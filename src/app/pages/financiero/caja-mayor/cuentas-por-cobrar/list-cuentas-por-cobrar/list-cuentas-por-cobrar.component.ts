@@ -14,12 +14,15 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatPaginatorModule, MatPaginator, PageEvent } from '@angular/material/paginator';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
+import { MatInputModule } from '@angular/material/input';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateCuentaPorCobrarDialogComponent } from '../create-cuenta-por-cobrar-dialog/create-cuenta-por-cobrar-dialog.component';
 import { CuentaPorCobrarDetalleComponent } from '../cuenta-por-cobrar-detalle/cuenta-por-cobrar-detalle.component';
+import { CobroConsolidadoComponent } from 'src/app/pages/personas/convenios/cobro-consolidado/cobro-consolidado.component';
 import { TabsService } from 'src/app/services/tabs.service';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-cuentas-por-cobrar',
@@ -42,7 +45,9 @@ import { TabsService } from 'src/app/services/tabs.service';
     MatPaginatorModule,
     MatFormFieldModule,
     MatSelectModule,
+    MatInputModule,
     DatePipe,
+    HasPermissionDirective,
   ]
 })
 export class ListCuentasPorCobrarComponent implements OnInit {
@@ -54,6 +59,7 @@ export class ListCuentasPorCobrarComponent implements OnInit {
   pageIndex = 0;
   loading = false;
   showFiltros = false;
+  conveniosActivos: any[] = [];
   filtrosForm!: FormGroup;
   estadoOptions = ['ACTIVO', 'COBRADO', 'CANCELADO'];
   tipoOptions = ['CREDITO_VENTA', 'PRESTAMO_CLIENTE', 'OTRO'];
@@ -72,8 +78,19 @@ export class ListCuentasPorCobrarComponent implements OnInit {
     this.filtrosForm = this.fb.group({
       estado: [null],
       tipo: [null],
+      cliente: [''],
     });
     this.loadData();
+    this.loadConvenios();
+  }
+
+  async loadConvenios(): Promise<void> {
+    try {
+      const convenios: any = await firstValueFrom(this.repositoryService.getConvenios({ activo: true }));
+      this.conveniosActivos = convenios || [];
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   setData(_d: any): void {}
@@ -85,6 +102,7 @@ export class ListCuentasPorCobrarComponent implements OnInit {
       const filtros: any = { page: this.pageIndex, pageSize: this.pageSize };
       if (f.estado) filtros.estado = f.estado;
       if (f.tipo) filtros.tipo = f.tipo;
+      if (f.cliente && f.cliente.trim()) filtros.cliente = f.cliente.trim();
       const r: any = await firstValueFrom(this.repositoryService.getCuentasPorCobrar(filtros));
       this.cuentas = r?.items || [];
       this.total = r?.total || 0;
@@ -124,6 +142,16 @@ export class ListCuentasPorCobrarComponent implements OnInit {
 
   verDetalle(c: any): void {
     this.tabsService.openTab(`CPC #${c.id}`, CuentaPorCobrarDetalleComponent, { cuentaPorCobrarId: c.id });
+  }
+
+  abrirCobroConsolidado(convenio: any): void {
+    this.tabsService.openTab(
+      `Cobro: ${convenio.nombre}`,
+      CobroConsolidadoComponent,
+      { convenioId: convenio.id },
+      `cobro-consolidado-${convenio.id}`,
+      true,
+    );
   }
 
   async cancelar(c: any): Promise<void> {

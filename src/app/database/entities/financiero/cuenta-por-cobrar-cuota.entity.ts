@@ -32,4 +32,11 @@ export class CuentaPorCobrarCuota extends BaseModel {
 
   @Column({ name: 'fecha_cobro', nullable: true })
   fechaCobro?: Date;
+
+  /**
+   * Liquidacion de sueldo que descuenta esta cuota (cuando el cliente tambien es
+   * funcionario y consume a credito). Evita que se tome en dos borradores.
+   */
+  @Column({ name: 'liquidacion_id', type: 'int', nullable: true })
+  liquidacionId?: number;
 }

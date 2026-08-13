@@ -9,11 +9,113 @@ import { ConteoDetalle } from '../../src/app/database/entities/financiero/conteo
 import { Dispositivo } from '../../src/app/database/entities/financiero/dispositivo.entity';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { CajaMoneda } from '../../src/app/database/entities/financiero/caja-moneda.entity';
+import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
 import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { generarRetiroDelCierre } from './retiro-cierre.util';
+import { RetiroCaja } from '../../src/app/database/entities/financiero/retiro-caja.entity';
+import { RetiroCajaEstado, RetiroCajaOrigen } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
+import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
+import { generarResumenCajaImagenes, buildResumenCajaCaption } from '../utils/resumen-caja-imagen.util';
+import { buildEvolutionConfig } from '../services/notificacion.service';
+import { getEvolutionApiKey } from '../utils/notificaciones-secrets.util';
+import { sendWhatsappMedia, sendWhatsappText, normalizeWhatsappNumber } from '../services/whatsapp.service';
+
+interface EnvioCierreResult {
+  ok: boolean;
+  cajaId: number | null;
+  omitido?: string;       // motivo por el que no se envió (config off, sin destino, etc.)
+  imagenes: number;
+  enviados: number;
+  errores: string[];
+}
+
+/**
+ * Envía el resumen de cierre de una caja PdV por WhatsApp como imagen(es), si
+ * está activado en PdvConfig y hay un destino configurado. Reutiliza la conexión
+ * Evolution API de la config de Notificaciones. Best-effort: nunca lanza; el
+ * resultado sirve para diagnóstico (uso automático al cerrar y manual/test).
+ *
+ * opts.forzar        → ignora el flag whatsappCierreCajaActivo (para test manual).
+ * opts.destinoOverride → usa este destino en vez del de PdvConfig (para test).
+ */
+async function enviarCierreCajaWhatsapp(
+  dataSource: DataSource,
+  cajaId: number,
+  opts: { forzar?: boolean; destinoOverride?: string } = {},
+): Promise<EnvioCierreResult> {
+  const result: EnvioCierreResult = { ok: false, cajaId, imagenes: 0, enviados: 0, errores: [] };
+  try {
+    const cfg = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+    if (!opts.forzar && !cfg?.whatsappCierreCajaActivo) {
+      result.omitido = 'Envío de WhatsApp desactivado en la config del PdV';
+      return result;
+    }
+    const destinoRaw = (opts.destinoOverride || cfg?.whatsappCierreCajaDestino || '').trim();
+    if (!destinoRaw) {
+      result.omitido = 'Sin destino de WhatsApp configurado';
+      return result;
+    }
+
+    const evolution = await buildEvolutionConfig();
+    const apikey = await getEvolutionApiKey();
+    if (!evolution.url || !evolution.instance || !apikey) {
+      result.omitido = 'Evolution API no configurada (URL/instancia/apikey en Notificaciones)';
+      console.warn('[cierre-whatsapp] ' + result.omitido);
+      return result;
+    }
+    const destino = normalizeWhatsappNumber(destinoRaw);
+
+    let generado: Awaited<ReturnType<typeof generarResumenCajaImagenes>> = null;
+    try {
+      generado = await generarResumenCajaImagenes(dataSource, cajaId);
+    } catch (e) {
+      const msg = (e as Error)?.message || String(e);
+      result.errores.push(`Render de imagen: ${msg}`);
+      console.warn(`[cierre-whatsapp] no se pudo generar la imagen del cierre ${cajaId}:`, msg);
+    }
+
+    // Fallback: si no se pudo generar la imagen, mandar al menos el texto.
+    if (!generado || !generado.base64List.length) {
+      try {
+        const { computeResumenCaja } = await import('../utils/resumen-caja.utils');
+        const resumen = await computeResumenCaja(dataSource, cajaId);
+        await sendWhatsappText(evolution, apikey, destino, buildResumenCajaCaption(resumen, ''));
+        result.ok = true;
+        result.enviados = 1;
+      } catch (e) {
+        const msg = (e as Error)?.message || String(e);
+        result.errores.push(`Fallback texto: ${msg}`);
+        console.warn(`[cierre-whatsapp] fallback de texto falló para caja ${cajaId}:`, msg);
+      }
+      return result;
+    }
+
+    result.imagenes = generado.base64List.length;
+    const caption = buildResumenCajaCaption(generado.resumen, generado.empresaNombre);
+    for (let i = 0; i < generado.base64List.length; i++) {
+      try {
+        await sendWhatsappMedia(evolution, apikey, destino, generado.base64List[i], {
+          fileName: `cierre-caja-${cajaId}${generado.base64List.length > 1 ? `-${i + 1}` : ''}.png`,
+          caption: i === 0 ? caption : '', // el caption va solo en la primera imagen
+        });
+        result.enviados++;
+      } catch (e) {
+        const msg = (e as Error)?.message || String(e);
+        result.errores.push(`Imagen ${i + 1}: ${msg}`);
+        console.warn(`[cierre-whatsapp] falló el envío de la imagen ${i + 1} del cierre ${cajaId}:`, msg);
+      }
+    }
+    result.ok = result.enviados > 0;
+    return result;
+  } catch (e) {
+    result.errores.push((e as Error)?.message || String(e));
+    return result;
+  }
+}
 
 export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Remove this line - get the current user in each handler instead
@@ -62,6 +164,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('createMoneda', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(Moneda);
       if (data.principal) {
         await repo.update({ principal: true }, { principal: false });
@@ -77,6 +180,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('updateMoneda', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(Moneda);
       if (data.principal) {
         await repo.update({ principal: true, id: Not(id) }, { principal: false });
@@ -95,6 +199,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('deleteMoneda', async (_event: any, id: number) => {
     // Note: Hard delete. Consider dependencies (PrecioVenta, MonedaBillete, CajaMoneda, etc.)
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(Moneda);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Moneda ID ${id} not found`);
@@ -122,6 +227,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('create-tipo-precio', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(TipoPrecio);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -144,6 +250,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-tipo-precio', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(TipoPrecio);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`TipoPrecio ID ${id} not found`);
@@ -158,6 +265,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('delete-tipo-precio', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(TipoPrecio);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`TipoPrecio ID ${id} not found`);
@@ -194,6 +302,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('create-moneda-billete', async (_event: IpcMainInvokeEvent, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(MonedaBillete);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -206,6 +315,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-moneda-billete', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(MonedaBillete);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`MonedaBillete ID ${id} not found`);
@@ -221,6 +331,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('delete-moneda-billete', async (_event: IpcMainInvokeEvent, id: number) => {
     // Note: Hard delete. Consider dependencies (ConteoDetalle)
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(MonedaBillete);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`MonedaBillete ID ${id} not found`);
@@ -256,6 +367,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('create-conteo', async (_event: IpcMainInvokeEvent, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(Conteo);
       const entity: any = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -273,6 +385,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-conteo', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(Conteo);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Conteo ID ${id} not found`);
@@ -288,6 +401,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('delete-conteo', async (_event: IpcMainInvokeEvent, id: number) => {
     // Note: Hard delete. Conteos might be linked to Cajas, consider implications.
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(Conteo);
       const entity = await repo.findOne({ where: { id }, relations: ['detalles'] }); // Load detalles to delete them first
       if (!entity) throw new Error(`Conteo ID ${id} not found`);
@@ -327,6 +441,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('create-conteo-detalle', async (_event: IpcMainInvokeEvent, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(ConteoDetalle);
       const entity = repo.create(data);
       // No user tracking needed usually for details
@@ -339,6 +454,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-conteo-detalle', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(ConteoDetalle);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`ConteoDetalle ID ${id} not found`);
@@ -354,6 +470,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('delete-conteo-detalle', async (_event: IpcMainInvokeEvent, id: number) => {
     // Note: Hard delete.
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(ConteoDetalle);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`ConteoDetalle ID ${id} not found`);
@@ -485,6 +602,18 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
     await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
     try {
       const repo = dataSource.getRepository(Caja);
+      // Guard: una sola caja ABIERTA por dispositivo (terminal). Antes solo lo
+      // aseguraba el frontend del desktop; la PWA también abre cajas, así que el
+      // chequeo va en backend para ser inmune a la carrera multi-dispositivo.
+      const dispositivoId = data?.dispositivo?.id ?? data?.dispositivo_id ?? null;
+      if (data?.estado === CajaEstado.ABIERTO && dispositivoId != null) {
+        const yaAbierta = await repo.count({
+          where: { dispositivo: { id: dispositivoId }, estado: CajaEstado.ABIERTO },
+        });
+        if (yaAbierta > 0) {
+          throw new Error('Ya hay una caja abierta en esta terminal. Cerrá esa caja antes de abrir otra.');
+        }
+      }
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       return await repo.save(entity);
@@ -498,20 +627,161 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
     try {
       await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(Caja);
-      const entity = await repo.findOneBy({ id });
+      const entity = await repo.findOne({ where: { id }, relations: ['createdBy'] });
       if (!entity) throw new Error(`Caja ID ${id} not found`);
+
+      // Guard: solo el usuario que ABRIÓ la caja puede cerrarla. Antes solo lo
+      // aseguraba el frontend del desktop (mostraba la acción solo al creador);
+      // la PWA también cierra cajas, así que va en backend.
+      if (data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO) {
+        const abridorId = (entity.createdBy as any)?.id ?? null;
+        const actualId = getCurrentUser()?.id ?? null;
+        if (abridorId != null && actualId !== abridorId) {
+          throw new Error('Solo el usuario que abrió la caja puede cerrarla.');
+        }
+      }
+
+      // Guard: no permitir CERRAR una caja que todavía tiene ventas ABIERTAS
+      // (mesas/comandas/ventas rápidas sin cobrar). Si se cierra igual, esas
+      // ventas quedan huérfanas (la mesa queda OCUPADA para siempre, visible
+      // para cualquier caja nueva). El chequeo del diálogo de cierre es solo de
+      // frontend y un snapshot: en el modelo multi-dispositivo otro equipo puede
+      // abrir una venta en esta caja después de que el diálogo cargó. Este guard
+      // en backend es inmune a esa carrera.
+      if (data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO) {
+        const ventasAbiertas = await dataSource.getRepository(Venta).count({
+          where: { caja: { id }, estado: VentaEstado.ABIERTA },
+        });
+        if (ventasAbiertas > 0) {
+          throw new Error(
+            `No se puede cerrar la caja: tiene ${ventasAbiertas} venta(s) abierta(s) (mesas/comandas sin cobrar). Cobrá o cancelá esas cuentas antes de cerrar.`
+          );
+        }
+      }
+
+      const seEstaCerrando = data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO;
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+
+      // Al cerrar, auto-generar el RetiroCaja FLOTANTE con el efectivo del cierre,
+      // para que quede disponible para ingresar a una caja mayor. Best-effort: si
+      // falla (p. ej. cierre sin conteo de billetes), NO bloquea el cierre. Es
+      // idempotente, así que el botón manual del desktop sigue funcionando igual.
+      if (seEstaCerrando) {
+        try {
+          await generarRetiroDelCierre(dataSource, id, getCurrentUser()?.id);
+        } catch (e) {
+          console.error(`[update-caja] no se pudo auto-generar el retiro del cierre de la caja ${id}:`, e);
+        }
+        // Envío automático del resumen por WhatsApp (best-effort, no bloquea).
+        setImmediate(() => {
+          enviarCierreCajaWhatsapp(dataSource, id)
+            .catch((e) => console.warn(`[update-caja] envío WhatsApp del cierre ${id} falló:`, e?.message || e));
+        });
+      }
+      return saved;
     } catch (error) {
       console.error(`Error updating caja ${id}:`, error);
       throw error;
     }
   });
 
+  // --- Ajuste de caja cerrada -------------------------------------------------
+  // Permite corregir el conteo o agregar un gasto/retiro que faltó, en una caja
+  // ya CERRADA, SIN reabrirla. Límite natural: solo mientras el retiro del cierre
+  // NO haya sido ingresado a Caja Mayor (ahí ya movió saldos reales).
+
+  /** Busca el retiro del cierre (origen=CIERRE) de una caja, si existe. */
+  async function findRetiroDelCierre(cajaId: number): Promise<RetiroCaja | null> {
+    return dataSource.getRepository(RetiroCaja).findOne({
+      where: { caja: { id: cajaId }, origen: RetiroCajaOrigen.CIERRE } as any,
+      relations: ['detalles'],
+      order: { id: 'DESC' },
+    });
+  }
+
+  // Indica si una caja cerrada se puede ajustar (y por qué no, si aplica).
+  ipcMain.handle('puede-ajustar-caja', async (_event: IpcMainInvokeEvent, cajaId: number) => {
+    const caja = await dataSource.getRepository(Caja).findOne({ where: { id: cajaId } });
+    if (!caja) return { editable: false, motivoBloqueo: 'La caja no existe.' };
+    if (caja.estado !== CajaEstado.CERRADO) {
+      return { editable: false, motivoBloqueo: 'La caja no está cerrada.' };
+    }
+    const retiroCierre = await findRetiroDelCierre(cajaId);
+    if (retiroCierre && retiroCierre.estado === RetiroCajaEstado.INGRESADO) {
+      return {
+        editable: false,
+        motivoBloqueo:
+          'El retiro del cierre ya fue ingresado a Caja Mayor. Revertí ese ingreso desde Caja Mayor antes de ajustar la caja.',
+      };
+    }
+    return { editable: true };
+  });
+
+  // Cierra el ajuste de una caja cerrada: regenera el retiro del cierre (para que
+  // refleje el conteo corregido) y deja traza (revisado + motivo). Se llama DESPUÉS
+  // de haber corregido el conteo / agregado el gasto o retiro.
+  ipcMain.handle('finalizar-ajuste-caja', async (_event: IpcMainInvokeEvent, cajaId: number, motivo?: string) => {
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_AJUSTAR');
+    const cajaRepo = dataSource.getRepository(Caja);
+    const caja = await cajaRepo.findOne({ where: { id: cajaId } });
+    if (!caja) throw new Error(`Caja ID ${cajaId} no encontrada`);
+    if (caja.estado !== CajaEstado.CERRADO) throw new Error('Solo se puede ajustar una caja cerrada.');
+
+    // Guard: si el retiro del cierre ya se ingresó a Caja Mayor, no tocar.
+    const retiroCierre = await findRetiroDelCierre(cajaId);
+    if (retiroCierre && retiroCierre.estado === RetiroCajaEstado.INGRESADO) {
+      throw new Error(
+        'El retiro del cierre ya fue ingresado a Caja Mayor. Revertí ese ingreso antes de ajustar la caja.',
+      );
+    }
+
+    // Regenerar el retiro del cierre desde el conteo (posiblemente) corregido:
+    // borrar el FLOTANTE/VINCULADO_PENDIENTE existente y volver a generarlo.
+    if (retiroCierre) {
+      await dataSource.getRepository(RetiroCaja).remove(retiroCierre);
+    }
+    await generarRetiroDelCierre(dataSource, cajaId, getCurrentUser()?.id);
+
+    // Traza del ajuste.
+    (caja as any).revisado = true;
+    if (getCurrentUser()?.id) (caja as any).revisadoPor = { id: getCurrentUser()!.id } as any;
+    (caja as any).motivoAjuste = (motivo || '').trim().toUpperCase() || null;
+    await setEntityUserTracking(dataSource, caja, getCurrentUser()?.id, true);
+    await cajaRepo.save(caja);
+    return { success: true };
+  });
+
+  // Envío manual / test del resumen de cierre por WhatsApp. Dispara la MISMA
+  // lógica que el envío automático al cerrar. Sin `cajaId`, usa la última caja
+  // CERRADA. `forzar` ignora el flag de PdvConfig (útil para probar); `destino`
+  // permite mandar a otro número/grupo sin tocar la config.
+  ipcMain.handle('enviar-resumen-cierre-whatsapp', async (
+    _event: IpcMainInvokeEvent,
+    params?: { cajaId?: number; forzar?: boolean; destino?: string },
+  ) => {
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+    const repo = dataSource.getRepository(Caja);
+    let cajaId = params?.cajaId ?? null;
+    if (!cajaId) {
+      const ultima = await repo.findOne({
+        where: { estado: CajaEstado.CERRADO },
+        order: { fechaCierre: 'DESC', id: 'DESC' },
+      });
+      if (!ultima) throw new Error('No hay ninguna caja cerrada');
+      cajaId = ultima.id;
+    }
+    return await enviarCierreCajaWhatsapp(dataSource, cajaId, {
+      forzar: params?.forzar,
+      destinoOverride: params?.destino,
+    });
+  });
+
   ipcMain.handle('delete-caja', async (_event: IpcMainInvokeEvent, id: number) => {
     // Note: Hard delete. Consider implications if caja records are critical audit trails.
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(Caja);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Caja ID ${id} not found`);
@@ -530,6 +800,23 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
       return await repo.findOne({ where: { createdBy: { id: usuarioId }, estado: CajaEstado.ABIERTO } });
     } catch (error) {
       console.error('Error getting caja abierta por usuario:', error);
+      throw error;
+    }
+  });
+
+  // get-cajas-abiertas: todas las cajas ABIERTO (de cualquier usuario/dispositivo).
+  // Permite que otros usuarios/dispositivos (desktop o PWA) se "unan" a una caja
+  // abierta para lanzar items. El cobro sigue restringido al dispositivo dueño.
+  ipcMain.handle('get-cajas-abiertas', async () => {
+    try {
+      const repo = dataSource.getRepository(Caja);
+      return await repo.find({
+        where: { estado: CajaEstado.ABIERTO },
+        relations: ['dispositivo', 'conteoApertura', 'createdBy', 'createdBy.persona'],
+        order: { fechaApertura: 'DESC' }
+      });
+    } catch (error) {
+      console.error('Error getting cajas abiertas:', error);
       throw error;
     }
   });
@@ -557,6 +844,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('create-caja-moneda', async (_event: IpcMainInvokeEvent, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(CajaMoneda);
       const entity = repo.create(data);
       // No user tracking typically needed for config like this
@@ -569,6 +857,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-caja-moneda', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(CajaMoneda);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`CajaMoneda ID ${id} not found`);
@@ -584,6 +873,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('delete-caja-moneda', async (_event: IpcMainInvokeEvent, id: number) => {
     // Note: Hard delete.
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(CajaMoneda);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`CajaMoneda ID ${id} not found`);
@@ -596,6 +886,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   // Bulk save for CajaMoneda settings
   ipcMain.handle('save-cajas-monedas', async (_event: IpcMainInvokeEvent, updates: any[]) => {
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -678,6 +969,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-moneda-cambio', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(MonedaCambio);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`MonedaCambio ID ${id} not found`);
@@ -693,6 +985,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('delete-moneda-cambio', async (_event: IpcMainInvokeEvent, id: number) => {
     // Note: Hard delete.
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'MONEDAS_GESTIONAR');
       const repo = dataSource.getRepository(MonedaCambio);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`MonedaCambio ID ${id} not found`);

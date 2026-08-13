@@ -27,7 +27,9 @@
           <mat-icon>more_vert</mat-icon>
         </button>
         <mat-menu #menu="matMenu">
+          <a mat-menu-item [routerLink]="['/rrhh/funcionarios', f.id, 'detalle']"><mat-icon>account_balance_wallet</mat-icon><span>Ver resumen</span></a>
           <a mat-menu-item [routerLink]="['/rrhh/funcionarios', f.id]"><mat-icon>edit</mat-icon><span>Editar</span></a>
+          <a mat-menu-item [routerLink]="['/rrhh/funcionarios', f.id, 'rostros']"><mat-icon>face</mat-icon><span>Rostros</span></a>
         </mat-menu>
       </div>
     </mat-card>

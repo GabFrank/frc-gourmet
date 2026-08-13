@@ -34,11 +34,11 @@ import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/a
         Funcionario: <strong>{{ data.vale?.funcionario?.persona?.nombre }} {{ data.vale?.funcionario?.persona?.apellido || '' }}</strong>
       </p>
       <p>Monto: <strong>{{ data.vale?.monto | number:'1.0-2' }} {{ data.vale?.moneda?.simbolo || '' }}</strong></p>
-      <mat-button-toggle-group formControlName="fuente" class="fuente-toggle">
-        <mat-button-toggle value="CAJA_MAYOR">Caja Mayor (efectivo)</mat-button-toggle>
-        <mat-button-toggle value="CUENTA_BANCARIA">Cuenta Bancaria</mat-button-toggle>
-      </mat-button-toggle-group>
       <form [formGroup]="form" class="form">
+        <mat-button-toggle-group formControlName="fuente" class="fuente-toggle">
+          <mat-button-toggle value="CAJA_MAYOR">Caja Mayor (efectivo)</mat-button-toggle>
+          <mat-button-toggle value="CUENTA_BANCARIA">Cuenta Bancaria</mat-button-toggle>
+        </mat-button-toggle-group>
         <mat-form-field appearance="outline">
           <mat-label>Moneda</mat-label>
           <mat-select formControlName="monedaId">

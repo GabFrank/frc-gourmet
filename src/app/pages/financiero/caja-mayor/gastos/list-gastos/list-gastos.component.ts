@@ -20,6 +20,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateEditGastoDialogComponent } from '../create-edit-gasto/create-edit-gasto-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-gastos',
@@ -45,6 +46,7 @@ import { CreateEditGastoDialogComponent } from '../create-edit-gasto/create-edit
     MatNativeDateModule,
     MatTooltipModule,
     DatePipe,
+    HasPermissionDirective,
   ]
 })
 export class ListGastosComponent implements OnInit {
@@ -64,9 +66,13 @@ export class ListGastosComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    // Carga inicial acotada: primer dia del mes actual -> hoy
+    const hoy = new Date();
+    const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+
     this.filterForm = this.fb.group({
-      fechaDesde: [null],
-      fechaHasta: [null],
+      fechaDesde: [primerDiaMes],
+      fechaHasta: [hoy],
       gastoCategoriaId: [null],
       estado: [null],
     });

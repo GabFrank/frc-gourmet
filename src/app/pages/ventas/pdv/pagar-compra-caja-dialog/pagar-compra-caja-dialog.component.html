@@ -1,0 +1,184 @@
+<h2 mat-dialog-title>
+  <mat-icon class="title-icon">shopping_bag</mat-icon>
+  Compra{{ cajaNombre ? ' — ' + cajaNombre : '' }}
+</h2>
+
+<mat-dialog-content>
+  <div *ngIf="loading" class="loading-box">
+    <mat-spinner diameter="36"></mat-spinner>
+  </div>
+
+  <form *ngIf="!loading" [formGroup]="form" class="form-container">
+
+    <mat-button-toggle-group formControlName="modo" class="full-width modo-toggle">
+      <mat-button-toggle value="CREAR"><mat-icon>add</mat-icon> Crear y pagar</mat-button-toggle>
+      <mat-button-toggle value="PAGAR"><mat-icon>payments</mat-icon> Pagar existente</mat-button-toggle>
+    </mat-button-toggle-group>
+
+    <!-- CREAR: compra simplificada -->
+    <ng-container *ngIf="!esPagar">
+      <div class="info-banner">
+        <mat-icon>info</mat-icon>
+        <span>Compra simplificada: sin ítems, no mueve stock. Para cargar ítems usá la compra detallada.</span>
+      </div>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Proveedor</mat-label>
+        <mat-select formControlName="proveedorId" (selectionChange)="onProveedorChange($event.value)">
+          <mat-option *ngFor="let p of proveedores" [value]="p.id">{{ p.nombre }}</mat-option>
+        </mat-select>
+        <mat-error>El proveedor es requerido</mat-error>
+      </mat-form-field>
+
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="flex-field">
+          <mat-label>Categoría</mat-label>
+          <mat-select formControlName="compraCategoriaId">
+            <mat-option [value]="null">— Sin categoría —</mat-option>
+            <mat-option *ngFor="let c of categorias" [value]="c.id">{{ c.nombre }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="flex-field">
+          <mat-label>Fecha</mat-label>
+          <input matInput [matDatepicker]="pickerFecha" formControlName="fecha">
+          <mat-datepicker-toggle matSuffix [for]="pickerFecha"></mat-datepicker-toggle>
+          <mat-datepicker #pickerFecha></mat-datepicker>
+        </mat-form-field>
+      </div>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>N° Nota / Comprobante</mat-label>
+        <input matInput formControlName="numeroNota" placeholder="Opcional">
+      </mat-form-field>
+    </ng-container>
+
+    <!-- PAGAR: cuota de compra existente -->
+    <ng-container *ngIf="esPagar">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Cuota pendiente</mat-label>
+        <mat-select formControlName="cuotaId">
+          <mat-option *ngIf="cargandoCuotas" [value]="null" disabled>Cargando…</mat-option>
+          <mat-option *ngIf="!cargandoCuotas && cuotasPendientes.length === 0" [value]="null" disabled>
+            Sin cuotas de compra pendientes
+          </mat-option>
+          <mat-option *ngFor="let c of cuotasPendientes" [value]="c.id">
+            {{ c.proveedorNombre || 'Compra' }} · Cuota #{{ c.numero }} —
+            {{ c.monedaSimbolo || '' }} {{ c.saldoPendiente | number:'1.0-2' }}
+          </mat-option>
+        </mat-select>
+        <mat-error>Seleccione una cuota</mat-error>
+      </mat-form-field>
+    </ng-container>
+
+    <div class="form-row">
+      <mat-form-field appearance="outline" class="flex-field">
+        <mat-label>Moneda</mat-label>
+        <mat-select formControlName="monedaId">
+          <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
+        </mat-select>
+        <mat-error>Requerida</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="flex-field" *ngIf="!esMixto">
+        <mat-label>Monto</mat-label>
+        <input matInput type="text" formControlName="monto" appCurrencyInput [decimals]="decimalesMoneda" placeholder="0">
+        <mat-error>Requerido</mat-error>
+      </mat-form-field>
+    </div>
+
+    <mat-checkbox formControlName="pagoMixto" class="mixto-check">
+      Pago mixto (varias formas/monedas)
+    </mat-checkbox>
+
+    <mat-form-field appearance="outline" class="full-width" *ngIf="!esMixto">
+      <mat-label>Forma de pago (efectivo)</mat-label>
+      <mat-select formControlName="formaPagoId">
+        <mat-option *ngFor="let fp of formasPago" [value]="fp.id">{{ fp.nombre }}</mat-option>
+      </mat-select>
+      <mat-error>Requerida</mat-error>
+    </mat-form-field>
+
+    <!-- Editor de líneas mixtas -->
+    <div *ngIf="esMixto" class="mixto-box">
+      <table mat-table [dataSource]="lineas" class="mixto-table">
+        <ng-container matColumnDef="moneda">
+          <th mat-header-cell *matHeaderCellDef>Moneda</th>
+          <td mat-cell *matCellDef="let l">
+            <mat-form-field appearance="outline" class="cell-field">
+              <mat-select [(ngModel)]="l.monedaId" [ngModelOptions]="{ standalone: true }" (ngModelChange)="onLineaMonedaChange(l)">
+                <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="forma">
+          <th mat-header-cell *matHeaderCellDef>Forma</th>
+          <td mat-cell *matCellDef="let l">
+            <mat-form-field appearance="outline" class="cell-field">
+              <mat-select [(ngModel)]="l.formaPagoId" [ngModelOptions]="{ standalone: true }">
+                <mat-option *ngFor="let fp of formasPago" [value]="fp.id">{{ fp.nombre }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="monto">
+          <th mat-header-cell *matHeaderCellDef class="num">Monto</th>
+          <td mat-cell *matCellDef="let l" class="num">
+            <mat-form-field appearance="outline" class="cell-field monto">
+              <input matInput type="text" inputmode="decimal" appCurrencyInput [decimals]="l.decimales"
+                     [ngModel]="l.monto" [ngModelOptions]="{ standalone: true }"
+                     (ngModelChange)="onLineaMontoChange(l, $event)">
+            </mat-form-field>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="convertido">
+          <th mat-header-cell *matHeaderCellDef class="num">Convertido</th>
+          <td mat-cell *matCellDef="let l" class="num">
+            <ng-container *ngIf="convertido(l) !== null; else sinCotiz">{{ convertido(l) | number:'1.0-2' }}</ng-container>
+            <ng-template #sinCotiz><span class="warn-text" matTooltip="No hay cotización para esta moneda">Sin cotización</span></ng-template>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let l; let i = index">
+            <button mat-icon-button color="warn" type="button" (click)="quitarLinea(i)" [disabled]="lineas.length <= 1">
+              <mat-icon>delete_outline</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="lineasCols"></tr>
+        <tr mat-row *matRowDef="let row; columns: lineasCols;"></tr>
+      </table>
+      <button mat-stroked-button type="button" class="add-linea" (click)="agregarLinea()">
+        <mat-icon>add</mat-icon> Agregar forma de pago
+      </button>
+      <div class="mixto-total">
+        <span>Total{{ esPagar ? '' : ' (compra)' }}</span>
+        <span class="strong">{{ totalConvertido | number:'1.0-2' }}</span>
+      </div>
+      <div class="mixto-total" *ngIf="esPagar">
+        <span>Saldo de la cuota</span>
+        <span>{{ saldoCuotaSeleccionada | number:'1.0-2' }}</span>
+      </div>
+    </div>
+
+    <div *ngIf="saldoInsuficiente" class="warn-banner">
+      <mat-icon>warning</mat-icon>
+      <span>El monto supera el efectivo disponible en la caja para esta moneda. El cierre quedará en negativo.</span>
+    </div>
+
+    <button *ngIf="!esPagar" mat-stroked-button type="button" class="detallada-btn" (click)="abrirCompraDetallada()">
+      <mat-icon>list_alt</mat-icon> ¿Necesitás cargar ítems? Abrir compra detallada
+    </button>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancelar()" [disabled]="saving">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="guardar()" [disabled]="saving || loading">
+    <mat-icon *ngIf="!saving">check</mat-icon>
+    <mat-spinner *ngIf="saving" diameter="18" class="btn-spinner"></mat-spinner>
+    {{ esPagar ? 'Pagar cuota' : 'Crear y pagar' }}
+  </button>
+</mat-dialog-actions>

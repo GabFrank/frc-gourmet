@@ -23,11 +23,66 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
  * abajo en `BLOCKED_CHANNELS`.
  */
 
+// C-05: /api/rpc queda en default-allow (la allowlist de canales legítimos sería
+// ~830, casi todo el registro, con alto costo/riesgo y poco valor marginal — ver
+// docs/HALLAZGOS-AUDITORIA-DESKTOP.md). El lever de seguridad real es esta
+// deny-list: canales que un cliente HTTP remoto (PWA / modo cliente) nunca debería
+// poder invocar porque tocan el NODO SERVIDOR (su disco, su BD, su proceso, sus
+// secretos). La defensa por-handler (ensurePermission) ya cubre los datos de
+// negocio; esto cierra los canales de infraestructura.
 const BLOCKED_CHANNELS = new Set<string>([
   'set-current-user',  // current user es session local del Electron, no del cliente HTTP
   'reset-database',
   'restart-app',
-  // F4 podra agregar mas si descubrimos handlers riesgosos
+
+  // Backups y restauración (destructivos / filesystem del servidor)
+  'backup-db-reset',
+  'backup-clear-images',
+  'backup-restore',
+  'backup-delete',
+  'backup-create',
+  'backup-create-and-export',
+  'backup-trigger-auto-now',
+  'backup-config-set',
+  'backup-send-whatsapp',
+  'backup-pick-folder',
+  'backup-pick-restore-file',
+
+  // Configuración de BD / modo de la app + reinicio (setup local, no remoto)
+  'db-config-save',
+  'db-config-init-postgres',
+  'db-config-restart-app',
+  'db-config-test-connection',
+  'app-mode-save',
+  'app-mode-test-server',
+
+  // Musica: abren cosas EN LA PC DEL SERVIDOR (el navegador de autorizacion y
+  // la app de Spotify). Disparar eso desde un cliente remoto no tiene sentido y
+  // es superficie de sobra: se hacen desde el desktop del local.
+  'musica-conectar',
+  'musica-cancelar-conexion',
+  'musica-abrir-spotify',
+
+  // Actualización / ciclo de vida del proceso servidor
+  'auto-update:quit-and-install',
+  'auto-update:check-now',
+
+  // Secretos / credenciales
+  'set-notif-secret',   // secreto de notificaciones (WhatsApp/email)
+  'ia-config-set',      // API keys de IA/OCR
+
+  // Seeds (se ejecutan internamente en el arranque, no vía HTTP)
+  'seed-permissions',
+  'seed-configuracion-rrhh',
+  'seed-liquidacion-conceptos',
+
+  // Sistema del host / diálogos nativos en el servidor
+  'get-system-mac-address',
+  'factura-import-pick-file',
+
+  // Gestión del propio nodo servidor (un cliente remoto no controla el túnel)
+  'remote-tunnel-start',
+  'remote-tunnel-stop',
 ]);
 
 export function registerRpcRoute(fastify: FastifyInstance, dataSource?: DataSource): void {

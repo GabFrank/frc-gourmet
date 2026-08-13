@@ -6,6 +6,7 @@ import { Role } from '../../src/app/database/entities/personas/role.entity';
 import { UsuarioRole } from '../../src/app/database/entities/personas/usuario-role.entity';
 import { TipoCliente } from '../../src/app/database/entities/personas/tipo-cliente.entity';
 import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
+import { Convenio } from '../../src/app/database/entities/personas/convenio.entity';
 import { setEntityUserTracking } from '../utils/entity.utils'; // Import the utility function
 import { hashPassword, verifyPassword } from '../utils/password.utils';
 import { ensurePermission } from '../utils/auth.utils';
@@ -183,7 +184,10 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
         persona: persona, // Assign the potentially null persona object
         nickname: usuarioData.nickname,
         password: await hashPassword(plainPassword),
-        activo: usuarioData.activo !== undefined ? usuarioData.activo : true
+        activo: usuarioData.activo !== undefined ? usuarioData.activo : true,
+        // Cuando se crea con password temporal (alta rápida), el frontend manda
+        // este flag en true para que el primer login obligue a cambiarla.
+        mustChangePassword: usuarioData.mustChangePassword === true,
       });
 
       // Set tracking before saving
@@ -261,6 +265,11 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
         usuario.password = await hashPassword(usuarioData.password);
       }
       if (usuarioData.activo !== undefined) usuario.activo = usuarioData.activo;
+      // Reset de password (admin): el frontend manda mustChangePassword=true para
+      // que el usuario cambie la temporal en su próximo login.
+      if (usuarioData.mustChangePassword !== undefined) {
+        usuario.mustChangePassword = usuarioData.mustChangePassword === true;
+      }
 
       await setEntityUserTracking(dataSource, usuario, currentUser?.id, true);
       const updatedUsuario = await usuarioRepository.save(usuario);
@@ -324,6 +333,10 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
       usuario.mustChangePassword = false;
       await setEntityUserTracking(dataSource, usuario, currentUser.id, true);
       const updated = await usuarioRepository.save(usuario);
+
+      // Reflejar el cambio en el usuario en memoria del main process para que el
+      // gate de must-change-password (auth.utils) se levante sin re-login.
+      (currentUser as any).mustChangePassword = false;
 
       return { success: true, usuario: { ...updated, password: undefined } };
     } catch (error) {
@@ -491,6 +504,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('assign-role-to-usuario', async (_event: any, usuarioId: number, roleId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'USUARIOS_GESTIONAR');
       const usuarioRoleRepository = dataSource.getRepository(UsuarioRole);
       const usuarioRepository = dataSource.getRepository(Usuario);
       const roleRepository = dataSource.getRepository(Role);
@@ -528,6 +542,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('remove-role-from-usuario', async (_event: any, usuarioRoleId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'USUARIOS_GESTIONAR');
       const usuarioRoleRepository = dataSource.getRepository(UsuarioRole);
       const result = await usuarioRoleRepository.delete(usuarioRoleId);
       return { success: result.affected && result.affected > 0 };
@@ -685,7 +700,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
       const clienteRepository = dataSource.getRepository(Cliente);
       return await clienteRepository.findOne({
         where: { id: clienteId },
-        relations: ['persona', 'tipo_cliente']
+        relations: ['persona', 'tipo_cliente', 'convenios']
       });
     } catch (error) {
       console.error('Error getting cliente:', error);
@@ -718,13 +733,19 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
         limite_credito: clienteData.limite_credito || 0
       });
 
+      // Convenio (opcional): vincula el cliente al convenio elegido en el alta (M2M).
+      if (clienteData.convenioId) {
+        const convenio = await dataSource.getRepository(Convenio).findOneBy({ id: clienteData.convenioId });
+        if (convenio) cliente.convenios = [convenio];
+      }
+
       await setEntityUserTracking(dataSource, cliente, currentUser?.id, false);
       const savedCliente = await clienteRepository.save(cliente);
 
       // Fetch the complete cliente with relations
       const completeCliente = await clienteRepository.findOne({
           where: { id: savedCliente.id },
-          relations: ['persona', 'tipo_cliente']
+          relations: ['persona', 'tipo_cliente', 'convenios']
       });
       return completeCliente;
     } catch (error) {
@@ -743,7 +764,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
       const cliente = await clienteRepository.findOne({
         where: { id: clienteId },
-        relations: ['persona', 'tipo_cliente'] // Load existing relations
+        relations: ['persona', 'tipo_cliente', 'convenios'] // Load existing relations
       });
       if (!cliente) return { success: false, message: 'No cliente found with that ID' };
 
@@ -766,6 +787,18 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
       if (clienteData.activo !== undefined) cliente.activo = clienteData.activo;
       if (clienteData.credito !== undefined) cliente.credito = clienteData.credito;
       if (clienteData.limite_credito !== undefined) cliente.limite_credito = clienteData.limite_credito;
+
+      // Convenio (opcional): merge aditivo — agrega el convenio elegido sin borrar
+      // otras membresías del cliente. `convenioId === null` no toca nada (no destructivo).
+      if (clienteData.convenioId) {
+        const convenio = await dataSource.getRepository(Convenio).findOneBy({ id: clienteData.convenioId });
+        if (convenio) {
+          const actuales: Convenio[] = (cliente as any).convenios || [];
+          if (!actuales.some((c) => c.id === convenio.id)) {
+            (cliente as any).convenios = [...actuales, convenio];
+          }
+        }
+      }
 
       await setEntityUserTracking(dataSource, cliente, currentUser?.id, true);
       const updatedCliente = await clienteRepository.save(cliente);
@@ -853,6 +886,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
     direccion?: string;
   }) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, ['VENTAS_PDV', 'CLIENTES_GESTIONAR']);
       if (!data?.nombre || !data.nombre.trim()) throw new Error('El nombre es obligatorio');
       const currentUser = getCurrentUser();
       const personaRepo = dataSource.getRepository(Persona);
@@ -890,6 +924,7 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
   ipcMain.handle('crear-cliente-rapido', async (_event: any, data: { telefono: string; nombre?: string; direccion?: string }) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, ['VENTAS_PDV', 'CLIENTES_GESTIONAR']);
       const currentUser = getCurrentUser();
       const personaRepo = dataSource.getRepository(Persona);
       const clienteRepo = dataSource.getRepository(Cliente);

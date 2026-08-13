@@ -1,0 +1,546 @@
+/**
+ * E2E smoke de PEDIDOS ONLINE — ejecuta el código real (no solo compila).
+ *
+ * Arranca un Fastify con los handlers reales contra una BD SQLite temporal
+ * (migraciones incluidas) y ejerce el flujo público + la bandeja admin:
+ *   menu.get → auth.otp.request → auth.otp.verify → pedido.crear (pickup/delivery)
+ *   → pedido.mis → [admin] listar/aceptar/avanzar.
+ *
+ * Uso:
+ *   npx ts-node --project tsconfig.typeorm.json scripts/test-pedidos-online-e2e.ts
+ *   (o: npm run test:pedidos-online)
+ */
+import 'reflect-metadata';
+import './_electron-mock'; // DEBE ir antes de cualquier import que use electron
+import * as path from 'path';
+import * as fs from 'fs';
+import { DataSource } from 'typeorm';
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
+
+import { invokeHandlerWithContext } from '../electron/utils/handler-registry';
+import { getDataSourceOptions } from '../src/app/database/database.config';
+import { registerAuthPlugin } from '../electron/server/auth-middleware';
+import { registerPublicRoutes } from '../electron/server/public-routes';
+import { registerPedidosOnlineHandlers } from '../electron/handlers/pedidos-online.handler';
+import { registerPedidosOnlineAuthHandlers } from '../electron/handlers/pedidos-online-auth.handler';
+import { registerPedidosOnlinePedidosHandlers } from '../electron/handlers/pedidos-online-pedidos.handler';
+import { registerPedidosOnlineAdminHandlers } from '../electron/handlers/pedidos-online-admin.handler';
+import { registerPedidosOnlineConfigHandlers } from '../electron/handlers/pedidos-online-config.handler';
+
+const PORT = 7099;
+const BASE = `http://localhost:${PORT}`;
+
+// --- mini framework de asserts ---
+let passed = 0;
+let failed = 0;
+function ok(cond: boolean, name: string, extra?: any) {
+  if (cond) { passed++; console.log(`  ✓ ${name}`); }
+  else { failed++; console.error(`  ✗ ${name}`, extra !== undefined ? JSON.stringify(extra) : ''); }
+}
+
+async function pub(op: string, params: any[] = [], token?: string): Promise<any> {
+  const headers: any = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${BASE}/pub/rpc`, { method: 'POST', headers, body: JSON.stringify({ op, params }) });
+  const json = await res.json().catch(() => ({}));
+  return { status: res.status, ...(json as any) };
+}
+
+async function seed(dataSource: DataSource): Promise<any> {
+  const { Moneda } = require('../src/app/database/entities/financiero/moneda.entity');
+  const { TipoPrecio } = require('../src/app/database/entities/financiero/tipo-precio.entity');
+  const { Familia } = require('../src/app/database/entities/productos/familia.entity');
+  const { Subfamilia } = require('../src/app/database/entities/productos/subfamilia.entity');
+  const { Producto } = require('../src/app/database/entities/productos/producto.entity');
+  const { Presentacion } = require('../src/app/database/entities/productos/presentacion.entity');
+  const { PrecioVenta } = require('../src/app/database/entities/productos/precio-venta.entity');
+  const { ZonaDelivery } = require('../src/app/database/entities/pedidos-online/zona-delivery.entity');
+  const { Usuario } = require('../src/app/database/entities/personas/usuario.entity');
+  const { Permission } = require('../src/app/database/entities/personas/permission.entity');
+  const { Role } = require('../src/app/database/entities/personas/role.entity');
+  const { RolePermission } = require('../src/app/database/entities/personas/role-permission.entity');
+  const { UsuarioRole } = require('../src/app/database/entities/personas/usuario-role.entity');
+  const { hashPassword } = require('../electron/utils/password.utils');
+
+  const moneda = await dataSource.getRepository(Moneda).save(
+    dataSource.getRepository(Moneda).create({ denominacion: 'GUARANI', simbolo: 'Gs', principal: true } as any),
+  );
+  const tipoPrecio = await dataSource.getRepository(TipoPrecio).save(
+    dataSource.getRepository(TipoPrecio).create({ descripcion: 'NORMAL', activo: true } as any),
+  );
+  const familia = await dataSource.getRepository(Familia).save(
+    dataSource.getRepository(Familia).create({ nombre: 'HAMBURGUESAS', activo: true } as any),
+  );
+  const subfamilia = await dataSource.getRepository(Subfamilia).save(
+    dataSource.getRepository(Subfamilia).create({ nombre: 'CLASICAS', activo: true, familia } as any),
+  );
+  const producto = await dataSource.getRepository(Producto).save(
+    dataSource.getRepository(Producto).create({
+      nombre: 'HAMBURGUESA COMPLETA', tipo: 'RETAIL', activo: true, esVendible: true,
+      disponibleOnline: true, pausadoOnline: false, iva: 10, subfamilia,
+    } as any),
+  );
+  const presentacion = await dataSource.getRepository(Presentacion).save(
+    dataSource.getRepository(Presentacion).create({ nombre: 'UNIDAD', cantidad: 1, principal: true, producto } as any),
+  );
+  await dataSource.getRepository(PrecioVenta).save(
+    dataSource.getRepository(PrecioVenta).create({
+      valor: 25000, principal: true, activo: true, moneda, tipoPrecio, presentacion,
+    } as any),
+  );
+  // Producto NO disponible online (no debe aparecer en el menú)
+  const prodOff = await dataSource.getRepository(Producto).save(
+    dataSource.getRepository(Producto).create({
+      nombre: 'PRODUCTO OCULTO', tipo: 'RETAIL', activo: true, esVendible: true,
+      disponibleOnline: false, pausadoOnline: false, iva: 10, subfamilia,
+    } as any),
+  );
+  const presOff = await dataSource.getRepository(Presentacion).save(
+    dataSource.getRepository(Presentacion).create({ nombre: 'UNIDAD', cantidad: 1, principal: true, producto: prodOff } as any),
+  );
+  await dataSource.getRepository(PrecioVenta).save(
+    dataSource.getRepository(PrecioVenta).create({ valor: 9999, principal: true, activo: true, moneda, tipoPrecio, presentacion: presOff } as any),
+  );
+
+  // Producto ELABORADO_SIN_VARIACION (precio via receta) + 1 adicional
+  const { Receta } = require('../src/app/database/entities/productos/receta.entity');
+  const { Adicional } = require('../src/app/database/entities/productos/adicional.entity');
+  const { RecetaAdicionalVinculacion } = require('../src/app/database/entities/productos/receta-adicional-vinculacion.entity');
+  const receta = await dataSource.getRepository(Receta).save(
+    dataSource.getRepository(Receta).create({ nombre: 'RECETA LOMITO', activo: true } as any),
+  );
+  const elaborado = await dataSource.getRepository(Producto).save(
+    dataSource.getRepository(Producto).create({
+      nombre: 'LOMITO ARABE', tipo: 'ELABORADO_SIN_VARIACION', activo: true, esVendible: true,
+      disponibleOnline: true, pausadoOnline: false, iva: 10, subfamilia, receta,
+    } as any),
+  );
+  await dataSource.getRepository(PrecioVenta).save(
+    dataSource.getRepository(PrecioVenta).create({ valor: 40000, principal: true, activo: true, moneda, tipoPrecio, receta } as any),
+  );
+  const adicional = await dataSource.getRepository(Adicional).save(
+    dataSource.getRepository(Adicional).create({ nombre: 'EXTRA QUESO', precio: 5000, activo: true } as any),
+  );
+  await dataSource.getRepository(RecetaAdicionalVinculacion).save(
+    dataSource.getRepository(RecetaAdicionalVinculacion).create({ receta, adicional, precioAdicional: 7000, activo: true } as any),
+  );
+
+  // Producto ELABORADO_CON_VARIACION (PIZZA): 2 tamaños × 2 sabores.
+  const { Sabor } = require('../src/app/database/entities/productos/sabor.entity');
+  const { RecetaPresentacion } = require('../src/app/database/entities/productos/receta-presentacion.entity');
+  const { PdvConfig } = require('../src/app/database/entities/ventas/pdv-config.entity');
+  const pizza = await dataSource.getRepository(Producto).save(
+    dataSource.getRepository(Producto).create({
+      nombre: 'PIZZA', tipo: 'ELABORADO_CON_VARIACION', activo: true, esVendible: true,
+      disponibleOnline: true, pausadoOnline: false, iva: 10, subfamilia,
+    } as any),
+  );
+  const presGrande = await dataSource.getRepository(Presentacion).save(
+    dataSource.getRepository(Presentacion).create({ nombre: 'GRANDE', cantidad: 3, principal: true, producto: pizza } as any),
+  );
+  const presMediana = await dataSource.getRepository(Presentacion).save(
+    dataSource.getRepository(Presentacion).create({ nombre: 'MEDIANA', cantidad: 2, principal: false, producto: pizza } as any),
+  );
+  const saborCalabresa = await dataSource.getRepository(Sabor).save(
+    dataSource.getRepository(Sabor).create({ nombre: 'CALABRESA', categoria: 'PIZZA', activo: true, producto: pizza } as any),
+  );
+  const saborBacon = await dataSource.getRepository(Sabor).save(
+    dataSource.getRepository(Sabor).create({ nombre: 'BACON', categoria: 'PIZZA', activo: true, producto: pizza } as any),
+  );
+  const saborMussarela = await dataSource.getRepository(Sabor).save(
+    dataSource.getRepository(Sabor).create({ nombre: 'MUSSARELA', categoria: 'PIZZA', activo: true, producto: pizza } as any),
+  );
+  // Una receta base por sabor (productoVariacion = la pizza).
+  const recCalabresa = await dataSource.getRepository(Receta).save(
+    dataSource.getRepository(Receta).create({ nombre: 'RECETA CALABRESA', activo: true, productoVariacion: pizza } as any),
+  );
+  const recBacon = await dataSource.getRepository(Receta).save(
+    dataSource.getRepository(Receta).create({ nombre: 'RECETA BACON', activo: true, productoVariacion: pizza } as any),
+  );
+  const recMussarela = await dataSource.getRepository(Receta).save(
+    dataSource.getRepository(Receta).create({ nombre: 'RECETA MUSSARELA', activo: true, productoVariacion: pizza } as any),
+  );
+  // Matriz (sabor × tamaño) → RecetaPresentacion + PrecioVenta.
+  //   CALABRESA: GRANDE 60000 / MEDIANA 45000
+  //   BACON:     GRANDE 70000 / MEDIANA 50000
+  //   MUSSARELA: GRANDE 65000 / MEDIANA 48000
+  const matriz: any[] = [
+    { receta: recCalabresa, sabor: saborCalabresa, presentacion: presGrande, precio: 60000 },
+    { receta: recCalabresa, sabor: saborCalabresa, presentacion: presMediana, precio: 45000 },
+    { receta: recBacon, sabor: saborBacon, presentacion: presGrande, precio: 70000 },
+    { receta: recBacon, sabor: saborBacon, presentacion: presMediana, precio: 50000 },
+    { receta: recMussarela, sabor: saborMussarela, presentacion: presGrande, precio: 65000 },
+    { receta: recMussarela, sabor: saborMussarela, presentacion: presMediana, precio: 48000 },
+  ];
+  for (const m of matriz) {
+    const rp = await dataSource.getRepository(RecetaPresentacion).save(
+      dataSource.getRepository(RecetaPresentacion).create({
+        nombre_generado: `PIZZA ${m.presentacion.nombre} ${m.sabor.nombre}`,
+        receta: m.receta, sabor: m.sabor, presentacion: m.presentacion, activo: true,
+      } as any),
+    );
+    await dataSource.getRepository(PrecioVenta).save(
+      dataSource.getRepository(PrecioVenta).create({ valor: m.precio, principal: true, activo: true, moneda, tipoPrecio, recetaPresentacion: rp } as any),
+    );
+  }
+  // Config de pizza del PdV: hasta 2 sabores, estrategia MAYOR_PRECIO.
+  await dataSource.getRepository(PdvConfig).save(
+    dataSource.getRepository(PdvConfig).create({ cantidad_mesas: 0, pizzaMaxSabores: 2, pizzaEstrategiaPrecio: 'MAYOR_PRECIO' } as any),
+  );
+
+  const zona = await dataSource.getRepository(ZonaDelivery).save(
+    dataSource.getRepository(ZonaDelivery).create({ nombre: 'CENTRO', tarifa: 15000, montoMinimo: 50000, activa: true } as any),
+  );
+
+  // Admin con permiso VENTAS_PDV (para la bandeja admin)
+  const admin = await dataSource.getRepository(Usuario).save(
+    dataSource.getRepository(Usuario).create({ nickname: 'admin', password: await hashPassword('admin'), activo: true } as any),
+  );
+  const perm = await dataSource.getRepository(Permission).save(
+    dataSource.getRepository(Permission).create({ codigo: 'VENTAS_PDV', descripcion: 'PdV', activo: true } as any),
+  );
+  const role = await dataSource.getRepository(Role).save(
+    dataSource.getRepository(Role).create({ descripcion: 'ADMIN', activo: true } as any),
+  );
+  await dataSource.getRepository(RolePermission).save(
+    dataSource.getRepository(RolePermission).create({ role, permission: perm } as any),
+  );
+  await dataSource.getRepository(UsuarioRole).save(
+    dataSource.getRepository(UsuarioRole).create({ usuario: admin, role } as any),
+  );
+
+  return {
+    admin, producto, presentacion, zona, elaborado, receta, adicional,
+    pizza, presGrande, presMediana, saborCalabresa, saborBacon, saborMussarela,
+  };
+}
+
+async function main() {
+  const tmpDir = path.resolve(__dirname, '../.tmp');
+  if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+  const dbFile = path.join(tmpDir, 'test-pedidos-online.db');
+  if (fs.existsSync(dbFile)) fs.unlinkSync(dbFile);
+
+  const baseOptions = getDataSourceOptions(tmpDir);
+  const dataSource = new DataSource({ ...(baseOptions as any), database: dbFile, synchronize: false, migrationsRun: false });
+  await dataSource.initialize();
+  await dataSource.runMigrations({ transaction: 'each' });
+  console.log('[e2e] Migraciones OK.');
+
+  const seeded = await seed(dataSource);
+  console.log('[e2e] Seed OK.');
+
+  // getCurrentUser para handlers admin
+  let currentUser: any = seeded.admin;
+  const getCurrentUser = () => currentUser;
+  registerPedidosOnlineHandlers(dataSource, getCurrentUser);
+  registerPedidosOnlineAuthHandlers(dataSource, getCurrentUser);
+  registerPedidosOnlinePedidosHandlers(dataSource, getCurrentUser);
+  registerPedidosOnlineAdminHandlers(dataSource, getCurrentUser);
+  registerPedidosOnlineConfigHandlers(dataSource, getCurrentUser);
+
+  const fastify = Fastify({ logger: false });
+  await fastify.register(cors, { origin: true });
+  await fastify.register(rateLimit, { max: 10000, timeWindow: '1 minute' });
+  await registerAuthPlugin(fastify);
+  registerPublicRoutes(fastify);
+  await fastify.listen({ port: PORT, host: '127.0.0.1' });
+
+  // Captura del OTP dev-log
+  let otpCapturado: string | null = null;
+  const origLog = console.log;
+  console.log = (...args: any[]) => {
+    const line = args.join(' ');
+    const m = /Código para \d+: (\d{6})/.exec(line);
+    if (m) otpCapturado = m[1];
+    origLog(...args);
+  };
+
+  console.log('\n[e2e] === FLUJO PÚBLICO ===');
+
+  // 1. Menú
+  const menu = await pub('menu.get');
+  const nombres = (menu.result?.productos || []).map((p: any) => p.nombre);
+  ok(menu.status === 200 && menu.result?.total === 3, 'menu.get devuelve 3 productos online (RETAIL + elaborado + pizza)', menu.result?.total);
+  ok(nombres.includes('HAMBURGUESA COMPLETA'), 'menu incluye el producto RETAIL online');
+  ok(nombres.includes('LOMITO ARABE'), 'menu incluye el ELABORADO_SIN_VARIACION (precio via receta)');
+  ok(!nombres.includes('PRODUCTO OCULTO'), 'menu NO incluye el producto no-online');
+  const pRetail = (menu.result?.productos || []).find((x: any) => x.nombre === 'HAMBURGUESA COMPLETA');
+  const pElab = (menu.result?.productos || []).find((x: any) => x.nombre === 'LOMITO ARABE');
+  ok(pRetail?.opciones?.[0]?.precio === 25000, 'RETAIL: precio de opción correcto', pRetail?.opciones?.[0]?.precio);
+  ok(pElab?.opciones?.[0]?.precio === 40000, 'ELABORADO: precio de opción (receta) correcto', pElab?.opciones?.[0]?.precio);
+  ok(pElab?.adicionales?.[0]?.precio === 7000, 'ELABORADO: adicional con precio de vinculación', pElab?.adicionales?.[0]?.precio);
+
+  // PIZZA (ELABORADO_CON_VARIACION): estructura sabor × tamaño.
+  const pPizza = (menu.result?.productos || []).find((x: any) => x.nombre === 'PIZZA');
+  ok(pPizza?.esPizza === true, 'PIZZA: marcada esPizza');
+  ok(Array.isArray(pPizza?.tamanos) && pPizza.tamanos.length === 2, 'PIZZA: 2 tamaños', pPizza?.tamanos?.length);
+  ok(pPizza?.tamanos?.[0]?.nombre === 'MEDIANA', 'PIZZA: tamaños ordenados chico→grande (MEDIANA primero)', pPizza?.tamanos?.[0]?.nombre);
+  ok(Array.isArray(pPizza?.sabores) && pPizza.sabores.length === 3, 'PIZZA: 3 sabores', pPizza?.sabores?.length);
+  const sCal = (pPizza?.sabores || []).find((s: any) => s.nombre === 'CALABRESA');
+  ok(sCal?.precios?.length === 2, 'PIZZA: sabor CALABRESA con 2 precios (por tamaño)', sCal?.precios?.length);
+  ok(sCal?.precioDesde === 45000, 'PIZZA: precioDesde de CALABRESA = 45000 (mediana)', sCal?.precioDesde);
+  ok(pPizza?.precioDesde === 45000, 'PIZZA: precioDesde global = 45000', pPizza?.precioDesde);
+  ok(pPizza?.pizzaConfig?.maxSabores === 2 && pPizza?.pizzaConfig?.estrategia === 'MAYOR_PRECIO', 'PIZZA: pizzaConfig (max 2, MAYOR_PRECIO)', pPizza?.pizzaConfig);
+
+  // 2. OTP request
+  const tel = '0981123456';
+  const otpReq = await pub('auth.otp.request', [tel]);
+  ok(otpReq.result?.success === true, 'auth.otp.request success');
+  ok(otpReq.result?.provider === 'dev-log', 'OTP en modo dev-log (sin credenciales)');
+  ok(!!otpCapturado, 'código OTP capturado del log', otpCapturado);
+
+  // 3. OTP verify
+  const otpVer = await pub('auth.otp.verify', [tel, otpCapturado]);
+  ok(otpVer.result?.success === true && !!otpVer.result?.accessToken, 'auth.otp.verify emite accessToken');
+  ok(!!otpVer.result?.refreshToken, 'auth.otp.verify emite refreshToken');
+  const token = otpVer.result?.accessToken;
+  const refreshTok = otpVer.result?.refreshToken;
+
+  // 3b. verify con código incorrecto
+  const otpBad = await pub('auth.otp.verify', [tel, '000000']);
+  ok(otpBad.result?.success === false, 'OTP incorrecto/usado es rechazado');
+
+  // 4. me
+  const me = await pub('auth.me', [], token);
+  ok(me.result?.success === true && me.result?.cuenta?.telefono === '0981123456', 'auth.me devuelve la cuenta');
+
+  // 5. pedido.crear sin token → rechazado
+  const sinAuth = await pub('pedido.crear', [{ tipoPedido: 'PICKUP', items: [] }]);
+  ok(sinAuth.status === 401, 'pedido.crear sin token → 401');
+
+  // 6. pedido.crear PICKUP
+  const pickup = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 2 }],
+    metodoPago: 'EFECTIVO',
+  }], token);
+  ok(pickup.result?.success === true, 'pedido.crear PICKUP success', pickup.result);
+  ok(pickup.result?.total === 50000, 'total PICKUP = 2×25000', pickup.result?.total);
+  ok(pickup.result?.costoEnvio === 0, 'PICKUP sin costo de envío');
+  const numeroPedido = pickup.result?.numero;
+
+  // 7. DELIVERY bajo mínimo
+  const delivBajo = await pub('pedido.crear', [{
+    tipoPedido: 'DELIVERY', zonaDeliveryId: seeded.zona.id, direccionEntrega: 'Calle 1',
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }],
+  }], token);
+  ok(delivBajo.result?.error === 'monto_minimo_no_alcanzado', 'DELIVERY bajo mínimo → error', delivBajo.result?.error);
+
+  // 8. DELIVERY válido (3×25000=75000 ≥ 50000) + envío 15000
+  const deliv = await pub('pedido.crear', [{
+    tipoPedido: 'DELIVERY', zonaDeliveryId: seeded.zona.id, direccionEntrega: 'Calle 1',
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 3 }],
+  }], token);
+  ok(deliv.result?.success === true, 'DELIVERY válido success', deliv.result);
+  ok(deliv.result?.costoEnvio === 15000, 'costo de envío aplicado');
+  ok(deliv.result?.total === 90000, 'total DELIVERY = 75000 + 15000', deliv.result?.total);
+
+  // 8b. ELABORADO con adicional: precio del adicional lo pone el SERVER (7000),
+  // aunque el cliente solo manda el id → total = 40000 + 7000 = 47000.
+  const pedElab = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.elaborado.id, opcion: { tipo: 'RECETA' }, cantidad: 1, adicionalIds: [seeded.adicional.id] }],
+  }], token);
+  ok(pedElab.result?.success === true && pedElab.result?.total === 47000, 'ELABORADO + adicional: total server-side = 47000', pedElab.result?.total);
+
+  // 9. mis pedidos
+  const mis = await pub('pedido.mis', [], token);
+  ok(mis.result?.success === true && mis.result?.pedidos?.length === 3, 'pedido.mis devuelve 3 pedidos', mis.result?.pedidos?.length);
+
+  console.log('\n[e2e] === BANDEJA ADMIN ===');
+  // 10. listar (invocación directa del handler admin, getCurrentUser = admin con permiso)
+  const lista: any = await invokeHandlerWithContext('get-pedidos-online-admin', undefined, { estado: 'RECIBIDO' });
+  ok(Array.isArray(lista) && lista.length === 3, 'admin ve 3 pedidos RECIBIDO', lista?.length);
+
+  const primero: any = lista[0];
+  // 11. aceptar
+  const acep = await invokeHandlerWithContext('aceptar-pedido-online', undefined, primero.id);
+  ok(acep?.success === true && acep?.pedido?.estado === 'ACEPTADO', 'aceptar → ACEPTADO');
+
+  // 12. transición inválida (ACEPTADO → LISTO no permitido directo)
+  const trInv = await invokeHandlerWithContext('avanzar-estado-pedido-online', undefined, primero.id, 'LISTO');
+  ok(trInv?.success === false && trInv?.error === 'transicion_invalida', 'transición inválida rechazada');
+
+  // 13. avanzar correcto: ACEPTADO → EN_PREPARACION → LISTO
+  const prep = await invokeHandlerWithContext('avanzar-estado-pedido-online', undefined, primero.id, 'EN_PREPARACION');
+  ok(prep?.success === true, 'ACEPTADO → EN_PREPARACION');
+  const listo = await invokeHandlerWithContext('avanzar-estado-pedido-online', undefined, primero.id, 'LISTO');
+  ok(listo?.success === true && listo?.pedido?.fechaListo, 'EN_PREPARACION → LISTO (con fechaListo)');
+
+  // 14. rechazar el segundo y el tercero
+  const segundo: any = lista[1];
+  const rech = await invokeHandlerWithContext('rechazar-pedido-online', undefined, segundo.id, 'sin stock');
+  ok(rech?.success === true && rech?.pedido?.estado === 'RECHAZADO', 'rechazar → RECHAZADO');
+  await invokeHandlerWithContext('rechazar-pedido-online', undefined, lista[2].id, 'sin stock');
+
+  // 15. pendientes (primero=LISTO ya no cuenta, segundo/tercero rechazados) = 0
+  const pend = await invokeHandlerWithContext('contar-pedidos-online-pendientes', undefined);
+  ok(pend?.pendientes === 0, 'contar pendientes = 0 (ya no hay RECIBIDO/ACEPTADO)', pend?.pendientes);
+
+  console.log('\n[e2e] === CONFIG DE TIENDA + REFRESH TOKEN ===');
+  // 16. config pública (default: abierta, ambos tipos)
+  const cfgPub = await pub('tienda.config');
+  ok(cfgPub.result?.abiertaAhora === true, 'tienda.config: abierta por default');
+  ok(cfgPub.result?.permitePickup === true && cfgPub.result?.permiteDelivery === true, 'ambos tipos habilitados por default');
+
+  // 17. refresh token: rota y emite nuevo access
+  const ref1 = await pub('auth.refresh', [refreshTok]);
+  ok(ref1.result?.success === true && !!ref1.result?.accessToken && !!ref1.result?.refreshToken, 'auth.refresh emite nuevo access+refresh');
+  // el refresh viejo ya no sirve (rotación)
+  const refOld = await pub('auth.refresh', [refreshTok]);
+  ok(refOld.result?.success === false, 'refresh viejo invalidado tras rotar');
+  const token2 = ref1.result?.accessToken;
+  const me2 = await pub('auth.me', [], token2);
+  ok(me2.result?.success === true, 'access token nuevo funciona en auth.me');
+
+  // 18. aceptación automática: el pedido entra ACEPTADO
+  await invokeHandlerWithContext('update-tienda-online-config', undefined, { aceptacionAutomatica: true });
+  const pedAuto = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }],
+  }], token2);
+  ok(pedAuto.result?.success === true && pedAuto.result?.estado === 'ACEPTADO', 'aceptación automática → pedido ACEPTADO', pedAuto.result?.estado);
+  await invokeHandlerWithContext('update-tienda-online-config', undefined, { aceptacionAutomatica: false });
+
+  // 19. pickup deshabilitado → rechazo
+  await invokeHandlerWithContext('update-tienda-online-config', undefined, { permitePickup: false });
+  const pedNoPickup = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }],
+  }], token2);
+  ok(pedNoPickup.result?.error === 'pickup_no_disponible', 'pickup deshabilitado → error', pedNoPickup.result?.error);
+  await invokeHandlerWithContext('update-tienda-online-config', undefined, { permitePickup: true });
+
+  // 20. tienda inactiva → cerrada
+  await invokeHandlerWithContext('update-tienda-online-config', undefined, { activa: false });
+  const pedCerrada = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }],
+  }], token2);
+  ok(pedCerrada.result?.error === 'tienda_cerrada', 'tienda inactiva → tienda_cerrada', pedCerrada.result?.error);
+  await invokeHandlerWithContext('update-tienda-online-config', undefined, { activa: true });
+
+  console.log('\n[e2e] === AUTH: REGISTRO EMAIL + GOOGLE ===');
+  // 21. registro por email+password (cuenta sin teléfono → migración nullable OK)
+  const reg = await pub('auth.registrar', [{ email: 'Cliente@Mail.com', password: 'secreto123', nombre: 'juan' }]);
+  ok(reg.result?.success === true && !!reg.result?.accessToken, 'auth.registrar crea cuenta por email + token');
+  ok(reg.result?.cuenta?.email === 'cliente@mail.com', 'email normalizado a minúsculas', reg.result?.cuenta?.email);
+  ok(reg.result?.cuenta?.nombre === 'JUAN', 'nombre en UPPERCASE', reg.result?.cuenta?.nombre);
+  // 22. email duplicado
+  const regDup = await pub('auth.registrar', [{ email: 'cliente@mail.com', password: 'otraclave1' }]);
+  ok(regDup.result?.error === 'email_en_uso', 'registro con email duplicado → email_en_uso');
+  // 23. password corto
+  const regShort = await pub('auth.registrar', [{ email: 'otro@mail.com', password: '123' }]);
+  ok(regShort.result?.error === 'password_corto', 'password corto rechazado');
+  // 24. login con el email registrado
+  const logEmail = await pub('auth.login', ['cliente@mail.com', 'secreto123']);
+  ok(logEmail.result?.success === true && !!logEmail.result?.accessToken, 'login por email + password funciona');
+  // 25. Google sin credenciales
+  const g = await pub('auth.google', ['fake-token']);
+  ok(g.result?.error === 'google_no_configurado', 'auth.google sin GOOGLE_CLIENT_ID → no_configurado');
+
+  console.log('\n[e2e] === ZONAS DELIVERY (ADMIN CRUD) + UBICACIÓN ===');
+  // 26. listar zonas (ya hay 1 del seed)
+  const zonasIni: any = await invokeHandlerWithContext('get-zonas-delivery-admin', undefined);
+  ok(Array.isArray(zonasIni) && zonasIni.length === 1, 'admin ve 1 zona inicial', zonasIni?.length);
+
+  // 27. crear una zona nueva
+  const nuevaZona: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, {
+    nombre: 'villa morra', tarifa: 20000, montoMinimo: 60000, activa: true, orden: 2,
+  });
+  ok(nuevaZona?.success === true && !!nuevaZona?.zona?.id, 'guardar-zona-delivery crea zona');
+  ok(nuevaZona?.zona?.nombre === 'VILLA MORRA', 'nombre de zona en UPPERCASE', nuevaZona?.zona?.nombre);
+  ok(nuevaZona?.zona?.tarifa === 20000, 'tarifa persistida', nuevaZona?.zona?.tarifa);
+
+  // 28. editar la zona creada
+  const editZona: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, {
+    id: nuevaZona.zona.id, nombre: 'villa morra norte', tarifa: 22000, montoMinimo: 60000, activa: false, orden: 2,
+  });
+  ok(editZona?.success === true && editZona?.zona?.nombre === 'VILLA MORRA NORTE' && editZona?.zona?.activa === false,
+    'guardar-zona-delivery edita zona existente');
+
+  // 29. nombre requerido
+  const zonaSinNombre: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, { nombre: '   ', tarifa: 1000 });
+  ok(zonaSinNombre?.success === false && zonaSinNombre?.error === 'nombre_requerido', 'zona sin nombre → nombre_requerido');
+
+  // 30. la zona pública (activa) NO incluye la inactiva
+  const zonasPub = await pub('zonas.get');
+  const zonasPubList = zonasPub.result || zonasPub;
+  const nombresPub = (Array.isArray(zonasPubList) ? zonasPubList : []).map((z: any) => z.nombre);
+  ok(nombresPub.includes('CENTRO') && !nombresPub.includes('VILLA MORRA NORTE'),
+    'zonas.get público sólo devuelve zonas activas', nombresPub);
+
+  // 31. eliminar la zona creada → vuelve a quedar 1
+  const del: any = await invokeHandlerWithContext('eliminar-zona-delivery', undefined, nuevaZona.zona.id);
+  ok(del?.success === true, 'eliminar-zona-delivery ok');
+  const zonasFin: any = await invokeHandlerWithContext('get-zonas-delivery-admin', undefined);
+  ok(Array.isArray(zonasFin) && zonasFin.length === 1, 'tras eliminar queda 1 zona', zonasFin?.length);
+
+  // 32. pedido DELIVERY con ubicación (lat/lng) → persiste y la ve el admin
+  const deliGeo = await pub('pedido.crear', [{
+    tipoPedido: 'DELIVERY', zonaDeliveryId: seeded.zona.id, direccionEntrega: 'Av. España 123',
+    latitud: -25.2891, longitud: -57.6109,
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 3 }],
+  }], token2);
+  ok(deliGeo.result?.success === true, 'pedido DELIVERY con ubicación creado', deliGeo.result?.error);
+  const listaGeo: any = await invokeHandlerWithContext('get-pedidos-online-admin', undefined, {});
+  const pedGeo: any = (listaGeo || []).find((p: any) => p.numero === deliGeo.result?.numero);
+  ok(!!pedGeo && Math.abs((pedGeo.latitud ?? 0) - (-25.2891)) < 1e-4 && Math.abs((pedGeo.longitud ?? 0) - (-57.6109)) < 1e-4,
+    'admin ve la ubicación (lat/lng) del pedido', { lat: pedGeo?.latitud, lng: pedGeo?.longitud });
+
+  console.log('\n[e2e] === PIZZA: PEDIDO (tamaño + sabor + mitad y mitad) ===');
+  // 33. pizza de 1 sabor: CALABRESA GRANDE → 60000
+  const pzUno = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.pizza.id, opcion: { tipo: 'PIZZA', presentacionId: seeded.presGrande.id, saborIds: [seeded.saborCalabresa.id] }, cantidad: 1 }],
+  }], token2);
+  ok(pzUno.result?.success === true && pzUno.result?.total === 60000, 'PIZZA 1 sabor (CALABRESA GRANDE) = 60000', pzUno.result?.total ?? pzUno.result?.error);
+
+  // 34. mitad y mitad: CALABRESA + BACON GRANDE → MAYOR_PRECIO = max(60000,70000) = 70000
+  const pzMitad = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.pizza.id, opcion: { tipo: 'PIZZA', presentacionId: seeded.presGrande.id, saborIds: [seeded.saborCalabresa.id, seeded.saborBacon.id] }, cantidad: 1 }],
+  }], token2);
+  ok(pzMitad.result?.success === true && pzMitad.result?.total === 70000, 'PIZZA mitad CALABRESA+BACON GRANDE = 70000 (MAYOR_PRECIO)', pzMitad.result?.total ?? pzMitad.result?.error);
+
+  // 35. tamaño MEDIANA de 1 sabor: BACON MEDIANA → 50000
+  const pzMed = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.pizza.id, opcion: { tipo: 'PIZZA', presentacionId: seeded.presMediana.id, saborIds: [seeded.saborBacon.id] }, cantidad: 1 }],
+  }], token2);
+  ok(pzMed.result?.success === true && pzMed.result?.total === 50000, 'PIZZA BACON MEDIANA = 50000', pzMed.result?.total ?? pzMed.result?.error);
+
+  // 36. exceder maxSabores (3 sabores con max 2) → error
+  const pzMax = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.pizza.id, opcion: { tipo: 'PIZZA', presentacionId: seeded.presGrande.id, saborIds: [seeded.saborCalabresa.id, seeded.saborBacon.id, seeded.saborMussarela.id] }, cantidad: 1 }],
+  }], token2);
+  ok(String(pzMax.result?.error || '').startsWith('demasiados_sabores'), 'PIZZA con 3 sabores (>max) → demasiados_sabores', pzMax.result?.error);
+
+  // 37. combinación inexistente (sabor válido, tamaño no cotizado) → error server-side.
+  //     Usamos un presentacionId ajeno (el de la hamburguesa) que no pertenece a la pizza.
+  const pzBad = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.pizza.id, opcion: { tipo: 'PIZZA', presentacionId: seeded.presentacion.id, saborIds: [seeded.saborCalabresa.id] }, cantidad: 1 }],
+  }], token2);
+  ok(String(pzBad.result?.error || '').startsWith('sabor_o_tamano_invalido'), 'PIZZA con tamaño no cotizado → sabor_o_tamano_invalido', pzBad.result?.error);
+
+  // 38. el desglose de sabores queda en el snapshot del item (para la bandeja).
+  const misPz: any = await invokeHandlerWithContext('get-pedidos-online-admin', undefined, {});
+  const pedMitad: any = (misPz || []).find((p: any) => p.numero === pzMitad.result?.numero);
+  const itMitad = pedMitad?.items?.[0];
+  ok(itMitad?.personalizacion?.sabores?.length === 2 && Math.abs(itMitad.personalizacion.sabores[0].proporcion - 0.5) < 1e-6,
+    'PIZZA mitad: snapshot con 2 sabores y proporción 0.5', itMitad?.personalizacion?.sabores);
+
+  console.log = origLog;
+  await fastify.close();
+  await dataSource.destroy();
+
+  console.log(`\n[e2e] RESULTADO: ${passed} passed, ${failed} failed.`);
+  process.exit(failed === 0 ? 0 : 1);
+}
+
+main().catch((e) => { console.error('[e2e] FATAL:', e); process.exit(1); });

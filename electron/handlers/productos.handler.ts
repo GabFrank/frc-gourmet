@@ -321,9 +321,11 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       // Construir where conditions
       const whereConditions: any = {};
 
-      // Filtro por búsqueda
+      // Filtro por búsqueda. Los strings se guardan en MAYÚSCULAS, así que se
+      // mayusculiza el término (en Postgres LIKE es case-sensitive; sin esto no
+      // trae datos al escribir en minúsculas).
       if (filters.search) {
-        whereConditions.nombre = Like(`%${filters.search}%`);
+        whereConditions.nombre = Like(`%${filters.search.toUpperCase()}%`);
       }
 
       // Filtro por tipo
@@ -407,12 +409,17 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
    * el listado de Productos del mobile). A diferencia de search-productos-by-
    * nombre, no filtra por esVendible (muestra también ingredientes).
    */
-  ipcMain.handle('get-productos-con-precio', async () => {
+  ipcMain.handle('get-productos-con-precio', async (_event: any, search?: string) => {
     try {
       const repo = dataSource.getRepository(Producto);
       const pvRepo = dataSource.getRepository(PrecioVenta);
+      // Filtro por nombre en el BACKEND (no en el cliente): el término va en
+      // UPPERCASE porque los nombres se guardan así (Like case-sensitive en Postgres).
+      const term = (search || '').trim().toUpperCase();
+      const where: any = { activo: true };
+      if (term) where.nombre = Like(`%${term}%`);
       const productos = await repo.find({
-        where: { activo: true },
+        where,
         relations: ['presentaciones', 'presentaciones.preciosVenta', 'presentaciones.preciosVenta.moneda', 'receta'],
         order: { nombre: 'ASC' },
       });
@@ -537,6 +544,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         esComprable: productoData.esComprable !== undefined ? productoData.esComprable : false,
         controlaStock: productoData.controlaStock !== undefined ? productoData.controlaStock : true,
         esIngrediente: productoData.esIngrediente !== undefined ? productoData.esIngrediente : false,
+        disponibleOnline: productoData.disponibleOnline === true,
+        pausadoOnline: productoData.pausadoOnline === true,
         stockMinimo: productoData.stockMinimo,
         stockMaximo: productoData.stockMaximo,
         // Buffet por peso
@@ -583,6 +592,10 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       if (productoData.esComprable !== undefined) producto.esComprable = productoData.esComprable;
       if (productoData.controlaStock !== undefined) producto.controlaStock = productoData.controlaStock;
       if (productoData.esIngrediente !== undefined) producto.esIngrediente = productoData.esIngrediente;
+
+      // Pedidos online (web app): disponibilidad y pausa (86ing) por canal.
+      if (productoData.disponibleOnline !== undefined) producto.disponibleOnline = productoData.disponibleOnline;
+      if (productoData.pausadoOnline !== undefined) producto.pausadoOnline = productoData.pausadoOnline;
 
       // Actualizar campos de control de stock
       if (productoData.stockMinimo !== undefined) producto.stockMinimo = productoData.stockMinimo;
@@ -812,6 +825,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('set-presentacion-principal', async (_event: any, presentacionId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const presentacionRepository = dataSource.getRepository(Presentacion);
       const currentUser = getCurrentUser();
 
@@ -854,6 +868,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('toggle-presentacion-activo', async (_event: any, presentacionId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const presentacionRepository = dataSource.getRepository(Presentacion);
       const currentUser = getCurrentUser();
 
@@ -927,8 +942,15 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   // --- Codigo Barra Handlers ---
+  // Normaliza el código de barra antes de persistir: recorta espacios (los
+  // lectores a veces agregan un salto de línea / espacio final) y lo pasa a
+  // MAYÚSCULAS, de modo que el guardado y la búsqueda usen la misma forma.
+  const normalizarCodigoBarra = (codigo: any): string =>
+    (codigo ?? '').toString().trim().toUpperCase();
+
   ipcMain.handle('create-codigo-barra', async (_event: any, codigoBarraData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       console.log('Creating codigo barra with data:', codigoBarraData);
 
       const codigoBarraRepository = dataSource.getRepository(CodigoBarra);
@@ -955,7 +977,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       }
 
       const codigoBarra = codigoBarraRepository.create({
-        codigo: codigoBarraData.codigo,
+        codigo: normalizarCodigoBarra(codigoBarraData.codigo),
         presentacion: presentacion,
         principal: codigoBarraData.principal !== undefined ? codigoBarraData.principal : false,
         activo: codigoBarraData.activo !== undefined ? codigoBarraData.activo : true
@@ -976,6 +998,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('update-codigo-barra', async (_event: any, codigoBarraId: number, codigoBarraData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const codigoBarraRepository = dataSource.getRepository(CodigoBarra);
       const currentUser = getCurrentUser();
 
@@ -998,7 +1021,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
       // Update fields
       if (codigoBarraData.codigo !== undefined) {
-        codigoBarra.codigo = codigoBarraData.codigo;
+        codigoBarra.codigo = normalizarCodigoBarra(codigoBarraData.codigo);
       }
       if (codigoBarraData.principal !== undefined) {
         codigoBarra.principal = codigoBarraData.principal;
@@ -1018,6 +1041,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('delete-codigo-barra', async (_event: any, codigoBarraId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const codigoBarraRepository = dataSource.getRepository(CodigoBarra);
       const currentUser = getCurrentUser();
 
@@ -1074,6 +1098,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-stock-movimiento', async (_event: any, stockMovimientoData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'STOCK_MOVIMIENTO_REGISTRAR');
       const stockMovimientoRepository = dataSource.getRepository(StockMovimiento);
       const productoRepository = dataSource.getRepository(Producto);
       const currentUser = getCurrentUser();
@@ -1119,6 +1144,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('update-stock-movimiento', async (_event: any, stockMovimientoId: number, stockMovimientoData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'STOCK_MOVIMIENTO_REGISTRAR');
       const stockMovimientoRepository = dataSource.getRepository(StockMovimiento);
       const stockMovimiento = await stockMovimientoRepository.findOneBy({ id: stockMovimientoId });
 
@@ -1186,6 +1212,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('createObservacion', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const observacionRepository = dataSource.getRepository(Observacion);
       const currentUser = getCurrentUser();
 
@@ -1204,6 +1231,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('updateObservacion', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const observacionRepository = dataSource.getRepository(Observacion);
       const currentUser = getCurrentUser();
 
@@ -1225,6 +1253,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('deleteObservacion', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const observacionRepository = dataSource.getRepository(Observacion);
       const currentUser = getCurrentUser();
 
@@ -1258,6 +1287,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-producto-observacion', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const productoObservacionRepository = dataSource.getRepository(ProductoObservacion);
       const currentUser = getCurrentUser();
 
@@ -1277,6 +1307,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('delete-producto-observacion', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const productoObservacionRepository = dataSource.getRepository(ProductoObservacion);
       const currentUser = getCurrentUser();
 
@@ -1389,6 +1420,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('createCombo', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const comboRepository = dataSource.getRepository(Combo);
       const currentUser = getCurrentUser();
 
@@ -1408,6 +1440,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('updateCombo', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const comboRepository = dataSource.getRepository(Combo);
       const currentUser = getCurrentUser();
 
@@ -1429,6 +1462,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('deleteCombo', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const comboRepository = dataSource.getRepository(Combo);
       const currentUser = getCurrentUser();
 
@@ -1462,6 +1496,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('createComboProducto', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const comboProductoRepository = dataSource.getRepository(ComboProducto);
       const currentUser = getCurrentUser();
 
@@ -1484,6 +1519,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('updateComboProducto', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const comboProductoRepository = dataSource.getRepository(ComboProducto);
       const currentUser = getCurrentUser();
 
@@ -1509,6 +1545,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('deleteComboProducto', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const comboProductoRepository = dataSource.getRepository(ComboProducto);
       const currentUser = getCurrentUser();
 
@@ -1727,18 +1764,23 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         order: { nombre: 'ASC' }
       });
 
-      // Buscar también por CÓDIGO DE BARRA: si el término coincide exactamente
-      // con un código activo, incluir ese producto en los resultados (los
-      // lectores envían el código completo). Así el buscador "encuentra por
-      // código" tanto en el PdV como en el mobile.
+      // Buscar también por CÓDIGO DE BARRA: si el término coincide con un
+      // código activo, incluir ese producto en los resultados (los lectores
+      // envían el código completo). Así el buscador "encuentra por código"
+      // tanto en el PdV como en el mobile.
+      // Se compara con TRIM + UPPER en ambos lados para tolerar diferencias de
+      // espacios/mayúsculas (incluye códigos ya guardados sin normalizar).
       const termino = (nombre || '').trim();
       const codigoProdIds = new Set<number>();
       if (termino) {
         const cbRepo = dataSource.getRepository(CodigoBarra);
-        const cbs = await cbRepo.find({
-          where: { codigo: termino, activo: true },
-          relations: ['presentacion', 'presentacion.producto'],
-        });
+        const cbs = await cbRepo
+          .createQueryBuilder('cb')
+          .leftJoinAndSelect('cb.presentacion', 'presentacion')
+          .leftJoinAndSelect('presentacion.producto', 'producto')
+          .where('cb.activo = :activo', { activo: true })
+          .andWhere('UPPER(TRIM(cb.codigo)) = UPPER(:codigo)', { codigo: termino })
+          .getMany();
         for (const cb of cbs) {
           const pid = (cb as any)?.presentacion?.producto?.id;
           if (pid) codigoProdIds.add(pid);
@@ -1820,6 +1862,10 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
           recetas: (p as any).recetas?.map((r: any) => ({ id: r.id, costoCalculado: r.costoCalculado })) || [],
           principalPresentacion,
           principalPrecio,
+          // true si el término de búsqueda matcheó EXACTAMENTE un código de
+          // barra de este producto. El PdV/buscador lo usa para auto-seleccionar
+          // (como un click en la fila) cuando hay un único match exacto.
+          matchByCodigo: codigoProdIds.has(p.id),
         };
       }));
     } catch (error) {
@@ -1915,6 +1961,10 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-precio-venta', async (_event: any, precioVentaData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
+      if (!(Number(precioVentaData?.valor) > 0)) {
+        throw new Error('El precio de venta debe ser mayor a 0');
+      }
       const repo = dataSource.getRepository(PrecioVenta);
       const presentacionRepo = dataSource.getRepository(Presentacion);
       const recetaRepo = dataSource.getRepository(Receta);
@@ -1927,11 +1977,20 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       let presentacion = null;
       let receta = null;
       let producto = null;
+      let recetaPresentacion = null;
 
       if (precioVentaData.presentacionId) {
         presentacion = await presentacionRepo.findOneBy({ id: precioVentaData.presentacionId });
         if (!presentacion) {
           throw new Error('Presentacion not found');
+        }
+      } else if (precioVentaData.recetaPresentacionId) {
+        // Precio por VARIACIÓN (sabor × tamaño): el precio vive en la
+        // RecetaPresentacion, no en la receta base (que es compartida entre tamaños).
+        recetaPresentacion = await dataSource.getRepository(RecetaPresentacion)
+          .findOneBy({ id: precioVentaData.recetaPresentacionId });
+        if (!recetaPresentacion) {
+          throw new Error('RecetaPresentacion not found');
         }
       } else if (precioVentaData.recetaId) {
         receta = await recetaRepo.findOneBy({ id: precioVentaData.recetaId });
@@ -1944,7 +2003,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
           throw new Error('Producto not found');
         }
       } else {
-        throw new Error('Either presentacionId, recetaId, or productoId must be provided');
+        throw new Error('Either presentacionId, recetaPresentacionId, recetaId, or productoId must be provided');
       }
 
       const moneda = await monedaRepo.findOneBy({ id: precioVentaData.monedaId });
@@ -1962,6 +2021,14 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         if (presentacion) {
           const existingPrincipals = await repo.find({
             where: { presentacion: { id: presentacion.id }, principal: true }
+          });
+          for (const existing of existingPrincipals) {
+            existing.principal = false;
+            await repo.save(existing);
+          }
+        } else if (recetaPresentacion) {
+          const existingPrincipals = await repo.find({
+            where: { recetaPresentacion: { id: recetaPresentacion.id }, principal: true }
           });
           for (const existing of existingPrincipals) {
             existing.principal = false;
@@ -2003,6 +2070,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         moneda: moneda,
         tipoPrecio: tipoPrecio,
         ...(presentacion && { presentacion }),
+        ...(recetaPresentacion && { recetaPresentacion }),
         ...(receta && { receta }),
         ...(producto && { producto })
       });
@@ -2018,6 +2086,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('update-precio-venta', async (_event: any, precioVentaId: number, precioVentaData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const repo = dataSource.getRepository(PrecioVenta);
       const monedaRepo = dataSource.getRepository(Moneda);
       const tipoPrecioRepo = dataSource.getRepository(TipoPrecio);
@@ -2025,7 +2094,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
       const precioVenta = await repo.findOne({
         where: { id: precioVentaId },
-        relations: ['presentacion', 'receta', 'moneda', 'tipoPrecio']
+        relations: ['presentacion', 'receta', 'recetaPresentacion', 'moneda', 'tipoPrecio']
       });
 
       if (!precioVenta) {
@@ -2062,6 +2131,14 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
           if (precioVenta.presentacion) {
             const existingPrincipals = await repo.find({
               where: { presentacion: { id: precioVenta.presentacion.id }, principal: true, id: Not(precioVentaId) }
+            });
+            for (const existing of existingPrincipals) {
+              existing.principal = false;
+              await repo.save(existing);
+            }
+          } else if (precioVenta.recetaPresentacion) {
+            const existingPrincipals = await repo.find({
+              where: { recetaPresentacion: { id: precioVenta.recetaPresentacion.id }, principal: true, id: Not(precioVentaId) }
             });
             for (const existing of existingPrincipals) {
               existing.principal = false;
@@ -2106,6 +2183,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('delete-precio-venta', async (_event: any, precioVentaId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const repo = dataSource.getRepository(PrecioVenta);
       const currentUser = getCurrentUser();
 
@@ -2155,6 +2233,10 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-precio-costo', async (_event: any, precioCostoData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
+      if (!(Number(precioCostoData?.valor) > 0)) {
+        throw new Error('El costo debe ser mayor a 0');
+      }
       const repo = dataSource.getRepository(PrecioCosto);
       const productoRepo = dataSource.getRepository(Producto);
       const monedaRepo = dataSource.getRepository(Moneda);
@@ -2191,6 +2273,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('update-precio-costo', async (_event: any, precioCostoId: number, precioCostoData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const repo = dataSource.getRepository(PrecioCosto);
       const monedaRepo = dataSource.getRepository(Moneda);
       const currentUser = getCurrentUser();
@@ -2229,6 +2312,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('delete-precio-costo', async (_event: any, precioCostoId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
       const repo = dataSource.getRepository(PrecioCosto);
       const currentUser = getCurrentUser();
 

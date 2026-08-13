@@ -1,9 +1,9 @@
-# Capítulo 6 — Módulo Compras
+# Módulo Compras
 
 Entrás tocando **Compras** (🛒) en la navegación. Te permite **gestionar las categorías de
 compra** y **consultar** las compras y los proveedores.
 
-> Repasá [Capítulo 3](03-como-usar-listas-y-formularios.md) para el uso general de listas.
+> Repasá [Cómo usar las listas y los formularios](03-como-usar-listas-y-formularios.md) para el uso general de listas.
 
 ---
 
@@ -40,7 +40,7 @@ El listado de proveedores con sus datos. Te deja consultar a quién le comprás.
 ## C. Lo que todavía no está (aparece como "pronto")
 
 - **Importaciones IA** — la importación de facturas con inteligencia artificial (OCR) está
-  disponible solo en el escritorio. Ver [Capítulo 10](10-limitaciones-y-version-escritorio.md).
+  disponible solo en el escritorio. Ver [Qué falta en mobile](10-limitaciones-y-version-escritorio.md).
 
 ---
 
@@ -52,4 +52,4 @@ El listado de proveedores con sus datos. Te deja consultar a quién le comprás.
 
 ---
 
-**Próximo capítulo →** [07 — Módulo Productos](07-modulo-productos.md)
+**Próximo capítulo →** [Módulo Productos](07-modulo-productos.md)

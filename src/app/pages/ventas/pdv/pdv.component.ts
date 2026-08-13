@@ -35,6 +35,7 @@ import { TipoDetalle } from 'src/app/database/entities/compras/pago-detalle.enti
 import { AuthService } from 'src/app/services/auth.service';
 import { Caja } from 'src/app/database/entities/financiero/caja.entity';
 import { CreateCajaDialogComponent } from '../../financiero/cajas/create-caja-dialog/create-caja-dialog.component';
+import { SeleccionarCajaDialogComponent, SeleccionarCajaDialogData } from '../../../shared/components/seleccionar-caja-dialog/seleccionar-caja-dialog.component';
 import { TabsService } from 'src/app/services/tabs.service';
 import { MesaSelectionDialogComponent } from '../../../shared/components/mesa-selection-dialog/mesa-selection-dialog.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
@@ -121,6 +122,13 @@ export class PdvComponent implements OnInit, OnDestroy {
   expandedElement: VentaItem | null = null;
   columnsToDisplayWithExpand: string[] = [...this.displayedColumns];
 
+  // ─── Estado de cobro por ítem (cobro parcial) ──────────────────────────
+  // Resumen en bruto para la barra Total/Pagado/Saldo del PdV.
+  cobroDeudaBruta = 0;
+  cobroPagado = 0;
+  cobroSaldo = 0;
+  hayCobroParcial = false; // true si algún ítem tiene cobertura parcial/total
+
   // Search form
   searchForm: FormGroup;
 
@@ -175,6 +183,14 @@ export class PdvComponent implements OnInit, OnDestroy {
 
   // Caja
   caja: Caja | null = null;
+  // Dispositivo de este PC (snapshot del boot). Si coincide con el dispositivo
+  // de la caja seleccionada, este equipo puede cobrar; si no, solo lanza items.
+  currentDeviceId: number | null = null;
+  // Gate de cobro por dispositivo: true solo en el dispositivo donde se abrio
+  // la caja. Otros dispositivos (y la PWA) pueden lanzar items pero no cobrar.
+  puedeCobrar = false;
+  // Nombre del dispositivo dueno de la caja (para el mensaje al usuario).
+  dispositivoCajaNombre = '';
 
   // Atajos (accesos rápidos)
   atajoGrupos: any[] = [];
@@ -219,50 +235,14 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
-    // get caja abierta from current user
+    // Dispositivo de este PC (para el gate de cobro por dispositivo).
+    this.currentDeviceId = (window as any).api?.getDeviceId ? (window as any).api.getDeviceId() : null;
+
+    // Selección de caja: cualquier usuario/dispositivo puede unirse a una caja
+    // ABIERTA para lanzar items. Si hay 1 sola, se usa esa; si hay varias, se
+    // muestra la lista para elegir; si no hay ninguna, se ofrece abrir una.
     if (this.authService.currentUser) {
-      this.caja = await firstValueFrom(this.repositoryService.getCajaAbiertaByUsuario(this.authService.currentUser.id));
-      if (this.caja) {
-        this.loadInitialData();
-      } else {
-        // show dialog warning that there is no caja abierta, ask if they want to open a new caja, if yes open create caja dialog
-        // fist show a dialog with a warning message  
-        // change this by confirmation dialog
-        const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-          disableClose: true,
-          data: {
-            title: 'Caja abierta no encontrada',
-            message: 'No hay una caja abierta, ¿desea abrir una nueva?',
-          }
-        });
-        dialogRef.afterClosed().subscribe(result => {
-          if (result) {
-            // open create caja dialog
-            const cajaDialogRef = this.dialog.open(CreateCajaDialogComponent, {
-              width: '80vw',
-              height: '80vh',
-              disableClose: true
-            });
-            cajaDialogRef.afterClosed().subscribe(async (cajaResult) => {
-              if (cajaResult?.success) {
-                // Recargar la caja abierta
-                this.caja = await firstValueFrom(this.repositoryService.getCajaAbiertaByUsuario(this.authService.currentUser!.id));
-                if (this.caja) {
-                  this.loadInitialData();
-                }
-              } else {
-                // close tab
-                this.tabsService.removeTabById('pdv');
-              }
-            });
-          } else {
-            // close tab
-            this.tabsService.removeTabById('pdv');
-          }
-        });
-      }
-    } else {
-      // 
+      await this.inicializarCaja();
     }
     //set timeout and focus on searchTerm input
     setTimeout(() => {
@@ -278,6 +258,111 @@ export class PdvComponent implements OnInit, OnDestroy {
     }, 60000);
 
 
+  }
+
+  /**
+   * Resuelve a qué caja abierta se une este PdV: 1 → automática; varias →
+   * diálogo de selección; ninguna → ofrecer abrir una nueva.
+   */
+  private async inicializarCaja(): Promise<void> {
+    let cajasAbiertas: Caja[] = [];
+    try {
+      cajasAbiertas = (await firstValueFrom(this.repositoryService.getCajasAbiertas())) || [];
+    } catch (e) {
+      console.error('Error obteniendo cajas abiertas:', e);
+      cajasAbiertas = [];
+    }
+
+    if (cajasAbiertas.length === 1) {
+      this.aplicarCajaSeleccionada(cajasAbiertas[0]);
+    } else if (cajasAbiertas.length > 1) {
+      const dialogRef = this.dialog.open(SeleccionarCajaDialogComponent, {
+        width: '520px',
+        disableClose: true,
+        data: { cajas: cajasAbiertas, currentDeviceId: this.currentDeviceId } as SeleccionarCajaDialogData,
+      });
+      const result = await firstValueFrom(dialogRef.afterClosed());
+      if (result?.caja) {
+        this.aplicarCajaSeleccionada(result.caja);
+      } else if (result?.abrirNueva) {
+        this.ofrecerAbrirCaja(false);
+      } else {
+        this.tabsService.removeTabById('pdv');
+      }
+    } else {
+      this.ofrecerAbrirCaja(true);
+    }
+  }
+
+  /**
+   * Ofrece abrir una nueva caja. Si `preguntar` es true, primero confirma.
+   */
+  private ofrecerAbrirCaja(preguntar: boolean): void {
+    const abrir = () => {
+      const cajaDialogRef = this.dialog.open(CreateCajaDialogComponent, {
+        width: '80vw',
+        height: '80vh',
+        disableClose: true,
+      });
+      cajaDialogRef.afterClosed().subscribe(async (cajaResult) => {
+        if (cajaResult?.success) {
+          // Recargar la caja recién abierta de este usuario.
+          const caja = await firstValueFrom(
+            this.repositoryService.getCajaAbiertaByUsuario(this.authService.currentUser!.id)
+          );
+          if (caja) {
+            this.aplicarCajaSeleccionada(caja);
+          } else {
+            this.tabsService.removeTabById('pdv');
+          }
+        } else {
+          this.tabsService.removeTabById('pdv');
+        }
+      });
+    };
+
+    if (!preguntar) {
+      abrir();
+      return;
+    }
+
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      disableClose: true,
+      data: {
+        title: 'Caja abierta no encontrada',
+        message: 'No hay una caja abierta, ¿desea abrir una nueva?',
+      },
+    });
+    dialogRef.afterClosed().subscribe(result => {
+      if (result) {
+        abrir();
+      } else {
+        this.tabsService.removeTabById('pdv');
+      }
+    });
+  }
+
+  /**
+   * Fija la caja activa, computa si este dispositivo puede cobrar y carga datos.
+   */
+  private aplicarCajaSeleccionada(caja: Caja): void {
+    this.caja = caja;
+    const dispositivoCajaId = caja?.dispositivo?.id ?? null;
+    this.dispositivoCajaNombre = caja?.dispositivo?.nombre || (dispositivoCajaId ? `Dispositivo #${dispositivoCajaId}` : '');
+    // Solo el dispositivo donde se abrió la caja puede cobrar. Se bloquea SOLO
+    // cuando se puede determinar positivamente que este dispositivo difiere del
+    // dueño de la caja; si el dispositivo local no está identificado (ej.
+    // standalone sin device configurado) no se bloquea, para no romper el cobro
+    // en instalaciones de un solo equipo.
+    this.puedeCobrar = this.currentDeviceId == null || dispositivoCajaId == null || this.currentDeviceId === dispositivoCajaId;
+    if (!this.puedeCobrar) {
+      this.snackBar.open(
+        `Unido a la caja #${caja.id}. El cobro solo se realiza en ${this.dispositivoCajaNombre || 'el dispositivo donde se abrió la caja'}.`,
+        'OK',
+        { duration: 6000 }
+      );
+    }
+    this.loadInitialData();
   }
 
   /**
@@ -310,8 +395,8 @@ export class PdvComponent implements OnInit, OnDestroy {
       // Load tables (mesas)
       await this.loadMesas();
 
-      // Load sectores
-      this.sectores = await firstValueFrom(this.repositoryService.getSectoresActivos());
+      // Load sectores de MESA (chips para filtrar mesas)
+      this.sectores = await firstValueFrom(this.repositoryService.getSectoresActivos('MESA'));
 
       // Load comandas
       await this.loadComandas();
@@ -358,6 +443,43 @@ export class PdvComponent implements OnInit, OnDestroy {
     if (this.mesasRefreshInterval) {
       clearInterval(this.mesasRefreshInterval);
     }
+    if (this.focusBuscadorTimeout) {
+      clearTimeout(this.focusBuscadorTimeout);
+    }
+  }
+
+  private focusBuscadorTimeout: any = null;
+
+  /**
+   * Reenfoca el input de búsqueda de producto tras un pequeño delay.
+   * Se usa al hacer click en una mesa/comanda u otro lugar del PdV, para que el
+   * usuario pueda seguir escaneando/escribiendo productos sin reubicar el foco a mano.
+   * No roba el foco si el usuario está escribiendo en el input de nombre de cliente
+   * (u otro input de texto), ni si hay un diálogo abierto.
+   */
+  private focusBuscadorConDelay(delayMs = 500): void {
+    if (this.focusBuscadorTimeout) {
+      clearTimeout(this.focusBuscadorTimeout);
+    }
+    this.focusBuscadorTimeout = setTimeout(() => {
+      this.focusBuscadorTimeout = null;
+      // No interrumpir la edición del nombre del cliente.
+      if (this.isEditingClienteName) return;
+      // No robar el foco si hay un diálogo abierto (ej. cobro, asociar cliente).
+      if (this.dialog.openDialogs.length > 0) return;
+      const active = document.activeElement as HTMLElement | null;
+      if (active) {
+        const tag = active.tagName;
+        const esInputTexto = tag === 'INPUT' || tag === 'TEXTAREA';
+        const esBuscador = active.getAttribute('formControlName') === 'searchTerm';
+        // Si está escribiendo en otro input (ej. nombre cliente), no interrumpir.
+        if (esInputTexto && !esBuscador) return;
+      }
+      const searchTermInput = document.querySelector('input[formControlName="searchTerm"]');
+      if (searchTermInput) {
+        (searchTermInput as HTMLInputElement).focus();
+      }
+    }, delayMs);
   }
 
   /**
@@ -575,6 +697,9 @@ export class PdvComponent implements OnInit, OnDestroy {
       this.ventaItemsDataSource.data = [];
       this.calculateTotals();
     }
+
+    // Devolver el foco al buscador de productos tras un pequeño delay.
+    this.focusBuscadorConDelay();
   }
 
   private async loadVentaItemsForVenta(ventaId: number): Promise<void> {
@@ -585,11 +710,64 @@ export class PdvComponent implements OnInit, OnDestroy {
       }
       this.ventaItemsDataSource.data = items;
       this.calculateTotals();
+      await this.loadEstadoCobroActual(ventaId);
     } catch (error) {
       console.error('Error loading venta items:', error);
       this.ventaItemsDataSource.data = [];
       this.calculateTotals();
+      this.resetEstadoCobro();
     }
+  }
+
+  /**
+   * Carga el estado de cobro por ítem (PAGADO/PARCIAL/PENDIENTE) y el resumen
+   * en bruto. Estampa `_estadoCobro` y `_montoCubierto` en cada VentaItem para
+   * el template (sin funciones en la vista).
+   */
+  private async loadEstadoCobroActual(ventaId: number): Promise<void> {
+    try {
+      const estado: any = await firstValueFrom(this.repositoryService.getEstadoCobroVenta(ventaId));
+      if (!estado) { this.resetEstadoCobro(); return; }
+      const map = new Map<number, any>();
+      for (const e of (estado.items || [])) map.set(e.id, e);
+      for (const item of this.ventaItemsDataSource.data) {
+        const e = map.get(item.id);
+        (item as any)._estadoCobro = e?.estado || 'PENDIENTE';
+        (item as any)._montoCubierto = Number(e?.montoCubierto || 0);
+      }
+      this.ventaItemsDataSource.data = [...this.ventaItemsDataSource.data];
+      this.cobroDeudaBruta = Number(estado.deudaBruta || 0);
+      this.cobroPagado = Number(estado.totalCubierto || 0);
+      this.cobroSaldo = Number(estado.pendienteBruto || 0);
+      this.hayCobroParcial = this.cobroPagado > 0.5;
+    } catch (error) {
+      console.error('Error cargando estado de cobro:', error);
+      this.resetEstadoCobro();
+    }
+  }
+
+  private resetEstadoCobro(): void {
+    this.cobroDeudaBruta = 0;
+    this.cobroPagado = 0;
+    this.cobroSaldo = 0;
+    this.hayCobroParcial = false;
+  }
+
+  /**
+   * Bloquea acciones sobre un ítem que ya tiene cobertura de pago (parcial o
+   * total): editar, cancelar, personalizar o mover. Hay que anular la ronda de
+   * cobro primero. Devuelve true si está bloqueado (y avisa).
+   */
+  private bloqueadoPorCobro(item: VentaItem, accion: string): boolean {
+    if (Number((item as any)?._montoCubierto || 0) > 0.5) {
+      this.snackBar.open(
+        `No se puede ${accion} un ítem ya pagado. Anulá el cobro parcial primero.`,
+        'OK',
+        { duration: 4000 }
+      );
+      return true;
+    }
+    return false;
   }
 
   private async cerrarComandaActual(): Promise<void> {
@@ -744,7 +922,13 @@ export class PdvComponent implements OnInit, OnDestroy {
       width: '55%',
       height: '70%',
       panelClass: 'atajo-productos-dialog-container',
-      data: { atajoItemId: item.id, atajoItemNombre: item.nombre, gridSize: this.atajosProductosGridSize }
+      data: {
+        atajoItemId: item.id,
+        atajoItemNombre: item.nombre,
+        gridSize: this.atajosProductosGridSize,
+        // Propagar la cantidad actual del buscador al panel de accesos directos.
+        cantidad: Number(this.searchForm.get('cantidad')?.value) || 1,
+      }
     });
 
     dialogRef.afterClosed().subscribe(async (result: any) => {
@@ -925,6 +1109,7 @@ export class PdvComponent implements OnInit, OnDestroy {
 
   // Edit item from cart
   async personalizarItem(item: VentaItem): Promise<void> {
+    if (this.bloqueadoPorCobro(item, 'personalizar')) return;
     const recetaId = (item.producto as any)?.receta?.id;
     if (!recetaId) {
       // Si no tiene receta, buscar el producto completo con relación receta
@@ -1015,6 +1200,7 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   editItem(item: VentaItem): void {
+    if (this.bloqueadoPorCobro(item, 'editar')) return;
     const dialogRef = this.dialog.open(EditVentaItemDialogComponent, {
       width: '400px',
       data: { ventaItem: item },
@@ -1088,6 +1274,7 @@ export class PdvComponent implements OnInit, OnDestroy {
 
   // Cancel item from cart
   cancelItem(item: VentaItem): void {
+    if (this.bloqueadoPorCobro(item, 'cancelar')) return;
     // update item with estado = CANCELADO, cancelado_por = current user, cancelado_fecha = current date,
     item.estado = EstadoVentaItem.CANCELADO;
     item.canceladoPor = this.authService.currentUser;
@@ -1287,8 +1474,19 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   private async openSeleccionarVariacionDialog(producto: Producto, cantidad: number): Promise<SeleccionarVariacionDialogResult | null> {
+    // El producto de la búsqueda/atajo/código puede venir como DTO sin la relación
+    // `presentaciones` (el handler search-productos-by-nombre no la incluye), lo que
+    // dejaba el paso 1 en "No hay presentaciones configuradas". Recargamos el producto
+    // completo (presentaciones activas + sabores) antes de abrir el diálogo.
+    let productoCompleto: Producto = producto;
+    try {
+      const full = await firstValueFrom(this.repositoryService.getProducto(producto.id));
+      if (full) productoCompleto = full;
+    } catch {
+      // Si falla la recarga, seguimos con lo que hay (mejor que romper el flujo).
+    }
     const dialogData: SeleccionarVariacionDialogData = {
-      producto,
+      producto: productoCompleto,
       cantidad,
       pdvConfig: this.pdvConfig,
     };
@@ -1312,15 +1510,12 @@ export class PdvComponent implements OnInit, OnDestroy {
 
     const venta = await this.getVenta();
 
-    // Calcular precio de adicionales total (por sabor + general)
+    // Calcular precio de adicionales total (personalización por sabor)
     let totalAdicionales = 0;
     for (const sabor of result.sabores) {
       if (sabor.personalizacion) {
         totalAdicionales += sabor.personalizacion.precioAdicionalTotal * sabor.proporcion;
       }
-    }
-    if (result.personalizacionGeneral) {
-      totalAdicionales += result.personalizacionGeneral.precioAdicionalTotal;
     }
 
     // Determinar la RecetaPresentacion principal (mayor precio o primera)
@@ -1371,11 +1566,6 @@ export class PdvComponent implements OnInit, OnDestroy {
         if (sabor.personalizacion) {
           await this.persistirPersonalizacionConSabor(savedItem.id, sabor.personalizacion, savedSabor.id);
         }
-      }
-
-      // Persistir personalización general (sin ventaItemSabor FK)
-      if (result.personalizacionGeneral) {
-        await this.persistirPersonalizacion(savedItem.id, result.personalizacionGeneral);
       }
 
       // Cargar personalizaciones para mostrar en tabla expandible
@@ -1681,6 +1871,16 @@ export class PdvComponent implements OnInit, OnDestroy {
   cobrarVenta(): void {
     if (!this.hasActiveVenta || !this.hasActiveItems) return;
 
+    // El cobro solo se permite en el dispositivo donde se abrió la caja.
+    if (!this.puedeCobrar) {
+      this.snackBar.open(
+        `El cobro solo se realiza en ${this.dispositivoCajaNombre || 'el dispositivo donde se abrió la caja'}.`,
+        'OK',
+        { duration: 5000 }
+      );
+      return;
+    }
+
     const venta = this.ventaRapidaActual || this.selectedComanda?.venta || this.selectedMesa?.venta;
     if (!venta) return;
 
@@ -1723,6 +1923,13 @@ export class PdvComponent implements OnInit, OnDestroy {
         // Limpiar UI
         this.ventaItemsDataSource.data = [];
         this.calculateTotals();
+        this.resetEstadoCobro();
+      } else if (result?.partial) {
+        // Cobro parcial: la venta sigue abierta. Recargar ítems + estado de cobro.
+        const ventaId = this.ventaRapidaActual?.id || this.selectedComanda?.venta?.id || this.selectedMesa?.venta?.id;
+        if (ventaId) {
+          await this.loadVentaItemsForVenta(ventaId);
+        }
       }
     });
   }
@@ -2176,13 +2383,18 @@ export class PdvComponent implements OnInit, OnDestroy {
     if (this.selectedItemIds.has(itemId)) {
       this.selectedItemIds.delete(itemId);
     } else {
+      const item = this.ventaItemsDataSource.data.find(i => i.id === itemId);
+      if (item && this.bloqueadoPorCobro(item, 'mover')) return;
       this.selectedItemIds.add(itemId);
     }
   }
 
   toggleSelectAll(): void {
-    const activeItems = this.ventaItemsDataSource.data.filter(i => i.estado === EstadoVentaItem.ACTIVO);
-    const allSelected = activeItems.every(i => this.selectedItemIds.has(i.id));
+    // Ítems movibles = ACTIVOS y sin cobertura de pago (los pagados no se mueven).
+    const activeItems = this.ventaItemsDataSource.data.filter(
+      i => i.estado === EstadoVentaItem.ACTIVO && Number((i as any)?._montoCubierto || 0) <= 0.5
+    );
+    const allSelected = activeItems.length > 0 && activeItems.every(i => this.selectedItemIds.has(i.id));
     if (allSelected) {
       this.selectedItemIds.clear();
     } else {
@@ -2191,7 +2403,9 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   isAllSelected(): boolean {
-    const activeItems = this.ventaItemsDataSource.data.filter(i => i.estado === EstadoVentaItem.ACTIVO);
+    const activeItems = this.ventaItemsDataSource.data.filter(
+      i => i.estado === EstadoVentaItem.ACTIVO && Number((i as any)?._montoCubierto || 0) <= 0.5
+    );
     return activeItems.length > 0 && activeItems.every(i => this.selectedItemIds.has(i.id));
   }
 
@@ -2415,13 +2629,21 @@ export class PdvComponent implements OnInit, OnDestroy {
         if (variacionResult) {
           await this.addVariacionItem(result.producto, variacionResult);
         }
-        this.searchForm.get('searchTerm')?.setValue('');
+        this.resetBuscador();
       } else if (result) {
         this.addProduct(result.producto, result.presentacion, result.cantidad, result.precioVenta);
-        // Clear search term after adding product
-        this.searchForm.get('searchTerm')?.setValue('');
+        this.resetBuscador();
       }
     });
+  }
+
+  /**
+   * Limpia el buscador tras agregar un ítem: borra el término y **resetea la
+   * cantidad a 1** (si el usuario había cargado "3*" para agregar 3, la próxima
+   * búsqueda arranca de nuevo en 1).
+   */
+  private resetBuscador(): void {
+    this.searchForm.patchValue({ searchTerm: '', cantidad: 1 });
   }
 
   // Handle search from input
@@ -2464,6 +2686,9 @@ export class PdvComponent implements OnInit, OnDestroy {
 
     // Load venta items if mesa has a venta
     this.loadVentaItems(mesa);
+
+    // Devolver el foco al buscador de productos tras un pequeño delay.
+    this.focusBuscadorConDelay();
   }
 
   /**
@@ -2482,19 +2707,21 @@ export class PdvComponent implements OnInit, OnDestroy {
           await this.cargarPersonalizacionesItem(item);
         }
         this.ventaItemsDataSource.data = items;
-        console.log(this.ventaItemsDataSource.data);
         // Calculate totals based on loaded items
         this.calculateTotals();
+        await this.loadEstadoCobroActual(mesa.venta.id);
       } catch (error) {
         console.error('Error loading venta items:', error);
         // Reset items and totals on error
         this.ventaItemsDataSource.data = [];
         this.calculateTotals();
+        this.resetEstadoCobro();
       }
     } else {
       // If there is no venta, clear the table
       this.ventaItemsDataSource.data = [];
       this.calculateTotals();
+      this.resetEstadoCobro();
     }
   }
 

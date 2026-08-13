@@ -8,6 +8,9 @@ import { Receta } from '../../src/app/database/entities/productos/receta.entity'
 import { RecetaIngrediente } from '../../src/app/database/entities/productos/receta-ingrediente.entity';
 import { Adicional } from '../../src/app/database/entities/productos/adicional.entity';
 import { RecetaAdicionalVinculacion } from '../../src/app/database/entities/productos/receta-adicional-vinculacion.entity';
+import { RecetaMaterial } from '../../src/app/database/entities/productos/receta-material.entity';
+import { RecetaFase } from '../../src/app/database/entities/productos/receta-fase.entity';
+import { RecetaFaseIngrediente } from '../../src/app/database/entities/productos/receta-fase-ingrediente.entity';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
 import { PrecioVenta } from '../../src/app/database/entities/productos/precio-venta.entity';
 import { PrecioCosto, FuenteCosto } from '../../src/app/database/entities/productos/precio-costo.entity';
@@ -19,6 +22,14 @@ import { TipoPrecio } from '../../src/app/database/entities/financiero/tipo-prec
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { Like, IsNull, Not } from 'typeorm';
 import { ensurePermission } from '../utils/auth.utils';
+import { desduplicarRecetasCompartidas } from '../utils/receta-clone.utils';
+import * as fs from 'fs';
+import * as path from 'path';
+import { app } from 'electron';
+import {
+  buildPdfBase64, pdfHeaderEmpresa, pdfTablaSimple, pdfMetadatos,
+  pdfFooterPaginado, pdfFmtMonto,
+} from '../utils/pdf.utils';
 
 export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
 
@@ -57,6 +68,18 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       let costoTotal = 0;
       for (const ingrediente of ingredientes) {
         let costoUnitario = 0;
+
+        // Ítem solo-descripción (sin producto vinculado aún): usa el costo
+        // cargado MANUALMENTE. Antes se ignoraba (continue → costo 0), así que
+        // no había forma de costear estos ítems (pre-recetas). Ahora se toma el
+        // costoTotal cargado, o costoUnitario × cantidad. No se sobrescriben sus
+        // valores (a diferencia de los ítems con producto, que se recalculan).
+        if (!ingrediente.ingrediente) {
+          const manual = Number(ingrediente.costoTotal)
+            || (Number(ingrediente.costoUnitario || 0) * Number(ingrediente.cantidad || 0));
+          if (manual > 0) costoTotal += manual;
+          continue;
+        }
 
         // Check if the ingredient is an elaborated product with its own recipe
         if (ingrediente.ingrediente.tipo === 'ELABORADO_SIN_VARIACION') {
@@ -146,10 +169,18 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         }
       }
 
-      console.log(`💵 Costo total calculado: ${costoTotal}`);
+      // A-02: costoTotal es el costo del LOTE completo (suma de ingredientes según
+      // las cantidades de la receta, que producen `rendimiento` unidades). El costo
+      // por UNIDAD — que es como se consume costoCalculado (ver ingrediente
+      // ELABORADO más arriba) y como debe guardarse el PrecioCosto — es
+      // costoTotal / rendimiento. Antes se guardaba el costo del lote como si fuera
+      // unitario, sobreestimando el costo de recetas con rendimiento>1.
+      const rendimiento = Number(receta.rendimiento) > 0 ? Number(receta.rendimiento) : 1;
+      const costoUnitario = +(costoTotal / rendimiento).toFixed(2);
+      console.log(`💵 Costo total del lote: ${costoTotal} / rendimiento ${rendimiento} = costo unitario ${costoUnitario}`);
 
-      // Update recipe total cost in the entity
-      await recetaRepository.update(recetaId, { costoCalculado: costoTotal });
+      // Update recipe unit cost in the entity
+      await recetaRepository.update(recetaId, { costoCalculado: costoUnitario });
 
       // ✅ MEJORA: Verificar si el precio anterior es igual al nuevo antes de crear registro
       const monedaRepository = dataSource.getRepository(Moneda);
@@ -170,14 +201,14 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
         // Solo crear nuevo registro si el precio ha cambiado o no existe precio anterior
         const precioHaCambiado = !precioCostoAnterior ||
-                                Math.abs(precioCostoAnterior.valor - costoTotal) > 0.01; // Tolerancia de 0.01
+                                Math.abs(precioCostoAnterior.valor - costoUnitario) > 0.01; // Tolerancia de 0.01
 
         if (precioHaCambiado) {
-          console.log(`💾 Creando nuevo registro de PrecioCosto - Valor anterior: ${precioCostoAnterior?.valor || 'N/A'}, Nuevo valor: ${costoTotal}`);
+          console.log(`💾 Creando nuevo registro de PrecioCosto - Valor anterior: ${precioCostoAnterior?.valor || 'N/A'}, Nuevo valor: ${costoUnitario}`);
 
           const precioCostoData: any = {
             fuente: FuenteCosto.AJUSTE_RECETA,
-            valor: costoTotal,
+            valor: costoUnitario,
             fecha: new Date(),
             activo: true,
             moneda: monedaPrincipal
@@ -200,7 +231,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       }
 
       console.log(`✅ Cálculo de costo completado para receta: ${receta.nombre}`);
-      return costoTotal;
+      return costoUnitario;
     } catch (error) {
       console.error('❌ Error calculating recipe cost:', error);
       throw error;
@@ -208,7 +239,10 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   };
 
   // ===== Helpers unificados (antes en handlers separados) =====
-  async function generarVariacionesParaProducto(queryRunner: any, productoId: number, saborId: number, recetaId: number): Promise<RecetaPresentacion[]> {
+  // Genera las variaciones (RecetaPresentacion) de un sabor, UNA por presentación,
+  // creando una RECETA PROPIA para cada una (cada tamaño puede tener ingredientes y
+  // costo distintos). Antes se compartía una sola receta base entre los tamaños.
+  async function generarVariacionesParaProducto(queryRunner: any, productoId: number, saborId: number): Promise<RecetaPresentacion[]> {
     const producto = await queryRunner.manager.getRepository(Producto).findOne({
       where: { id: productoId },
       relations: ['presentaciones']
@@ -216,6 +250,12 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
     if (!producto?.presentaciones?.length) return [];
 
+    // El nombre/SKU de la variación se arma con el nombre del SABOR, no con el
+    // del producto repetido. Cargamos el sabor una vez para tenerlo disponible.
+    const sabor = await queryRunner.manager.getRepository(Sabor).findOne({ where: { id: saborId } });
+    const nombreSabor = sabor?.nombre;
+
+    const recetaRepo = queryRunner.manager.getRepository(Receta);
     const repo = queryRunner.manager.getRepository(RecetaPresentacion);
     const variaciones: RecetaPresentacion[] = [];
 
@@ -230,20 +270,31 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
       if (existente) continue;
 
-      const nombre = generarNombreVariacion(producto.nombre, presentacion.nombre, producto.nombre);
-      const sku = generarSKU(producto.nombre, producto.nombre, presentacion.nombre);
+      const nombre = generarNombreVariacion(producto.nombre, presentacion.nombre, nombreSabor);
+      const sku = generarSKU(producto.nombre, nombreSabor, presentacion.nombre);
+
+      // Receta propia de esta variación (sabor × tamaño).
+      const recetaGuardada = await recetaRepo.save(recetaRepo.create({
+        nombre: nombre,
+        descripcion: `Receta para ${nombre}`,
+        rendimiento: 1,
+        unidadRendimiento: 'UNIDADES',
+        costoCalculado: 0,
+        activo: true
+      }));
 
       const nueva = repo.create({
         nombre_generado: nombre,
         sku,
         costo_calculado: 0,
         activo: true,
-        receta: { id: recetaId },
+        receta: { id: recetaGuardada.id },
         presentacion: { id: presentacion.id },
         sabor: { id: saborId }
       });
 
       const guardada = await repo.save(nueva);
+      (guardada as any).receta = recetaGuardada;
       variaciones.push(guardada);
     }
 
@@ -314,8 +365,10 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         whereConditions.activo = filters.activo;
       }
 
+      // Mayusculiza el término: los strings se guardan en MAYÚSCULAS y en
+      // Postgres LIKE es case-sensitive (sin esto no trae datos en minúsculas).
       if (filters.search && filters.search.trim()) {
-        whereConditions.nombre = Like(`%${filters.search.trim()}%`);
+        whereConditions.nombre = Like(`%${filters.search.trim().toUpperCase()}%`);
       }
 
       // Configurar paginación
@@ -329,6 +382,9 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       // Obtener registros paginados
       const recetas = await recetaRepository.find({
         where: whereConditions,
+        // `producto` para que la UI distinga pre-receta (sin producto) de
+        // receta completa (con producto vinculado).
+        relations: ['producto'],
         order: { nombre: 'ASC' },
         skip,
         take: pageSize
@@ -396,6 +452,8 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         rendimiento: recetaData.rendimiento || 1,
         unidadRendimiento: recetaData.unidadRendimiento || 'UNIDADES',
         unidadRendimientoOriginal: recetaData.unidadRendimientoOriginal,
+        tiempoPreparo: recetaData.tiempoPreparo ?? null,
+        imageUrl: recetaData.imageUrl ?? null,
         activo: recetaData.activo !== undefined ? recetaData.activo : true
       });
 
@@ -428,6 +486,9 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         activo: recetaData.activo,
         productoId: recetaData.productoId // Agregar actualización del productoId
       });
+      // tiempoPreparo / imageUrl: solo actualizar si vienen en el payload.
+      if (recetaData.tiempoPreparo !== undefined) receta.tiempoPreparo = recetaData.tiempoPreparo;
+      if (recetaData.imageUrl !== undefined) receta.imageUrl = recetaData.imageUrl;
 
       setEntityUserTracking(dataSource, receta, currentUser?.id, true);
       return await recetaRepository.save(receta);
@@ -541,7 +602,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       const recetaRepository = dataSource.getRepository(Receta);
       return await recetaRepository.find({
         where: {
-          nombre: Like(`%${nombre}%`),
+          nombre: Like(`%${(nombre || '').toUpperCase()}%`),
           activo: true
         },
         order: { nombre: 'ASC' }
@@ -576,6 +637,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('actualizar-costo-receta', async (_event: any, recetaId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
       await calculateRecipeCost(recetaId);
       return { success: true };
     } catch (error) {
@@ -619,30 +681,33 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       // 1. Extraer IDs correctamente del objeto anidado
       const ingredienteId = recetaIngredienteData.ingrediente?.id || recetaIngredienteData.ingredienteId;
       const recetaId = recetaIngredienteData.receta?.id || recetaIngredienteData.recetaId;
-
-      if (!ingredienteId) {
-        throw new Error('ID del ingrediente no proporcionado');
-      }
+      const descripcion = (recetaIngredienteData.descripcion || '').trim() || null;
 
       if (!recetaId) {
         throw new Error('ID de la receta no proporcionado');
       }
 
-      // 2. Verificar que el ingrediente (Producto) exista
+      // El ítem debe tener un ingrediente vinculado O una descripción libre.
+      if (!ingredienteId && !descripcion) {
+        throw new Error('Debe indicar un ingrediente o una descripción');
+      }
 
-      const ingrediente = await productoRepository.findOne({
-        where: { id: ingredienteId }
-      });
-
-            if (!ingrediente) {
-        throw new Error(`El ingrediente con ID ${ingredienteId} no fue encontrado.`);
+      // 2. Si hay ingredienteId, verificar que el Producto exista. Si es ítem
+      //    solo-descripción, no se vincula ingrediente.
+      let ingrediente: Producto | null = null;
+      if (ingredienteId) {
+        ingrediente = await productoRepository.findOne({ where: { id: ingredienteId } });
+        if (!ingrediente) {
+          throw new Error(`El ingrediente con ID ${ingredienteId} no fue encontrado.`);
+        }
       }
       // --- FIN DE LA VALIDACIÓN ---
 
       const recetaIngrediente = recetaIngredienteRepository.create({
-        cantidad: recetaIngredienteData.cantidad,
-        unidad: recetaIngredienteData.unidad,
+        cantidad: recetaIngredienteData.cantidad ?? null,
+        unidad: recetaIngredienteData.unidad ?? null,
         unidadOriginal: recetaIngredienteData.unidadOriginal,
+        descripcion: descripcion ? descripcion.toUpperCase() : null,
         costoUnitario: recetaIngredienteData.costoUnitario || 0,
         costoTotal: recetaIngredienteData.costoTotal || 0,
         esExtra: recetaIngredienteData.esExtra || false,
@@ -651,7 +716,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         costoExtra: recetaIngredienteData.costoExtra || 0,
         activo: recetaIngredienteData.activo !== undefined ? recetaIngredienteData.activo : true,
         receta: { id: recetaId },
-        ingrediente: ingrediente, // ✅ CORREGIDO: Usar la entidad completa
+        ingrediente: ingrediente ?? null, // null = ítem solo-descripción
         reemplazoDefault: recetaIngredienteData.reemplazoDefaultId ? { id: recetaIngredienteData.reemplazoDefaultId } : undefined
       });
 
@@ -699,10 +764,18 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         throw new Error('Receta ingrediente not found');
       }
 
+      const nuevoIngredienteId =
+        recetaIngredienteData.ingredienteId ?? recetaIngredienteData.ingrediente?.id ?? null;
+      const nuevaDescripcion = (recetaIngredienteData.descripcion || '').trim() || null;
+      if (!nuevoIngredienteId && !nuevaDescripcion) {
+        throw new Error('Debe indicar un ingrediente o una descripción');
+      }
+
       Object.assign(recetaIngrediente, {
-        cantidad: recetaIngredienteData.cantidad,
-        unidad: recetaIngredienteData.unidad,
+        cantidad: recetaIngredienteData.cantidad ?? null,
+        unidad: recetaIngredienteData.unidad ?? null,
         unidadOriginal: recetaIngredienteData.unidadOriginal,
+        descripcion: nuevaDescripcion ? nuevaDescripcion.toUpperCase() : null,
         costoUnitario: recetaIngredienteData.costoUnitario || 0,
         costoTotal: recetaIngredienteData.costoTotal || 0,
         esExtra: recetaIngredienteData.esExtra,
@@ -710,7 +783,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         esCambiable: recetaIngredienteData.esCambiable,
         costoExtra: recetaIngredienteData.costoExtra,
         activo: recetaIngredienteData.activo,
-        ingrediente: { id: recetaIngredienteData.ingredienteId },
+        ingrediente: nuevoIngredienteId ? { id: nuevoIngredienteId } : null,
         reemplazoDefault: recetaIngredienteData.reemplazoDefaultId ? { id: recetaIngredienteData.reemplazoDefaultId } : undefined
       });
 
@@ -784,6 +857,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
     eliminarDeOtrasVariaciones: boolean;
   }) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
       const recetaIngredienteRepository = dataSource.getRepository(RecetaIngrediente);
       const currentUser = getCurrentUser();
 
@@ -797,8 +871,9 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         throw new Error('Receta ingrediente not found');
       }
 
-      // 2. Si se debe eliminar de otras variaciones, buscar solo las recetas del MISMO SABOR que usan este ingrediente
-      if (data.eliminarDeOtrasVariaciones) {
+      // 2. Si se debe eliminar de otras variaciones, buscar solo las recetas del MISMO SABOR que usan este ingrediente.
+      //    Un ítem solo-descripción (sin ingrediente vinculado) no aplica a la lógica multi-variación.
+      if (data.eliminarDeOtrasVariaciones && recetaIngrediente.ingrediente) {
         // ✅ NUEVO: Obtener el sabor de la receta actual a través de RecetaPresentacion
         const recetaPresentacionRepository = dataSource.getRepository(RecetaPresentacion);
         const variacionActual = await recetaPresentacionRepository.findOne({
@@ -898,6 +973,11 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
       if (!recetaIngrediente) {
         throw new Error('Receta ingrediente not found');
+      }
+
+      // Ítem solo-descripción (sin ingrediente vinculado): costo 0.
+      if (!recetaIngrediente.ingrediente) {
+        return 0;
       }
 
       let costoUnitario = 0;
@@ -1136,6 +1216,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('create-receta-for-adicional', async (_event: any, adicionalId: number, recetaData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'ADICIONALES_GESTIONAR');
       const adicionalRepository = dataSource.getRepository(Adicional);
       const recetaRepository = dataSource.getRepository(Receta);
       const currentUser = getCurrentUser();
@@ -1169,6 +1250,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('update-receta-for-adicional', async (_event: any, adicionalId: number, recetaData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'ADICIONALES_GESTIONAR');
       const adicionalRepository = dataSource.getRepository(Adicional);
       const recetaRepository = dataSource.getRepository(Receta);
       const currentUser = getCurrentUser();
@@ -1202,6 +1284,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('delete-receta-for-adicional', async (_event: any, adicionalId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'ADICIONALES_GESTIONAR');
       const adicionalRepository = dataSource.getRepository(Adicional);
       const currentUser = getCurrentUser();
 
@@ -1244,7 +1327,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       const whereConditions: any = {};
 
       if (filters.search) {
-        whereConditions.nombre = Like(`%${filters.search}%`);
+        whereConditions.nombre = Like(`%${filters.search.toUpperCase()}%`);
       }
 
       if (filters.activo !== null && filters.activo !== undefined) {
@@ -1321,6 +1404,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('create-receta-adicional-vinculacion', async (_event: any, vinculacionData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'ADICIONALES_GESTIONAR');
       const vinculacionRepository = dataSource.getRepository(RecetaAdicionalVinculacion);
       const currentUser = getCurrentUser();
 
@@ -1344,6 +1428,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('update-receta-adicional-vinculacion', async (_event: any, vinculacionId: number, vinculacionData: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'ADICIONALES_GESTIONAR');
       const vinculacionRepository = dataSource.getRepository(RecetaAdicionalVinculacion);
       const currentUser = getCurrentUser();
 
@@ -1376,6 +1461,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('delete-receta-adicional-vinculacion', async (_event: any, vinculacionId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'ADICIONALES_GESTIONAR');
       const vinculacionRepository = dataSource.getRepository(RecetaAdicionalVinculacion);
       const vinculacion = await vinculacionRepository.findOne({ where: { id: vinculacionId } });
       if (!vinculacion) {
@@ -1394,6 +1480,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   // Handler to recalculate all recipe costs
   ipcMain.handle('recalculate-all-recipe-costs', async () => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
       const recetaRepository = dataSource.getRepository(Receta);
       const allRecetas = await recetaRepository.find({
         order: { nombre: 'ASC' }
@@ -1430,6 +1517,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   // Handler to recalculate a single recipe cost
   ipcMain.handle('recalculate-recipe-cost', async (_event: any, recetaId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
       const newCost = await calculateRecipeCost(recetaId);
       return { success: true, costoCalculado: newCost };
     } catch (error) {
@@ -1478,8 +1566,66 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
     }
   });
 
+  // ✅ NUEVO: Listado GLOBAL de sabores (para el módulo "Gestión de Sabores"),
+  // con filtros al padrón de la app (producto, categoría, estado, texto) y el
+  // conteo de variaciones (RecetaPresentacion) de cada sabor.
+  ipcMain.handle('get-all-sabores', async (_e: IpcMainInvokeEvent, filtros?: {
+    productoId?: number | null;
+    categoria?: string | null;
+    activo?: boolean | null;
+    texto?: string | null;
+  }) => {
+    const f = filtros || {};
+    const qb = dataSource.getRepository(Sabor).createQueryBuilder('sabor')
+      .leftJoinAndSelect('sabor.producto', 'producto')
+      .orderBy('sabor.nombre', 'ASC');
+
+    if (Number.isInteger(f.productoId as any)) {
+      qb.andWhere('sabor.producto_id = :pid', { pid: f.productoId });
+    }
+    if (f.categoria && String(f.categoria).trim()) {
+      qb.andWhere('UPPER(sabor.categoria) = :cat', { cat: String(f.categoria).trim().toUpperCase() });
+    }
+    if (typeof f.activo === 'boolean') {
+      qb.andWhere('sabor.activo = :act', { act: f.activo });
+    }
+    if (f.texto && String(f.texto).trim()) {
+      qb.andWhere('UPPER(sabor.nombre) LIKE :txt', { txt: `%${String(f.texto).trim().toUpperCase()}%` });
+    }
+
+    const sabores = await qb.getMany();
+
+    // Conteo de variaciones por sabor.
+    const saborIds = sabores.map(s => s.id!).filter(Boolean);
+    const counts = new Map<number, number>();
+    if (saborIds.length) {
+      const rows = await dataSource.getRepository(RecetaPresentacion).createQueryBuilder('rp')
+        .select('rp.sabor_id', 'saborId')
+        .addSelect('COUNT(*)', 'total')
+        .where('rp.sabor_id IN (:...ids)', { ids: saborIds })
+        .groupBy('rp.sabor_id')
+        .getRawMany();
+      for (const r of rows) counts.set(Number(r.saborId), Number(r.total));
+    }
+
+    return sabores.map(s => ({
+      id: s.id,
+      nombre: s.nombre,
+      categoria: s.categoria,
+      descripcion: s.descripcion ?? null,
+      activo: s.activo,
+      imageUrl: s.imageUrl ?? null,
+      producto: s.producto ? { id: s.producto.id, nombre: s.producto.nombre } : null,
+      variacionesCount: counts.get(s.id!) || 0,
+    }));
+  });
+
   // ✅ NUEVO: CRUD y helpers para Sabores (nueva arquitectura)
   ipcMain.handle('get-sabores-by-producto', async (_e: IpcMainInvokeEvent, productoId: number) => {
+    // Guard: con productoId indefinido, el filtro por relación se descarta y
+    // TypeORM devuelve TODOS los sabores (incluidos huérfanos de otros
+    // productos). Sin id válido no hay sabores que listar.
+    if (!Number.isInteger(productoId)) return [];
     const repo = dataSource.getRepository(Sabor);
     return await repo.find({
       where: { producto: { id: productoId } },
@@ -1489,6 +1635,12 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('create-sabor', async (_e: IpcMainInvokeEvent, saborData: { nombre: string; categoria: string; descripcion?: string; productoId: number; imageUrl?: string; }) => {
     await ensurePermission(dataSource, getCurrentUser, 'SABORES_GESTIONAR');
+    // Guard: sin un productoId válido, findOne({ where: { id: undefined } })
+    // devuelve el PRIMER producto de la tabla (footgun de TypeORM) y termina
+    // creando el sabor huérfano + variaciones contra el producto equivocado.
+    if (!Number.isInteger(saborData?.productoId)) {
+      throw new Error('create-sabor: productoId inválido o ausente');
+    }
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1508,29 +1660,25 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       });
       const saborGuardado = await saborRepo.save(sabor);
 
-      // Crear receta base
-      const recetaRepo = queryRunner.manager.getRepository(Receta);
-      const receta = recetaRepo.create({
-        nombre: `${producto.nombre} ${saborData.nombre}`.toUpperCase(),
-        descripcion: `Receta base para ${producto.nombre} ${saborData.nombre}`,
-        rendimiento: 1,
-        unidadRendimiento: 'UNIDADES',
-        costoCalculado: 0,
-        activo: true
-      });
-      const recetaGuardada = await recetaRepo.save(receta);
-
-      // Generar variaciones para cada presentación del producto
-      const variaciones = await generarVariacionesParaProducto(queryRunner, producto.id, saborGuardado.id, recetaGuardada.id);
+      // Generar variaciones: UNA RECETA PROPIA por presentación (cada tamaño
+      // puede tener ingredientes/costo distintos). Ya no se comparte una receta base.
+      const variaciones = await generarVariacionesParaProducto(queryRunner, producto.id, saborGuardado.id);
 
       await queryRunner.commitTransaction();
-      return { sabor: saborGuardado, receta: recetaGuardada, mensaje: `Sabor creado con ${variaciones.length} variaciones` };
+      return { sabor: saborGuardado, receta: (variaciones[0] as any)?.receta ?? null, mensaje: `Sabor creado con ${variaciones.length} variaciones` };
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
     } finally {
       await queryRunner.release();
     }
+  });
+
+  // Reparación de datos: des-comparte las recetas que hoy usan más de una
+  // variación (modelo viejo), clonando la receta para cada tamaño. Manual/opt-in.
+  ipcMain.handle('reparar-recetas-compartidas', async () => {
+    await ensurePermission(dataSource, getCurrentUser, 'SABORES_GESTIONAR');
+    return await dataSource.transaction(async (manager) => desduplicarRecetasCompartidas(manager));
   });
 
   ipcMain.handle('update-sabor', async (_e: IpcMainInvokeEvent, id: number, saborData: Partial<Sabor> & { imageUrl?: string | null }) => {
@@ -1614,6 +1762,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
   // ✅ NUEVO: Variaciones (RecetaPresentacion)
   ipcMain.handle('get-variaciones-by-producto', async (_e: IpcMainInvokeEvent, productoId: number) => {
+    if (!Number.isInteger(productoId)) return [];
     return await dataSource.getRepository(RecetaPresentacion)
       .createQueryBuilder('rp')
       .leftJoinAndSelect('rp.receta', 'receta')
@@ -1625,38 +1774,27 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       .addOrderBy('presentacion.cantidad', 'ASC')
       .getMany()
       .then(async (variaciones) => {
-        // ✅ NUEVO: Buscar precios de venta por recetaId para cada variación
+        // El precio es POR VARIACIÓN (sabor × tamaño): se lee de la
+        // RecetaPresentacion, no de la receta base (compartida entre tamaños).
+        // Así cada tamaño tiene su precio y coincide con lo que lee el storefront.
         const variacionesConPrecios = await Promise.all(
           variaciones.map(async (variacion) => {
-            if (!variacion.receta?.id) {
-              return {
-                ...variacion,
-                precioPrincipal: null
-              };
-            }
-
-            // ✅ CORREGIDO: Buscar precios por receta_id, no por recetaId
-            console.log(`🔍 Buscando precios para receta ID: ${variacion.receta.id}`);
-
             const preciosVenta = await dataSource.getRepository(PrecioVenta)
               .createQueryBuilder('pv')
               .leftJoinAndSelect('pv.moneda', 'moneda')
               .leftJoinAndSelect('pv.tipoPrecio', 'tipoPrecio')
-              .leftJoinAndSelect('pv.receta', 'receta') // ✅ NUEVO: Join con receta
-              .where('pv.receta.id = :recetaId', { recetaId: variacion.receta.id })
+              .where('pv.receta_presentacion_id = :rpId', { rpId: variacion.id })
               .andWhere('pv.activo = :activo', { activo: true })
               .orderBy('pv.principal', 'DESC') // Precio principal primero
               .addOrderBy('pv.created_at', 'DESC')
               .getMany();
-
-            console.log(`💰 Precios encontrados para receta ${variacion.receta.id}:`, preciosVenta.length);
 
             // Buscar el precio principal
             const precioPrincipal = preciosVenta.find(p => p.principal);
 
             return {
               ...variacion,
-              preciosVenta, // ✅ NUEVO: Incluir todos los precios de la receta
+              preciosVenta,
               precioPrincipal: precioPrincipal ? {
                 id: precioPrincipal.id,
                 valor: precioPrincipal.valor,
@@ -1698,16 +1836,14 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       .orderBy('sabor.nombre', 'ASC')
       .getMany();
 
-    // Cargar precios de venta para cada variación
+    // Cargar precios de venta por VARIACIÓN (receta_presentacion_id): precio por tamaño.
     const variacionesConPrecios = await Promise.all(
       variaciones.map(async (variacion) => {
-        if (!variacion.receta?.id) return { ...variacion, preciosVenta: [] };
-
         const preciosVenta = await dataSource.getRepository(PrecioVenta)
           .createQueryBuilder('pv')
           .leftJoinAndSelect('pv.moneda', 'moneda')
           .leftJoinAndSelect('pv.tipoPrecio', 'tipoPrecio')
-          .where('pv.receta_id = :recetaId', { recetaId: variacion.receta.id })
+          .where('pv.receta_presentacion_id = :rpId', { rpId: variacion.id })
           .andWhere('pv.activo = :activo', { activo: true })
           .orderBy('pv.principal', 'DESC')
           .getMany();
@@ -1720,6 +1856,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('create-receta-presentacion', async (_e: IpcMainInvokeEvent, variacionData: { recetaId: number; presentacionId: number; nombre_generado?: string; sku?: string; precio_ajuste?: number; }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1762,12 +1899,14 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('update-receta-presentacion', async (_e: IpcMainInvokeEvent, id: number, data: Partial<RecetaPresentacion>) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
     await dataSource.getRepository(RecetaPresentacion).update(id, { ...data, nombre_generado: data.nombre_generado?.toUpperCase() });
     const updated = await dataSource.getRepository(RecetaPresentacion).findOne({ where: { id }, relations: ['receta', 'presentacion', 'sabor', 'preciosVenta'] });
     return updated;
   });
 
   ipcMain.handle('delete-receta-presentacion', async (_e: IpcMainInvokeEvent, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1785,6 +1924,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('bulk-update-variaciones', async (_e: IpcMainInvokeEvent, updates: Array<{ variacionId: number; precio_ajuste?: number; activo?: boolean;}>) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1811,11 +1951,16 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('recalcular-costo-variacion', async (_e: IpcMainInvokeEvent, variacionId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
     const resultado = await recalcularCostoVariacion(variacionId);
     return { ...resultado, mensaje: `Costo recalculado: $${resultado.costoAnterior.toFixed(2)} → $${resultado.costoNuevo.toFixed(2)}` };
   });
 
   ipcMain.handle('generate-variaciones-faltantes', async (_e: IpcMainInvokeEvent, productoId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+    if (!Number.isInteger(productoId)) {
+      throw new Error('generate-variaciones-faltantes: productoId inválido o ausente');
+    }
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -1886,6 +2031,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('create-or-update-sabor', async (_event: any, saborData: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'SABORES_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -2065,8 +2211,8 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       const ingredientesBase = primeraReceta.ingredientes
         ?.filter(ing => ing.esIngredienteBase)
         .map(ing => ({
-          productoId: ing.ingrediente.id,
-          nombre: ing.ingrediente.nombre,
+          productoId: ing.ingrediente?.id ?? null,
+          nombre: ing.ingrediente?.nombre ?? ing.descripcion ?? '',
           cantidad: ing.cantidad,
           unidad: ing.unidad
         })) || [];
@@ -2076,8 +2222,8 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         const ingredientesEspecificos = receta.ingredientes
           ?.filter(ing => !ing.esIngredienteBase)
           .map(ing => ({
-            productoId: ing.ingrediente.id,
-            nombre: ing.ingrediente.nombre,
+            productoId: ing.ingrediente?.id ?? null,
+            nombre: ing.ingrediente?.nombre ?? ing.descripcion ?? '',
             cantidad: ing.cantidad,
             unidad: ing.unidad
           })) || [];
@@ -2098,6 +2244,292 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
     } catch (error) {
       console.error('Error getting sabor details:', error);
+      throw error;
+    }
+  });
+
+  // ===================== RECETA FASES (modo de preparo) =====================
+
+  ipcMain.handle('get-receta-fases', async (_event: any, recetaId: number) => {
+    try {
+      const repo = dataSource.getRepository(RecetaFase);
+      return await repo.find({
+        where: { receta: { id: recetaId }, activo: true },
+        relations: [
+          'ingredientes',
+          'ingredientes.recetaIngrediente',
+          'ingredientes.recetaIngrediente.ingrediente',
+        ],
+        order: { orden: 'ASC' },
+      });
+    } catch (error) {
+      console.error('Error getting receta fases:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('create-receta-fase', async (_event: any, data: any) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+      const repo = dataSource.getRepository(RecetaFase);
+      const recetaId = data.recetaId || data.receta?.id;
+      if (!recetaId) throw new Error('recetaId requerido');
+      if (!data.descripcion || !`${data.descripcion}`.trim()) throw new Error('La fase requiere una descripción');
+      const fase = repo.create({
+        receta: { id: recetaId } as any,
+        orden: data.orden ?? 0,
+        titulo: data.titulo ? `${data.titulo}`.toUpperCase() : null,
+        descripcion: `${data.descripcion}`.toUpperCase(),
+        activo: true,
+      });
+      setEntityUserTracking(dataSource, fase, getCurrentUser()?.id, false);
+      return await repo.save(fase);
+    } catch (error) {
+      console.error('Error creating receta fase:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('update-receta-fase', async (_event: any, faseId: number, data: any) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+      const repo = dataSource.getRepository(RecetaFase);
+      const fase = await repo.findOne({ where: { id: faseId } });
+      if (!fase) throw new Error('Fase not found');
+      if (data.titulo !== undefined) fase.titulo = data.titulo ? `${data.titulo}`.toUpperCase() : undefined;
+      if (data.descripcion !== undefined) fase.descripcion = `${data.descripcion}`.toUpperCase();
+      if (data.orden !== undefined) fase.orden = data.orden;
+      if (data.activo !== undefined) fase.activo = data.activo;
+      setEntityUserTracking(dataSource, fase, getCurrentUser()?.id, true);
+      return await repo.save(fase);
+    } catch (error) {
+      console.error('Error updating receta fase:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('delete-receta-fase', async (_event: any, faseId: number) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+      const repo = dataSource.getRepository(RecetaFase);
+      const fiRepo = dataSource.getRepository(RecetaFaseIngrediente);
+      await fiRepo.delete({ fase: { id: faseId } } as any);
+      await repo.delete(faseId);
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting receta fase:', error);
+      throw error;
+    }
+  });
+
+  // Reordena las fases segun el array de IDs recibido (indice = nuevo orden).
+  ipcMain.handle('reorder-receta-fases', async (_event: any, recetaId: number, ordenIds: number[]) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+      const repo = dataSource.getRepository(RecetaFase);
+      for (let i = 0; i < (ordenIds || []).length; i++) {
+        await repo.update(ordenIds[i], { orden: i });
+      }
+      return { success: true };
+    } catch (error) {
+      console.error('Error reordering receta fases:', error);
+      throw error;
+    }
+  });
+
+  // Reemplaza el conjunto de itemes de receta vinculados a una fase.
+  ipcMain.handle('set-receta-fase-ingredientes', async (_event: any, faseId: number, recetaIngredienteIds: number[]) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+      const fiRepo = dataSource.getRepository(RecetaFaseIngrediente);
+      await fiRepo.delete({ fase: { id: faseId } } as any);
+      for (const riId of recetaIngredienteIds || []) {
+        const link = fiRepo.create({
+          fase: { id: faseId } as any,
+          recetaIngrediente: { id: riId } as any,
+        });
+        setEntityUserTracking(dataSource, link, getCurrentUser()?.id, false);
+        await fiRepo.save(link);
+      }
+      return { success: true };
+    } catch (error) {
+      console.error('Error setting receta fase ingredientes:', error);
+      throw error;
+    }
+  });
+
+  // ===================== RECETA MATERIALES =====================
+
+  ipcMain.handle('get-receta-materiales', async (_event: any, recetaId: number) => {
+    try {
+      const repo = dataSource.getRepository(RecetaMaterial);
+      return await repo.find({
+        where: { receta: { id: recetaId }, activo: true },
+        order: { orden: 'ASC' },
+      });
+    } catch (error) {
+      console.error('Error getting receta materiales:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('create-receta-material', async (_event: any, data: any) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+      const repo = dataSource.getRepository(RecetaMaterial);
+      const recetaId = data.recetaId || data.receta?.id;
+      if (!recetaId) throw new Error('recetaId requerido');
+      if (!data.descripcion || !`${data.descripcion}`.trim()) throw new Error('El material requiere una descripción');
+      const material = repo.create({
+        receta: { id: recetaId } as any,
+        descripcion: `${data.descripcion}`.toUpperCase(),
+        orden: data.orden ?? 0,
+        activo: true,
+      });
+      setEntityUserTracking(dataSource, material, getCurrentUser()?.id, false);
+      return await repo.save(material);
+    } catch (error) {
+      console.error('Error creating receta material:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('update-receta-material', async (_event: any, materialId: number, data: any) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+      const repo = dataSource.getRepository(RecetaMaterial);
+      const material = await repo.findOne({ where: { id: materialId } });
+      if (!material) throw new Error('Material not found');
+      if (data.descripcion !== undefined) material.descripcion = `${data.descripcion}`.toUpperCase();
+      if (data.orden !== undefined) material.orden = data.orden;
+      if (data.activo !== undefined) material.activo = data.activo;
+      setEntityUserTracking(dataSource, material, getCurrentUser()?.id, true);
+      return await repo.save(material);
+    } catch (error) {
+      console.error('Error updating receta material:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle('delete-receta-material', async (_event: any, materialId: number) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'RECETAS_GESTIONAR');
+      const repo = dataSource.getRepository(RecetaMaterial);
+      await repo.delete(materialId);
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting receta material:', error);
+      throw error;
+    }
+  });
+
+  // ===================== EXPORT PDF DE RECETA =====================
+
+  // Convierte una URL app://carpeta/archivo a dataURL para incrustar en el PDF.
+  const appUrlToDataUrl = (appUrl?: string | null): string | null => {
+    try {
+      if (!appUrl || !appUrl.startsWith('app://')) return null;
+      const rest = appUrl.replace(/^app:\/\//, '');
+      const slash = rest.indexOf('/');
+      if (slash <= 0) return null;
+      const carpeta = rest.substring(0, slash);
+      const relPath = rest.substring(slash + 1);
+      const abs = path.join(app.getPath('userData'), carpeta, relPath);
+      if (!fs.existsSync(abs)) return null;
+      const buf = fs.readFileSync(abs);
+      const ext = path.extname(abs).toLowerCase();
+      const mime = ext === '.png' ? 'image/png'
+        : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+        : ext === '.gif' ? 'image/gif'
+        : 'image/png';
+      return `data:${mime};base64,${buf.toString('base64')}`;
+    } catch {
+      return null;
+    }
+  };
+
+  ipcMain.handle('export-receta-pdf', async (_event: any, recetaId: number) => {
+    try {
+      const recetaRepo = dataSource.getRepository(Receta);
+      const receta = await recetaRepo.findOne({
+        where: { id: recetaId },
+        relations: ['ingredientes', 'ingredientes.ingrediente'],
+      });
+      if (!receta) throw new Error('Receta not found');
+
+      const fases = await dataSource.getRepository(RecetaFase).find({
+        where: { receta: { id: recetaId }, activo: true },
+        relations: ['ingredientes', 'ingredientes.recetaIngrediente', 'ingredientes.recetaIngrediente.ingrediente'],
+        order: { orden: 'ASC' },
+      });
+      const materiales = await dataSource.getRepository(RecetaMaterial).find({
+        where: { receta: { id: recetaId }, activo: true },
+        order: { orden: 'ASC' },
+      });
+
+      const nombreIng = (ri: any): string =>
+        (ri?.ingrediente?.nombre || ri?.descripcion || '').toUpperCase();
+
+      const header = await pdfHeaderEmpresa(dataSource, { titulo: receta.nombre });
+
+      const content: any[] = [header];
+
+      // Foto del producto final.
+      const fotoDataUrl = appUrlToDataUrl(receta.imageUrl);
+      if (fotoDataUrl) {
+        content.push({ image: fotoDataUrl, width: 180, alignment: 'center', margin: [0, 0, 0, 10] });
+      }
+
+      // Metadatos (tiempo + rendimiento).
+      const meta: { label: string; value: string }[] = [];
+      if (receta.tiempoPreparo != null) meta.push({ label: 'Tiempo de preparo', value: `${receta.tiempoPreparo} MIN` });
+      meta.push({
+        label: 'Rendimiento',
+        value: `${pdfFmtMonto(receta.rendimiento, 2)} ${(receta.unidadRendimiento || '').toUpperCase()}`.trim(),
+      });
+      content.push(pdfMetadatos(meta, 2));
+
+      if (receta.descripcion) {
+        content.push({ text: receta.descripcion, style: 'legal', margin: [0, 6, 0, 0] });
+      }
+
+      // Ingredientes.
+      const ingRows = (receta.ingredientes || []).map((ri: any) => [
+        nombreIng(ri),
+        ri.cantidad != null ? pdfFmtMonto(ri.cantidad, 2) : '',
+        (ri.unidad || '').toUpperCase(),
+      ]);
+      content.push({ text: 'INGREDIENTES', style: 'sectionHeader' });
+      content.push(ingRows.length
+        ? pdfTablaSimple(['INGREDIENTE', 'CANTIDAD', 'UNIDAD'], ingRows, { widths: ['*', 'auto', 'auto'], alignment: ['left', 'right', 'left'] })
+        : { text: 'Sin ingredientes.', style: 'smallMuted' });
+
+      // Materiales.
+      if (materiales.length) {
+        content.push({ text: 'MATERIALES', style: 'sectionHeader' });
+        content.push({ ul: materiales.map((m: any) => m.descripcion) });
+      }
+
+      // Modo de preparo (fases).
+      if (fases.length) {
+        content.push({ text: 'MODO DE PREPARO', style: 'sectionHeader' });
+        fases.forEach((f: any, i: number) => {
+          const titulo = f.titulo ? `FASE ${i + 1} — ${f.titulo}` : `FASE ${i + 1}`;
+          content.push({ text: titulo, style: 'h3' });
+          content.push({ text: f.descripcion || '' });
+          const ings = (f.ingredientes || [])
+            .map((fi: any) => nombreIng(fi.recetaIngrediente))
+            .filter((x: string) => !!x);
+          if (ings.length) {
+            content.push({ ul: ings, margin: [0, 2, 0, 4], style: 'smallMuted' });
+          }
+        });
+      }
+
+      const base64 = await buildPdfBase64({ content, footer: pdfFooterPaginado() });
+      return { base64, fileName: `RECETA_${(receta.nombre || 'RECETA').toUpperCase().replace(/[^A-Z0-9]+/g, '_')}.pdf` };
+    } catch (error) {
+      console.error('Error exporting receta PDF:', error);
       throw error;
     }
   });

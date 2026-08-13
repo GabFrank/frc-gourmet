@@ -17,6 +17,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
 import { CreateEditValeDialogComponent } from './create-edit-vale-dialog.component';
 import { ConfirmarValeDialogComponent } from './confirmar-vale-dialog.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 const ESTADOS = ['SOLICITADO', 'CONFIRMADO', 'DESCONTADO', 'ANULADO'];
 
@@ -37,6 +38,7 @@ const ESTADOS = ['SOLICITADO', 'CONFIRMADO', 'DESCONTADO', 'ANULADO'];
     MatSelectModule,
     MatSnackBarModule,
     MatDialogModule,
+    HasPermissionDirective,
   ],
   template: `
     <div class="page">
@@ -44,7 +46,7 @@ const ESTADOS = ['SOLICITADO', 'CONFIRMADO', 'DESCONTADO', 'ANULADO'];
         <mat-card-content>
           <div class="header">
             <div class="title"><mat-icon>receipt_long</mat-icon> <h2>Vales y adelantos</h2></div>
-            <button mat-flat-button color="primary" (click)="abrirCrear()">
+            <button *appHasPermission="'RRHH_VALE_CREAR'" mat-flat-button color="primary" (click)="abrirCrear()">
               <mat-icon>add</mat-icon> Nuevo vale
             </button>
           </div>
@@ -110,10 +112,10 @@ const ESTADOS = ['SOLICITADO', 'CONFIRMADO', 'DESCONTADO', 'ANULADO'];
               <td mat-cell *matCellDef="let v">
                 <button mat-icon-button [matMenuTriggerFor]="menu"><mat-icon>more_vert</mat-icon></button>
                 <mat-menu #menu="matMenu">
-                  <button mat-menu-item (click)="confirmar(v)" [disabled]="v.estado !== 'SOLICITADO'">
+                  <button *appHasPermission="'RRHH_VALE_CONFIRMAR'" mat-menu-item (click)="confirmar(v)" [disabled]="v.estado !== 'SOLICITADO'">
                     <mat-icon>check_circle</mat-icon><span>Confirmar</span>
                   </button>
-                  <button mat-menu-item (click)="anular(v)" [disabled]="v.estado === 'ANULADO' || v.estado === 'DESCONTADO'">
+                  <button *appHasPermission="'RRHH_VALE_ANULAR'" mat-menu-item (click)="anular(v)" [disabled]="v.estado === 'ANULADO' || v.estado === 'DESCONTADO'">
                     <mat-icon>cancel</mat-icon><span>Anular</span>
                   </button>
                 </mat-menu>

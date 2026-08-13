@@ -114,6 +114,7 @@ export function registerFacturaImportHandlers(
   });
 
   ipcMain.handle('ia-prompt-sugerencia-create', async (_e, payload: { texto: string; motivo?: string; documentoOrigenId?: number; origen?: string }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_IMPORTAR_FACTURA');
     const userId = getCurrentUser()?.id;
     const repo = dataSource.getRepository(IaPromptSugerencia);
     const texto = (payload?.texto || '').trim();
@@ -214,7 +215,7 @@ export function registerFacturaImportHandlers(
     return { canceled: false, filePath, fileType };
   });
 
-  ipcMain.handle('factura-import-process', async (_e, payload: { filePath: string }) => {
+  ipcMain.handle('factura-import-process', async (_e, payload: { filePath?: string; url?: string }) => {
     await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_IMPORTAR_FACTURA');
     const userDataPath = app.getPath('userData');
     const userId = getCurrentUser()?.id;
@@ -222,17 +223,27 @@ export function registerFacturaImportHandlers(
     if (!cfg.habilitado || !cfg.openaiApiKey) {
       return { success: false, error: 'IA deshabilitada o sin API key. Configura desde Sistema → Configurar IA.' };
     }
-    if (!payload?.filePath || !fs.existsSync(payload.filePath)) {
+    // Resolver la ruta: puede venir un filePath (diálogo nativo) o una app:// URL
+    // (subida por QR desde el celular al bucket factura-imports).
+    let effectivePath = payload?.filePath;
+    if (!effectivePath && payload?.url && payload.url.startsWith('app://')) {
+      const rest = payload.url.replace(/^app:\/\//, '');
+      const top = rest.split('/')[0];
+      if (top === 'factura-imports' && !rest.includes('..')) {
+        effectivePath = path.join(userDataPath, rest);
+      }
+    }
+    if (!effectivePath || !fs.existsSync(effectivePath)) {
       return { success: false, error: 'Archivo no encontrado.' };
     }
-    const stat = fs.statSync(payload.filePath);
+    const stat = fs.statSync(effectivePath);
     if (stat.size > MAX_BYTES) {
       return { success: false, error: `Archivo demasiado grande (${(stat.size / 1024 / 1024).toFixed(1)}MB). Max 5MB.` };
     }
 
     const promptEff = await loadEffectivePrompt(dataSource);
 
-    const copied = copyArchivoToImports(userDataPath, payload.filePath);
+    const copied = copyArchivoToImports(userDataPath, effectivePath);
     const repo = dataSource.getRepository(DocumentoCompraImportado);
     const doc = repo.create({
       archivoUrl: copied.archivoUrl,

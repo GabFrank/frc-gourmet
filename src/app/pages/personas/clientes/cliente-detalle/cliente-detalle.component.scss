@@ -4,6 +4,13 @@
   flex-direction: column;
   gap: 16px;
 
+  .vinculo-chip {
+    margin-right: 8px;
+    line-height: 32px;
+    color: var(--info-color);
+    border-color: var(--info-color);
+  }
+
   .page-header {
     display: flex;
     justify-content: space-between;

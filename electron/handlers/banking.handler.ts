@@ -4,6 +4,7 @@ import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuent
 import { MaquinaPos } from '../../src/app/database/entities/financiero/maquina-pos.entity';
 import { AcreditacionPos } from '../../src/app/database/entities/financiero/acreditacion-pos.entity';
 import { MovimientoBancario, MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
+import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { Chequera } from '../../src/app/database/entities/financiero/chequera.entity';
 import { Cheque } from '../../src/app/database/entities/financiero/cheque.entity';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
@@ -57,6 +58,12 @@ export async function procesarAcreditacionesPendientes(dataSource: DataSource): 
       if (!cb) continue;
       cb.saldo = Number(cb.saldo) + Number(acred.montoEsperado);
       await queryRunner.manager.save(CuentaBancaria, cb);
+      await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+        cuentaBancariaId: cb.id,
+        tipo: MovimientoBancarioTipo.ACREDITACION_POS,
+        monto: Number(acred.montoEsperado),
+        observacion: `ACREDITACION POS AUTO #${acred.id}`,
+      });
 
       acred.estado = AcreditacionPosEstado.ACREDITADO_AUTO;
       acred.fechaAcreditacionReal = new Date();
@@ -373,6 +380,7 @@ export function registerBankingHandlers(
   // Procesa acreditaciones pendientes vencidas (manual / lazy on access)
   ipcMain.handle('procesar-acreditaciones-auto', async () => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
       return await procesarAcreditacionesPendientes(dataSource);
     } catch (error) {
       console.error('Error procesando acreditaciones auto:', error);
@@ -397,6 +405,14 @@ export function registerBankingHandlers(
         relations: ['cuentaBancaria'],
       });
       if (!acred) throw new Error(`AcreditacionPos ${id} no encontrada`);
+      // Evitar doble acreditación: si ya fue verificada, no se puede re-verificar
+      // (volvería a sumar el monto al saldo bancario).
+      if (
+        acred.estado === AcreditacionPosEstado.VERIFICADO ||
+        acred.estado === AcreditacionPosEstado.CON_DIFERENCIA
+      ) {
+        throw new Error(`La acreditación POS #${acred.id} ya fue verificada.`);
+      }
 
       const cb = await cbRepo.findOne({ where: { id: acred.cuentaBancaria.id } });
       if (!cb) throw new Error('Cuenta bancaria no encontrada');
@@ -413,11 +429,25 @@ export function registerBankingHandlers(
         if (diferencia !== 0) {
           cb.saldo = Number(cb.saldo) + diferencia;
           await queryRunner.manager.save(CuentaBancaria, cb);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: cb.id,
+            tipo: diferencia > 0 ? MovimientoBancarioTipo.AJUSTE_POSITIVO : MovimientoBancarioTipo.AJUSTE_NEGATIVO,
+            monto: Math.abs(diferencia),
+            observacion: `AJUSTE VERIFICACION POS #${acred.id}`,
+            responsable: getCurrentUser(),
+          });
         }
       } else {
         // Aun no acreditada: sumar el monto real al saldo
         cb.saldo = Number(cb.saldo) + montoReal;
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId: cb.id,
+          tipo: MovimientoBancarioTipo.ACREDITACION_POS,
+          monto: montoReal,
+          observacion: `ACREDITACION POS VERIFICADA #${acred.id}`,
+          responsable: getCurrentUser(),
+        });
       }
 
       acred.montoAcreditado = montoReal;
@@ -461,6 +491,14 @@ export function registerBankingHandlers(
       if (!cb) throw new Error(`CuentaBancaria ${cuentaBancariaId} no encontrada`);
       cb.saldo = Number(cb.saldo) + monto;
       await repo.save(cb);
+      await registrarMovimientoBancario(dataSource.manager, dataSource, {
+        cuentaBancariaId,
+        tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
+        monto,
+        observacion: 'TRANSFERENCIA/PIX RECIBIDA',
+        numeroComprobante: payload.numeroComprobante,
+        responsable: getCurrentUser(),
+      });
       return { success: true, saldoActual: Number(cb.saldo) };
     } catch (error) {
       console.error('Error acreditando transferencia bancaria:', error);
@@ -774,6 +812,14 @@ export function registerBankingHandlers(
       } else {
         cb.saldo = Number(cb.saldo) - monto;
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId: cb.id,
+          tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+          monto,
+          observacion: `CHEQUE #${saved.numeroCheque} - ${data.beneficiario || ''}`,
+          numeroComprobante: saved.numeroCheque,
+          responsable: getCurrentUser(),
+        });
 
         if (data.cajaMayorId && data.monedaId && data.formaPagoId) {
           const currentUser = getCurrentUser();
@@ -837,6 +883,14 @@ export function registerBankingHandlers(
       }
       cb.saldo = Number(cb.saldo) - monto;
       await queryRunner.manager.save(CuentaBancaria, cb);
+      await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+        cuentaBancariaId: cb.id,
+        tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+        monto,
+        observacion: `COBRO CHEQUE #${cheque.numeroCheque}`,
+        numeroComprobante: cheque.numeroCheque,
+        responsable: getCurrentUser(),
+      });
 
       if (cheque.cajaMayor && cheque.moneda && cheque.formaPago) {
         const currentUser = getCurrentUser();

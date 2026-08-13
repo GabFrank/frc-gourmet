@@ -16,6 +16,8 @@ import { CobroConsolidadoEstado, CobroConsolidadoFuente } from '../../src/app/da
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
+import { MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
+import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { ensurePermission } from '../utils/auth.utils';
@@ -100,12 +102,17 @@ async function computeCobroPreview(dataSource: DataSource, convenioId: number): 
     const deuda = +cuotas
       .reduce((s, c: any) => s + (Number(c.monto) - Number(c.montoCobrado)), 0)
       .toFixed(2);
+    // Cantidad de compras (operaciones a credito) con deuda pendiente: CPC
+    // distintas, no cuotas. Cada venta a credito genera una CuentaPorCobrar.
+    const cantidadCompras = new Set(
+      cuotas.map((c: any) => c.cuentaPorCobrar?.id).filter((id: any) => id != null),
+    ).size;
     total += deuda;
     clientes.push({
       id: cli.id,
       nombre: nombreCliente(cli),
       documento: cli.ruc || cli.persona?.documento || null,
-      cantidadCuotas: cuotas.length,
+      cantidadCompras,
       deuda,
     });
   }
@@ -260,7 +267,7 @@ export function registerConveniosHandlers(
     const empresaHeader = await pdfHeaderEmpresa(dataSource, { showLogo: true });
     const filas = preview.clientes
       .filter((c: any) => c.deuda > 0)
-      .map((c: any) => [c.nombre, c.documento || '—', String(c.cantidadCuotas), pdfFmtMonto(c.deuda)]);
+      .map((c: any) => [c.nombre, c.documento || '—', String(c.cantidadCompras), pdfFmtMonto(c.deuda)]);
 
     const docDef = {
       pageSize: 'A4',
@@ -278,7 +285,7 @@ export function registerConveniosHandlers(
           margin: [0, 0, 0, 8],
         },
         pdfTablaMontos(
-          ['CLIENTE', 'DOCUMENTO', 'CUOTAS', 'DEUDA'],
+          ['CLIENTE', 'DOCUMENTO', 'COMPRAS', 'DEUDA'],
           filas,
           { montoCols: [3], totalLabel: 'TOTAL A COBRAR', totalValue: preview.total, totalCol: 3 },
         ),
@@ -489,6 +496,13 @@ export function registerConveniosHandlers(
         if (!cb) throw new Error('Cuenta bancaria no encontrada');
         cb.saldo = +(Number(cb.saldo) + totalGeneral).toFixed(2);
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId,
+          tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
+          monto: totalGeneral,
+          observacion: `COBRO CONSOLIDADO #${cobroSaved.id} - ${convenio.nombre}`,
+          responsable: cu,
+        });
       }
 
       cobroSaved.montoTotal = +totalGeneral.toFixed(2);

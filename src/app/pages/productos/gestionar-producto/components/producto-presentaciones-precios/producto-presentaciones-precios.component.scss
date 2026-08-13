@@ -10,14 +10,14 @@
   
   h2 {
     margin: 0 0 8px 0;
-    color: #333;
+    color: var(--text-primary);
     font-size: 24px;
     font-weight: 500;
   }
   
   .description {
     margin: 0;
-    color: #818181;
+    color: var(--text-secondary);
     font-size: 14px;
   }
 }
@@ -77,7 +77,7 @@
     }
     
     .cancel-button {
-      color: #666;
+      color: var(--text-secondary);
     }
   }
 }
@@ -90,8 +90,8 @@
     flex-direction: column;
     align-items: center;
     padding: 40px;
-    color: #666;
-    
+    color: var(--text-secondary);
+
     p {
       margin: 16px 0 0 0;
     }
@@ -102,14 +102,14 @@
     flex-direction: column;
     align-items: center;
     padding: 40px;
-    color: #666;
+    color: var(--text-secondary);
     text-align: center;
-    
+
     mat-icon {
       font-size: 48px;
       width: 48px;
       height: 48px;
-      color: #ccc;
+      color: var(--text-disabled);
       margin-bottom: 16px;
     }
     
@@ -193,16 +193,16 @@
     }
 
     &.placeholder {
-      background: rgba(0,0,0,0.06);
+      background: var(--surface-variant);
     }
   }
 
   .presentacion-nombre {
     font-weight: 500;
-    color: #bababa;
+    color: var(--text-primary);
 
     &.inactive {
-      color: #999;
+      color: var(--text-disabled);
       text-decoration: line-through;
     }
   }
@@ -266,7 +266,7 @@
 
 .stock-info {
   font-weight: 500;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .acciones-container {
@@ -353,26 +353,26 @@
 // Estilos para presentaciones inactivas
 .presentacion-inactiva {
   opacity: 0.6;
-  
+
   .presentacion-nombre {
-    color: #999;
+    color: var(--text-disabled);
     text-decoration: line-through;
   }
 }
 
 .delete-action {
   .delete-icon {
-    color: #f44336 !important;
+    color: var(--error-color) !important;
   }
-  
+
   .delete-text {
-    color: #f44336 !important;
+    color: var(--error-color) !important;
   }
-  
+
   &:disabled {
     .delete-icon,
     .delete-text {
-      color: #ccc !important;
+      color: var(--text-disabled) !important;
     }
   }
 }
@@ -669,7 +669,7 @@ mat-paginator {
 }
 
 .text-muted {
-  color: #999;
+  color: var(--text-disabled);
   font-style: italic;
 }
 
@@ -680,10 +680,10 @@ mat-paginator {
   
   .precio-valor {
     font-weight: 500;
-    color: #333;
-    
+    color: var(--text-primary);
+
     &.text-muted {
-      color: #999;
+      color: var(--text-disabled);
       font-style: italic;
     }
   }

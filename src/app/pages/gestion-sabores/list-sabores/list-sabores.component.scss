@@ -1,34 +1,132 @@
-.list-sabores-container {
+.sabores-container {
+  padding: 16px;
   display: flex;
   flex-direction: column;
+  gap: 12px;
   height: 100%;
+  box-sizing: border-box;
 }
 
-.toolbar-spacer {
-  flex: 1 1 auto;
-}
-
-.content {
-  padding: 20px;
-  flex: 1;
-  overflow: auto;
-}
-
-.spinner-container {
+.header {
   display: flex;
-  justify-content: center;
   align-items: center;
-  padding: 40px;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.empty-state {
-  text-align: center;
-  padding: 40px;
-  color: #888;
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.list-item-actions {
+.header-acciones {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.filtros-card {
+  padding: 12px 16px;
+}
+
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.f-producto { min-width: 200px; flex: 1 1 200px; }
+.f-categoria { min-width: 150px; flex: 1 1 150px; }
+.f-estado { min-width: 130px; flex: 0 1 130px; }
+.f-texto { min-width: 200px; flex: 1 1 220px; }
+
+.filtros mat-form-field {
+  margin-bottom: -1.25em; // recuperar el espacio del subscript vacío
+}
+
+.filtros-acciones {
   display: flex;
   gap: 8px;
-  margin-left: auto;
+  align-items: center;
+  padding-bottom: 4px;
+}
+
+.tabla-card {
+  padding: 0;
+  overflow: auto;
+  flex: 1;
+}
+
+.sabores-table {
+  width: 100%;
+}
+
+.sabor-nombre {
+  display: block;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sabor-desc {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--surface-variant);
+  color: var(--text-primary);
+}
+
+.chip-num {
+  background: var(--info-color, var(--surface-variant));
+  color: var(--on-info, var(--text-primary));
+}
+
+.chip-link {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+
+  &:hover { filter: brightness(1.08); text-decoration: underline; }
+}
+
+.chip-off {
+  background: var(--surface-variant);
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+.col-estado {
+  white-space: nowrap;
+
+  mat-slide-toggle { margin-right: 8px; vertical-align: middle; }
+}
+
+.col-acciones {
+  width: 72px;
+  text-align: center;
+}
+
+.empty {
+  text-align: center;
+  padding: 40px 16px;
+  color: var(--text-secondary);
+
+  mat-icon {
+    font-size: 40px;
+    width: 40px;
+    height: 40px;
+    opacity: 0.4;
+  }
+
+  p { margin: 8px 0 0; }
 }

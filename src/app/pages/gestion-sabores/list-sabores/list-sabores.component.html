@@ -1,45 +1,142 @@
-<div class="list-sabores-container">
-  <mat-toolbar color="primary">
-    <span>Gestión de Sabores</span>
-    <span class="toolbar-spacer"></span>
-    <button *appHasPermission="'SABORES_GESTIONAR'" mat-fab extended (click)="crearSabor()">
-      <mat-icon>add</mat-icon>
-      Nuevo Sabor
-    </button>
-  </mat-toolbar>
-
-  <div class="content">
-    <mat-card>
-      <mat-card-header>
-        <mat-card-title>Sabores Registrados</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <div *ngIf="loading; else list" class="spinner-container">
-          <mat-spinner></mat-spinner>
-        </div>
-
-        <ng-template #list>
-          <div *ngIf="sabores.length > 0; else empty">
-            <mat-list>
-              <mat-list-item *ngFor="let sabor of sabores">
-                <span matListItemTitle>{{ sabor }}</span>
-                <span matListItemLine>Gestione las variaciones de este sabor</span>
-                <div class="list-item-actions">
-                  <button *appHasPermission="'SABORES_GESTIONAR'" mat-icon-button (click)="editarSabor(sabor)" matTooltip="Editar Sabor">
-                    <mat-icon>edit</mat-icon>
-                  </button>
-                </div>
-              </mat-list-item>
-            </mat-list>
-          </div>
-          <ng-template #empty>
-            <div class="empty-state">
-              <p>No se encontraron sabores.</p>
-              <p>Haga clic en "Nuevo Sabor" para comenzar a crear uno.</p>
-            </div>
-          </ng-template>
-        </ng-template>
-      </mat-card-content>
-    </mat-card>
+<div class="sabores-container">
+  <div class="header">
+    <h1 class="title">Gestión de Sabores</h1>
+    <div class="header-acciones" *appHasPermission="'SABORES_GESTIONAR'">
+      <button mat-raised-button color="primary" (click)="crearSabor()"
+              [matTooltip]="filtroProductoId ? '' : 'Elegí un producto en el filtro para crear un sabor'">
+        <mat-icon>add</mat-icon> Nuevo Sabor
+      </button>
+      <button mat-icon-button [matMenuTriggerFor]="masMenu" matTooltip="Más acciones" aria-label="Más acciones">
+        <mat-icon>more_vert</mat-icon>
+      </button>
+      <mat-menu #masMenu="matMenu">
+        <button mat-menu-item (click)="repararRecetasCompartidas()">
+          <mat-icon>healing</mat-icon>
+          <span>Reparar recetas compartidas</span>
+        </button>
+      </mat-menu>
+    </div>
   </div>
+
+  <!-- Filtros (se aplican con Buscar) -->
+  <mat-card class="filtros-card">
+    <div class="filtros">
+      <mat-form-field appearance="outline" class="f-producto">
+        <mat-label>Producto</mat-label>
+        <mat-select [(ngModel)]="filtroProductoId">
+          <mat-option [value]="null">Todos</mat-option>
+          <mat-option *ngFor="let p of productos" [value]="p.id">{{ p.nombre }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="f-categoria">
+        <mat-label>Categoría</mat-label>
+        <mat-select [(ngModel)]="filtroCategoria">
+          <mat-option [value]="null">Todas</mat-option>
+          <mat-option *ngFor="let c of categorias" [value]="c">{{ c }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="f-estado">
+        <mat-label>Estado</mat-label>
+        <mat-select [(ngModel)]="filtroEstado">
+          <mat-option value="todos">Todos</mat-option>
+          <mat-option value="activos">Activos</mat-option>
+          <mat-option value="inactivos">Inactivos</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="f-texto">
+        <mat-label>Buscar por nombre</mat-label>
+        <input matInput [(ngModel)]="filtroTexto" (keyup.enter)="buscar()" placeholder="Ej: Calabresa" />
+        <mat-icon matSuffix>search</mat-icon>
+      </mat-form-field>
+
+      <div class="filtros-acciones">
+        <button mat-raised-button color="primary" (click)="buscar()">
+          <mat-icon>search</mat-icon> Buscar
+        </button>
+        <button mat-stroked-button (click)="limpiarFiltros()">
+          <mat-icon>clear</mat-icon> Limpiar
+        </button>
+      </div>
+    </div>
+  </mat-card>
+
+  <mat-progress-bar mode="indeterminate" *ngIf="loading"></mat-progress-bar>
+
+  <!-- Tabla -->
+  <mat-card class="tabla-card">
+    <table mat-table [dataSource]="pagedSabores" class="sabores-table">
+      <ng-container matColumnDef="nombre">
+        <th mat-header-cell *matHeaderCellDef>Sabor</th>
+        <td mat-cell *matCellDef="let s">
+          <span class="sabor-nombre">{{ s.nombre }}</span>
+          <span class="sabor-desc" *ngIf="s.descripcion">{{ s.descripcion }}</span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="producto">
+        <th mat-header-cell *matHeaderCellDef>Producto</th>
+        <td mat-cell *matCellDef="let s">{{ s.producto?.nombre || '—' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="categoria">
+        <th mat-header-cell *matHeaderCellDef>Categoría</th>
+        <td mat-cell *matCellDef="let s">
+          <span class="chip" *ngIf="s.categoria">{{ s.categoria }}</span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="variaciones">
+        <th mat-header-cell *matHeaderCellDef>Variaciones</th>
+        <td mat-cell *matCellDef="let s">
+          <button class="chip chip-num chip-link" (click)="gestionarVariaciones(s)"
+                  matTooltip="Gestionar variaciones (tamaños, precios, recetas)">{{ s.variacionesCount }}</button>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="estado">
+        <th mat-header-cell *matHeaderCellDef>Estado</th>
+        <td mat-cell *matCellDef="let s" class="col-estado">
+          <mat-slide-toggle [checked]="s.activo" (change)="toggleActivo(s)"
+                            *appHasPermission="'SABORES_GESTIONAR'"></mat-slide-toggle>
+          <span class="chip" [class.chip-off]="!s.activo">{{ s.activo ? 'Activo' : 'Inactivo' }}</span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="acciones">
+        <th mat-header-cell *matHeaderCellDef class="col-acciones">Acciones</th>
+        <td mat-cell *matCellDef="let s" class="col-acciones">
+          <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #menu="matMenu">
+            <button mat-menu-item (click)="gestionarVariaciones(s)">
+              <mat-icon>tune</mat-icon> <span>Gestionar variaciones</span>
+            </button>
+            <button mat-menu-item (click)="editarSabor(s)" *appHasPermission="'SABORES_GESTIONAR'">
+              <mat-icon>edit</mat-icon> <span>Editar sabor</span>
+            </button>
+            <button mat-menu-item (click)="eliminarSabor(s)" *appHasPermission="'SABORES_GESTIONAR'">
+              <mat-icon>delete</mat-icon> <span>Eliminar</span>
+            </button>
+          </mat-menu>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+    </table>
+
+    <div class="empty" *ngIf="!loading && sabores.length === 0">
+      <mat-icon>local_pizza</mat-icon>
+      <p>No se encontraron sabores con esos filtros.</p>
+    </div>
+
+    <mat-paginator [length]="sabores.length" [pageSize]="pageSize"
+                   [pageSizeOptions]="[10, 25, 50]" [pageIndex]="pageIndex"
+                   (page)="onPageChange($event)" *ngIf="sabores.length > 0">
+    </mat-paginator>
+  </mat-card>
 </div>

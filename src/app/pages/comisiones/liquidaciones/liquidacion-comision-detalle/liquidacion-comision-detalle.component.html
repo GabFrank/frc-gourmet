@@ -25,9 +25,11 @@
       <ng-container matColumnDef="acciones">
         <th mat-header-cell *matHeaderCellDef></th>
         <td mat-cell *matCellDef="let i">
-          <button mat-icon-button (click)="eliminarItem(i)" *ngIf="liquidacion.estado === 'BORRADOR'">
-            <mat-icon>delete</mat-icon>
-          </button>
+          <ng-container *appHasPermission="'COMISION_LIQUIDACION_GENERAR'">
+            <button mat-icon-button (click)="eliminarItem(i)" *ngIf="liquidacion.estado === 'BORRADOR'">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </ng-container>
         </td>
       </ng-container>
       <tr mat-header-row *matHeaderRowDef="itemsColumns"></tr>

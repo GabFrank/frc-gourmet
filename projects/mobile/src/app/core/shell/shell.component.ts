@@ -6,8 +6,9 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
-import { Observable } from 'rxjs';
-import { filter, map, shareReplay, startWith } from 'rxjs/operators';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { Observable, combineLatest, from, of } from 'rxjs';
+import { catchError, filter, map, shareReplay, startWith, switchMap } from 'rxjs/operators';
 import { AuthService, PermissionService, ThemeService, Usuario } from '@frc/shared-core';
 import { NAV_ITEMS, NavItem } from './nav';
 import { OfflineBannerComponent } from '../components/offline-banner.component';
@@ -27,6 +28,7 @@ import { OfflineBannerComponent } from '../components/offline-banner.component';
     MatIconModule,
     MatButtonModule,
     MatMenuModule,
+    MatSnackBarModule,
     OfflineBannerComponent,
   ],
   templateUrl: './shell.component.html',
@@ -39,16 +41,57 @@ export class ShellComponent implements OnInit {
   private readonly permissions = inject(PermissionService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly snack = inject(MatSnackBar);
+
+  // Versión que sirve el server (se muestra en el menú del usuario). La PWA la
+  // pide a /api/version del server que la sirve.
+  appVersion = '';
+  // Versión al momento de cargar la app (baseline para detectar update nuevo).
+  private loadedVersion = '';
+  buscandoUpdate = false;
+
+  /**
+   * ¿El módulo de música sirve para algo ahora mismo? Exige `client_id` Y cuenta
+   * conectada: sin conexión la pantalla solo puede mostrar un error, y desde la
+   * PWA no se puede reconectar (la autorización abre el navegador en la PC del
+   * local). Ocultarlo es más honesto que ofrecer un destino roto.
+   *
+   * Si el handler falla (permiso o server viejo) se asume que no está
+   * disponible: ocultar de más es preferible a ofrecer algo que no funciona.
+   */
+  private readonly musicaDisponible$: Observable<boolean> = from(
+    Promise.resolve((window as any).api?.callIpc?.('musica-disponible') ?? null),
+  ).pipe(
+    map((r: any) => !!r?.configurado && !!r?.conectado),
+    catchError(() => of(false)),
+    startWith(false),
+    shareReplay(1),
+  );
 
   // Navegación filtrada por permisos: los destinos con `permisos` solo se
   // muestran si el usuario tiene al menos uno (Compras/Finanzas/RRHH).
-  readonly nav$: Observable<NavItem[]> = this.permissions.codigos$.pipe(
-    map((set) =>
-      NAV_ITEMS.filter((i) => !i.permisos || i.permisos.some((p) => set.has(p.toUpperCase()))),
+  // Música además exige que el local tenga Spotify configurado.
+  readonly nav$: Observable<NavItem[]> = combineLatest([
+    this.permissions.codigos$,
+    this.musicaDisponible$,
+  ]).pipe(
+    map(([set, hayMusica]) =>
+      NAV_ITEMS.filter((i) => {
+        if (i.permisos && !i.permisos.some((p) => set.has(p.toUpperCase()))) return false;
+        if (i.path === '/musica' && !hayMusica) return false;
+        return true;
+      }),
     ),
     shareReplay(1),
   );
   readonly user: Usuario | null = this.auth.currentUser;
+
+  // KDS (cocina): destino full-screen fuera del menú de navegación. Se ofrece un
+  // acceso en el menú de usuario para quien pueda verlo (útil en la TV/cocina).
+  readonly canKds$: Observable<boolean> = this.permissions.codigos$.pipe(
+    map((set) => set.has('COMANDAS_KDS_VER') || set.has('VENTAS_PDV')),
+    shareReplay(1),
+  );
 
   readonly isHandset$: Observable<boolean> = this.breakpoints
     .observe('(max-width: 767px)')
@@ -66,6 +109,61 @@ export class ShellComponent implements OnInit {
         map(() => this.deriveTitle()),
       )
       .subscribe((t) => (this.pageTitle = t));
+
+    void this.cargarVersion();
+  }
+
+  /** Pide la versión al server que sirve la PWA (/api/version). */
+  private async fetchVersion(): Promise<string | null> {
+    try {
+      const base = ((window as any).api?.getServerUrl?.() || '').toString().replace(/\/$/, '');
+      const resp = await fetch(`${base}/api/version`, { cache: 'no-store' });
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      return data?.appVersion ? String(data.appVersion) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async cargarVersion(): Promise<void> {
+    const v = await this.fetchVersion();
+    if (v) {
+      this.appVersion = v;
+      if (!this.loadedVersion) this.loadedVersion = v;
+    }
+  }
+
+  /**
+   * Re-consulta la versión del server. Si hay una más nueva que la cargada,
+   * ofrece recargar (la PWA no tiene service worker: recargar trae los assets
+   * nuevos que sirve el server actualizado).
+   */
+  async buscarActualizacion(): Promise<void> {
+    if (this.buscandoUpdate) return;
+    this.buscandoUpdate = true;
+    const buscando = this.snack.open('Buscando actualización…', undefined, { duration: 0 });
+    try {
+      const serverVersion = await this.fetchVersion();
+      buscando.dismiss();
+      if (!serverVersion) {
+        this.snack.open('No se pudo verificar la versión', 'CERRAR', { duration: 3000 });
+        return;
+      }
+      this.appVersion = serverVersion;
+      if (this.loadedVersion && serverVersion !== this.loadedVersion) {
+        const ref = this.snack.open(`Nueva versión disponible (${serverVersion})`, 'ACTUALIZAR', { duration: 10000 });
+        ref.onAction().subscribe(() => (window as any).location?.reload());
+      } else {
+        if (!this.loadedVersion) this.loadedVersion = serverVersion;
+        this.snack.open(`Estás en la última versión (${serverVersion})`, 'CERRAR', { duration: 3000 });
+      }
+    } catch {
+      buscando.dismiss();
+      this.snack.open('No se pudo verificar la versión', 'CERRAR', { duration: 3000 });
+    } finally {
+      this.buscandoUpdate = false;
+    }
   }
 
   private deriveTitle(): string {

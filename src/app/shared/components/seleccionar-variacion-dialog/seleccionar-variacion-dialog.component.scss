@@ -181,7 +181,7 @@
 
   .selected & {
     opacity: 1;
-    color: #2196f3;
+    color: var(--info-color);
   }
 }
 
@@ -222,7 +222,7 @@
   }
 
   &.disabled {
-    opacity: 0.35;
+    opacity: 0.55;
     cursor: not-allowed;
   }
 }
@@ -245,11 +245,11 @@
 
 .sabor-sin-precio {
   font-size: 10px;
-  color: #ef5350;
+  color: var(--error-color);
 }
 
 .check-icon {
-  color: #4caf50;
+  color: var(--success-color);
   font-size: 20px;
 }
 
@@ -299,7 +299,7 @@
   padding: 2px 6px;
   border-radius: 10px;
   background-color: rgba(255, 152, 0, 0.15);
-  color: #ffa726;
+  color: var(--warning-color);
 
   mat-icon {
     font-size: 12px;
@@ -319,6 +319,66 @@
     width: 16px;
     height: 16px;
     margin-right: 4px;
+  }
+}
+
+// Acciones de cada sabor seleccionado (proporción + personalizar)
+.sabor-sel-acciones {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.proporcion-control {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+
+  button {
+    width: 28px;
+    height: 28px;
+    line-height: 28px;
+  }
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.proporcion-pct {
+  min-width: 38px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.proporciones-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+
+  button {
+    font-size: 11px;
+    mat-icon {
+      font-size: 15px;
+      width: 15px;
+      height: 15px;
+      margin-right: 2px;
+    }
+  }
+}
+
+.proporciones-suma {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.6;
+
+  &.warn {
+    color: var(--error-color, #e53935);
+    opacity: 1;
   }
 }
 
@@ -398,7 +458,7 @@
     font-size: 16px;
     width: 16px;
     height: 16px;
-    color: #4caf50;
+    color: var(--success-color);
   }
 }
 
@@ -428,7 +488,7 @@
     font-size: 14px;
     width: 14px;
     height: 14px;
-    color: #ffa726;
+    color: var(--warning-color);
   }
 }
 
@@ -485,7 +545,7 @@
 .total-value {
   font-size: 24px;
   font-weight: bold;
-  color: #4caf50;
+  color: var(--success-color);
 }
 
 .btn-confirmar {

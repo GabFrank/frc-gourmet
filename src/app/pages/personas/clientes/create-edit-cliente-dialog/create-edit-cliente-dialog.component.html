@@ -65,6 +65,28 @@
           </button>
         </div>
 
+        <mat-form-field appearance="outline" class="full">
+          <mat-label>Conveniado (opcional)</mat-label>
+          <input matInput
+                 [formControl]="convenioControl"
+                 [matAutocomplete]="autoConvenio"
+                 placeholder="Escriba para buscar...">
+          <button *ngIf="selectedConvenio" mat-icon-button matSuffix type="button"
+                  (click)="clearConvenio()" matTooltip="Quitar selección">
+            <mat-icon>close</mat-icon>
+          </button>
+          <mat-icon *ngIf="!selectedConvenio" matSuffix>badge</mat-icon>
+          <mat-autocomplete #autoConvenio="matAutocomplete"
+                            [displayWith]="displayConvenio"
+                            (optionSelected)="onConvenioSelected($event.option.value)">
+            <mat-option *ngFor="let c of filteredConvenios" [value]="c">
+              {{ c.nombre }}
+              <span *ngIf="c.ruc" class="muted"> - {{ c.ruc }}</span>
+            </mat-option>
+          </mat-autocomplete>
+          <mat-hint>Asocia el cliente a una lista de conveniados</mat-hint>
+        </mat-form-field>
+
         <mat-slide-toggle formControlName="tributa" class="full">Tributa (RUC obligatorio)</mat-slide-toggle>
       </div>
     </section>

@@ -1,11 +1,30 @@
 <div class="list-container">
   <div class="header">
     <h2>Categorias de Gasto</h2>
-    <button mat-raised-button color="primary" (click)="showCreateForm()">
+    <button mat-raised-button color="primary" (click)="showCreateForm()" *appHasPermission="'CAJA_MAYOR_OPERAR'">
       <mat-icon>add</mat-icon>
       Nueva Categoria
     </button>
   </div>
+
+  <!-- Filtro de busqueda -->
+  <mat-card class="filter-card">
+    <div class="filter-row">
+      <mat-form-field appearance="outline">
+        <mat-label>Buscar por nombre</mat-label>
+        <input matInput [formControl]="searchControl" (keyup.enter)="aplicarFiltro()" placeholder="Nombre de la categoria">
+        <mat-icon matSuffix>search</mat-icon>
+      </mat-form-field>
+
+      <div class="filter-actions">
+        <button mat-raised-button color="primary" (click)="aplicarFiltro()">
+          <mat-icon>filter_list</mat-icon>
+          Filtrar
+        </button>
+        <button mat-button (click)="limpiarFiltro()">Limpiar</button>
+      </div>
+    </div>
+  </mat-card>
 
   <!-- Inline Form -->
   <mat-card *ngIf="showInlineForm" class="inline-form-card">
@@ -38,7 +57,7 @@
   </div>
 
   <mat-card *ngIf="!loading">
-    <table mat-table [dataSource]="categorias" class="full-width">
+    <table mat-table [dataSource]="categoriasFiltradas" class="full-width">
       <ng-container matColumnDef="nombre">
         <th mat-header-cell *matHeaderCellDef>Nombre</th>
         <td mat-cell *matCellDef="let row">{{row.nombre}}</td>
@@ -65,14 +84,16 @@
             <mat-icon>more_vert</mat-icon>
           </button>
           <mat-menu #menu="matMenu">
-            <button mat-menu-item (click)="editCategoria(row)">
+            <button mat-menu-item (click)="editCategoria(row)" *appHasPermission="'CAJA_MAYOR_OPERAR'">
               <mat-icon>edit</mat-icon>
               <span>Editar</span>
             </button>
-            <button mat-menu-item (click)="desactivarCategoria(row)" *ngIf="row.activo">
-              <mat-icon>block</mat-icon>
-              <span>Desactivar</span>
-            </button>
+            <ng-container *appHasPermission="'CAJA_MAYOR_OPERAR'">
+              <button mat-menu-item (click)="desactivarCategoria(row)" *ngIf="row.activo">
+                <mat-icon>block</mat-icon>
+                <span>Desactivar</span>
+              </button>
+            </ng-container>
           </mat-menu>
         </td>
       </ng-container>
@@ -81,7 +102,7 @@
       <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
     </table>
 
-    <div *ngIf="categorias.length === 0" class="empty-state">
+    <div *ngIf="categoriasFiltradas.length === 0" class="empty-state">
       <mat-icon>category</mat-icon>
       <p>No hay categorias registradas</p>
     </div>

@@ -5,6 +5,7 @@ import { Delivery, DeliveryEstado } from '../../src/app/database/entities/ventas
 import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
 import { VentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
 import { VentaItemObservacion } from '../../src/app/database/entities/ventas/venta-item-observacion.entity';
+import { Observacion } from '../../src/app/database/entities/productos/observacion.entity';
 import { VentaItemAdicional } from '../../src/app/database/entities/ventas/venta-item-adicional.entity';
 import { VentaItemIngredienteModificacion } from '../../src/app/database/entities/ventas/venta-item-ingrediente-modificacion.entity';
 import { PdvGrupoCategoria } from '../../src/app/database/entities/ventas/pdv-grupo-categoria.entity';
@@ -15,10 +16,14 @@ import { setEntityUserTracking } from '../utils/entity.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
-import { Not, IsNull } from 'typeorm';
+import { Not, IsNull, In } from 'typeorm';
 import { DeepPartial } from 'typeorm';
 import { Reserva } from '../../src/app/database/entities/ventas/reserva.entity';
 import { ensurePermission } from '../utils/auth.utils';
+import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
+import { MovimientoCliente } from '../../src/app/database/entities/financiero/movimiento-cliente.entity';
+import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
+import { CuentaPorCobrarEstado, MovimientoClienteTipo } from '../../src/app/database/entities/financiero/cuentas-por-cobrar-enums';
 import { PdvMesa, PdvMesaEstado } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { Comanda, ComandaEstado } from '../../src/app/database/entities/ventas/comanda.entity';
 import { printComandaInternal, printVentaTicketInternal } from './documentos-tickets.handler';
@@ -31,13 +36,12 @@ import { PdvAtajoItem } from '../../src/app/database/entities/ventas/pdv-atajo-i
 import { PdvAtajoGrupoItem } from '../../src/app/database/entities/ventas/pdv-atajo-grupo-item.entity';
 import { PdvAtajoItemProducto } from '../../src/app/database/entities/ventas/pdv-atajo-item-producto.entity';
 import { PrecioVenta } from '../../src/app/database/entities/productos/precio-venta.entity';
-import { PagoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
-import { Caja } from '../../src/app/database/entities/financiero/caja.entity';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
 import { ProductoTipo } from '../../src/app/database/entities/productos/producto-tipo.enum';
 import { Receta } from '../../src/app/database/entities/productos/receta.entity';
 import { RecetaIngrediente } from '../../src/app/database/entities/productos/receta-ingrediente.entity';
 import { RecetaPresentacion } from '../../src/app/database/entities/productos/receta-presentacion.entity';
+import { PrecioCosto } from '../../src/app/database/entities/productos/precio-costo.entity';
 import { StockMovimiento, StockMovimientoTipo, StockMovimientoTipoReferencia } from '../../src/app/database/entities/productos/stock-movimiento.entity';
 import { Combo } from '../../src/app/database/entities/productos/combo.entity';
 import { ComboProducto } from '../../src/app/database/entities/productos/combo-producto.entity';
@@ -48,10 +52,324 @@ import { TipoModificacionIngrediente } from '../../src/app/database/entities/ven
 import { EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
 import { VentaItemSabor } from '../../src/app/database/entities/ventas/venta-item-sabor.entity';
 import { dbQuery } from '../utils/db-query';
+import { computeResumenCaja } from '../utils/resumen-caja.utils';
+import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
+import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
+import { EstadoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { CobroParcial } from '../../src/app/database/entities/ventas/cobro-parcial.entity';
+import { CobroParcialItem } from '../../src/app/database/entities/ventas/cobro-parcial-item.entity';
+import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
+
+/**
+ * M-04: mutex por-venta para serializar procesarStockVenta. El chequeo de
+ * idempotencia (contar StockMovimiento existentes) y la escritura ocurren en
+ * pasos separados; dos llamadas concurrentes para la misma venta podían pasar
+ * ambas el chequeo y duplicar el descuento de stock. En cualquier modo
+ * (standalone/server/client) hay UN solo proceso Node que escribe la BD, así
+ * que un candado en memoria por ventaId serializa correctamente.
+ */
+const procesarStockTails = new Map<number, Promise<void>>();
+async function withVentaStockLock<T>(ventaId: number, fn: () => Promise<T>): Promise<T> {
+  const prev = procesarStockTails.get(ventaId) ?? Promise.resolve();
+  let release!: () => void;
+  const myTurn = new Promise<void>((res) => (release = res));
+  const composed = prev.then(() => myTurn);
+  procesarStockTails.set(ventaId, composed);
+  await prev.catch(() => {});
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (procesarStockTails.get(ventaId) === composed) procesarStockTails.delete(ventaId);
+  }
+}
+
+// Serializa la materialización de pedidos online por mesa (proceso Node único).
+// Evita dos ventas ABIERTAS para la misma mesa y la doble materialización de un
+// pedido cuando la auto-materialización y un click manual del cajero coinciden.
+const mesaMaterializeTails = new Map<number, Promise<void>>();
+async function withMesaMaterializeLock<T>(mesaId: number, fn: () => Promise<T>): Promise<T> {
+  const prev = mesaMaterializeTails.get(mesaId) ?? Promise.resolve();
+  let release!: () => void;
+  const myTurn = new Promise<void>((res) => (release = res));
+  const composed = prev.then(() => myTurn);
+  mesaMaterializeTails.set(mesaId, composed);
+  await prev.catch(() => {});
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (mesaMaterializeTails.get(mesaId) === composed) mesaMaterializeTails.delete(mesaId);
+  }
+}
+
+/**
+ * Materializa un PedidoOnline en la Venta ABIERTA de su mesa (canal MESA_QR).
+ * Resuelve/abre la venta de la mesa y vuelca los items como VentaItem (+ sabores
+ * + adicionales + observaciones/nota libre) disparando el KDS/impresión por los
+ * hooks. Idempotente por `pedido.ventaId`. Escrituras en transacción; los hooks
+ * corren post-commit.
+ *
+ * Las observaciones predefinidas se resuelven por texto contra el catálogo
+ * `Observacion`; la nota libre y las no matcheadas se cuelgan de un sentinel
+ * ('NOTA DEL CLIENTE') vía observacionLibre. Las modificaciones de ingredientes
+ * no se capturan en pedidos online (no aplica).
+ *
+ * NO chequea permisos: es una función de sistema, gateada aguas arriba por la
+ * validación de mesa (autoservicio habilitado + LAN). El ipc handler la envuelve
+ * con ensurePermission para el uso manual del cajero.
+ */
+export async function materializarPedidoOnlineEnVenta(
+  dataSource: DataSource,
+  pedidoId: number,
+  opts?: { cajaId?: number },
+  _userId?: number,
+): Promise<{ ventaId: number; yaMaterializado: boolean; itemsCreados: number; observacionesNoMapeadas: any[] }> {
+  // Fast-path (no autoritativo): si ya se materializó, salir sin tomar el lock.
+  const pedidoPre = await dataSource.getRepository(PedidoOnline).findOne({ where: { id: pedidoId } });
+  if (!pedidoPre) throw new Error(`Pedido online ${pedidoId} no encontrado`);
+  if (!pedidoPre.mesaId) throw new Error('El pedido no es de mesa (sin mesaId)');
+  if (pedidoPre.ventaId) {
+    return { ventaId: pedidoPre.ventaId, yaMaterializado: true, itemsCreados: 0, observacionesNoMapeadas: [] };
+  }
+
+  return withMesaMaterializeLock(pedidoPre.mesaId, async () => {
+    const pedido = await dataSource.getRepository(PedidoOnline).findOne({
+      where: { id: pedidoId },
+      relations: ['items'],
+    });
+    if (!pedido) throw new Error(`Pedido online ${pedidoId} no encontrado`);
+    // Idempotencia autoritativa BAJO lock: evita doble materialización del mismo pedido.
+    if (pedido.ventaId) {
+      return { ventaId: pedido.ventaId, yaMaterializado: true, itemsCreados: 0, observacionesNoMapeadas: [] };
+    }
+
+    // Caja: la del parámetro o la única caja abierta.
+    let cajaId: number | undefined = opts?.cajaId ? Number(opts.cajaId) : undefined;
+    if (!cajaId) {
+      const abiertas = await dataSource.getRepository(Caja).find({ where: { estado: CajaEstado.ABIERTO } });
+      if (abiertas.length === 0) throw new Error('no_hay_caja_abierta');
+      if (abiertas.length > 1) throw new Error('caja_ambigua_especificar_cajaId');
+      cajaId = abiertas[0].id;
+    }
+
+    const userId = _userId;
+    const createdItemIds: number[] = [];
+    const observacionesNoMapeadas: any[] = [];
+    let ventaId = 0;
+
+    const qr = dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+    try {
+    const mesaRepo = qr.manager.getRepository(PdvMesa);
+    const ventaRepo = qr.manager.getRepository(Venta);
+    const itemRepo = qr.manager.getRepository(VentaItem);
+    const saborRepo = qr.manager.getRepository(VentaItemSabor);
+    const adicionalRepo = qr.manager.getRepository(VentaItemAdicional);
+    const obsCatRepo = qr.manager.getRepository(Observacion);
+    const obsItemRepo = qr.manager.getRepository(VentaItemObservacion);
+
+    // Sentinel para la nota libre del cliente (VentaItemObservacion.observacion es
+    // FK obligatoria; la nota va en observacionLibre colgada de esta observación).
+    // Se asegura vía dataSource (fuera de la transacción) tolerando la colisión de
+    // unique, para no abortar la materialización si dos mesas lo crean a la vez.
+    let sentinelObsId: number | null = null;
+    const getSentinelObs = async (): Promise<number> => {
+      if (sentinelObsId != null) return sentinelObsId;
+      const desc = 'NOTA DEL CLIENTE';
+      const repoObs = dataSource.getRepository(Observacion);
+      let obs = await repoObs.findOne({ where: { descripcion: desc } });
+      if (!obs) {
+        try { obs = await repoObs.save(repoObs.create({ descripcion: desc, activo: true })); }
+        catch { obs = await repoObs.findOne({ where: { descripcion: desc } }); }
+      }
+      if (!obs) throw new Error('no_se_pudo_asegurar_observacion_sentinel');
+      sentinelObsId = obs.id;
+      return sentinelObsId;
+    };
+
+    const mesa = await mesaRepo.findOneBy({ id: pedido.mesaId });
+    if (!mesa) throw new Error(`Mesa ${pedido.mesaId} no encontrada`);
+
+    // Venta ABIERTA de la mesa (comanda IsNull = cuenta de mesa), o crear una.
+    let venta = await ventaRepo.findOne({
+      where: { mesa: { id: mesa.id }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
+    });
+    if (!venta) {
+      venta = ventaRepo.create({
+        estado: VentaEstado.ABIERTA,
+        caja: { id: cajaId } as any,
+        mesa: { id: mesa.id } as any,
+      });
+      await setEntityUserTracking(dataSource, venta, userId, false);
+      venta = await ventaRepo.save(venta);
+      if (mesa.estado !== PdvMesaEstado.OCUPADO) {
+        mesa.estado = PdvMesaEstado.OCUPADO;
+        await setEntityUserTracking(dataSource, mesa, userId, true);
+        await mesaRepo.save(mesa);
+      }
+    }
+    ventaId = venta.id;
+
+    for (const pItem of pedido.items || []) {
+      let pers: any = {};
+      try { pers = pItem.personalizacion ? JSON.parse(pItem.personalizacion) : {}; } catch { pers = {}; }
+      const sabores: any[] = Array.isArray(pers.sabores) ? pers.sabores : [];
+      const adicionales: any[] = Array.isArray(pers.adicionales) ? pers.adicionales : [];
+
+      // El pedido congela precioUnitario = opcion.valor + Σ adicionales.
+      // Se separa igual que el PdV: precioVentaUnitario base + precioAdicionales.
+      const adicTotal = adicionales.reduce((s, a) => s + (Number(a?.precio) || 0), 0);
+      const precioVentaUnitario = Math.max(0, Number(pItem.precioUnitario || 0) - adicTotal);
+
+      const esPizza = sabores.length > 0;
+      let principalRpId: number | undefined;
+      if (esPizza) {
+        const principal = sabores.reduce(
+          (best, s) => (Number(s?.precioReferencia) || 0) > (Number(best?.precioReferencia) || 0) ? s : best,
+          sabores[0],
+        );
+        principalRpId = principal?.recetaPresentacionId;
+      }
+
+      // Costo (best-effort): el snapshot online no lo trae. Pizza → costo_calculado
+      // por RecetaPresentacion ponderado por proporción; simple → PrecioCosto activo
+      // del producto. Sin dato → 0. Necesario para que margen/CMV no queden inflados.
+      const rpCostos = new Map<number, number>();
+      let precioCostoUnitario = 0;
+      if (esPizza) {
+        for (const s of sabores) {
+          const rpId = Number(s?.recetaPresentacionId) || 0;
+          if (!rpId) continue;
+          if (!rpCostos.has(rpId)) {
+            const rp = await qr.manager.getRepository(RecetaPresentacion).findOne({ where: { id: rpId } });
+            rpCostos.set(rpId, Number(rp?.costo_calculado) || 0);
+          }
+          precioCostoUnitario += (Number(s.proporcion) || 1 / sabores.length) * (rpCostos.get(rpId) || 0);
+        }
+      } else {
+        const pc = await qr.manager.getRepository(PrecioCosto).findOne({
+          where: { producto: { id: pItem.productoId }, activo: true },
+          order: { id: 'DESC' },
+        });
+        precioCostoUnitario = Number(pc?.valor) || 0;
+      }
+
+      const vItem = itemRepo.create({
+        venta: { id: ventaId } as any,
+        producto: { id: pItem.productoId } as any,
+        presentacion: pItem.presentacionId ? ({ id: pItem.presentacionId } as any) : null,
+        cantidad: Number(pItem.cantidad) || 1,
+        precioVentaUnitario,
+        precioCostoUnitario,
+        precioAdicionales: adicTotal,
+        estado: EstadoVentaItem.ACTIVO,
+        recetaPresentacion: principalRpId ? ({ id: principalRpId } as any) : null,
+        ensambladoDescripcion: esPizza ? String(pers?.opcion?.label || '').slice(0, 500) : null,
+        cantidadSabores: sabores.length,
+      });
+      await setEntityUserTracking(dataSource, vItem, userId, false);
+      const savedItem = await itemRepo.save(vItem);
+      createdItemIds.push(savedItem.id);
+
+      // Sabores (pizza mitad y mitad) — ids presentes en el snapshot.
+      for (const s of sabores) {
+        if (!s?.recetaPresentacionId) continue;
+        const vs = saborRepo.create({
+          ventaItem: { id: savedItem.id } as any,
+          recetaPresentacion: { id: s.recetaPresentacionId } as any,
+          proporcion: Number(s.proporcion) || 1 / sabores.length,
+          precioReferencia: Number(s.precioReferencia) || 0,
+          costoReferencia: rpCostos.get(Number(s.recetaPresentacionId) || 0) || 0,
+        });
+        await setEntityUserTracking(dataSource, vs, userId, false);
+        await saborRepo.save(vs);
+      }
+
+      // Adicionales — ids presentes en el snapshot.
+      for (const a of adicionales) {
+        if (!a?.id) continue;
+        const va = adicionalRepo.create({
+          ventaItem: { id: savedItem.id } as any,
+          adicional: { id: a.id } as any,
+          precioCobrado: Number(a.precio) || 0,
+          cantidad: 1,
+        });
+        await setEntityUserTracking(dataSource, va, userId, false);
+        await adicionalRepo.save(va);
+      }
+
+      // Observaciones predefinidas: el snapshot online trae el TEXTO; se resuelve
+      // contra el catálogo global `Observacion` (descripcion única). Las que no
+      // matchean + la nota libre se cuelgan del sentinel vía observacionLibre.
+      const obs: string[] = Array.isArray(pers.observaciones) ? pers.observaciones : [];
+      const libres: string[] = [];
+      for (const texto of obs) {
+        const desc = String(texto || '').trim().toUpperCase();
+        if (!desc) continue;
+        const cat = await obsCatRepo.findOne({ where: { descripcion: desc } });
+        if (cat) {
+          const vo = obsItemRepo.create({
+            ventaItem: { id: savedItem.id } as any,
+            observacion: { id: cat.id } as any,
+          });
+          await setEntityUserTracking(dataSource, vo, userId, false);
+          await obsItemRepo.save(vo);
+        } else {
+          libres.push(desc);
+        }
+      }
+      const notaLibre = pers.notaLibre ? String(pers.notaLibre).trim() : '';
+      if (notaLibre) libres.push(notaLibre);
+      if (libres.length) {
+        const vo = obsItemRepo.create({
+          ventaItem: { id: savedItem.id } as any,
+          observacion: { id: await getSentinelObs() } as any,
+          observacionLibre: libres.join(' · ').slice(0, 500),
+        });
+        await setEntityUserTracking(dataSource, vo, userId, false);
+        await obsItemRepo.save(vo);
+      }
+    }
+
+    pedido.ventaId = ventaId;
+    pedido.estado = EstadoPedidoOnline.EN_PREPARACION;
+    await qr.manager.getRepository(PedidoOnline).save(pedido);
+
+    await qr.commitTransaction();
+  } catch (e) {
+    await qr.rollbackTransaction();
+    throw e;
+  } finally {
+    await qr.release();
+  }
+
+  // Post-commit: disparar KDS + impresión (leen por dataSource, ya visible).
+  for (const itemId of createdItemIds) {
+    try { await crearComandaItemsSiCorresponde(dataSource, itemId); }
+    catch (e) { console.warn('[materializar-pedido-online] hook KDS falló:', e); }
+  }
+  try { await autoPrintComandaIfNeeded(dataSource, ventaId); }
+  catch (e) { console.warn('[materializar-pedido-online] auto-imprimir comanda falló:', e); }
+
+    return { ventaId, yaMaterializado: false, itemsCreados: createdItemIds.length, observacionesNoMapeadas };
+  });
+}
 
 export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Remove this line - get the current user in each handler instead
   // const currentUser = getCurrentUser(); // Get user for tracking
+
+  // Flag de config: ¿vincular una comanda a una mesa debe ocupar la mesa?
+  const ocuparMesaAlVincularComanda = async (): Promise<boolean> => {
+    try {
+      const cfg = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+      return !!cfg?.ocuparMesaAlVincularComanda;
+    } catch {
+      return false;
+    }
+  };
 
   // Arrancar worker de retry de comandas (cada 5s reintenta items con
   // `impreso=false` y al menos un intento previo, en ventas ABIERTAS).
@@ -122,6 +440,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createPrecioDelivery', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PrecioDelivery);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -134,6 +453,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updatePrecioDelivery', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PrecioDelivery);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Precio Delivery ID ${id} not found`);
@@ -148,6 +468,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deletePrecioDelivery', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PrecioDelivery);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Precio Delivery ID ${id} not found`);
@@ -212,6 +533,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createDelivery', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Delivery);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -224,6 +546,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updateDelivery', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Delivery);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Delivery ID ${id} not found`);
@@ -238,6 +561,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deleteDelivery', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Delivery);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Delivery ID ${id} not found`);
@@ -305,8 +629,10 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Venta);
+      // Solo las ventas DE MESA (comanda IS NULL): las cuentas de comanda
+      // vinculadas a la mesa se cierran/liberan desde su propio flujo.
       const ventasAbiertas = await repo.find({
-        where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA },
+        where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
       });
       for (const v of ventasAbiertas) {
         v.estado = estado as VentaEstado;
@@ -383,6 +709,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createVenta', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Venta);
       const entity: any = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -441,6 +768,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             .select('pd_fp.pago_id')
             .from('pagos_detalles', 'pd_fp')
             .where('pd_fp.forma_pago_id IN (:...formasPagoIds)')
+            .andWhere('pd_fp.activo')
             .getQuery();
           return 'pago.id IN ' + subQuery;
         }).setParameter('formasPagoIds', filtros.formasPagoIds);
@@ -453,6 +781,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             .select('pd_m.pago_id')
             .from('pagos_detalles', 'pd_m')
             .where('pd_m.moneda_id IN (:...monedaIds)')
+            .andWhere('pd_m.activo')
             .getQuery();
           return 'pago.id IN ' + subQuery;
         }).setParameter('monedaIds', filtros.monedaIds);
@@ -466,6 +795,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             .from('pagos_detalles', 'pd_v')
             .where('pd_v.moneda_id = :monedaValorId')
             .andWhere('pd_v.tipo = :tipoPago')
+            .andWhere('pd_v.activo')
             .groupBy('pd_v.pago_id');
           if (filtros.valorMin != null) {
             subQuery = subQuery.having('SUM(pd_v.valor) >= :valorMin');
@@ -490,6 +820,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             .select('pd_a.pago_id')
             .from('pagos_detalles', 'pd_a')
             .where('pd_a.tipo = :tipoAumento')
+            .andWhere('pd_a.activo')
             .getQuery();
           return 'pago.id IN ' + subQuery;
         }).setParameter('tipoAumento', 'AUMENTO');
@@ -541,126 +872,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   // Resumen completo de una caja (para diálogo de resumen)
   ipcMain.handle('getResumenCaja', async (_event: any, cajaId: number) => {
     try {
-      const cajaRepo = dataSource.getRepository(Caja);
-      const caja = await cajaRepo.findOne({
-        where: { id: cajaId },
-        relations: ['dispositivo', 'conteoApertura', 'conteoCierre', 'createdBy', 'createdBy.persona'],
-      });
-      if (!caja) throw new Error(`Caja ${cajaId} not found`);
-
-      // Conteo apertura por moneda
-      const conteoApertura: any[] = [];
-      if (caja.conteoApertura?.id) {
-        const rows = await dbQuery(dataSource, `
-          SELECT mb.moneda_id, m.simbolo, m.denominacion, SUM(cd.cantidad * mb.valor) as total
-          FROM conteos_detalles cd
-          JOIN monedas_billetes mb ON cd.moneda_billete_id = mb.id
-          JOIN monedas m ON mb.moneda_id = m.id
-          WHERE cd.conteo_id = ?
-          GROUP BY mb.moneda_id, m.simbolo, m.denominacion
-        `, [caja.conteoApertura.id]);
-        for (const r of rows) {
-          conteoApertura.push({ monedaId: r.moneda_id, monedaSimbolo: r.simbolo, monedaDenominacion: r.denominacion, total: r.total || 0 });
-        }
-      }
-
-      // Conteo cierre por moneda
-      const conteoCierre: any[] = [];
-      if (caja.conteoCierre?.id) {
-        const rows = await dbQuery(dataSource, `
-          SELECT mb.moneda_id, m.simbolo, m.denominacion, SUM(cd.cantidad * mb.valor) as total
-          FROM conteos_detalles cd
-          JOIN monedas_billetes mb ON cd.moneda_billete_id = mb.id
-          JOIN monedas m ON mb.moneda_id = m.id
-          WHERE cd.conteo_id = ?
-          GROUP BY mb.moneda_id, m.simbolo, m.denominacion
-        `, [caja.conteoCierre.id]);
-        for (const r of rows) {
-          conteoCierre.push({ monedaId: r.moneda_id, monedaSimbolo: r.simbolo, monedaDenominacion: r.denominacion, total: r.total || 0 });
-        }
-      }
-
-      // Ventas de esta caja
-      const ventaRepo = dataSource.getRepository(Venta);
-      const ventas = await ventaRepo.find({
-        where: { caja: { id: cajaId }, estado: VentaEstado.CONCLUIDA },
-        relations: ['pago'],
-      });
-
-      const cantidadVentas = ventas.length;
-      const ventasPorFormaPagoMap: { [key: string]: any } = {};
-      const ventasTotalPorMonedaMap: { [key: string]: any } = {};
-      const efectivoPorMoneda: { [monedaId: number]: number } = {};
-
-      const pagoDetalleRepo = dataSource.getRepository(PagoDetalle);
-      for (const venta of ventas) {
-        if (!venta.pago?.id) continue;
-        const detalles = await pagoDetalleRepo.find({
-          where: { pago: { id: venta.pago.id } },
-          relations: ['moneda', 'formaPago'],
-        });
-        for (const d of detalles) {
-          if (!d.moneda || !d.formaPago) continue;
-          const monedaId = d.moneda.id;
-          const simbolo = d.moneda.simbolo || '';
-
-          if (d.tipo === 'PAGO') {
-            const fpKey = `${d.formaPago.nombre}_${monedaId}`;
-            if (!ventasPorFormaPagoMap[fpKey]) {
-              ventasPorFormaPagoMap[fpKey] = { formaPago: d.formaPago.nombre, monedaId, monedaSimbolo: simbolo, total: 0 };
-            }
-            ventasPorFormaPagoMap[fpKey].total += d.valor || 0;
-
-            const mKey = `${monedaId}`;
-            if (!ventasTotalPorMonedaMap[mKey]) {
-              ventasTotalPorMonedaMap[mKey] = { monedaId, monedaSimbolo: simbolo, total: 0 };
-            }
-            ventasTotalPorMonedaMap[mKey].total += d.valor || 0;
-
-            if ((d.formaPago as any).movimentaCaja) {
-              efectivoPorMoneda[monedaId] = (efectivoPorMoneda[monedaId] || 0) + (d.valor || 0);
-            }
-          } else if (d.tipo === 'VUELTO') {
-            const mKey = `${monedaId}`;
-            if (!ventasTotalPorMonedaMap[mKey]) {
-              ventasTotalPorMonedaMap[mKey] = { monedaId, monedaSimbolo: simbolo, total: 0 };
-            }
-            ventasTotalPorMonedaMap[mKey].total -= d.valor || 0;
-
-            if ((d.formaPago as any)?.movimentaCaja) {
-              efectivoPorMoneda[monedaId] = (efectivoPorMoneda[monedaId] || 0) - (d.valor || 0);
-            }
-          }
-        }
-      }
-
-      // Calcular esperado y diferencia
-      const esperadoPorMoneda: { [monedaId: number]: number } = {};
-      const diferenciaPorMoneda: { [monedaId: number]: number } = {};
-      const allMonedaIds = new Set<number>();
-      conteoApertura.forEach(c => allMonedaIds.add(c.monedaId));
-      conteoCierre.forEach(c => allMonedaIds.add(c.monedaId));
-      Object.keys(efectivoPorMoneda).forEach(k => allMonedaIds.add(Number(k)));
-
-      for (const monedaId of allMonedaIds) {
-        const apertura = conteoApertura.find(c => c.monedaId === monedaId)?.total || 0;
-        const cierre = conteoCierre.find(c => c.monedaId === monedaId)?.total || 0;
-        const efectivo = efectivoPorMoneda[monedaId] || 0;
-        esperadoPorMoneda[monedaId] = apertura + efectivo;
-        diferenciaPorMoneda[monedaId] = cierre - esperadoPorMoneda[monedaId];
-      }
-
-      return {
-        caja,
-        conteoApertura,
-        conteoCierre,
-        ventasPorFormaPago: Object.values(ventasPorFormaPagoMap),
-        ventasTotalPorMoneda: Object.values(ventasTotalPorMonedaMap),
-        cantidadVentas,
-        efectivoPorMoneda,
-        esperadoPorMoneda,
-        diferenciaPorMoneda,
-      };
+      return await computeResumenCaja(dataSource, cajaId);
     } catch (error) {
       console.error(`Error getting resumen caja ${cajaId}:`, error);
       throw error;
@@ -678,7 +890,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           pd.moneda_id as "monedaId"
         FROM ventas v
         LEFT JOIN pagos p ON v.pago_id = p.id
-        LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id
+        LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.activo
         WHERE v.caja_id = ? AND v.estado = 'CONCLUIDA'
         GROUP BY pd.moneda_id
       `, [cajaId]);
@@ -696,17 +908,92 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta ID ${id} not found`);
 
+      // Control opcional de impresión del ticket para esta transición puntual.
+      // Si viene definido (true/false), tiene prioridad sobre el config global
+      // `autoImprimirTicketVenta`. Se extrae antes del merge para que no intente
+      // persistirse como columna de la entidad.
+      let imprimirTicketOverride: boolean | undefined;
+      if (data && Object.prototype.hasOwnProperty.call(data, '__imprimirTicketVenta')) {
+        imprimirTicketOverride = data.__imprimirTicketVenta === true;
+        delete data.__imprimirTicketVenta;
+      }
+
       const estadoAnterior = entity.estado;
+
+      // A-01: al cancelar una venta a crédito hay que revertir la Cuenta Por
+      // Cobrar y el saldoActual del cliente; antes quedaban vivos (cobros
+      // fantasma). Pre-chequeo ANTES de guardar el estado para poder rechazar
+      // limpiamente si la CPC ya tiene cobros.
+      const willCancel =
+        data?.estado === VentaEstado.CANCELADA && estadoAnterior !== VentaEstado.CANCELADA;
+      let cpcToReverse: CuentaPorCobrar | null = null;
+      if (willCancel) {
+        cpcToReverse = await dataSource.getRepository(CuentaPorCobrar).findOne({
+          where: { ventaId: id, estado: CuentaPorCobrarEstado.ACTIVO },
+          relations: ['cliente'],
+        });
+        if (cpcToReverse && Number(cpcToReverse.montoCobrado) > 0) {
+          throw new Error(
+            'No se puede cancelar una venta a crédito con cobros registrados. Anule primero los cobros de la cuenta por cobrar.',
+          );
+        }
+      }
+
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
+
+      // A-01: revertir la CPC (sin cobros, garantizado por el pre-chequeo) y el
+      // saldo del cliente en una transacción atómica.
+      if (willCancel && cpcToReverse) {
+        const cu = getCurrentUser();
+        const cpcId = cpcToReverse.id;
+        const montoOriginal = Number(cpcToReverse.montoTotal);
+        const clienteId = cpcToReverse.cliente?.id;
+        await dataSource.transaction(async (m) => {
+          const cpc = await m.getRepository(CuentaPorCobrar).findOne({ where: { id: cpcId } });
+          if (!cpc || cpc.estado !== CuentaPorCobrarEstado.ACTIVO) return; // ya revertida
+          cpc.estado = CuentaPorCobrarEstado.CANCELADO;
+          cpc.fechaCancelacion = new Date();
+          cpc.motivoCancelacion = 'CANCELACION DE VENTA';
+          await setEntityUserTracking(dataSource, cpc, cu?.id, true);
+          await m.save(CuentaPorCobrar, cpc);
+
+          if (clienteId) {
+            const cliente = await m.getRepository(Cliente).findOne({ where: { id: clienteId } });
+            if (cliente) {
+              cliente.saldoActual = +(Number(cliente.saldoActual) - montoOriginal).toFixed(2);
+              await m.save(Cliente, cliente);
+            }
+            const mov = m.getRepository(MovimientoCliente).create({
+              cliente: { id: clienteId } as any,
+              tipo: MovimientoClienteTipo.AJUSTE_NEGATIVO,
+              monto: montoOriginal,
+              fecha: new Date(),
+              cuentaPorCobrarId: cpcId,
+              ventaId: id,
+              observacion: `CANCELACION VENTA #${id} - REVERSION CPC #${cpcId}`,
+              registradoPor: cu || undefined,
+            });
+            await setEntityUserTracking(dataSource, mov, cu?.id, false);
+            await m.save(MovimientoCliente, mov);
+          }
+        });
+      }
 
       // ─── Hook E2.3: auto-imprimir ticket cuando la venta pasa a CONCLUIDA
       // Fire-and-forget. NUNCA bloquea ni revierte la transición de estado.
       if (estadoAnterior !== VentaEstado.CONCLUIDA && saved.estado === VentaEstado.CONCLUIDA) {
         try {
-          const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
-          if (pdvConfig?.autoImprimirTicketVenta) {
+          let debeImprimir: boolean;
+          if (imprimirTicketOverride !== undefined) {
+            // El llamador (finalizar / finalizar + ticket) decide explícitamente.
+            debeImprimir = imprimirTicketOverride;
+          } else {
+            const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+            debeImprimir = !!pdvConfig?.autoImprimirTicketVenta;
+          }
+          if (debeImprimir) {
             setImmediate(() => {
               printVentaTicketInternal(dataSource, id)
                 .catch(e => console.warn('[updateVenta] auto-print ticket falló:', e));
@@ -812,6 +1099,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createVentaItem', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItem);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -848,8 +1136,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     }
   });
 
+  // Puente MESA_QR: materializa un PedidoOnline en la Venta de su mesa. La lógica
+  // vive en la función module-level `materializarPedidoOnlineEnVenta` (reutilizable
+  // desde el flujo público). Ver domains/pedidos-online.md (MESA_QR, F2).
+  ipcMain.handle('materializar-pedido-online-en-venta', async (_event: any, pedidoId: number, opts?: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+    return materializarPedidoOnlineEnVenta(dataSource, pedidoId, opts, getCurrentUser()?.id);
+  });
+
   ipcMain.handle('updateVentaItem', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
@@ -874,6 +1171,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('deleteVentaItem', async (_event: any, id: number) => {
     // return a boolean if success or not
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
@@ -909,6 +1207,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createVentaItemObservacion', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemObservacion);
       const entity = repo.create(data);
       return await repo.save(entity);
@@ -920,6 +1219,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deleteVentaItemObservacion', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemObservacion);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`VentaItemObservacion ID ${id} not found`);
@@ -947,6 +1247,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createVentaItemAdicional', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemAdicional);
       const entity = repo.create(data);
       return await repo.save(entity);
@@ -958,6 +1259,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deleteVentaItemAdicional', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemAdicional);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`VentaItemAdicional ID ${id} not found`);
@@ -985,6 +1287,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createVentaItemIngredienteModificacion', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemIngredienteModificacion);
       const entity = repo.create(data);
       return await repo.save(entity);
@@ -996,6 +1299,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deleteVentaItemIngredienteModificacion', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemIngredienteModificacion);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`VentaItemIngredienteModificacion ID ${id} not found`);
@@ -1036,6 +1340,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createPdvGrupoCategoria', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvGrupoCategoria);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -1048,6 +1353,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updatePdvGrupoCategoria', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvGrupoCategoria);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PDV Grupo Categoria ID ${id} not found`);
@@ -1062,6 +1368,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deletePdvGrupoCategoria', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvGrupoCategoria);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PDV Grupo Categoria ID ${id} not found`);
@@ -1126,6 +1433,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createPdvCategoria', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvCategoria);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -1138,6 +1446,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updatePdvCategoria', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvCategoria);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PDV Categoria ID ${id} not found`);
@@ -1152,6 +1461,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deletePdvCategoria', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvCategoria);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PDV Categoria ID ${id} not found`);
@@ -1216,6 +1526,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createPdvCategoriaItem', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvCategoriaItem);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -1228,6 +1539,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updatePdvCategoriaItem', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvCategoriaItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PDV Categoria Item ID ${id} not found`);
@@ -1242,6 +1554,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deletePdvCategoriaItem', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvCategoriaItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PDV Categoria Item ID ${id} not found`);
@@ -1306,6 +1619,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createPdvItemProducto', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvItemProducto);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -1318,6 +1632,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updatePdvItemProducto', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvItemProducto);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PDV Item Producto ID ${id} not found`);
@@ -1332,6 +1647,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deletePdvItemProducto', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvItemProducto);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PDV Item Producto ID ${id} not found`);
@@ -1371,6 +1687,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createPdvConfig', async (_event: any, data: Partial<PdvConfig>) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repository = dataSource.getRepository(PdvConfig);
       
       // Make sure there is only one active config
@@ -1394,6 +1711,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updatePdvConfig', async (_event: any, id: number, data: Partial<PdvConfig>) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repository = dataSource.getRepository(PdvConfig);
       
       // Find the config to update
@@ -1457,6 +1775,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createReserva', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Reserva);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -1469,6 +1788,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updateReserva', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Reserva);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Reserva ID ${id} not found`);
@@ -1483,6 +1803,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deleteReserva', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Reserva);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Reserva ID ${id} not found`);
@@ -1510,7 +1831,11 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     return repo.createQueryBuilder('mesa')
       .leftJoinAndSelect('mesa.reserva', 'reserva')
       .leftJoinAndSelect('mesa.sector', 'sector')
-      .leftJoinAndMapOne('mesa.venta', Venta, 'venta', 'venta.mesa_id = mesa.id AND venta.estado = :ventaEstado', { ventaEstado: VentaEstado.ABIERTA })
+      .leftJoinAndMapOne('mesa.venta', Venta, 'venta', 'venta.mesa_id = mesa.id AND venta.estado = :ventaEstado AND venta.comanda_id IS NULL', { ventaEstado: VentaEstado.ABIERTA })
+      // Cargar el cliente de la venta (+ persona) para que el auto-refresh de mesas
+      // no pierda el cliente asignado al volver a seleccionar la mesa.
+      .leftJoinAndSelect('venta.cliente', 'ventaCliente')
+      .leftJoinAndSelect('ventaCliente.persona', 'ventaClientePersona')
       .leftJoinAndSelect('mesa.comandas', 'comanda', 'comanda.estado = :comandaEstado AND comanda.activo = :comandaActivo', { comandaEstado: ComandaEstado.OCUPADO, comandaActivo: true })
       .orderBy('mesa.numero', 'ASC');
   };
@@ -1590,6 +1915,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createPdvMesa', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvMesa);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -1602,6 +1928,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createBatchPdvMesas', async (_event: any, batchData: any[]) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvMesa);
       const savedEntities: any[] = [];
       for (const data of batchData) {
@@ -1619,6 +1946,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updatePdvMesa', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvMesa);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PDV Mesa ID ${id} not found`);
@@ -1633,6 +1961,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deletePdvMesa', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvMesa);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PDV Mesa ID ${id} not found`);
@@ -1711,6 +2040,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createComanda', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Comanda);
       const entity: any = repo.create({ ...data, estado: ComandaEstado.DISPONIBLE });
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -1728,6 +2058,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updateComanda', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Comanda);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Comanda ID ${id} not found`);
@@ -1757,6 +2088,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deleteComanda', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Comanda);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Comanda ID ${id} not found`);
@@ -1814,6 +2146,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('abrirComanda', async (_event: any, comandaId: number, data: { mesaId?: number, sectorId?: number, observacion?: string }) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Comanda);
       const entity = await repo.findOneBy({ id: comandaId });
       if (!entity) throw new Error(`Comanda ID ${comandaId} not found`);
@@ -1837,7 +2170,18 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         entity.observacion = data.observacion;
       }
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+
+      // Si la config lo pide, vincular comanda a mesa también ocupa la mesa.
+      if (data.mesaId && (await ocuparMesaAlVincularComanda())) {
+        const mesaRepo = dataSource.getRepository(PdvMesa);
+        const mesa = await mesaRepo.findOneBy({ id: data.mesaId });
+        if (mesa && mesa.estado !== 'OCUPADO') {
+          mesa.estado = 'OCUPADO' as any;
+          await mesaRepo.save(mesa);
+        }
+      }
+      return saved;
     } catch (error) {
       console.error(`Error abriendo Comanda ID ${comandaId}:`, error);
       throw error;
@@ -1846,16 +2190,38 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('cerrarComanda', async (_event: any, comandaId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Comanda);
-      const entity = await repo.findOneBy({ id: comandaId });
+      const entity = await repo.findOne({ where: { id: comandaId }, relations: ['pdv_mesa'] });
       if (!entity) throw new Error(`Comanda ID ${comandaId} not found`);
 
+      const mesaId = entity.pdv_mesa?.id;
       entity.estado = ComandaEstado.DISPONIBLE;
       entity.pdv_mesa = undefined as any;
       entity.sector = undefined as any;
       entity.observacion = undefined as any;
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+
+      // Si la config ocupa la mesa al vincular comanda, al liberar la comanda
+      // liberar la mesa solo si no quedan otras comandas OCUPADO ni venta de mesa ABIERTA.
+      if (mesaId && (await ocuparMesaAlVincularComanda())) {
+        const otrasComandas = await repo.count({
+          where: { pdv_mesa: { id: mesaId }, estado: ComandaEstado.OCUPADO, activo: true },
+        });
+        const ventaMesa = await dataSource.getRepository(Venta).count({
+          where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
+        });
+        if (otrasComandas === 0 && ventaMesa === 0) {
+          const mesaRepo = dataSource.getRepository(PdvMesa);
+          const mesa = await mesaRepo.findOneBy({ id: mesaId });
+          if (mesa && mesa.estado !== 'DISPONIBLE') {
+            mesa.estado = 'DISPONIBLE' as any;
+            await mesaRepo.save(mesa);
+          }
+        }
+      }
+      return saved;
     } catch (error) {
       console.error(`Error cerrando Comanda ID ${comandaId}:`, error);
       throw error;
@@ -1864,6 +2230,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createBatchComandas', async (_event: any, batchData: any[]) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Comanda);
       const results: any[] = [];
       for (const data of batchData) {
@@ -1886,6 +2253,9 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         .leftJoinAndSelect('comanda.pdv_mesa', 'pdv_mesa')
         .leftJoinAndSelect('comanda.sector', 'sector')
         .leftJoinAndMapOne('comanda.venta', Venta, 'venta', 'venta.comanda_id = comanda.id AND venta.estado = :ventaEstado', { ventaEstado: VentaEstado.ABIERTA })
+        // Cargar cliente (+ persona) para que el auto-refresh no lo pierda al reseleccionar la comanda.
+        .leftJoinAndSelect('venta.cliente', 'ventaCliente')
+        .leftJoinAndSelect('ventaCliente.persona', 'ventaClientePersona')
         .where('comanda.id = :id', { id: comandaId })
         .getOne();
     } catch (error) {
@@ -1895,10 +2265,11 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   });
 
   // --- Sector Handlers ---
-  ipcMain.handle('getSectores', async () => {
+  ipcMain.handle('getSectores', async (_event: any, tipo?: string) => {
     try {
       const repo = dataSource.getRepository(Sector);
       return await repo.find({
+        where: tipo ? { tipo: tipo as any } : {},
         order: { nombre: 'ASC' }
       });
     } catch (error) {
@@ -1907,11 +2278,11 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     }
   });
 
-  ipcMain.handle('getSectoresActivos', async () => {
+  ipcMain.handle('getSectoresActivos', async (_event: any, tipo?: string) => {
     try {
       const repo = dataSource.getRepository(Sector);
       return await repo.find({
-        where: { activo: true },
+        where: { activo: true, ...(tipo ? { tipo: tipo as any } : {}) },
         order: { nombre: 'ASC' }
       });
     } catch (error) {
@@ -1935,6 +2306,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createSector', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(Sector);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -1947,6 +2319,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updateSector', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(Sector);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Sector ID ${id} not found`);
@@ -1961,6 +2334,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deleteSector', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(Sector);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Sector ID ${id} not found`);
@@ -1984,6 +2358,8 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   // --- Stock: Procesar movimientos de stock al finalizar venta ---
   ipcMain.handle('procesarStockVenta', async (_event: any, ventaId: number) => {
+   await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+   return withVentaStockLock(ventaId, async () => {
     const stockRepo = dataSource.getRepository(StockMovimiento);
     const ventaItemRepo = dataSource.getRepository(VentaItem);
     const recetaIngRepo = dataSource.getRepository(RecetaIngrediente);
@@ -2144,7 +2520,33 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       async function processElaboradoConVariacion(item: VentaItem, out: PendingMovement[]): Promise<void> {
         if (!item.presentacion?.id) return;
 
-        // Buscar RecetaPresentacion que coincida con la presentación vendida y el producto
+        // C-02: una pizza multi-sabor tiene N VentaItemSabor, cada uno con su
+        // RecetaPresentacion y su proporcion (1.0 entera, 0.5 mitad, ...). Antes
+        // se resolvía UN solo RecetaPresentacion con .getOne() (sabor arbitrario)
+        // y se descontaba al 100%, ignorando los demás sabores y la proporción.
+        // Ahora se descuenta la receta de CADA sabor escalada por su proporción,
+        // igual que el cálculo de costo (costo_calculado × proporcion).
+        const sabores = await dataSource.getRepository(VentaItemSabor).find({
+          where: { ventaItem: { id: item.id }, activo: true },
+          relations: ['recetaPresentacion', 'recetaPresentacion.receta'],
+        });
+
+        if (sabores.length > 0) {
+          for (const vis of sabores) {
+            const receta = vis.recetaPresentacion?.receta;
+            if (!receta) continue;
+            const proporcion = Number(vis.proporcion) || 0;
+            if (proporcion <= 0) continue;
+            const itemEscalado = { ...item, cantidad: Number(item.cantidad) * proporcion } as VentaItem;
+            // Ingredientes + modificaciones por sabor; adicionales una sola vez (abajo).
+            await processReceta(receta, itemEscalado, out, false);
+          }
+          // Los adicionales del item se descuentan una sola vez (no por sabor).
+          await processAdicionalesItem(item, out);
+          return;
+        }
+
+        // Fallback (data antigua / item sin sabores persistidos): comportamiento previo.
         const recetaPres = await recetaPresRepo.createQueryBuilder('rp')
           .innerJoinAndSelect('rp.receta', 'receta')
           .innerJoin('rp.sabor', 'sabor')
@@ -2230,8 +2632,10 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         }
       }
 
-      // Procesa receta completa: con modificaciones del VentaItem + adicionales
-      async function processReceta(receta: Receta, item: VentaItem, out: PendingMovement[]): Promise<void> {
+      // Procesa receta completa: con modificaciones del VentaItem + adicionales.
+      // incluirAdicionales=false para el caso multi-sabor (los adicionales se
+      // procesan una sola vez aparte, no por cada sabor).
+      async function processReceta(receta: Receta, item: VentaItem, out: PendingMovement[], incluirAdicionales = true): Promise<void> {
         const rendimiento = Number(receta.rendimiento) || 1;
         const cantidadVendida = Number(item.cantidad);
 
@@ -2292,7 +2696,18 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           }
         }
 
-        // Procesar adicionales del item
+        // Adicionales del item: se procesan una sola vez por item. En pizzas
+        // multi-sabor la receta se procesa por-sabor, pero los adicionales no
+        // deben multiplicarse por la cantidad de sabores (C-02).
+        if (incluirAdicionales) {
+          await processAdicionalesItem(item, out);
+        }
+      }
+
+      // Procesa los adicionales de un VentaItem (extraído de processReceta para
+      // poder llamarlo una sola vez cuando la receta se procesa por-sabor).
+      async function processAdicionalesItem(item: VentaItem, out: PendingMovement[]): Promise<void> {
+        const cantidadVendida = Number(item.cantidad);
         const adicionales = await adicRepo.find({
           where: { ventaItem: { id: item.id }, activo: true },
           relations: ['adicional'],
@@ -2332,10 +2747,12 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       console.error(`Error procesando stock para venta #${ventaId}:`, error);
       return { success: false, error: (error as any).message };
     }
+   });
   });
 
   // --- Stock: Revertir movimientos de stock al cancelar venta finalizada ---
   ipcMain.handle('revertirStockVenta', async (_event: any, ventaId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
     const stockRepo = dataSource.getRepository(StockMovimiento);
 
     try {
@@ -2395,6 +2812,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createPdvAtajoGrupo', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvAtajoGrupo);
       if (data.nombre) data.nombre = data.nombre.toUpperCase();
       const entity = repo.create(data);
@@ -2408,6 +2826,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updatePdvAtajoGrupo', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvAtajoGrupo);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PdvAtajoGrupo ID ${id} not found`);
@@ -2423,6 +2842,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deletePdvAtajoGrupo', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvAtajoGrupo);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PdvAtajoGrupo ID ${id} not found`);
@@ -2438,6 +2858,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('reorderPdvAtajoGrupos', async (_event: any, orderedIds: number[]) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvAtajoGrupo);
       for (let i = 0; i < orderedIds.length; i++) {
         await repo.update(orderedIds[i], { posicion: i });
@@ -2498,6 +2919,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createPdvAtajoItem', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvAtajoItem);
       if (data.nombre) data.nombre = data.nombre.toUpperCase();
       const entity = repo.create(data);
@@ -2511,6 +2933,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('updatePdvAtajoItem', async (_event: any, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvAtajoItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PdvAtajoItem ID ${id} not found`);
@@ -2526,6 +2949,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deletePdvAtajoItem', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvAtajoItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PdvAtajoItem ID ${id} not found`);
@@ -2547,6 +2971,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('assignAtajoItemToGrupo', async (_event: any, grupoId: number, itemId: number, posicion: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvAtajoGrupoItem);
       // Check if already exists
       const existing = await repo.findOne({
@@ -2567,6 +2992,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('removeAtajoItemFromGrupo', async (_event: any, grupoId: number, itemId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvAtajoGrupoItem);
       const entity = await repo.findOne({
         where: { atajoGrupoId: grupoId, atajoItemId: itemId }
@@ -2581,6 +3007,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('reorderAtajoItemsInGrupo', async (_event: any, grupoId: number, orderedItemIds: number[]) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvAtajoGrupoItem);
       for (let i = 0; i < orderedItemIds.length; i++) {
         await repo.update(
@@ -2667,6 +3094,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('assignProductoToAtajoItem', async (_event: any, atajoItemId: number, productoId: number, data?: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvAtajoItemProducto);
       // Check if already exists
       const existing = await repo.findOne({
@@ -2695,6 +3123,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('removeProductoFromAtajoItem', async (_event: any, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvAtajoItemProducto);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`PdvAtajoItemProducto ID ${id} not found`);
@@ -2707,6 +3136,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('reorderProductosInAtajoItem', async (_event: any, atajoItemId: number, orderedIds: number[]) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV_CONFIGURAR');
       const repo = dataSource.getRepository(PdvAtajoItemProducto);
       for (let i = 0; i < orderedIds.length; i++) {
         await repo.update(orderedIds[i], { posicion: i });
@@ -2722,6 +3152,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('createVentaItemSabor', async (_event: any, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemSabor);
       const entity = repo.create({
         ventaItem: { id: data.ventaItemId },
@@ -2757,6 +3188,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('deleteVentaItemSaboresByItem', async (_event: any, ventaItemId: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       await dataSource.getRepository(VentaItemSabor).delete({ ventaItem: { id: ventaItemId } });
       return { success: true };
     } catch (error) {
@@ -2764,14 +3196,223 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       throw error;
     }
   });
+
+  // ─── Cobro parcial por ítems ─────────────────────────────────────────────
+  // Ver docs/PLAN-COBRO-PARCIAL-POR-ITEMS.md. El estado de cobro se maneja en
+  // BRUTO (moneda principal, sin conversión): la cobertura por ítem
+  // (`montoCubierto`) y los topes viven en bruto. El descuento/aumento global
+  // se absorbe vía el `factor` que calcula el front (ya trabaja en principal).
+
+  // Estado de cobro de una venta: por ítem (neto bruto, cubierto, estado) +
+  // totales en bruto. La verdad de dinero (saldo con descuento global) la
+  // sigue calculando el front con sus cotizaciones.
+  ipcMain.handle('getEstadoCobroVenta', async (_event: any, ventaId: number) => {
+    return await getEstadoCobroVentaInternal(dataSource, ventaId);
+  });
+
+  // Registra una ronda de cobro parcial: crea `CobroParcial`, taguea las líneas
+  // de pago de la ronda, crea las imputaciones en bruto y actualiza el cache
+  // `VentaItem.montoCubierto`. Transaccional + anti-doble-cobro (valida topes
+  // contra la cobertura ya persistida, incluso desde otro dispositivo).
+  ipcMain.handle('registrarCobroParcial', async (_event: any, ventaId: number, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+    const imputaciones: Array<{ ventaItemId: number; brutoCubierto: number; cantidad?: number }> =
+      Array.isArray(payload?.imputaciones) ? payload.imputaciones : [];
+    const pagoDetalleIds: number[] = Array.isArray(payload?.pagoDetalleIds) ? payload.pagoDetalleIds : [];
+    const cashTotal = Number(payload?.cashTotalPrincipal ?? 0);
+    const factor = Number(payload?.factorAplicado ?? 1) || 1;
+    const TOL = 0.5;
+
+    if (!imputaciones.length) throw new Error('COBRO_PARCIAL_SIN_ITEMS');
+
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const venta = await queryRunner.manager.findOne(Venta, { where: { id: ventaId } });
+      if (!venta) throw new Error(`Venta ${ventaId} no encontrada`);
+      if (venta.estado !== VentaEstado.ABIERTA) throw new Error('VENTA_NO_ABIERTA');
+
+      // Validar topes por ítem contra la cobertura ya persistida (anti doble-cobro).
+      const itemsAfectados: Array<{ item: VentaItem; brutoCubierto: number; cantidad?: number }> = [];
+      for (const imp of imputaciones) {
+        const item = await queryRunner.manager.findOne(VentaItem, {
+          where: { id: imp.ventaItemId },
+          relations: ['venta'],
+        });
+        if (!item || (item.venta as any)?.id !== ventaId) throw new Error(`ITEM_INVALIDO_${imp.ventaItemId}`);
+        if (item.estado !== EstadoVentaItem.ACTIVO) throw new Error(`ITEM_NO_ACTIVO_${imp.ventaItemId}`);
+        const netoBruto = computeNetoBrutoItem(item);
+        const yaCubierto = Number(item.montoCubierto || 0);
+        const bruto = Number(imp.brutoCubierto || 0);
+        if (bruto <= 0) continue;
+        if (yaCubierto + bruto > netoBruto + TOL) {
+          throw new Error(`ITEM_YA_CUBIERTO_${imp.ventaItemId}`);
+        }
+        itemsAfectados.push({ item, brutoCubierto: bruto, cantidad: imp.cantidad });
+      }
+      if (!itemsAfectados.length) throw new Error('COBRO_PARCIAL_SIN_ITEMS');
+
+      // Crear la ronda.
+      const ronda = queryRunner.manager.create(CobroParcial, {
+        venta: { id: ventaId } as any,
+        usuario: getCurrentUser()?.id ? ({ id: getCurrentUser()!.id } as any) : null,
+        fecha: new Date(),
+        factorAplicado: factor,
+        cashTotal: cashTotal,
+        activo: true,
+      });
+      setEntityUserTracking(dataSource, ronda, getCurrentUser()?.id, false);
+      const rondaSaved = await queryRunner.manager.save(CobroParcial, ronda);
+
+      // Taguear las líneas de pago de esta ronda.
+      if (pagoDetalleIds.length) {
+        await queryRunner.manager.update(
+          PagoDetalle,
+          { id: In(pagoDetalleIds) },
+          { cobroParcialId: rondaSaved.id },
+        );
+      }
+
+      // Imputaciones + actualización del cache montoCubierto.
+      for (const af of itemsAfectados) {
+        const cpi = queryRunner.manager.create(CobroParcialItem, {
+          cobroParcial: { id: rondaSaved.id } as any,
+          ventaItem: { id: af.item.id } as any,
+          brutoCubierto: af.brutoCubierto,
+          cantidad: af.cantidad ?? null,
+        });
+        setEntityUserTracking(dataSource, cpi, getCurrentUser()?.id, false);
+        await queryRunner.manager.save(CobroParcialItem, cpi);
+
+        const netoBruto = computeNetoBrutoItem(af.item);
+        let nuevo = Number(af.item.montoCubierto || 0) + af.brutoCubierto;
+        if (nuevo > netoBruto) nuevo = netoBruto; // clamp
+        await queryRunner.manager.update(VentaItem, { id: af.item.id }, { montoCubierto: nuevo });
+      }
+
+      await queryRunner.commitTransaction();
+      return await getEstadoCobroVentaInternal(dataSource, ventaId);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error en registrarCobroParcial:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  // Anula una ronda de cobro parcial: desactiva la ronda + sus líneas de pago y
+  // recomputa `montoCubierto` de los ítems afectados desde las rondas activas.
+  ipcMain.handle('anularCobroParcial', async (_event: any, cobroParcialId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const ronda = await queryRunner.manager.findOne(CobroParcial, {
+        where: { id: cobroParcialId },
+        relations: ['venta'],
+      });
+      if (!ronda) throw new Error(`CobroParcial ${cobroParcialId} no encontrado`);
+      const ventaId = (ronda.venta as any)?.id;
+
+      // Ítems que tocaba esta ronda.
+      const impsRonda = await queryRunner.manager.find(CobroParcialItem, {
+        where: { cobroParcial: { id: cobroParcialId } },
+        relations: ['ventaItem'],
+      });
+
+      // Desactivar ronda + sus líneas de pago.
+      await queryRunner.manager.update(CobroParcial, { id: cobroParcialId }, { activo: false });
+      await queryRunner.manager.update(
+        PagoDetalle,
+        { cobroParcialId: cobroParcialId },
+        { activo: false },
+      );
+
+      // Recomputar montoCubierto de cada ítem afectado desde rondas ACTIVAS.
+      const itemIds = Array.from(new Set(impsRonda.map(i => (i.ventaItem as any)?.id).filter(Boolean)));
+      for (const itemId of itemIds) {
+        const activos = await queryRunner.manager.find(CobroParcialItem, {
+          where: { ventaItem: { id: itemId }, cobroParcial: { activo: true } },
+          relations: ['cobroParcial'],
+        });
+        const total = activos.reduce((s, i) => s + Number(i.brutoCubierto || 0), 0);
+        await queryRunner.manager.update(VentaItem, { id: itemId }, { montoCubierto: total });
+      }
+
+      await queryRunner.commitTransaction();
+      return await getEstadoCobroVentaInternal(dataSource, ventaId);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error en anularCobroParcial:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
 }
+
+/** Neto bruto de un ítem (con descuento propio, SIN descuento global). */
+function computeNetoBrutoItem(item: any): number {
+  const unit = Number(item.precioVentaUnitario || 0)
+    + Number(item.precioAdicionales || 0)
+    - Number(item.descuentoUnitario || 0);
+  return unit * Number(item.cantidad || 0);
+}
+
+/**
+ * Estado de cobro de una venta (en bruto). Devuelve por ítem el neto bruto,
+ * lo cubierto y su estado (PENDIENTE/PARCIAL/PAGADO), más totales en bruto y el
+ * descuento/aumento global vigente (referencia para el front).
+ */
+async function getEstadoCobroVentaInternal(dataSource: DataSource, ventaId: number) {
+  const TOL = 0.5;
+  const items = await dataSource.getRepository(VentaItem).find({
+    where: { venta: { id: ventaId }, estado: EstadoVentaItem.ACTIVO },
+  });
+  const itemsEstado = items.map(it => {
+    const netoBruto = computeNetoBrutoItem(it);
+    const cubierto = Number(it.montoCubierto || 0);
+    let estado: 'PENDIENTE' | 'PARCIAL' | 'PAGADO';
+    if (cubierto <= TOL) estado = 'PENDIENTE';
+    else if (cubierto >= netoBruto - TOL) estado = 'PAGADO';
+    else estado = 'PARCIAL';
+    return { id: it.id, netoBruto, montoCubierto: cubierto, estado };
+  });
+  const deudaBruta = itemsEstado.reduce((s, i) => s + i.netoBruto, 0);
+  const totalCubierto = itemsEstado.reduce((s, i) => s + i.montoCubierto, 0);
+  const pendienteBruto = Math.max(0, deudaBruta - totalCubierto);
+
+  // Descuento/aumento global desde las líneas del pago (si existe pago).
+  let descuentoGlobal = 0;
+  let aumentoGlobal = 0;
+  const venta = await dataSource.getRepository(Venta).findOne({ where: { id: ventaId }, relations: ['pago'] });
+  if (venta?.pago?.id) {
+    const detalles = await dataSource.getRepository(PagoDetalle).find({
+      where: { pago: { id: venta.pago.id }, activo: true },
+    });
+    for (const d of detalles) {
+      if (d.tipo === TipoDetalle.DESCUENTO) descuentoGlobal += Number(d.valor || 0);
+      else if (d.tipo === TipoDetalle.AUMENTO) aumentoGlobal += Number(d.valor || 0);
+    }
+  }
+
+  return { items: itemsEstado, deudaBruta, totalCubierto, pendienteBruto, descuentoGlobal, aumentoGlobal };
+}
+
+// Retardo antes de auto-imprimir la comanda: da tiempo a que el PdV persista los
+// adicionales/observaciones/opcionales del ítem (que guarda en llamadas separadas
+// DESPUÉS de createVentaItem) para que salgan en el ticket de cocina.
+const AUTO_PRINT_COMANDA_DELAY_MS = 2500;
 
 /**
  * Hook auto-impresión de comanda (ticket de cocina).
  *
  * Se ejecuta tras `createVentaItem`. Si la Venta tiene **mesa o comanda**
  * asignada Y `pdv_config.autoImprimirComanda=true`, dispara
- * `printComandaInternal` en background (setImmediate) — el item ya fue
+ * `printComandaInternal` en background (con un retardo corto) — el item ya fue
  * guardado y la respuesta al frontend NO espera la impresión.
  *
  * Si la venta no tiene ni mesa ni comanda → venta directa de mostrador
@@ -2799,8 +3440,15 @@ async function autoPrintComandaIfNeeded(
   const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
   if (!pdvConfig?.autoImprimirComanda) return;
 
-  // 3. Disparar en background
-  setImmediate(() => {
+  // 3. Disparar en background, con un pequeño retardo.
+  //    El PdV guarda el VentaItem PRIMERO (esto dispara el hook) y RECIÉN DESPUÉS
+  //    persiste sus adicionales/observaciones/opcionales en llamadas separadas.
+  //    Sin el retardo, la comanda se imprime antes de que esos modificadores
+  //    existan y salen sin ellos. El retardo deja que se guarden (son round-trips
+  //    rápidos, locales o por LAN) antes de imprimir. La comanda usa
+  //    soloItemsNoImpresos + tracking de `impreso`, así que agregar varios ítems
+  //    seguidos no duplica.
+  setTimeout(() => {
     printComandaInternal(dataSource, ventaId, { soloItemsNoImpresos: true })
       .then(res => {
         if (!res.ok) {
@@ -2809,7 +3457,7 @@ async function autoPrintComandaIfNeeded(
         }
       })
       .catch(e => console.error(`[auto-print comanda venta=${ventaId}] excepción:`, e));
-  });
+  }, AUTO_PRINT_COMANDA_DELAY_MS);
 }
 
 /**

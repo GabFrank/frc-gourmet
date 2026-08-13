@@ -12,6 +12,8 @@ import {
 } from '../../src/app/database/entities/financiero/cuentas-por-cobrar-enums';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
+import { MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
+import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
@@ -49,6 +51,15 @@ export function registerCuentasPorCobrarHandlers(
       if (filtros?.estado) qb.andWhere('cpc.estado = :estado', { estado: filtros.estado });
       if (filtros?.tipo) qb.andWhere('cpc.tipo = :tipo', { tipo: filtros.tipo });
       if (filtros?.clienteId) qb.andWhere('cpc.cliente_id = :cid', { cid: filtros.clienteId });
+      // Filtro por nombre de cliente: razón social (empresa) o nombre+apellido
+      // de la persona. Datos guardados en MAYÚSCULAS; UPPER() por portabilidad.
+      if (filtros?.cliente) {
+        const term = `%${String(filtros.cliente).trim().toUpperCase()}%`;
+        qb.andWhere(
+          '(UPPER(cliente.razon_social) LIKE :t OR UPPER(persona.nombre) LIKE :t OR UPPER(persona.apellido) LIKE :t)',
+          { t: term },
+        );
+      }
 
       if (filtros?.pageSize != null) {
         const pageSize = Number(filtros.pageSize) || 15;
@@ -73,6 +84,21 @@ export function registerCuentasPorCobrarHandlers(
       });
     } catch (error) {
       console.error(`Error getting cuenta por cobrar ${id}:`, error);
+      throw error;
+    }
+  });
+
+  // CPC asociada a una venta (para reimprimir el pagaré desde el historial/PdV).
+  ipcMain.handle('get-cpc-by-venta', async (_event, ventaId: number) => {
+    try {
+      const repo = dataSource.getRepository(CuentaPorCobrar);
+      return await repo.findOne({
+        where: { ventaId },
+        relations: ['cliente', 'cliente.persona', 'moneda', 'cuotas'],
+        order: { id: 'DESC' },
+      });
+    } catch (error) {
+      console.error(`Error getting cpc for venta ${ventaId}:`, error);
       throw error;
     }
   });
@@ -345,6 +371,13 @@ export function registerCuentasPorCobrarHandlers(
         if (!cb) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
         cb.saldo = +(Number(cb.saldo) + montoBanco).toFixed(2);
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId,
+          tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
+          monto: montoBanco,
+          observacion: observacion ? `${obsBase} — ${observacion}` : obsBase,
+          responsable: cu,
+        });
       } else {
         const movCM = queryRunner.manager.create(CajaMayorMovimiento, {
           cajaMayor: { id: cajaMayorId } as any,
@@ -431,6 +464,12 @@ export function registerCuentasPorCobrarHandlers(
         order: { id: 'DESC' },
       });
       if (ultimoPago?.cuentaBancariaId) {
+        // Idempotencia (M-01): si este cobro ya fue revertido, no volver a
+        // ajustar saldos. Sin esta marca, una segunda llamada reencontraba el
+        // mismo PAGO y revertía de nuevo la cuenta/cuota/cpc/cliente.
+        if ((ultimoPago as any).anulado) {
+          throw new Error('El cobro ya fue anulado');
+        }
         // Reversión bancaria: debita la cuenta (en SU moneda) y revierte cuota/cpc/cliente
         // por el monto del cobro (en la moneda de la CPC).
         const montoAnuladoBanco = Number(ultimoPago.monto);
@@ -439,6 +478,13 @@ export function registerCuentasPorCobrarHandlers(
         if (cb) {
           cb.saldo = +(Number(cb.saldo) - montoBancoRevertir).toFixed(2);
           await queryRunner.manager.save(CuentaBancaria, cb);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: ultimoPago.cuentaBancariaId,
+            tipo: MovimientoBancarioTipo.AJUSTE_NEGATIVO,
+            monto: montoBancoRevertir,
+            observacion: `ANULACION COBRO CPC CUOTA #${cuotaId} - ${motivo}`,
+            responsable: cu,
+          });
         }
 
         cuota.montoCobrado = +(Math.max(0, Number(cuota.montoCobrado) - montoAnuladoBanco)).toFixed(2);
@@ -476,6 +522,10 @@ export function registerCuentasPorCobrarHandlers(
             await queryRunner.manager.save(MovimientoCliente, movAjusteB);
           }
         }
+
+        // Marcar el PAGO como revertido para que la anulación sea idempotente (M-01).
+        (ultimoPago as any).anulado = true;
+        await queryRunner.manager.save(MovimientoCliente, ultimoPago);
 
         await queryRunner.commitTransaction();
         return { success: true };
@@ -595,6 +645,7 @@ export function registerCuentasPorCobrarHandlers(
   // F2-extra: cerrar venta como crédito (atómico)
   // Recibe: { ventaId, clienteId, montoTotal, monedaId, cantidadCuotas?, frecuenciaDias?, fechaInicio?, descripcion?, forzar? }
   ipcMain.handle('cobrar-venta-credito', async (_event, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -640,8 +691,9 @@ export function registerCuentasPorCobrarHandlers(
         };
       }
 
-      // Get-or-create FormaPago "CUENTA CORRIENTE"
-      const NOMBRE_FP = 'CUENTA CORRIENTE';
+      // Get-or-create FormaPago "CREDITO" (la venta a crédito se registra con
+      // esta forma de pago; movimentaCaja:false para no impactar el arqueo).
+      const NOMBRE_FP = 'CREDITO';
       let formaPago = await formaPagoRepo
         .createQueryBuilder('fp')
         .where('UPPER(fp.nombre) = :n', { n: NOMBRE_FP })
@@ -761,20 +813,25 @@ export function registerCuentasPorCobrarHandlers(
       // El handler `cobrar-venta-credito` no pasa por `updateVenta`, así
       // que el hook de auto-print del ticket no se dispara. Lo invocamos
       // explícitamente acá, igual que el flujo de cobro normal.
-      setImmediate(async () => {
-        try {
-          const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
-          if (pdvConfig?.autoImprimirTicketVenta) {
-            await printVentaTicketInternal(dataSource, venta.id);
+      // La impresión es opt-in: solo si el usuario pidió imprimir en el diálogo
+      // de cobro (por defecto NO). Si no se desea el pagaré, tampoco se imprime
+      // el ticket de venta.
+      const imprimirPagare = data?.imprimirPagare === true;
+      if (imprimirPagare) {
+        setImmediate(async () => {
+          try {
+            const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+            if (pdvConfig?.autoImprimirTicketVenta) {
+              await printVentaTicketInternal(dataSource, venta.id);
+            }
+            // Pequeña pausa para que el ticket salga primero en la térmica.
+            await new Promise(r => setTimeout(r, 600));
+            await printPagareCpcTicketInternal(dataSource, cpcSaved.id);
+          } catch (e: any) {
+            console.warn('[cobrar-venta-credito] auto-print:', e?.message || e);
           }
-          // Pagaré siempre — es requerido para venta a crédito. Pequeña
-          // pausa para que el ticket salga primero en la térmica.
-          await new Promise(r => setTimeout(r, 600));
-          await printPagareCpcTicketInternal(dataSource, cpcSaved.id);
-        } catch (e: any) {
-          console.warn('[cobrar-venta-credito] auto-print:', e?.message || e);
-        }
-      });
+        });
+      }
 
       return { success: true, ventaId: venta.id, cpcId: cpcSaved.id };
     } catch (error) {

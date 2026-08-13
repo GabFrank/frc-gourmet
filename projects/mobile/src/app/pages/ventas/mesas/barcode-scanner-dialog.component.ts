@@ -141,26 +141,56 @@ export class BarcodeScannerDialogComponent implements AfterViewInit, OnDestroy {
   private detector: any = null;
   private rafId: any = null;
   private cerrado = false;
+  // Reader de ZXing para iOS/Safari (no soporta la API nativa BarcodeDetector).
+  private zxingReader: any = null;
 
   async ngAfterViewInit(): Promise<void> {
-    const BD = (window as any).BarcodeDetector;
-    if (!BD || !navigator.mediaDevices?.getUserMedia) {
-      this.mensaje = 'Tu navegador no soporta el escaneo por cámara. Ingresá el código manualmente.';
+    if (!navigator.mediaDevices?.getUserMedia) {
+      this.mensaje = 'Tu navegador no soporta la cámara. Ingresá el código manualmente.';
       return;
     }
+
+    const BD = (window as any).BarcodeDetector;
+    if (BD) {
+      // Android/Chromium: API nativa BarcodeDetector.
+      try {
+        this.detector = new BD({
+          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code', 'itf'],
+        });
+        this.stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false,
+        });
+        const video = this.videoRef.nativeElement;
+        video.srcObject = this.stream;
+        await video.play();
+        this.camaraOk = true;
+        this.scanLoop();
+      } catch (e) {
+        this.mensaje = 'No se pudo acceder a la cámara. Revisá los permisos o ingresá el código manualmente.';
+        this.camaraOk = false;
+        this.detener();
+      }
+      return;
+    }
+
+    // iOS/Safari: no existe BarcodeDetector → decodificar con ZXing sobre la
+    // cámara (getUserMedia sí funciona en iOS con el <video> playsinline+muted).
     try {
-      this.detector = new BD({
-        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code', 'itf'],
-      });
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
-        audio: false,
-      });
+      const { BrowserMultiFormatReader } = await import('@zxing/library');
+      this.zxingReader = new BrowserMultiFormatReader();
       const video = this.videoRef.nativeElement;
-      video.srcObject = this.stream;
-      await video.play();
+      await this.zxingReader.decodeFromConstraints(
+        { video: { facingMode: { ideal: 'environment' } }, audio: false },
+        video,
+        (result: any) => {
+          if (result && !this.cerrado) {
+            this.zone.run(() => this.emitir(String(result.getText())));
+          }
+          // Los errores por frame sin código (NotFoundException) se ignoran.
+        },
+      );
       this.camaraOk = true;
-      this.scanLoop();
     } catch (e) {
       this.mensaje = 'No se pudo acceder a la cámara. Revisá los permisos o ingresá el código manualmente.';
       this.camaraOk = false;
@@ -216,6 +246,11 @@ export class BarcodeScannerDialogComponent implements AfterViewInit, OnDestroy {
     if (this.stream) {
       this.stream.getTracks().forEach((t) => t.stop());
       this.stream = null;
+    }
+    if (this.zxingReader) {
+      // reset() detiene el decode loop y libera la cámara que abrió ZXing.
+      try { this.zxingReader.reset(); } catch { /* noop */ }
+      this.zxingReader = null;
     }
   }
 

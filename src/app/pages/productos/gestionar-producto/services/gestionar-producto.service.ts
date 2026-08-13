@@ -432,6 +432,8 @@ export class GestionarProductoService {
           esComprable: producto.esComprable,
           controlaStock: producto.controlaStock,
           esIngrediente: producto.esIngrediente,
+          disponibleOnline: (producto as any).disponibleOnline ?? false,
+          pausadoOnline: (producto as any).pausadoOnline ?? false,
           requiereComanda: (producto as any).requiereComanda !== false,
           sectorIds: [], // se carga abajo con get-producto-sectores
           stockMinimo: producto.stockMinimo,
@@ -504,6 +506,9 @@ export class GestionarProductoService {
         esComprable: [true],
         controlaStock: [true],
         esIngrediente: [false],
+        // Pedidos online (web app)
+        disponibleOnline: [false],
+        pausadoOnline: [false],
         requiereComanda: [true],
         sectorIds: [[]],
         stockMinimo: [null, [Validators.min(0)]],
@@ -781,6 +786,8 @@ export class GestionarProductoService {
       esComprable: productoData.esComprable,
       controlaStock: productoData.controlaStock,
       esIngrediente: productoData.esIngrediente,
+      disponibleOnline: productoData.disponibleOnline ?? false,
+      pausadoOnline: productoData.pausadoOnline ?? false,
       requiereComanda: productoData.requiereComanda !== false,
       stockMinimo: productoData.stockMinimo,
       stockMaximo: productoData.stockMaximo,

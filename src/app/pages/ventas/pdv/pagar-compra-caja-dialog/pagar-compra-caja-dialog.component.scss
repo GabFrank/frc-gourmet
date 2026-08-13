@@ -1,0 +1,146 @@
+h2[mat-dialog-title] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .title-icon {
+    color: var(--primary-color, #00838f);
+  }
+}
+
+.loading-box {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 0;
+}
+
+.form-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 480px;
+  max-width: 560px;
+}
+
+.modo-toggle {
+  margin-bottom: 12px;
+
+  mat-button-toggle {
+    flex: 1;
+  }
+
+  mat-icon {
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+}
+
+.info-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  background: var(--surface-hover, rgba(0, 131, 143, 0.08));
+  color: var(--text-secondary, #607d8b);
+  font-size: 13px;
+
+  mat-icon {
+    color: var(--primary-color, #00838f);
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+.form-row {
+  display: flex;
+  gap: 12px;
+
+  .flex-field {
+    flex: 1;
+  }
+}
+
+.full-width {
+  width: 100%;
+}
+
+.warn-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-top: 4px;
+  border-radius: 6px;
+  background: var(--surface-hover, #fff8e1);
+  color: var(--text-secondary, #bf360c);
+  font-size: 13px;
+
+  mat-icon {
+    color: var(--warning-color, #ff9800);
+  }
+}
+
+.detallada-btn {
+  margin-top: 12px;
+  width: 100%;
+  font-size: 12px;
+}
+
+.btn-spinner {
+  display: inline-block;
+  margin-right: 6px;
+}
+
+@media (max-width: 560px) {
+  .form-container {
+    min-width: unset;
+    width: 100%;
+  }
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+}
+
+.mixto-check {
+  display: block;
+  margin: 4px 0 8px;
+}
+
+.mixto-box {
+  border: 1px solid var(--border-color, rgba(128, 128, 128, 0.3));
+  border-radius: 8px;
+  padding: 8px 10px 12px;
+  margin-bottom: 8px;
+
+  .mixto-table {
+    width: 100%;
+    background: transparent;
+
+    .num { text-align: right; }
+
+    .cell-field {
+      width: 100%;
+      margin: 4px 0 -1.25em;
+    }
+    .cell-field.monto input { text-align: right; }
+  }
+
+  .add-linea { margin: 8px 0 4px; }
+
+  .mixto-total {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    padding: 2px 0;
+    color: var(--text-primary);
+
+    .strong { font-weight: 600; }
+  }
+
+  .warn-text { color: var(--warning-color, #fb8c00); }
+}

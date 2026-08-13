@@ -1,0 +1,210 @@
+<div class="crud-page">
+  <mat-progress-bar *ngIf="cargando || generando" mode="indeterminate"></mat-progress-bar>
+
+  <!-- Plan del día -->
+  <mat-card appearance="outlined" class="tarjeta">
+    <mat-card-header>
+      <mat-card-title><mat-icon>playlist_add_check</mat-icon> Plan del día</mat-card-title>
+      <mat-card-subtitle>Arma las playlists de hoy en Spotify: tres variantes de energía por bloque.</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <mat-form-field appearance="outline" class="campo">
+        <mat-label>Indicación para hoy (opcional)</mat-label>
+        <input matInput [(ngModel)]="instruccion" placeholder="Ej: hoy hay muchas familias con chicos" />
+      </mat-form-field>
+      <div class="acciones">
+        <button mat-flat-button color="accent" (click)="generarPlan()" [disabled]="generando || !hayBloques">
+          <mat-icon>auto_fix_high</mat-icon> Generar plan de hoy
+        </button>
+      </div>
+      <p class="ayuda" *ngIf="!hayBloques">
+        Primero cargá la programación semanal (abajo) para poder generar el plan.
+      </p>
+      <div class="resultado" *ngIf="ultimoPlan">
+        <h4>{{ ultimoPlan.resumen }}</h4>
+        <div class="advertencia" *ngFor="let a of ultimoPlan.advertencias">
+          <mat-icon>warning</mat-icon> {{ a }}
+        </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Preset -->
+  <mat-card appearance="outlined" class="tarjeta">
+    <mat-card-header>
+      <mat-card-title>Programación semanal</mat-card-title>
+      <mat-card-subtitle>Arrancá de un preset y ajustá cada momento.</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <mat-form-field appearance="outline" class="campo">
+        <mat-label>Preset</mat-label>
+        <mat-select [(ngModel)]="presetElegido">
+          <mat-option *ngFor="let p of presets" [value]="p.codigo">
+            {{ p.nombre }} ({{ p.cantidadBloques }} bloques)
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+      <div class="acciones">
+        <button mat-flat-button color="primary" (click)="aplicarPreset()" [disabled]="cargando">
+          <mat-icon>download</mat-icon>
+          {{ hayBloques ? 'Reemplazar con el preset' : 'Cargar preset' }}
+        </button>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Grilla por día -->
+  <mat-card appearance="outlined" class="tarjeta" *ngFor="let d of dias">
+    <mat-card-header>
+      <mat-card-title>{{ d.nombre }}</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <mat-accordion multi="false">
+        <mat-expansion-panel *ngFor="let b of d.bloques">
+          <!--
+            Sin mat-panel-description: Material le da el 50% del ancho y en un
+            teléfono el nombre del bloque quedaba recortado sin elipsis. La
+            energía entra como badge compacto dentro del título.
+          -->
+          <mat-expansion-panel-header>
+            <mat-panel-title>
+              <span class="bloque-hora">{{ b.horarioTexto }}</span>
+              <span class="bloque-nombre">{{ b.nombre }}</span>
+              <span class="bloque-energia" [attr.aria-label]="'energía ' + b.energia + ' de 5'">
+                E{{ b.energia }}
+              </span>
+            </mat-panel-title>
+          </mat-expansion-panel-header>
+
+          <div class="form-grid">
+            <mat-form-field appearance="outline" class="campo">
+              <mat-label>Nombre</mat-label>
+              <input matInput [(ngModel)]="b.nombre" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="chico">
+              <mat-label>Desde</mat-label>
+              <input matInput [(ngModel)]="b.horaDesde" placeholder="HH:MM" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="chico">
+              <mat-label>Hasta</mat-label>
+              <input matInput [(ngModel)]="b.horaHasta" placeholder="HH:MM" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="chico">
+              <mat-label>Energía (1-5)</mat-label>
+              <input matInput type="number" min="1" max="5" [(ngModel)]="b.energia" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="chico">
+              <mat-label>Volumen</mat-label>
+              <input matInput type="number" min="0" max="100" [(ngModel)]="b.volumen" />
+            </mat-form-field>
+          </div>
+
+          <!-- Mezcla de estilos -->
+          <div class="mezcla">
+            <div class="mezcla-texto">
+              <span class="mezcla-titulo">Mezcla de estilos</span>
+              <span class="mezcla-detalle">{{ b.mezclaTexto }}</span>
+            </div>
+            <div class="acciones">
+              <button mat-stroked-button (click)="abrirMezcla(b)">
+                <mat-icon>tune</mat-icon> Configurar mezcla
+              </button>
+              <button mat-button *ngIf="b.mezclaCount > 0" (click)="copiarMezclaATodos(b)">
+                <mat-icon>content_copy</mat-icon> Copiar a la semana
+              </button>
+            </div>
+          </div>
+
+          <mat-form-field appearance="outline" class="campo">
+            <mat-label>Notas sobre este momento</mat-label>
+            <textarea matInput rows="2" [(ngModel)]="b.notas" placeholder="Ej: los domingos al mediodía viene mucha familia con chicos"></textarea>
+            <mat-hint>Este texto lo lee la IA tal cual al buscar música</mat-hint>
+          </mat-form-field>
+
+          <div class="avanzado-bloque">
+            <h4>Opciones avanzadas de este bloque</h4>
+            <div class="form-grid">
+              <mat-form-field appearance="outline" class="campo">
+                <mat-label>Temas del mismo artista</mat-label>
+                <mat-select [(ngModel)]="b.modoLimite">
+                  <mat-option value="heredar">Usar el límite general</mat-option>
+                  <mat-option value="sin-limite">Sin límite</mat-option>
+                  <mat-option value="fijo">Límite propio…</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="chico" *ngIf="b.modoLimite === 'fijo'">
+                <mat-label>Máximo</mat-label>
+                <input matInput type="number" min="1" max="20" [(ngModel)]="b.maxPorArtista" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="chico">
+                <mat-label>Largo playlist (×)</mat-label>
+                <input matInput type="number" step="0.1" min="1" max="4" [(ngModel)]="b.factorDuracion" />
+                <mat-hint>Vacío = general</mat-hint>
+              </mat-form-field>
+            </div>
+            <mat-slide-toggle [(ngModel)]="b.evitarArtistaConsecutivo">
+              Nunca dos temas seguidos del mismo artista
+            </mat-slide-toggle>
+          </div>
+
+          <div class="acciones bloque-acciones">
+            <button mat-flat-button color="primary" (click)="guardarBloque(b)">
+              <mat-icon>save</mat-icon> Guardar
+            </button>
+            <button mat-stroked-button color="warn" (click)="eliminarBloque(b)">
+              <mat-icon>delete</mat-icon> Quitar
+            </button>
+          </div>
+        </mat-expansion-panel>
+      </mat-accordion>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Opciones generales -->
+  <mat-card appearance="outlined" class="tarjeta" *ngIf="avanzado">
+    <mat-card-header>
+      <mat-card-title>Opciones generales</mat-card-title>
+      <mat-card-subtitle>Valores por defecto cuando el bloque no define los suyos.</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="form-grid">
+        <mat-form-field appearance="outline" class="chico">
+          <mat-label>Máx. por artista</mat-label>
+          <input matInput type="number" min="1" max="20" [(ngModel)]="avanzado.maxPorArtistaDefault" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="chico">
+          <mat-label>No repetir (días)</mat-label>
+          <input matInput type="number" min="0" max="30" [(ngModel)]="avanzado.ventanaAntirepeticionDias" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="chico">
+          <mat-label>Largo playlist (×)</mat-label>
+          <input matInput type="number" step="0.1" min="1" max="4" [(ngModel)]="avanzado.factorDuracion" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="chico">
+          <mat-label>BPM entre variantes</mat-label>
+          <input matInput type="number" min="0" max="40" [(ngModel)]="avanzado.deltaBpmVariante" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="chico">
+          <mat-label>Duración mín. (seg)</mat-label>
+          <input matInput type="number" min="0" [(ngModel)]="avanzado.duracionMinSeg" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="chico">
+          <mat-label>Duración máx. (seg)</mat-label>
+          <input matInput type="number" min="60" [(ngModel)]="avanzado.duracionMaxSeg" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="chico">
+          <mat-label>Propuestas por ronda</mat-label>
+          <input matInput type="number" min="10" max="60" [(ngModel)]="avanzado.candidatosPorRonda" />
+        </mat-form-field>
+      </div>
+      <mat-slide-toggle [(ngModel)]="avanzado.permitirExplicit">
+        Permitir temas marcados como explícitos
+      </mat-slide-toggle>
+      <div class="acciones">
+        <button mat-flat-button color="primary" (click)="guardarAvanzado()">
+          <mat-icon>save</mat-icon> Guardar opciones
+        </button>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

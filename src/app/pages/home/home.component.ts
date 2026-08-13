@@ -15,7 +15,8 @@ import { Subscription, firstValueFrom } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { TabsService } from 'src/app/services/tabs.service';
 import { RepositoryService } from 'src/app/database/repository.service';
-import { CajaMayorDashboardComponent } from 'src/app/pages/financiero/caja-mayor/dashboard/caja-mayor-dashboard.component';
+import { PermissionService } from 'src/app/services/permission.service';
+import { FinancieroDashboardComponent } from 'src/app/pages/financiero/dashboard/financiero-dashboard.component';
 import { PdvComponent } from 'src/app/pages/ventas/pdv/pdv.component';
 import { ListNotificacionesRrhhComponent } from 'src/app/pages/rrhh/notificaciones/list-notificaciones-rrhh.component';
 import { abrirShortcut } from 'src/app/shared/utils/dashboard-shortcut-router';
@@ -43,6 +44,7 @@ import { ListClientesComponent } from 'src/app/pages/personas/clientes/list-clie
 import { PdvConfigDialogComponent } from 'src/app/shared/components/pdv-config-dialog/pdv-config-dialog.component';
 import { PdvMesaDialogComponent } from 'src/app/shared/components/pdv-mesa-dialog/pdv-mesa-dialog.component';
 import { MatDialog } from '@angular/material/dialog';
+import { VentasDesgloseDialogComponent } from 'src/app/shared/components/ventas-desglose-dialog/ventas-desglose-dialog.component';
 
 @Component({
   selector: 'app-home',
@@ -75,15 +77,23 @@ export class HomeComponent implements OnInit, OnDestroy {
   private subs = new Subscription();
 
   quickActions = [
-    { title: 'Abrir PdV', icon: 'point_of_sale', action: 'pdv', color: '#4caf50' },
-    { title: 'Caja Mayor', icon: 'account_balance', action: 'caja-mayor', color: '#1b5e20' },
-    { title: 'Notificaciones', icon: 'notifications', action: 'notificaciones', color: '#f44336' },
+    { title: 'Abrir PdV', icon: 'point_of_sale', action: 'pdv', color: '#4caf50', permiso: 'VENTAS_PDV' },
+    { title: 'Financiero', icon: 'account_balance', action: 'financiero', color: '#1b5e20', permiso: 'FINANCIERO_DASHBOARD_VER' },
+    { title: 'Notificaciones', icon: 'notifications', action: 'notificaciones', color: '#f44336', permiso: 'RRHH_NOTIFICACIONES_VER' },
   ];
+  // Accesos rápidos visibles según los permisos del usuario.
+  visibleQuickActions: typeof this.quickActions = [];
 
   ventasHoy = 0;
   totalHoyPYG = 0;
   cajasAbiertas = 0;
   cppVencidos = 0;
+  // Desglose del total de ventas de hoy (por moneda y forma de pago, en Gs).
+  desgloseVentasHoy: any = null;
+  // true → el total corresponde a las cajas abiertas (no al día calendario).
+  totalBasadoEnCajas = false;
+  labelVentas = 'Ventas hoy';
+  labelTotal = 'Total hoy';
 
   alertas: { tipo: string; titulo: string; detalle: string; color: 'error' | 'warning' | 'info' }[] = [];
 
@@ -107,9 +117,17 @@ export class HomeComponent implements OnInit, OnDestroy {
     private snackBar: MatSnackBar,
     private onboardingService: OnboardingService,
     private dialog: MatDialog,
+    private permission: PermissionService,
   ) {}
 
   ngOnInit(): void {
+    this.subs.add(
+      this.permission.codigos$.subscribe(() => {
+        this.visibleQuickActions = this.quickActions.filter(
+          (a) => !a.permiso || this.permission.has(a.permiso),
+        );
+      }),
+    );
     this.cargarKpis();
     this.loadShortcuts();
     this.cargarPwaAccess();
@@ -148,6 +166,10 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.ventasHoy = ventasKpi.ventasHoy || 0;
         this.totalHoyPYG = ventasKpi.totalHoyPYG || 0;
         this.cajasAbiertas = (ventasKpi.cajasAbiertas || []).length;
+        this.desgloseVentasHoy = ventasKpi.desgloseVentasHoy || null;
+        this.totalBasadoEnCajas = !!ventasKpi.totalBasadoEnCajas;
+        this.labelVentas = this.totalBasadoEnCajas ? 'Ventas en caja' : 'Ventas hoy';
+        this.labelTotal = this.totalBasadoEnCajas ? 'Total en caja' : 'Total hoy';
 
         const periodo = ventasKpi.ventasPorPeriodo || { labels: [], ventas: [] };
         this.chartData = {
@@ -205,13 +227,28 @@ export class HomeComponent implements OnInit, OnDestroy {
     return (v || 0).toLocaleString('es-PY', { maximumFractionDigits: 0 });
   }
 
+  /** Abre el desglose del total de ventas por moneda y forma de pago (en Gs). */
+  abrirDesgloseVentas(): void {
+    if (!this.desgloseVentasHoy) return;
+    this.dialog.open(VentasDesgloseDialogComponent, {
+      width: '600px',
+      maxWidth: '95vw',
+      data: {
+        titulo: this.totalBasadoEnCajas ? 'Total de ventas en caja' : 'Total de ventas de hoy',
+        totalGs: this.desgloseVentasHoy.totalGs || 0,
+        porMoneda: this.desgloseVentasHoy.porMoneda || [],
+        porFormaPago: this.desgloseVentasHoy.porFormaPago || [],
+      },
+    });
+  }
+
   navigateTo(action: string): void {
     switch (action) {
       case 'pdv':
         this.tabsService.openTab('Punto de Venta (PDV)', PdvComponent, {}, 'pdv');
         break;
-      case 'caja-mayor':
-        this.tabsService.openTab('Caja Mayor', CajaMayorDashboardComponent);
+      case 'financiero':
+        this.tabsService.openTab('Financiero Dashboard', FinancieroDashboardComponent, { source: 'navigation' }, 'financiero-dashboard-tab', true);
         break;
       case 'notificaciones':
         this.tabsService.openTab('Notificaciones RRHH', ListNotificacionesRrhhComponent);
@@ -349,7 +386,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         break;
       case 'HOME':
         this.snackBar.open(
-          'Para crear tu primer acceso directo, navegá a cualquier dashboard (Caja Mayor, Ventas, etc.) y usá el botón "Guardar como acceso directo".',
+          'Para crear tu primer acceso directo, navegá a cualquier dashboard (Financiero, Ventas, etc.) y usá el botón "Guardar como acceso directo".',
           'OK',
           { duration: 6000 },
         );

@@ -101,6 +101,19 @@ export function registerEmpresaHandlers(
       (existing as any).monedaPrincipalId = (v === null || v === undefined || v === '' as any) ? null : Number(v);
     }
     if ('actividadEconomica' in data) (existing as any).actividadEconomica = toUpperOrNull(data.actividadEconomica);
+    // Ubicación (geocerca del fichaje facial)
+    if ('latitud' in data) {
+      const v = (data as any).latitud;
+      (existing as any).latitud = (v === null || v === undefined || v === '') ? null : Number(v);
+    }
+    if ('longitud' in data) {
+      const v = (data as any).longitud;
+      (existing as any).longitud = (v === null || v === undefined || v === '') ? null : Number(v);
+    }
+    if ('radioFichajeMetros' in data) {
+      const v = (data as any).radioFichajeMetros;
+      (existing as any).radioFichajeMetros = (v === null || v === undefined || v === '') ? null : Number(v);
+    }
 
     await setEntityUserTracking(dataSource, existing, currentUser?.id, true);
     return repo.save(existing);

@@ -2,7 +2,7 @@
 
 <mat-dialog-content>
   <div class="opciones-grid">
-    <mat-card *ngFor="let opt of opciones"
+    <mat-card *ngFor="let opt of opcionesVisibles"
               class="opcion-card"
               [class.disabled]="opt.disabled"
               (click)="seleccionar(opt)"

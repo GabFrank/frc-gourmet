@@ -1,0 +1,81 @@
+.face-capture {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.video-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  aspect-ratio: 4 / 3;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1); // espejo natural para el usuario
+    &.hidden { visibility: hidden; }
+  }
+}
+
+.oval-guide {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 55%;
+  height: 78%;
+  border: 3px dashed rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 14px;
+  text-align: center;
+  padding: 12px;
+
+  &.countdown {
+    background: rgba(0, 0, 0, 0.25);
+    .big {
+      font-size: 96px;
+      font-weight: 700;
+      line-height: 1;
+      text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+    }
+  }
+}
+
+.status-msg {
+  margin: 0;
+  font-size: 13px;
+  text-align: center;
+  color: var(--text-secondary, #666);
+
+  &.error {
+    color: var(--error, #e53935);
+  }
+}
+
+.capture-btn {
+  min-width: 160px;
+
+  mat-icon {
+    margin-right: 6px;
+  }
+}

@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import { CajaMayor } from '../../src/app/database/entities/financiero/caja-mayor.entity';
 import { CajaMayorSaldo } from '../../src/app/database/entities/financiero/caja-mayor-saldo.entity';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
@@ -16,14 +16,25 @@ import { EntradaVaria } from '../../src/app/database/entities/financiero/entrada
 import { OperacionFinancieraCategoria } from '../../src/app/database/entities/financiero/operacion-financiera-categoria.entity';
 import { OperacionFinanciera } from '../../src/app/database/entities/financiero/operacion-financiera.entity';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
+import { MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
+import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
+import { Compra } from '../../src/app/database/entities/compras/compra.entity';
 import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
-import { CajaMayorEstado, TipoMovimiento, GastoEstado, GastoDestinoTipo, RetiroCajaEstado } from '../../src/app/database/entities/financiero/caja-mayor-enums';
+import { CajaMayorEstado, TipoMovimiento, GastoEstado, GastoDestinoTipo, RetiroCajaEstado, RetiroCajaOrigen } from '../../src/app/database/entities/financiero/caja-mayor-enums';
+import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
+import { Conteo } from '../../src/app/database/entities/financiero/conteo.entity';
+import { ConteoDetalle } from '../../src/app/database/entities/financiero/conteo-detalle.entity';
+import { MonedaBillete } from '../../src/app/database/entities/financiero/moneda-billete.entity';
+import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
 import { TipoOperacionFinanciera, DiferenciaDestinoTipo } from '../../src/app/database/entities/financiero/operaciones-financieras-enums';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { esIngreso, actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { ensurePermission, getEffectiveUser } from '../utils/auth.utils';
+import { Vale } from '../../src/app/database/entities/rrhh/vale.entity';
+import { ValeEstado } from '../../src/app/database/entities/rrhh/vale-estado.enum';
+import { generarRetiroDelCierre } from './retiro-cierre.util';
 import { getMovimientosBancariosUnificados } from '../utils/movimientos-bancarios';
 import { dispatchEvento } from '../services/notificacion.service';
 
@@ -149,12 +160,56 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       if (cb) {
         cb.saldo = Number(cb.saldo) - Number(op.montoDestino || 0);
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId: cb.id,
+          tipo: MovimientoBancarioTipo.AJUSTE_NEGATIVO,
+          monto: Number(op.montoDestino || 0),
+          observacion: `ANULACION DEPOSITO OP.FIN #${op.id}`,
+          responsable: getEffectiveUser(getCurrentUser),
+        });
       }
     } else if (op.tipoOperacion === TipoOperacionFinanciera.RETIRO_BANCARIO && op.cuentaBancariaOrigen) {
       const cb = await cbRepo.findOne({ where: { id: op.cuentaBancariaOrigen.id } });
       if (cb) {
         cb.saldo = Number(cb.saldo) + Number(op.montoOrigen || 0);
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId: cb.id,
+          tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
+          monto: Number(op.montoOrigen || 0),
+          observacion: `ANULACION RETIRO OP.FIN #${op.id}`,
+          responsable: getEffectiveUser(getCurrentUser),
+        });
+      }
+    } else if (op.tipoOperacion === TipoOperacionFinanciera.TRANSFERENCIA_BANCARIA) {
+      // Revertir AMBAS cuentas: devolver a origen, quitar de destino.
+      if (op.cuentaBancariaOrigen) {
+        const cbO = await cbRepo.findOne({ where: { id: op.cuentaBancariaOrigen.id } });
+        if (cbO) {
+          cbO.saldo = Number(cbO.saldo) + Number(op.montoOrigen || 0);
+          await queryRunner.manager.save(CuentaBancaria, cbO);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: cbO.id,
+            tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
+            monto: Number(op.montoOrigen || 0),
+            observacion: `ANULACION TRANSFERENCIA BANCARIA (ORIGEN) OP.FIN #${op.id}`,
+            responsable: getEffectiveUser(getCurrentUser),
+          });
+        }
+      }
+      if (op.cuentaBancariaDestino) {
+        const cbD = await cbRepo.findOne({ where: { id: op.cuentaBancariaDestino.id } });
+        if (cbD) {
+          cbD.saldo = Number(cbD.saldo) - Number(op.montoDestino || 0);
+          await queryRunner.manager.save(CuentaBancaria, cbD);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: cbD.id,
+            tipo: MovimientoBancarioTipo.AJUSTE_NEGATIVO,
+            monto: Number(op.montoDestino || 0),
+            observacion: `ANULACION TRANSFERENCIA BANCARIA (DESTINO) OP.FIN #${op.id}`,
+            responsable: getEffectiveUser(getCurrentUser),
+          });
+        }
       }
     }
   };
@@ -426,6 +481,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     AJUSTE_POSITIVO: 'Ajuste (+)',
     AJUSTE_NEGATIVO: 'Ajuste (-)',
     CHEQUE_COBRADO: 'Cheque cobrado',
+    ACREDITACION_POS: 'Acreditacion POS',
     DEPOSITO: 'Deposito bancario',
     RETIRO: 'Retiro bancario',
     ENTRADA_VARIA: 'Entrada Varia',
@@ -445,10 +501,14 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     for (const mov of ordenados) {
       const gastoId = mov.gasto?.id;
       const retiroCajaId = mov.retiroCaja?.id;
+      const conteoId = mov.conteo?.id;
       const isAnulacion = mov.tipoMovimiento === 'ANULACION';
       const contraDeId = mov.referenciaAnulacion?.id;
+      // El egreso de caja inicial genera un movimiento por moneda con el mismo
+      // conteo; se agrupan en una sola fila para poder "abrir caja con este conteo".
       const key = gastoId ? `gasto-${gastoId}` :
                   retiroCajaId ? `retiro-${retiroCajaId}` :
+                  conteoId ? `conteo-${conteoId}` :
                   `mov-${mov.id}`;
 
       if (isAnulacion && (gastoId || retiroCajaId) && grupos.has(key)) {
@@ -482,10 +542,12 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           detalles: [detalle],
           responsableNombre: mov.responsable?.persona?.nombre || mov.responsable?.nickname || '-',
           observacion: mov.observacion || '-',
+          observacionRaw: mov.observacionRaw ?? mov.observacion ?? '',
           anulado: !!mov.anulacion,
           origen: '',
           gastoId,
           retiroCajaId,
+          conteoId,
           movimientoIds: [mov.id],
           esAnulacion: isAnulacion || !!contraDeId,
           anulacion: mov.anulacion || null,
@@ -516,7 +578,10 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           .leftJoinAndSelect('responsable.persona', 'persona')
           .leftJoinAndSelect('mov.gasto', 'gasto')
           .leftJoinAndSelect('gasto.proveedor', 'proveedor')
+          .leftJoinAndSelect('gasto.gastoCategoria', 'gastoCategoria')
           .leftJoinAndSelect('mov.retiroCaja', 'retiroCaja')
+          .leftJoinAndSelect('retiroCaja.caja', 'retiroCajaCaja')
+          .leftJoinAndSelect('mov.conteo', 'conteo')
           .leftJoinAndSelect('mov.referenciaAnulacion', 'referenciaAnulacion')
           .where('mov.caja_mayor_id = :cajaMayorId', { cajaMayorId })
           .orderBy('mov.fecha', 'DESC')
@@ -552,6 +617,76 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           for (const m of cajaItems) (m as any).anulacion = byOrigId.get(m.id) || null;
         }
 
+        // ---- Observación legible: se COMPONE al leer (no al crear) para que
+        // los movimientos viejos y nuevos se vean igual. Batch-load por id de
+        // las entidades origen que no son relaciones declaradas del movimiento.
+        const evIds = [...new Set(cajaItems.map((m: any) => m.entradaVariaId).filter(Boolean))] as number[];
+        const opIds = [...new Set(cajaItems.map((m: any) => m.operacionFinancieraId).filter(Boolean))] as number[];
+        const compraIds = [...new Set(cajaItems.map((m: any) => m.compraId).filter(Boolean))] as number[];
+        const evMap = new Map<number, any>();
+        if (evIds.length) {
+          (await dataSource.getRepository(EntradaVaria).find({ where: { id: In(evIds) }, relations: ['entradaVariaCategoria'] }))
+            .forEach((e: any) => evMap.set(e.id, e));
+        }
+        const opMap = new Map<number, any>();
+        if (opIds.length) {
+          (await dataSource.getRepository(OperacionFinanciera).find({ where: { id: In(opIds) }, relations: ['operacionFinancieraCategoria'] }))
+            .forEach((o: any) => opMap.set(o.id, o));
+        }
+        const compraMap = new Map<number, any>();
+        if (compraIds.length) {
+          (await dataSource.getRepository(Compra).find({ where: { id: In(compraIds) }, relations: ['proveedor'] }))
+            .forEach((c: any) => compraMap.set(c.id, c));
+        }
+
+        const opTipoLabel: Record<string, string> = {
+          CAMBIO_DIVISA: 'Cambio de divisa',
+          DEPOSITO_BANCARIO: 'Deposito bancario',
+          RETIRO_BANCARIO: 'Retiro bancario',
+          TRANSFERENCIA_ENTRE_CAJAS: 'Transferencia entre cajas',
+        };
+        const fmtFecha = (d: any): string => {
+          if (!d) return '';
+          const x = new Date(d);
+          if (isNaN(x.getTime())) return '';
+          const p = (n: number) => String(n).padStart(2, '0');
+          return `${p(x.getDate())}/${p(x.getMonth() + 1)}/${x.getFullYear()} ${p(x.getHours())}:${p(x.getMinutes())}`;
+        };
+        // `Base: (CATEGORIA) DESCRIPCION. OBSERVACION` con formateo defensivo
+        // (sin paréntesis vacíos, ni ": "/". " colgando cuando falta el dato).
+        const conDesc = (base: string, cat: any, desc: any, obs?: any): string => {
+          const c = (cat || '').toString().trim();
+          const d = (desc || '').toString().trim();
+          const o = (obs || '').toString().trim();
+          const body = `${c ? `(${c}) ` : ''}${d}`.trim();
+          return `${base}${body ? `: ${body}` : ''}${o ? `. ${o}` : ''}`;
+        };
+        const composeObs = (m: any): string => {
+          const tipo = m.tipoMovimiento || '';
+          if (tipo === 'ANULACION') return m.observacion || '-';
+          if (m.gasto) return conDesc(`Gasto #${m.gasto.id}`, m.gasto.gastoCategoria?.nombre, m.gasto.descripcion);
+          if (m.retiroCaja) {
+            const esCierre = tipo === TipoMovimiento.INGRESO_CIERRE_CAJA;
+            const apertura = fmtFecha(m.retiroCaja.caja?.fechaApertura);
+            return `${esCierre ? 'CIERRE CAJA' : 'RETIRO CAJA'} #${m.retiroCaja.id}${apertura ? ` ${apertura}` : ''}`;
+          }
+          if (m.entradaVariaId && evMap.has(m.entradaVariaId)) {
+            const ev = evMap.get(m.entradaVariaId);
+            return conDesc(`Entrada #${ev.id}`, ev.entradaVariaCategoria?.nombre, ev.descripcion, ev.observacion);
+          }
+          if (m.operacionFinancieraId && opMap.has(m.operacionFinancieraId)) {
+            const op = opMap.get(m.operacionFinancieraId);
+            const label = opTipoLabel[op.tipoOperacion] || 'Operacion financiera';
+            return conDesc(`${label} #${op.id}`, op.operacionFinancieraCategoria?.nombre, op.descripcion, op.observacion);
+          }
+          if (m.compraId && compraMap.has(m.compraId)) {
+            const c = compraMap.get(m.compraId);
+            const prov = (c.proveedor?.nombre || c.proveedor?.razon_social || '').toString().trim();
+            return `Pago compra #${c.id}${prov ? ` ${prov}` : ''}`;
+          }
+          return m.observacion || '-';
+        };
+
         // Mapear a la forma esperada por consolidarCaja (gasto/retiro/referenciaAnulacion como objetos)
         const mapped = cajaItems.map((m: any) => ({
           id: m.id,
@@ -561,9 +696,11 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           moneda: m.moneda,
           formaPago: m.formaPago,
           responsable: m.responsable,
-          observacion: m.observacion,
+          observacion: composeObs(m),
+          observacionRaw: m.observacion,
           gasto: m.gasto,
           retiroCaja: m.retiroCaja,
+          conteo: m.conteo,
           referenciaAnulacion: m.referenciaAnulacion,
           anulacion: (m as any).anulacion,
         }));
@@ -575,7 +712,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         const accountIds = fuenteEsCuenta ? [Number(fuente)] : cuentasVisibles;
         if (accountIds.length > 0) {
           const bancoItems = await getMovimientosBancariosUnificados(dataSource, accountIds, {
-            excludePos: true,
+            // Ocultar tipos ruidosos (POS, etc.) salvo que el toggle pida verlos.
+            excluirRuidosos: !filtros?.incluirRuidosos,
             stampFuente: true,
             fechaDesde: filtros?.fechaDesde,
             fechaHasta: filtros?.fechaHasta,
@@ -630,6 +768,12 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('create-caja-mayor-movimiento', async (_event: any, data: any) => {
     await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
+    if (!(Number(data?.monto) > 0)) {
+      throw new Error('El monto del movimiento debe ser mayor a 0');
+    }
+    if (!data?.tipoMovimiento) {
+      throw new Error('Falta el tipo de movimiento');
+    }
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -677,7 +821,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       const repo = queryRunner.manager.getRepository(CajaMayorMovimiento);
       const original = await repo.findOne({
         where: { id },
-        relations: ['cajaMayor', 'moneda', 'formaPago'],
+        relations: ['cajaMayor', 'moneda', 'formaPago', 'retiroCaja'],
       });
       if (!original) throw new Error(`Movimiento ID ${id} not found`);
 
@@ -699,11 +843,58 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           `Anular desde el modulo de Cuentas por Pagar (revierte el estado de la cuota y el saldo del CPP).`
         );
       }
+      // Vale: anular desde Caja Mayor revierte el movimiento Y deja el vale en
+      // ANULADO (para que entre en la liquidacion del mes). Misma logica que el
+      // handler 'anular-vale' del modulo Vales, unificada en un solo click.
       if (original.valeId) {
-        throw new Error(
-          `Este movimiento corresponde al vale #${original.valeId}. ` +
-          `Anular desde el modulo de Vales.`
+        if (!original.cajaMayor || !original.moneda || !original.formaPago) {
+          throw new Error(`El movimiento del vale #${original.valeId} no tiene caja/moneda/forma de pago para revertir.`);
+        }
+        const valeRepo = queryRunner.manager.getRepository(Vale);
+        const vale = await valeRepo.findOne({ where: { id: original.valeId } });
+        if (!vale) throw new Error(`Vale #${original.valeId} no encontrado`);
+        if (vale.estado === ValeEstado.ANULADO) {
+          throw new Error(`El vale #${original.valeId} ya fue anulado previamente.`);
+        }
+        // Idempotencia: no anular dos veces el mismo movimiento
+        const yaAnuladoVale = await repo.findOne({
+          where: { referenciaAnulacion: { id: original.id } as any },
+        });
+        if (yaAnuladoVale) {
+          throw new Error(`El movimiento ID ${id} ya fue anulado previamente (anulacion ID ${yaAnuladoVale.id})`);
+        }
+
+        const currentUserVale = getEffectiveUser(getCurrentUser);
+        const contraVale = queryRunner.manager.create(CajaMayorMovimiento, {
+          cajaMayor: original.cajaMayor,
+          tipoMovimiento: TipoMovimiento.AJUSTE_POSITIVO,
+          moneda: original.moneda,
+          formaPago: original.formaPago,
+          monto: original.monto,
+          fecha: new Date(),
+          observacion: `ANULACION VALE #${vale.id}` + (motivo ? ` - ${motivo}` : ''),
+          referenciaAnulacion: original,
+          valeId: vale.id,
+        });
+        if (currentUserVale) contraVale.responsable = currentUserVale;
+        await setEntityUserTracking(dataSource, contraVale, currentUserVale?.id, false);
+        await queryRunner.manager.save(CajaMayorMovimiento, contraVale);
+
+        await actualizarSaldo(
+          queryRunner,
+          original.cajaMayor.id,
+          original.moneda.id,
+          original.formaPago.id,
+          Number(original.monto),
+          TipoMovimiento.AJUSTE_POSITIVO,
         );
+
+        vale.estado = ValeEstado.ANULADO;
+        await setEntityUserTracking(dataSource, vale, currentUserVale?.id, true);
+        await valeRepo.save(vale);
+
+        await queryRunner.commitTransaction();
+        return { success: true };
       }
       if (original.liquidacionComisionId) {
         throw new Error(
@@ -735,6 +926,57 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       // completa (ambos lados + saldo bancario si aplica), no solo este movimiento.
       if (original.operacionFinancieraId) {
         await anularOperacionFinancieraTx(queryRunner, original.operacionFinancieraId, motivo, getCurrentUser());
+        await queryRunner.commitTransaction();
+        return { success: true };
+      }
+
+      // Retiro/cierre de caja: el ingreso a caja mayor pudo crear N movimientos
+      // (uno por detalle/moneda). Anular cualquiera de ellos revierte TODO el
+      // ingreso del retiro (todos sus movimientos + saldo) y deja el retiro
+      // re-ingresable (FLOTANTE); antes el saldo se revertía pero el RetiroCaja
+      // quedaba INGRESADO (huérfano, no re-ingresable).
+      if (original.retiroCaja) {
+        const retiroRepo = queryRunner.manager.getRepository(RetiroCaja);
+        const retiro = await retiroRepo.findOne({ where: { id: original.retiroCaja.id } });
+        if (!retiro) throw new Error(`RetiroCaja #${original.retiroCaja.id} no encontrado`);
+
+        const movsRetiro = await repo.find({
+          where: {
+            retiroCaja: { id: original.retiroCaja.id } as any,
+            tipoMovimiento: In([TipoMovimiento.INGRESO_RETIRO_CAJA, TipoMovimiento.INGRESO_CIERRE_CAJA]),
+          },
+          relations: ['cajaMayor', 'moneda', 'formaPago'],
+        });
+        const currentUserRet = getEffectiveUser(getCurrentUser);
+        for (const mov of movsRetiro) {
+          // Saltar los ya anulados (idempotencia)
+          const yaAnul = await repo.findOne({ where: { referenciaAnulacion: { id: mov.id } as any } });
+          if (yaAnul) continue;
+          const contra = queryRunner.manager.create(CajaMayorMovimiento, {
+            cajaMayor: mov.cajaMayor,
+            tipoMovimiento: TipoMovimiento.ANULACION,
+            moneda: mov.moneda,
+            formaPago: mov.formaPago,
+            monto: mov.monto,
+            fecha: new Date(),
+            observacion: `ANULACION RETIRO #${retiro.id}` + (motivo ? ` - ${motivo}` : ''),
+            referenciaAnulacion: mov,
+            retiroCaja: retiro,
+          });
+          if (currentUserRet) contra.responsable = currentUserRet;
+          await setEntityUserTracking(dataSource, contra, currentUserRet?.id, false);
+          await queryRunner.manager.save(CajaMayorMovimiento, contra);
+          // INGRESO_* → revertir restando (AJUSTE_NEGATIVO)
+          await actualizarSaldo(queryRunner, mov.cajaMayor.id, mov.moneda.id, mov.formaPago.id, Number(mov.monto), TipoMovimiento.AJUSTE_NEGATIVO);
+        }
+        // Dejar el retiro re-ingresable (nulear con `as any = null`, no undefined).
+        (retiro as any).cajaMayor = null;
+        (retiro as any).responsableIngreso = null;
+        (retiro as any).fechaIngreso = null;
+        retiro.estado = RetiroCajaEstado.FLOTANTE;
+        await setEntityUserTracking(dataSource, retiro, currentUserRet?.id, true);
+        await retiroRepo.save(retiro);
+
         await queryRunner.commitTransaction();
         return { success: true };
       }
@@ -955,6 +1197,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         if (!cb) throw new Error(`CuentaBancaria ${cuentaBancariaId} no encontrada`);
         cb.saldo = Number(cb.saldo) - monto;
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId,
+          tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+          monto,
+          observacion: `GASTO #${savedBanco.id}: ${gastoData.descripcion || ''}`,
+          responsable: getEffectiveUser(getCurrentUser),
+        });
 
         await queryRunner.commitTransaction();
         return savedBanco;
@@ -1029,6 +1278,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         if (!cb) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
         cb.saldo = Number(cb.saldo) - montoBanco;
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId: Number(cuentaBancariaId),
+          tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+          monto: montoBanco,
+          observacion: `GASTO #${savedGasto.id}`,
+          responsable: getEffectiveUser(getCurrentUser),
+        });
       }
 
       await queryRunner.commitTransaction();
@@ -1072,21 +1328,31 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
             const montoBanco = Number(gasto.montoCuentaBancaria) > 0 ? Number(gasto.montoCuentaBancaria) : Number(gasto.monto);
             cb.saldo = Number(cb.saldo) + montoBanco;
             await queryRunner.manager.save(CuentaBancaria, cb);
+            await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+              cuentaBancariaId: cb.id,
+              tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
+              monto: montoBanco,
+              observacion: `ANULACION GASTO #${gasto.id}` + (motivo ? ` - ${motivo}` : ''),
+              responsable: getEffectiveUser(getCurrentUser),
+            });
           }
         }
         await queryRunner.commitTransaction();
         return { success: true };
       }
 
-      // Buscar movimiento original del gasto
+      // Buscar TODOS los movimientos del gasto. Un gasto multi-detalle crea un
+      // EGRESO_GASTO por línea (moneda/forma de pago), así que hay que revertir
+      // todos (antes se usaba findOne y quedaba el saldo descuadrado). Mismo
+      // criterio que edit-gasto, que usa find().
       const movRepo = queryRunner.manager.getRepository(CajaMayorMovimiento);
-      const movOriginal = await movRepo.findOne({
+      const movimientos = await movRepo.find({
         where: { gasto: { id }, tipoMovimiento: TipoMovimiento.EGRESO_GASTO },
         relations: ['cajaMayor', 'moneda', 'formaPago'],
       });
 
-      if (movOriginal) {
-        // Crear contra-movimiento
+      for (const movOriginal of movimientos) {
+        // Crear contra-movimiento por cada egreso
         const contraMovimiento = queryRunner.manager.create(CajaMayorMovimiento, {
           cajaMayor: movOriginal.cajaMayor,
           tipoMovimiento: TipoMovimiento.ANULACION,
@@ -1162,6 +1428,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           const montoBancoOld = Number(gasto.montoCuentaBancaria) > 0 ? Number(gasto.montoCuentaBancaria) : Number(gasto.monto);
           cbOld.saldo = Number(cbOld.saldo) + montoBancoOld;
           await queryRunner.manager.save(CuentaBancaria, cbOld);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: gasto.cuentaBancariaId,
+            tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
+            monto: montoBancoOld,
+            observacion: `EDICION GASTO #${gasto.id} (REVERSO)`,
+            responsable: getEffectiveUser(getCurrentUser),
+          });
         }
       } else {
         const movsViejos = await movRepo.find({
@@ -1232,6 +1505,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         if (!cbNew) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
         cbNew.saldo = Number(cbNew.saldo) - montoBancoNew;
         await queryRunner.manager.save(CuentaBancaria, cbNew);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId: Number(cuentaBancariaId),
+          tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+          monto: montoBancoNew,
+          observacion: `EDICION GASTO #${gasto.id}`,
+          responsable: getEffectiveUser(getCurrentUser),
+        });
       }
 
       await queryRunner.commitTransaction();
@@ -1415,16 +1695,23 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       await setEntityUserTracking(dataSource, retiro, currentUser?.id, true);
       await queryRunner.manager.save(RetiroCaja, retiro);
 
+      // Tipo de movimiento según el origen del retiro: un retiro generado desde
+      // el cierre de una caja entra como INGRESO_CIERRE_CAJA (distinguible en
+      // reportes); un retiro manual entra como INGRESO_RETIRO_CAJA.
+      const esCierre = retiro.origen === RetiroCajaOrigen.CIERRE;
+      const tipoMov = esCierre ? TipoMovimiento.INGRESO_CIERRE_CAJA : TipoMovimiento.INGRESO_RETIRO_CAJA;
+      const etiqueta = esCierre ? `CIERRE CAJA #${retiroId}` : `RETIRO CAJA #${retiroId}`;
+
       // Crear movimiento por cada detalle
       for (const detalle of retiro.detalles) {
         const movimiento = queryRunner.manager.create(CajaMayorMovimiento, {
           cajaMayor: { id: cajaMayorId },
-          tipoMovimiento: TipoMovimiento.INGRESO_RETIRO_CAJA,
+          tipoMovimiento: tipoMov,
           moneda: detalle.moneda,
           formaPago: detalle.formaPago,
           monto: detalle.monto,
           fecha: new Date(),
-          observacion: `RETIRO CAJA #${retiroId}`,
+          observacion: etiqueta,
           retiroCaja: retiro,
         });
 
@@ -1434,7 +1721,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         await setEntityUserTracking(dataSource, movimiento, currentUser?.id, false);
         await queryRunner.manager.save(CajaMayorMovimiento, movimiento);
 
-        await actualizarSaldo(queryRunner, cajaMayorId, detalle.moneda.id, detalle.formaPago.id, Number(detalle.monto), TipoMovimiento.INGRESO_RETIRO_CAJA);
+        await actualizarSaldo(queryRunner, cajaMayorId, detalle.moneda.id, detalle.formaPago.id, Number(detalle.monto), tipoMov);
       }
 
       await queryRunner.commitTransaction();
@@ -1445,6 +1732,167 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       throw error;
     } finally {
       await queryRunner.release();
+    }
+  });
+
+  /**
+   * Genera (manual, desde el cierre) un RetiroCaja por el EFECTIVO contado en el
+   * cierre de una caja. Queda FLOTANTE (pendiente): el efectivo recién "se toca"
+   * cuando se ingresa a una caja mayor (genera INGRESO_CIERRE_CAJA). Idempotente:
+   * si ya existe un retiro para ese conteo de cierre, lo devuelve.
+   */
+  ipcMain.handle('generar-retiro-cierre-caja', async (_event: any, cajaId: number) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
+      const uid = getEffectiveUser(getCurrentUser)?.id;
+      const retiro = await generarRetiroDelCierre(dataSource, cajaId, uid);
+      if (!retiro) {
+        throw new Error('No se pudo generar el retiro: la caja no tiene conteo de cierre con efectivo, o falta la forma de pago de efectivo.');
+      }
+      return retiro;
+    } catch (error) {
+      console.error(`Error generando retiro de cierre para caja ${cajaId}:`, error);
+      throw error;
+    }
+  });
+
+  /**
+   * EGRESO DE CAJA INICIAL (Fase 2). Retira efectivo de la caja mayor para sembrar
+   * la apertura de una caja: se cuenta billete por billete (un Conteo tipo APERTURA),
+   * se genera un movimiento `EGRESO_CAJA_INICIAL` por moneda (efectivo) y se descuenta
+   * el saldo. El Conteo creado se reutiliza luego como conteo de apertura mediante
+   * `abrir-caja-desde-conteo`.
+   *
+   * data = { cajaMayorId, observacion?, detalles: [{ monedaBilleteId, cantidad }] }
+   */
+  ipcMain.handle('egreso-caja-inicial', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const cajaMayorId = data?.cajaMayorId;
+      if (!cajaMayorId) throw new Error('cajaMayorId requerido');
+      const detallesIn = (data?.detalles || []).filter((d: any) => Number(d.cantidad) > 0);
+      if (detallesIn.length === 0) throw new Error('Debe contar al menos un billete');
+
+      // Forma de pago de EFECTIVO (la que mueve caja; preferir la principal).
+      const formaEfectivo = await queryRunner.manager.findOne(FormasPago, {
+        where: { movimentaCaja: true, activo: true } as any,
+        order: { principal: 'DESC', orden: 'ASC' },
+      });
+      if (!formaEfectivo) throw new Error('No hay forma de pago de efectivo configurada (movimenta caja)');
+
+      const etiqueta = (data?.observacion || 'EGRESO DE CAJA INICIAL').toUpperCase();
+      const currentUser = getEffectiveUser(getCurrentUser);
+
+      // 1. Crear el conteo (tipo APERTURA: reutilizable como apertura de caja).
+      const conteo = queryRunner.manager.create(Conteo, {
+        activo: true,
+        tipo: 'APERTURA',
+        fecha: new Date(),
+        observaciones: etiqueta,
+      });
+      const savedConteo = await queryRunner.manager.save(Conteo, conteo);
+
+      // 2. Crear los detalles del conteo y acumular el efectivo por moneda.
+      const porMoneda = new Map<number, { moneda: any; monto: number }>();
+      for (const d of detallesIn) {
+        const billete = await queryRunner.manager.findOne(MonedaBillete, {
+          where: { id: d.monedaBilleteId },
+          relations: ['moneda'],
+        });
+        if (!billete || !billete.moneda) continue;
+        const cantidad = Number(d.cantidad);
+        const detalle = queryRunner.manager.create(ConteoDetalle, {
+          conteo: { id: savedConteo.id },
+          monedaBillete: { id: billete.id },
+          cantidad,
+          activo: true,
+        });
+        await queryRunner.manager.save(ConteoDetalle, detalle);
+        const sub = Number(billete.valor) * cantidad;
+        const cur = porMoneda.get(billete.moneda.id) || { moneda: billete.moneda, monto: 0 };
+        cur.monto += sub;
+        porMoneda.set(billete.moneda.id, cur);
+      }
+
+      const monedasConMonto = [...porMoneda.values()].filter((x) => x.monto > 0);
+      if (monedasConMonto.length === 0) throw new Error('El conteo no tiene efectivo');
+
+      // 3. Un movimiento EGRESO_CAJA_INICIAL por moneda (efectivo), vinculado al conteo.
+      for (const x of monedasConMonto) {
+        const mov = queryRunner.manager.create(CajaMayorMovimiento, {
+          cajaMayor: { id: cajaMayorId },
+          tipoMovimiento: TipoMovimiento.EGRESO_CAJA_INICIAL,
+          moneda: { id: x.moneda.id },
+          formaPago: { id: formaEfectivo.id },
+          monto: x.monto,
+          fecha: new Date(),
+          observacion: etiqueta,
+          conteo: { id: savedConteo.id },
+        });
+        if (currentUser) mov.responsable = currentUser;
+        await setEntityUserTracking(dataSource, mov, currentUser?.id, false);
+        await queryRunner.manager.save(CajaMayorMovimiento, mov);
+
+        await actualizarSaldo(
+          queryRunner, cajaMayorId, x.moneda.id, formaEfectivo.id,
+          Number(x.monto), TipoMovimiento.EGRESO_CAJA_INICIAL,
+        );
+      }
+
+      await queryRunner.commitTransaction();
+      return { success: true, conteoId: savedConteo.id };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error creando egreso de caja inicial:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  /**
+   * Abre una caja reutilizando un Conteo ya existente (el generado por un
+   * `EGRESO_CAJA_INICIAL`) como su conteo de apertura. Valida que el conteo no haya
+   * sido usado ya para abrir otra caja y que el dispositivo no tenga una caja abierta.
+   */
+  ipcMain.handle('abrir-caja-desde-conteo', async (_event: any, conteoId: number, dispositivoId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+    try {
+      if (!conteoId) throw new Error('conteoId requerido');
+      if (!dispositivoId) throw new Error('Debe seleccionar un dispositivo');
+
+      const conteoRepo = dataSource.getRepository(Conteo);
+      const conteo = await conteoRepo.findOne({ where: { id: conteoId } });
+      if (!conteo) throw new Error(`Conteo ${conteoId} no encontrado`);
+
+      const cajaRepo = dataSource.getRepository(Caja);
+      // El conteo no debe estar ya usado como apertura de otra caja.
+      const yaUsado = await cajaRepo.findOne({ where: { conteoApertura: { id: conteoId } } as any });
+      if (yaUsado) throw new Error(`Este conteo ya fue usado para abrir la caja #${yaUsado.id}`);
+
+      // El dispositivo no debe tener una caja abierta.
+      const abierta = await cajaRepo.findOne({
+        where: { dispositivo: { id: dispositivoId }, estado: CajaEstado.ABIERTO } as any,
+      });
+      if (abierta) throw new Error('El dispositivo ya tiene una caja abierta');
+
+      const currentUser = getEffectiveUser(getCurrentUser);
+      const caja = cajaRepo.create({
+        dispositivo: { id: dispositivoId } as any,
+        estado: CajaEstado.ABIERTO,
+        fechaApertura: new Date(),
+        conteoApertura: { id: conteoId } as any,
+        activo: true,
+      });
+      await setEntityUserTracking(dataSource, caja, currentUser?.id, false);
+      const saved = await cajaRepo.save(caja);
+      return Array.isArray(saved) ? saved[0] : saved;
+    } catch (error) {
+      console.error(`Error abriendo caja desde conteo ${conteoId}:`, error);
+      throw error;
     }
   });
 
@@ -1620,6 +2068,14 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         if (!cb) throw new Error(`CuentaBancaria ${cuentaBancariaId} no encontrada`);
         cb.saldo = Number(cb.saldo) + monto;
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId,
+          tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
+          monto,
+          observacion: `ENTRADA VARIA #${saved.id}: ${data.descripcion || ''}`,
+          numeroComprobante: data.numeroComprobante,
+          responsable: getEffectiveUser(getCurrentUser),
+        });
       }
 
       await queryRunner.commitTransaction();
@@ -1691,6 +2147,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         if (cb) {
           cb.saldo = Number(cb.saldo) - Number(entrada.monto);
           await queryRunner.manager.save(CuentaBancaria, cb);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: entrada.cuentaBancaria.id,
+            tipo: MovimientoBancarioTipo.AJUSTE_NEGATIVO,
+            monto: Number(entrada.monto),
+            observacion: `ANULACION ENTRADA VARIA #${id}` + (motivo ? ` - ${motivo}` : ''),
+            responsable: getEffectiveUser(getCurrentUser),
+          });
         }
       }
 
@@ -1931,6 +2394,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           if (!cb) throw new Error(`Cuenta bancaria destino ${data.cuentaBancariaDestinoId} no encontrada`);
           cb.saldo = Number(cb.saldo) + Number(data.montoDestino);
           await queryRunner.manager.save(CuentaBancaria, cb);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: data.cuentaBancariaDestinoId,
+            tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
+            monto: Number(data.montoDestino),
+            observacion: `DEPOSITO BANCARIO OP.FIN #${opId}`,
+            responsable: getEffectiveUser(getCurrentUser),
+          });
           break;
         }
 
@@ -1941,6 +2411,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           if (!cb) throw new Error(`Cuenta bancaria origen ${data.cuentaBancariaOrigenId} no encontrada`);
           cb.saldo = Number(cb.saldo) - Number(data.montoOrigen);
           await queryRunner.manager.save(CuentaBancaria, cb);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: data.cuentaBancariaOrigenId,
+            tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+            monto: Number(data.montoOrigen),
+            observacion: `RETIRO BANCARIO OP.FIN #${opId}`,
+            responsable: getEffectiveUser(getCurrentUser),
+          });
 
           const movIn = queryRunner.manager.create(CajaMayorMovimiento, {
             cajaMayor: { id: cmId },
@@ -1991,12 +2468,55 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           await actualizarSaldo(queryRunner, data.cajaMayorDestinoId, data.monedaDestinoId, data.formaPagoDestinoId, Number(data.montoDestino), TipoMovimiento.TRANSFERENCIA_ENTRADA);
           break;
         }
+
+        case TipoOperacionFinanciera.TRANSFERENCIA_BANCARIA: {
+          // Transferencia interna banco → banco. NO toca la caja mayor: solo mueve
+          // saldo entre dos cuentas bancarias. Puede ser entre monedas distintas
+          // (montoDestino ya viene convertido por cotización desde la UI).
+          if (!data.cuentaBancariaOrigenId || !data.cuentaBancariaDestinoId) {
+            throw new Error('Transferencia bancaria requiere cuenta de origen y destino');
+          }
+          if (Number(data.cuentaBancariaOrigenId) === Number(data.cuentaBancariaDestinoId)) {
+            throw new Error('La cuenta de origen y destino no pueden ser la misma');
+          }
+          const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
+          const cbOrigen = await cbRepo.findOne({ where: { id: data.cuentaBancariaOrigenId } });
+          if (!cbOrigen) throw new Error(`Cuenta bancaria origen ${data.cuentaBancariaOrigenId} no encontrada`);
+          const cbDestino = await cbRepo.findOne({ where: { id: data.cuentaBancariaDestinoId } });
+          if (!cbDestino) throw new Error(`Cuenta bancaria destino ${data.cuentaBancariaDestinoId} no encontrada`);
+
+          // Débito en origen
+          cbOrigen.saldo = Number(cbOrigen.saldo) - Number(data.montoOrigen);
+          await queryRunner.manager.save(CuentaBancaria, cbOrigen);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: data.cuentaBancariaOrigenId,
+            tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+            monto: Number(data.montoOrigen),
+            observacion: `TRANSFERENCIA BANCARIA → ${cbDestino.nombre} OP.FIN #${opId}`,
+            responsable: getEffectiveUser(getCurrentUser),
+          });
+
+          // Crédito en destino
+          cbDestino.saldo = Number(cbDestino.saldo) + Number(data.montoDestino);
+          await queryRunner.manager.save(CuentaBancaria, cbDestino);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: data.cuentaBancariaDestinoId,
+            tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
+            monto: Number(data.montoDestino),
+            observacion: `TRANSFERENCIA BANCARIA ← ${cbOrigen.nombre} OP.FIN #${opId}`,
+            responsable: getEffectiveUser(getCurrentUser),
+          });
+          break;
+        }
       }
 
-      // Diferencia opcional → AJUSTE_POSITIVO/NEGATIVO en moneda destino
-      if (data.diferencia && Number(data.diferencia) !== 0 && data.diferenciaDestinoTipo && data.diferenciaDestinoTipo !== DiferenciaDestinoTipo.IGNORAR) {
+      // Diferencia opcional → AJUSTE_POSITIVO/NEGATIVO en moneda destino.
+      // Solo aplica a operaciones con caja mayor; una transferencia banco→banco
+      // no tiene caja donde imputar la diferencia, así que se omite.
+      const cajaMayorDiferenciaId = data.cajaMayorDestinoId || data.cajaMayorOrigenId;
+      if (cajaMayorDiferenciaId && data.diferencia && Number(data.diferencia) !== 0 && data.diferenciaDestinoTipo && data.diferenciaDestinoTipo !== DiferenciaDestinoTipo.IGNORAR) {
         const diferencia = Number(data.diferencia);
-        const cmId = data.cajaMayorDestinoId || data.cajaMayorOrigenId;
+        const cmId = cajaMayorDiferenciaId;
         const monId = data.monedaDestinoId || data.monedaOrigenId;
         const fpId = data.formaPagoDestinoId || data.formaPagoOrigenId;
         const tipoMov = diferencia > 0 ? TipoMovimiento.AJUSTE_POSITIVO : TipoMovimiento.AJUSTE_NEGATIVO;
@@ -2073,12 +2593,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       _event: any,
       cajaMayorId: number,
       data: {
-        formaPagoIds: number[];
+        formaPagoIds?: number[];
         cuentaBancariaIds: number[];
         mostrarCuentasPorPagar?: boolean;
         mostrarCuentasPorCobrar?: boolean;
       }
     ) => {
+      await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
       const queryRunner = dataSource.createQueryRunner();
       await queryRunner.connect();
       await queryRunner.startTransaction();
@@ -2101,11 +2622,19 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           await setEntityUserTracking(dataSource, config, getCurrentUser()?.id, true);
         }
 
-        const fpIds = Array.isArray(data?.formaPagoIds) ? data.formaPagoIds : [];
+        // formaPagoIds es opcional: el diálogo ya no muestra la sección de formas
+        // de pago (en caja mayor solo hay EFECTIVO). Si NO viene, se preservan las
+        // FPs ya cargadas (no vaciar la M:M). Si viene, se reemplaza.
+        if (data?.formaPagoIds !== undefined) {
+          const fpIds = Array.isArray(data.formaPagoIds) ? data.formaPagoIds : [];
+          config.formasPagoVisibles = fpIds.map((id) => ({ id })) as any;
+        }
+        // cuentaBancariaIds llega EN EL ORDEN elegido por drag & drop. La M:M
+        // define visibilidad (sin orden confiable); la columna `cuentasBancariasOrden`
+        // preserva el orden para el sidebar.
         const cbIds = Array.isArray(data?.cuentaBancariaIds) ? data.cuentaBancariaIds : [];
-
-        config.formasPagoVisibles = fpIds.map((id) => ({ id })) as any;
         config.cuentasBancariasVisibles = cbIds.map((id) => ({ id })) as any;
+        config.cuentasBancariasOrden = JSON.stringify(cbIds);
         config.mostrarCuentasPorPagar = data?.mostrarCuentasPorPagar === true;
         config.mostrarCuentasPorCobrar = data?.mostrarCuentasPorCobrar === true;
 

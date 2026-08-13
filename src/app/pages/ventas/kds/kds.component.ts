@@ -25,6 +25,11 @@ interface KdsRow {
   mesaNumero?: number;
   comandaCodigo?: string;
   comandaNumero?: number;
+  // Personalizaciones por ítem (mismo detalle que el ticket de cocina).
+  removidos?: string[];
+  cambios?: string[];
+  adicionales?: string[];
+  observacionesItem?: string[];
 }
 
 interface KdsItem {
@@ -35,6 +40,11 @@ interface KdsItem {
   ensamblado?: string;
   estado: string;
   sectorNombre?: string;
+  // Personalizaciones a mostrar en la card.
+  removidos: string[];
+  cambios: string[];
+  adicionales: string[];
+  observacionesItem: string[];
 }
 
 interface KdsTicket {
@@ -86,6 +96,13 @@ export class KdsComponent implements OnInit, OnDestroy {
   conectado = false;
   numpadBuffer = '';
 
+  // Modo TV: escala grande + márgenes seguros (anti-overscan) para leer de lejos.
+  // Persistido en localStorage. Fullscreen aparte (requiere gesto del usuario).
+  tvMode = false;
+  isFullscreen = false;
+  private readonly LS_TV = 'kds.tvMode';
+  private readonly onFsChange = (): void => { this.isFullscreen = !!document.fullscreenElement; };
+
   // Umbrales de semáforo (minutos). Fase 2 los hará configurables por pantalla.
   umbralAmarillo = 5;
   umbralRojo = 10;
@@ -112,6 +129,11 @@ export class KdsComponent implements OnInit, OnDestroy {
   ) {}
 
   async ngOnInit(): Promise<void> {
+    // Modo TV persistido + listener de fullscreen.
+    try { this.tvMode = localStorage.getItem(this.LS_TV) === '1'; } catch { /* no-op */ }
+    this.isFullscreen = !!document.fullscreenElement;
+    document.addEventListener('fullscreenchange', this.onFsChange);
+
     // Modo web: leer token/server de la query o localStorage
     if (this.esWeb) {
       const params = new URLSearchParams(window.location.search);
@@ -124,8 +146,8 @@ export class KdsComponent implements OnInit, OnDestroy {
     // 1. Sectores activos + selección persistida
     try {
       const secs: any[] = this.esWeb
-        ? ((await this.invokeData('getSectoresActivos')) || [])
-        : ((await firstValueFrom(this.repo.getSectoresActivos())) || []);
+        ? ((await this.invokeData('getSectoresActivos', 'IMPRESION')) || [])
+        : ((await firstValueFrom(this.repo.getSectoresActivos('IMPRESION'))) || []);
       this.sectores = secs || [];
     } catch { this.sectores = []; }
     // Pantallas configuradas (Fase 2). Si hay una elegida, aplica sus sectores.
@@ -160,6 +182,24 @@ export class KdsComponent implements OnInit, OnDestroy {
     if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.tickTimer) clearInterval(this.tickTimer);
     if (this.reloadDebounce) clearTimeout(this.reloadDebounce);
+    document.removeEventListener('fullscreenchange', this.onFsChange);
+  }
+
+  /** Modo TV: escala grande + márgenes seguros para la pantalla de cocina. */
+  toggleTvMode(): void {
+    this.tvMode = !this.tvMode;
+    try { localStorage.setItem(this.LS_TV, this.tvMode ? '1' : '0'); } catch { /* no-op */ }
+  }
+
+  /** Pantalla completa (oculta la barra del navegador en la TV). */
+  toggleFullscreen(): void {
+    try {
+      if (!document.fullscreenElement) {
+        void document.documentElement.requestFullscreen?.();
+      } else {
+        void document.exitFullscreen?.();
+      }
+    } catch { /* no soportado */ }
   }
 
   /** Conecta el canal de tiempo real según el transporte disponible. */
@@ -170,16 +210,41 @@ export class KdsComponent implements OnInit, OnDestroy {
       this.conectado = true;
       return;
     }
-    // Web: SSE
+    void this.conectarSse();
+  }
+
+  /**
+   * Abre el stream con un token EFÍMERO pedido por RPC. Antes se mandaba el JWT
+   * de sesión por query, lo que lo dejaba en logs de acceso, historial y
+   * proxies; y como la PWA no tenía ese token a mano, ahí ni siquiera había
+   * SSE. Con el token de stream (60s, un solo uso, alcance acotado) funcionan
+   * los dos: navegador puro y PWA.
+   */
+  private async conectarSse(): Promise<void> {
     try {
+      const t = await this.invokeData('stream-token', 'kds');
+      const token = t?.token;
+      if (!token) {
+        this.conectado = false;
+        return;
+      }
+      const base = this.webBase || '';
       const secs = this.selectedSectorIds.join(',');
-      const url = `${this.webBase}/api/kds/stream?token=${encodeURIComponent(this.webToken)}&sectores=${secs}`;
+      const url = `${base}/api/kds/stream?token=${encodeURIComponent(token)}&sectores=${secs}`;
       this.eventSource = new EventSource(url);
       this.eventSource.onmessage = () => this.scheduleReload();
       this.eventSource.onopen = () => { this.conectado = true; };
-      this.eventSource.onerror = () => { this.conectado = false; };
+      this.eventSource.onerror = () => {
+        // El token ya se consumió: reconectar exige pedir uno nuevo, así que se
+        // cierra y se reintenta con backoff. El poll de respaldo cubre el hueco.
+        this.conectado = false;
+        this.eventSource?.close();
+        this.eventSource = undefined;
+        setTimeout(() => void this.conectarSse(), 15000);
+      };
     } catch (e) {
       console.warn('[KDS] SSE no disponible:', e);
+      this.conectado = false;
     }
   }
 
@@ -202,7 +267,10 @@ export class KdsComponent implements OnInit, OnDestroy {
       body: JSON.stringify({ method, params }),
     });
     if (!res.ok) throw new Error(`RPC ${method} → ${res.status}`);
-    return await res.json();
+    // El router RPC responde `{ result: <valor> }`; hay que desenvolverlo (el
+    // path Electron/callIpc ya devuelve el valor directo).
+    const data = await res.json();
+    return data && Object.prototype.hasOwnProperty.call(data, 'result') ? data.result : data;
   }
 
   setData(_d: any): void { /* hook tab/standalone */ }
@@ -294,6 +362,10 @@ export class KdsComponent implements OnInit, OnDestroy {
         ensamblado: r.ensambladoDescripcion || undefined,
         estado: r.estado,
         sectorNombre: r.sectorNombre,
+        removidos: r.removidos || [],
+        cambios: r.cambios || [],
+        adicionales: r.adicionales || [],
+        observacionesItem: r.observacionesItem || [],
       }));
       const todoListo = items.every(i => i.estado === 'LISTO');
       return {

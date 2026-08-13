@@ -22,13 +22,14 @@ import { PdvConfigDialogComponent } from 'src/app/shared/components/pdv-config-d
 import { PdvMesaDialogComponent } from 'src/app/shared/components/pdv-mesa-dialog/pdv-mesa-dialog.component';
 import { ComandaAbmDialogComponent } from 'src/app/shared/components/comanda-abm-dialog/comanda-abm-dialog.component';
 import { AtajoConfigDialogComponent } from 'src/app/shared/components/atajo-config-dialog/atajo-config-dialog.component';
-import { CajaMayorDashboardComponent } from '../../financiero/caja-mayor/dashboard/caja-mayor-dashboard.component';
+import { FinancieroDashboardComponent } from '../../financiero/dashboard/financiero-dashboard.component';
 import { DashStatChipComponent } from 'src/app/shared/components/dashboard/stat-chip/dash-stat-chip.component';
 import { DashQuickActionComponent } from 'src/app/shared/components/dashboard/quick-action/dash-quick-action.component';
 import { DashRankingListComponent, DashRankingItem } from 'src/app/shared/components/dashboard/ranking-list/dash-ranking-list.component';
 import { DashSectionHeaderComponent } from 'src/app/shared/components/dashboard/section-header/dash-section-header.component';
 import { DashChartCardComponent } from 'src/app/shared/components/dashboard/chart-card/dash-chart-card.component';
 import { getDashboardChartOptions, DASHBOARD_CHART_COLORS, buildLineDataset } from 'src/app/shared/utils/dashboard-chart-theme';
+import { VentasDesgloseDialogComponent } from 'src/app/shared/components/ventas-desglose-dialog/ventas-desglose-dialog.component';
 
 interface CajaAbierta {
   id: number;
@@ -86,7 +87,7 @@ export class VentasDashboardComponent implements OnInit {
     { title: 'Accesos Rapidos', icon: 'touch_app', action: 'atajo-config', color: '#ff9800' },
     { title: 'Precios Delivery', icon: 'local_shipping', action: 'precios-delivery', color: '#e91e63' },
     { title: 'Listado Ventas', icon: 'list_alt', action: 'ventas-list', color: '#2196f3' },
-    { title: 'Caja Mayor', icon: 'account_balance', action: 'caja-mayor', color: '#1b5e20' },
+    { title: 'Financiero', icon: 'account_balance', action: 'financiero', color: '#1b5e20' },
   ];
 
   // --- KPIs ---
@@ -99,6 +100,13 @@ export class VentasDashboardComponent implements OnInit {
 
   cajasAbiertas: CajaAbierta[] = [];
   topProductos: DashRankingItem[] = [];
+  // Desglose del total de ventas de hoy (por moneda y forma de pago, en Gs).
+  desgloseVentasHoy: any = null;
+  // true → el total corresponde a las cajas abiertas (no al día calendario);
+  // define los labels de las cards y el título del desglose.
+  totalBasadoEnCajas = false;
+  labelVentas = 'Ventas hoy';
+  labelTotal = 'Total hoy';
 
   // --- Rango ---
   rangosChips: RangoChip[] = [
@@ -111,7 +119,23 @@ export class VentasDashboardComponent implements OnInit {
 
   // --- Chart ---
   chartData: ChartData<'line'> = { labels: [], datasets: [] };
-  chartOptions: ChartConfiguration<'line'>['options'] = getDashboardChartOptions('line');
+  // Eje secundario `y1` (derecha) para la serie "Cantidad": comparte el chart con
+  // "Ventas (Gs)" (millones) pero en su propia escala, si no queda aplastada en 0.
+  chartOptions: ChartConfiguration<'line'>['options'] = (() => {
+    const opts: any = getDashboardChartOptions('line');
+    opts.scales = opts.scales || {};
+    opts.scales.y1 = {
+      position: 'right',
+      beginAtZero: true,
+      grid: { drawOnChartArea: false },
+      ticks: {
+        precision: 0,
+        color: (opts.scales.y?.ticks?.color) || undefined,
+        font: { size: 11 },
+      },
+    };
+    return opts;
+  })();
 
   constructor(
     private repository: RepositoryService,
@@ -132,6 +156,10 @@ export class VentasDashboardComponent implements OnInit {
       if (kpis) {
         this.ventasHoy = kpis.ventasHoy || 0;
         this.totalHoyPYG = kpis.totalHoyPYG || 0;
+        this.desgloseVentasHoy = kpis.desgloseVentasHoy || null;
+        this.totalBasadoEnCajas = !!kpis.totalBasadoEnCajas;
+        this.labelVentas = this.totalBasadoEnCajas ? 'Ventas en caja' : 'Ventas hoy';
+        this.labelTotal = this.totalBasadoEnCajas ? 'Total en caja' : 'Total hoy';
         this.ticketPromedio = kpis.ticketPromedio || 0;
         this.mesasOcupadas = kpis.mesasOcupadas || 0;
         this.mesasTotal = kpis.mesasTotal || 0;
@@ -148,8 +176,8 @@ export class VentasDashboardComponent implements OnInit {
         this.chartData = {
           labels: periodo.labels || [],
           datasets: [
-            buildLineDataset('Ventas (Gs)', periodo.ventas || [], DASHBOARD_CHART_COLORS.primary, DASHBOARD_CHART_COLORS.primarySoft, true),
-            buildLineDataset('Cantidad', periodo.cantidades || [], DASHBOARD_CHART_COLORS.cyan, DASHBOARD_CHART_COLORS.cyanSoft, false),
+            buildLineDataset('Ventas (Gs)', periodo.ventas || [], DASHBOARD_CHART_COLORS.primary, DASHBOARD_CHART_COLORS.primarySoft, true, 'y'),
+            buildLineDataset('Cantidad', periodo.cantidades || [], DASHBOARD_CHART_COLORS.cyan, DASHBOARD_CHART_COLORS.cyanSoft, false, 'y1'),
           ],
         };
       }
@@ -169,6 +197,21 @@ export class VentasDashboardComponent implements OnInit {
 
   formatPYG(v: number): string {
     return (v || 0).toLocaleString('es-PY', { maximumFractionDigits: 0 });
+  }
+
+  /** Abre el desglose del total de ventas por moneda y forma de pago (en Gs). */
+  abrirDesgloseVentas(): void {
+    if (!this.desgloseVentasHoy) return;
+    this.dialog.open(VentasDesgloseDialogComponent, {
+      width: '600px',
+      maxWidth: '95vw',
+      data: {
+        titulo: this.totalBasadoEnCajas ? 'Total de ventas en caja' : 'Total de ventas de hoy',
+        totalGs: this.desgloseVentasHoy.totalGs || 0,
+        porMoneda: this.desgloseVentasHoy.porMoneda || [],
+        porFormaPago: this.desgloseVentasHoy.porFormaPago || [],
+      },
+    });
   }
 
   navigateTo(action: string): void {
@@ -197,8 +240,8 @@ export class VentasDashboardComponent implements OnInit {
       case 'ventas-list':
         this.tabsService.openTab('Historial de Ventas', ListVentasComponent);
         break;
-      case 'caja-mayor':
-        this.tabsService.openTab('Caja Mayor', CajaMayorDashboardComponent);
+      case 'financiero':
+        this.tabsService.openTab('Financiero Dashboard', FinancieroDashboardComponent, { source: 'navigation' }, 'financiero-dashboard-tab', true);
         break;
     }
   }

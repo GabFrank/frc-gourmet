@@ -1,0 +1,36 @@
+<div class="mesas-qr-page">
+  <div class="toolbar no-print">
+    <mat-form-field appearance="outline" class="url-field">
+      <mat-label>URL pública de la tienda</mat-label>
+      <input matInput [(ngModel)]="baseUrl" placeholder="https://app.frc-gourmet.com" />
+    </mat-form-field>
+    <button mat-stroked-button color="primary" (click)="cargar()" [disabled]="cargando">
+      <mat-icon>refresh</mat-icon>
+      Generar / Actualizar
+    </button>
+    <button mat-flat-button color="primary" (click)="imprimir()" [disabled]="cargando || mesas.length === 0">
+      <mat-icon>print</mat-icon>
+      Imprimir láminas
+    </button>
+  </div>
+
+  <p class="hint no-print">
+    Cada QR apunta a la tienda con el token de la mesa. Verificá que la URL pública sea la correcta antes de imprimir.
+  </p>
+
+  <p class="hint warn no-print" *ngIf="faltaUrlPublica">
+    ⚠️ La URL pública debe empezar con <strong>http://</strong> o <strong>https://</strong> (ej. https://app.frc-gourmet.com). Sin una URL absoluta el QR no se puede escanear.
+  </p>
+
+  <div class="grid" *ngIf="mesas.length > 0; else vacio">
+    <div class="lamina" *ngFor="let m of mesas">
+      <div class="titulo">Mesa {{ m.numero }}</div>
+      <img class="qr" [src]="m.qr" alt="QR mesa {{ m.numero }}" />
+      <div class="instruccion">Escaneá para ver el menú y pedir</div>
+    </div>
+  </div>
+
+  <ng-template #vacio>
+    <p class="no-print" *ngIf="!cargando">No hay mesas activas para generar QR.</p>
+  </ng-template>
+</div>

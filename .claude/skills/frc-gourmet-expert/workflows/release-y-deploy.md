@@ -24,7 +24,7 @@ Se dispara en **push** a `master`, `release/beta`, `develop`. Dos jobs:
 - Crea tag `vX.Y.Z` + GitHub Release (vacío al principio).
 - Output: `new_release_version`, `new_release_git_tag`, `new_release_channel`, `new_release_published`.
 
-Config en raíz del repo: `.releaserc` (JSON). Branches y reglas de release ahí.
+Config en raíz del repo: `.releaserc.json`. Branches y reglas de release ahí.
 
 #### Job 2 — `build` (matrix)
 - Solo si `new_release_published == 'true'`.
@@ -35,10 +35,10 @@ Config en raíz del repo: `.releaserc` (JSON). Branches y reglas de release ahí
   - **⚠️ `--omit=optional`** es para evitar compilar `canvas` (transitivo de `pdfjs-dist`) — falla porque no hay headers nativos en el runner. La app usa `@napi-rs/canvas` (prebuilt) que monkey-patchea CanvasFactory.
   - Esto históricamente excluía `pg` cuando estaba en `optionalDependencies` → bug "postgres package has not been found". Fix: `pg` debe estar en `dependencies` (PR #24, v1.1.1).
 - `npm run build:prod` (Angular + Electron TS).
-- `npx electron-builder --publish always` → empaqueta:
-  - **Windows:** NSIS installer `.exe` (`x64`, nombre `FRC-Gourmet-Setup-X.Y.Z.exe`)
-  - **Linux:** AppImage `.AppImage` (`x64`)
-  - **macOS:** no se buildea (target removido — ver branch `feat/drop-mac-target`)
+- `npx electron-builder --publish always` → empaqueta (config en `package.json:build`, no hay `electron-builder.json` separado):
+  - **Windows:** NSIS installer `.exe` (`x64`, `artifactName: FRC-Gourmet-Setup-${version}.${ext}` → `FRC-Gourmet-Setup-X.Y.Z.exe`)
+  - **Linux:** AppImage (`x64`, `artifactName: FRC-Gourmet-${version}-${arch}.${ext}` → `FRC-Gourmet-X.Y.Z-x64.AppImage`)
+  - **macOS:** no se buildea (`package.json:build` solo tiene targets `win` + `linux`)
 - Sube los artifacts + manifests (`latest.yml`, `alpha.yml`, `beta.yml`) al GitHub Release.
 
 ### Firma de código (SignPath, opcional)
@@ -77,7 +77,17 @@ Tanto `develop` como `master` tienen branch protection con required status check
   - `beta` → `beta.yml`
   - `alpha` → `alpha.yml`
 - `autoDownload: true`, `autoInstallOnAppQuit: true`.
-- Cuando termina la descarga: dialog "Cerrar y actualizar" / "Más tarde" → `quitAndInstall()`.
+- Cuando termina la descarga: dialog "Cerrar y actualizar" / "Más tarde" → `quitAndInstall(false, true)`.
+
+### Instalador one-click (Windows)
+
+`package.json:nsis.oneClick = true` (antes era `false`, un instalador *assisted* con wizard completo Next → dir → Install → Finish en **cada** update). Ahora:
+
+- **Update = un solo click.** El usuario toca "Cerrar y actualizar" en el dialog; la app se cierra y el instalador one-click corre **solo con barra de progreso** (sin wizard, sin pantallas) y **relanza la app** automáticamente (`runAfterFinish: true` + `quitAndInstall(false, true)`).
+- **Sin UAC / sin elevación.** `perMachine: false` → instala per-user en `$LOCALAPPDATA\Programs\FRC Gourmet`. No pide permisos de admin.
+- **Primera instalación también es one-click:** el `.exe` instala directo a la ruta default (no hay pantalla para elegir carpeta).
+- **Trade-off:** se quitó `allowToChangeInstallationDirectory` (es **incompatible** con `oneClick: true` — electron-builder lo rechaza). El usuario ya no puede elegir carpeta de instalación; para un deploy interno en LAN es el comportamiento deseado. Si algún día se necesita elegir carpeta, hay que volver a `oneClick: false`.
+- El `build/installer.nsh` (`preInit` fija `InstallLocation` en el registro) sigue siendo compatible con one-click.
 - Eventos emitidos por IPC a `auto-update:status` (renderer puede mostrar progress).
 - Handlers IPC: `auto-update:get-config`, `auto-update:set-channel`, `auto-update:check-now`, `auto-update:install-now`.
 

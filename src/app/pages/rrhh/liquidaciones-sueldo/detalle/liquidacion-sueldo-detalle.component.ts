@@ -11,9 +11,11 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
+import { DocumentoService } from 'src/app/services/documento.service';
 import { AgregarItemDialogComponent } from '../agregar-item-dialog/agregar-item-dialog.component';
 import { PagarLiquidacionDialogComponent } from '../pagar-dialog/pagar-liquidacion-dialog.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-liquidacion-sueldo-detalle',
@@ -29,6 +31,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
     MatChipsModule,
     MatDialogModule,
     MatSnackBarModule,
+    HasPermissionDirective,
   ],
   template: `
     <div class="page" *ngIf="!loading; else loadingTpl">
@@ -56,9 +59,11 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
               </p>
             </div>
             <div class="header-actions">
-              <button mat-stroked-button color="primary" (click)="regenerar()" *ngIf="puedeEditar()">
-                <mat-icon>refresh</mat-icon> Regenerar
-              </button>
+              <ng-container *appHasPermission="'RRHH_LIQUIDACION_GENERAR'">
+                <button mat-stroked-button color="primary" (click)="regenerar()" *ngIf="puedeEditar()">
+                  <mat-icon>refresh</mat-icon> Regenerar
+                </button>
+              </ng-container>
               <button mat-stroked-button color="primary" (click)="agregarItem()" *ngIf="puedeEditar()">
                 <mat-icon>add</mat-icon> Item manual
               </button>
@@ -66,17 +71,21 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
                 <mat-icon>more_vert</mat-icon> Acciones
               </button>
               <mat-menu #menu="matMenu">
-                <button mat-menu-item (click)="aprobar()" [disabled]="liquidacion.estado !== 'BORRADOR'">
+                <button *appHasPermission="'RRHH_LIQUIDACION_APROBAR'" mat-menu-item (click)="aprobar()" [disabled]="liquidacion.estado !== 'BORRADOR'">
                   <mat-icon>check_circle</mat-icon> Aprobar
                 </button>
                 <button mat-menu-item (click)="volverBorrador()" [disabled]="liquidacion.estado !== 'APROBADA'">
                   <mat-icon>undo</mat-icon> Volver a BORRADOR
                 </button>
-                <button mat-menu-item (click)="pagar()" [disabled]="liquidacion.estado !== 'APROBADA'">
+                <button *appHasPermission="'RRHH_LIQUIDACION_PAGAR'" mat-menu-item (click)="pagar()" [disabled]="liquidacion.estado !== 'APROBADA'">
                   <mat-icon>payments</mat-icon> Pagar
                 </button>
-                <button mat-menu-item (click)="anular()" [disabled]="liquidacion.estado === 'ANULADA'">
+                <button *appHasPermission="'RRHH_LIQUIDACION_ANULAR'" mat-menu-item (click)="anular()" [disabled]="liquidacion.estado === 'ANULADA'">
                   <mat-icon>cancel</mat-icon> Anular
+                </button>
+                <button mat-menu-item (click)="imprimirRecibo()"
+                  [disabled]="imprimiendo || (liquidacion.estado !== 'APROBADA' && liquidacion.estado !== 'PAGADA')">
+                  <mat-icon>print</mat-icon> Imprimir recibo
                 </button>
               </mat-menu>
             </div>
@@ -118,9 +127,11 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
             <ng-container matColumnDef="actions">
               <th mat-header-cell *matHeaderCellDef class="acc-col"></th>
               <td mat-cell *matCellDef="let i">
-                <button mat-icon-button (click)="eliminarItem(i)" *ngIf="puedeEditar() && i.manual" matTooltip="Eliminar item manual">
-                  <mat-icon>delete</mat-icon>
-                </button>
+                <ng-container *appHasPermission="'RRHH_LIQUIDACION_GENERAR'">
+                  <button mat-icon-button (click)="eliminarItem(i)" *ngIf="puedeEditar() && i.manual" matTooltip="Eliminar item manual">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </ng-container>
               </td>
             </ng-container>
             <tr mat-header-row *matHeaderRowDef="cols"></tr>
@@ -170,8 +181,11 @@ export class LiquidacionSueldoDetalleComponent implements OnInit {
   loading = false;
   cols = ['tipo', 'concepto', 'descripcion', 'monto', 'actions'];
 
+  imprimiendo = false;
+
   constructor(
     private repositoryService: RepositoryService,
+    private documentoService: DocumentoService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
   ) {}
@@ -287,6 +301,20 @@ export class LiquidacionSueldoDetalleComponent implements OnInit {
       data: { liquidacion: this.liquidacion },
     });
     ref.afterClosed().subscribe((res) => { if (res?.saved) this.load(); });
+  }
+
+  async imprimirRecibo(): Promise<void> {
+    if (!this.liquidacionId || this.imprimiendo) return;
+    this.imprimiendo = true;
+    try {
+      const result = await firstValueFrom(this.repositoryService.exportReciboLiquidacionPdf(this.liquidacionId));
+      if (result) this.documentoService.abrirEnVisor(result);
+    } catch (e: any) {
+      console.error(e);
+      this.snackBar.open('Error al generar el recibo: ' + (e?.message || ''), 'Cerrar', { duration: 4000 });
+    } finally {
+      this.imprimiendo = false;
+    }
   }
 
   async anular(): Promise<void> {

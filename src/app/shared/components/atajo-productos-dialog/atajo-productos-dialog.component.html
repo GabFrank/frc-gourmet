@@ -11,7 +11,12 @@
       *ngFor="let item of productos"
       (click)="selectProducto(item)">
       <div class="producto-image">
-        <mat-icon>restaurant</mat-icon>
+        <img
+          *ngIf="item.producto?.imageUrl"
+          [src]="thumbFor(item.producto.imageUrl)"
+          (error)="onThumbError($event, item.producto.imageUrl)"
+          alt="" />
+        <mat-icon *ngIf="!item.producto?.imageUrl">restaurant</mat-icon>
       </div>
       <div class="producto-info">
         <span class="producto-nombre">{{ getDisplayName(item) }}</span>

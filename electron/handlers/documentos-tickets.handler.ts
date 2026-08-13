@@ -26,10 +26,17 @@ import type { DataSource } from 'typeorm';
 import { In as TIn } from 'typeorm';
 import { Venta } from '../../src/app/database/entities/ventas/venta.entity';
 import { VentaItem, EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
+import { VentaItemAdicional } from '../../src/app/database/entities/ventas/venta-item-adicional.entity';
+import { VentaItemSabor } from '../../src/app/database/entities/ventas/venta-item-sabor.entity';
+import { VentaItemObservacion } from '../../src/app/database/entities/ventas/venta-item-observacion.entity';
+import { VentaItemIngredienteModificacion } from '../../src/app/database/entities/ventas/venta-item-ingrediente-modificacion.entity';
 import { Printer } from '../../src/app/database/entities/printer.entity';
 import { SectorImpresora, SectorImpresoraRol } from '../../src/app/database/entities/ventas/sector-impresora.entity';
 import { ProductoSector } from '../../src/app/database/entities/productos/producto-sector.entity';
 import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
+import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
+import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
+import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
@@ -41,6 +48,7 @@ import {
   printTicketSpec, printerWidthToChars, monedaSimboloAscii,
 } from '../utils/ticket.utils';
 import { broadcastPrinterEvent, PrinterEventPayload } from '../utils/printer-events.utils';
+import { computeResumenCaja } from '../utils/resumen-caja.utils';
 
 type GetCurrentUser = () => Usuario | null;
 
@@ -262,6 +270,86 @@ export async function printComandaInternal(
     return { ok: true, printed, errors };
   }
 
+  // 1.b Cargar modificadores por ítem (adicionales, observaciones, opcionales/
+  // modificaciones de ingredientes) para mostrarlos en la comanda de cocina.
+  const itemIds = itemsAImprimir.map(i => i.id);
+  const adicionalesByItem = new Map<number, string[]>();
+  const observacionesByItem = new Map<number, string[]>();
+  // Se separan las remociones (SIN X) de los cambios (CAMBIAR X POR Y) para
+  // darle a cada una el énfasis que corresponde en el ticket de cocina.
+  const removidosByItem = new Map<number, string[]>();
+  const cambiosByItem = new Map<number, string[]>();
+  // Pizzas (producto con variación): tamaño + sabores por mitad, para imprimirlos
+  // en grande y separados en la comanda.
+  const pizzaByItem = new Map<number, { presentacion: string; sabores: { nombre: string; proporcion: number }[] }>();
+  const pushMap = (m: Map<number, string[]>, k: number, v: string) => {
+    if (!m.has(k)) m.set(k, []);
+    m.get(k)!.push(v);
+  };
+  if (itemIds.length > 0) {
+    try {
+      const adics = await dataSource.getRepository(VentaItemAdicional).find({
+        where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+        relations: ['adicional', 'ventaItem'],
+      });
+      for (const a of adics) {
+        const iid = (a as any).ventaItem?.id;
+        if (!iid) continue;
+        const cant = Number((a as any).cantidad || 1);
+        const nom = ((a as any).adicional?.nombre || 'ADICIONAL').toUpperCase();
+        pushMap(adicionalesByItem, iid, cant > 1 ? `ADD ${cant}x ${nom}` : `ADD ${nom}`);
+      }
+
+      const obs = await dataSource.getRepository(VentaItemObservacion).find({
+        where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+        relations: ['observacion', 'ventaItem'],
+      });
+      for (const o of obs) {
+        const iid = (o as any).ventaItem?.id;
+        if (!iid) continue;
+        const txt = String((o as any).descripcion || (o as any).observacion?.descripcion || '').toUpperCase().trim();
+        if (txt) pushMap(observacionesByItem, iid, `>> ${txt}`);
+      }
+
+      const mods = await dataSource.getRepository(VentaItemIngredienteModificacion).find({
+        where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+        relations: ['recetaIngrediente', 'recetaIngrediente.ingrediente', 'ingredienteReemplazo', 'ventaItem'],
+      });
+      for (const m of mods) {
+        const iid = (m as any).ventaItem?.id;
+        if (!iid) continue;
+        const ing = String((m as any).recetaIngrediente?.ingrediente?.nombre || (m as any).recetaIngrediente?.descripcion || 'INGREDIENTE').toUpperCase();
+        if ((m as any).tipoModificacion === 'REMOVIDO') {
+          pushMap(removidosByItem, iid, ing);
+        } else {
+          const rep = String((m as any).ingredienteReemplazo?.nombre || '').toUpperCase();
+          pushMap(cambiosByItem, iid, rep ? `${ing} POR ${rep}` : ing);
+        }
+      }
+
+      // Sabores de pizza (VentaItemSabor): tamaño + cada mitad, para la comanda.
+      const vsabores = await dataSource.getRepository(VentaItemSabor).find({
+        where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+        relations: ['ventaItem', 'recetaPresentacion', 'recetaPresentacion.sabor', 'recetaPresentacion.presentacion'],
+      });
+      for (const vs of vsabores) {
+        const iid = (vs as any).ventaItem?.id;
+        const saborNombre = String((vs as any).recetaPresentacion?.sabor?.nombre || '').toUpperCase().trim();
+        if (!iid || !saborNombre) continue;
+        if (!pizzaByItem.has(iid)) {
+          pizzaByItem.set(iid, {
+            presentacion: String((vs as any).recetaPresentacion?.presentacion?.nombre || '').toUpperCase().trim(),
+            sabores: [],
+          });
+        }
+        pizzaByItem.get(iid)!.sabores.push({ nombre: saborNombre, proporcion: Number((vs as any).proporcion) || 0 });
+      }
+    } catch (e) {
+      // Los modificadores son opcionales: si fallan, se imprime la comanda igual.
+      console.warn('[printComandaInternal] no se pudieron cargar modificadores del ítem:', e);
+    }
+  }
+
   // 2. Cargar M2M producto_sectores para todos los producto_id involucrados
   const productoIds = Array.from(new Set(
     itemsAImprimir.map(i => (i as any).producto?.id).filter((x): x is number => !!x),
@@ -365,32 +453,65 @@ export async function printComandaInternal(
     if (job.items.length === 0) continue;
 
     const width = printerWidthToChars(job.printer.width);
-    const headerLines: TicketLine[] = await ticketHeaderEmpresa(dataSource, width);
     const sectorNombre = await getSectorNombre(dataSource, job.sectorId);
 
+    // Comanda de cocina: sin datos de empresa/RUC. Se enfatizan MESA y N° de
+    // ticket (venta) en grande para identificar el pedido de un vistazo.
     const lines: TicketLine[] = [
-      ...headerLines,
-      ticketSeparador('='),
       ticketText(`** COMANDA - ${sectorNombre} **`, { align: 'C', bold: true }),
       ticketText(ticketFmtFechaHora(new Date()), { align: 'C' }),
-      ticketSeparador('-'),
+      ticketSeparador('='),
     ];
-    if (refMesa) lines.push(ticketKv('MESA', refMesa.replace('MESA ', '')));
-    if (refComanda) lines.push(ticketKv('COMANDA', refComanda));
-    lines.push(ticketKv('VENTA', `#${ventaId}`));
-    lines.push(ticketSeparador('-'));
+    if (mesa?.numero) {
+      lines.push(ticketText('MESA', { align: 'C' }));
+      lines.push(ticketText(String(mesa.numero), { align: 'C', bold: true, size: 'big' }));
+    } else if (refComanda) {
+      lines.push(ticketText('COMANDA', { align: 'C' }));
+      lines.push(ticketText(String(refComanda), { align: 'C', bold: true, size: 'big' }));
+    } else {
+      lines.push(ticketText('PARA LLEVAR', { align: 'C', bold: true, size: 'tall' }));
+    }
+    lines.push(ticketText(`TICKET #${ventaId}`, { align: 'C', bold: true, size: 'tall' }));
+    lines.push(ticketSeparador('='));
 
     for (const j of job.items) {
       const v = j.item;
       const nombre = ((v as any).producto?.nombre || 'PRODUCTO').toUpperCase();
       const qty = Number(v.cantidad || 1);
-      lines.push(ticketText(`${qty}  ${nombre}`, { bold: true }));
-      if (v.ensambladoDescripcion) {
-        lines.push(ticketText(`   ${v.ensambladoDescripcion}`, { size: 'normal' }));
+      lines.push(ticketText(`${qty}  ${nombre}`, { bold: true, size: 'tall' }));
+      const pizza = pizzaByItem.get(v.id);
+      if (pizza && pizza.sabores.length) {
+        // Pizza: tamaño y cada mitad en GRANDE, uno por línea.
+        const tamano = `${nombre} ${pizza.presentacion}`.trim();
+        lines.push(ticketText(tamano, { bold: true, size: 'tall' }));
+        const n = pizza.sabores.length;
+        const iguales = pizza.sabores.every(s => Math.abs(s.proporcion - pizza.sabores[0].proporcion) < 0.001);
+        for (const s of pizza.sabores) {
+          let frac = '';
+          if (n > 1) frac = iguales ? `1/${n}` : `${Math.round(s.proporcion * 100)}%`;
+          lines.push(ticketText(`${frac} ${s.nombre}`.trim(), { bold: true, size: 'tall' }));
+        }
+      } else if (v.ensambladoDescripcion) {
+        lines.push(ticketText(`   ${String(v.ensambladoDescripcion).toUpperCase()}`));
       }
+      // QUITAR — lo más crítico en cocina: se imprime invertido (fondo negro).
+      // El video inverso ya destaca por sí solo, sin agrandar la fuente.
+      for (const ing of (removidosByItem.get(v.id) || [])) {
+        lines.push(ticketText(`SIN ${ing}`, { bold: true, invert: true }));
+      }
+      // CAMBIAR — destacado en negrita, tamaño normal.
+      for (const c of (cambiosByItem.get(v.id) || [])) {
+        lines.push(ticketText(`CAMBIAR ${c}`, { bold: true }));
+      }
+      // AGREGAR — en negrita para diferenciar de las observaciones.
+      for (const t of (adicionalesByItem.get(v.id) || [])) lines.push(ticketText(`   ${t}`, { bold: true }));
+      for (const t of (observacionesByItem.get(v.id) || [])) lines.push(ticketText(`   ${t}`));
+      lines.push(ticketBlank());
     }
 
     lines.push(ticketSeparador('='));
+    // El margen inferior antes del corte lo agrega printTicketSpec de forma
+    // centralizada (BOTTOM_SAFE_FEED) para todos los tickets por igual.
 
     const spec: TicketSpec = { printerWidth: width, lines, cutAtEnd: true };
 
@@ -462,6 +583,26 @@ async function getSectorNombre(dataSource: DataSource, sectorId: number): Promis
 // PRINT VENTA TICKET
 // ============================================================
 
+/**
+ * Cotización (compraLocal) entre la moneda principal y otra. compraLocal =
+ * cuántos principal vale 1 unidad de la otra moneda. Toma la más reciente
+ * (`cambios` viene ordenado por createdAt DESC). 0 si no hay.
+ */
+function buscarCotizacion(cambios: any[], principal: any, moneda: any): number {
+  if (!principal || !moneda) return 0;
+  const c = (cambios || []).find((x: any) =>
+    (x.monedaOrigen?.id === principal.id && x.monedaDestino?.id === moneda.id) ||
+    (x.monedaOrigen?.id === moneda.id && x.monedaDestino?.id === principal.id));
+  return c ? Number(c.compraLocal || 0) : 0;
+}
+
+/** Convierte un valor expresado en `moneda` a la moneda principal. */
+function convertirAPrincipal(valor: number, moneda: any, principal: any, cambios: any[]): number {
+  if (!moneda || !principal || moneda.id === principal.id) return valor;
+  const rate = buscarCotizacion(cambios, principal, moneda);
+  return rate > 0 ? valor * rate : valor; // 1 moneda = rate principal
+}
+
 export async function printVentaTicketInternal(
   dataSource: DataSource,
   ventaId: number,
@@ -471,7 +612,7 @@ export async function printVentaTicketInternal(
 
   const venta = await dataSource.getRepository(Venta).findOne({
     where: { id: ventaId },
-    relations: ['cliente', 'cliente.persona', 'mesa', 'formaPago', 'dispositivo'],
+    relations: ['cliente', 'cliente.persona', 'mesa', 'formaPago', 'dispositivo', 'pago'],
   });
   if (!venta) {
     return { ok: false, printed: [], errors: [{ message: `Venta ${ventaId} no encontrada` }] };
@@ -496,49 +637,126 @@ export async function printVentaTicketInternal(
   const width = printerWidthToChars(printer.width);
   const headerLines = await ticketHeaderEmpresa(dataSource, width, { showTimbrado: !opts.isPrecuenta });
 
-  const titulo = opts.isPrecuenta ? 'PRE-CUENTA' : 'COMPROBANTE DE VENTA';
-  const lines: TicketLine[] = [
-    ...headerLines,
-    ticketSeparador('='),
-    ticketText(titulo, { align: 'C', bold: true, size: 'tall' }),
-    ticketText(`N° ${ventaId}`, { align: 'C' }),
-    ticketText(ticketFmtFechaHora((venta as any).fechaCierre || new Date()), { align: 'C' }),
-    ticketSeparador('-'),
-  ];
+  // Monedas activas + cotizaciones para mostrar los totales en cada moneda.
+  const monedaRepo = dataSource.getRepository(Moneda);
+  const [principalMoneda, monedasActivas, cambios] = await Promise.all([
+    monedaRepo.findOne({ where: { principal: true } as any }),
+    monedaRepo.find({ where: { activo: true } as any }),
+    dataSource.getRepository(MonedaCambio).find({
+      where: { activo: true } as any,
+      relations: ['monedaOrigen', 'monedaDestino'],
+      order: { createdAt: 'DESC' } as any,
+    }),
+  ]);
 
-  const mesaTxt = (venta.mesa as any)?.numero ? `MESA ${(venta.mesa as any).numero}` : '';
-  if (mesaTxt) lines.push(ticketKv('MESA', mesaTxt));
+  // Totales: bruto (sin descuento) y descuento de nivel ítem.
+  let bruto = 0;
+  let descItems = 0;
+  for (const it of items) {
+    const qty = Number(it.cantidad || 1);
+    const pu = Number(it.precioVentaUnitario || 0) + Number(it.precioAdicionales || 0);
+    bruto += qty * pu;
+    descItems += qty * Number(it.descuentoUnitario || 0);
+  }
+  // Descuentos/aumentos a nivel de pago (ajustes del cobro).
+  let descPago = 0;
+  let aumPago = 0;
+  const pagoId = (venta as any).pago?.id;
+  if (pagoId) {
+    try {
+      const detalles = await dataSource.getRepository(PagoDetalle).find({
+        where: { pago: { id: pagoId } as any, activo: true },
+        relations: ['moneda'],
+      });
+      for (const d of detalles) {
+        const valP = convertirAPrincipal(Number((d as any).valor || 0), (d as any).moneda, principalMoneda, cambios);
+        if ((d as any).tipo === TipoDetalle.DESCUENTO) descPago += valP;
+        else if ((d as any).tipo === TipoDetalle.AUMENTO) aumPago += valP;
+      }
+    } catch (e) {
+      console.warn('[printVentaTicketInternal] no se pudieron cargar ajustes del pago:', e);
+    }
+  }
+  const descuentoTotal = descItems + descPago;
+  const totalPrincipal = Number((venta as any).total) > 0
+    ? Number((venta as any).total)
+    : bruto - descItems - descPago + aumPago;
+
+  const lines: TicketLine[] = [...headerLines];
+
+  // MESA en grande — identifica el pedido de un vistazo (reemplaza el título
+  // "PRE-CUENTA", que era redundante).
+  const mesaNro = (venta.mesa as any)?.numero;
+  if (mesaNro) {
+    lines.push(ticketSeparador('='));
+    lines.push(ticketText('MESA', { align: 'C' }));
+    lines.push(ticketText(String(mesaNro), { align: 'C', bold: true, size: 'big' }));
+  }
+
+  lines.push(ticketSeparador('='));
+  // El comprobante conserva su título; la pre-cuenta no lo necesita.
+  if (!opts.isPrecuenta) {
+    lines.push(ticketText('COMPROBANTE DE VENTA', { align: 'C', bold: true }));
+  }
+  lines.push(ticketText(`N° ${ventaId}`, { align: 'C' }));
+  lines.push(ticketText(ticketFmtFechaHora((venta as any).fechaCierre || new Date()), { align: 'C' }));
+  lines.push(ticketSeparador('-'));
 
   const clienteTxt = (venta.cliente as any)?.razon_social || (venta.cliente as any)?.persona?.nombre;
   if (clienteTxt) lines.push(ticketKv('CLIENTE', clienteTxt));
 
+  // Ancho de la columna CANT: mínimo 5 para que "CANT" (4) + la cantidad no
+  // queden pegados a DESCRIPCION (el padding derecho de la celda deja el
+  // espacio). Con anchos chicos (32/40 col) floor(width*0.12) daba 3-4 → sin
+  // separación. TOTAL usa 12 col fijos.
+  const totalW = 12;
+  const cantW = Math.max(5, Math.min(6, Math.floor(width * 0.12)));
+  const descW = width - cantW - totalW;
   lines.push(ticketSeparador('-'));
   lines.push(ticketColumns([
-    { text: 'CANT', width: Math.min(6, Math.floor(width * 0.12)), align: 'L' },
-    { text: 'DESCRIPCION', width: width - Math.min(6, Math.floor(width * 0.12)) - 12, align: 'L' },
-    { text: 'TOTAL', width: 12, align: 'R' },
+    { text: 'CANT', width: cantW, align: 'L' },
+    { text: 'DESCRIPCION', width: descW, align: 'L' },
+    { text: 'TOTAL', width: totalW, align: 'R' },
   ]));
   lines.push(ticketSeparador('-'));
 
-  let subtotal = 0;
   for (const it of items) {
     const qty = Number(it.cantidad || 1);
     const precio = Number(it.precioVentaUnitario || 0) + Number(it.precioAdicionales || 0);
     const total = qty * precio - qty * Number(it.descuentoUnitario || 0);
-    subtotal += total;
     const nombre = (it.producto?.nombre || 'PRODUCTO').toUpperCase();
     lines.push(ticketColumns([
-      { text: String(qty), width: Math.min(6, Math.floor(width * 0.12)), align: 'L' },
-      { text: nombre, width: width - Math.min(6, Math.floor(width * 0.12)) - 12, align: 'L' },
-      { text: ticketFmtMonto(total), width: 12, align: 'R' },
+      { text: String(qty), width: cantW, align: 'L' },
+      { text: nombre, width: descW, align: 'L' },
+      { text: ticketFmtMonto(total), width: totalW, align: 'R' },
     ]));
   }
 
   lines.push(ticketSeparador('-'));
-  lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(Number(venta.total || subtotal))}`, true));
+  if (descuentoTotal > 0) {
+    lines.push(ticketKv('SUBTOTAL', `Gs. ${ticketFmtMonto(bruto)}`));
+    lines.push(ticketKv('DESCUENTO', `Gs. -${ticketFmtMonto(descuentoTotal)}`));
+  }
+  if (aumPago > 0) lines.push(ticketKv('AUMENTO', `Gs. ${ticketFmtMonto(aumPago)}`));
+  lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(totalPrincipal)}`, true));
+
+  // Totales en las demás monedas configuradas (según cotización vigente).
+  const otrasMonedas = (monedasActivas || []).filter((m: any) => m.id !== (principalMoneda as any)?.id);
+  const totalesMonedaLines: TicketLine[] = [];
+  for (const m of otrasMonedas) {
+    const rate = buscarCotizacion(cambios, principalMoneda, m);
+    if (!rate || rate <= 0) continue;
+    const val = totalPrincipal / rate;
+    const label = String((m as any).denominacion || (m as any).simbolo || '').toUpperCase();
+    totalesMonedaLines.push(ticketKv(`TOTAL ${label}`, ticketFmtMonto(val, Number((m as any).decimales) || 0)));
+  }
+  if (totalesMonedaLines.length) {
+    lines.push(ticketSeparador('-'));
+    lines.push(...totalesMonedaLines);
+  }
 
   if (!opts.isPrecuenta && venta.formaPago) {
-    lines.push(ticketKv('FORMA PAGO', (venta.formaPago as any).descripcion || ''));
+    lines.push(ticketKv('FORMA PAGO', (venta.formaPago as any).nombre || (venta.formaPago as any).descripcion || ''));
   }
 
   lines.push(ticketBlank());
@@ -840,6 +1058,19 @@ export function registerDocumentosTicketsHandlers(
       ? { ok: true, printed: [{ itemId: params.conteoId, sectorId: null, printerId: printer.id, printerName: printer.name }], errors: [] }
       : { ok: false, printed: [], errors: [{ printerId: printer.id, message: res.error || 'Error' }] };
   });
+
+  // ─── CIERRE DE CAJA (reporte completo del turno) ────────────────────────
+  ipcMain.handle('print-cierre-caja', async (_event, params: {
+    cajaId: number;
+    printerId?: number;
+  }) => {
+    await ensurePermission(dataSource, getCurrentUser, ['FINANCIERO_CAJA_VER', 'DOCUMENTOS_IMPRIMIR_TICKET']);
+    const dispositivoId = resolveRequestDeviceId(_event) ?? undefined;
+    return await printCierreCajaInternal(dataSource, params.cajaId, {
+      printerId: params.printerId,
+      dispositivoId,
+    });
+  });
 }
 
 // ============================================================
@@ -925,7 +1156,7 @@ export async function printPagareCpcTicketInternal(
   lines.push(ticketText('_'.repeat(Math.min(width - 2, 32)), { align: 'C' }));
   lines.push(ticketText(clienteNombre, { align: 'C', bold: true }));
   lines.push(ticketText('FIRMA DEL CLIENTE', { align: 'C' }));
-  lines.push(ticketBlank(2));
+  // El margen inferior antes del corte lo agrega printTicketSpec (BOTTOM_SAFE_FEED).
 
   const res = await printTicketSpec(printer, { printerWidth: width, lines, cutAtEnd: true });
   return res.ok
@@ -958,5 +1189,235 @@ async function printReciboGenericoInternal(
   const res = await printTicketSpec(printer, { printerWidth: width, lines });
   return res.ok
     ? { ok: true, printed: [{ itemId: 0, sectorId: null, printerId: printer.id, printerName: printer.name }], errors: [] }
+    : { ok: false, printed: [], errors: [{ printerId: printer.id, message: res.error || 'Error' }] };
+}
+
+// ============================================================
+// CIERRE DE CAJA (reporte completo del turno)
+// ============================================================
+
+/** Formatea "Xh Ym" a partir de dos fechas (apertura → cierre). */
+function formatDuracion(desde?: Date | string | null, hasta?: Date | string | null): string {
+  if (!desde) return '—';
+  const d1 = typeof desde === 'string' ? new Date(desde) : desde;
+  const d2 = hasta ? (typeof hasta === 'string' ? new Date(hasta) : hasta) : new Date();
+  const ms = d2.getTime() - d1.getTime();
+  if (!isFinite(ms) || ms < 0) return '—';
+  const totalMin = Math.floor(ms / 60000);
+  const dias = Math.floor(totalMin / 1440);
+  const horas = Math.floor((totalMin % 1440) / 60);
+  const mins = totalMin % 60;
+  const parts: string[] = [];
+  if (dias > 0) parts.push(`${dias}d`);
+  parts.push(`${horas}h`);
+  parts.push(`${mins}m`);
+  return parts.join(' ');
+}
+
+/**
+ * Imprime el TICKET DE CIERRE DE CAJA: reporte completo del turno con datos de
+ * la caja, ventas por forma de pago, gastos, retiros, descuentos/aumentos y el
+ * arqueo (apertura, cierre, esperado y diferencia por moneda).
+ *
+ * Reusable como función (auto-print al cerrar la caja) sin chequeo de permisos.
+ */
+export async function printCierreCajaInternal(
+  dataSource: DataSource,
+  cajaId: number,
+  opts: { printerId?: number; dispositivoId?: number } = {},
+): Promise<ImpresionResultado> {
+  let resumen;
+  try {
+    resumen = await computeResumenCaja(dataSource, cajaId);
+  } catch (e: any) {
+    return { ok: false, printed: [], errors: [{ message: e?.message || `No se pudo calcular el resumen de la caja ${cajaId}` }] };
+  }
+
+  const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, {
+    printerId: opts.printerId,
+    dispositivoId: opts.dispositivoId,
+  });
+  if (!printer) return { ok: false, printed: [], errors: [{ message: 'Sin impresora' }] };
+  const width = printerWidthToChars(printer.width);
+
+  // Mapa moneda → { decimales, simbolo ASCII } para formateo correcto por moneda.
+  const monedas = await dataSource.getRepository(Moneda).find();
+  const monedaInfo: { [id: number]: { decimales: number; simbolo: string } } = {};
+  for (const m of monedas) {
+    monedaInfo[m.id] = { decimales: Number((m as any).decimales) || 0, simbolo: monedaSimboloAscii(m) };
+  }
+  const fmtMoneda = (monedaId: number, monto: number): string => {
+    const info = monedaInfo[monedaId] || { decimales: 0, simbolo: '' };
+    return `${info.simbolo} ${ticketFmtMonto(monto, info.decimales)}`.trim();
+  };
+  const simboloMoneda = (monedaId: number): string => (monedaInfo[monedaId]?.simbolo || '');
+  const fmtMontoMoneda = (monedaId: number, monto: number): string =>
+    ticketFmtMonto(monto, monedaInfo[monedaId]?.decimales ?? 0);
+
+  // Renderiza un total/rubro etiquetado que puede tener varias monedas:
+  //  - 1 moneda  → una sola línea "ETIQUETA .......... Gs 5.300.000"
+  //  - N monedas → la ETIQUETA va como encabezado y cada moneda indentada
+  //    debajo (sin repetir la etiqueta), igual que el bloque de ARQUEO.
+  const pushTotalMultimoneda = (
+    label: string,
+    montos: { monedaId: number; total: number }[],
+    bold = false,
+  ): void => {
+    if (montos.length === 0) return;
+    if (montos.length === 1) {
+      lines.push(ticketKv(label, fmtMoneda(montos[0].monedaId, montos[0].total), bold));
+      return;
+    }
+    lines.push(ticketText(label, { bold }));
+    for (const m of montos) {
+      lines.push(ticketKv(`  ${simboloMoneda(m.monedaId)}`, fmtMontoMoneda(m.monedaId, m.total), bold));
+    }
+  };
+
+  const caja = resumen.caja as any;
+  const cajero = caja?.createdBy?.persona?.nombre
+    || caja?.createdBy?.nickname
+    || caja?.createdBy?.usuario
+    || '—';
+  const dispositivo = caja?.dispositivo?.nombre || '—';
+
+  const headerLines = await ticketHeaderEmpresa(dataSource, width);
+  const lines: TicketLine[] = [
+    ...headerLines,
+    ticketSeparador('='),
+    ticketText('CIERRE DE CAJA', { align: 'C', bold: true, size: 'tall' }),
+    ticketText(ticketFmtFechaHora(new Date()), { align: 'C' }),
+    ticketSeparador('='),
+    ticketKv('CAJA N°', String(caja?.id ?? cajaId)),
+    ticketKv('DISPOSITIVO', String(dispositivo).toUpperCase()),
+    ticketKv('CAJERO', String(cajero).toUpperCase()),
+    ticketKv('APERTURA', ticketFmtFechaHora(caja?.fechaApertura)),
+    ticketKv('CIERRE', ticketFmtFechaHora(caja?.fechaCierre)),
+    ticketKv('TIEMPO ABIERTO', formatDuracion(caja?.fechaApertura, caja?.fechaCierre)),
+    ticketKv('N° VENTAS', String(resumen.cantidadVentas)),
+  ];
+
+  // ── Ventas por forma de pago ──────────────────────────────
+  lines.push(ticketSeparador('-'));
+  lines.push(ticketText('VENTAS POR FORMA DE PAGO', { align: 'C', bold: true }));
+  if (resumen.ventasPorFormaPago.length === 0) {
+    lines.push(ticketText('Sin ventas', { align: 'C' }));
+  } else {
+    // Agrupar por forma de pago para no repetir el nombre en cada moneda.
+    const porForma = new Map<string, { monedaId: number; total: number }[]>();
+    for (const fp of resumen.ventasPorFormaPago) {
+      const nombre = `${fp.formaPago}`.toUpperCase();
+      if (!porForma.has(nombre)) porForma.set(nombre, []);
+      porForma.get(nombre)!.push({ monedaId: fp.monedaId, total: fp.total });
+    }
+    for (const [nombre, montos] of porForma) {
+      pushTotalMultimoneda(nombre, montos);
+    }
+    lines.push(ticketSeparador('.'));
+    pushTotalMultimoneda(
+      'TOTAL VENTAS',
+      resumen.ventasTotalPorMoneda.map(vt => ({ monedaId: vt.monedaId, total: vt.total })),
+      true,
+    );
+  }
+
+  // ── Descuentos / Aumentos ─────────────────────────────────
+  const descMonedas = Object.keys(resumen.descuentosPorMoneda).map(Number).filter(id => resumen.descuentosPorMoneda[id]);
+  const aumMonedas = Object.keys(resumen.aumentosPorMoneda).map(Number).filter(id => resumen.aumentosPorMoneda[id]);
+  if (descMonedas.length > 0 || aumMonedas.length > 0) {
+    lines.push(ticketSeparador('-'));
+    lines.push(ticketText('DESCUENTOS / AUMENTOS', { align: 'C', bold: true }));
+    pushTotalMultimoneda('TOTAL DESCUENTOS', descMonedas.map(id => ({ monedaId: id, total: resumen.descuentosPorMoneda[id] })));
+    pushTotalMultimoneda('TOTAL AUMENTOS', aumMonedas.map(id => ({ monedaId: id, total: resumen.aumentosPorMoneda[id] })));
+  }
+
+  // ── Gastos ────────────────────────────────────────────────
+  if (resumen.gastos.length > 0) {
+    lines.push(ticketSeparador('-'));
+    lines.push(ticketText('GASTOS', { align: 'C', bold: true }));
+    const gastoTotalPorMoneda: { [id: number]: number } = {};
+    for (const g of resumen.gastos) {
+      const desc = `${g.descripcion || g.categoria || 'GASTO'}`.toUpperCase().slice(0, width - 14);
+      lines.push(ticketKv(desc, fmtMoneda(g.monedaId, g.monto)));
+      gastoTotalPorMoneda[g.monedaId] = (gastoTotalPorMoneda[g.monedaId] || 0) + g.monto;
+    }
+    lines.push(ticketSeparador('.'));
+    pushTotalMultimoneda(
+      'TOTAL GASTOS',
+      Object.keys(gastoTotalPorMoneda).map(Number).map(id => ({ monedaId: id, total: gastoTotalPorMoneda[id] })),
+      true,
+    );
+  }
+
+  // ── Egresos (Vales / Compras pagados del cajón) ───────────
+  if ((resumen.egresos || []).length > 0) {
+    lines.push(ticketSeparador('-'));
+    lines.push(ticketText('EGRESOS (VALES / COMPRAS)', { align: 'C', bold: true }));
+    const egresoTotalPorMoneda: { [id: number]: number } = {};
+    for (const e of resumen.egresos) {
+      const desc = `${e.tipo || 'EGRESO'}: ${e.descripcion || ''}`.toUpperCase().slice(0, width - 14);
+      lines.push(ticketKv(desc, fmtMoneda(e.monedaId, e.monto)));
+      egresoTotalPorMoneda[e.monedaId] = (egresoTotalPorMoneda[e.monedaId] || 0) + e.monto;
+    }
+    lines.push(ticketSeparador('.'));
+    pushTotalMultimoneda(
+      'TOTAL EGRESOS',
+      Object.keys(egresoTotalPorMoneda).map(Number).map(id => ({ monedaId: id, total: egresoTotalPorMoneda[id] })),
+      true,
+    );
+  }
+
+  // ── Retiros ───────────────────────────────────────────────
+  if (resumen.retiros.length > 0) {
+    lines.push(ticketSeparador('-'));
+    lines.push(ticketText('RETIROS', { align: 'C', bold: true }));
+    const retiroTotalPorMoneda: { [id: number]: number } = {};
+    for (const r of resumen.retiros) {
+      const etiqueta = `RETIRO N° ${r.id}${r.responsable ? ' - ' + String(r.responsable).toUpperCase() : ''}`.slice(0, width - 12);
+      lines.push(ticketText(etiqueta));
+      for (const d of (r.detalles || [])) {
+        lines.push(ticketKv(`  ${d.monedaDenominacion || ''}`.trimEnd() || '  ', fmtMoneda(d.monedaId, d.monto)));
+        retiroTotalPorMoneda[d.monedaId] = (retiroTotalPorMoneda[d.monedaId] || 0) + d.monto;
+      }
+    }
+    lines.push(ticketSeparador('.'));
+    pushTotalMultimoneda(
+      'TOTAL RETIROS',
+      Object.keys(retiroTotalPorMoneda).map(Number).map(id => ({ monedaId: id, total: retiroTotalPorMoneda[id] })),
+      true,
+    );
+  }
+
+  // ── Arqueo (apertura / cierre / esperado / diferencia por moneda) ──
+  lines.push(ticketSeparador('='));
+  lines.push(ticketText('ARQUEO DE CAJA', { align: 'C', bold: true }));
+  const arqueoMonedaIds = new Set<number>();
+  resumen.conteoApertura.forEach(c => arqueoMonedaIds.add(c.monedaId));
+  resumen.conteoCierre.forEach(c => arqueoMonedaIds.add(c.monedaId));
+  Object.keys(resumen.esperadoPorMoneda).forEach(k => arqueoMonedaIds.add(Number(k)));
+  Object.keys(resumen.diferenciaPorMoneda).forEach(k => arqueoMonedaIds.add(Number(k)));
+  if (arqueoMonedaIds.size === 0) {
+    lines.push(ticketText('Sin datos de conteo', { align: 'C' }));
+  } else {
+    for (const id of arqueoMonedaIds) {
+      const info = monedaInfo[id];
+      const apertura = resumen.conteoApertura.find(c => c.monedaId === id)?.total || 0;
+      const cierre = resumen.conteoCierre.find(c => c.monedaId === id)?.total || 0;
+      const esperado = resumen.esperadoPorMoneda[id] || 0;
+      const diferencia = resumen.diferenciaPorMoneda[id] || 0;
+      lines.push(ticketSeparador('.'));
+      lines.push(ticketText((info?.simbolo || `MONEDA ${id}`).toUpperCase(), { bold: true }));
+      lines.push(ticketKv('  MONTO APERTURA', fmtMoneda(id, apertura)));
+      lines.push(ticketKv('  MONTO CIERRE', fmtMoneda(id, cierre)));
+      lines.push(ticketKv('  ESPERADO', fmtMoneda(id, esperado)));
+      lines.push(ticketKv('  DIFERENCIA', fmtMoneda(id, diferencia), true));
+    }
+  }
+
+  lines.push(...ticketLineasFirma(width, 'FIRMA CAJERO'));
+
+  const res = await printTicketSpec(printer, { printerWidth: width, lines });
+  return res.ok
+    ? { ok: true, printed: [{ itemId: caja?.id ?? cajaId, sectorId: null, printerId: printer.id, printerName: printer.name }], errors: [] }
     : { ok: false, printed: [], errors: [{ printerId: printer.id, message: res.error || 'Error' }] };
 }

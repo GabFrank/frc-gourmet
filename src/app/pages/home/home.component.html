@@ -25,14 +25,16 @@
     <app-dash-stat-chip
       icon="shopping_cart"
       [value]="ventasHoy"
-      label="Ventas hoy"
+      [label]="labelVentas"
       [loading]="loading">
     </app-dash-stat-chip>
     <app-dash-stat-chip
       icon="payments"
       [value]="formatPYG(totalHoyPYG) + ' Gs'"
-      label="Total hoy"
-      [loading]="loading">
+      [label]="labelTotal"
+      [loading]="loading"
+      [clickable]="!!desgloseVentasHoy"
+      (chipClick)="abrirDesgloseVentas()">
     </app-dash-stat-chip>
     <app-dash-stat-chip
       icon="point_of_sale"
@@ -51,7 +53,7 @@
   </div>
 
   <div class="dashboard-quick-actions">
-    <app-dash-quick-action *ngFor="let a of quickActions"
+    <app-dash-quick-action *ngFor="let a of visibleQuickActions"
       [icon]="a.icon"
       [title]="a.title"
       [color]="a.color"

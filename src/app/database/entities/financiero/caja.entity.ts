@@ -50,4 +50,9 @@ export class Caja extends BaseModel {
   @ManyToOne(() => Usuario, { nullable: true })
   @JoinColumn({ name: 'revisado_por' })
   revisadoPor?: Usuario;
+
+  // Motivo del último ajuste sobre la caja ya cerrada (corrección de conteo o
+  // gasto/retiro agregado post-cierre). Traza junto con `revisado`/`revisadoPor`.
+  @Column({ name: 'motivo_ajuste', type: 'varchar', length: 500, nullable: true })
+  motivoAjuste?: string;
 }

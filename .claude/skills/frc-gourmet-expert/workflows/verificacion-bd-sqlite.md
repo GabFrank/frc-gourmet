@@ -18,9 +18,11 @@ cp "$DB" "$DB.bak-$(date +%Y%m%d-%H%M)"
 ```
 
 **Hacer SIEMPRE** antes de:
-- Modificar entidades (que dispararán `synchronize`).
+- Correr migraciones nuevas (el `DatabaseService` hace backup automático pre-migrate, pero igual conviene tener el tuyo).
 - Ejecutar deletes manuales.
 - Probar flujos destructivos (anulación de liquidación, recalcular saldos).
+
+> Nota: `synchronize` está en `false`. El schema lo manejan **migraciones** que corren al arranque. La app NO altera tablas automáticamente al cambiar una entity — ver [add-new-entity.md](add-new-entity.md).
 
 ## Comandos SQLite básicos
 
@@ -311,32 +313,21 @@ sqlite3 "$DB" ".schema" > schema-current.sql
 sqlite3 "$DB" ".schema" | grep -A 20 "CREATE TABLE compras"
 ```
 
-## Migración manual de columna
+## Cambios de schema = migración, no edición manual
 
-Si `synchronize` no aplica un cambio (raro, pero pasa con tipos incompatibles):
+El schema lo gobiernan las **migraciones** (`synchronize: false`). La forma correcta de agregar/cambiar una columna es escribir una migración driver-aware y registrarla en `getMigrations()` — ver [add-new-entity.md](add-new-entity.md) paso 3 y `docs/MIGRATIONS.md`. Al reiniciar, `DatabaseService` la corre (con backup previo).
+
+Un `ALTER TABLE` manual sobre el `.db` solo sirve como **parche de emergencia de debug** (BD local de desarrollo), nunca como solución real: no queda registrado en `typeorm_migrations` y en otra PC / en Postgres la columna no existirá.
 
 ```bash
-# 1. Backup
-cp "$DB" "$DB.bak-$(date +%Y%m%d)"
-
-# 2. Cerrar Electron
-
-# 3. Aplicar manualmente
-sqlite3 "$DB" "ALTER TABLE compras ADD COLUMN motivo_anulacion TEXT;"
-
-# 4. Reabrir Electron — synchronize verá la columna y no la tocará
+# Parche de emergencia LOCAL (no reemplaza la migración):
+cp "$DB" "$DB.bak-$(date +%Y%m%d)"   # 1. backup
+# 2. cerrar Electron (la app tiene la BD lockeada)
+sqlite3 "$DB" "ALTER TABLE compras ADD COLUMN motivo_anulacion TEXT;"  # 3. parche
+# 4. reabrir Electron
 ```
 
-Para cambios incompatibles (cambio de tipo, drop de NOT NULL), SQLite obliga a recrear la tabla. Usar el handler de TypeORM `synchronize` (con backup) o:
-
-```sql
-BEGIN TRANSACTION;
-CREATE TABLE compras_new ( ... nuevo schema ... );
-INSERT INTO compras_new SELECT ... FROM compras;
-DROP TABLE compras;
-ALTER TABLE compras_new RENAME TO compras;
-COMMIT;
-```
+Para cambios incompatibles (cambio de tipo, drop de NOT NULL), SQLite obliga a recrear la tabla (patrón create-new + copy + drop + rename). Pero eso debe ir en una **migración**, no a mano.
 
 ## Cliente GUI
 

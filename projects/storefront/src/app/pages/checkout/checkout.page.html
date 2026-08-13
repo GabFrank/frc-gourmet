@@ -1,0 +1,107 @@
+<div class="sf-container co">
+  <h1 class="co-title">Finalizar pedido</h1>
+
+  <ng-container *ngIf="!mesa.enMesa && !auth.isAuthenticated">
+    <div class="sf-card">
+      <p>Necesitás ingresar para completar tu pedido.</p>
+      <button class="sf-btn sf-btn--block mt" (click)="irLogin()">Ingresar</button>
+    </div>
+  </ng-container>
+
+  <div class="sf-card cerrada" *ngIf="config.loaded && !config.config.abiertaAhora">
+    <sf-icon name="clock" [size]="18"></sf-icon>
+    <span>La tienda está cerrada ahora. No se pueden tomar pedidos.</span>
+  </div>
+
+  <!-- Modo MESA_QR: invitado con nombre, sin dirección ni pago (paga en caja) -->
+  <ng-container *ngIf="mesa.enMesa && config.config.abiertaAhora">
+    <div class="sf-card cerrada" *ngIf="mesa.ctx && !mesa.ctx.habilitada">
+      <sf-icon name="clock" [size]="18"></sf-icon>
+      <span>Esta mesa todavía no está habilitada. Pedile al mozo que active el autoservicio.</span>
+    </div>
+
+    <div class="sf-card">
+      <h3>Tu nombre</h3>
+      <input class="sf-input" [(ngModel)]="mesa.nombre" placeholder="¿A nombre de quién?" maxlength="60" />
+      <p class="sf-muted prep" *ngIf="config.config.prepTimeMinutos"><sf-icon name="clock" [size]="14"></sf-icon>Preparación estimada: {{ config.config.prepTimeMinutos }} min.</p>
+    </div>
+
+    <div class="sf-card">
+      <label class="lbl">Notas del pedido (opcional)</label>
+      <input class="sf-input" [(ngModel)]="notas" placeholder="Ej: sin hielo" />
+    </div>
+
+    <div class="sf-card totales">
+      <div class="row grand"><strong>Total</strong><strong>{{ cart.subtotal | number:'1.0-2' }}</strong></div>
+    </div>
+
+    <p class="sf-muted pago"><sf-icon name="cash" [size]="15"></sf-icon>El pago se realiza en la caja del local.</p>
+    <p class="sf-error" *ngIf="error">{{ error }}</p>
+  </ng-container>
+
+  <ng-container *ngIf="!mesa.enMesa && auth.isAuthenticated && config.config.abiertaAhora">
+    <!-- Tipo -->
+    <div class="sf-card">
+      <h3>Tipo de pedido</h3>
+      <div class="choices">
+        <button class="choice" *ngIf="config.config.permitePickup" [class.active]="tipo === 'PICKUP'" (click)="setTipo('PICKUP')"><sf-icon name="bag" [size]="18"></sf-icon>Retiro</button>
+        <button class="choice" *ngIf="config.config.permiteDelivery" [class.active]="tipo === 'DELIVERY'" (click)="setTipo('DELIVERY')"><sf-icon name="bike" [size]="18"></sf-icon>Delivery</button>
+      </div>
+      <p class="sf-muted prep" *ngIf="config.config.prepTimeMinutos"><sf-icon name="clock" [size]="14"></sf-icon>Preparación estimada: {{ config.config.prepTimeMinutos }} min.</p>
+    </div>
+
+    <!-- Delivery -->
+    <div class="sf-card" *ngIf="tipo === 'DELIVERY'">
+      <h3>¿Dónde entregamos?</h3>
+
+      <!-- Toggle: ubicación en el mapa o dirección escrita -->
+      <div class="choices ubic">
+        <button type="button" class="choice" [class.active]="!manual" (click)="setUbicacion(false)"><sf-icon name="pin" [size]="18"></sf-icon>En el mapa</button>
+        <button type="button" class="choice" [class.active]="manual" (click)="setUbicacion(true)"><sf-icon name="pencil" [size]="18"></sf-icon>Escribir dirección</button>
+      </div>
+
+      <!-- Mapa -->
+      <ng-container *ngIf="!manual">
+        <div class="map-wrap">
+          <div id="sf-map" class="map"></div>
+          <div class="map-pin"><sf-icon name="pin" [size]="34"></sf-icon></div>
+          <button type="button" class="map-loc" (click)="usarMiUbicacion()">Usar mi ubicación</button>
+        </div>
+        <p class="map-dir sf-muted" *ngIf="direccionMapa">{{ direccionMapa }}</p>
+        <p class="map-hint sf-muted" *ngIf="!direccionMapa">Mové el mapa para ubicar el pin en tu dirección.</p>
+      </ng-container>
+
+      <!-- Manual -->
+      <ng-container *ngIf="manual">
+        <label class="lbl">Dirección</label>
+        <input class="sf-input" [(ngModel)]="direccion" placeholder="Calle, número, barrio" />
+      </ng-container>
+
+      <label class="lbl">Referencia (opcional)</label>
+      <input class="sf-input" [(ngModel)]="referencia" placeholder="Casa, timbre, portón, etc." />
+    </div>
+
+    <!-- Notas -->
+    <div class="sf-card">
+      <label class="lbl">Notas del pedido (opcional)</label>
+      <input class="sf-input" [(ngModel)]="notas" placeholder="Ej: tocar timbre" />
+    </div>
+
+    <!-- Totales -->
+    <div class="sf-card totales">
+      <div class="row"><span>Subtotal</span><span>{{ cart.subtotal | number:'1.0-2' }}</span></div>
+      <div class="row" *ngIf="tipo === 'DELIVERY'"><span>Envío</span><span class="acoordinar">A coordinar</span></div>
+      <div class="row grand"><strong>Total</strong><strong>{{ total | number:'1.0-2' }}</strong></div>
+    </div>
+    <p class="sf-muted envio-nota" *ngIf="tipo === 'DELIVERY'">El costo de envío se confirma cuando la tienda acepta tu pedido.</p>
+
+    <p class="sf-muted pago"><sf-icon name="cash" [size]="15"></sf-icon>Pago: efectivo contra entrega/retiro.</p>
+    <p class="sf-error" *ngIf="error">{{ error }}</p>
+  </ng-container>
+</div>
+
+<div class="sf-sticky-bar" *ngIf="config.config.abiertaAhora && (mesa.enMesa || auth.isAuthenticated)">
+  <button class="sf-btn sf-btn--block" [disabled]="enviando || cart.items.length === 0" (click)="confirmar()">
+    {{ enviando ? 'Enviando…' : ('Confirmar pedido · ' + ((mesa.enMesa ? cart.subtotal : total) | number:'1.0-2')) }}
+  </button>
+</div>

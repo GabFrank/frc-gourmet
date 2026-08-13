@@ -23,7 +23,12 @@ import { Usuario } from 'src/app/database/entities/personas/usuario.entity';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CreateCajaDialogComponent } from './create-caja-dialog/create-caja-dialog.component';
 import { ResumenCajaDialogComponent } from 'src/app/shared/components/resumen-caja-dialog/resumen-caja-dialog.component';
+import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { PromptDialogComponent } from 'src/app/shared/components/prompt-dialog/prompt-dialog.component';
+import { CreateGastoCajaDialogComponent } from 'src/app/pages/ventas/pdv/gasto-caja-dialog/gasto-caja-dialog.component';
+import { CreateRetiroCajaDialogComponent } from 'src/app/pages/financiero/caja-mayor/retiros/create-retiro-caja-dialog/create-retiro-caja-dialog.component';
 import { AuthService } from 'src/app/services/auth.service';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 // Confirmation dialog for existing open caja
 @Component({
@@ -87,7 +92,8 @@ interface CajaRow {
     MatButtonToggleModule,
     MatAutocompleteModule,
     MatMenuModule,
-    CreateCajaDialogComponent
+    CreateCajaDialogComponent,
+    HasPermissionDirective
   ]
 })
 export class ListCajasComponent implements OnInit {
@@ -306,6 +312,148 @@ export class ListCajasComponent implements OnInit {
         this.loadCajas();
       }
     });
+  }
+
+  /**
+   * Ajusta el conteo de una caja YA CERRADA (corregir apertura/cierre) sin
+   * reabrirla. Guarda el motivo, regenera el retiro del cierre y deja traza.
+   * Bloqueado si el retiro del cierre ya fue ingresado a Caja Mayor.
+   */
+  async ajustarConteo(caja: Caja): Promise<void> {
+    if (!caja.id) return;
+    const permiso = await firstValueFrom(this.repositoryService.puedeAjustarCaja(caja.id));
+    if (!permiso?.editable) {
+      this.snackBar.open(permiso?.motivoBloqueo || 'No se puede ajustar esta caja.', 'CERRAR', { duration: 6000 });
+      return;
+    }
+    const motivo = await firstValueFrom(
+      this.dialog.open(PromptDialogComponent, {
+        width: '460px',
+        data: {
+          title: 'Ajustar caja cerrada',
+          message: `Vas a corregir el conteo de la caja #${caja.id}. Indicá el motivo del ajuste (queda registrado).`,
+          label: 'Motivo del ajuste',
+          required: true,
+          confirmText: 'Continuar',
+        },
+      }).afterClosed(),
+    );
+    if (!motivo) return;
+
+    const dialogRef = this.dialog.open(CreateCajaDialogComponent, {
+      width: '80vw',
+      height: '80vh',
+      disableClose: true,
+      data: { cajaId: caja.id, mode: 'conteo', ajuste: true },
+    });
+    dialogRef.afterClosed().subscribe(async result => {
+      if (result?.success) {
+        try {
+          await firstValueFrom(this.repositoryService.finalizarAjusteCaja(caja.id!, motivo));
+          this.snackBar.open('CAJA AJUSTADA', 'CERRAR', { duration: 3000 });
+        } catch (e: any) {
+          this.snackBar.open(e?.message || 'Error al finalizar el ajuste', 'CERRAR', { duration: 6000 });
+        }
+        this.loadCajas();
+      }
+    });
+  }
+
+  /** Agrega un gasto que faltó registrar a una caja (incl. ya cerrada). */
+  agregarGasto(caja: Caja): void {
+    const ref = this.dialog.open(CreateGastoCajaDialogComponent, {
+      width: '560px',
+      disableClose: true,
+      data: { cajaId: caja.id },
+    });
+    ref.afterClosed().subscribe(result => {
+      if (result?.success || result?.saved || result === true) {
+        this.snackBar.open('GASTO REGISTRADO', 'CERRAR', { duration: 3000 });
+        this.loadCajas();
+      }
+    });
+  }
+
+  /** Agrega un retiro que faltó registrar a una caja (incl. ya cerrada). */
+  agregarRetiro(caja: Caja): void {
+    const ref = this.dialog.open(CreateRetiroCajaDialogComponent, {
+      width: '620px',
+      disableClose: true,
+      data: { cajaId: caja.id },
+    });
+    ref.afterClosed().subscribe(result => {
+      if (result?.success || result?.saved || result === true) {
+        this.snackBar.open('RETIRO REGISTRADO', 'CERRAR', { duration: 3000 });
+        this.loadCajas();
+      }
+    });
+  }
+
+  /**
+   * Genera (manual) un retiro por el efectivo del cierre de una caja CERRADA.
+   * Queda pendiente de ingreso a una caja mayor (no toca saldos hasta ingresarlo).
+   */
+  async generarRetiroCierre(caja: Caja): Promise<void> {
+    const ok = await firstValueFrom(
+      this.dialog
+        .open(ConfirmationDialogComponent, {
+          width: '440px',
+          data: {
+            title: 'Generar retiro del cierre',
+            message:
+              `Se generará un retiro con el EFECTIVO contado en el cierre de la caja #${caja.id}.\n\n` +
+              `Quedará PENDIENTE de ingreso a una caja mayor — el efectivo "se toca" recién cuando lo ingreses allí. ¿Continuar?`,
+          },
+        })
+        .afterClosed(),
+    );
+    if (!ok) return;
+    try {
+      await firstValueFrom(this.repositoryService.generarRetiroCierreCaja(caja.id!));
+      this.snackBar.open('Retiro del cierre generado (pendiente de ingreso a caja mayor)', 'CERRAR', {
+        duration: 4000,
+      });
+    } catch (e) {
+      console.error('Error generando retiro de cierre:', e);
+      this.snackBar.open('No se pudo generar el retiro del cierre', 'CERRAR', { duration: 4000 });
+    }
+  }
+
+  /**
+   * Reenvía el resumen del cierre por WhatsApp (imagen), al destino configurado
+   * en la config del PdV. `forzar: true` para que funcione aunque el envío
+   * automático esté desactivado (es una acción manual explícita).
+   */
+  async reenviarResumenWhatsapp(caja: Caja): Promise<void> {
+    const ok = await firstValueFrom(
+      this.dialog
+        .open(ConfirmationDialogComponent, {
+          width: '440px',
+          data: {
+            title: 'Reenviar resumen por WhatsApp',
+            message:
+              `Se enviará el resumen del cierre de la caja #${caja.id} por WhatsApp ` +
+              `al destino configurado en la configuración del PdV. ¿Continuar?`,
+          },
+        })
+        .afterClosed(),
+    );
+    if (!ok) return;
+    try {
+      const res = await firstValueFrom(
+        this.repositoryService.enviarResumenCierreWhatsapp(caja.id!, { forzar: true }),
+      );
+      if (res?.ok) {
+        const imgs = res.enviados > 1 ? `${res.enviados} imágenes` : 'el resumen';
+        this.snackBar.open(`WhatsApp enviado (${imgs})`, 'CERRAR', { duration: 4000 });
+      } else {
+        const motivo = res?.omitido || (res?.errores?.length ? res.errores.join(' · ') : 'motivo desconocido');
+        this.snackBar.open(`No se envió: ${motivo}`, 'CERRAR', { duration: 6000 });
+      }
+    } catch (e: any) {
+      console.error('Error reenviando resumen por WhatsApp:', e);
+      this.snackBar.open(e?.message || 'No se pudo enviar el resumen por WhatsApp', 'CERRAR', { duration: 5000 });
+    }
   }
 
   openCaja(): void {

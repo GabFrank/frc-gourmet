@@ -16,6 +16,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateEditChequeraDialogComponent } from '../create-edit-chequera/create-edit-chequera-dialog.component';
 import { ListChequesComponent } from '../list-cheques/list-cheques.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-chequeras',
@@ -27,6 +28,7 @@ import { ListChequesComponent } from '../list-cheques/list-cheques.component';
     MatTableModule, MatButtonModule, MatIconModule, MatMenuModule, MatCardModule,
     MatProgressSpinnerModule, MatChipsModule, MatDialogModule, MatSnackBarModule,
     MatTooltipModule, DecimalPipe,
+    HasPermissionDirective,
   ]
 })
 export class ListChequerasComponent implements OnInit {

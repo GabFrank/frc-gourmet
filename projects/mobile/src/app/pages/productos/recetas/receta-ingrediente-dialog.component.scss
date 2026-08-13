@@ -1,0 +1,80 @@
+.ing-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 280px;
+}
+
+.ing-modo {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.ing-modo .mat-button-toggle {
+  flex: 1;
+}
+
+.ing-field {
+  width: 100%;
+}
+
+.ing-producto-sel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.ing-producto-nombre {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ing-resultados {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+
+.ing-resultado {
+  text-align: left;
+  padding: 12px;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.ing-resultado:hover {
+  background: var(--hover-bg, rgba(127, 127, 127, 0.1));
+}
+
+.ing-row {
+  display: flex;
+  gap: 10px;
+}
+
+.ing-cant {
+  flex: 1;
+}
+
+.ing-unidad {
+  flex: 1.2;
+}
+
+.ing-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 4px 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+}

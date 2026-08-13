@@ -35,4 +35,26 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'RRHH',
     permisos: ['RRHH_DASHBOARD_VER', 'RRHH_FUNCIONARIO_VER'],
   },
+  {
+    path: '/reportes',
+    icon: 'assessment',
+    label: 'Reportes',
+    permisos: ['VENTAS_REPORTES_VER', 'FINANCIERO_REPORTES_VER'],
+  },
+  // El mozo entra con MUSICA_VER (mira que suena); cajero/gerente/admin
+  // ademas controlan, porque tienen MUSICA_CONTROLAR.
+  {
+    path: '/musica',
+    icon: 'music_note',
+    label: 'Música',
+    permisos: ['MUSICA_VER', 'MUSICA_CONTROLAR'],
+  },
+  // Configuracion: hoy solo Musica ambiente (gerente/admin). A futuro suma mas
+  // opciones; el SectionIndexPage filtra los tiles por permiso.
+  {
+    path: '/configuracion',
+    icon: 'settings',
+    label: 'Configuración',
+    permisos: ['MUSICA_CONFIGURAR'],
+  },
 ];

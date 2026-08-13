@@ -134,7 +134,7 @@
         </div>
 
         <div class="actions">
-          <button mat-raised-button color="primary" (click)="saveAndRestart()"
+          <button *appHasPermission="'SISTEMA_MODO_CONFIGURAR'" mat-raised-button color="primary" (click)="saveAndRestart()"
                   [disabled]="testing || saving">
             <mat-icon>restart_alt</mat-icon>
             <span>Guardar y reiniciar</span>

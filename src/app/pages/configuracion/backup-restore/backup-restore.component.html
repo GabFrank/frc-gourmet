@@ -37,7 +37,15 @@
                 <span class="info-value">{{ info.appVersion }}</span>
               </div>
               <div class="info-row">
-                <span class="info-label">BD existe:</span>
+                <span class="info-label">Motor de BD:</span>
+                <span class="info-value">
+                  <span class="chip" [ngClass]="isPostgres ? 'chip-full' : 'chip-db'">
+                    {{ isPostgres ? 'POSTGRESQL' : 'SQLITE' }}
+                  </span>
+                </span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">{{ isPostgres ? 'BD accesible:' : 'BD existe:' }}</span>
                 <span class="info-value">
                   <mat-icon class="ok-icon" *ngIf="info.dbExists">check_circle</mat-icon>
                   <mat-icon class="err-icon" *ngIf="!info.dbExists">error</mat-icon>
@@ -48,9 +56,17 @@
                 <span class="info-label">Tamaño de BD:</span>
                 <span class="info-value">{{ formatSize(info.dbSize) }}</span>
               </div>
-              <div class="info-row">
+              <div class="info-row" *ngIf="!isPostgres">
                 <span class="info-label">Última modificación:</span>
                 <span class="info-value">{{ formatDate(info.dbModifiedAt) }}</span>
+              </div>
+              <div class="info-row info-row-wide" *ngIf="isPostgres && info.pgInfo">
+                <span class="info-label">Conexión Postgres:</span>
+                <span class="info-value mono">{{ info.pgInfo.username }}&#64;{{ info.pgInfo.host }}:{{ info.pgInfo.port }}/{{ info.pgInfo.database }}</span>
+              </div>
+              <div class="info-row info-row-wide" *ngIf="isPostgres && info.connError">
+                <span class="info-label">Error de conexión:</span>
+                <span class="info-value err-icon">{{ info.connError }}</span>
               </div>
               <div class="info-row">
                 <span class="info-label">Imágenes de perfil:</span>
@@ -76,29 +92,32 @@
         <mat-card class="action-card">
           <mat-card-header>
             <mat-card-title>Crear backup manual</mat-card-title>
-            <mat-card-subtitle>El backup queda en la carpeta de backups configurada o podés exportarlo a otra ubicación</mat-card-subtitle>
+            <mat-card-subtitle>
+              El backup queda en la carpeta de backups configurada o podés exportarlo a otra ubicación.
+              <span *ngIf="isPostgres">Postgres genera un dump con <strong>pg_dump</strong> (formato configurable en Auto-backup).</span>
+            </mat-card-subtitle>
           </mat-card-header>
           <mat-card-content>
             <div class="action-grid">
-              <button mat-stroked-button color="primary"
+              <button *appHasPermission="'SISTEMA_BACKUP'" mat-stroked-button color="primary"
                       (click)="createBackupLocal(false)"
                       [disabled]="loading">
                 <mat-icon>save</mat-icon>
                 <span>Backup rápido (solo BD)</span>
               </button>
-              <button mat-stroked-button color="primary"
+              <button *appHasPermission="'SISTEMA_BACKUP'" mat-stroked-button color="primary"
                       (click)="createBackupLocal(true)"
                       [disabled]="loading">
                 <mat-icon>archive</mat-icon>
                 <span>Backup completo (BD + imágenes)</span>
               </button>
-              <button mat-stroked-button
+              <button *appHasPermission="'SISTEMA_BACKUP'" mat-stroked-button
                       (click)="createAndExport(false)"
                       [disabled]="loading">
                 <mat-icon>file_download</mat-icon>
                 <span>Exportar BD a archivo...</span>
               </button>
-              <button mat-stroked-button
+              <button *appHasPermission="'SISTEMA_BACKUP'" mat-stroked-button
                       (click)="createAndExport(true)"
                       [disabled]="loading">
                 <mat-icon>folder_zip</mat-icon>
@@ -114,11 +133,11 @@
             <mat-card-subtitle>Reemplaza la BD actual con un backup. La app se reinicia.</mat-card-subtitle>
           </mat-card-header>
           <mat-card-content>
-            <button mat-flat-button color="warn"
+            <button *appHasPermission="'SISTEMA_BACKUP'" mat-flat-button color="warn"
                     (click)="restoreFromFile()"
                     [disabled]="loading">
               <mat-icon>restore</mat-icon>
-              <span>Elegir archivo .db o .frcbak...</span>
+              <span>{{ isPostgres ? 'Elegir archivo .dump, .sql o .frcbak...' : 'Elegir archivo .db o .frcbak...' }}</span>
             </button>
           </mat-card-content>
         </mat-card>
@@ -184,11 +203,15 @@
                       <mat-icon>more_vert</mat-icon>
                     </button>
                     <mat-menu #rowMenu="matMenu">
-                      <button mat-menu-item (click)="restoreFromList(row)">
+                      <button *appHasPermission="'SISTEMA_BACKUP'" mat-menu-item (click)="restoreFromList(row)">
                         <mat-icon>restore</mat-icon>
                         <span>Restaurar este backup</span>
                       </button>
-                      <button mat-menu-item (click)="deleteBackup(row)">
+                      <button *appHasPermission="'SISTEMA_BACKUP'" mat-menu-item (click)="sendBackupWhatsapp(row)">
+                        <mat-icon>send</mat-icon>
+                        <span>Enviar por WhatsApp</span>
+                      </button>
+                      <button *appHasPermission="'SISTEMA_BACKUP'" mat-menu-item (click)="deleteBackup(row)">
                         <mat-icon>delete</mat-icon>
                         <span>Eliminar</span>
                       </button>
@@ -279,6 +302,34 @@
               <span class="hint-text">(Aumenta el tamaño del archivo)</span>
             </div>
 
+            <!-- Formato de dump: solo Postgres -->
+            <div class="form-row" *ngIf="isPostgres">
+              <mat-form-field appearance="outline">
+                <mat-label>Formato del dump (Postgres)</mat-label>
+                <mat-select [(ngModel)]="config.pgFormat">
+                  <mat-option *ngFor="let opt of pgFormatOptions" [value]="opt.value">{{ opt.label }}</mat-option>
+                </mat-select>
+                <mat-hint>Comprimido restaura con pg_restore; SQL plano con psql</mat-hint>
+              </mat-form-field>
+            </div>
+            <div class="form-row" *ngIf="isPostgres">
+              <mat-form-field appearance="outline" class="wide-field">
+                <mat-label>Carpeta de binarios Postgres (opcional)</mat-label>
+                <input matInput [(ngModel)]="config.pgBinDir" placeholder="Ej: C:\Program Files\PostgreSQL\16\bin">
+                <mat-hint>Dejar vacío para autodetectar pg_dump/pg_restore/psql</mat-hint>
+              </mat-form-field>
+            </div>
+
+            <!-- WhatsApp: número destino para enviar backups -->
+            <mat-divider></mat-divider>
+            <div class="form-row">
+              <mat-form-field appearance="outline" class="wide-field">
+                <mat-label>WhatsApp destino para backups (opcional)</mat-label>
+                <input matInput [(ngModel)]="config.whatsappDestino" placeholder="Ej: 595991123456 o JID de grupo">
+                <mat-hint>Reusa la conexión Evolution API de Notificaciones. Enviá backups desde el menú de cada archivo.</mat-hint>
+              </mat-form-field>
+            </div>
+
             <div class="form-row dir-row">
               <div class="dir-display">
                 <span class="dir-label">Carpeta de backups:</span>
@@ -306,11 +357,11 @@
             </div>
 
             <div class="form-row buttons-row">
-              <button mat-flat-button color="primary" (click)="saveConfig()" [disabled]="loading">
+              <button *appHasPermission="'SISTEMA_BACKUP'" mat-flat-button color="primary" (click)="saveConfig()" [disabled]="loading">
                 <mat-icon>save</mat-icon>
                 <span>Guardar configuración</span>
               </button>
-              <button mat-stroked-button (click)="triggerAutoBackupNow()" [disabled]="loading">
+              <button *appHasPermission="'SISTEMA_BACKUP'" mat-stroked-button (click)="triggerAutoBackupNow()" [disabled]="loading">
                 <mat-icon>flash_on</mat-icon>
                 <span>Ejecutar ahora</span>
               </button>
@@ -348,7 +399,7 @@
               </ul>
               <p>La app se reiniciará automáticamente.</p>
             </div>
-            <button mat-flat-button color="warn" (click)="resetDatabase()" [disabled]="loading">
+            <button *appHasPermission="'SISTEMA_BACKUP'" mat-flat-button color="warn" (click)="resetDatabase()" [disabled]="loading">
               <mat-icon>delete_forever</mat-icon>
               <span>Resetear base de datos</span>
             </button>

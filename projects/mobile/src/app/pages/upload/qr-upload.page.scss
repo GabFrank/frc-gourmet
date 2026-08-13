@@ -1,0 +1,138 @@
+.upload-page {
+  min-height: 100dvh;
+  padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: var(--background, #fff);
+  color: var(--text-primary);
+}
+
+.up-center {
+  flex: 1;
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+
+  h2 { margin: 0; }
+}
+
+.up-error-icon {
+  font-size: 56px;
+  width: 56px;
+  height: 56px;
+  color: var(--warn-color, #d32f2f);
+}
+
+.up-muted {
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.up-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  mat-icon {
+    font-size: 34px;
+    width: 34px;
+    height: 34px;
+    color: var(--primary-color, #3f51b5);
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 1.3rem;
+  }
+}
+
+.up-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.up-action {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 12px;
+  text-align: left;
+  padding: 16px;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
+  border-radius: 14px;
+  background: var(--card-background, #fafafa);
+  color: var(--text-primary);
+  cursor: pointer;
+
+  &:disabled { opacity: 0.5; }
+  &:active { transform: scale(0.99); }
+
+  mat-icon {
+    grid-row: 1 / 3;
+    font-size: 30px;
+    width: 30px;
+    height: 30px;
+    color: var(--primary-color, #3f51b5);
+  }
+}
+.up-action-title {
+  font-weight: 600;
+  font-size: 1rem;
+}
+.up-action-sub {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+
+  &.warn { color: var(--warn-color, #d32f2f); }
+}
+
+.up-uploading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+}
+
+.up-done {
+  border-top: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.up-done-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--success-color, #2e7d32);
+
+  mat-icon { color: var(--success-color, #2e7d32); }
+}
+.up-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.up-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--card-background, #f0f0f0);
+
+  img { width: 100%; height: 100%; object-fit: cover; }
+  mat-icon { color: var(--text-secondary); }
+}
+.up-hint { font-size: 0.8rem; }

@@ -10,12 +10,15 @@
       <span class="chip" [class.chip-naranja]="compra.credito" [class.chip-celeste]="!compra.credito">
         {{ compra.credito ? 'A crédito' : 'Contado' }}
       </span>
+      <span *ngIf="compra.simplificada" class="chip chip-celeste" matTooltip="Compra simplificada: sin ítems, no mueve stock ni costo">
+        SIMPLIFICADA · SIN STOCK
+      </span>
     </div>
     <div class="header-actions">
       <button mat-icon-button matTooltip="Refrescar" (click)="load()" [disabled]="loading">
         <mat-icon>refresh</mat-icon>
       </button>
-      <button mat-stroked-button color="warn" (click)="anular()" [disabled]="compra.estado === 'CANCELADO'">
+      <button mat-stroked-button color="warn" (click)="anular()" [disabled]="compra.estado === 'CANCELADO'" *appHasPermission="'COMPRAS_GESTIONAR'">
         <mat-icon>block</mat-icon>
         Anular
       </button>
@@ -65,7 +68,14 @@
     </div>
   </div>
 
-  <div class="seccion" *ngIf="compra">
+  <div class="seccion" *ngIf="compra && compra.simplificada">
+    <div class="info-simplificada">
+      <mat-icon>info</mat-icon>
+      <span>Compra simplificada: no tiene ítems cargados. Solo generó la deuda al proveedor (no impacta stock ni costo).</span>
+    </div>
+  </div>
+
+  <div class="seccion" *ngIf="compra && !compra.simplificada">
     <h3>Detalles ({{ compra.detalles?.length || 0 }})</h3>
     <table mat-table [dataSource]="compra.detalles || []" class="det-table">
       <ng-container matColumnDef="producto">

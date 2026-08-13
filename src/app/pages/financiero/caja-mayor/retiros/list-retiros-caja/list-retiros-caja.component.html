@@ -7,6 +7,20 @@
   <mat-card class="filter-card">
     <div class="filter-row">
       <mat-form-field appearance="outline">
+        <mat-label>Desde</mat-label>
+        <input matInput [matDatepicker]="pickerDesde" [formControl]="fechaDesde">
+        <mat-datepicker-toggle matSuffix [for]="pickerDesde"></mat-datepicker-toggle>
+        <mat-datepicker #pickerDesde></mat-datepicker>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Hasta</mat-label>
+        <input matInput [matDatepicker]="pickerHasta" [formControl]="fechaHasta">
+        <mat-datepicker-toggle matSuffix [for]="pickerHasta"></mat-datepicker-toggle>
+        <mat-datepicker #pickerHasta></mat-datepicker>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
         <mat-label>Estado</mat-label>
         <mat-select [formControl]="estadoFilter">
           <mat-option [value]="null">Todos</mat-option>
@@ -38,6 +52,17 @@
       <ng-container matColumnDef="caja">
         <th mat-header-cell *matHeaderCellDef>Caja</th>
         <td mat-cell *matCellDef="let row">{{row.retiro.caja?.dispositivo?.nombre || row.retiro.caja?.nombre || '-'}}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="origen">
+        <th mat-header-cell *matHeaderCellDef>Origen</th>
+        <td mat-cell *matCellDef="let row">
+          <mat-chip
+            [ngStyle]="{'background-color': row.retiro.origen === 'CIERRE' ? '#6a1b9a' : '#9e9e9e', 'color': 'white'}"
+          >
+            {{ row.retiro.origen === 'CIERRE' ? 'CIERRE' : 'MANUAL' }}
+          </mat-chip>
+        </td>
       </ng-container>
 
       <ng-container matColumnDef="estado">
@@ -82,10 +107,12 @@
               <mat-icon>visibility</mat-icon>
               <span>Ver Detalles</span>
             </button>
-            <button mat-menu-item (click)="ingresarACajaMayor(row)" *ngIf="row.retiro.estado === 'FLOTANTE' || row.retiro.estado === 'VINCULADO_PENDIENTE'">
-              <mat-icon>move_up</mat-icon>
-              <span>{{row.retiro.estado === 'VINCULADO_PENDIENTE' ? 'Verificar e Ingresar' : 'Ingresar a Caja Mayor'}}</span>
-            </button>
+            <ng-container *appHasPermission="'CAJA_MAYOR_OPERAR'">
+              <button mat-menu-item (click)="ingresarACajaMayor(row)" *ngIf="row.retiro.estado === 'FLOTANTE' || row.retiro.estado === 'VINCULADO_PENDIENTE'">
+                <mat-icon>move_up</mat-icon>
+                <span>{{row.retiro.estado === 'VINCULADO_PENDIENTE' ? 'Verificar e Ingresar' : 'Ingresar a Caja Mayor'}}</span>
+              </button>
+            </ng-container>
           </mat-menu>
         </td>
       </ng-container>

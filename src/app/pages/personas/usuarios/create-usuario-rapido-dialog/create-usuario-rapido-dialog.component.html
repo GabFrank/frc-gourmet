@@ -12,9 +12,10 @@
   <!-- Vista 1: formulario -->
   <ng-container *ngIf="!loading && !usuarioCreado">
     <p class="hint">
-      Vamos a crear un usuario con una <strong>contraseña temporal aleatoria</strong>.
+      Vamos a crear un usuario con una <strong>contraseña temporal de 6 dígitos</strong>.
       Una vez creado, vas a poder copiarla y pasársela al funcionario.
-      Él mismo podrá cambiarla luego desde el menú de su perfil.
+      En su <strong>primer inicio de sesión</strong> el sistema le va a pedir que la
+      cambie por una personal.
     </p>
 
     <form [formGroup]="form" class="form-grid">

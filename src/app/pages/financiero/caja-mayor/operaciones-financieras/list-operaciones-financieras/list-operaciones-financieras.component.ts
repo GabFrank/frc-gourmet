@@ -21,6 +21,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateOperacionFinancieraDialogComponent } from '../create-operacion-financiera/create-operacion-financiera-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-operaciones-financieras',
@@ -34,6 +35,7 @@ import { CreateOperacionFinancieraDialogComponent } from '../create-operacion-fi
     MatFormFieldModule, MatInputModule, MatSelectModule, MatDatepickerModule,
     MatNativeDateModule, MatTooltipModule, MatPaginatorModule,
     DatePipe, DecimalPipe,
+    HasPermissionDirective,
   ]
 })
 export class ListOperacionesFinancierasComponent implements OnInit {
@@ -53,6 +55,7 @@ export class ListOperacionesFinancierasComponent implements OnInit {
     { value: 'DEPOSITO_BANCARIO', label: 'Deposito Bancario' },
     { value: 'RETIRO_BANCARIO', label: 'Retiro Bancario' },
     { value: 'TRANSFERENCIA_ENTRE_CAJAS', label: 'Transferencia entre Cajas' },
+    { value: 'TRANSFERENCIA_BANCARIA', label: 'Transferencia Bancaria' },
   ];
 
   constructor(
@@ -154,6 +157,7 @@ export class ListOperacionesFinancierasComponent implements OnInit {
       case 'DEPOSITO_BANCARIO': return '#43a047';
       case 'RETIRO_BANCARIO': return '#f57c00';
       case 'TRANSFERENCIA_ENTRE_CAJAS': return '#6a1b9a';
+      case 'TRANSFERENCIA_BANCARIA': return '#00838f';
       default: return '#757575';
     }
   }

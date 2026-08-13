@@ -1,8 +1,64 @@
 # TODOs pendientes del proyecto
 
-Snapshot **2026-05-06**, **auditado 2026-06-08** contra el código. Verificar `git log` y memorias antes de afirmar que algo sigue pendiente.
+Snapshot **2026-05-06**, **auditado 2026-06-08**, **revisado 2026-06-28**, **reauditado integral 2026-07-26** (240 commits desde 2026-06-28) contra el código. Verificar `git log` y memorias antes de afirmar que algo sigue pendiente.
 
 > 📌 **El orden de ataque está en `## Plan de implementación priorizado (P0→P5)` al final.** Lo de arriba es el catálogo detallado.
+
+## Reauditado 2026-07-26 — TODOs que YA se completaron
+
+Confirmado contra código en la reauditoría integral. Estos ya NO son pendientes:
+
+- [x] **KDS (Kitchen Display Screen)** — completo: componente compartido desktop (tab) + PWA `/kds` (TV), SSE en web + poll de respaldo, modo TV, bump bar/numpad, detalle por ítem, ABM de pantallas con semáforo/umbrales. Los estados avanzados de `ComandaItem` (EN_PREPARACION/LISTO/ENTREGADO) ahora tienen UI. → [domains/cocina-impresion.md](../domains/cocina-impresion.md).
+- [x] **Impresión real de tickets/comandas** — `TicketSpec`/`printTicketSpec` estructurado, auto-impresión al cobrar (`PdvConfig.autoImprimirTicketVenta`), enrutado por sector (M2M `producto_sectores` → `sectores_impresoras`), comanda de cocina mejorada (pizza en grande, remociones destacadas), **ticket de cierre de caja** con auto-impresión. Reimprimir comanda (`forceReprint`) y reimprimir ticket/pagaré (menú de Últimas Ventas).
+- [x] **Impresora del sistema + descubrimiento de red** — `connectionType='system'` (RAW por spooler, `@thiagoelg/node-printer` opcional), `list-system-printers`, `scan-network-printers` (mDNS+TCP), `test-printer-connection`. Selector de **columnas** (32/40/42/48) en vez de mm.
+- [x] **Combos UI** — component `producto-combo` como tab del editor de producto + handlers CRUD `createCombo`/`comboProducto`. (No hay página top-level pero el ABM es funcional.)
+- [x] **UI de Observaciones** — component `producto-observaciones` (tab) hace CRUD del catálogo `Observacion` + vínculo `ProductoObservacion`.
+- [x] **Stock UI** — component `producto-stock` (tab) lista movimientos y crea manuales (AJUSTE_POSITIVO/NEGATIVO/DESCARTE/TRANSFERENCIA) vía `create-stock-movimiento`.
+- [x] **Imagen en Presentación + Sabor** — `app-file-upload` + `imageUrl` en `sabor-dialog` y `producto-presentaciones-precios` (con fallback al producto).
+- [x] **Retiros de Efectivo desde PdV** — tarjeta "Retiro de Caja" en el cajón + integrados en el esperado del cierre.
+- [x] **Gastos desde PdV** — entidad `GastoCaja` + `gastos-caja.handler.ts` + `gasto-caja-dialog`.
+- [x] **Vales y Compras desde el PdV** — entidad `EgresoCaja` + `pdv-egresos.handler.ts` (permisos `PDV_PAGAR_VALE`/`PDV_PAGAR_COMPRA`/`PDV_ANULAR_EGRESO`).
+- [x] **Refactor sabores: cada variación su propia receta** — `create-sabor`/`generarVariacionesParaProducto` crean una `Receta` por variación (ya no compartida). Módulo Gestión de Sabores + `reparar-recetas-compartidas`.
+- [x] **Batch de seguridad/correctness 2026-07-15** — ~20 bugs C/M/A cerrados (ver [reference/known-bugs.md](../reference/known-bugs.md)). Incluye permisos en handlers de precio/stock (C-03) y 23 handlers RRHH (M-05).
+- [x] **Transferencia bancaria (banco→banco) + UI config Caja Mayor 2026-07-27** — nuevo tipo `TipoOperacionFinanciera.TRANSFERENCIA_BANCARIA` (transferencia interna entre dos cuentas bancarias, posible multi-moneda con cotización; no toca Caja Mayor). Migración `DropCheckTipoOperacionFinanciera` (suelta el CHECK de SQLite). **UI Caja Mayor:** el diálogo de configuración quitó la sección "Formas de pago" (inútil, solo hay EFECTIVO) y agregó **drag & drop** para ordenar las cuentas bancarias (persistido en `CajaMayorConfiguracion.cuentasBancariasOrden`, reflejado en el sidebar desktop + mobile). Tests: `test:transferencia-bancaria`, `test:config-caja-mayor`, `test:operacion-financiera`. → [domains/financiero-caja-mayor.md](../domains/financiero-caja-mayor.md).
+
+### Pendientes CONFIRMADOS (siguen abiertos tras la reauditoría)
+
+- [ ] **UI de Liquidación Final** — el backend netea deudas pero **no existe pantalla** (`pages/rrhh/liquidaciones-final/` no existe); falta también `anular-liquidacion-final`.
+- [ ] **Multimoneda DENTRO del cálculo de liquidación** — `LiquidacionItem`/`LiquidacionFinalItem` sin columna moneda; solo se arregló la capa de resumen. Bug de plata → prioridad.
+- [ ] **Promociones UI** — solo entidades; cero componentes/handlers/motor en PdV.
+- [ ] **Producción UI genérica** — solo existe `produccion-buffet-dialog` (BUFFET_POR_PESO); falta la pantalla de producción de elaborados.
+- [ ] **Ensamblado Pizza UI** (`EnsambladoPizza`/`SaborPizza`/`TamanhoPizza`) — legacy sin UI; evaluar deprecar a favor de `RecetaPresentacion`.
+- [ ] **Cancelar Caja** — botón "CANCELAR CAJA" sigue `disabled` ("Próximamente"); `CajaEstado.CANCELADO` existe sin flujo.
+- [ ] **Permisos de Facturación** — el subsistema no tiene códigos de permiso ni gating en el menú.
+
+## ✅ Feature implementado (rama `claude/pedidos-mesa-qr`, sin mergear): Pedidos en Mesa por QR (MESA_QR autoservicio)
+
+**Registrado 2026-07-26, implementado F1–F5 + F3b la misma sesión.** Extiende el módulo `pedidos-online` (sección/canal, **NO** módulo separado). El cliente se sienta, escanea un QR estático de la mesa, se identifica liviano y pide desde el celular; el pago es **obligatoriamente en la caja física** (sin pasarela online). Diseño y decisiones acordadas con el usuario:
+
+**Modelo de seguridad (3 capas):**
+1. **QR estático por mesa** con **token opaco** (UUID aleatorio en `PdvMesa.qrToken`, nunca el número pelado). Lámina imprimible por mesa.
+2. **Habilitación del cajero**: la mesa solo acepta pedidos si el cajero la marcó habilitada (`PdvMesa.autoservicioActivo`). Corta el ataque de escanear una foto del QR desde afuera.
+3. **WiFi/LAN obligatorio**: el alpha está **expuesto a internet** (`app.frc-gourmet.com`), así que hay que validar **explícitamente** el IP de origen del request contra el rango LAN configurado — solo para el canal `QR_MESA`. Flag `TiendaOnlineConfig.requiereLanMesa` + rango configurable.
+
+**Identificación del cliente:** **nombre obligatorio**, teléfono/OTP **opcional** (modo invitado — requiere permitir `crear-pedido-online` con `customerId` null para el canal `QR_MESA`; el modelo ya soporta `nombreCliente` snapshot + `cuentaCliente` nullable).
+
+**Aprobación:** **automático a cocina** (los ítems caen en la venta abierta de la mesa → el hook `crearComandaItemsSiCorresponde` dispara KDS/impresión solo). **Monitoreo en PdV**: color distinto en el mapa de mesas para indicar "autoatención en curso".
+
+**Estado del terreno** (auditado): el modelo de datos está listo (`PdvMesa`, `Venta.mesa`, `Comanda`, KDS por sector, enums `MESA_QR`/`QR_MESA`, columna `PedidoOnline.mesaId`). **Falta casi todo el cableado.** ⚠️ La **materialización pedido→Venta NO existe para ningún tipo** (ni pickup/delivery) — hay que construirla, es el corazón del feature.
+
+**Plan por fases** (implementado 2026-07 en la rama `claude/pedidos-mesa-qr`, sin mergear aún):
+- [x] **F1a — Datos + config:** `PdvMesa.qrToken` + `autoservicioActivo`; `TiendaOnlineConfig.permiteMesa`/`requiereLanMesa`/`rangoLanMesa`. Migración `1785082533104-AddMesaQrAutoservicio`.
+- [x] **F1b — QR de mesa + lámina:** `mesa-qr.handler.ts` (`generar-qr-mesa`/`get-qr-mesas`/`set-autoservicio-mesa`) + componente "QR de Mesas" imprimible.
+- [x] **F2 — Puente pedido→Venta:** `materializarPedidoOnlineEnVenta` (exportada en `ventas.handler.ts`). Transaccional, hooks KDS post-commit, idempotente. Sirve también a pickup/delivery a futuro.
+- [x] **F3 — Backend MESA_QR:** rama en `crear-pedido-online` (invitado, mesa por token, gate + `permiteMesa`), auto-materialización, `mesaId` en la bandeja, `optionalAuth`.
+- [x] **F3b — Validación de red LAN:** `ip-lan.util.ts` + `trustProxy` (env `TRUST_PROXY`) + chequeo de IP contra `rangoLanMesa`.
+- [x] **F4 — Storefront modo mesa:** `MesaService` + banner + checkout modo mesa (invitado, sin dirección/pago).
+- [x] **F5 — PdV monitoreo:** color "autoatención" + toggle de habilitación en `mesa-selection-dialog`.
+- [x] **F2b:** mapear observaciones/nota libre del pedido a `VentaItemObservacion` — predefinidas por lookup de texto contra el catálogo `Observacion`; nota libre + no matcheadas vía sentinel `'NOTA DEL CLIENTE'` + `observacionLibre`. (Modificaciones de ingredientes no se capturan online.)
+- [x] **Config UI:** toggles `permiteMesa`/`requiereLanMesa` + campo `rangoLanMesa` en *Config Tienda Online* (el WiFi-check se apaga en dev).
+
+Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) sección "Canal MESA_QR". Referencia de diseño: sistemas tipo Toast/Lightspeed/Odoo (QR estático + sesión, sin login, direct-to-kitchen).
 
 ## Recientemente completado (auditado 2026-06-08)
 
@@ -51,7 +107,7 @@ Snapshot **2026-05-06**, **auditado 2026-06-08** contra el código. Verificar `g
 - [ ] **Migrar `PdvCategoriaItem.imagen` (base64 → app://)** — hoy guarda base64 directo en BD (anti-patrón). Crear job de migración que: lee cada `imagen` que empieza con `data:image/...`, llama `save-file` con carpeta='producto-images' o nueva 'pdv-images', actualiza la columna con la URL devuelta, y opcionalmente elimina el data URL viejo (o deja la columna apuntando al archivo). Patrón: tab de "Mantenimiento BD" con botón "Migrar imágenes legacy".
 - [ ] **Backup/restore extender a carpetas userData** — el backup actual cubre solo la BD. Sumar `userData/{profile-images,producto-images,funcionario-documentos,factura-imports,adjuntos}` al ZIP de backup. Restore correspondiente.
 - [ ] Limpiar `.js` y `.js.map` del repo (deberían estar en `.gitignore`).
-- [ ] Eliminar entidad `RecetaAdicional` legacy (reemplazada por `RecetaAdicionalVinculacion`).
+- [x] Eliminar entidad `RecetaAdicional` legacy (verificado 2026-06-28: ya no existe el `.entity.ts` ni referencias; solo queda `RecetaAdicionalVinculacion`).
 - [ ] **Permisos OCR**: `COMPRAS_IMPORTAR_FACTURA` y `SISTEMA_CONFIGURAR_IA` están seedeados pero no se chequean en sidenav. Agregar `*ngIf="hasPermission(...)"` a las entradas correspondientes.
 - [ ] **Inferidor de presentación** (regex en `producto-inference.util.ts`) no detecta unidad cuando la descripción no incluye número/unidad explícita (ej "MANDIOCA" sin tamaño). Mejora futura: que el OCR sugiera unidad y cantidad por separado en el JSON.
 
@@ -172,8 +228,8 @@ Snapshot **2026-05-06**, **auditado 2026-06-08** contra el código. Verificar `g
 
 ## Seguridad (alta prioridad para producción)
 
-- [ ] **Hash de contraseñas con bcrypt/argon2**: actualmente texto plano.
-- [ ] **JWT secret en variable de entorno**: actualmente hardcoded `'frc-gourmet-secret-key'` en `auth.handler.ts:9`.
+- [x] **Hash de contraseñas con bcrypt** (HECHO, verificado 2026-06-28): `electron/utils/password.utils.ts` (`hashPassword`/`verifyPassword` con `bcryptjs`, 10 rounds) + migración one-shot `migrate-passwords.ts` que hashea los plaintext legacy al arranque. `verifyPassword` solo cae a comparación plaintext como fallback si el valor aún no fue hasheado.
+- [x] **JWT secret fuera del código** (HECHO, verificado 2026-06-28): `electron/utils/jwt-secret.utils.ts` (`getJwtSecret`) lee el secret de keytar (fallback a archivo local en userData) y lo genera si no existe. Ya NO está hardcodeado.
 - [x] **Validación de permisos en backend** (HECHO, auditado 2026-06-08): sweep `ensurePermission` en ~178 handlers IPC (memoria `project_todo_sweep_handlers_auth`).
 - [ ] **Idle timeout server-side**: hoy solo `last_activity_time` se actualiza, sin auto-logout.
 - [ ] **Refresh tokens** + invalidación.
@@ -184,7 +240,7 @@ Snapshot **2026-05-06**, **auditado 2026-06-08** contra el código. Verificar `g
 
 ## Reportes y exports
 
-- [ ] **Reportes de Ventas** con filtros + exports PDF/Excel.
+- [x] **Reportes de cierre de mes (Ventas + Finanzas)** — hub interactivo con período comparativo, modo presentación, export PDF y envío por WhatsApp (2026-07). → [domains/reportes.md](../domains/reportes.md). Pendiente: portar a **modo client** (los 3 métodos HTTP lanzan "no implementado"); export a **Excel**; superficie del ranking de **meseros** (calculado pero no mostrado).
 - [ ] **Reportes de Compras** (ya listados arriba).
 - [ ] **Reportes RRHH** ya tiene base (Fase 8) — auditar coverage de cada reporte.
 - [ ] **Dashboard de Ventas estadísticas** con datos reales (actualmente placeholder).
@@ -204,11 +260,10 @@ Snapshot **2026-05-06**, **auditado 2026-06-08** contra el código. Verificar `g
 Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `project_roadmap_prioritizado`). Orden por urgencia × impacto × esfuerzo. Es una propuesta; el negocio puede reordenar. Ataca de arriba hacia abajo.
 
 ### P0 — Gating de producción (seguridad) 🔴
-Lo más urgente para un deploy real:
-- **Hash de contraseñas** (bcrypt/argon2) — hoy texto plano.
-- **JWT secret a variable de entorno** — hoy hardcoded en `auth.handler.ts`.
-- (2º orden: idle timeout server-side, bloqueo por intentos fallidos, refresh tokens.)
-- ✅ *Validación de permisos backend ya está hecha (no incluir).*
+- ✅ **Hash de contraseñas (bcrypt)** — HECHO (verificado 2026-06-28, `password.utils.ts`).
+- ✅ **JWT secret fuera del código** — HECHO (verificado 2026-06-28, `jwt-secret.utils.ts`, en keytar).
+- ✅ **Validación de permisos backend** — HECHO.
+- Restante (2º orden): idle timeout server-side, bloqueo por intentos fallidos, refresh tokens (existe `RefreshToken` entity + `password-recovery.handler.ts`; auditar cobertura real).
 
 ### P1 — Correctness / riesgo de datos
 - **Sweep fechas timezone-safe** (`parseLocalDate`) en handlers con columnas `date` — parcial, completar los restantes.
@@ -229,8 +284,11 @@ Lo más urgente para un deploy real:
 - **Adjuntos UI por entidad** (backend genérico + permisos listos; UI solo en GASTO).
 
 ### P4 — Completar features con base existente
+- **UI de Liquidación Final (egreso)**: el backend existe y ahora **netea deudas** del funcionario (vales + préstamos + consumo a crédito CPC, prioridad vales→préstamo→crédito, neto topado en 0, residual queda a cobrar — ver `liquidacion-final.handler.ts` `generar`/`pagar` + entidad con `totalHaberes/Descuentos/Neto` y `tipo`/`referencia_*` en items). **Falta la pantalla**: ningún componente invoca `generar/aprobar/pagar-liquidacion-final`. Al construirla mostrar haberes, descuentos neteados y neto; disparar desde el egreso del funcionario. Falta también `anular-liquidacion-final` (no existe).
+- **Multimoneda en el cálculo de liquidación (sueldo/final)**: `LiquidacionItem`/`LiquidacionFinalItem` no guardan moneda → se netea/suma monedas distintas como iguales. La capa de resumen ya convierte a PYG (PR #198, `electron/utils/moneda.utils.ts`), pero el cálculo interno no. Requiere migración (moneda + cotización en items) + decisión: convertir con cotización vs bloquear/avisar. Ver [reference/known-bugs.md](../reference/known-bugs.md).
+- **Impresoras: validar en Windows real** la conexión `system` (spooler RAW por nombre) y el descubrimiento mDNS — solo se verificó compilación (CI Linux no puede probarlo). El módulo nativo `@thiagoelg/node-printer` es `optionalDependency` (se compila en el release Windows). Wizard LPR guiado sigue pendiente para impresora compartida en otra PC.
 - **Caja Mayor Fase 5**: arqueos/cortes formales + reportes imprimibles.
-- UI de **Combos / Promociones / Producción** (entidades existen, sin UI).
+- UI de **Promociones** (sin UI ni motor) y **Producción genérica** (solo existe el dialog buffet). *Combos ya tiene UI (tab del editor).*
 - **Reportes** Ventas/Compras con exports PDF/Excel.
 - **Compras secundarias**: recepción de mercadería, devoluciones, tab Productos en proveedor-detalle, link CPP→Compra en detalle, C-5 testing E2E.
 - **Visor universal de documentos** (UX RRHH).
@@ -238,9 +296,35 @@ Lo más urgente para un deploy real:
 ### P5 — Features grandes / nuevas
 - **Pago mixto** reutilizable (efectivo+banco, N líneas).
 - **Clientes F3/F4**: loyalty/puntos, direcciones múltiples, cumpleaños, import CSV, reportes avanzados.
-- **KDS** (Kitchen Display Screen) + impresión ESC/POS avanzada.
+- ~~**KDS** + impresión ESC/POS avanzada~~ — ✅ **HECHO** (KDS completo + impresión real). Ver sección "Reauditado 2026-07-26".
 - **Reservas** UI completa.
+- **Pedidos Online / Storefront**: base construida (Fases 0–E). Pendiente: zonas por polígono (Fase 6), pasarelas de pago reales (Bancard/UPay/PagoPar hoy son enums).
 
 ### Continuo (transversal)
 - Testing E2E (Producto→Receta→PdV→Venta→Stock; Compras contado/crédito; multi-moneda).
 - Probar margen/precio sugerido de receta con una receta con ingredientes (implementado, sin probar).
+
+### Música ambiental (branch `feat/musica-ambiental`)
+
+**Probado y funcionando** (2026-08-11, con Spotify y OpenAI reales): conexión y control del reproductor, brief → grilla semanal, descubrimiento con IA (427 temas en 3 rondas), generación del plan y **creación de las 15 playlists en Spotify**, con el planificador de F3 corriendo (`origen = IA`).
+
+**Sin probar todavía:**
+- **`Analizar temas` (ReccoBeats)** — el único paso que nunca se ejecutó. El cliente se escribió a ciegas porque su doc pública no publica el esquema de respuesta ni la base URL; es defensivo y la URL es configurable en *Opciones generales*. **Hasta que corra, `bpm`/`valencia` están vacíos y las tres variantes de energía salen casi iguales** (sólo cambia el orden).
+- **Runtime en horario real** — que el cambio de bloque dispare la playlist correcta.
+- **SSE a través del túnel Cloudflare** — funciona en localhost; falta ver si un proxy bufferea el stream.
+- **Reacción al salón** — necesita mesas ocupadas y ventas reales.
+
+**Ajustes de UX pendientes:**
+- El toggle *"Permitir explícitos"* está en Programación → Opciones generales, pero **el filtro actúa en el descubrimiento**: hay que moverlo o duplicarlo junto a ese botón.
+- Al aplicar la programación, **la propuesta desaparece** sin poder copiarla.
+- Si la importación de una semilla falla, **la semilla queda creada con 0 temas** y "Reimportar todo" la reintenta cada vez. Debería revertirse.
+- Tamaños de inputs y espaciados en general (el dueño marcó que hay varios).
+
+**Pendiente después de la clasificación semántica (2026-08-12):**
+- **Semilla que declara su estilo.** La procedencia es el discriminador más barato y confiable: lo que entró por *Bossa Nova Covers* **es** un cover, sin inferencia. Columna en `MusicaSemilla` + migración; encaja entre manual y agente en la cadena de precedencia que ya existe.
+- **El repertorio, no el algoritmo, es el limitante.** Medido en producción: `PAGODE 6 temas · SERTANEJO 6 · BRASIL FESTIVO 0` contra `INDIE 53 · POP 47 · ROCK 44`. Cualquier cuota brasileña por encima del 10% es inalcanzable hasta salir a descubrir material. Mirar `musica-deficit` del bloque antes de tocar nada.
+- **Paridad en la PWA mobile**: los ejes de ánimo y momento y las acciones nuevas de catálogo están solo en el desktop. No es regresión (el handler solo actualiza lo que recibe), pero la programación desde el teléfono queda incompleta.
+
+**Notas de operación:**
+- **La música paraguaya no aparece por descubrimiento**: el modelo no conoce bien esa escena. Se siembra con **semillas de artista** (Kchiporros, Tierra Adentro) — los links de artista funcionan desde cualquier cuenta, a diferencia de las playlists ajenas.
+- En desarrollo las playlists `FRC · …` se crean en la **cuenta personal** conectada, no en la del local.

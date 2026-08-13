@@ -1,0 +1,96 @@
+<div class="crud-page">
+  <mat-progress-bar *ngIf="cargando || trabajando" mode="indeterminate"></mat-progress-bar>
+
+  <!-- Catálogo -->
+  <mat-card appearance="outlined" class="tarjeta">
+    <mat-card-header>
+      <mat-card-title>Estilos del local</mat-card-title>
+      <mat-card-subtitle>
+        El vocabulario que usan la programación, el descubrimiento y los vetos. Los géneros de
+        Spotify se traducen a estos estilos.
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="acciones">
+        <button mat-flat-button color="primary" (click)="sembrar()" [disabled]="trabajando">
+          <mat-icon>auto_awesome</mat-icon>
+          {{ hayCatalogo ? 'Completar catálogo' : 'Crear catálogo inicial' }}
+        </button>
+        <button mat-stroked-button (click)="clasificar(false)" [disabled]="trabajando">
+          <mat-icon>bolt</mat-icon> Clasificar (rápido)
+        </button>
+        <button mat-stroked-button (click)="clasificar(true)" [disabled]="trabajando">
+          <mat-icon>travel_explore</mat-icon> Con MusicBrainz (lento)
+        </button>
+      </div>
+
+      <div class="resultado" *ngIf="ultimoResultado.length">
+        <div *ngFor="let l of ultimoResultado">{{ l }}</div>
+      </div>
+
+      <div class="crud-list" *ngIf="hayCatalogo">
+        <mat-card *ngFor="let e of estilos" class="crud-card" appearance="outlined">
+          <div class="crud-card-body">
+            <div class="crud-card-main">
+              <span class="crud-name">{{ e.nombre }}</span>
+              <span class="crud-sub">{{ e.tracks | number: '1.0-0' }} temas · {{ e.horasTexto }}</span>
+              <span class="crud-sub alias">{{ e.aliasTexto }}</span>
+            </div>
+            <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="eliminarEstilo(e)">
+                <mat-icon>delete</mat-icon><span>Eliminar</span>
+              </button>
+            </mat-menu>
+          </div>
+        </mat-card>
+      </div>
+
+      <div class="alta">
+        <mat-form-field appearance="outline" class="campo">
+          <mat-label>Nuevo estilo</mat-label>
+          <input matInput [(ngModel)]="nuevoNombre" (keyup.enter)="crearEstilo()" placeholder="Ej: BOSSA / MPB" />
+          <button matSuffix mat-icon-button (click)="crearEstilo()" [disabled]="!nuevoNombre" aria-label="Agregar">
+            <mat-icon>add</mat-icon>
+          </button>
+        </mat-form-field>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Géneros sin asignar -->
+  <mat-card appearance="outlined" class="tarjeta" *ngIf="sinClasificar.length">
+    <mat-card-header>
+      <mat-card-title>Géneros sin asignar ({{ sinClasificar.length }})</mat-card-title>
+      <mat-card-subtitle>
+        Vienen de Spotify y no pertenecen a ningún estilo, así que sus temas no entran en ninguna
+        cuota. Asignalos para que cuenten.
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="crud-list">
+        <!--
+          En columna, no en fila: los géneros crudos de Spotify son largos y sin
+          espacios ("musica-popular-brasileira"), y al lado de un select fijo
+          desbordaban la card en un teléfono.
+        -->
+        <mat-card *ngFor="let g of sinClasificar" class="crud-card" appearance="outlined">
+          <div class="crud-card-body sin-clasificar">
+            <div class="crud-card-main">
+              <span class="crud-name">{{ g.genero }}</span>
+              <span class="crud-sub">{{ g.cantidad | number: '1.0-0' }} temas</span>
+            </div>
+            <mat-form-field appearance="outline" class="select-estilo">
+              <mat-label>Asignar a</mat-label>
+              <mat-select (selectionChange)="asignar(g.genero, $event.value)">
+                <mat-option *ngFor="let e of estilos" [value]="e.id">{{ e.nombre }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+        </mat-card>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

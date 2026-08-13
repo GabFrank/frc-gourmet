@@ -8,43 +8,25 @@
   <div *ngIf="!loading">
     <section class="cfg-section">
       <div class="section-header">
-        <h3>Formas de pago a mostrar</h3>
-        <div class="bulk-actions">
-          <button mat-stroked-button type="button" (click)="toggleTodasFp(true)">Todas</button>
-          <button mat-stroked-button type="button" (click)="toggleTodasFp(false)">Ninguna</button>
-        </div>
-      </div>
-      <p class="hint">Cards de saldo en efectivo agrupados por forma de pago.</p>
-
-      <div class="check-list" *ngIf="formasPago.length > 0; else emptyFp">
-        <mat-checkbox *ngFor="let fp of formasPago" [(ngModel)]="fp.visible">
-          {{fp.nombre}}
-        </mat-checkbox>
-      </div>
-      <ng-template #emptyFp>
-        <p class="empty">No hay formas de pago activas.</p>
-      </ng-template>
-    </section>
-
-    <mat-divider></mat-divider>
-
-    <section class="cfg-section">
-      <div class="section-header">
         <h3>Cuentas bancarias a mostrar</h3>
         <div class="bulk-actions">
           <button mat-stroked-button type="button" (click)="toggleTodasCb(true)">Todas</button>
           <button mat-stroked-button type="button" (click)="toggleTodasCb(false)">Ninguna</button>
         </div>
       </div>
-      <p class="hint">Cards mostrando saldo actual, futuro (POS pendientes) y reservado (cheques diferidos).</p>
+      <p class="hint">Cards mostrando saldo actual, futuro (POS pendientes) y reservado (cheques diferidos). Arrastrá para reordenar — ese orden se usa en el resumen de Caja Mayor.</p>
 
-      <div class="check-list" *ngIf="cuentasBancarias.length > 0; else emptyCb">
-        <mat-checkbox *ngFor="let cb of cuentasBancarias" [(ngModel)]="cb.visible">
-          <span class="cb-line">
-            <strong>{{cb.nombre}}</strong>
-            <span class="cb-meta">{{cb.banco}} · {{cb.numeroCuenta}} · {{cb.monedaSimbolo}}</span>
-          </span>
-        </mat-checkbox>
+      <div class="cb-drag-list" *ngIf="cuentasBancarias.length > 0; else emptyCb"
+           cdkDropList (cdkDropListDropped)="drop($event)">
+        <div class="cb-drag-item" *ngFor="let cb of cuentasBancarias" cdkDrag [cdkDragDisabled]="guardando">
+          <mat-icon class="drag-handle" cdkDragHandle>drag_indicator</mat-icon>
+          <mat-checkbox [(ngModel)]="cb.visible">
+            <span class="cb-line">
+              <strong>{{cb.nombre}}</strong>
+              <span class="cb-meta">{{cb.banco}} · {{cb.numeroCuenta}} · {{cb.monedaSimbolo}}</span>
+            </span>
+          </mat-checkbox>
+        </div>
       </div>
       <ng-template #emptyCb>
         <p class="empty">No hay cuentas bancarias activas.</p>

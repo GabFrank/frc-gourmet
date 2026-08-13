@@ -1,7 +1,7 @@
 <div class="list-container">
   <div class="header">
     <h2>Chequeras</h2>
-    <button mat-raised-button color="primary" (click)="openCreateDialog()">
+    <button mat-raised-button color="primary" (click)="openCreateDialog()" *appHasPermission="'BANCOS_GESTIONAR'">
       <mat-icon>add</mat-icon>
       Nueva Chequera
     </button>
@@ -54,12 +54,14 @@
             <button mat-menu-item (click)="verHistorico(row)">
               <mat-icon>history</mat-icon><span>Historico de cheques</span>
             </button>
-            <button mat-menu-item (click)="openEditDialog(row)">
+            <button mat-menu-item (click)="openEditDialog(row)" *appHasPermission="'BANCOS_GESTIONAR'">
               <mat-icon>edit</mat-icon><span>Editar</span>
             </button>
-            <button mat-menu-item (click)="eliminar(row)" *ngIf="row.estado !== 'ANULADA'">
-              <mat-icon>cancel</mat-icon><span>Anular</span>
-            </button>
+            <ng-container *appHasPermission="'BANCOS_GESTIONAR'">
+              <button mat-menu-item (click)="eliminar(row)" *ngIf="row.estado !== 'ANULADA'">
+                <mat-icon>cancel</mat-icon><span>Anular</span>
+              </button>
+            </ng-container>
           </mat-menu>
         </td>
       </ng-container>

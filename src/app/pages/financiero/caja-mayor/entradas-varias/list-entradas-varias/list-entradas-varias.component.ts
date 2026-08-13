@@ -21,6 +21,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateEditEntradaVariaDialogComponent } from '../create-edit-entrada-varia/create-edit-entrada-varia-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-entradas-varias',
@@ -34,6 +35,7 @@ import { CreateEditEntradaVariaDialogComponent } from '../create-edit-entrada-va
     MatFormFieldModule, MatInputModule, MatSelectModule, MatDatepickerModule,
     MatNativeDateModule, MatTooltipModule, MatPaginatorModule,
     DatePipe, DecimalPipe,
+    HasPermissionDirective,
   ]
 })
 export class ListEntradasVariasComponent implements OnInit {

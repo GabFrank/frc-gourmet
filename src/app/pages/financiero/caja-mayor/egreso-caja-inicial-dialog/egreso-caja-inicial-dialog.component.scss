@@ -1,0 +1,83 @@
+.egreso-content {
+  min-width: 420px;
+  max-width: 560px;
+}
+
+.egreso-hint {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  margin: 0 0 12px;
+}
+
+.egreso-loading {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0;
+}
+
+.moneda-card {
+  margin-bottom: 12px;
+  padding: 12px;
+}
+
+.moneda-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  margin-bottom: 8px;
+
+  .moneda-total {
+    color: var(--primary-color, #3f51b5);
+  }
+}
+
+.billete-row {
+  display: grid;
+  grid-template-columns: 1fr 110px 1fr;
+  align-items: center;
+  gap: 8px;
+
+  .billete-valor {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .billete-input {
+    width: 100%;
+
+    ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+      display: none;
+    }
+  }
+
+  .billete-subtotal {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.85;
+  }
+}
+
+.egreso-obs {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.egreso-resumen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--hover-color, rgba(0, 0, 0, 0.04));
+
+  .egreso-resumen-label {
+    font-weight: 600;
+  }
+
+  .egreso-resumen-monto {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--primary-color, #3f51b5);
+  }
+}

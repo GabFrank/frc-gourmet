@@ -1,0 +1,51 @@
+<h2 mat-dialog-title>Registrar rostro{{ data.funcionarioNombre ? ' — ' + data.funcionarioNombre : '' }}</h2>
+
+<mat-dialog-content>
+  <p class="hint">
+    Capturá entre 1 y {{ maxCapturas }} tomas del rostro (frente, leve giro) con buena luz.
+    Mejora el reconocimiento en el fichaje.
+  </p>
+
+  <div class="prep" *ngIf="preparando">
+    <mat-spinner diameter="32"></mat-spinner>
+    <span>Preparando…</span>
+  </div>
+
+  <div class="prep faltan" *ngIf="modelosFaltan">
+    <mat-icon>download_for_offline</mat-icon>
+    <span>Faltan los modelos de reconocimiento. Descargalos en
+      <strong>Configuración → Reconocimiento facial</strong>.</span>
+  </div>
+
+  <app-face-capture
+    *ngIf="modelBasePath && !modelosFaltan"
+    facingMode="user"
+    captureLabel="Capturar rostro"
+    [modelBasePath]="modelBasePath"
+    (captured)="onCaptured($event)"
+    (cameraError)="onCameraError($event)"
+  ></app-face-capture>
+
+  <div class="capturas" *ngIf="capturas.length">
+    <mat-chip-listbox>
+      <mat-chip-option
+        *ngFor="let c of capturas; let i = index"
+        [selectable]="false"
+        (removed)="quitarCaptura(i)"
+      >
+        Toma {{ i + 1 }} · {{ (c.score * 100) | number:'1.0-0' }}%
+        <button matChipRemove aria-label="Quitar">
+          <mat-icon>cancel</mat-icon>
+        </button>
+      </mat-chip-option>
+    </mat-chip-listbox>
+    <span class="count">{{ capturas.length }} / {{ maxCapturas }}</span>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancelar()" [disabled]="saving">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="guardar()" [disabled]="!capturas.length || saving">
+    Guardar {{ capturas.length || '' }} rostro(s)
+  </button>
+</mat-dialog-actions>

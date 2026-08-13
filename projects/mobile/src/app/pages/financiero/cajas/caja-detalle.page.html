@@ -1,0 +1,138 @@
+<mat-toolbar color="primary" class="caja-bar">
+  <button mat-icon-button (click)="volver()" aria-label="Volver">
+    <mat-icon>arrow_back</mat-icon>
+  </button>
+  <span class="caja-bar-title">Caja</span>
+</mat-toolbar>
+
+<mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+
+<div class="caja-body" *ngIf="!loading">
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <ng-container *ngIf="!error">
+    <!-- Cabecera -->
+    <div class="caja-head">
+      <div class="caja-head-row">
+        <span class="caja-head-label">Cajero</span>
+        <span class="caja-head-value">{{ cajero }}</span>
+      </div>
+      <div class="caja-head-row">
+        <span class="caja-head-label">Terminal</span>
+        <span class="caja-head-value">{{ terminal }}</span>
+      </div>
+      <div class="caja-head-row">
+        <span class="caja-head-label">Estado</span>
+        <span class="chip" [class.ok]="estadoClase === 'ok'" [class.off]="estadoClase === 'off'">{{ estado }}</span>
+      </div>
+      <div class="caja-head-row" *ngIf="aperturaFmt">
+        <span class="caja-head-label">Apertura</span>
+        <span class="caja-head-value">{{ aperturaFmt }}</span>
+      </div>
+      <div class="caja-head-row" *ngIf="cierreFmt">
+        <span class="caja-head-label">Cierre</span>
+        <span class="caja-head-value">{{ cierreFmt }}</span>
+      </div>
+    </div>
+
+    <!-- Ventas (total por moneda) -->
+    <section class="block">
+      <h3 class="block-title">Ventas ({{ cantidadVentas }})</h3>
+      <div class="line" *ngFor="let l of totalVentas">
+        <span class="line-label">{{ l.simbolo }}</span>
+        <span class="line-value">{{ l.valorFmt }}</span>
+      </div>
+      <p *ngIf="!totalVentas.length" class="crud-empty">Sin ventas.</p>
+    </section>
+
+    <!-- Por forma de pago (agrupado) -->
+    <section class="block" *ngIf="ventasForma.length">
+      <h3 class="block-title">Por forma de pago</h3>
+      <ng-container *ngFor="let g of ventasForma">
+        <div class="line" *ngIf="g.items.length === 1">
+          <span class="line-label">{{ g.forma }}</span>
+          <span class="line-value">{{ g.items[0].valorFmt }} {{ g.items[0].simbolo }}</span>
+        </div>
+        <ng-container *ngIf="g.items.length > 1">
+          <div class="group-head">{{ g.forma }}</div>
+          <div class="line sub" *ngFor="let it of g.items">
+            <span class="line-label">{{ it.simbolo }}</span>
+            <span class="line-value">{{ it.valorFmt }}</span>
+          </div>
+        </ng-container>
+      </ng-container>
+    </section>
+
+    <!-- Descuentos / Aumentos -->
+    <section class="block" *ngIf="descuentos.length || aumentos.length">
+      <h3 class="block-title">Descuentos / Aumentos</h3>
+      <div class="line" *ngFor="let l of descuentos">
+        <span class="line-label">Descuento</span>
+        <span class="line-value neg">{{ l.valorFmt }} {{ l.simbolo }}</span>
+      </div>
+      <div class="line" *ngFor="let l of aumentos">
+        <span class="line-label">Aumento</span>
+        <span class="line-value pos">{{ l.valorFmt }} {{ l.simbolo }}</span>
+      </div>
+    </section>
+
+    <!-- Gastos -->
+    <section class="block" *ngIf="gastos.length">
+      <h3 class="block-title">Gastos</h3>
+      <div class="line" *ngFor="let l of gastos">
+        <span class="line-label">{{ l.label }}</span>
+        <span class="line-value">{{ l.valorFmt }}</span>
+      </div>
+      <div class="line total" *ngFor="let t of totalGastos">
+        <span class="line-label">Total gastos</span>
+        <span class="line-value">{{ t.valorFmt }} {{ t.simbolo }}</span>
+      </div>
+    </section>
+
+    <!-- Retiros -->
+    <section class="block" *ngIf="retiros.length">
+      <h3 class="block-title">Retiros</h3>
+      <ng-container *ngFor="let rt of retiros">
+        <div class="group-head">{{ rt.titulo }}</div>
+        <div class="line sub" *ngFor="let d of rt.detalles">
+          <span class="line-label">{{ d.label }}</span>
+          <span class="line-value">{{ d.valorFmt }}</span>
+        </div>
+      </ng-container>
+      <div class="line total" *ngFor="let t of totalRetiros">
+        <span class="line-label">Total retiros</span>
+        <span class="line-value">{{ t.valorFmt }} {{ t.simbolo }}</span>
+      </div>
+    </section>
+
+    <!-- Arqueo por moneda -->
+    <section class="block" *ngIf="arqueo.length">
+      <h3 class="block-title">Arqueo</h3>
+      <ng-container *ngFor="let a of arqueo">
+        <div class="group-head">{{ a.simbolo }}</div>
+        <div class="line sub">
+          <span class="line-label">Apertura</span>
+          <span class="line-value">{{ a.apertura }}</span>
+        </div>
+        <div class="line sub" *ngIf="a.cierre !== undefined">
+          <span class="line-label">Cierre</span>
+          <span class="line-value">{{ a.cierre }}</span>
+        </div>
+        <div class="line sub">
+          <span class="line-label">Esperado</span>
+          <span class="line-value">{{ a.esperado }}</span>
+        </div>
+        <div class="line sub" *ngIf="a.diferencia !== undefined">
+          <span class="line-label">Diferencia</span>
+          <span class="line-value" [class.pos]="a.difClase === 'pos'" [class.neg]="a.difClase === 'neg'">{{ a.diferencia }}</span>
+        </div>
+      </ng-container>
+    </section>
+
+    <!-- Cerrar -->
+    <button *ngIf="puedeCerrar" mat-flat-button color="warn" class="caja-cta" (click)="irACerrar()">
+      Cerrar caja
+    </button>
+    <p *ngIf="avisoNoCierre" class="crud-empty">{{ avisoNoCierre }}</p>
+  </ng-container>
+</div>

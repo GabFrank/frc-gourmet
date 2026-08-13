@@ -48,6 +48,22 @@ export class GestionarProductoComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     console.log('[GestionarProductoComponent] ngOnInit: start');
+
+    // Mantener this.productoId sincronizado con el estado del servicio. Es
+    // clave para el flujo de CREACIÓN: al guardar un producto nuevo el servicio
+    // emite el id recién generado (setEditMode / createProducto), y las subtabs
+    // que se bindean a [productoId] (ej. Sabores y Variaciones) deben recibir
+    // ese id real en lugar de quedar con null. Antes, this.productoId sólo se
+    // seteaba una vez desde los datos del tab y nunca se actualizaba tras crear,
+    // lo que hacía que la creación de sabores viajara sin productoId.
+    this.productoId$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(id => {
+        if (id) {
+          this.productoId = id;
+        }
+      });
+
     // Obtener el productoId desde el tabsService
     const currentTab = this.tabsService.currentTab();
     console.log('[GestionarProductoComponent] currentTab', currentTab);

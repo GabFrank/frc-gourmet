@@ -1,11 +1,15 @@
 # Plan: Cliente web mobile (PWA) — FRC Gourmet
 
-> Estado vivo. Última actualización: 2026-05-20. Branch: `feat/mobile-pwa-cliente`.
+> Estado vivo. Verificado: 2026-06-28. Branch original: `feat/mobile-pwa-cliente` (ya en `develop`).
 >
-> **Progreso:** F0 ✅ · F1 ✅ · F2 🟦 (servir ✅ / TLS ⛔ usuario) · F3 ✅ · Ola 1 RRHH 🟦 (Cargos ejemplar ✅).
-> Tracker detallado en [`mobile-pwa-skill-notes.md`](./mobile-pwa-skill-notes.md). **GATE:** validar E2E contra
-> server real antes de producir en masa el resto de pantallas.
-> Documento hermano de seguimiento de skill: [`mobile-pwa-skill-notes.md`](./mobile-pwa-skill-notes.md).
+> **IMPLEMENTADO:** la PWA existe en `projects/mobile` y el server Fastify la sirve. F0 ✅ · F1 ✅ ·
+> F2 (servir PWA ✅ / TLS del mesh ⛔ requiere acción del usuario) · F3 ✅ · olas administrativas con
+> múltiples dominios ya cubiertos (RRHH, Productos, Compras, Financiero, Clientes/Comisiones — mezcla de
+> CRUD y vistas). Detalle por pantalla en [`mobile-pwa-skill-notes.md`](./mobile-pwa-skill-notes.md).
+> **GATE pendiente:** validar E2E contra server real (mode=server + mesh) antes de dar por cerrado el resto.
+>
+> > **Nota de alcance:** el plan original anticipaba un *repo separado* (`frc-gourmet-mobile`); se decidió
+> > finalmente hacerlo **dentro del mismo repo** (`projects/mobile` + path-alias `@frc/shared-core`).
 
 ## Objetivo
 
@@ -131,3 +135,20 @@ Como `<img>` no manda headers, usar **fetch→blobURL** (o token firmado por que
 - Commit entre fases y entre pasos grandes. Branch `feat/mobile-pwa-cliente` → PR a `develop`.
 - Verificar compilación con `npm run build` (nunca `npm start`).
 - Respetar reglas duras del proyecto (UPPERCASE en BD, colores de tema, etc.) también en mobile.
+
+## Bitácora — Compras PWA (paridad práctica, 2026-07-30)
+
+Branch `claude/mejoras-compras-pwa-07tnam`. Ola administrativa de Compras llevada a paridad práctica
+con desktop (sin backend nuevo; se regeneró el api-map para el pago mixto). En 6 fases con commit +
+push y tests por fase:
+
+- **F1** Lista de compras: filtros + paginación (`getComprasPaginado`) + estado de pago.
+- **F2** Detalle de compra + Finalizar (`finalizar-compra`) + Anular (`anular-compra`).
+- **F3** Alta de compra simplificada (`crear-compra-simplificada`, total-based).
+- **F4** CRUD de proveedores (`createProveedor`/`updateProveedor`/`deleteProveedor`).
+- **F5** Pago mixto de cuota CPP (`pagar-cpp-cuota-mixto`) + anular (`anular-pago-mixto-cuota`).
+- **F6** Dashboard de compras (`get-dashboard-compras-kpis`).
+
+Diferido y documentado: compra compleja multi-ítem y OCR/IA de facturas.
+Detalle de cobertura → skill `architecture/mobile-pwa.md`. Manual de pruebas →
+`docs/testing/TESTING-CHECKLIST-COMPRAS-PWA.md`.

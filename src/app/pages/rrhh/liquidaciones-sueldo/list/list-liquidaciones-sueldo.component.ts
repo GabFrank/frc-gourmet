@@ -17,6 +17,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
 import { TabsService } from 'src/app/services/tabs.service';
 import { GenerarLiquidacionDialogComponent } from '../generar-dialog/generar-liquidacion-dialog.component';
 import { LiquidacionSueldoDetalleComponent } from '../detalle/liquidacion-sueldo-detalle.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 const ESTADOS = ['BORRADOR', 'APROBADA', 'PAGADA', 'ANULADA'];
 
@@ -37,6 +38,7 @@ const ESTADOS = ['BORRADOR', 'APROBADA', 'PAGADA', 'ANULADA'];
     MatSelectModule,
     MatSnackBarModule,
     MatDialogModule,
+    HasPermissionDirective,
   ],
   template: `
     <div class="page">
@@ -44,7 +46,7 @@ const ESTADOS = ['BORRADOR', 'APROBADA', 'PAGADA', 'ANULADA'];
         <mat-card-content>
           <div class="header">
             <div class="title"><mat-icon>request_quote</mat-icon> <h2>Liquidaciones de sueldo</h2></div>
-            <button mat-flat-button color="primary" (click)="abrirGenerar()">
+            <button *appHasPermission="'RRHH_LIQUIDACION_GENERAR'" mat-flat-button color="primary" (click)="abrirGenerar()">
               <mat-icon>add</mat-icon> Generar liquidacion
             </button>
           </div>

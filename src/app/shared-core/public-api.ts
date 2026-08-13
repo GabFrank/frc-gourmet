@@ -26,13 +26,64 @@ export { ThemeService } from '../services/theme.service';
 export { AuthService } from '../services/auth.service';
 export type { DeviceInfo } from '../services/auth.service';
 export { PermissionService } from '../services/permission.service';
+export { FaceRecognitionService } from '../services/face-recognition.service';
+export type { FaceCapture } from '../services/face-recognition.service';
+export { FaceCaptureComponent } from '../shared/components/face-capture/face-capture.component';
 export { AppModeService } from '../services/app-mode.service';
 export type { AppMode, AppModeDto } from '../services/app-mode.service';
 
+// --- Componentes standalone compartidos ---
+// KDS (pantalla de cocina): reusado por el desktop (tab) y la PWA (ruta /kds
+// para TV). No está acoplado a Electron — usa window.api si existe, sino HTTP.
+export { KdsComponent } from '../pages/ventas/kds/kds.component';
+
 // --- Enums de dominio (valores puros, sin decoradores TypeORM) ---
 export { PersonaTipo } from '../database/entities/personas/persona-tipo.enum';
+export {
+  TipoSemilla,
+  TipoVeto,
+  EstadoTrack,
+  VarianteEnergia,
+  TipoFeedback,
+  OrigenPlan,
+} from '../database/entities/musica/musica-enums';
+
+// --- Música ambiental: service + interfaces (reusado tal cual por la PWA) ---
+// El service sólo usa `window.api.callIpc` (browser-safe); en mobile ese
+// window.api lo provee el shim HTTP. El desktop sigue importándolo por su ruta
+// relativa; la PWA lo importa por este barrel.
+export { MusicaService } from '../services/musica.service';
+export type {
+  MusicaAvanzado,
+  MusicaConfig,
+  MusicaSemilla,
+  MusicaTrack,
+  ResumenPool,
+  ResultadoDescubrimiento,
+  BloqueProgramacion,
+  ResultadoPlan,
+  DispositivoSpotify,
+  EstiloConDatos,
+  MezclaItem,
+  DeficitEstilo,
+  DeficitBloque,
+  EstadoRuntime,
+  EstadoReproduccion,
+} from '../services/musica.service';
 
 // --- Entities (solo tipos en el bundle browser) ---
 export type { Usuario } from '../database/entities/personas/usuario.entity';
 export type { Moneda } from '../database/entities/financiero/moneda.entity';
 export type { Persona } from '../database/entities/personas/persona.entity';
+
+// --- Utilidades de dominio (datos puros, sin Angular/Electron) ---
+// Reglas de validación de Operación Financiera (fuente única desktop + mobile).
+export {
+  CAMPOS_REQUERIDOS,
+  CAMPOS_MONEDA,
+  MONEDAS_EN_UI,
+  usaCuentaBancaria,
+  usaDosCuentasBancarias,
+  monedasDesdeCuentaBancaria,
+} from '../pages/financiero/caja-mayor/operaciones-financieras/create-operacion-financiera/operacion-financiera-validacion.util';
+export type { TipoOperacionFinanciera } from '../pages/financiero/caja-mayor/operaciones-financieras/create-operacion-financiera/operacion-financiera-validacion.util';

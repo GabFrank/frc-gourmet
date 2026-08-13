@@ -7,6 +7,9 @@ import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.en
 import { CajaMayor } from '../../src/app/database/entities/financiero/caja-mayor.entity';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
+import { EgresoCaja } from '../../src/app/database/entities/financiero/egreso-caja.entity';
+import { MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
+import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
@@ -182,6 +185,13 @@ export function registerValesHandlers(
 
         cb.saldo = Number(cb.saldo) - montoBanco;
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId: cb.id,
+          tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+          monto: montoBanco,
+          observacion: `VALE #${valeSaved.id} - ${funcionario.persona?.nombre || ''} ${funcionario.persona?.apellido || ''}`.trim(),
+          responsable: userEntity,
+        });
 
         await queryRunner.commitTransaction();
         return valeSaved;
@@ -276,6 +286,13 @@ export function registerValesHandlers(
         const montoBanco = Number(payload?.montoCuentaBancaria) > 0 ? Number(payload.montoCuentaBancaria) : Number(vale.monto);
         cb.saldo = Number(cb.saldo) - montoBanco;
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId: cb.id,
+          tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+          monto: montoBanco,
+          observacion: `VALE #${vale.id}`,
+          responsable: userEntity,
+        });
 
         vale.estado = ValeEstado.CONFIRMADO;
         vale.cuentaBancariaId = cb.id;
@@ -357,6 +374,13 @@ export function registerValesHandlers(
           const montoBanco = Number(vale.montoCuentaBancaria) > 0 ? Number(vale.montoCuentaBancaria) : Number(vale.monto);
           cb.saldo = Number(cb.saldo) + montoBanco;
           await queryRunner.manager.save(CuentaBancaria, cb);
+          await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+            cuentaBancariaId: vale.cuentaBancariaId,
+            tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
+            monto: montoBanco,
+            observacion: `ANULACION VALE #${vale.id}`,
+            responsable: userEntity,
+          });
         }
       }
 
@@ -390,6 +414,19 @@ export function registerValesHandlers(
         }
       }
 
+      // Conciliación con el cajón del PdV: si el vale se pagó/creó desde una
+      // caja de venta (EgresoCaja ACTIVO), anular ese egreso para que el cierre
+      // deje de descontarlo (si no, quedaría un faltante fantasma en la caja).
+      const egresosCaja = await queryRunner.manager.getRepository(EgresoCaja).find({
+        where: { valeId: vale.id, estado: 'ACTIVO' } as any,
+      });
+      for (const eg of egresosCaja) {
+        eg.estado = 'ANULADO';
+        eg.motivoAnulacion = `ANULACION VALE #${vale.id}` + (motivo ? ` - ${String(motivo).toUpperCase()}` : '');
+        await setEntityUserTracking(dataSource, eg, userId, true);
+        await queryRunner.manager.save(EgresoCaja, eg);
+      }
+
       vale.estado = ValeEstado.ANULADO;
       await setEntityUserTracking(dataSource, vale, userId, true);
       await valeRepo.save(vale);
@@ -406,6 +443,7 @@ export function registerValesHandlers(
   });
 
   ipcMain.handle('marcar-vale-descontado', async (_e, id: number, liquidacionId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VALE_CONFIRMAR');
     const repo = dataSource.getRepository(Vale);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Vale ${id} no encontrado`);

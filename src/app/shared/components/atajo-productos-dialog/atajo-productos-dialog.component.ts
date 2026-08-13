@@ -10,11 +10,14 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '../../../database/repository.service';
 import { SeleccionarPresentacionDialogComponent } from '../seleccionar-presentacion-dialog/seleccionar-presentacion-dialog.component';
+import { thumbUrl, resolveAppUrl } from '../../utils/image-url.util';
 
 export interface AtajoProductosDialogData {
   atajoItemId: number;
   atajoItemNombre: string;
   gridSize?: number;
+  /** Cantidad inicial propagada desde el input de cantidad del PdV. */
+  cantidad?: number;
 }
 
 @Component({
@@ -47,6 +50,11 @@ export class AtajoProductosDialogComponent implements OnInit {
     private dialog: MatDialog
   ) {
     this.gridSize = data.gridSize || 3;
+    // Propagar la cantidad del PdV como valor inicial (default 1).
+    const cantidadInicial = Number(data.cantidad);
+    if (cantidadInicial && cantidadInicial > 0) {
+      this.cantidadFormControl.setValue(cantidadInicial);
+    }
   }
 
   async ngOnInit(): Promise<void> {
@@ -119,6 +127,20 @@ export class AtajoProductosDialogComponent implements OnInit {
 
   getDisplayName(item: any): string {
     return item.nombre_alternativo || item.producto?.nombre || 'Sin nombre';
+  }
+
+  /** URL renderizable del thumb (con fallback al original vía proxy en cliente). */
+  thumbFor(url?: string | null): string | undefined {
+    return thumbUrl(url) || resolveAppUrl(url ?? undefined);
+  }
+
+  /** Si el thumb no existe (imágenes legacy), cae al original. */
+  onThumbError(event: Event, originalUrl?: string | null): void {
+    const img = event.target as HTMLImageElement;
+    const fallback = resolveAppUrl(originalUrl);
+    if (fallback && img.src !== fallback) {
+      img.src = fallback;
+    }
   }
 
   getPrice(item: any): number {

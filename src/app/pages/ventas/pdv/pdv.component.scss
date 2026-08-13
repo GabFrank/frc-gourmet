@@ -343,7 +343,7 @@
       .currency-code {
         font-size: 14px;
         font-weight: 500;
-        color: rgba(0, 0, 0, 0.7);
+        color: var(--text-secondary);
       }
     }
 
@@ -355,12 +355,12 @@
         font-size: 16px;
         font-weight: 600;
         margin-right: 4px;
-        color: #000;
+        color: var(--text-primary);
       }
 
       .currency-denomination {
         font-size: 14px;
-        color: rgba(0, 0, 0, 0.6);
+        color: var(--text-secondary);
       }
     }
   }
@@ -1135,4 +1135,53 @@ tr.example-element-row:not(.example-expanded-row):active {
 
 .status-reserved {
   color: #07a4ff;
+}
+
+/* ─── Estado de cobro por ítem (cobro parcial) ───────────────────────────── */
+.cobro-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: middle;
+  letter-spacing: 0.3px;
+}
+.cobro-pagado {
+  background-color: rgba(76, 175, 80, 0.2);
+  color: #66bb6a;
+}
+.cobro-parcial {
+  background-color: rgba(255, 167, 38, 0.2);
+  color: #ffa726;
+}
+
+.cobro-resumen-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 12px;
+  margin-bottom: 6px;
+  border-radius: 6px;
+  background-color: rgba(255, 167, 38, 0.08);
+  border: 1px solid rgba(255, 167, 38, 0.25);
+  font-size: 13px;
+
+  .cr-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+
+    strong { color: var(--text-primary, inherit); font-weight: 700; }
+
+    mat-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+    }
+  }
+  .cr-pagado strong { color: #66bb6a; }
+  .cr-saldo strong { color: #ffa726; }
 }

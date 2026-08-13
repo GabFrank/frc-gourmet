@@ -31,6 +31,12 @@
             Comandas habilitadas
           </mat-checkbox>
         </div>
+
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="ocuparMesaAlVincularComanda" color="primary">
+            Ocupar la mesa al vincular una comanda
+          </mat-checkbox>
+        </div>
       </div>
     </div>
 
@@ -85,6 +91,21 @@
           <mat-label>Umbral diferencia alta (%)</mat-label>
           <input matInput type="number" formControlName="umbralDiferenciaAlta" min="0" max="100">
           <mat-hint>Desde este % = rojo</mat-hint>
+        </mat-form-field>
+      </div>
+
+      <div class="config-row">
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="whatsappCierreCajaActivo" color="primary">
+            Enviar resumen por WhatsApp al cerrar caja
+          </mat-checkbox>
+        </div>
+
+        <mat-form-field appearance="outline" class="field-medium">
+          <mat-label>Destino WhatsApp</mat-label>
+          <input matInput formControlName="whatsappCierreCajaDestino"
+                 placeholder="595991123456 o 12036...@g.us">
+          <mat-hint>Número internacional o ID de grupo. Usa la conexión de Notificaciones.</mat-hint>
         </mat-form-field>
       </div>
     </div>

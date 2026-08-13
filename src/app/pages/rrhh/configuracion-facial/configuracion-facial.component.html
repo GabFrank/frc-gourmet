@@ -1,0 +1,93 @@
+<div class="config-facial">
+  <div *ngIf="cargando" class="spinner-container">
+    <mat-progress-spinner mode="indeterminate" diameter="36"></mat-progress-spinner>
+  </div>
+
+  <ng-container *ngIf="!cargando">
+    <!-- Modelos -->
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>Modelos de reconocimiento</mat-card-title>
+        <mat-card-subtitle>Se descargan una vez y se sirven localmente (LAN / offline).</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="estado">
+          <span class="chip" [class.ok]="status?.installed" [class.falta]="!status?.installed">
+            <mat-icon>{{ status?.installed ? 'check_circle' : 'error_outline' }}</mat-icon>
+            {{ status?.installed ? 'Instalados' : 'Faltan modelos' }}
+          </span>
+          <span class="tamano" *ngIf="status && status.totalBytes > 0">{{ tamanoMb }} MB</span>
+        </div>
+
+        <div class="modelos-grid" *ngIf="status">
+          <span class="modelo" *ngFor="let m of status.models" [class.present]="m.present">
+            <mat-icon>{{ m.present ? 'done' : 'remove' }}</mat-icon> {{ m.name }}
+          </span>
+        </div>
+
+        <div class="descarga">
+          <button mat-raised-button color="primary" (click)="descargar()" [disabled]="descargando">
+            <mat-icon>download</mat-icon>
+            {{ status?.installed ? 'Volver a descargar' : 'Descargar modelos' }}
+          </button>
+          <div class="progreso" *ngIf="descargando">
+            <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+            <span *ngIf="progreso">Descargando {{ progreso.model }} ({{ progreso.index }}/{{ progreso.total }})…</span>
+            <span *ngIf="!progreso">Iniciando descarga…</span>
+          </div>
+        </div>
+        <p class="nota">Requiere internet solo durante la descarga. La cámara del fichaje necesita HTTPS.</p>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Umbrales -->
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>Ajustes de fichaje</mat-card-title>
+        <mat-card-subtitle>Más estricto = menos falsos positivos, pero puede pedir reintentar.</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="campos">
+          <mat-form-field appearance="outline">
+            <mat-label>Umbral de similitud (0–1)</mat-label>
+            <input matInput type="number" min="0" max="1" step="0.05" [(ngModel)]="umbral" />
+            <mat-hint>Recomendado 0.55–0.65</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Margen mínimo vs 2º candidato</mat-label>
+            <input matInput type="number" min="0" max="1" step="0.01" [(ngModel)]="margen" />
+            <mat-hint>Evita confundir caras parecidas</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Liveness mínimo (0–1)</mat-label>
+            <input matInput type="number" min="0" max="1" step="0.05" [(ngModel)]="livenessMin" />
+            <mat-hint>Score mínimo de antispoof / prueba de vida</mat-hint>
+          </mat-form-field>
+
+          <mat-slide-toggle [(ngModel)]="livenessObligatorio">
+            Exigir prueba de vida (anti-foto)
+          </mat-slide-toggle>
+
+          <mat-slide-toggle [(ngModel)]="permitirMultiple">
+            Permitir marcar varias veces por día (turnos partidos)
+          </mat-slide-toggle>
+
+          <mat-slide-toggle [(ngModel)]="geocercaActiva">
+            Exigir ubicación en la empresa (geocerca)
+          </mat-slide-toggle>
+          <p class="nota" *ngIf="geocercaActiva">
+            Configurá las coordenadas y el radio en <strong>Configuración de empresa</strong>.
+          </p>
+        </div>
+
+        <div class="acciones">
+          <button mat-raised-button color="primary" (click)="guardar()" [disabled]="guardando">
+            Guardar ajustes
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </ng-container>
+</div>

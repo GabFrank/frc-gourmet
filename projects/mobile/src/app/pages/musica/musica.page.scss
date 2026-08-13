@@ -1,0 +1,244 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+
+  .spacer {
+    flex: 1 1 auto;
+  }
+}
+
+.contenido {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-bottom: 40px;
+}
+
+.chip-fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  .spacer {
+    flex: 1 1 auto;
+  }
+}
+
+.en-vivo {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(76, 175, 80, 0.22);
+  color: #a5d6a7;
+
+  mat-icon {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+  }
+}
+
+/**
+ * Los chips llevan FONDO, no solo borde: sobre el gris oscuro del tema, un
+ * texto de color sin fondo queda practicamente ilegible en un telefono a la luz
+ * del salon. Se usan tonos claros del color sobre un fondo tenue del mismo tono.
+ */
+.chip-estado {
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e8e8e8;
+
+  &.chip-ok {
+    background: rgba(76, 175, 80, 0.22);
+    color: #a5d6a7;
+  }
+  &.chip-warn {
+    background: rgba(255, 152, 0, 0.22);
+    color: #ffcc80;
+  }
+  &.chip-error {
+    background: rgba(244, 67, 54, 0.22);
+    color: #ef9a9a;
+  }
+}
+
+.alerta {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 152, 0, 0.15);
+  border-left: 3px solid #ef6c00;
+  color: #ffcc80;
+  font-size: 13px;
+  // El texto llega en MAYUSCULAS desde el backend y en un parrafo largo cansa.
+  text-transform: none;
+}
+
+.ahora {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+}
+
+.caratula {
+  width: 200px;
+  height: 200px;
+  max-width: 60vw;
+  max-height: 60vw;
+  border-radius: 12px;
+  object-fit: cover;
+  margin-bottom: 8px;
+}
+
+.caratula-vacia {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--hover-bg, rgba(128, 128, 128, 0.15));
+
+  mat-icon {
+    transform: scale(2.5);
+    color: var(--text-secondary, #888);
+  }
+}
+
+.titulo {
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--text-primary, inherit);
+}
+
+.artista {
+  font-size: 14px;
+  color: var(--text-secondary, #888);
+}
+
+.barra {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--hover-bg, rgba(128, 128, 128, 0.2));
+  margin-top: 12px;
+  overflow: hidden;
+
+  .relleno {
+    height: 100%;
+    background: var(--primary-color, #d84315);
+    transition: width 1s linear;
+  }
+}
+
+.tiempo {
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+}
+
+.controles {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+
+  // Anterior: presente para paridad, pero secundario frente a play/siguiente.
+  .btn-secundario {
+    background: var(--surface-variant);
+    color: var(--text-primary);
+  }
+}
+
+.feedback {
+  display: flex;
+  gap: 12px;
+
+  button {
+    flex: 1 1 0;
+    height: 52px;
+    font-size: 15px;
+  }
+
+  // Fondo solido y texto blanco: son los dos botones que mas se usan, con el
+  // telefono en la mano y en un salon con luz calida.
+  .btn-no-va {
+    background: #c62828;
+    color: #fff;
+  }
+
+  .btn-mas {
+    background: #2e7d32;
+    color: #fff;
+  }
+}
+
+.seccion {
+  .seccion-titulo {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary, #888);
+    margin-bottom: 8px;
+  }
+}
+
+.variantes {
+  width: 100%;
+
+  mat-button-toggle {
+    flex: 1 1 0;
+  }
+
+  // Sin esto el seleccionado casi no se distingue de los otros dos.
+  ::ng-deep .mat-button-toggle-checked {
+    background: var(--primary-color, #d84315) !important;
+
+    .mat-button-toggle-label-content {
+      color: #fff !important;
+      font-weight: 600;
+    }
+  }
+}
+
+.fila-volumen {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  .slider {
+    flex: 1 1 auto;
+  }
+
+  .valor {
+    min-width: 48px;
+    font-size: 13px;
+    color: var(--text-secondary, #888);
+  }
+}
+
+.ayuda {
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+  margin: 6px 0 0;
+}
+
+.pie {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+}

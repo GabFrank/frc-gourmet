@@ -61,6 +61,11 @@
 
   <!-- Tabla -->
   <table mat-table [dataSource]="ventaRows" class="mat-elevation-z2 ventas-table">
+    <ng-container matColumnDef="id">
+      <th mat-header-cell *matHeaderCellDef>N° VENTA</th>
+      <td mat-cell *matCellDef="let row">#{{ row.venta.id }}</td>
+    </ng-container>
+
     <ng-container matColumnDef="fecha">
       <th mat-header-cell *matHeaderCellDef>FECHA</th>
       <td mat-cell *matCellDef="let row">{{ row.venta.createdAt | date:'dd/MM/yyyy HH:mm' }}</td>
@@ -74,6 +79,11 @@
     <ng-container matColumnDef="cajero">
       <th mat-header-cell *matHeaderCellDef>CAJERO</th>
       <td mat-cell *matCellDef="let row">{{ row.venta.createdBy?.persona?.nombre || '-' }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="formaPago">
+      <th mat-header-cell *matHeaderCellDef>FORMA PAGO</th>
+      <td mat-cell *matCellDef="let row">{{ row.formaPago }}</td>
     </ng-container>
 
     <ng-container matColumnDef="estado">
@@ -109,14 +119,16 @@
             <mat-icon>visibility</mat-icon>
             <span>VER DETALLE</span>
           </button>
-          <button mat-menu-item (click)="cancelarVenta(row.venta)" *ngIf="row.venta.estado !== 'CANCELADA'">
-            <mat-icon>cancel</mat-icon>
-            <span>CANCELAR VENTA</span>
-          </button>
-          <button mat-menu-item (click)="rehabilitarVenta(row.venta)" *ngIf="row.venta.estado === 'CANCELADA'">
-            <mat-icon>replay</mat-icon>
-            <span>REHABILITAR VENTA</span>
-          </button>
+          <ng-container *appHasPermission="'VENTAS_PDV'">
+            <button mat-menu-item (click)="cancelarVenta(row.venta)" *ngIf="row.venta.estado !== 'CANCELADA'">
+              <mat-icon>cancel</mat-icon>
+              <span>CANCELAR VENTA</span>
+            </button>
+            <button mat-menu-item (click)="rehabilitarVenta(row.venta)" *ngIf="row.venta.estado === 'CANCELADA'">
+              <mat-icon>replay</mat-icon>
+              <span>REHABILITAR VENTA</span>
+            </button>
+          </ng-container>
         </mat-menu>
       </td>
     </ng-container>

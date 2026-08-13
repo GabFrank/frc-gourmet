@@ -46,7 +46,6 @@ export interface SeleccionarVariacionDialogResult {
   precioCalculado: number;
   costoCalculado: number;
   cantidad: number;
-  personalizacionGeneral: PersonalizarProductoDialogResult | null;
   ensambladoDescripcion: string;
 }
 
@@ -83,7 +82,9 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
 
   // Paso 3: Resumen
   cantidad: number;
-  personalizacionGeneral: PersonalizarProductoDialogResult | null = null;
+
+  // Proporciones: por defecto partes iguales; el usuario puede ajustarlas (mitad y mitad, 60/40, etc.)
+  proporcionesManuales = false;
 
   // Precios pre-computados
   precioCalculado = 0;
@@ -134,7 +135,7 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
   async selectPresentacion(presentacion: Presentacion): Promise<void> {
     this.selectedPresentacion = presentacion;
     this.saboresSeleccionados = [];
-    this.personalizacionGeneral = null;
+    this.proporcionesManuales = false;
     this.recalcular();
 
     // Cargar variaciones para este tamaño
@@ -181,30 +182,41 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
     if (index >= 0) {
       // Deseleccionar
       this.saboresSeleccionados.splice(index, 1);
-    } else {
-      // Verificar máximo
-      if (this.saboresSeleccionados.length >= this.maxSabores) return;
-
-      // Verificar si es el mismo sabor repetido
-      const saborId = variacion.sabor?.id;
-      const yaExiste = this.saboresSeleccionados.some(
-        s => s.recetaPresentacion.sabor?.id === saborId
-      );
-      if (yaExiste) {
-        // Auto-consolidar: ya existe este sabor, no agregar duplicado
-        return;
-      }
-
-      this.saboresSeleccionados.push({
-        recetaPresentacion: variacion,
-        proporcion: 1, // Se recalcula abajo
-        personalizacion: null
-      });
+      // Al cambiar la cantidad de sabores, volvemos a partes iguales.
+      this.proporcionesManuales = false;
+      this.recalcularProporciones();
+      this.recalcular();
+      return;
     }
 
-    // Recalcular proporciones
+    // Verificar máximo
+    if (this.saboresSeleccionados.length >= this.maxSabores) return;
+
+    // Verificar si es el mismo sabor repetido
+    const saborId = variacion.sabor?.id;
+    const yaExiste = this.saboresSeleccionados.some(
+      s => s.recetaPresentacion.sabor?.id === saborId
+    );
+    if (yaExiste) {
+      // Auto-consolidar: ya existe este sabor, no agregar duplicado
+      return;
+    }
+
+    const nuevo: SaborSeleccionado = {
+      recetaPresentacion: variacion,
+      proporcion: 1, // Se recalcula abajo
+      personalizacion: null
+    };
+    this.saboresSeleccionados.push(nuevo);
+
+    // Nuevo sabor → volver a partes iguales y recalcular precio.
+    this.proporcionesManuales = false;
     this.recalcularProporciones();
     this.recalcular();
+
+    // Abrir la personalización del sabor recién elegido (agregar/quitar,
+    // observaciones) sin que el usuario tenga que buscar el botón.
+    void this.personalizarSabor(nuevo);
   }
 
   private recalcularProporciones(): void {
@@ -214,6 +226,57 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
     for (const sabor of this.saboresSeleccionados) {
       sabor.proporcion = proporcion;
     }
+  }
+
+  // ===== Proporciones manuales (mitad y mitad, 60/40, etc.) =====
+
+  /** Porcentaje entero de un sabor (para mostrar/editar). */
+  proporcionPct(sabor: SaborSeleccionado): number {
+    return Math.round((sabor.proporcion || 0) * 100);
+  }
+
+  /** ¿Las proporciones actuales son todas iguales (partes iguales)? */
+  get proporcionesIguales(): boolean {
+    if (this.saboresSeleccionados.length <= 1) return true;
+    const p0 = this.saboresSeleccionados[0].proporcion;
+    return this.saboresSeleccionados.every(s => Math.abs((s.proporcion || 0) - p0) < 0.001);
+  }
+
+  /** Suma de porcentajes (para avisar si no llega a 100%). */
+  get sumaProporcionesPct(): number {
+    return this.saboresSeleccionados.reduce((t, s) => t + this.proporcionPct(s), 0);
+  }
+
+  /** Etiqueta de la porción: fracción si es parte igual, si no el porcentaje. */
+  etiquetaProporcion(sabor: SaborSeleccionado): string {
+    const n = this.saboresSeleccionados.length;
+    if (n <= 1) return '';
+    if (this.proporcionesIguales) return n === 2 ? '1/2' : n === 3 ? '1/3' : `1/${n}`;
+    return `${this.proporcionPct(sabor)}%`;
+  }
+
+  /** Ajusta el % de un sabor (±paso) compensando en el resto para que sume 100. */
+  ajustarProporcion(sabor: SaborSeleccionado, deltaPct: number): void {
+    const otros = this.saboresSeleccionados.filter(s => s !== sabor);
+    if (!otros.length) return;
+    const actual = this.proporcionPct(sabor);
+    const nuevo = Math.min(90, Math.max(10, actual + deltaPct));
+    const realDelta = nuevo - actual;
+    if (realDelta === 0) return;
+    sabor.proporcion = nuevo / 100;
+    // Compensar el delta repartido en el resto (manteniendo la suma en 100).
+    const compensacionCadaUno = -realDelta / otros.length / 100;
+    for (const o of otros) {
+      o.proporcion = Math.max(0.05, (o.proporcion || 0) + compensacionCadaUno);
+    }
+    this.proporcionesManuales = true;
+    this.recalcular();
+  }
+
+  restablecerProporciones(): void {
+    this.proporcionesManuales = false;
+    this.recalcularProporciones();
+    this.recalcular();
   }
 
   async personalizarSabor(sabor: SaborSeleccionado): Promise<void> {
@@ -244,40 +307,6 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
     const result = await firstValueFrom(dialogRef.afterClosed());
     if (result) {
       sabor.personalizacion = result;
-      this.recalcular();
-    }
-  }
-
-  async personalizarGeneral(): Promise<void> {
-    // Usar la receta del primer sabor para cargar adicionales y observaciones
-    const primerSabor = this.saboresSeleccionados[0];
-    if (!primerSabor) return;
-
-    const receta = primerSabor.recetaPresentacion.receta;
-    if (!receta) return;
-
-    const dialogData: PersonalizarProductoDialogData = {
-      producto: this.data.producto,
-      presentacion: this.selectedPresentacion!,
-      precioVenta: { valor: this.precioCalculado } as any,
-      cantidad: 1,
-      recetaId: receta.id,
-      modoEdicion: !!this.personalizacionGeneral,
-      adicionalesSeleccionados: this.personalizacionGeneral?.adicionalesSeleccionados?.map(a => a.adicionalId),
-      observacionIds: this.personalizacionGeneral?.observacionIds,
-      observacionLibre: this.personalizacionGeneral?.observacionLibre || undefined,
-    };
-
-    const dialogRef = this.dialog.open(PersonalizarProductoDialogComponent, {
-      data: dialogData,
-      width: '700px',
-      maxHeight: '85vh',
-      disableClose: false,
-    });
-
-    const result = await firstValueFrom(dialogRef.afterClosed());
-    if (result) {
-      this.personalizacionGeneral = result;
       this.recalcular();
     }
   }
@@ -314,10 +343,6 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
         totalAdicionales += sabor.personalizacion.precioAdicionalTotal * sabor.proporcion;
       }
     }
-    // Sumar adicionales generales
-    if (this.personalizacionGeneral) {
-      totalAdicionales += this.personalizacionGeneral.precioAdicionalTotal;
-    }
 
     this.precioCalculado += totalAdicionales;
   }
@@ -334,11 +359,7 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
     }
 
     const saboresTexto = this.saboresSeleccionados
-      .map(s => {
-        const fraccion = this.saboresSeleccionados.length === 2 ? '1/2' :
-                         this.saboresSeleccionados.length === 3 ? '1/3' : `1/${this.saboresSeleccionados.length}`;
-        return `${fraccion} ${s.recetaPresentacion.sabor?.nombre || ''}`;
-      })
+      .map(s => `${this.etiquetaProporcion(s)} ${s.recetaPresentacion.sabor?.nombre || ''}`.trim())
       .join(' + ');
 
     return `${productoNombre} ${presentacionNombre} ${saboresTexto}`.toUpperCase();
@@ -379,7 +400,6 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
       precioCalculado: this.precioCalculado,
       costoCalculado: this.costoCalculado,
       cantidad: this.cantidad,
-      personalizacionGeneral: this.personalizacionGeneral,
       ensambladoDescripcion: this.generarDescripcion(),
     };
 

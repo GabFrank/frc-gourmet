@@ -215,6 +215,9 @@
                     <mat-option *ngFor="let p of v.presentacionesDisponibles" [value]="p.id">
                       {{ p.nombre }} ({{ p.cantidad | number:'1.0-2' }})
                     </mat-option>
+                    <mat-option [value]="CREAR_PRESENTACION" class="crear-pres-option">
+                      <mat-icon>add</mat-icon> Crear presentación
+                    </mat-option>
                   </mat-select>
                 </mat-form-field>
               </td>

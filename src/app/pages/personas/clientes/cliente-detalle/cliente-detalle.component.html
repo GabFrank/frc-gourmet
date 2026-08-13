@@ -6,6 +6,14 @@
       <div class="subtitle" *ngIf="clienteSubtitulo">{{ clienteSubtitulo }}</div>
     </div>
     <div class="header-actions">
+      <button *ngIf="funcionarioVinculado?.id"
+              mat-stroked-button
+              class="vinculo-chip"
+              matTooltip="Ver ficha del funcionario"
+              (click)="abrirFuncionarioVinculado()">
+        <mat-icon>badge</mat-icon>
+        También es funcionario
+      </button>
       <button mat-icon-button [matMenuTriggerFor]="menu" matTooltip="Más opciones" *ngIf="cliente">
         <mat-icon>more_vert</mat-icon>
       </button>

@@ -26,6 +26,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
 import { Cliente } from 'src/app/database/entities/personas/cliente.entity';
 import { Persona } from 'src/app/database/entities/personas/persona.entity';
 import { TipoCliente } from 'src/app/database/entities/personas/tipo-cliente.entity';
+import { Convenio } from 'src/app/database/entities/personas/convenio.entity';
 import { Moneda } from 'src/app/database/entities/financiero/moneda.entity';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 import { CreateEditTipoClienteDialogComponent } from '../create-edit-tipo-cliente-dialog/create-edit-tipo-cliente-dialog.component';
@@ -69,6 +70,12 @@ export class CreateEditClienteDialogComponent implements OnInit {
   selectedPersona: Persona | null = null;
   personaSinDocumento = false;
 
+  // Autocomplete convenio (opcional)
+  convenioControl = new FormControl<Convenio | string | null>(null);
+  convenios: Convenio[] = [];
+  filteredConvenios: Convenio[] = [];
+  selectedConvenio: Convenio | null = null;
+
   saldoActual = 0;
 
   constructor(
@@ -98,16 +105,20 @@ export class CreateEditClienteDialogComponent implements OnInit {
 
     this.loading = true;
     try {
-      const [personas, tipos, monedas] = await Promise.all([
+      const [personas, tipos, monedas, convenios] = await Promise.all([
         firstValueFrom(this.repositoryService.getPersonas()),
         firstValueFrom(this.repositoryService.getTipoClientes()),
         firstValueFrom(this.repositoryService.getMonedas()),
+        firstValueFrom(this.repositoryService.getConvenios({ activo: true })),
       ]);
       this.personas = (personas || []).filter((p: any) => p.activo);
       this.tiposCliente = (tipos || []).filter((t: any) => t.activo);
       this.monedaPrincipal = (monedas || []).find((m: any) => m.principal) || null;
+      this.convenios = convenios || [];
       this.filteredPersonas = this.personas.slice(0, 50);
+      this.filteredConvenios = this.convenios.slice(0, 50);
       this.setupPersonaAutocomplete();
+      this.setupConvenioAutocomplete();
 
       if (this.isEditing && this.data.cliente) {
         this.prefillFromCliente(this.data.cliente);
@@ -141,6 +152,13 @@ export class CreateEditClienteDialogComponent implements OnInit {
       this.personaSinDocumento = !(personaExistente.documento || '').trim();
       this.personaControl.setValue(personaExistente, { emitEvent: false });
     }
+    // Preload del convenio si el cliente ya tiene uno (M2M — mostramos el primero).
+    const conveniosCliente: Convenio[] = (c as any).convenios || [];
+    if (conveniosCliente.length) {
+      const conv = this.convenios.find((x) => x.id === conveniosCliente[0].id) || conveniosCliente[0];
+      this.selectedConvenio = conv;
+      this.convenioControl.setValue(conv, { emitEvent: false });
+    }
     this.applyCreditoToggle(!!c.credito);
   }
 
@@ -158,6 +176,40 @@ export class CreateEditClienteDialogComponent implements OnInit {
         this.filteredPersonas = this.personas.slice(0, 50);
       }
     });
+  }
+
+  private setupConvenioAutocomplete(): void {
+    this.convenioControl.valueChanges.subscribe((value) => {
+      if (typeof value === 'string') {
+        const filter = value.toUpperCase();
+        this.filteredConvenios = this.convenios
+          .filter((c) => this.convenioLabel(c).toUpperCase().includes(filter))
+          .slice(0, 50);
+        if (this.selectedConvenio && this.convenioLabel(this.selectedConvenio).toUpperCase() !== filter) {
+          this.selectedConvenio = null;
+        }
+      } else {
+        this.filteredConvenios = this.convenios.slice(0, 50);
+      }
+    });
+  }
+
+  private convenioLabel(c: Convenio | null): string {
+    if (!c) return '';
+    const ruc = c.ruc ? ` - ${c.ruc}` : '';
+    return `${c.nombre || ''}${ruc}`.trim();
+  }
+
+  displayConvenio = (c: any): string => (c && typeof c === 'object' ? this.convenioLabel(c) : '');
+
+  onConvenioSelected(convenio: Convenio): void {
+    this.selectedConvenio = convenio;
+  }
+
+  clearConvenio(): void {
+    this.selectedConvenio = null;
+    this.convenioControl.setValue('');
+    this.filteredConvenios = this.convenios.slice(0, 50);
   }
 
   private personaLabel(p: Persona | null): string {
@@ -281,6 +333,7 @@ export class CreateEditClienteDialogComponent implements OnInit {
       activo: !!v.activo,
       credito: !!v.credito,
       limite_credito: Number(v.limite_credito) || 0,
+      convenioId: this.selectedConvenio?.id ?? null,
     };
 
     try {

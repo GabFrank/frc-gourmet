@@ -389,6 +389,14 @@
     opacity: 0.5;
   }
 
+  .producto-thumb {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    object-fit: cover;
+    flex: 0 0 auto;
+  }
+
   .producto-name {
     flex: 1;
     font-size: 13px;

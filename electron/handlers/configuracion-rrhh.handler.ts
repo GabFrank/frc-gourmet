@@ -39,6 +39,13 @@ const SEED_CONFIG: SeedItem[] = [
   { clave: 'DIA_CIERRE_MES', valor: '30', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Dia del mes en que se cierra el periodo de liquidacion' },
   // Productos / recetas
   { clave: 'PORCENTAJE_COSTO_SUGERIDO', valor: '35', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Porcentaje del precio final que representa el costo, para sugerir precio en recetas. Ej: 35 => el costo es 35% del precio, precio sugerido = costo / 0.35' },
+  // Reconocimiento facial (fichaje de asistencia)
+  { clave: 'FACIAL_UMBRAL_SIMILITUD', valor: '0.6', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Similitud minima (0..1) para aceptar un match facial. Mas alto = mas estricto (menos falsos positivos)' },
+  { clave: 'FACIAL_MARGEN_MIN', valor: '0.05', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Margen minimo de similitud entre el mejor y el 2do mejor candidato para aceptar el match (evita confundir caras parecidas)' },
+  { clave: 'FACIAL_LIVENESS_OBLIGATORIO', valor: 'true', tipo: ConfiguracionRrhhTipo.BOOLEAN, descripcion: 'Exigir prueba de vida (antispoof + liveness) para aceptar el fichaje facial' },
+  { clave: 'FACIAL_LIVENESS_MIN', valor: '0.5', tipo: ConfiguracionRrhhTipo.NUMBER, descripcion: 'Score minimo (0..1) de antispoof y liveness para considerar el rostro como real/vivo' },
+  { clave: 'FACIAL_PERMITIR_MULTIPLE_DIARIO', valor: 'false', tipo: ConfiguracionRrhhTipo.BOOLEAN, descripcion: 'Permitir que un funcionario fiche mas de una entrada/salida por dia (turnos partidos)' },
+  { clave: 'FACIAL_GEOCERCA_ACTIVA', valor: 'false', tipo: ConfiguracionRrhhTipo.BOOLEAN, descripcion: 'Exigir que el dispositivo este dentro del radio de la empresa (ubicacion en Config Empresa) para permitir el fichaje' },
 ];
 
 export async function seedConfiguracionRrhh(dataSource: DataSource) {
@@ -155,6 +162,7 @@ export function registerConfiguracionRrhhHandlers(
 
   ipcMain.handle('seed-configuracion-rrhh', async () => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
       await seedConfiguracionRrhh(dataSource);
       return { success: true };
     } catch (error) {

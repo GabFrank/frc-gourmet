@@ -3,7 +3,7 @@
   <p *ngIf="error" class="crud-error">{{ error }}</p>
 
   <div class="crud-list" *ngIf="!loading && !error">
-    <mat-card *ngFor="let c of items" class="crud-card" appearance="outlined">
+    <a *ngFor="let c of items" class="crud-card" mat-ripple [routerLink]="['/financiero/cxc', c.id]">
       <div class="crud-card-body">
         <div class="crud-card-main">
           <span class="crud-name">{{ c.clienteNombre }}</span>
@@ -13,8 +13,9 @@
         <span class="crud-chip" [class.warn]="c.saldo > 0" [class.off]="c.saldo <= 0">
           Saldo {{ c.saldo | number: '1.0-2' }}
         </span>
+        <mat-icon>chevron_right</mat-icon>
       </div>
-    </mat-card>
+    </a>
     <p *ngIf="items.length === 0" class="crud-empty">No hay cuentas por cobrar.</p>
   </div>
 </div>

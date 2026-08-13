@@ -13,6 +13,7 @@ import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-aguinaldos',
@@ -29,6 +30,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
     MatInputModule,
     MatSnackBarModule,
     MatDialogModule,
+    HasPermissionDirective,
   ],
   template: `
     <div class="page">
@@ -44,7 +46,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
               <button mat-stroked-button color="primary" (click)="load()">
                 <mat-icon>search</mat-icon> Buscar
               </button>
-              <button mat-flat-button color="primary" (click)="recalcular()">
+              <button *appHasPermission="'RRHH_LIQUIDACION_GENERAR'" mat-flat-button color="primary" (click)="recalcular()">
                 <mat-icon>calculate</mat-icon> Recalcular {{ anio }}
               </button>
             </div>

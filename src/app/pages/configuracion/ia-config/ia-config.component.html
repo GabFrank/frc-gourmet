@@ -54,7 +54,7 @@
             <span *ngIf="!testing">Probar conexion</span>
             <mat-spinner *ngIf="testing" diameter="18"></mat-spinner>
           </button>
-          <button mat-flat-button color="primary" (click)="guardar()" [disabled]="saving">
+          <button *appHasPermission="'SISTEMA_CONFIGURAR_IA'" mat-flat-button color="primary" (click)="guardar()" [disabled]="saving">
             <mat-icon>save</mat-icon>
             <span *ngIf="!saving">Guardar</span>
             <mat-spinner *ngIf="saving" diameter="18"></mat-spinner>

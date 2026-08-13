@@ -33,6 +33,7 @@ export class AuthService {
   private readonly TOKEN_KEY = 'auth_token';
   private readonly USER_KEY = 'current_user';
   private readonly SESSION_ID_KEY = 'session_id';
+  private handlingAuthExpired = false;
 
   constructor(
     private repositoryService: RepositoryService,
@@ -40,6 +41,20 @@ export class AuthService {
     private appModeService: AppModeService
   ) {
     this.loadFromLocalStorage();
+
+    // Web /admin: el shim HTTP (api-http.ts) emite 'frc-web-auth-expired' cuando
+    // el refresh token venció / es inválido y no se pudo renovar la sesión. Sin
+    // un interceptor global, la UI quedaba "logueada sin token"; acá cerramos
+    // sesión y vamos al login. En Electron el evento nunca se emite (no-op).
+    if (typeof window !== 'undefined') {
+      window.addEventListener('frc-web-auth-expired', () => {
+        // Guard: logout() hace un RPC que podría volver a 401 y re-emitir el
+        // evento; el flag evita el logout re-entrante en loop.
+        if (this.handlingAuthExpired || !this.currentUserSubject.value) return;
+        this.handlingAuthExpired = true;
+        this.logout().finally(() => { this.handlingAuthExpired = false; });
+      });
+    }
   }
 
   // Check if user is logged in
@@ -50,6 +65,22 @@ export class AuthService {
   // Get the current logged in user
   public get currentUser(): Usuario | null {
     return this.currentUserSubject.value;
+  }
+
+  /**
+   * Baja el flag `mustChangePassword` del usuario en memoria (y storage) tras un
+   * cambio de contraseña exitoso, para que el guard de la PWA deje de redirigir
+   * a la pantalla de cambio obligatorio. El backend ya persistió el false.
+   */
+  markPasswordChanged(): void {
+    const user = this.currentUserSubject.value;
+    if (!user) return;
+    const updated = { ...user, mustChangePassword: false } as Usuario;
+    this.currentUserSubject.next(updated);
+    this.repositoryService.setCurrentUser(updated);
+    if (localStorage.getItem(this.USER_KEY)) {
+      localStorage.setItem(this.USER_KEY, JSON.stringify(updated));
+    }
   }
 
   // Login user
@@ -111,6 +142,16 @@ export class AuthService {
         console.error('Error updating session activity:', error);
       }
     }
+  }
+
+  /**
+   * Aplica una sesión obtenida por fuera del login con usuario/clave (ej. login
+   * por QR / device grant). Persiste el estado y emite el usuario actual. El
+   * transporte HTTP (api-http) debe recibir sus tokens por separado.
+   */
+  applyExternalSession(user: Usuario, token: string, sessionId: number): void {
+    this.setSession(user, token, sessionId);
+    this.currentUserSubject.next(user);
   }
 
   // Set up session data after successful login

@@ -1,0 +1,25 @@
+<div class="crud-page">
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+
+  <div class="crud-list" *ngIf="!loading && !error">
+    <a
+      *ngFor="let i of items"
+      class="crud-card"
+      mat-ripple
+      [routerLink]="['/financiero/cxp', i.id]"
+    >
+      <div class="crud-card-body">
+        <div class="crud-card-main">
+          <span class="crud-name">{{ i.titulo }}</span>
+          <span class="crud-sub" *ngIf="i.descripcion">{{ i.descripcion }}</span>
+          <span class="crud-sub">Saldo: {{ i.simbolo }} {{ i.saldo | number: '1.0-' + i.decimales }}</span>
+        </div>
+        <span class="crud-chip" [class.off]="i.estadoClase === 'off'" [class.warn]="i.estadoClase === 'warn'">{{ i.estado }}</span>
+        <mat-icon>chevron_right</mat-icon>
+      </div>
+    </a>
+
+    <p *ngIf="items.length === 0" class="crud-empty">No hay cuentas por pagar.</p>
+  </div>
+</div>

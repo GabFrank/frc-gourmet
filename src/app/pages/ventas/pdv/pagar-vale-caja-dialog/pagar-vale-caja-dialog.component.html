@@ -1,0 +1,109 @@
+<h2 mat-dialog-title>
+  <mat-icon class="title-icon">receipt_long</mat-icon>
+  Vale de funcionario{{ cajaNombre ? ' — ' + cajaNombre : '' }}
+</h2>
+
+<mat-dialog-content>
+  <div *ngIf="loading" class="loading-box">
+    <mat-spinner diameter="36"></mat-spinner>
+  </div>
+
+  <form *ngIf="!loading" [formGroup]="form" class="form-container">
+
+    <mat-button-toggle-group formControlName="modo" class="full-width modo-toggle">
+      <mat-button-toggle value="CREAR"><mat-icon>add</mat-icon> Crear y pagar</mat-button-toggle>
+      <mat-button-toggle value="PAGAR"><mat-icon>payments</mat-icon> Pagar existente</mat-button-toggle>
+    </mat-button-toggle-group>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Funcionario</mat-label>
+      <mat-select formControlName="funcionarioId">
+        <mat-option *ngFor="let f of funcionarios" [value]="f.id">
+          {{ f.persona?.nombre || '' }} {{ f.persona?.apellido || '' }}
+        </mat-option>
+      </mat-select>
+      <mat-error>El funcionario es requerido</mat-error>
+    </mat-form-field>
+
+    <!-- PAGAR: seleccionar un vale SOLICITADO existente -->
+    <ng-container *ngIf="esPagar">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Vale pendiente</mat-label>
+        <mat-select formControlName="valeId">
+          <mat-option *ngIf="cargandoVales" [value]="null" disabled>Cargando…</mat-option>
+          <mat-option *ngIf="!cargandoVales && valesPendientes.length === 0" [value]="null" disabled>
+            Sin vales pendientes para este funcionario
+          </mat-option>
+          <mat-option *ngFor="let v of valesPendientes" [value]="v.id">
+            #{{ v.id }} — {{ v.moneda?.simbolo || '' }} {{ v.monto | number:'1.0-2' }}
+            <span *ngIf="v.descripcion"> · {{ v.descripcion }}</span>
+          </mat-option>
+        </mat-select>
+        <mat-error>Seleccione un vale</mat-error>
+      </mat-form-field>
+    </ng-container>
+
+    <!-- CREAR: datos del vale nuevo -->
+    <ng-container *ngIf="!esPagar">
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="flex-field">
+          <mat-label>Motivo</mat-label>
+          <mat-select formControlName="motivoId">
+            <mat-option [value]="null">— Sin motivo —</mat-option>
+            <mat-option *ngFor="let m of motivos" [value]="m.id">{{ m.nombre || m.descripcion }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="flex-field">
+          <mat-label>Fecha</mat-label>
+          <input matInput [matDatepicker]="pickerFecha" formControlName="fecha">
+          <mat-datepicker-toggle matSuffix [for]="pickerFecha"></mat-datepicker-toggle>
+          <mat-datepicker #pickerFecha></mat-datepicker>
+        </mat-form-field>
+      </div>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Descripción</mat-label>
+        <input matInput formControlName="descripcion" placeholder="Opcional">
+      </mat-form-field>
+    </ng-container>
+
+    <div class="form-row">
+      <mat-form-field appearance="outline" class="flex-field">
+        <mat-label>Moneda</mat-label>
+        <mat-select formControlName="monedaId">
+          <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
+        </mat-select>
+        <mat-error>Requerida</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="flex-field">
+        <mat-label>Monto</mat-label>
+        <input matInput type="text" formControlName="monto" appCurrencyInput [decimals]="decimalesMoneda" placeholder="0">
+        <mat-error>Requerido</mat-error>
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Forma de pago (efectivo)</mat-label>
+      <mat-select formControlName="formaPagoId">
+        <mat-option *ngFor="let fp of formasPago" [value]="fp.id">{{ fp.nombre }}</mat-option>
+      </mat-select>
+      <mat-error>Requerida</mat-error>
+    </mat-form-field>
+
+    <div *ngIf="saldoInsuficiente" class="warn-banner">
+      <mat-icon>warning</mat-icon>
+      <span>El monto supera el efectivo disponible en la caja para esta moneda. El cierre quedará en negativo.</span>
+    </div>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancelar()" [disabled]="saving">Cancelar</button>
+  <button mat-raised-button color="primary" (click)="guardar()" [disabled]="saving || loading">
+    <mat-icon *ngIf="!saving">check</mat-icon>
+    <mat-spinner *ngIf="saving" diameter="18" class="btn-spinner"></mat-spinner>
+    {{ esPagar ? 'Pagar vale' : 'Crear y pagar' }}
+  </button>
+</mat-dialog-actions>

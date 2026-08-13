@@ -1,0 +1,29 @@
+.login { max-width: 440px; }
+.login-title { font-size: 22px; font-weight: 800; margin: 8px 0 16px; }
+
+.metodo-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.metodo-tab {
+  flex: 1; height: 44px; border-radius: var(--sf-radius);
+  border: 1.5px solid var(--sf-border); background: var(--sf-surface);
+  color: var(--sf-text); font-weight: 600; font-size: 14px;
+}
+.metodo-tab.active { border-color: var(--sf-primary); color: var(--sf-primary); background: var(--sf-primary-surface); }
+
+.lbl { display: block; font-size: 13px; color: var(--sf-text-muted); margin: 12px 0 4px; }
+.lbl:first-of-type { margin-top: 0; }
+.mt { margin-top: 14px; }
+.hint { font-size: 12px; margin-top: 12px; }
+
+.email-switch { display: flex; background: var(--sf-surface-alt); border-radius: var(--sf-radius); padding: 4px; margin-bottom: 14px; }
+.email-switch button {
+  flex: 1; height: 36px; border: none; background: transparent; border-radius: 8px;
+  color: var(--sf-text-muted); font-weight: 600; font-size: 14px;
+}
+.email-switch button.on { background: var(--sf-surface); color: var(--sf-primary); box-shadow: var(--sf-shadow-card); }
+
+.google-wrap { margin-top: 18px; }
+.sep { display: flex; align-items: center; gap: 10px; color: var(--sf-text-muted); font-size: 13px; margin-bottom: 14px; }
+.sep::before, .sep::after { content: ''; flex: 1; height: 1px; background: var(--sf-divider); }
+.google-btn { display: flex; justify-content: center; }
+
+.sf-error { color: var(--sf-error); margin-top: 14px; }

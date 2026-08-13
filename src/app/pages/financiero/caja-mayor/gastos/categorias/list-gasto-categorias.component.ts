@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormGroup, FormBuilder, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormGroup, FormBuilder, FormControl, Validators } from '@angular/forms';
 import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -16,6 +16,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-gasto-categorias',
@@ -37,12 +38,17 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
     MatSnackBarModule,
     MatDialogModule,
     MatTooltipModule,
+    HasPermissionDirective,
   ]
 })
 export class ListGastoCategoriasComponent implements OnInit {
   categorias: any[] = [];
+  categoriasFiltradas: any[] = [];
   loading = false;
   displayedColumns = ['nombre', 'padre', 'activo', 'actions'];
+
+  // Busqueda client-side por nombre (catalogo chico)
+  searchControl = new FormControl('');
 
   showInlineForm = false;
   editingId: number | null = null;
@@ -70,12 +76,29 @@ export class ListGastoCategoriasComponent implements OnInit {
     this.loading = true;
     try {
       this.categorias = await firstValueFrom(this.repositoryService.getGastoCategorias());
+      this.aplicarFiltro();
     } catch (error) {
       console.error('Error loading gasto categorias:', error);
       this.snackBar.open('Error al cargar categorias', 'Cerrar', { duration: 3000 });
     } finally {
       this.loading = false;
     }
+  }
+
+  aplicarFiltro(): void {
+    const termino = (this.searchControl.value || '').trim().toUpperCase();
+    if (!termino) {
+      this.categoriasFiltradas = [...this.categorias];
+      return;
+    }
+    this.categoriasFiltradas = this.categorias.filter((cat: any) =>
+      (cat.nombre || '').toUpperCase().includes(termino)
+    );
+  }
+
+  limpiarFiltro(): void {
+    this.searchControl.setValue('');
+    this.aplicarFiltro();
   }
 
   showCreateForm(): void {

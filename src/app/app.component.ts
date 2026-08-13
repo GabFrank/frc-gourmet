@@ -37,6 +37,10 @@ import { HomeComponent } from './pages/home/home.component';
 import { RrhhDashComponent } from './pages/personas/rrhhDash/rrhh-dash.component';
 import { ListUsuariosComponent } from './pages/personas/usuarios/list-usuarios.component';
 import { ListClientesComponent } from './pages/personas/clientes/list-clientes.component';
+import { BuscadorGlobalDialogComponent } from './shared/components/buscador-global-dialog/buscador-global-dialog.component';
+import { ListPedidosOnlineComponent } from './pages/ventas/pedidos-online/list-pedidos-online.component';
+import { TiendaOnlineConfigComponent } from './pages/ventas/pedidos-online/tienda-online-config.component';
+import { ZonasDeliveryComponent } from './pages/ventas/pedidos-online/zonas-delivery.component';
 import { ListConveniosComponent } from './pages/personas/convenios/list-convenios.component';
 import { AuthService } from './services/auth.service';
 import { Usuario } from './database/entities/personas/usuario.entity';
@@ -63,10 +67,10 @@ import { VentasDashboardComponent } from './pages/ventas/dashboard/ventas-dashbo
 import { BuffetDashboardComponent } from './pages/ventas/buffet-dashboard/buffet-dashboard.component';
 import { KdsComponent } from './pages/ventas/kds/kds.component';
 import { ListKdsPantallasComponent } from './pages/ventas/kds/list-kds-pantallas/list-kds-pantallas.component';
-import { CajaMayorDashboardComponent } from './pages/financiero/caja-mayor/dashboard/caja-mayor-dashboard.component';
 import { ListCuentasPorCobrarComponent } from './pages/financiero/caja-mayor/cuentas-por-cobrar/list-cuentas-por-cobrar/list-cuentas-por-cobrar.component';
 import { ListPermisosComponent } from './pages/personalizacion/permisos/list-permisos/list-permisos.component';
 import { ListConfiguracionRrhhComponent } from './pages/rrhh/configuracion/list-configuracion-rrhh/list-configuracion-rrhh.component';
+import { ConfiguracionFacialComponent } from './pages/rrhh/configuracion-facial/configuracion-facial.component';
 import { BackupRestoreComponent } from './pages/configuracion/backup-restore/backup-restore.component';
 import { IaConfigComponent } from './pages/configuracion/ia-config/ia-config.component';
 import { DbConfigComponent } from './pages/configuracion/db-config/db-config.component';
@@ -98,12 +102,18 @@ import { RepositoryService } from './database/repository.service';
 import { UpdateService } from './services/update.service';
 import { PrinterEventsService } from './services/printer-events.service';
 import { UpdateChannelDialogComponent } from './shared/components/update-channel-dialog/update-channel-dialog.component';
+import { MusicaControlDialogComponent } from './shared/components/musica-control-dialog/musica-control-dialog.component';
+import { MusicaService } from './services/musica.service';
 import { EmpresaService } from './shared/services/empresa.service';
 import { ConfigurarEmpresaComponent } from './pages/sistema/configurar-empresa/configurar-empresa.component';
 import { resolveAppUrl } from './shared/utils/image-url.util';
 import { HasPermissionDirective, HasAnyPermissionDirective } from './shared/directives/has-permission.directive';
 import { SplashOverlayComponent } from './shared/components/splash-overlay/splash-overlay.component';
 import { UserAvatarComponent } from './shared/components/user-avatar/user-avatar.component';
+import { SidenavMenuComponent } from './shared/components/sidenav-menu/sidenav-menu.component';
+import { MenuService } from './services/menu.service';
+import { PermissionService } from './services/permission.service';
+import { MenuNode } from './services/menu-tree';
 
 @Component({
   selector: 'app-root',
@@ -131,6 +141,7 @@ import { UserAvatarComponent } from './shared/components/user-avatar/user-avatar
     HasAnyPermissionDirective,
     SplashOverlayComponent,
     UserAvatarComponent,
+    SidenavMenuComponent,
   ],
 })
 export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
@@ -141,6 +152,11 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   // Track which menu section is expanded
   expandedMenu: string | null = null;
   firsTime = true;
+
+  /** Árbol del sidenav (fuente única: menu-tree.ts), filtrado por permisos. */
+  menuNodes: MenuNode[] = [];
+  /** Estado de expansión compartido del árbol recursivo (por id de nodo). */
+  menuExpandedIds = new Set<string>();
 
   // Authentication state
   isAuthenticated = false;
@@ -169,11 +185,33 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   updateDownloaded = false;
   private updateStatusSub: Subscription | null = null;
 
+  /**
+   * Control de musica en el header.
+   *
+   * Quien esta en la caja es el primero que escucha "cambia esa musica", y
+   * abrir Configuracion → Musica es una pestana entera. El boton solo aparece
+   * si Spotify esta configurado y conectado (`musica-disponible`) y el usuario
+   * tiene permiso.
+   */
+  musicaDisponible = false;
+  musicaSonando = false;
+  musicaAlerta = false;
+  /** Titulo truncado para el header. Ancho fijo en CSS: no debe mover el layout. */
+  musicaTexto = '';
+  /** Titulo + artista completos, para el tooltip. */
+  musicaTooltip = 'Música';
+  private musicaUnsub: (() => void) | null = null;
+  private musicaInterval: any = null;
+
   // Window controls (custom titlebar). En macOS los semáforos nativos
   // quedan a la izquierda por `titleBarStyle:hiddenInset` en main.ts, así
   // que ocultamos los controles custom para no duplicar.
   isWindowMaximized = false;
   isMacOS = false;
+  // true cuando el frontend desktop corre servido como web (/admin) en vez de
+  // dentro de Electron. Lo marca el shim HTTP (main.web.ts). Sirve para ocultar
+  // UI que solo tiene sentido en la ventana nativa (controles de titlebar).
+  isWeb = !!(window as any).__FRC_WEB__;
   private windowStateUnsub: (() => void) | null = null;
 
   // Datos enriquecidos del header.
@@ -212,10 +250,25 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     private repo: RepositoryService,
     private updateService: UpdateService,
     private empresaService: EmpresaService,
+    private menuService: MenuService,
+    private permissionService: PermissionService,
+    private musicaService: MusicaService,
     // E2.4: solo inyectar para arrancar el listener global de eventos de
     // impresora — el servicio se auto-suscribe en su constructor.
     private _printerEvents: PrinterEventsService,
   ) {
+    // Reconstruir el árbol del sidenav cuando cambian los permisos del usuario
+    // (login/logout/refresh) o los overrides del ADMIN. Fuente única: menu-tree.ts.
+    this.permissionService.codigos$.subscribe(() => {
+      this.menuNodes = this.menuService.getSidenavTree();
+      // El control de música pregunta al backend, que exige sesión: en
+      // `ngOnInit` todavía no hay usuario y la llamada muere con NO AUTENTICADO.
+      // Este es el momento en que ya hay permisos cargados.
+      void this.iniciarMusicaHeader();
+    });
+    this.menuService.changes$.subscribe(() => {
+      this.menuNodes = this.menuService.getSidenavTree();
+    });
     // Suscribirse al servicio de empresa para mantener el nombre + logo del
     // toolbar sincronizados con cualquier update (login, guardar en
     // configurar-empresa, subir/quitar logo).
@@ -238,6 +291,8 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       // context para tracking). Sin user, dejamos el cache previo / fallback.
       if (this.isAuthenticated) {
         this.empresaService.load();
+        // Cargar overrides del menú (config del ADMIN) para armar el sidenav.
+        this.menuService.loadOverrides().subscribe();
       }
 
       // If user is logged in, fetch login history
@@ -362,6 +417,13 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   private initHeaderEnriched(): void {
     const api: any = (window as any).api;
     this.appVersion = api?.getAppVersion?.() || '';
+    // Web /admin: la versión llega por un fetch async del shim; si el read sync
+    // llegó antes de que resuelva (típico al reabrir), esperarla y actualizar.
+    if (!this.appVersion && typeof api?.getAppVersionAsync === 'function') {
+      api.getAppVersionAsync()
+        .then((v: string) => { if (v) this.ngZone.run(() => { this.appVersion = v; }); })
+        .catch(() => { /* ignore */ });
+    }
     this.appMode = api?.getAppMode?.() || 'standalone';
     // Reloj: tick cada 1s. ngZone.runOutsideAngular para no disparar CD
     // global cada segundo; el binding se actualiza al asignar dentro de
@@ -376,6 +438,82 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     // y dejamos el último valor visible (mejor que vaciar la UI).
     this.refreshCotizacion();
     this.cotizacionInterval = setInterval(() => this.refreshCotizacion(), 5 * 60 * 1000);
+  }
+
+  /**
+   * Estado de musica para el header.
+   *
+   * Se alimenta del canal `musica-events` que ya emitia el main para el SSE de
+   * la PWA: el tema cambia cada 3 minutos, un poll corto en la pantalla de cobro
+   * seria gasto permanente. El intervalo lento es solo la red de seguridad para
+   * el avance normal de tema, que no emite evento.
+   */
+  private async iniciarMusicaHeader(): Promise<void> {
+    // `codigos$` emite en cada login/logout/cambio de permisos: sin esta guarda
+    // se acumularían suscripciones e intervalos.
+    this.detenerMusicaHeader();
+    if (!this.authService.isLoggedIn) return;
+    try {
+      const d = await this.musicaService.disponible();
+      this.musicaDisponible = !!d?.configurado && !!d?.conectado;
+    } catch {
+      // Sin permiso de música, o Spotify sin configurar: el botón no va.
+      this.musicaDisponible = false;
+    }
+    if (!this.musicaDisponible) return;
+
+    await this.refrescarMusicaHeader();
+    this.musicaUnsub = this.musicaService.onEvento(() =>
+      this.ngZone.run(() => void this.refrescarMusicaHeader()),
+    );
+    this.ngZone.runOutsideAngular(() => {
+      this.musicaInterval = setInterval(
+        () => this.ngZone.run(() => void this.refrescarMusicaHeader()),
+        60 * 1000,
+      );
+    });
+  }
+
+  private detenerMusicaHeader(): void {
+    if (this.musicaInterval) {
+      clearInterval(this.musicaInterval);
+      this.musicaInterval = null;
+    }
+    if (this.musicaUnsub) {
+      this.musicaUnsub();
+      this.musicaUnsub = null;
+    }
+    this.musicaDisponible = false;
+  }
+
+  private async refrescarMusicaHeader(): Promise<void> {
+    try {
+      const [estado, runtime] = await Promise.all([
+        this.musicaService.getEstado(),
+        this.musicaService.getRuntimeEstado(),
+      ]);
+      this.musicaSonando = !!estado?.reproduciendo;
+      this.musicaAlerta = !!runtime?.ultimoError;
+      const titulo = estado?.track || '';
+      const artista = estado?.artista || '';
+      this.musicaTexto = titulo || 'Sin reproducir';
+      this.musicaTooltip = titulo
+        ? `${titulo}${artista ? ' — ' + artista : ''}`
+        : 'Música — nada sonando';
+      if (runtime?.ultimoError) this.musicaTooltip = runtime.ultimoError;
+    } catch {
+      // Un fallo puntual no debe vaciar el header: se deja lo último visible.
+      this.musicaAlerta = true;
+    }
+  }
+
+  abrirMusica(): void {
+    this.dialog.open(MusicaControlDialogComponent, {
+      width: '460px',
+      maxWidth: '95vw',
+      panelClass: 'musica-control-panel',
+      autoFocus: false,
+    });
   }
 
   private async refreshCotizacion(): Promise<void> {
@@ -431,6 +569,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     // Initialize sidenav in collapsed state
     this.isMenuExpanded = false;
     this.expandedMenu = null;
+    this.menuExpandedIds.clear();
   }
 
   ngOnDestroy() {
@@ -456,6 +595,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       clearTimeout(this.splashTimer);
       this.splashTimer = null;
     }
+    this.detenerMusicaHeader();
   }
 
   openUpdateDialog(): void {
@@ -495,6 +635,32 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // Listen for clicks on the document
+  private buscadorAbierto = false;
+
+  /** Abre el buscador global (paleta). Atajo: Ctrl+Espacio. */
+  abrirBuscador(): void {
+    if (this.buscadorAbierto) return;
+    this.buscadorAbierto = true;
+    const ref = this.dialog.open(BuscadorGlobalDialogComponent, {
+      width: '640px',
+      maxWidth: '95vw',
+      panelClass: 'buscador-global-panel',
+      position: { top: '10vh' },
+      autoFocus: false,
+      restoreFocus: false,
+    });
+    ref.afterClosed().subscribe(() => { this.buscadorAbierto = false; });
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  onBuscadorShortcut(event: KeyboardEvent): void {
+    // Ctrl+Espacio abre el buscador global desde cualquier lado.
+    if (event.ctrlKey && (event.code === 'Space' || event.key === ' ')) {
+      event.preventDefault();
+      this.abrirBuscador();
+    }
+  }
+
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent) {
     // Only process when menu is expanded
@@ -507,6 +673,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
         if (!sidenavElement.contains(event.target as Node) &&
             !toggleButton.contains(event.target as Node)) {
           this.isMenuExpanded = false;
+          this.menuExpandedIds.clear();
         }
       }
     }
@@ -519,9 +686,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     this.isMenuExpanded = !this.isMenuExpanded;
 
-    // When collapsing the menu, reset the expanded menu
+    // When collapsing the menu, reset the expanded menu + cerrar submenús del árbol
     if (!this.isMenuExpanded) {
       this.expandedMenu = null;
+      this.menuExpandedIds.clear();
     }
   }
 
@@ -529,6 +697,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   closeMenu(): void {
     this.isMenuExpanded = false;
     this.expandedMenu = null;
+    this.menuExpandedIds.clear();
   }
 
   // Expand menu when any item is clicked in collapsed mode
@@ -556,6 +725,26 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   // Check if a menu section is expanded
   isMenuSectionExpanded(section: string): boolean {
     return this.expandedMenu === section;
+  }
+
+  /** Abrir el sidenav cuando el árbol recursivo lo pide (click en modo mini). */
+  onSidenavRequestExpand(): void {
+    this.isMenuExpanded = true;
+  }
+
+  /**
+   * Despacho genérico de una hoja del árbol de menú: abre su tab o su diálogo
+   * según `action.mode`. Reemplaza a los ~60 métodos openXTab() del sidenav.
+   */
+  activarNodo(node: MenuNode): void {
+    const action = node.action;
+    if (!action) return;
+    if (action.mode === 'dialog') {
+      this.dialog.open(action.component, { ...(action.dialogConfig || {}), data: action.data || {} });
+    } else {
+      this.tabsService.openTab(action.title, action.component, action.data || {}, action.tabId, true);
+    }
+    this.closeMenu();
   }
 
   toggleTheme(): void {
@@ -599,6 +788,40 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       HomeComponent,
       { source: 'navigation' },
       'dashboard-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  // Pedidos online (bandeja en el PdV)
+  openPedidosOnlineTab() {
+    this.tabsService.openTab(
+      'Pedidos Online',
+      ListPedidosOnlineComponent,
+      { source: 'navigation' },
+      'pedidos-online-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openTiendaOnlineConfigTab() {
+    this.tabsService.openTab(
+      'Config Tienda Online',
+      TiendaOnlineConfigComponent,
+      { source: 'navigation' },
+      'tienda-online-config-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openZonasDeliveryTab() {
+    this.tabsService.openTab(
+      'Zonas de Delivery',
+      ZonasDeliveryComponent,
+      { source: 'navigation' },
+      'zonas-delivery-tab',
       true
     );
     this.closeMenu();
@@ -655,6 +878,17 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       ListConfiguracionRrhhComponent,
       { source: 'navigation' },
       'configuracion-rrhh-tab',
+      true
+    );
+    this.closeMenu();
+  }
+
+  openConfiguracionFacialTab() {
+    this.tabsService.openTab(
+      'Reconocimiento facial',
+      ConfiguracionFacialComponent,
+      { source: 'navigation' },
+      'configuracion-facial-tab',
       true
     );
     this.closeMenu();
@@ -992,17 +1226,6 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       ListDispositivosComponent,
       { source: 'navigation' },
       'dispositivos-tab',
-      true
-    );
-    this.closeMenu();
-  }
-
-  openCajaMayorTab() {
-    this.tabsService.openTab(
-      'Caja Mayor',
-      CajaMayorDashboardComponent,
-      { source: 'navigation' },
-      'caja-mayor-tab',
       true
     );
     this.closeMenu();

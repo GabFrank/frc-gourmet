@@ -10,6 +10,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -69,6 +70,7 @@ interface CuotaRow {
     MatRadioModule,
     MatButtonToggleModule,
     MatCheckboxModule,
+    MatMenuModule,
     MatTableModule,
     MatTooltipModule,
     MatProgressSpinnerModule,
@@ -80,7 +82,7 @@ interface CuotaRow {
   ],
 })
 export class PagarComprasDialogComponent implements OnInit {
-  readonly displayedColumns = ['select', 'proveedor', 'compra', 'cuota', 'vencimiento', 'saldo', 'monto'];
+  readonly displayedColumns = ['select', 'proveedor', 'compra', 'cuota', 'vencimiento', 'saldo', 'monto', 'acciones'];
 
   loading = true;
   saving = false;
@@ -95,6 +97,8 @@ export class PagarComprasDialogComponent implements OnInit {
   cuentasBancarias: any[] = [];
   monedas: any[] = [];
   formasPago: any[] = [];
+  // Fuente Caja Mayor = siempre efectivo (regla de negocio).
+  formasPagoEfectivo: any[] = [];
 
   form!: FormGroup;
 
@@ -160,6 +164,8 @@ export class PagarComprasDialogComponent implements OnInit {
       this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
       this.monedas = (monedas as any[]) || [];
       this.formasPago = ((formas as any[]) || []).filter((f: any) => f.movimentaCaja);
+      // Para pagar desde Caja Mayor solo se ofrece efectivo (por nombre).
+      this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
 
       const preIds = new Set<number>(this.data?.cuotaIdsPreseleccionadas || []);
 
@@ -208,9 +214,7 @@ export class PagarComprasDialogComponent implements OnInit {
       if (m) this.form.patchValue({ monedaId: m.id });
     }
     if (!this.form.value.formaPagoId) {
-      const fp = preselectSingleOrPrincipal(this.formasPago)
-        || this.formasPago.find((f: any) => /EFECTIVO/i.test(f.nombre || ''))
-        || this.formasPago[0];
+      const fp = preselectSingleOrPrincipal(this.formasPagoEfectivo) || this.formasPagoEfectivo[0];
       if (fp) this.form.patchValue({ formaPagoId: fp.id });
     }
   }
@@ -317,6 +321,35 @@ export class PagarComprasDialogComponent implements OnInit {
 
   cancelar(): void {
     this.dialogRef?.close(false);
+  }
+
+  // Abre el pago mixto (varias formas/monedas) para una cuota puntual. Al confirmar
+  // se recarga la lista de cuotas pendientes (la cuota puede quedar PARCIAL o pagada).
+  async pagoMixto(row: CuotaRow): Promise<void> {
+    const { PagoMixtoCuotaDialogComponent } = await import(
+      'src/app/pages/financiero/caja-mayor/pago-mixto-cuota-dialog/pago-mixto-cuota-dialog.component'
+    );
+    const ref = this.dialog.open(PagoMixtoCuotaDialogComponent, {
+      width: '720px',
+      maxWidth: '95vw',
+      data: {
+        cuota: {
+          id: row.id,
+          numero: row.numero,
+          saldoPendiente: row.saldoPendiente,
+          monedaId: row.monedaId,
+          monedaSimbolo: row.monedaSimbolo,
+          monedaDenominacion: row.monedaDenominacion,
+          cppId: row.cppId,
+          proveedorNombre: row.proveedorNombre,
+          compraNumeroNota: row.compraNumeroNota,
+        },
+      },
+    });
+    const ok = await firstValueFrom(ref.afterClosed());
+    if (ok) {
+      await this.loadAll();
+    }
   }
 
   private async confirmarSaldoSiNegativo(f: any, monto: number): Promise<boolean> {

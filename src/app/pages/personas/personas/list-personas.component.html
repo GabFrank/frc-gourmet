@@ -54,7 +54,7 @@
             Limpiar
           </button>
           <span class="spacer"></span>
-          <button mat-raised-button color="accent" (click)="addPersona()">
+          <button mat-raised-button color="accent" (click)="addPersona()" *appHasPermission="'PERSONAS_GESTIONAR'">
             <mat-icon>add</mat-icon>
             Adicionar
           </button>
@@ -130,15 +130,15 @@
               <mat-icon>more_vert</mat-icon>
             </button>
             <mat-menu #menu="matMenu">
-              <button mat-menu-item (click)="editPersona(persona)">
+              <button mat-menu-item (click)="editPersona(persona)" *appHasPermission="'PERSONAS_GESTIONAR'">
                 <mat-icon>edit</mat-icon>
                 <span>Editar</span>
               </button>
-              <button mat-menu-item (click)="deletePersona(persona.id!)">
+              <button mat-menu-item (click)="deletePersona(persona.id!)" *appHasPermission="'PERSONAS_GESTIONAR'">
                 <mat-icon>delete</mat-icon>
                 <span>Eliminar</span>
               </button>
-              <button mat-menu-item (click)="createEditUsuario(persona)">
+              <button mat-menu-item (click)="createEditUsuario(persona)" *appHasPermission="'USUARIOS_GESTIONAR'">
                 <mat-icon>person</mat-icon>
                 <span>Crear/Editar Usuario</span>
               </button>

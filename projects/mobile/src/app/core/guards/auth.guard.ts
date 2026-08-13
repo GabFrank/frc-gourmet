@@ -9,6 +9,13 @@ import { AuthService } from '@frc/shared-core';
 export const authGuard: CanActivateFn = (_route, state) => {
   const auth = inject(AuthService);
   const router = inject(Router);
-  if (auth.isLoggedIn) return true;
-  return router.createUrlTree(['/login'], { queryParams: { returnUrl: state.url } });
+  if (!auth.isLoggedIn) {
+    return router.createUrlTree(['/login'], { queryParams: { returnUrl: state.url } });
+  }
+  // Cambio de contraseña temporal obligatorio: si el usuario tiene el flag,
+  // no puede navegar a ninguna otra ruta hasta cambiarla (bloquea deep-links).
+  if (auth.currentUser?.mustChangePassword && !state.url.startsWith('/cambiar-password')) {
+    return router.createUrlTree(['/cambiar-password']);
+  }
+  return true;
 };

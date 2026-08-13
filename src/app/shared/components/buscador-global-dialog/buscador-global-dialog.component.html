@@ -1,0 +1,35 @@
+<div class="bg-root">
+  <div class="bg-search">
+    <mat-icon class="bg-search-icon">search</mat-icon>
+    <input #inputBuscar type="text" class="bg-input" [formControl]="control"
+           placeholder="Buscar menús, productos, clientes, funcionarios…" autocomplete="off" spellcheck="false" />
+    <button class="bg-esc" (click)="cerrar()" aria-label="Cerrar">ESC</button>
+  </div>
+
+  <mat-progress-bar *ngIf="cargando" mode="indeterminate" class="bg-progress"></mat-progress-bar>
+
+  <div class="bg-results">
+    <div *ngIf="termino.trim().length >= 2 && !secciones.length && !cargando" class="bg-empty">
+      Sin resultados para “{{ termino }}”.
+    </div>
+
+    <div *ngIf="termino.trim().length < 2" class="bg-hint">
+      Escribí al menos 2 caracteres. Navegá con ↑ ↓ y abrí con Enter.
+    </div>
+
+    <div *ngFor="let s of secciones" class="bg-seccion">
+      <div class="bg-seccion-titulo">{{ s.titulo }}<span *ngIf="s.hasMore" class="bg-mas">+</span></div>
+      <button *ngFor="let item of s.items" type="button" class="bg-item"
+              [class.seleccionado]="esSeleccionado(item)"
+              (mouseenter)="seleccionado = flat.indexOf(item)"
+              (click)="activar(item)">
+        <mat-icon class="bg-item-icon">{{ item.icono }}</mat-icon>
+        <span class="bg-item-main">
+          <span class="bg-item-titulo">{{ item.titulo }}</span>
+          <span class="bg-item-sub" *ngIf="item.subtitulo">{{ item.subtitulo }}</span>
+        </span>
+        <mat-icon class="bg-item-go">subdirectory_arrow_left</mat-icon>
+      </button>
+    </div>
+  </div>
+</div>

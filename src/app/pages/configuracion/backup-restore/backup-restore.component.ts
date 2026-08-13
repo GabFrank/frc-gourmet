@@ -29,6 +29,7 @@ import {
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { RestoreConfirmDialogComponent } from './restore-confirm-dialog.component';
 import { ResetDbConfirmDialogComponent } from './reset-db-confirm-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-backup-restore',
@@ -54,6 +55,7 @@ import { ResetDbConfirmDialogComponent } from './reset-db-confirm-dialog.compone
     MatTableModule,
     MatTabsModule,
     MatTooltipModule,
+    HasPermissionDirective,
   ],
   templateUrl: './backup-restore.component.html',
   styleUrls: ['./backup-restore.component.scss'],
@@ -65,9 +67,17 @@ export class BackupRestoreComponent implements OnInit {
   info: BackupInfo | null = null;
   config: BackupConfig | null = null;
 
+  /** true cuando la BD activa es Postgres (activa la UI específica). */
+  isPostgres = false;
+
   backupsDataSource = new MatTableDataSource<BackupItem>([]);
   backupsDir = '';
   displayedColumns: string[] = ['fileName', 'createdAt', 'size', 'isAutomatic', 'hasImages', 'actions'];
+
+  pgFormatOptions = [
+    { value: 'custom', label: 'Comprimido (.dump) — recomendado' },
+    { value: 'plain', label: 'SQL plano (.sql)' },
+  ];
 
   @ViewChild(MatPaginator) paginator?: MatPaginator;
 
@@ -108,7 +118,10 @@ export class BackupRestoreComponent implements OnInit {
 
   loadInfo(): void {
     this.backupService.getInfo().subscribe({
-      next: (info) => { this.info = info; },
+      next: (info) => {
+        this.info = info;
+        this.isPostgres = info.dbType === 'postgres';
+      },
       error: (err) => this.notifyError('Error al obtener info de BD', err),
     });
   }
@@ -247,6 +260,37 @@ export class BackupRestoreComponent implements OnInit {
     });
   }
 
+  // ================== ENVIAR POR WHATSAPP ==================
+  sendBackupWhatsapp(item: BackupItem): void {
+    const destino = this.config?.whatsappDestino?.trim();
+    if (!destino) {
+      this.notifyError('Configurá primero el número de WhatsApp (pestaña Auto-backup) y guardá.');
+      return;
+    }
+    const ref = this.dialog.open(ConfirmationDialogComponent, {
+      width: '460px',
+      data: {
+        title: 'Enviar backup por WhatsApp',
+        message: `¿Enviar "${item.fileName}" (${this.formatSize(item.size)}) al número ${destino}?`,
+      },
+    });
+    ref.afterClosed().subscribe((confirmed) => {
+      if (!confirmed) return;
+      this.startBusy('Enviando backup por WhatsApp...');
+      this.backupService.sendWhatsapp({ fullPath: item.fullPath }).subscribe({
+        next: (res) => {
+          this.endBusy();
+          if (res.success) {
+            this.notifyOk(`Backup enviado por WhatsApp a ${res.destino}`);
+          } else {
+            this.notifyError('No se pudo enviar', res.message);
+          }
+        },
+        error: (err) => { this.endBusy(); this.notifyError('Error al enviar', err); },
+      });
+    });
+  }
+
   // ================== AUTO-BACKUP ==================
   toggleAutoBackup(): void {
     if (!this.config) return;
@@ -274,6 +318,9 @@ export class BackupRestoreComponent implements OnInit {
       retentionCount: this.config.retentionCount,
       includeImages: this.config.includeImages,
       customBackupDir: this.config.customBackupDir,
+      pgFormat: this.config.pgFormat,
+      pgBinDir: this.config.pgBinDir,
+      whatsappDestino: this.config.whatsappDestino,
     };
     this.backupService.setConfig(partial).subscribe({
       next: (res) => {

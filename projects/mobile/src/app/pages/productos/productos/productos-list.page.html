@@ -40,4 +40,8 @@
     </mat-card>
     <p *ngIf="items.length === 0" class="crud-empty">No hay productos.</p>
   </div>
+
+  <button *ngIf="canEdit" class="crud-fab" mat-fab color="primary" (click)="nuevo()" aria-label="Nuevo producto">
+    <mat-icon>add</mat-icon>
+  </button>
 </div>

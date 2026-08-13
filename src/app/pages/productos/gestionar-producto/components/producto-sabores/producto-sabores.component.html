@@ -109,7 +109,9 @@
         <!-- Fila de acciones principales -->
         <div class="actions-row">
           <div class="primary-actions">
-            <button mat-raised-button color="primary" (click)="nuevoSabor()" [disabled]="loading">
+            <button mat-raised-button color="primary" (click)="nuevoSabor()"
+              [disabled]="loading || !productoId"
+              [matTooltip]="!productoId ? 'Guardá primero el producto para poder agregar sabores' : ''">
               <mat-icon>add</mat-icon>
               Nuevo Sabor
             </button>
@@ -174,7 +176,9 @@
           <mat-icon class="empty-icon">restaurant_menu</mat-icon>
           <h3>No hay sabores configurados</h3>
           <p>Agrega el primer sabor para este producto y comenzarás a generar variaciones automáticamente.</p>
-          <button mat-raised-button color="primary" (click)="nuevoSabor()">
+          <button mat-raised-button color="primary" (click)="nuevoSabor()"
+            [disabled]="!productoId"
+            [matTooltip]="!productoId ? 'Guardá primero el producto para poder agregar sabores' : ''">
             <mat-icon>add</mat-icon>
             Crear Primer Sabor
           </button>
@@ -297,6 +301,9 @@
             <ng-container matColumnDef="expandedDetail">
               <td mat-cell *matCellDef="let sabor" [attr.colspan]="displayedColumns.length">
                 <div class="variaciones-detail" [@detailExpand]="expandedSabor === sabor ? 'expanded' : 'collapsed'">
+                  <!-- Wrapper interno: el padding/borde viven acá, NO en el elemento
+                       animado, para que colapsado mida 0px sin dejar hueco. -->
+                  <div class="variaciones-detail-inner">
 
                   <!-- Header de Variaciones -->
                   <div class="variaciones-header">
@@ -472,6 +479,7 @@
 
                   </div>
 
+                  </div>
                 </div>
               </td>
             </ng-container>

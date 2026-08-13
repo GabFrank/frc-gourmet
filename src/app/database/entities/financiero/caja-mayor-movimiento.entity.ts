@@ -47,6 +47,13 @@ export class CajaMayorMovimiento extends BaseModel {
   @JoinColumn({ name: 'retiro_caja_id' })
   retiroCaja?: any;
 
+  // Conteo de billetes asociado a un EGRESO_CAJA_INICIAL: el efectivo retirado de
+  // caja mayor para sembrar la apertura de una caja. Ese mismo conteo se reutiliza
+  // luego como conteo de apertura al "abrir caja con este conteo".
+  @ManyToOne('Conteo', { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'conteo_id' })
+  conteo?: any;
+
   // --- Referencias a entidades de fases futuras (columnas int por ahora) ---
   // Se convertiran en @ManyToOne cuando se creen las entidades
 

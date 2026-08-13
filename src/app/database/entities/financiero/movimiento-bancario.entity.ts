@@ -7,6 +7,10 @@ export enum MovimientoBancarioTipo {
   SALIDA_MANUAL = 'SALIDA_MANUAL',
   AJUSTE_POSITIVO = 'AJUSTE_POSITIVO',
   AJUSTE_NEGATIVO = 'AJUSTE_NEGATIVO',
+  // Asiento bancario generado al acreditar una AcreditacionPos (auto o verificada).
+  // Tiene tipo propio para etiquetarse como "Acreditación POS" y poder ocultarse
+  // por defecto de la lista consolidada (es un movimiento de alto volumen/ruidoso).
+  ACREDITACION_POS = 'ACREDITACION_POS',
 }
 
 @Entity('movimientos_bancarios')

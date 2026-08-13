@@ -8,6 +8,18 @@ import { Persona } from '../../src/app/database/entities/personas/persona.entity
 import { Cargo as CargoEnt } from '../../src/app/database/entities/rrhh/cargo.entity';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
+import { TipoCliente } from '../../src/app/database/entities/personas/tipo-cliente.entity';
+import { ConfiguracionRrhh } from '../../src/app/database/entities/rrhh/configuracion-rrhh.entity';
+import { Vale } from '../../src/app/database/entities/rrhh/vale.entity';
+import { ValeEstado } from '../../src/app/database/entities/rrhh/vale-estado.enum';
+import { CuentaPorPagar } from '../../src/app/database/entities/financiero/cuenta-por-pagar.entity';
+import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
+import { CuentaPorPagarTipo, CuentaPorPagarEstado, CuotaEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
+import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
+import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
+import { CuentaPorCobrarEstado, CuentaPorCobrarCuotaEstado } from '../../src/app/database/entities/financiero/cuentas-por-cobrar-enums';
+import { getMonedaPrincipal, getCotizacionCompraLocal } from '../utils/moneda.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { ensurePermission } from '../utils/auth.utils';
@@ -195,6 +207,48 @@ export function registerRrhhFuncionariosHandlers(
       await setEntityUserTracking(dataSource, histSalario, userId, false);
       await histSalarioRepo.save(histSalario);
 
+      // Cliente conveniado con crédito automático (opt-in vía checkbox del alta).
+      // Crea un Cliente para la misma persona, tipo CONVENIADO, con crédito y
+      // límite = un porcentaje del salario base (configurable, default 15%).
+      // Va dentro de la misma transacción para ser atómico con el alta.
+      if (data.crearClienteConveniado === true) {
+        const clienteRepo = queryRunner.manager.getRepository(Cliente);
+        // No duplicar: si la persona ya es cliente, no creamos otro.
+        const clienteExistente = await clienteRepo.findOne({ where: { persona: { id: persona.id } } });
+        if (!clienteExistente) {
+          const tipoConveniado = await queryRunner.manager
+            .getRepository(TipoCliente)
+            .findOne({ where: { descripcion: 'CONVENIADO' } });
+          if (!tipoConveniado) {
+            throw new Error(
+              "No existe el tipo de cliente 'CONVENIADO'. Creelo en Tipos de Cliente antes de dar de alta un funcionario con cliente conveniado.",
+            );
+          }
+
+          // Porcentaje configurable en configuraciones_rrhh; si no está, 15%.
+          const cfgPorc = await queryRunner.manager
+            .getRepository(ConfiguracionRrhh)
+            .findOne({ where: { clave: 'CLIENTE_FUNCIONARIO_PORCENTAJE_CREDITO' } });
+          const porcentaje =
+            cfgPorc?.valor != null && !isNaN(parseFloat(cfgPorc.valor))
+              ? parseFloat(cfgPorc.valor)
+              : 15;
+
+          const salarioNum = Number(saved.salarioBase) || 0;
+          const limiteCredito = Math.round((salarioNum * porcentaje) / 100 * 100) / 100;
+
+          const cliente = clienteRepo.create({
+            persona,
+            tipo_cliente: tipoConveniado,
+            activo: true,
+            credito: true,
+            limite_credito: limiteCredito,
+          });
+          await setEntityUserTracking(dataSource, cliente, userId, false);
+          await clienteRepo.save(cliente);
+        }
+      }
+
       await queryRunner.commitTransaction();
       return saved;
     } catch (error) {
@@ -247,6 +301,7 @@ export function registerRrhhFuncionariosHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_FUNCIONARIO_EDITAR');
       const funcRepo = queryRunner.manager.getRepository(Funcionario);
       const histRepo = queryRunner.manager.getRepository(HistoricoCargo);
 
@@ -297,6 +352,7 @@ export function registerRrhhFuncionariosHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_FUNCIONARIO_EDITAR');
       const funcRepo = queryRunner.manager.getRepository(Funcionario);
       const histRepo = queryRunner.manager.getRepository(HistoricoSalario);
 
@@ -342,6 +398,7 @@ export function registerRrhhFuncionariosHandlers(
 
   ipcMain.handle('egresar-funcionario', async (_event, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_FUNCIONARIO_EGRESAR');
       const repo = dataSource.getRepository(Funcionario);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`Funcionario ${id} no encontrado`);
@@ -380,6 +437,167 @@ export function registerRrhhFuncionariosHandlers(
       });
     } catch (error) {
       console.error('Error getting historico salarios:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Resumen financiero del funcionario: deudas con el negocio (vales pendientes,
+   * saldo de préstamos y consumo a crédito del cliente vinculado por persona),
+   * total adeudado y próximos vencimientos. Solo lectura.
+   */
+  ipcMain.handle('get-funcionario-resumen-financiero', async (_event, funcionarioId: number) => {
+    try {
+      const funcionario = await dataSource.getRepository(Funcionario).findOne({
+        where: { id: funcionarioId },
+        relations: ['persona'],
+      });
+      if (!funcionario) throw new Error(`Funcionario ${funcionarioId} no encontrado`);
+
+      // Todos los montos se convierten a la moneda principal (PYG) usando la
+      // cotización, porque vales/préstamos/créditos pueden estar en distintas
+      // monedas. `sinCotizacion` marca si faltó alguna cotización (total parcial).
+      const principal = await getMonedaPrincipal(dataSource);
+      const rateCache = new Map<number, number | null>();
+      let sinCotizacion = false;
+      // Convierte un monto de `monedaId` a principal; null si falta cotización.
+      const toPrincipal = async (monto: number, monedaId: number | null | undefined): Promise<number | null> => {
+        const m = Number(monto) || 0;
+        if (!principal || !monedaId || monedaId === principal.id) return m;
+        if (!rateCache.has(monedaId)) {
+          rateCache.set(monedaId, await getCotizacionCompraLocal(dataSource, monedaId, principal.id));
+        }
+        const tasa = rateCache.get(monedaId) ?? null;
+        if (tasa == null) { sinCotizacion = true; return null; }
+        return +(m * tasa).toFixed(2);
+      };
+
+      const proximos: Array<{ tipo: string; numero: number; fechaVencimiento: any; saldo: number; monedaSimbolo: string; saldoPrincipal: number | null; descripcion: string }> = [];
+
+      // Vales CONFIRMADO (pendientes de descontar) — con su moneda
+      const vales = await dataSource.getRepository(Vale).createQueryBuilder('v')
+        .leftJoinAndSelect('v.moneda', 'moneda')
+        .where('v.funcionario_id = :fid', { fid: funcionarioId })
+        .andWhere('v.estado = :est', { est: ValeEstado.CONFIRMADO })
+        .getMany();
+      let valesTotal = 0;
+      for (const v of vales) {
+        const conv = await toPrincipal(Number(v.monto), (v as any).moneda?.id);
+        if (conv != null) valesTotal += conv;
+      }
+      valesTotal = +valesTotal.toFixed(2);
+
+      // Préstamos (CPP PRESTAMO_FUNCIONARIO ACTIVO) — con su moneda
+      const prestamos = await dataSource.getRepository(CuentaPorPagar).find({
+        where: { funcionario: { id: funcionarioId } as any, tipo: CuentaPorPagarTipo.PRESTAMO_FUNCIONARIO, estado: CuentaPorPagarEstado.ACTIVO },
+        relations: ['moneda'],
+      });
+      let prestamosSaldo = 0;
+      const cuotaCppRepo = dataSource.getRepository(CuentaPorPagarCuota);
+      for (const p of prestamos) {
+        const simbolo = (p as any).moneda?.simbolo || (principal?.simbolo || 'Gs');
+        const convPrestamo = await toPrincipal(Number(p.montoTotal) - Number(p.montoPagado), (p as any).moneda?.id);
+        if (convPrestamo != null) prestamosSaldo += convPrestamo;
+        const cuotas = await cuotaCppRepo.createQueryBuilder('c')
+          .where('c.cuenta_por_pagar_id = :pid', { pid: p.id })
+          .andWhere('c.estado IN (:...ests)', { ests: [CuotaEstado.PENDIENTE, CuotaEstado.PARCIAL, CuotaEstado.VENCIDA] })
+          .getMany();
+        for (const c of cuotas) {
+          const saldo = +(Number(c.monto) - Number(c.montoPagado)).toFixed(2);
+          if (saldo > 0) {
+            const saldoPrincipal = await toPrincipal(saldo, (p as any).moneda?.id);
+            proximos.push({ tipo: 'PRESTAMO', numero: c.numero, fechaVencimiento: c.fechaVencimiento, saldo, monedaSimbolo: simbolo, saldoPrincipal, descripcion: p.descripcion });
+          }
+        }
+      }
+      prestamosSaldo = +prestamosSaldo.toFixed(2);
+
+      // Cliente vinculado + consumo a crédito (CPC)
+      let cliente: any = null;
+      let creditoSaldo = 0;
+      let cpcActivas = 0;
+      const personaId = funcionario.persona?.id;
+      if (personaId) {
+        const clienteEnt = await dataSource.getRepository(Cliente).findOne({
+          where: { persona: { id: personaId } as any },
+          relations: ['tipo_cliente'],
+        });
+        if (clienteEnt) {
+          cliente = {
+            id: clienteEnt.id,
+            saldoActual: Number(clienteEnt.saldoActual) || 0,
+            limiteCredito: Number(clienteEnt.limite_credito) || 0,
+            tieneCredito: !!clienteEnt.credito,
+            tipoClienteDescripcion: clienteEnt.tipo_cliente?.descripcion || null,
+          };
+          const cpcs = await dataSource.getRepository(CuentaPorCobrar).find({
+            where: { cliente: { id: clienteEnt.id } as any, estado: CuentaPorCobrarEstado.ACTIVO },
+            relations: ['moneda'],
+          });
+          cpcActivas = cpcs.length;
+          const cuotaCpcRepo = dataSource.getRepository(CuentaPorCobrarCuota);
+          for (const cpc of cpcs) {
+            const simbolo = (cpc as any).moneda?.simbolo || (principal?.simbolo || 'Gs');
+            const cuotas = await cuotaCpcRepo.createQueryBuilder('c')
+              .where('c.cuenta_por_cobrar_id = :cid', { cid: cpc.id })
+              .andWhere('c.estado IN (:...ests)', { ests: [CuentaPorCobrarCuotaEstado.PENDIENTE, CuentaPorCobrarCuotaEstado.PARCIAL] })
+              .getMany();
+            for (const c of cuotas) {
+              const saldo = +(Number(c.monto) - Number(c.montoCobrado)).toFixed(2);
+              if (saldo > 0) {
+                const saldoPrincipal = await toPrincipal(saldo, (cpc as any).moneda?.id);
+                if (saldoPrincipal != null) creditoSaldo += saldoPrincipal;
+                proximos.push({ tipo: 'CREDITO', numero: c.numero, fechaVencimiento: c.fechaVencimiento, saldo, monedaSimbolo: simbolo, saldoPrincipal, descripcion: cpc.descripcion || 'Consumo a crédito' });
+              }
+            }
+          }
+        }
+      }
+      creditoSaldo = +creditoSaldo.toFixed(2);
+
+      proximos.sort((a, b) => new Date(a.fechaVencimiento).getTime() - new Date(b.fechaVencimiento).getTime());
+      const totalAdeudado = +(valesTotal + prestamosSaldo + creditoSaldo).toFixed(2);
+
+      return {
+        cliente,
+        monedaPrincipalSimbolo: principal?.simbolo || 'Gs',
+        sinCotizacion,
+        vales: { count: vales.length, total: valesTotal },
+        prestamos: { count: prestamos.length, saldo: prestamosSaldo },
+        credito: { saldo: creditoSaldo, cpcActivas },
+        totalAdeudado,
+        proximosVencimientos: proximos.slice(0, 5),
+      };
+    } catch (error) {
+      console.error('Error getting resumen financiero funcionario:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Dado un cliente, devuelve el funcionario vinculado por la misma persona
+   * (o null). Usado para el aviso cruzado "También es funcionario". Solo lectura.
+   */
+  ipcMain.handle('get-funcionario-de-cliente', async (_event, clienteId: number) => {
+    try {
+      const cliente = await dataSource.getRepository(Cliente).findOne({
+        where: { id: clienteId },
+        relations: ['persona'],
+      });
+      if (!cliente?.persona?.id) return null;
+      const funcionario = await dataSource.getRepository(Funcionario).findOne({
+        where: { persona: { id: cliente.persona.id } as any },
+        relations: ['persona', 'cargo'],
+      });
+      if (!funcionario) return null;
+      return {
+        id: funcionario.id,
+        activo: funcionario.activo,
+        nombre: `${funcionario.persona?.nombre || ''} ${funcionario.persona?.apellido || ''}`.trim(),
+        cargo: funcionario.cargo?.nombre || null,
+      };
+    } catch (error) {
+      console.error('Error getting funcionario de cliente:', error);
       throw error;
     }
   });

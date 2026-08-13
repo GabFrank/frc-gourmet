@@ -466,6 +466,46 @@
   .header-info { display: none; }
 }
 
+// Control de música en el header. El texto vive en un slot de ANCHO FIJO: el
+// título cambia cada 3 minutos y el largo varía mucho ("Come" vs "Cachimbo da
+// Paz (feat. Lulu Santos)"), así que sin ancho fijo el header se reacomodaría
+// solo todo el día justo al lado del reloj.
+.musica-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+
+  .musica-texto {
+    width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.2px;
+  }
+
+  // Pausado o con alerta: el icono baja de intensidad o se tiñe, para que el
+  // estado se lea sin abrir el diálogo.
+  &.pausado {
+    opacity: 0.65;
+  }
+
+  &.alerta mat-icon {
+    color: #ffcc80;
+  }
+}
+
+// Bajo 1200px el texto se va y queda solo el icono, igual que las cotizaciones.
+@media (max-width: 1200px) {
+  .musica-btn {
+    min-width: 0;
+    .musica-texto { display: none; }
+  }
+}
+
 // Botón con nombre del usuario activo
 .user-button {
   display: inline-flex;

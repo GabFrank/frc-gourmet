@@ -1,0 +1,80 @@
+<div class="crud-edit">
+  <mat-toolbar color="primary" class="crud-edit-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="crud-edit-title">Compra #{{ id }}</span>
+    <span class="crud-spacer"></span>
+    <button
+      *ngIf="canGestionar && !loading && (esAbierto || !esCancelado)"
+      mat-icon-button
+      [matMenuTriggerFor]="menu"
+      aria-label="Acciones"
+    >
+      <mat-icon>more_vert</mat-icon>
+    </button>
+    <mat-menu #menu="matMenu">
+      <button mat-menu-item *ngIf="esAbierto" (click)="finalizar()">
+        <mat-icon>check_circle</mat-icon><span>Finalizar</span>
+      </button>
+      <button mat-menu-item *ngIf="!esCancelado" (click)="anular()">
+        <mat-icon>cancel</mat-icon><span>Anular</span>
+      </button>
+    </mat-menu>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error cd-pad">{{ error }}</p>
+
+  <div class="cd-scroll" *ngIf="!loading && !error">
+    <!-- Cabecera -->
+    <section class="cd-card">
+      <div class="cd-head">
+        <span class="cd-prov">{{ proveedor }}</span>
+        <span class="crud-chip" [ngClass]="estadoClase">{{ estadoLabel }}</span>
+      </div>
+      <div class="cd-total">{{ simbolo }} {{ total | number: '1.0-' + decimales }}</div>
+      <div class="cd-meta">
+        <span *ngIf="numeroNota">Nota {{ numeroNota }}</span>
+        <span *ngIf="fechaCompra">{{ fechaCompra | date: 'dd/MM/yyyy' }}</span>
+        <span>{{ credito ? 'Crédito' : 'Contado' }}</span>
+        <span *ngIf="categoria">{{ categoria }}</span>
+        <span *ngIf="simplificada">Simplificada</span>
+      </div>
+    </section>
+
+    <!-- Ítems -->
+    <section class="cd-card">
+      <h3 class="cd-section">Ítems</h3>
+      <p *ngIf="items.length === 0" class="crud-empty cd-empty">
+        {{ simplificada ? 'Compra simplificada (sin detalle de ítems).' : 'Sin ítems.' }}
+      </p>
+      <div *ngFor="let it of items" class="cd-item">
+        <div class="cd-item-main">
+          <span class="cd-item-name">{{ it.producto }}</span>
+          <span class="cd-item-sub">
+            <span *ngIf="it.presentacion">{{ it.presentacion }} · </span>
+            {{ it.cantidad | number: '1.0-3' }} × {{ simbolo }} {{ it.costoUnitario | number: '1.0-' + decimales }}
+          </span>
+        </div>
+        <span class="cd-item-total">{{ simbolo }} {{ it.subtotal | number: '1.0-' + decimales }}</span>
+      </div>
+    </section>
+
+    <!-- Cuotas / pago (oculto si la compra fue anulada) -->
+    <section class="cd-card" *ngIf="cppId && !esCancelado">
+      <h3 class="cd-section">Cuotas</h3>
+      <p *ngIf="cuotas.length === 0" class="crud-empty cd-empty">Sin cuotas.</p>
+      <div *ngFor="let q of cuotas" class="cd-item">
+        <div class="cd-item-main">
+          <span class="cd-item-name">Cuota {{ q.numero }}</span>
+          <span class="cd-item-sub">
+            Vence {{ q.vencimiento | date: 'dd/MM/yyyy' }} · Saldo {{ simbolo }} {{ q.saldo | number: '1.0-' + decimales }}
+          </span>
+        </div>
+        <span class="crud-chip" [ngClass]="q.estadoClase">{{ q.estado }}</span>
+      </div>
+      <button mat-stroked-button color="primary" class="cd-cxp-btn" (click)="irACxp()">
+        <mat-icon>payments</mat-icon> Ir a Cuenta por Pagar
+      </button>
+    </section>
+  </div>
+</div>

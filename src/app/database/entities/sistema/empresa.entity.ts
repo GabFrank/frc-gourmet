@@ -62,4 +62,15 @@ export class Empresa extends BaseModel {
   /** Ej. "RESTAURANTE", "ALMACEN". */
   @Column({ type: 'varchar', length: 120, name: 'actividad_economica', nullable: true })
   actividadEconomica?: string | null;
+
+  /** Ubicación de la empresa para la geocerca del fichaje facial. */
+  @Column({ type: 'numeric', precision: 10, scale: 7, nullable: true })
+  latitud?: number | null;
+
+  @Column({ type: 'numeric', precision: 10, scale: 7, nullable: true })
+  longitud?: number | null;
+
+  /** Radio (m) dentro del cual se permite fichar. Null → default en el handler. */
+  @Column({ type: 'int', name: 'radio_fichaje_metros', nullable: true })
+  radioFichajeMetros?: number | null;
 }

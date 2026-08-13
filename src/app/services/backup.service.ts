@@ -1,8 +1,21 @@
 import { Injectable } from '@angular/core';
 import { Observable, from } from 'rxjs';
 
+export type DbType = 'sqlite' | 'postgres';
+export type PgBackupFormat = 'custom' | 'plain';
+
+export interface PgInfo {
+  host?: string;
+  port?: number;
+  database?: string;
+  username?: string;
+  schema?: string;
+  ssl?: boolean;
+}
+
 export interface BackupInfo {
   userDataPath: string;
+  dbType: DbType;
   dbPath: string;
   dbExists: boolean;
   dbSize: number;
@@ -13,6 +26,9 @@ export interface BackupInfo {
   productoImagesSize: number;
   backupDir: string;
   appVersion: string;
+  /** Solo Postgres: datos de conexión + posible error de conexión. */
+  pgInfo?: PgInfo;
+  connError?: string;
 }
 
 export interface BackupItem {
@@ -22,6 +38,7 @@ export interface BackupItem {
   createdAt: Date;
   isAutomatic: boolean;
   hasImages?: boolean;
+  dbType?: DbType;
 }
 
 export interface BackupListResult {
@@ -41,6 +58,12 @@ export interface BackupConfig {
   includeImages: boolean;
   lastAutoBackupAt?: string;
   nextAutoBackupAt?: string | null;
+  /** Postgres: formato del dump. */
+  pgFormat?: PgBackupFormat;
+  /** Postgres: carpeta de binarios pg_dump/pg_restore/psql (vacío = autodetect). */
+  pgBinDir?: string;
+  /** WhatsApp: número/JID destino para enviar backups. */
+  whatsappDestino?: string;
 }
 
 export interface BackupCreateResult {
@@ -55,7 +78,9 @@ export interface BackupCreateResult {
 }
 
 export interface BackupRestorePreview {
-  type: 'db' | 'frcbak';
+  type: 'db' | 'frcbak' | 'pgdump';
+  dbType?: DbType;
+  format?: PgBackupFormat;
   createdAt?: string;
   appVersion?: string;
   notes?: string;
@@ -103,6 +128,10 @@ export class BackupService {
 
   restore(filePath: string): Observable<{ success: boolean; message?: string; safetyBackupPath?: string }> {
     return from(this.api.backupRestore({ filePath }) as Promise<any>);
+  }
+
+  sendWhatsapp(opts: { fullPath: string; destino?: string; caption?: string }): Observable<{ success: boolean; destino?: string; messageId?: string; message?: string }> {
+    return from(this.api.backupSendWhatsapp(opts) as Promise<any>);
   }
 
   getConfig(): Observable<BackupConfig> {

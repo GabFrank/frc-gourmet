@@ -68,8 +68,63 @@
 
     <!-- Main content: table + selections -->
     <div class="main-content">
-      <!-- Left: Payment lines table -->
+      <!-- Left: Payment lines table / Items (cobro parcial) -->
       <div class="table-panel">
+        <!-- Tabs: Pagos (default) | Ítems -->
+        <div class="left-tabs" *ngIf="itemsCobro.length > 0">
+          <button type="button" class="left-tab" [class.active]="leftTab === 'pagos'" (click)="leftTab = 'pagos'">
+            Pagos <span class="tab-count" *ngIf="detalleRows.length">{{ detalleRows.length }}</span>
+          </button>
+          <button type="button" class="left-tab" [class.active]="leftTab === 'items'" (click)="leftTab = 'items'">
+            Ítems
+            <span class="tab-saldo" *ngIf="pendienteBrutoInicial > 0.5 && estadoTotalCubierto > 0.5">saldo {{ pendienteBrutoInicial | number:'1.0-0' }}</span>
+          </button>
+        </div>
+
+        <!-- Ítems (cobro parcial) -->
+        <div class="items-cobro-tab" *ngIf="leftTab === 'items' && itemsCobro.length > 0">
+          <div class="items-cobro-resumen">
+            <span class="ic-chip ic-total">Total {{ estadoDeudaBruta | number:'1.0-0' }}</span>
+            <span class="ic-chip ic-pagado">Pagado {{ estadoTotalCubierto | number:'1.0-0' }}</span>
+            <span class="ic-chip ic-saldo" [class.ic-saldo-cero]="pendienteBrutoInicial <= 0">Saldo {{ pendienteBrutoInicial | number:'1.0-0' }}</span>
+            <span class="ic-chip ic-sel" *ngIf="brutoSeleccionado > 0">Seleccionado {{ brutoSeleccionado | number:'1.0-0' }}</span>
+          </div>
+          <div class="items-cobro-list">
+            <div class="item-cobro-row" *ngFor="let it of itemsCobro"
+                 [class.pagado]="it.estado === 'PAGADO'"
+                 [class.seleccionado]="it.seleccionado">
+              <mat-checkbox
+                [disabled]="it.saldoItem <= 0.5"
+                [checked]="it.seleccionado"
+                (change)="toggleItemCobro(it)"></mat-checkbox>
+              <div class="item-cobro-info">
+                <span class="item-cobro-nombre">{{ it.nombre }}</span>
+                <span class="item-cobro-sub">
+                  <span class="ic-estado" [ngClass]="'ic-estado-' + it.estado.toLowerCase()">{{ it.estado }}</span>
+                  · neto {{ it.netoBruto | number:'1.0-0' }}
+                  <ng-container *ngIf="it.cubierto > 0.5"> · cubierto {{ it.cubierto | number:'1.0-0' }}</ng-container>
+                  · saldo {{ it.saldoItem | number:'1.0-0' }}
+                </span>
+              </div>
+              <div class="item-cobro-input" *ngIf="it.seleccionado && it.saldoItem > 0.5">
+                <input type="number" min="0" [max]="it.saldoItem"
+                       [(ngModel)]="it.brutoACobrar" (ngModelChange)="onBrutoACobrarChange()"
+                       class="bruto-input" />
+              </div>
+            </div>
+          </div>
+          <div class="items-cobro-footer" *ngIf="hayItemsPendientes">
+            <span class="a-cobrar-label a-cobrar-spacer">Seleccionado: <strong>{{ brutoSeleccionado | number:'1.0-0' }}</strong></span>
+            <span class="a-cobrar-label saldo-tras">Saldo tras cobrar: <strong>{{ saldoTrasCobrar | number:'1.0-0' }}</strong></span>
+            <button mat-flat-button color="primary" class="btn-cobrar-sel" (click)="cobrarSeleccionados()" [disabled]="brutoSeleccionado <= 0"
+                    matTooltip="Carga el valor en la línea de pago y pasa a la pestaña Pagos">
+              <mat-icon>south</mat-icon> Cargar valor
+            </button>
+          </div>
+        </div>
+
+        <!-- Pagos (líneas de pago) -->
+        <div class="pagos-scroll" *ngIf="leftTab === 'pagos' || itemsCobro.length === 0">
         <table mat-table [dataSource]="detalleRows" class="detalles-table" *ngIf="detalleRows.length > 0">
           <ng-container matColumnDef="numero">
             <th mat-header-cell *matHeaderCellDef style="width: 36px">#</th>
@@ -139,6 +194,7 @@
           <mat-icon>receipt_long</mat-icon>
           <span>AGREGUE LÍNEAS DE PAGO</span>
           <span class="empty-hint">Seleccione moneda y forma de pago, ingrese el valor y presione Enter</span>
+        </div>
         </div>
       </div>
 
@@ -309,9 +365,13 @@
   <!-- Action buttons -->
   <mat-dialog-actions>
     <div class="action-buttons-row">
-      <button mat-raised-button class="btn-finalizar" [disabled]="!canFinalizar" (click)="finalizar()" matTooltip="Finalizar (F10)">
+      <button mat-raised-button class="btn-finalizar" [disabled]="!canFinalizar" (click)="finalizar()" matTooltip="Finalizar sin imprimir ticket (F10)">
         <mat-icon>check</mat-icon>
         Finalizar (F10)
+      </button>
+      <button mat-raised-button class="btn-finalizar-ticket" [disabled]="!canFinalizar" (click)="finalizarConTicket()" matTooltip="Finalizar e imprimir ticket (F11)">
+        <mat-icon>receipt_long</mat-icon>
+        Finalizar + Ticket (F11)
       </button>
       <button mat-raised-button class="btn-parcial" [disabled]="!canCobroParcial" (click)="cobroParcial()">
         <mat-icon>timelapse</mat-icon>

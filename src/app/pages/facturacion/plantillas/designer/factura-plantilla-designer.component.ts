@@ -12,8 +12,10 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
-import { RepositoryService } from '../../../../database/repository.service';
+import { RepositoryService, QrUploadedFile } from '../../../../database/repository.service';
+import { QrUploadDialogComponent } from '../../../../shared/components/qr-upload-dialog/qr-upload-dialog.component';
 import { FacturaPlantilla } from '../../../../database/entities/facturacion/factura-plantilla.entity';
 import {
   CATALOGO_COLUMNAS_ITEM,
@@ -42,6 +44,7 @@ import { buildDocDefinition, loadPdfMake, resolveVariable, FacturaRenderContext 
     MatTooltipModule,
     MatExpansionModule,
     MatSnackBarModule,
+    MatDialogModule,
   ],
   templateUrl: './factura-plantilla-designer.component.html',
   styleUrls: ['./factura-plantilla-designer.component.scss'],
@@ -93,7 +96,7 @@ export class FacturaPlantillaDesignerComponent {
   /** Contexto de ejemplo para previsualizar variables en el lienzo. */
   private demoCtx: FacturaRenderContext = {
     factura: { numeroCompleto: '001-001-0000123', fecha: new Date(), condicionVenta: 'CONTADO' },
-    cliente: { nombre: 'JUAN PEREZ', ruc: '1234567-8', direccion: 'AV. SIEMPRE VIVA 123', email: 'cliente@mail.com' },
+    cliente: { nombre: 'JUAN PEREZ', ruc: '1234567-8', direccion: 'AV. SIEMPRE VIVA 123', telefono: '0981 123 456', email: 'cliente@mail.com' },
     timbrado: { numero: '12345678', vigencia: '01/01/2026 - 31/12/2026' },
     totales: { gravada10: 100000, gravada5: 0, exenta: 0, iva10: 9091, iva5: 0, totalIva: 9091, descuento: 0, total: 100000, totalEnLetras: 'CIEN MIL GUARANIES' },
     empresa: { nombre: 'MI EMPRESA S.A.', ruc: '80012345-6', direccion: 'CENTRO, ASUNCIÓN' },
@@ -106,6 +109,7 @@ export class FacturaPlantillaDesignerComponent {
   constructor(
     private repositoryService: RepositoryService,
     private snackBar: MatSnackBar,
+    private dialog: MatDialog,
   ) {
     const map = new Map<string, VariableCatalogo[]>();
     for (const v of CATALOGO_VARIABLES) {
@@ -336,6 +340,29 @@ export class FacturaPlantillaDesignerComponent {
     reader.readAsDataURL(file);
   }
 
+  /** Subir la imagen de fondo desde el celular (QR). Se guarda como base64 en la plantilla. */
+  async onBackgroundFromQr(): Promise<void> {
+    if (!this.plantilla) return;
+    const ref = this.dialog.open(QrUploadDialogComponent, {
+      data: { carpeta: 'producto-images', accept: 'image/*', maxSizeMB: 5, multiple: false },
+      width: '420px',
+      maxWidth: '95vw',
+    });
+    const files: QrUploadedFile[] | undefined = await firstValueFrom(ref.afterClosed());
+    const f = files?.[0];
+    if (!f) return;
+    try {
+      const { base64, mimeType } = await firstValueFrom(this.repositoryService.readFileBase64(f.url));
+      this.plantilla.backgroundImageUrl = `data:${mimeType};base64,${base64}`;
+      this.ensureBackground();
+      this.recomputeBg();
+      this.repositoryService.deleteFile(f.url).subscribe({ error: () => { /* best-effort */ } });
+    } catch (e) {
+      console.error(e);
+      this.snackBar.open('No se pudo leer la imagen subida.', 'Cerrar', { duration: 3500 });
+    }
+  }
+
   clearBackground(): void {
     if (this.plantilla) this.plantilla.backgroundImageUrl = undefined;
   }
@@ -378,11 +405,17 @@ export class FacturaPlantillaDesignerComponent {
       const pdfMake = await loadPdfMake();
       // En pre-impreso NO se imprime el fondo (la hoja ya esta impresa); en A4 si.
       const includeBg = String(this.plantilla.tipo) !== 'PRE_IMPRESO' && !!this.plantilla.backgroundImageUrl;
+      // La vista previa refleja la impresion real: facturas no termicas salen en
+      // A4 vertical (ver facturar-dialog / plantilla-render.util).
+      const forceA4 = String(this.plantilla.tipo) !== 'AUTO_IMPRESO_TERMICA';
       const dd = buildDocDefinition(
         { anchoMm: Number(this.plantilla.anchoMm), altoMm: Number(this.plantilla.altoMm) },
         this.config,
         this.demoCtx,
-        includeBg ? { background: this.plantilla.backgroundImageUrl, backgroundTransform: this.config.background } : undefined,
+        {
+          forceA4,
+          ...(includeBg ? { background: this.plantilla.backgroundImageUrl, backgroundTransform: this.config.background } : {}),
+        },
       );
       pdfMake.createPdf(dd).open();
     } catch (error: any) {

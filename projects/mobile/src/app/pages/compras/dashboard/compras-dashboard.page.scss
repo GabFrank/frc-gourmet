@@ -1,0 +1,120 @@
+.cd-kpis {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.cd-kpi {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  .cd-kpi-val {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+
+    &.warn { color: var(--warning-color); }
+    &.err { color: var(--error-color); }
+  }
+
+  .cd-kpi-lbl {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+  }
+}
+
+.cd-card {
+  margin-bottom: 12px;
+  padding: 14px 16px;
+}
+
+.cd-title {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.cd-rank {
+  margin-bottom: 12px;
+
+  .cd-rank-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.85rem;
+  }
+
+  .cd-rank-name { font-weight: 500; }
+  .cd-rank-total { font-weight: 600; white-space: nowrap; }
+  .cd-rank-sub { font-size: 0.75rem; color: var(--text-secondary); }
+}
+
+.cd-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-secondary) 16%, transparent);
+  margin: 4px 0 2px;
+  overflow: hidden;
+
+  .cd-bar-fill {
+    height: 100%;
+    background: var(--primary-color, #3f51b5);
+    border-radius: 999px;
+  }
+}
+
+.cd-venc {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border-color);
+
+  &:first-of-type { border-top: none; }
+
+  .cd-venc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .cd-venc-name { font-weight: 500; }
+  .cd-venc-sub { font-size: 0.78rem; color: var(--text-secondary); }
+}
+
+.cd-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 120px;
+  padding-top: 8px;
+}
+
+.cd-chart-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  gap: 4px;
+
+  .cd-chart-bar {
+    width: 60%;
+    min-height: 2px;
+    background: var(--primary-color, #3f51b5);
+    border-radius: 4px 4px 0 0;
+  }
+
+  .cd-chart-lbl {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+  }
+}
+
+/* Chips de urgencia (además de ok/warn/off). */
+.crud-chip {
+  &.info { background: color-mix(in srgb, var(--info-color) 16%, transparent); color: var(--info-color); }
+  &.pend { background: color-mix(in srgb, var(--warning-color) 22%, transparent); color: var(--warning-color); }
+  &.anul { background: color-mix(in srgb, var(--error-color) 16%, transparent); color: var(--error-color); }
+}

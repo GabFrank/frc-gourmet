@@ -5,8 +5,8 @@
                          icon="receipt"
                          [loading]="loading"
                          (refresh)="cargar()">
-        <button mat-stroked-button (click)="abrirGenerarMes()"><mat-icon>calendar_month</mat-icon> Generar mes</button>
-        <button mat-flat-button color="primary" (click)="abrirGenerar()"><mat-icon>add</mat-icon> Generar</button>
+        <button mat-stroked-button (click)="abrirGenerarMes()" *appHasPermission="'COMISION_LIQUIDACION_GENERAR'"><mat-icon>calendar_month</mat-icon> Generar mes</button>
+        <button mat-flat-button color="primary" (click)="abrirGenerar()" *appHasPermission="'COMISION_LIQUIDACION_GENERAR'"><mat-icon>add</mat-icon> Generar</button>
       </app-table-toolbar>
 
       <div class="filtros">
@@ -71,9 +71,15 @@
             <button mat-icon-button [matMenuTriggerFor]="menu"><mat-icon>more_vert</mat-icon></button>
             <mat-menu #menu="matMenu">
               <button mat-menu-item (click)="verDetalle(l)"><mat-icon>visibility</mat-icon> Ver detalle</button>
-              <button mat-menu-item (click)="aprobar(l)" *ngIf="l.estado === 'BORRADOR'"><mat-icon>check_circle</mat-icon> Aprobar</button>
-              <button mat-menu-item (click)="abrirAgregarItemManual(l)" *ngIf="l.estado === 'BORRADOR'"><mat-icon>add_circle</mat-icon> Agregar item manual</button>
-              <button mat-menu-item (click)="anular(l)" *ngIf="l.estado === 'BORRADOR' || l.estado === 'APROBADA'"><mat-icon>cancel</mat-icon> Anular</button>
+              <ng-container *appHasPermission="'COMISION_LIQUIDACION_APROBAR'">
+                <button mat-menu-item (click)="aprobar(l)" *ngIf="l.estado === 'BORRADOR'"><mat-icon>check_circle</mat-icon> Aprobar</button>
+              </ng-container>
+              <ng-container *appHasPermission="'COMISION_LIQUIDACION_GENERAR'">
+                <button mat-menu-item (click)="abrirAgregarItemManual(l)" *ngIf="l.estado === 'BORRADOR'"><mat-icon>add_circle</mat-icon> Agregar item manual</button>
+              </ng-container>
+              <ng-container *appHasPermission="'COMISION_LIQUIDACION_ANULAR'">
+                <button mat-menu-item (click)="anular(l)" *ngIf="l.estado === 'BORRADOR' || l.estado === 'APROBADA'"><mat-icon>cancel</mat-icon> Anular</button>
+              </ng-container>
             </mat-menu>
           </td>
         </ng-container>

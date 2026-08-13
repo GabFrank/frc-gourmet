@@ -78,6 +78,41 @@ export interface ClienteFilters {
   conCredito?: boolean;
 }
 
+/** Archivo devuelto por la subida (genérica o por QR). */
+export interface QrUploadedFile {
+  url: string;
+  fileName: string;
+  mimeType: string;
+  tamanoBytes: number;
+  thumbUrl?: string;
+  mediumUrl?: string;
+}
+
+export interface QrUploadCreateResult {
+  ok: boolean;
+  sessionId?: string;
+  lanUrl?: string;
+  targetUrl?: string;
+  qrDataUrl?: string | null;
+  expiresAt?: number;
+  error?: string;
+}
+
+export interface QrUploadRemoteResult {
+  ok: boolean;
+  remoteUrl?: string;
+  targetUrl?: string;
+  qrDataUrl?: string | null;
+  error?: string;
+}
+
+export interface QrUploadPollResult {
+  ok: boolean;
+  expired: boolean;
+  files: QrUploadedFile[];
+  expiresAt?: number;
+}
+
 /**
  * Abstracción del repositorio de datos.
  *
@@ -126,6 +161,7 @@ export abstract class RepositoryService {
   abstract updateCliente(clienteId: number, clienteData: Partial<Cliente>): Observable<any>;
   abstract deleteCliente(clienteId: number): Observable<any>;
   abstract getPrinters(): Observable<any[]>;
+  abstract listSystemPrinters(): Observable<any[]>;
   abstract addPrinter(printer: any): Observable<any>;
   abstract updatePrinter(printerId: number, printer: any): Observable<any>;
   abstract deletePrinter(printerId: number): Observable<any>;
@@ -144,6 +180,10 @@ export abstract class RepositoryService {
   abstract readFileBase64(url: string): Observable<{ base64: string; mimeType: string }>;
   abstract openFileWithSystem(url: string): Observable<{ ok: boolean; error?: string }>;
   abstract openBase64File(base64: string, fileName: string): Observable<{ ok: boolean; error?: string }>;
+  abstract qrUploadCreateSession(input: { carpeta: string; accept?: string; maxSizeMB?: number }): Observable<QrUploadCreateResult>;
+  abstract qrUploadEnableRemote(sessionId: string): Observable<QrUploadRemoteResult>;
+  abstract qrUploadPoll(sessionId: string): Observable<QrUploadPollResult>;
+  abstract qrUploadClose(sessionId: string): Observable<{ ok: boolean }>;
   abstract getAdjuntos(params: { entidadTipo: string; entidadId: number; tipo?: string }): Observable<any[]>;
   abstract getAdjuntoById(id: number): Observable<any>;
   abstract createAdjunto(data: { entidadTipo: string; entidadId: number; tipo?: string; archivoUrl: string; nombreArchivo: string; mimeType?: string; tamanoBytes?: number; observacion?: string }): Observable<any>;
@@ -177,6 +217,7 @@ export abstract class RepositoryService {
   abstract deleteDispositivo(dispositivoId: number): Observable<any>;
   abstract getCajas(): Observable<Caja[]>;
   abstract getCajaAbiertaByUsuario(usuarioId: number): Observable<Caja>;
+  abstract getCajasAbiertas(): Observable<Caja[]>;
   abstract getCaja(cajaId: number): Observable<Caja>;
   abstract createCaja(cajaData: Partial<Caja>): Observable<Caja>;
   abstract updateCaja(cajaId: number, cajaData: Partial<Caja>): Observable<any>;
@@ -211,6 +252,7 @@ export abstract class RepositoryService {
   abstract createCompraBorrador(data: any): Observable<Compra>;
   abstract updateCompraBorrador(id: number, data: any): Observable<Compra>;
   abstract finalizarCompra(id: number, payload: any): Observable<Compra>;
+  abstract crearCompraSimplificada(payload: any): Observable<Compra>;
   abstract anularCompra(id: number, motivo: string): Observable<{ success: boolean }>;
   abstract getCompraDetalles(compraId: number): Observable<CompraDetalle[]>;
   abstract getCompraDetalle(compraDetalleId: number): Observable<CompraDetalle>;
@@ -336,8 +378,8 @@ export abstract class RepositoryService {
   abstract createBatchPdvMesas(batchData: Partial<PdvMesa>[]): Observable<PdvMesa[]>;
   abstract updatePdvMesa(id: number, data: Partial<PdvMesa>): Observable<PdvMesa>;
   abstract deletePdvMesa(id: number): Observable<boolean>;
-  abstract getSectores(): Observable<Sector[]>;
-  abstract getSectoresActivos(): Observable<Sector[]>;
+  abstract getSectores(tipo?: string): Observable<Sector[]>;
+  abstract getSectoresActivos(tipo?: string): Observable<Sector[]>;
   abstract getSector(id: number): Observable<Sector>;
   abstract createSector(data: Partial<Sector>): Observable<Sector>;
   abstract updateSector(id: number, data: Partial<Sector>): Observable<Sector>;
@@ -411,6 +453,18 @@ export abstract class RepositoryService {
   abstract createProducto(productoData: Partial<Producto>): Observable<Producto>;
   abstract updateProducto(productoId: number, productoData: Partial<Producto>): Observable<any>;
   abstract deleteProducto(productoId: number): Observable<any>;
+  // Pedidos online (bandeja PdV)
+  abstract getPedidosOnlineAdmin(filtros?: any): Observable<any[]>;
+  abstract contarPedidosOnlinePendientes(): Observable<any>;
+  abstract aceptarPedidoOnline(pedidoId: number, data?: any): Observable<any>;
+  abstract rechazarPedidoOnline(pedidoId: number, motivo: string): Observable<any>;
+  abstract avanzarEstadoPedidoOnline(pedidoId: number, nuevoEstado: string): Observable<any>;
+  abstract vincularVentaPedidoOnline(pedidoId: number, ventaId: number): Observable<any>;
+  abstract getTiendaOnlineConfig(): Observable<any>;
+  abstract updateTiendaOnlineConfig(data: any): Observable<any>;
+  abstract getZonasDeliveryAdmin(): Observable<any[]>;
+  abstract guardarZonaDelivery(data: any): Observable<any>;
+  abstract eliminarZonaDelivery(zonaId: number): Observable<any>;
   // Producción de buffet (cargar cubas)
   abstract crearProduccion(data: any): Observable<any>;
   abstract getProducciones(filtros?: any): Observable<any[]>;
@@ -471,6 +525,8 @@ export abstract class RepositoryService {
   abstract calcularCostoIngrediente(recetaIngredienteId: number): Observable<number>;
   abstract validarStockIngrediente(recetaIngredienteId: number): Observable<boolean>;
   abstract getSaboresByProducto(productoId: number): Observable<any[]>;
+  abstract getAllSabores(filtros?: { productoId?: number | null; categoria?: string | null; activo?: boolean | null; texto?: string | null; }): Observable<any[]>;
+  abstract repararRecetasCompartidas(): Observable<{ recetasCompartidas: number; variacionesReparadas: number }>;
   abstract createSabor(saborData: {
     nombre: string;
     categoria: string;
@@ -522,6 +578,10 @@ export abstract class RepositoryService {
   abstract deleteStockMovimiento(stockMovimientoId: number): Observable<any>;
   abstract procesarStockVenta(ventaId: number): Observable<any>;
   abstract revertirStockVenta(ventaId: number): Observable<any>;
+  // Cobro parcial por ítems
+  abstract getEstadoCobroVenta(ventaId: number): Observable<any>;
+  abstract registrarCobroParcial(ventaId: number, payload: any): Observable<any>;
+  abstract anularCobroParcial(cobroParcialId: number): Observable<any>;
   abstract searchProductosByNombre(nombre: string, mode?: 'venta' | 'compra'): Observable<Producto[]>;
   abstract getProductosByTipo(tipo: string): Observable<Producto[]>;
   abstract getProductosWithStock(): Observable<Producto[]>;
@@ -539,6 +599,17 @@ export abstract class RepositoryService {
   abstract deleteTipoPrecio(tipoPrecioId: number): Observable<any>;
   abstract recalculateAllRecipeCosts(): Observable<any[]>;
   abstract recalculateRecipeCost(recetaId: number): Observable<any>;
+  abstract getRecetaFases(recetaId: number): Observable<any[]>;
+  abstract createRecetaFase(data: any): Observable<any>;
+  abstract updateRecetaFase(faseId: number, data: any): Observable<any>;
+  abstract deleteRecetaFase(faseId: number): Observable<any>;
+  abstract reorderRecetaFases(recetaId: number, ordenIds: number[]): Observable<any>;
+  abstract setRecetaFaseIngredientes(faseId: number, recetaIngredienteIds: number[]): Observable<any>;
+  abstract getRecetaMateriales(recetaId: number): Observable<any[]>;
+  abstract createRecetaMaterial(data: any): Observable<any>;
+  abstract updateRecetaMaterial(materialId: number, data: any): Observable<any>;
+  abstract deleteRecetaMaterial(materialId: number): Observable<any>;
+  abstract exportRecetaPdf(recetaId: number): Observable<any>;
   abstract getSabores(): Observable<string[]>;
   abstract createOrUpdateSabor(saborData: any): Observable<{ success: boolean, message: string }>;
   abstract getSaborDetails(categoria: string): Observable<any>;
@@ -576,7 +647,7 @@ export abstract class RepositoryService {
   abstract getCajaMayorConfiguracion(cajaMayorId: number): Observable<any>;
   abstract saveCajaMayorConfiguracion(cajaMayorId: number,
     data: {
-      formaPagoIds: number[];
+      formaPagoIds?: number[];
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;
@@ -595,12 +666,33 @@ export abstract class RepositoryService {
   abstract createGasto(data: any): Observable<any>;
   abstract anularGasto(id: number, motivo: string): Observable<any>;
   abstract editGasto(gastoId: number, data: any): Observable<any>;
+  // Gastos de la caja de venta (PdV) — distintos de los gastos de Caja Mayor.
+  abstract createGastoCaja(data: any): Observable<any>;
+  abstract getGastosCaja(cajaId: number, incluirAnulados?: boolean): Observable<any[]>;
+  abstract anularGastoCaja(gastoId: number, motivo?: string): Observable<any>;
+  // Egresos de caja PdV (vales/compras pagados desde el cajón)
+  abstract crearValeCaja(data: any): Observable<any>;
+  abstract pagarValeCaja(data: any): Observable<any>;
+  abstract crearCompraSimplificadaCaja(data: any): Observable<any>;
+  abstract pagarCompraCuotaCaja(data: any): Observable<any>;
+  abstract anularEgresoCaja(egresoId: number, motivo?: string): Observable<any>;
+  abstract getEgresosCaja(cajaId: number, incluirAnulados?: boolean): Observable<any[]>;
+  abstract getValesPendientesFuncionario(funcionarioId: number): Observable<any[]>;
+  abstract buscarGlobal(termino: string): Observable<any>;
+  abstract getMenuConfig(): Observable<any[]>;
+  abstract saveMenuConfig(items: any[]): Observable<any>;
   abstract editCajaMayorMovimiento(movId: number, data: any): Observable<any>;
   abstract getGastosProgramados(): Observable<any[]>;
   abstract getRetirosCaja(filtros?: any): Observable<any[]>;
   abstract getRetiroCaja(id: number): Observable<any>;
   abstract createRetiroCaja(data: any): Observable<any>;
   abstract ingresarRetiroCaja(retiroId: number, cajaMayorId: number): Observable<any>;
+  abstract generarRetiroCierreCaja(cajaId: number): Observable<any>;
+  abstract puedeAjustarCaja(cajaId: number): Observable<{ editable: boolean; motivoBloqueo?: string }>;
+  abstract finalizarAjusteCaja(cajaId: number, motivo?: string): Observable<any>;
+  abstract enviarResumenCierreWhatsapp(cajaId: number, opts?: { forzar?: boolean; destino?: string }): Observable<any>;
+  abstract egresoCajaInicial(data: any): Observable<any>;
+  abstract abrirCajaDesdeConteo(conteoId: number, dispositivoId: number): Observable<any>;
   abstract getCuentasBancarias(): Observable<any[]>;
   abstract getCuentaBancaria(id: number): Observable<any>;
   abstract createCuentaBancaria(data: any): Observable<any>;
@@ -632,6 +724,9 @@ export abstract class RepositoryService {
   abstract cancelarCuentaPorPagar(id: number): Observable<any>;
   abstract getCuentaPorPagarCuotas(cppId: number): Observable<any[]>;
   abstract pagarCppCuota(payload: any): Observable<any>;
+  abstract pagarCppCuotaMixto(payload: any): Observable<any>;
+  abstract anularPagoMixtoCuota(payload: any): Observable<any>;
+  abstract getCuotasConPagoMixto(cuentaPorPagarId: number): Observable<any>;
   abstract pagarCuotasComprasLote(payload: any): Observable<any>;
   abstract getCuotasPendientesCompras(filtros?: any): Observable<any[]>;
   abstract cancelarCppCuota(payload: any): Observable<any>;
@@ -704,6 +799,8 @@ export abstract class RepositoryService {
   abstract egresarFuncionario(id: number, data: any): Observable<any>;
   abstract getHistoricoCargos(funcionarioId: number): Observable<any[]>;
   abstract getHistoricoSalarios(funcionarioId: number): Observable<any[]>;
+  abstract getFuncionarioResumenFinanciero(funcionarioId: number): Observable<any>;
+  abstract getFuncionarioDeCliente(clienteId: number): Observable<any>;
   abstract getFuncionarioDocumentos(funcionarioId: number): Observable<any[]>;
   abstract uploadFuncionarioDocumento(payload: any): Observable<any>;
   abstract deleteFuncionarioDocumento(id: number): Observable<any>;
@@ -724,6 +821,14 @@ export abstract class RepositoryService {
   abstract updateAsistencia(id: number, data: any): Observable<any>;
   abstract justificarAsistencia(id: number, data: any): Observable<any>;
   abstract marcarAsistenciaMasiva(payload: any): Observable<any>;
+  // Reconocimiento facial (rostros + fichaje)
+  abstract enrolarRostro(data: any): Observable<any>;
+  abstract getRostrosFuncionario(funcionarioId: number): Observable<any[]>;
+  abstract eliminarRostro(id: number): Observable<any>;
+  abstract ficharFacial(payload: any): Observable<any>;
+  abstract getFaceModelsStatus(): Observable<any>;
+  abstract downloadFaceModels(): Observable<any>;
+  abstract getFaceModelsBaseUrl(): Observable<any>;
   abstract getPenalizaciones(filtros?: any): Observable<any[]>;
   abstract createPenalizacion(data: any): Observable<any>;
   abstract updatePenalizacion(data: any): Observable<any>;
@@ -842,6 +947,9 @@ export abstract class RepositoryService {
   abstract getDashboardProductosKpis(): Observable<any>;
   abstract getDashboardFinancieroKpis(): Observable<any>;
   abstract getDashboardCajaMayorKpis(): Observable<any>;
+  abstract getReporteVentasCierre(params: any): Observable<any>;
+  abstract getReporteFinanzasCierre(params: any): Observable<any>;
+  abstract enviarReporteWhatsapp(params: { base64: string; caption?: string; fileName?: string; destino?: string }): Observable<any>;
   abstract getReporteLiquidacionesMesData(periodo: string): Observable<any>;
   abstract exportReporteLiquidacionesMesExcel(periodo: string): Observable<any>;
   abstract exportReporteLiquidacionesMesPdf(periodo: string): Observable<any>;

@@ -1,0 +1,55 @@
+<div class="crud-page">
+  <div class="crud-filterbar">
+    <mat-form-field appearance="outline" class="crud-search">
+      <mat-label>Buscar (clave / descripción)</mat-label>
+      <input matInput [formControl]="busqueda" (keyup.enter)="aplicarFiltro()" />
+      <button *ngIf="busqueda.value" matSuffix mat-icon-button (click)="limpiarFiltro()" aria-label="Limpiar">
+        <mat-icon>close</mat-icon>
+      </button>
+    </mat-form-field>
+    <button mat-flat-button color="primary" class="crud-filter-btn" (click)="aplicarFiltro()">Filtrar</button>
+  </div>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+
+  <div class="crud-list" *ngIf="!loading">
+    <mat-card *ngFor="let c of items" class="crud-card" appearance="outlined">
+      <div class="cfg-body">
+        <div class="cfg-head">
+          <span class="cfg-clave">{{ c.clave }}</span>
+          <span class="cfg-tipo">{{ c.tipo }}</span>
+        </div>
+        <p class="cfg-desc" *ngIf="c.descripcion">{{ c.descripcion }}</p>
+
+        <!-- Control según tipo -->
+        <mat-slide-toggle *ngIf="c.tipo === 'BOOLEAN'"
+          [disabled]="!canEdit"
+          [ngModel]="editado[c.id] === 'true'"
+          (ngModelChange)="setBool(c.id, $event)">
+          {{ editado[c.id] === 'true' ? 'Activado' : 'Desactivado' }}
+        </mat-slide-toggle>
+
+        <mat-form-field *ngIf="c.tipo === 'NUMBER'" appearance="outline" class="cfg-field">
+          <input matInput type="number" [disabled]="!canEdit" [(ngModel)]="editado[c.id]" />
+        </mat-form-field>
+
+        <mat-form-field *ngIf="c.tipo === 'DATE'" appearance="outline" class="cfg-field">
+          <input matInput type="date" [disabled]="!canEdit" [(ngModel)]="editado[c.id]" />
+        </mat-form-field>
+
+        <mat-form-field *ngIf="c.tipo !== 'BOOLEAN' && c.tipo !== 'NUMBER' && c.tipo !== 'DATE'" appearance="outline" class="cfg-field">
+          <input matInput type="text" [disabled]="!canEdit" [(ngModel)]="editado[c.id]" />
+        </mat-form-field>
+
+        <div class="cfg-actions" *ngIf="canEdit">
+          <button mat-flat-button color="primary"
+            [disabled]="editado[c.id] === original[c.id] || guardando[c.id]"
+            (click)="guardar(c)">
+            Guardar
+          </button>
+        </div>
+      </div>
+    </mat-card>
+    <p *ngIf="items.length === 0" class="crud-empty">No hay parámetros.</p>
+  </div>
+</div>

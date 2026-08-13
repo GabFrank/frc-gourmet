@@ -21,6 +21,7 @@ import { GenerarLiquidacionDialogComponent } from '../generar-liquidacion-dialog
 import { GenerarLiquidacionesMesDialogComponent } from '../generar-liquidaciones-mes-dialog/generar-liquidaciones-mes-dialog.component';
 import { AgregarItemManualDialogComponent } from '../agregar-item-manual-dialog/agregar-item-manual-dialog.component';
 import { TableToolbarComponent } from 'src/app/shared/components/table-toolbar/table-toolbar.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-liquidaciones-comision',
@@ -42,6 +43,7 @@ import { TableToolbarComponent } from 'src/app/shared/components/table-toolbar/t
     MatSnackBarModule,
     MatDialogModule,
     TableToolbarComponent,
+    HasPermissionDirective,
   ],
   templateUrl: './list-liquidaciones-comision.component.html',
   styleUrls: ['./list-liquidaciones-comision.component.scss'],

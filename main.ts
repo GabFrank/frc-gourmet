@@ -23,47 +23,15 @@ import { Usuario } from './src/app/database/entities/personas/usuario.entity';
 // Import the new handler registration functions
 import { installHandlerRegistry, handlerRegistryCount } from './electron/utils/handler-registry';
 import { startServer, stopServer } from './electron/server/server';
-import { registerPrinterHandlers } from './electron/handlers/printers.handler';
-import { registerPersonasHandlers } from './electron/handlers/personas.handler';
-import { registerAuthHandlers } from './electron/handlers/auth.handler';
-import { registerImageHandlers } from './electron/handlers/images.handler';
-import { registerFilesHandlers } from './electron/handlers/files.handler';
-import { registerAdjuntosHandlers } from './electron/handlers/adjuntos.handler';
-import { registerDocumentosTicketsHandlers } from './electron/handlers/documentos-tickets.handler';
-import { registerSectoresImpresorasHandlers } from './electron/handlers/sectores-impresoras.handler';
-import { registerProductoSectoresHandlers } from './electron/handlers/producto-sectores.handler';
-import { registerProductosHandlers } from './electron/handlers/productos.handler';
-import { registerFinancieroHandlers } from './electron/handlers/financiero.handler';
-import { registerComprasHandlers } from './electron/handlers/compras.handler';
-import { registerSystemHandlers } from './electron/handlers/system.handler';
-import { registerRemoteTunnelHandlers } from './electron/handlers/remote-tunnel.handler';
-import { registerVentasHandlers } from './electron/handlers/ventas.handler';
-import { registerKdsHandlers } from './electron/handlers/kds.handler';
-import { registerRecetasHandlers } from './electron/handlers/recetas.handler';
-import { registerCajaMayorHandlers } from './electron/handlers/caja-mayor.handler';
-import { registerBankingHandlers, startAcreditacionesScheduler } from './electron/handlers/banking.handler';
-import { registerCuentasPorPagarHandlers } from './electron/handlers/cuentas-por-pagar.handler';
-import { registerDashboardShortcutsHandlers } from './electron/handlers/dashboard-shortcuts.handler';
-import { registerOnboardingHandlers } from './electron/handlers/onboarding.handler';
-import { registerEmpresaHandlers } from './electron/handlers/empresa.handler';
-import { registerFacturacionHandlers } from './electron/handlers/facturacion.handler';
-import { registerCotizacionMercadoHandlers } from './electron/handlers/cotizacion-mercado.handler';
-import { registerPermissionsHandlers, seedPermissions } from './electron/handlers/permissions.handler';
-import { registerConfiguracionRrhhHandlers, seedConfiguracionRrhh } from './electron/handlers/configuracion-rrhh.handler';
-import { registerRrhhFuncionariosHandlers } from './electron/handlers/rrhh-funcionarios.handler';
-import { registerFuncionarioDocumentosHandlers } from './electron/handlers/funcionario-documentos.handler';
-import { registerAsistenciasHandlers } from './electron/handlers/asistencias.handler';
-import { registerFeriadosHandlers } from './electron/handlers/feriados.handler';
-import { registerHorasExtraHandlers } from './electron/handlers/horas-extra.handler';
-import { registerValesHandlers } from './electron/handlers/vales.handler';
-import { registerLiquidacionSueldoHandlers, seedLiquidacionConceptos } from './electron/handlers/liquidacion-sueldo.handler';
-import { registerVacacionesHandlers } from './electron/handlers/vacaciones.handler';
-import { registerLiquidacionFinalHandlers } from './electron/handlers/liquidacion-final.handler';
-import { registerComisionesHandlers } from './electron/handlers/comisiones.handler';
-import { registerEquiposComisionHandlers } from './electron/handlers/equipos-comision.handler';
-import { registerCuentasPorCobrarHandlers } from './electron/handlers/cuentas-por-cobrar.handler';
-import { registerMovimientosClienteHandlers } from './electron/handlers/movimientos-cliente.handler';
-import { registerConveniosHandlers } from './electron/handlers/convenios.handler';
+import { registerAllAppHandlers } from './electron/utils/register-all-handlers';
+import { iniciarRuntimeMusica } from './electron/services/musica-runtime.service';
+import { startAcreditacionesScheduler } from './electron/handlers/banking.handler';
+import { seedPermissions } from './electron/handlers/permissions.handler';
+import { seedConfiguracionRrhh } from './electron/handlers/configuracion-rrhh.handler';
+import { seedLiquidacionConceptos } from './electron/handlers/liquidacion-sueldo.handler';
+import { generarNotificacionesRrhh } from './electron/handlers/notificaciones-rrhh.handler';
+import { startAutoBackupScheduler } from './electron/handlers/backup.handler';
+import { seedNotificaciones } from './electron/handlers/notificaciones-config.handler';
 import { seedInitialData } from './electron/utils/seed-data';
 import { runBootstrapMigrations } from './electron/utils/db-migrations-bootstrap';
 import { seedSystemData } from './electron/utils/seed-system';
@@ -73,25 +41,6 @@ import { setCurrentDevice } from './electron/utils/current-device.utils';
 import { Dispositivo } from './src/app/database/entities/financiero/dispositivo.entity';
 import { getDbPassword } from './electron/utils/db-password.utils';
 import type { DbConnectionOverride } from './src/app/database/database.config';
-import { registerDbConfigHandlers } from './electron/handlers/db-config.handler';
-import { registerAppModeHandlers } from './electron/handlers/app-mode.handler';
-// RRHH Fase 8 - Dashboard, Notificaciones, Reportes
-import { registerNotificacionesRrhhHandlers, generarNotificacionesRrhh } from './electron/handlers/notificaciones-rrhh.handler';
-import { registerDashboardRrhhHandlers } from './electron/handlers/dashboard-rrhh.handler';
-import { registerReportesRrhhHandlers } from './electron/handlers/reportes-rrhh.handler';
-// Dashboards por dominio
-import { registerDashboardVentasHandlers } from './electron/handlers/dashboard-ventas.handler';
-import { registerDashboardComprasHandlers } from './electron/handlers/dashboard-compras.handler';
-import { registerDashboardProductosHandlers } from './electron/handlers/dashboard-productos.handler';
-import { registerDashboardFinancieroHandlers } from './electron/handlers/dashboard-financiero.handler';
-import { registerDashboardCajaMayorHandlers } from './electron/handlers/dashboard-caja-mayor.handler';
-// Backup & Restore handler
-import { registerBackupHandlers, startAutoBackupScheduler } from './electron/handlers/backup.handler';
-// Importacion de facturas via OCR + IA
-import { registerFacturaImportHandlers } from './electron/handlers/factura-import.handler';
-import { registerNotificacionesConfigHandlers, seedNotificaciones } from './electron/handlers/notificaciones-config.handler';
-import { registerPasswordRecoveryHandlers } from './electron/handlers/password-recovery.handler';
-import { setNotificacionDataSource } from './electron/services/notificacion.service';
 // Auto-updater
 import { initAutoUpdater } from './electron/utils/auto-updater';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
@@ -185,59 +134,11 @@ function initializeDatabase() {
       // mismo handler sin reescribir nada.
       installHandlerRegistry();
 
-      // Register all IPC handlers *after* the database is ready
-      registerPrinterHandlers(dataSource, getCurrentUser);
-      registerPersonasHandlers(dataSource, getCurrentUser);
-      registerAuthHandlers(dataSource, getCurrentUser, setCurrentUser);
-      registerImageHandlers(dataSource);
-      registerFilesHandlers(); // generic file IPCs (save/delete/read/open)
-      registerAdjuntosHandlers(dataSource, getCurrentUser); // CRUD generico de adjuntos polimorficos
-      registerDocumentosTicketsHandlers(dataSource, getCurrentUser); // Tickets termicos (comanda multi-sector, venta, recibos, vales, etc.)
-      registerSectoresImpresorasHandlers(dataSource, getCurrentUser); // M2M Sector↔Printer con rol (COMANDA/TICKET_VENTA/PRECUENTA)
-      registerProductoSectoresHandlers(dataSource, getCurrentUser); // M2M Producto↔Sector (routing comanda por producto)
-      registerProductosHandlers(dataSource, getCurrentUser);
-      registerFinancieroHandlers(dataSource, getCurrentUser);
-      registerComprasHandlers(dataSource, getCurrentUser);
-      registerSystemHandlers(); // system handler doesn't need dataSource or user
-      registerRemoteTunnelHandlers(); // acceso remoto via cloudflare quick tunnel
-      registerVentasHandlers(dataSource, getCurrentUser); // Register ventas handlers
-      registerKdsHandlers(dataSource, getCurrentUser); // KDS: comandas en pantalla de cocina (estado por sector)
-      registerRecetasHandlers(dataSource, getCurrentUser); // Recetas + Sabores + Variaciones (unificado)
-      registerCajaMayorHandlers(dataSource, getCurrentUser); // Caja Mayor + Gastos + Retiros
-      registerBankingHandlers(dataSource, getCurrentUser); // CuentasBancarias + MaquinasPos + Acreditaciones
-      registerCuentasPorPagarHandlers(dataSource, getCurrentUser); // CompraCategoria + CompraCuota + CuentaPorPagar
-      registerDashboardShortcutsHandlers(dataSource, getCurrentUser); // Dashboard Shortcuts personalizables
-      registerOnboardingHandlers(dataSource, getCurrentUser); // Onboarding tasks (lista guiada en Home)
-      registerEmpresaHandlers(dataSource, getCurrentUser); // Empresa singleton (datos + branding + fiscal)
-      registerFacturacionHandlers(dataSource, getCurrentUser); // Facturación: timbrados, plantillas, facturas
-      registerCotizacionMercadoHandlers(); // Scraping de cotizaciones de mercado on-demand
-      registerPermissionsHandlers(dataSource, getCurrentUser); // RRHH: Permission + RolePermission
-      registerConfiguracionRrhhHandlers(dataSource, getCurrentUser); // RRHH: ConfiguracionRrhh (parametros legales)
-      registerRrhhFuncionariosHandlers(dataSource, getCurrentUser); // RRHH Fase 1: Cargos + Funcionarios + Historicos
-      registerFuncionarioDocumentosHandlers(dataSource, getCurrentUser); // RRHH Fase 1: Documentos del funcionario (filesystem)
-      registerAsistenciasHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Turnos + Asistencias + Penalizaciones
-      registerFeriadosHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Feriados
-      registerHorasExtraHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Horas extra
-      registerValesHandlers(dataSource, getCurrentUser); // RRHH Fase 3: Vales + Adelantos
-      registerLiquidacionSueldoHandlers(dataSource, getCurrentUser); // RRHH Fase 4: Liquidacion + Bonos + Aguinaldos
-      registerVacacionesHandlers(dataSource, getCurrentUser); // RRHH Fase 5: Vacaciones
-      registerLiquidacionFinalHandlers(dataSource, getCurrentUser); // RRHH Fase 5: Liquidacion final
-      registerComisionesHandlers(dataSource, getCurrentUser); // RRHH Fase 6: Comisiones
-      registerEquiposComisionHandlers(dataSource, getCurrentUser); // RRHH Fase 6: Equipos de comision
-      registerCuentasPorCobrarHandlers(dataSource, getCurrentUser); // Fase 7: CuentasPorCobrar
-      registerMovimientosClienteHandlers(dataSource, getCurrentUser); // Fase 7: MovimientosCliente
-      registerConveniosHandlers(dataSource, getCurrentUser); // Convenios + cobro consolidado
-      // RRHH Fase 8
-      registerNotificacionesRrhhHandlers(dataSource, getCurrentUser); // Notificaciones RRHH
-      registerDashboardRrhhHandlers(dataSource, getCurrentUser); // Dashboard KPIs RRHH
-      registerReportesRrhhHandlers(dataSource, getCurrentUser); // Reportes + Exports RRHH
-
-      // Dashboards por dominio (Ventas, Compras, Productos, Financiero, Caja Mayor)
-      registerDashboardVentasHandlers(dataSource, getCurrentUser);
-      registerDashboardComprasHandlers(dataSource, getCurrentUser);
-      registerDashboardProductosHandlers(dataSource, getCurrentUser);
-      registerDashboardFinancieroHandlers(dataSource, getCurrentUser);
-      registerDashboardCajaMayorHandlers(dataSource, getCurrentUser);
+      // Register all IPC handlers *after* the database is ready.
+      // Fuente UNICA: registerAllAppHandlers (electron/utils/register-all-handlers.ts).
+      // NO agregar registros inline aca: se agregan en ese archivo, asi fluyen
+      // tambien a los tests E2E y no vuelve a pasar el "handler no registrado".
+      registerAllAppHandlers({ dataSource, getCurrentUser, setCurrentUser });
 
       console.log(`[F3] handlerRegistry: ${handlerRegistryCount()} channels registrados (disponibles via IPC + futuro /api/rpc).`);
 
@@ -247,23 +148,6 @@ function initializeDatabase() {
 
       // Scheduler: procesa acreditaciones POS pendientes cada 5 min (en main process)
       startAcreditacionesScheduler(dataSource, 5);
-
-      // Backup & Restore handlers
-      registerBackupHandlers(dataSource, getCurrentUser);
-
-      // F1: Configuracion de BD (sqlite path / postgres)
-      registerDbConfigHandlers(dataSource, getCurrentUser);
-
-      // F4.2: Modo de operacion (standalone / server / cliente)
-      registerAppModeHandlers(dataSource, getCurrentUser);
-
-      // Importacion de facturas con OCR + IA
-      registerFacturaImportHandlers(dataSource, getCurrentUser);
-
-      // Notificaciones (Email + WhatsApp): config/receptores/eventos + recuperacion de contrasenha
-      setNotificacionDataSource(dataSource);
-      registerNotificacionesConfigHandlers(dataSource, getCurrentUser);
-      registerPasswordRecoveryHandlers(dataSource, getCurrentUser);
 
       // Seed initial data (idempotent - only inserts if tables are empty)
       // Orden: 1) datos generales 2) permisos+conceptos 3) admin user (necesita permisos ya creados)
@@ -338,8 +222,28 @@ function initializeDatabase() {
           );
           if (fs.existsSync(unpacked)) staticRoot = unpacked;
         }
+        // Storefront de pedidos online (dist/storefront) — se sirve en /tienda si existe.
+        let storefrontRoot: string | undefined = path.join(__dirname, 'dist', 'storefront');
+        if (
+          storefrontRoot.includes(`app.asar${path.sep}`) &&
+          !storefrontRoot.includes('app.asar.unpacked')
+        ) {
+          const unpackedSf = storefrontRoot.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+          if (fs.existsSync(unpackedSf)) storefrontRoot = unpackedSf;
+        }
+        if (!fs.existsSync(storefrontRoot)) storefrontRoot = undefined;
+        // Panel admin desktop-web (dist/frc-gourmet-web) — se sirve en /admin si existe.
+        let adminRoot: string | undefined = path.join(__dirname, 'dist', 'frc-gourmet-web');
+        if (
+          adminRoot.includes(`app.asar${path.sep}`) &&
+          !adminRoot.includes('app.asar.unpacked')
+        ) {
+          const unpackedAdmin = adminRoot.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+          if (fs.existsSync(unpackedAdmin)) adminRoot = unpackedAdmin;
+        }
+        if (!fs.existsSync(adminRoot)) adminRoot = undefined;
         startServer({
-          port, appVersion, schemaVersion, driver, dataSource, staticRoot,
+          port, appVersion, schemaVersion, driver, dataSource, staticRoot, storefrontRoot, adminRoot,
           httpsPort: settings.network?.httpsPort,
           certPath: settings.network?.certPath,
           keyPath: settings.network?.keyPath,
@@ -354,6 +258,19 @@ function initializeDatabase() {
       // Generar notificaciones RRHH al startup y cada 24h
       generarNotificacionesRrhh().catch((e) => console.error('Error generando notificaciones RRHH:', e));
       setInterval(() => { generarNotificacionesRrhh().catch((e) => console.error('Error notif RRHH interval:', e)); }, 24 * 60 * 60 * 1000);
+
+      // Musica ambiental: el runtime solo arranca si el modulo esta habilitado.
+      // Reacciona por evento (cambio de bloque) con un heartbeat de 2 min; no
+      // elige tema por tema. Ver docs/DISENO-OPERATIVO-MUSICA.md 3.3.
+      try {
+        const settingsMusica = readAppSettings(app.getPath('userData')).musica;
+        if (settingsMusica?.habilitado) {
+          iniciarRuntimeMusica(dataSource, app.getPath('userData'));
+          console.log('[musica] Runtime iniciado.');
+        }
+      } catch (e) {
+        console.error('[musica] No se pudo iniciar el runtime:', e);
+      }
     })
     .catch((error) => {
       console.error('Failed to initialize database:', error);
@@ -559,7 +476,7 @@ function registerAppProtocol(): void {
 
     // Ensure the parent dir exists for known buckets so first-write doesn't fail
     // before any file is requested. Cheap and idempotent.
-    const knownBuckets = ['profile-images', 'producto-images', 'factura-imports', 'funcionario-documentos', 'adjuntos', 'logos'];
+    const knownBuckets = ['profile-images', 'producto-images', 'producto-thumbs', 'sabores', 'presentaciones', 'factura-imports', 'funcionario-documentos', 'adjuntos', 'logos', 'rostros'];
     for (const bucket of knownBuckets) {
       if (urlPath.startsWith(bucket + '/')) {
         const bucketDir = path.join(userDataPath, bucket);

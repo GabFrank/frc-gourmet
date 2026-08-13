@@ -2,7 +2,7 @@
   <mat-card-header class="page-header">
     <mat-card-title>Facturas</mat-card-title>
     <span class="spacer"></span>
-    <button mat-raised-button color="primary" (click)="facturar()">
+    <button *appHasPermission="'FACTURACION_EMITIR'" mat-raised-button color="primary" (click)="facturar()">
       <mat-icon>receipt_long</mat-icon> Emitir factura
     </button>
   </mat-card-header>
@@ -65,10 +65,12 @@
       <ng-container matColumnDef="acciones">
         <th mat-header-cell *matHeaderCellDef>Acciones</th>
         <td mat-cell *matCellDef="let f">
-          <button mat-icon-button color="warn" matTooltip="Anular"
-                  *ngIf="f.estado === 'EMITIDA'" (click)="anular(f)">
-            <mat-icon>block</mat-icon>
-          </button>
+          <ng-container *appHasPermission="'FACTURACION_ANULAR'">
+            <button mat-icon-button color="warn" matTooltip="Anular"
+                    *ngIf="f.estado === 'EMITIDA'" (click)="anular(f)">
+              <mat-icon>block</mat-icon>
+            </button>
+          </ng-container>
         </td>
       </ng-container>
       <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>

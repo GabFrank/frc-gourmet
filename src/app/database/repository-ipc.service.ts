@@ -109,6 +109,7 @@ interface ElectronAPI {
   deleteCliente: (clienteId: number) => Promise<any>;
   // Printer operations
   getPrinters: () => Promise<any[]>;
+  listSystemPrinters: () => Promise<any[]>;
   addPrinter: (printer: any) => Promise<any>;
   updatePrinter: (printerId: number, printer: any) => Promise<any>;
   deletePrinter: (printerId: number) => Promise<any>;
@@ -133,6 +134,11 @@ interface ElectronAPI {
   readFileBase64: (url: string) => Promise<{ base64: string; mimeType: string }>;
   openFileWithSystem: (url: string) => Promise<{ ok: boolean; error?: string }>;
   openBase64File: (base64: string, fileName: string) => Promise<{ ok: boolean; error?: string }>;
+  // Subida por QR
+  qrUploadCreateSession: (input: { carpeta: string; accept?: string; maxSizeMB?: number }) => Promise<any>;
+  qrUploadEnableRemote: (sessionId: string) => Promise<any>;
+  qrUploadPoll: (sessionId: string) => Promise<any>;
+  qrUploadClose: (sessionId: string) => Promise<any>;
 
   // Adjuntos polimorficos
   getAdjuntos: (params: { entidadTipo: string; entidadId: number; tipo?: string }) => Promise<any[]>;
@@ -183,6 +189,7 @@ interface ElectronAPI {
   getCajas: () => Promise<Caja[]>;
   getCaja: (cajaId: number) => Promise<Caja>;
   getCajaAbiertaByUsuario: (usuarioId: number) => Promise<Caja>;
+  getCajasAbiertas: () => Promise<Caja[]>;
   createCaja: (cajaData: Partial<Caja>) => Promise<Caja>;
   updateCaja: (cajaId: number, cajaData: Partial<Caja>) => Promise<any>;
   deleteCaja: (cajaId: number) => Promise<any>;
@@ -220,6 +227,7 @@ interface ElectronAPI {
   createCompraBorrador: (data: any) => Promise<Compra>;
   updateCompraBorrador: (id: number, data: any) => Promise<Compra>;
   finalizarCompra: (id: number, payload: any) => Promise<Compra>;
+  crearCompraSimplificada: (payload: any) => Promise<Compra>;
   anularCompra: (id: number, motivo: string) => Promise<{ success: boolean }>;
   // Add CompraDetalle operations
   getCompraDetalles: (compraId: number) => Promise<CompraDetalle[]>;
@@ -367,8 +375,8 @@ interface ElectronAPI {
   deletePdvMesa: (id: number) => Promise<boolean>;
 
   // Sector methods
-  getSectores: () => Promise<Sector[]>;
-  getSectoresActivos: () => Promise<Sector[]>;
+  getSectores: (tipo?: string) => Promise<Sector[]>;
+  getSectoresActivos: (tipo?: string) => Promise<Sector[]>;
   getSector: (id: number) => Promise<Sector>;
   createSector: (data: Partial<Sector>) => Promise<Sector>;
   updateSector: (id: number, data: Partial<Sector>) => Promise<Sector>;
@@ -460,6 +468,18 @@ interface ElectronAPI {
   createProducto: (productoData: any) => Promise<Producto>;
   updateProducto: (productoId: number, productoData: any) => Promise<any>;
   deleteProducto: (productoId: number) => Promise<any>;
+  // Pedidos online (bandeja PdV)
+  getPedidosOnlineAdmin: (filtros?: any) => Promise<any[]>;
+  contarPedidosOnlinePendientes: () => Promise<any>;
+  aceptarPedidoOnline: (pedidoId: number, data?: any) => Promise<any>;
+  rechazarPedidoOnline: (pedidoId: number, motivo: string) => Promise<any>;
+  avanzarEstadoPedidoOnline: (pedidoId: number, nuevoEstado: string) => Promise<any>;
+  vincularVentaPedidoOnline: (pedidoId: number, ventaId: number) => Promise<any>;
+  getTiendaOnlineConfig: () => Promise<any>;
+  updateTiendaOnlineConfig: (data: any) => Promise<any>;
+  getZonasDeliveryAdmin: () => Promise<any[]>;
+  guardarZonaDelivery: (data: any) => Promise<any>;
+  eliminarZonaDelivery: (zonaId: number) => Promise<any>;
   crearProduccion: (data: any) => Promise<any>;
   getProducciones: (filtros?: any) => Promise<any[]>;
   // Presentacion methods
@@ -517,6 +537,8 @@ interface ElectronAPI {
   // ✅ NUEVOS MÉTODOS PARA ARQUITECTURA CON VARIACIONES
   // Sabor methods
   getSaboresByProducto: (productoId: number) => Promise<any[]>;
+  getAllSabores: (filtros?: { productoId?: number | null; categoria?: string | null; activo?: boolean | null; texto?: string | null; }) => Promise<any[]>;
+  repararRecetasCompartidas: () => Promise<{ recetasCompartidas: number; variacionesReparadas: number }>;
   createSabor: (saborData: {
     nombre: string;
     categoria: string;
@@ -584,6 +606,9 @@ interface ElectronAPI {
   deleteStockMovimiento: (stockMovimientoId: number) => Promise<any>;
   procesarStockVenta: (ventaId: number) => Promise<any>;
   revertirStockVenta: (ventaId: number) => Promise<any>;
+  getEstadoCobroVenta: (ventaId: number) => Promise<any>;
+  registrarCobroParcial: (ventaId: number, payload: any) => Promise<any>;
+  anularCobroParcial: (cobroParcialId: number) => Promise<any>;
   // Additional helper methods
   searchProductosByNombre: (nombre: string, mode?: 'venta' | 'compra') => Promise<Producto[]>;
   getProductosByTipo: (tipo: string) => Promise<Producto[]>;
@@ -601,6 +626,18 @@ interface ElectronAPI {
   recalculateRecipeCost: (recetaId: number) => Promise<{ success: boolean; costoCalculado: number }>;
   recalculateAllRecipeCosts: () => Promise<any[]>;
   getPreciosCostoReceta: (recetaId: number) => Promise<PrecioCosto[]>;
+  // Receta fases / materiales
+  getRecetaFases: (recetaId: number) => Promise<any[]>;
+  createRecetaFase: (data: any) => Promise<any>;
+  updateRecetaFase: (faseId: number, data: any) => Promise<any>;
+  deleteRecetaFase: (faseId: number) => Promise<any>;
+  reorderRecetaFases: (recetaId: number, ordenIds: number[]) => Promise<any>;
+  setRecetaFaseIngredientes: (faseId: number, recetaIngredienteIds: number[]) => Promise<any>;
+  getRecetaMateriales: (recetaId: number) => Promise<any[]>;
+  createRecetaMaterial: (data: any) => Promise<any>;
+  updateRecetaMaterial: (materialId: number, data: any) => Promise<any>;
+  deleteRecetaMaterial: (materialId: number) => Promise<any>;
+  exportRecetaPdf: (recetaId: number) => Promise<any>;
   // Sabor methods
   getSabores: () => Promise<string[]>;
   createOrUpdateSabor: (saborData: any) => Promise<{ success: boolean, message: string }>;
@@ -649,7 +686,7 @@ interface ElectronAPI {
   saveCajaMayorConfiguracion: (
     cajaMayorId: number,
     data: {
-      formaPagoIds: number[];
+      formaPagoIds?: number[];
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;
@@ -669,12 +706,30 @@ interface ElectronAPI {
   createGasto: (data: any) => Promise<any>;
   anularGasto: (id: number, motivo: string) => Promise<any>;
   editGasto: (gastoId: number, data: any) => Promise<any>;
+  createGastoCaja: (data: any) => Promise<any>;
+  getGastosCaja: (cajaId: number, incluirAnulados?: boolean) => Promise<any[]>;
+  anularGastoCaja: (gastoId: number, motivo?: string) => Promise<any>;
+  crearValeCaja: (data: any) => Promise<any>;
+  pagarValeCaja: (data: any) => Promise<any>;
+  crearCompraSimplificadaCaja: (data: any) => Promise<any>;
+  pagarCompraCuotaCaja: (data: any) => Promise<any>;
+  anularEgresoCaja: (egresoId: number, motivo?: string) => Promise<any>;
+  getEgresosCaja: (cajaId: number, incluirAnulados?: boolean) => Promise<any[]>;
+  getValesPendientesFuncionario: (funcionarioId: number) => Promise<any[]>;
+  buscarGlobal: (termino: string) => Promise<any>;
+  getMenuConfig: () => Promise<any[]>;
+  saveMenuConfig: (items: any[]) => Promise<any>;
   editCajaMayorMovimiento: (movId: number, data: any) => Promise<any>;
   getGastosProgramados: () => Promise<any[]>;
   getRetirosCaja: (filtros?: any) => Promise<any[]>;
   getRetiroCaja: (id: number) => Promise<any>;
   createRetiroCaja: (data: any) => Promise<any>;
   ingresarRetiroCaja: (retiroId: number, cajaMayorId: number) => Promise<any>;
+  generarRetiroCierreCaja: (cajaId: number) => Promise<any>;
+  puedeAjustarCaja: (cajaId: number) => Promise<any>;
+  finalizarAjusteCaja: (cajaId: number, motivo?: string) => Promise<any>;
+  egresoCajaInicial: (data: any) => Promise<any>;
+  abrirCajaDesdeConteo: (conteoId: number, dispositivoId: number) => Promise<any>;
 
   // Banking - CuentasBancarias
   getCuentasBancarias: () => Promise<any[]>;
@@ -718,6 +773,9 @@ interface ElectronAPI {
   cancelarCuentaPorPagar: (id: number) => Promise<any>;
   getCuentaPorPagarCuotas: (cppId: number) => Promise<any[]>;
   pagarCppCuota: (payload: any) => Promise<any>;
+  pagarCppCuotaMixto: (payload: any) => Promise<any>;
+  anularPagoMixtoCuota: (payload: any) => Promise<any>;
+  getCuotasConPagoMixto: (cuentaPorPagarId: number) => Promise<any>;
   pagarCuotasComprasLote: (payload: any) => Promise<any>;
   getCuotasPendientesCompras: (filtros?: any) => Promise<any[]>;
   cancelarCppCuota: (payload: any) => Promise<any>;
@@ -813,6 +871,8 @@ interface ElectronAPI {
   egresarFuncionario: (id: number, data: any) => Promise<any>;
   getHistoricoCargos: (funcionarioId: number) => Promise<any[]>;
   getHistoricoSalarios: (funcionarioId: number) => Promise<any[]>;
+  getFuncionarioResumenFinanciero: (funcionarioId: number) => Promise<any>;
+  getFuncionarioDeCliente: (clienteId: number) => Promise<any>;
 
   // RRHH - Documentos
   getFuncionarioDocumentos: (funcionarioId: number) => Promise<any[]>;
@@ -839,6 +899,15 @@ interface ElectronAPI {
   updateAsistencia: (id: number, data: any) => Promise<any>;
   justificarAsistencia: (id: number, data: any) => Promise<any>;
   marcarAsistenciaMasiva: (payload: any) => Promise<any>;
+
+  // RRHH - Reconocimiento facial
+  enrolarRostro: (data: any) => Promise<any>;
+  getRostrosFuncionario: (funcionarioId: number) => Promise<any[]>;
+  eliminarRostro: (id: number) => Promise<any>;
+  ficharFacial: (payload: any) => Promise<any>;
+  getFaceModelsStatus: () => Promise<any>;
+  downloadFaceModels: () => Promise<any>;
+  getFaceModelsBaseUrl: () => Promise<any>;
 
   // RRHH - Penalizaciones
   getPenalizaciones: (filtros?: any) => Promise<any[]>;
@@ -991,6 +1060,9 @@ interface ElectronAPI {
   getDashboardProductosKpis: () => Promise<any>;
   getDashboardFinancieroKpis: () => Promise<any>;
   getDashboardCajaMayorKpis: () => Promise<any>;
+  getReporteVentasCierre: (params: any) => Promise<any>;
+  getReporteFinanzasCierre: (params: any) => Promise<any>;
+  enviarReporteWhatsapp: (params: { base64: string; caption?: string; fileName?: string; destino?: string }) => Promise<any>;
 
   // Reportes RRHH (Fase 8)
   getReporteLiquidacionesMesData: (periodo: string) => Promise<any>;
@@ -1213,6 +1285,9 @@ export class RepositoryIpcService extends RepositoryService {
   getPrinters(): Observable<any[]> {
     return from(this.api.getPrinters());
   }
+  listSystemPrinters(): Observable<any[]> {
+    return from(this.api.listSystemPrinters());
+  }
 
   addPrinter(printer: any): Observable<any> {
     return from(this.api.addPrinter(printer));
@@ -1352,6 +1427,20 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.openBase64File(base64, fileName));
   }
 
+  // ===================== SUBIDA POR QR =====================
+  qrUploadCreateSession(input: { carpeta: string; accept?: string; maxSizeMB?: number }): Observable<any> {
+    return from(this.api.qrUploadCreateSession(input));
+  }
+  qrUploadEnableRemote(sessionId: string): Observable<any> {
+    return from(this.api.qrUploadEnableRemote(sessionId));
+  }
+  qrUploadPoll(sessionId: string): Observable<any> {
+    return from(this.api.qrUploadPoll(sessionId));
+  }
+  qrUploadClose(sessionId: string): Observable<any> {
+    return from(this.api.qrUploadClose(sessionId));
+  }
+
   // ===================== ADJUNTOS POLIMORFICOS =====================
   getAdjuntos(params: { entidadTipo: string; entidadId: number; tipo?: string }): Observable<any[]> {
     return from(this.api.getAdjuntos(params));
@@ -1487,6 +1576,10 @@ export class RepositoryIpcService extends RepositoryService {
 
   getCajaAbiertaByUsuario(usuarioId: number): Observable<Caja> {
     return from(this.api.getCajaAbiertaByUsuario(usuarioId));
+  }
+
+  getCajasAbiertas(): Observable<Caja[]> {
+    return from(this.api.getCajasAbiertas());
   }
 
   getCaja(cajaId: number): Observable<Caja> {
@@ -1639,6 +1732,10 @@ export class RepositoryIpcService extends RepositoryService {
 
   finalizarCompra(id: number, payload: any): Observable<Compra> {
     return from(this.api.finalizarCompra(id, payload));
+  }
+
+  crearCompraSimplificada(payload: any): Observable<Compra> {
+    return from(this.api.crearCompraSimplificada(payload));
   }
 
   anularCompra(id: number, motivo: string): Observable<{ success: boolean }> {
@@ -2169,12 +2266,12 @@ export class RepositoryIpcService extends RepositoryService {
   }
 
   // Sector methods
-  getSectores(): Observable<Sector[]> {
-    return from(this.api.getSectores());
+  getSectores(tipo?: string): Observable<Sector[]> {
+    return from(this.api.getSectores(tipo));
   }
 
-  getSectoresActivos(): Observable<Sector[]> {
-    return from(this.api.getSectoresActivos());
+  getSectoresActivos(tipo?: string): Observable<Sector[]> {
+    return from(this.api.getSectoresActivos(tipo));
   }
 
   getSector(id: number): Observable<Sector> {
@@ -2432,6 +2529,41 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.deleteProducto(productoId));
   }
 
+  // ===== Pedidos online (bandeja PdV) =====
+  getPedidosOnlineAdmin(filtros: any = {}): Observable<any[]> {
+    return from(this.api.getPedidosOnlineAdmin(filtros));
+  }
+  contarPedidosOnlinePendientes(): Observable<any> {
+    return from(this.api.contarPedidosOnlinePendientes());
+  }
+  aceptarPedidoOnline(pedidoId: number, data?: any): Observable<any> {
+    return from(this.api.aceptarPedidoOnline(pedidoId, data));
+  }
+  rechazarPedidoOnline(pedidoId: number, motivo: string): Observable<any> {
+    return from(this.api.rechazarPedidoOnline(pedidoId, motivo));
+  }
+  avanzarEstadoPedidoOnline(pedidoId: number, nuevoEstado: string): Observable<any> {
+    return from(this.api.avanzarEstadoPedidoOnline(pedidoId, nuevoEstado));
+  }
+  vincularVentaPedidoOnline(pedidoId: number, ventaId: number): Observable<any> {
+    return from(this.api.vincularVentaPedidoOnline(pedidoId, ventaId));
+  }
+  getTiendaOnlineConfig(): Observable<any> {
+    return from(this.api.getTiendaOnlineConfig());
+  }
+  updateTiendaOnlineConfig(data: any): Observable<any> {
+    return from(this.api.updateTiendaOnlineConfig(data));
+  }
+  getZonasDeliveryAdmin(): Observable<any[]> {
+    return from(this.api.getZonasDeliveryAdmin());
+  }
+  guardarZonaDelivery(data: any): Observable<any> {
+    return from(this.api.guardarZonaDelivery(data));
+  }
+  eliminarZonaDelivery(zonaId: number): Observable<any> {
+    return from(this.api.eliminarZonaDelivery(zonaId));
+  }
+
   crearProduccion(data: any): Observable<any> {
     return from(this.api.crearProduccion(data));
   }
@@ -2646,6 +2778,14 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.getSaboresByProducto(productoId));
   }
 
+  getAllSabores(filtros?: { productoId?: number | null; categoria?: string | null; activo?: boolean | null; texto?: string | null; }): Observable<any[]> {
+    return from(this.api.getAllSabores(filtros));
+  }
+
+  repararRecetasCompartidas(): Observable<{ recetasCompartidas: number; variacionesReparadas: number }> {
+    return from(this.api.repararRecetasCompartidas());
+  }
+
   createSabor(saborData: {
     nombre: string;
     categoria: string;
@@ -2763,6 +2903,18 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.revertirStockVenta(ventaId));
   }
 
+  getEstadoCobroVenta(ventaId: number): Observable<any> {
+    return from(this.api.getEstadoCobroVenta(ventaId));
+  }
+
+  registrarCobroParcial(ventaId: number, payload: any): Observable<any> {
+    return from(this.api.registrarCobroParcial(ventaId, payload));
+  }
+
+  anularCobroParcial(cobroParcialId: number): Observable<any> {
+    return from(this.api.anularCobroParcial(cobroParcialId));
+  }
+
   // Additional helper methods
   searchProductosByNombre(nombre: string, mode: 'venta' | 'compra' = 'venta'): Observable<Producto[]> {
     return from(this.api.searchProductosByNombre(nombre, mode));
@@ -2833,6 +2985,39 @@ export class RepositoryIpcService extends RepositoryService {
 
   recalculateRecipeCost(recetaId: number): Observable<any> {
     return from(this.api.recalculateRecipeCost(recetaId));
+  }
+  getRecetaFases(recetaId: number): Observable<any[]> {
+    return from(this.api.getRecetaFases(recetaId));
+  }
+  createRecetaFase(data: any): Observable<any> {
+    return from(this.api.createRecetaFase(data));
+  }
+  updateRecetaFase(faseId: number, data: any): Observable<any> {
+    return from(this.api.updateRecetaFase(faseId, data));
+  }
+  deleteRecetaFase(faseId: number): Observable<any> {
+    return from(this.api.deleteRecetaFase(faseId));
+  }
+  reorderRecetaFases(recetaId: number, ordenIds: number[]): Observable<any> {
+    return from(this.api.reorderRecetaFases(recetaId, ordenIds));
+  }
+  setRecetaFaseIngredientes(faseId: number, recetaIngredienteIds: number[]): Observable<any> {
+    return from(this.api.setRecetaFaseIngredientes(faseId, recetaIngredienteIds));
+  }
+  getRecetaMateriales(recetaId: number): Observable<any[]> {
+    return from(this.api.getRecetaMateriales(recetaId));
+  }
+  createRecetaMaterial(data: any): Observable<any> {
+    return from(this.api.createRecetaMaterial(data));
+  }
+  updateRecetaMaterial(materialId: number, data: any): Observable<any> {
+    return from(this.api.updateRecetaMaterial(materialId, data));
+  }
+  deleteRecetaMaterial(materialId: number): Observable<any> {
+    return from(this.api.deleteRecetaMaterial(materialId));
+  }
+  exportRecetaPdf(recetaId: number): Observable<any> {
+    return from(this.api.exportRecetaPdf(recetaId));
   }
 
   // Sabor methods
@@ -2973,7 +3158,7 @@ export class RepositoryIpcService extends RepositoryService {
   saveCajaMayorConfiguracion(
     cajaMayorId: number,
     data: {
-      formaPagoIds: number[];
+      formaPagoIds?: number[];
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;
@@ -3024,6 +3209,45 @@ export class RepositoryIpcService extends RepositoryService {
   anularGasto(id: number, motivo: string): Observable<any> {
     return from(this.api.anularGasto(id, motivo));
   }
+  createGastoCaja(data: any): Observable<any> {
+    return from(this.api.createGastoCaja(data));
+  }
+  getGastosCaja(cajaId: number, incluirAnulados?: boolean): Observable<any[]> {
+    return from(this.api.getGastosCaja(cajaId, incluirAnulados));
+  }
+  anularGastoCaja(gastoId: number, motivo?: string): Observable<any> {
+    return from(this.api.anularGastoCaja(gastoId, motivo));
+  }
+  crearValeCaja(data: any): Observable<any> {
+    return from(this.api.crearValeCaja(data));
+  }
+  pagarValeCaja(data: any): Observable<any> {
+    return from(this.api.pagarValeCaja(data));
+  }
+  crearCompraSimplificadaCaja(data: any): Observable<any> {
+    return from(this.api.crearCompraSimplificadaCaja(data));
+  }
+  pagarCompraCuotaCaja(data: any): Observable<any> {
+    return from(this.api.pagarCompraCuotaCaja(data));
+  }
+  anularEgresoCaja(egresoId: number, motivo?: string): Observable<any> {
+    return from(this.api.anularEgresoCaja(egresoId, motivo));
+  }
+  getEgresosCaja(cajaId: number, incluirAnulados?: boolean): Observable<any[]> {
+    return from(this.api.getEgresosCaja(cajaId, incluirAnulados));
+  }
+  getValesPendientesFuncionario(funcionarioId: number): Observable<any[]> {
+    return from(this.api.getValesPendientesFuncionario(funcionarioId));
+  }
+  buscarGlobal(termino: string): Observable<any> {
+    return from(this.api.buscarGlobal(termino));
+  }
+  getMenuConfig(): Observable<any[]> {
+    return from(this.api.getMenuConfig());
+  }
+  saveMenuConfig(items: any[]): Observable<any> {
+    return from(this.api.saveMenuConfig(items));
+  }
   editGasto(gastoId: number, data: any): Observable<any> {
     return from(this.api.editGasto(gastoId, data));
   }
@@ -3046,6 +3270,24 @@ export class RepositoryIpcService extends RepositoryService {
   }
   ingresarRetiroCaja(retiroId: number, cajaMayorId: number): Observable<any> {
     return from(this.api.ingresarRetiroCaja(retiroId, cajaMayorId));
+  }
+  generarRetiroCierreCaja(cajaId: number): Observable<any> {
+    return from(this.api.generarRetiroCierreCaja(cajaId));
+  }
+  puedeAjustarCaja(cajaId: number): Observable<{ editable: boolean; motivoBloqueo?: string }> {
+    return from(this.api.puedeAjustarCaja(cajaId));
+  }
+  finalizarAjusteCaja(cajaId: number, motivo?: string): Observable<any> {
+    return from(this.api.finalizarAjusteCaja(cajaId, motivo));
+  }
+  enviarResumenCierreWhatsapp(cajaId: number, opts?: { forzar?: boolean; destino?: string }): Observable<any> {
+    return from(this.api.callIpc('enviar-resumen-cierre-whatsapp', { cajaId, ...(opts || {}) }));
+  }
+  egresoCajaInicial(data: any): Observable<any> {
+    return from(this.api.egresoCajaInicial(data));
+  }
+  abrirCajaDesdeConteo(conteoId: number, dispositivoId: number): Observable<any> {
+    return from(this.api.abrirCajaDesdeConteo(conteoId, dispositivoId));
   }
 
   // ===================== BANKING =====================
@@ -3147,6 +3389,15 @@ export class RepositoryIpcService extends RepositoryService {
   }
   pagarCppCuota(payload: any): Observable<any> {
     return from(this.api.pagarCppCuota(payload));
+  }
+  pagarCppCuotaMixto(payload: any): Observable<any> {
+    return from(this.api.pagarCppCuotaMixto(payload));
+  }
+  anularPagoMixtoCuota(payload: any): Observable<any> {
+    return from(this.api.anularPagoMixtoCuota(payload));
+  }
+  getCuotasConPagoMixto(cuentaPorPagarId: number): Observable<any> {
+    return from(this.api.getCuotasConPagoMixto(cuentaPorPagarId));
   }
   pagarCuotasComprasLote(payload: any): Observable<any> {
     return from(this.api.pagarCuotasComprasLote(payload));
@@ -3382,6 +3633,12 @@ export class RepositoryIpcService extends RepositoryService {
   getHistoricoSalarios(funcionarioId: number): Observable<any[]> {
     return from(this.api.getHistoricoSalarios(funcionarioId));
   }
+  getFuncionarioResumenFinanciero(funcionarioId: number): Observable<any> {
+    return from(this.api.getFuncionarioResumenFinanciero(funcionarioId));
+  }
+  getFuncionarioDeCliente(clienteId: number): Observable<any> {
+    return from(this.api.getFuncionarioDeCliente(clienteId));
+  }
 
   // ===================== RRHH: DOCUMENTOS =====================
   getFuncionarioDocumentos(funcionarioId: number): Observable<any[]> {
@@ -3447,6 +3704,29 @@ export class RepositoryIpcService extends RepositoryService {
   }
   marcarAsistenciaMasiva(payload: any): Observable<any> {
     return from(this.api.marcarAsistenciaMasiva(payload));
+  }
+
+  // ===================== RRHH: RECONOCIMIENTO FACIAL =====================
+  enrolarRostro(data: any): Observable<any> {
+    return from(this.api.enrolarRostro(data));
+  }
+  getRostrosFuncionario(funcionarioId: number): Observable<any[]> {
+    return from(this.api.getRostrosFuncionario(funcionarioId));
+  }
+  eliminarRostro(id: number): Observable<any> {
+    return from(this.api.eliminarRostro(id));
+  }
+  ficharFacial(payload: any): Observable<any> {
+    return from(this.api.ficharFacial(payload));
+  }
+  getFaceModelsStatus(): Observable<any> {
+    return from(this.api.getFaceModelsStatus());
+  }
+  downloadFaceModels(): Observable<any> {
+    return from(this.api.downloadFaceModels());
+  }
+  getFaceModelsBaseUrl(): Observable<any> {
+    return from(this.api.getFaceModelsBaseUrl());
   }
 
   // ===================== RRHH: PENALIZACIONES =====================
@@ -3835,6 +4115,15 @@ export class RepositoryIpcService extends RepositoryService {
   }
   getDashboardCajaMayorKpis(): Observable<any> {
     return from(this.api.getDashboardCajaMayorKpis());
+  }
+  getReporteVentasCierre(params: any): Observable<any> {
+    return from(this.api.getReporteVentasCierre(params));
+  }
+  getReporteFinanzasCierre(params: any): Observable<any> {
+    return from(this.api.getReporteFinanzasCierre(params));
+  }
+  enviarReporteWhatsapp(params: { base64: string; caption?: string; fileName?: string; destino?: string }): Observable<any> {
+    return from(this.api.enviarReporteWhatsapp(params));
   }
 
   // ===================== REPORTES RRHH (Fase 8) =====================

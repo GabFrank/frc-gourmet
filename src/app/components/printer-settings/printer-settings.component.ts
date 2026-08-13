@@ -58,10 +58,33 @@ export class PrinterSettingsComponent implements OnInit {
   ];
 
   connectionTypes = [
+    { value: 'system', displayName: 'Impresora del sistema (local / Windows)' },
     { value: 'network', displayName: 'Red / IP' },
     { value: 'lpr', displayName: 'LPR/LPD (Windows compartida)' },
     { value: 'usb', displayName: 'USB' },
     { value: 'bluetooth', displayName: 'Bluetooth' }
+  ];
+
+  // Impresoras instaladas en el SO (para el tipo de conexión 'system').
+  systemPrinters: any[] = [];
+  loadingSystemPrinters = false;
+
+  // Descubrimiento de impresoras en red (para el tipo 'network').
+  networkCandidates: any[] = [];
+  scanningNetwork = false;
+  deepScan = false;
+  scannedOnce = false;
+
+  // Prueba de conexión (pre-guardado).
+  testingConnection = false;
+
+  // La cantidad de columnas depende de la tecnología + fuente de la impresora,
+  // no solo del ancho en mm. Se configura directamente (se guarda en `width`).
+  columnOptions = [
+    { value: 32, displayName: '32 columnas — térmica 58 mm' },
+    { value: 40, displayName: '40 columnas — matriz de punto 76 mm (9 pines) / comprimido' },
+    { value: 42, displayName: '42 columnas — térmica 80 mm' },
+    { value: 48, displayName: '48 columnas — térmica 80 mm (estándar)' },
   ];
 
   characterSets = [
@@ -89,11 +112,112 @@ export class PrinterSettingsComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadPrinters();
+    this.loadSystemPrinters();
+  }
+
+  /**
+   * Descubre impresoras en la red local (mDNS + barrido TCP opcional) y las
+   * ofrece como candidatos para autocompletar el form.
+   */
+  scanNetwork(): void {
+    this.scanningNetwork = true;
+    this.printerService.scanNetworkPrinters({ mdns: true, tcpScan: this.deepScan }).subscribe({
+      next: (list) => {
+        this.networkCandidates = list || [];
+        this.scannedOnce = true;
+        this.scanningNetwork = false;
+        if (this.networkCandidates.length === 0) {
+          this.snackBar.open('No se encontraron impresoras en la red', 'CERRAR', { duration: 3000 });
+        }
+      },
+      error: () => {
+        this.networkCandidates = [];
+        this.scannedOnce = true;
+        this.scanningNetwork = false;
+        this.snackBar.open('Error al buscar impresoras en la red', 'CERRAR', { duration: 3000 });
+      },
+    });
+  }
+
+  /** Prueba la conexión con la config actual del form, sin guardar ni imprimir. */
+  testConnection(): void {
+    const cfg = this.printerForm.value;
+    if (!cfg.connectionType || !cfg.address) {
+      this.snackBar.open('Completá tipo de conexión y dirección primero', 'CERRAR', { duration: 3000 });
+      return;
+    }
+    this.testingConnection = true;
+    this.printerService.testPrinterConnection(cfg).subscribe({
+      next: (res) => {
+        this.testingConnection = false;
+        if (res?.ok) {
+          this.snackBar.open('Conexión OK ✓', 'CERRAR', { duration: 3000 });
+        } else {
+          this.snackBar.open(`Sin conexión: ${res?.error || 'no responde'}`, 'CERRAR', { duration: 5000 });
+        }
+      },
+      error: (e) => {
+        this.testingConnection = false;
+        this.snackBar.open(`Error al probar: ${e?.message || e}`, 'CERRAR', { duration: 4000 });
+      },
+    });
+  }
+
+  /** Autocompleta el form con una impresora descubierta en red. */
+  usarCandidato(c: any): void {
+    this.printerForm.patchValue({
+      connectionType: 'network',
+      address: c.address,
+      port: c.port || 9100,
+      name: this.printerForm.get('name')?.value || c.name,
+    });
+  }
+
+  /**
+   * Carga las impresoras instaladas en el sistema operativo para el selector
+   * del tipo de conexión 'system'.
+   */
+  loadSystemPrinters(): void {
+    this.loadingSystemPrinters = true;
+    this.printerService.listSystemPrinters().subscribe({
+      next: (list) => {
+        this.systemPrinters = (list || []).map((p: any) => ({
+          ...p,
+          label: p.displayName && p.displayName !== p.name ? `${p.displayName} (${p.name})` : p.name,
+        }));
+        this.loadingSystemPrinters = false;
+      },
+      error: () => {
+        this.systemPrinters = [];
+        this.loadingSystemPrinters = false;
+      },
+    });
   }
 
   /**
    * Create the printer form
    */
+  /**
+   * Normaliza el valor guardado en `width` a una de las opciones del selector
+   * de columnas (32/40/42/48). Soporta valores nuevos (ya en columnas) y
+   * valores legacy expresados en mm (ej. 58, 80). Así el selector siempre
+   * muestra una opción válida al editar una impresora existente.
+   */
+  normalizeColumns(width?: number | null): number {
+    const w = Number(width || 0);
+    if (!w || w <= 0) return 48;
+    if (w < 50) {
+      // Ya está en columnas: snap al preset más cercano
+      if (w <= 36) return 32;
+      if (w <= 41) return 40;
+      if (w <= 45) return 42;
+      return 48;
+    }
+    // Legacy en mm
+    if (w <= 68) return 32;          // 58mm
+    return 48;                       // 76/80mm
+  }
+
   createPrinterForm(printer?: PrinterConfig): FormGroup {
     const form = this.fb.group({
       name: [printer?.name || '', [Validators.required, Validators.maxLength(100)]],
@@ -102,7 +226,7 @@ export class PrinterSettingsComponent implements OnInit {
       address: [printer?.address || '', Validators.required],
       port: [printer?.port || 9100],
       dpi: [printer?.dpi || 203],
-      width: [printer?.width || 58],
+      width: [this.normalizeColumns(printer?.width)],
       characterSet: [printer?.characterSet || 'PC437_USA'],
       isDefault: [printer?.isDefault || false]
     });
@@ -315,7 +439,7 @@ export class PrinterSettingsComponent implements OnInit {
       connectionType: 'usb',     // Use USB connection type for CUPS
       address: printerName,      // Just use the printer name for CUPS
       port: null,                // CUPS doesn't need a port
-      width: 48,                 // Character width in characters (not mm)
+      width: 32,                 // Columnas por línea (58mm térmica = 32)
       dpi: 203,                  // Standard DPI for most thermal printers
       characterSet: 'PC437_USA', // Use a standard character set supported by the library
       isDefault: true

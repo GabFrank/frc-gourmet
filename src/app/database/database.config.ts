@@ -15,6 +15,7 @@ import { Permission } from './entities/personas/permission.entity';
 import { RolePermission } from './entities/personas/role-permission.entity';
 import { LoginSession } from './entities/auth/login-session.entity';
 import { RefreshToken } from './entities/auth/refresh-token.entity';
+import { DeviceAuthCode } from './entities/auth/device-auth-code.entity';
 import { PasswordResetToken } from './entities/auth/password-reset-token.entity';
 import { Adjunto } from './entities/shared/adjunto.entity';
 
@@ -24,6 +25,17 @@ import { EventoNotificacion } from './entities/notificaciones/evento-notificacio
 import { ReceptorNotificacion } from './entities/notificaciones/receptor-notificacion.entity';
 import { SuscripcionNotificacion } from './entities/notificaciones/suscripcion-notificacion.entity';
 import { LogNotificacion } from './entities/notificaciones/log-notificacion.entity';
+import { MusicaSemilla } from './entities/musica/musica-semilla.entity';
+import { MusicaTrack } from './entities/musica/musica-track.entity';
+import { MusicaVeto } from './entities/musica/musica-veto.entity';
+import { BloqueProgramacion } from './entities/musica/bloque-programacion.entity';
+import { PlanProgramacion } from './entities/musica/plan-programacion.entity';
+import { PlanBloque } from './entities/musica/plan-bloque.entity';
+import { TrackLog } from './entities/musica/track-log.entity';
+import { MusicaFeedback } from './entities/musica/musica-feedback.entity';
+import { MusicaEstilo } from './entities/musica/musica-estilo.entity';
+import { MusicaEstiloAlias } from './entities/musica/musica-estilo-alias.entity';
+import { BloqueEstiloMezcla } from './entities/musica/bloque-estilo-mezcla.entity';
 
 // RRHH entities
 import { ConfiguracionRrhh } from './entities/rrhh/configuracion-rrhh.entity';
@@ -35,6 +47,7 @@ import { FuncionarioDocumento } from './entities/rrhh/funcionario-documento.enti
 import { Turno } from './entities/rrhh/turno.entity';
 import { FuncionarioTurno } from './entities/rrhh/funcionario-turno.entity';
 import { Asistencia } from './entities/rrhh/asistencia.entity';
+import { FuncionarioRostro } from './entities/rrhh/funcionario-rostro.entity';
 import { Penalizacion } from './entities/rrhh/penalizacion.entity';
 import { Feriado } from './entities/rrhh/feriado.entity';
 import { HoraExtra } from './entities/rrhh/hora-extra.entity';
@@ -79,6 +92,9 @@ import { RecetaIngrediente } from './entities/productos/receta-ingrediente.entit
 import { Adicional } from './entities/productos/adicional.entity';
 import { RecetaAdicionalVinculacion } from './entities/productos/receta-adicional-vinculacion.entity';
 import { RecetaIngredienteIntercambiable } from './entities/productos/receta-ingrediente-intercambiable.entity';
+import { RecetaMaterial } from './entities/productos/receta-material.entity';
+import { RecetaFase } from './entities/productos/receta-fase.entity';
+import { RecetaFaseIngrediente } from './entities/productos/receta-fase-ingrediente.entity';
 import { Observacion } from './entities/productos/observacion.entity';
 import { ProductoObservacion } from './entities/productos/producto-observacion.entity';
 import { TamanhoPizza } from './entities/productos/tamanho-pizza.entity';
@@ -116,6 +132,8 @@ import { GastoCategoria } from './entities/financiero/gasto-categoria.entity';
 import { Gasto } from './entities/financiero/gasto.entity';
 import { RetiroCaja } from './entities/financiero/retiro-caja.entity';
 import { RetiroCajaDetalle } from './entities/financiero/retiro-caja-detalle.entity';
+import { GastoCaja } from './entities/financiero/gasto-caja.entity';
+import { EgresoCaja } from './entities/financiero/egreso-caja.entity';
 import { GastoDetalle } from './entities/financiero/gasto-detalle.entity';
 
 // Banking entities (Fase 2)
@@ -135,6 +153,7 @@ import { CuentaPorCobrar } from './entities/financiero/cuenta-por-cobrar.entity'
 import { CuentaPorCobrarCuota } from './entities/financiero/cuenta-por-cobrar-cuota.entity';
 import { CobroConsolidado } from './entities/financiero/cobro-consolidado.entity';
 import { CobroConsolidadoDetalle } from './entities/financiero/cobro-consolidado-detalle.entity';
+import { PagoCuotaCppDetalle } from './entities/financiero/pago-cuota-cpp-detalle.entity';
 import { MovimientoCliente } from './entities/financiero/movimiento-cliente.entity';
 
 // Entradas Varias + Operaciones Financieras (caja mayor)
@@ -153,6 +172,7 @@ import { OnboardingTaskOverride } from './entities/personalizacion/onboarding-ta
 
 // Sistema (config global)
 import { Empresa } from './entities/sistema/empresa.entity';
+import { MenuConfig } from './entities/sistema/menu-config.entity';
 
 // Import compras entities
 import { Proveedor } from './entities/compras/proveedor.entity';
@@ -210,19 +230,64 @@ import { AddPrinterTicketToDispositivo1779200000000 } from './migrations/1779200
 import { AddDestinoToGasto1779300000000 } from './migrations/1779300000000-AddDestinoToGasto';
 import { AddCuentaBancariaToLiquidacionSueldo1779400000000 } from './migrations/1779400000000-AddCuentaBancariaToLiquidacionSueldo';
 import { AddConveniosCobroConsolidado1779500000000 } from './migrations/1779500000000-AddConveniosCobroConsolidado';
+import { AddPagoCuotaCppDetalle1785320463398 } from './migrations/1785320463398-AddPagoCuotaCppDetalle';
+import { AddEgresoCajaToPagoCuotaDetalle1785335253817 } from './migrations/1785335253817-AddEgresoCajaToPagoCuotaDetalle';
 import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVacacionVentas';
 import { AddCuentaBancariaToPagosCobros1779700000000 } from './migrations/1779700000000-AddCuentaBancariaToPagosCobros';
 import { AddCotizacionBancariaToPagosCobros1779800000000 } from './migrations/1779800000000-AddCotizacionBancariaToPagosCobros';
 import { AddKdsToComandaItem1780000000000 } from './migrations/1780000000000-AddKdsToComandaItem';
+import { AddGastoCaja1783025751400 } from './migrations/1783025751400-AddGastoCaja';
+import { AddMontoToConteoDetalle1783173960142 } from './migrations/1783173960142-AddMontoToConteoDetalle';
+import { AddDeviceAuthCodes1783088331915 } from './migrations/1783088331915-AddDeviceAuthCodes';
 import { AddKdsPantalla1780100000000 } from './migrations/1780100000000-AddKdsPantalla';
+import { AddOrigenToRetiroCaja1780200000000 } from './migrations/1780200000000-AddOrigenToRetiroCaja';
+import { AddConteoToCajaMayorMovimiento1780300000000 } from './migrations/1780300000000-AddConteoToCajaMayorMovimiento';
+import { AddRecetaPreparacion1780400000000 } from './migrations/1780400000000-AddRecetaPreparacion';
+import { AddOcuparMesaAlVincularComanda1780500000000 } from './migrations/1780500000000-AddOcuparMesaAlVincularComanda';
 import { AddFacturacion1782519234187 } from './migrations/1782519234187-AddFacturacion';
 import { AddFacturacionConfig1782519876542 } from './migrations/1782519876542-AddFacturacionConfig';
+import { AddTipoToSector1782860367433 } from './migrations/1782860367433-AddTipoToSector';
+import { AddOnlineFieldsToProducto1783520460210 } from './migrations/1783520460210-AddOnlineFieldsToProducto';
+import { AddCuentasClienteYOtp1783520460211 } from './migrations/1783520460211-AddCuentasClienteYOtp';
+import { AddPedidosOnline1783520460212 } from './migrations/1783520460212-AddPedidosOnline';
+import { AddTiendaConfigYCustomerRefresh1783525141550 } from './migrations/1783525141550-AddTiendaConfigYCustomerRefresh';
+import { CuentaClienteTelefonoNullable1783740826975 } from './migrations/1783740826975-CuentaClienteTelefonoNullable';
+import { AddUbicacionPedidoOnline1783741165054 } from './migrations/1783741165054-AddUbicacionPedidoOnline';
+import { AddCobroParcialPorItems1783805921597 } from './migrations/1783805921597-AddCobroParcialPorItems';
+import { AddReconocimientoFacial1783808912909 } from './migrations/1783808912909-AddReconocimientoFacial';
+import { AddUbicacionEmpresa1783915694893 } from './migrations/1783915694893-AddUbicacionEmpresa';
+import { AddNotificaciones1782606189440 } from './migrations/1782606189440-AddNotificaciones';
+import { AddWhatsappCierreCajaConfig1783975019373 } from './migrations/1783975019373-AddWhatsappCierreCajaConfig';
+import { ReclasificarMovimientosAcreditacionPos1784049746457 } from './migrations/1784049746457-ReclasificarMovimientosAcreditacionPos';
+import { AddMotivoAjusteToCaja1784316132819 } from './migrations/1784316132819-AddMotivoAjusteToCaja';
+import { AddLiquidacionIdToCpcCuota1784554795703 } from './migrations/1784554795703-AddLiquidacionIdToCpcCuota';
+import { AddNeteoDeudasLiquidacionFinal1784555556082 } from './migrations/1784555556082-AddNeteoDeudasLiquidacionFinal';
+import { AddSimplificadaToCompra1784652193704 } from './migrations/1784652193704-AddSimplificadaToCompra';
+import { AddEgresoCaja1784664715714 } from './migrations/1784664715714-AddEgresoCaja';
+import { AddMenuConfig1784756065888 } from './migrations/1784756065888-AddMenuConfig';
+import { AddAnuladoToMovimientoCliente1784136362576 } from './migrations/1784136362576-AddAnuladoToMovimientoCliente';
+import { AddMesaQrAutoservicio1785082533104 } from './migrations/1785082533104-AddMesaQrAutoservicio';
+import { DropCheckTipoOperacionFinanciera1785170061312 } from './migrations/1785170061312-DropCheckTipoOperacionFinanciera';
+import { AddCuentasBancariasOrdenCajaMayorConfig1785170062316 } from './migrations/1785170062316-AddCuentasBancariasOrdenCajaMayorConfig';
+import { MusicaAmbiental1786378422682 } from './migrations/1786378422682-MusicaAmbiental';
+import { MusicaOpcionesAvanzadas1786383979096 } from './migrations/1786383979096-MusicaOpcionesAvanzadas';
+import { MusicaCatalogoEstilos1786475808081 } from './migrations/1786475808081-MusicaCatalogoEstilos';
+import { MusicaClasificacionSemantica1786563231306 } from './migrations/1786563231306-MusicaClasificacionSemantica';
+import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
+import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
+import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
+import { PedidoOnline } from './entities/pedidos-online/pedido-online.entity';
+import { PedidoOnlineItem } from './entities/pedidos-online/pedido-online-item.entity';
+import { CustomerRefreshToken } from './entities/pedidos-online/customer-refresh-token.entity';
+import { TiendaOnlineConfig } from './entities/pedidos-online/tienda-online-config.entity';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
 import { PdvAtajoGrupoItem } from './entities/ventas/pdv-atajo-grupo-item.entity';
 import { PdvAtajoItemProducto } from './entities/ventas/pdv-atajo-item-producto.entity';
 import { VentaItemSabor } from './entities/ventas/venta-item-sabor.entity';
+import { CobroParcial } from './entities/ventas/cobro-parcial.entity';
+import { CobroParcialItem } from './entities/ventas/cobro-parcial-item.entity';
 
 // Facturacion entities (modulo de facturacion: pre-impreso, auto-impreso, electronica)
 import { Timbrado } from './entities/facturacion/timbrado.entity';
@@ -316,7 +381,16 @@ function getEntitiesList(): any[] {
       RolePermission,
       LoginSession,
       RefreshToken,
+      DeviceAuthCode,
       PasswordResetToken,
+      // Pedidos online (web app)
+      CuentaCliente,
+      CodigoOtp,
+      ZonaDelivery,
+      PedidoOnline,
+      PedidoOnlineItem,
+      CustomerRefreshToken,
+      TiendaOnlineConfig,
       // Shared
       Adjunto,
       // Notificaciones (Email + WhatsApp)
@@ -325,6 +399,18 @@ function getEntitiesList(): any[] {
       ReceptorNotificacion,
       SuscripcionNotificacion,
       LogNotificacion,
+      // Musica ambiental (Spotify Connect)
+      MusicaSemilla,
+      MusicaTrack,
+      MusicaVeto,
+      BloqueProgramacion,
+      PlanProgramacion,
+      PlanBloque,
+      TrackLog,
+      MusicaFeedback,
+      MusicaEstilo,
+      MusicaEstiloAlias,
+      BloqueEstiloMezcla,
       // RRHH entities
       ConfiguracionRrhh,
       Cargo,
@@ -335,6 +421,7 @@ function getEntitiesList(): any[] {
       Turno,
       FuncionarioTurno,
       Asistencia,
+      FuncionarioRostro,
       Penalizacion,
       Feriado,
       HoraExtra,
@@ -382,6 +469,8 @@ function getEntitiesList(): any[] {
       GastoDetalle,
       RetiroCaja,
       RetiroCajaDetalle,
+      GastoCaja,
+      EgresoCaja,
       // Banking (Fase 2)
       CuentaBancaria,
       MaquinaPos,
@@ -397,6 +486,7 @@ function getEntitiesList(): any[] {
       CuentaPorCobrarCuota,
       CobroConsolidado,
       CobroConsolidadoDetalle,
+      PagoCuotaCppDetalle,
       MovimientoCliente,
       // Entradas Varias + Operaciones Financieras + Chequeras + Cheques
       EntradaVariaCategoria,
@@ -410,6 +500,7 @@ function getEntitiesList(): any[] {
       OnboardingTaskOverride,
       // Sistema (config global)
       Empresa,
+      MenuConfig,
       // Productos entities
       Familia,
       Subfamilia,
@@ -423,6 +514,9 @@ function getEntitiesList(): any[] {
       Adicional,
       RecetaAdicionalVinculacion,
       RecetaIngredienteIntercambiable,
+      RecetaMaterial,
+      RecetaFase,
+      RecetaFaseIngrediente,
       Observacion,
       ProductoObservacion,
       TamanhoPizza,
@@ -485,6 +579,9 @@ function getEntitiesList(): any[] {
       PdvAtajoItemProducto,
       // VentaItem sabores (variaciones multi-sabor)
       VentaItemSabor,
+      // Cobro parcial por items
+      CobroParcial,
+      CobroParcialItem,
       // Facturacion (modulo de facturacion)
       Timbrado,
       TimbradoDetalle,
@@ -541,8 +638,48 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddCotizacionBancariaToPagosCobros1779800000000,
     AddKdsToComandaItem1780000000000,
     AddKdsPantalla1780100000000,
+    AddOrigenToRetiroCaja1780200000000,
+    AddConteoToCajaMayorMovimiento1780300000000,
+    AddRecetaPreparacion1780400000000,
+    AddOcuparMesaAlVincularComanda1780500000000,
     AddFacturacion1782519234187,
     AddFacturacionConfig1782519876542,
+    AddTipoToSector1782860367433,
+    AddGastoCaja1783025751400,
+    AddDeviceAuthCodes1783088331915,
+    AddMontoToConteoDetalle1783173960142,
+    AddOnlineFieldsToProducto1783520460210,
+    AddCuentasClienteYOtp1783520460211,
+    AddPedidosOnline1783520460212,
+    AddTiendaConfigYCustomerRefresh1783525141550,
+    CuentaClienteTelefonoNullable1783740826975,
+    AddUbicacionPedidoOnline1783741165054,
+    AddCobroParcialPorItems1783805921597,
+    AddReconocimientoFacial1783808912909,
+    AddUbicacionEmpresa1783915694893,
+    // Notificaciones (Email + WhatsApp): la migracion no habia llegado a develop
+    // (el PR original se mergeo antes de agregarla). Timestamp menor que las de
+    // arriba, pero TypeORM corre toda migracion no-ejecutada igual.
+    AddNotificaciones1782606189440,
+    AddWhatsappCierreCajaConfig1783975019373,
+    ReclasificarMovimientosAcreditacionPos1784049746457,
+    AddAnuladoToMovimientoCliente1784136362576,
+    AddMotivoAjusteToCaja1784316132819,
+    AddLiquidacionIdToCpcCuota1784554795703,
+    AddNeteoDeudasLiquidacionFinal1784555556082,
+    AddSimplificadaToCompra1784652193704,
+    AddEgresoCaja1784664715714,
+    AddMenuConfig1784756065888,
+    AddMesaQrAutoservicio1785082533104,
+    DropCheckTipoOperacionFinanciera1785170061312,
+    AddCuentasBancariasOrdenCajaMayorConfig1785170062316,
+    // Musica ambiental (Spotify Connect): repertorio, bloques y planes
+    MusicaAmbiental1786378422682,
+    MusicaOpcionesAvanzadas1786383979096,
+    MusicaCatalogoEstilos1786475808081,
+    MusicaClasificacionSemantica1786563231306,
+    AddPagoCuotaCppDetalle1785320463398,
+    AddEgresoCajaToPagoCuotaDetalle1785335253817,
   ];
 }
 

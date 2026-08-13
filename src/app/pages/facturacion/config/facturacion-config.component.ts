@@ -15,6 +15,7 @@ import { RepositoryService } from '../../../database/repository.service';
 import { FacturaPlantilla } from '../../../database/entities/facturacion/factura-plantilla.entity';
 import { TimbradoDetalle } from '../../../database/entities/facturacion/timbrado-detalle.entity';
 import { TipoFacturacion } from '../../../database/entities/facturacion/factura.entity';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-facturacion-config',
@@ -31,6 +32,7 @@ import { TipoFacturacion } from '../../../database/entities/facturacion/factura.
     MatCheckboxModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    HasPermissionDirective,
   ],
   templateUrl: './facturacion-config.component.html',
   styleUrls: ['./facturacion-config.component.scss'],

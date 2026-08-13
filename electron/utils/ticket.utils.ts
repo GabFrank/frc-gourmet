@@ -28,6 +28,8 @@ import { DataSource } from 'typeorm';
 import { Empresa } from '../../src/app/database/entities/sistema/empresa.entity';
 import { getPrinterType, getCharacterSet } from './printer.utils';
 import { sendLprJob, parseLprAddress } from './lpr.utils';
+import { getSystemPrinterDriver } from './system-printer.utils';
+import { probeTcp } from './network-printer-scan.utils';
 
 // ============================================================
 // SPEC
@@ -162,28 +164,36 @@ export function ticketTotales(items: { label: string; monto: string; bold?: bool
 // ============================================================
 
 /**
- * Mapea el campo `printer.width` (interpretado como **mm físicos**, según
- * el label "Width (mm)" de la UI) al número de caracteres por línea que
- * usan los templates ESC/POS.
+ * Devuelve la cantidad de **caracteres por línea (columnas)** que usan los
+ * templates ESC/POS, a partir del campo `printer.width`.
  *
- * Convención estándar para impresoras térmicas (Font A, default):
- *   - 58mm → 32 chars
- *   - 80mm → 48 chars
- *   - 76mm → 42 chars (raro)
+ * La cantidad de columnas NO se puede deducir de forma confiable del ancho
+ * físico en mm, porque depende de la tecnología de la impresora y de la
+ * fuente activa. Ejemplos reales:
+ *   - Térmica 58mm  (Font A) → 32 columnas
+ *   - Térmica 80mm  (Font A) → 48 columnas
+ *   - Matriz de punto 9 pines 76mm (ej. Epson TM-U220, Font A) → 40 columnas
  *
- * Si el valor recibido ya está en rango de chars (>=20 y <=80), se asume
- * que el usuario puso chars directos y se respeta — pero la convención
- * de la UI es mm.
+ * Por eso la UI configura **directamente la cantidad de columnas** y ese es
+ * el valor que se guarda en `printer.width` (32, 40, 42, 48...).
+ *
+ * Interpretación del valor guardado (retrocompatible):
+ *   - `< 50`  → ya es cantidad de columnas configurada directamente (nuevo).
+ *   - `>= 50` → valor legacy expresado en mm; se mapea a columnas por densidad
+ *               térmica estándar (58mm→32, 80mm→48).
  */
 export function printerWidthToChars(width?: number | null): number {
   const w = Number(width || 0);
-  if (!w || w <= 0) return 48; // default
-  if (w >= 75 && w <= 85) return 48;   // 80mm
-  if (w >= 70 && w < 75) return 42;    // 76mm raro
-  if (w >= 50 && w < 70) return 32;    // 58mm
-  if (w < 50) return 32;               // < 58mm asume 58mm safe default
-  // > 85: probable que el usuario haya puesto chars directo
-  return Math.min(64, Math.max(20, w));
+  if (!w || w <= 0) return 48; // default 80mm térmica
+
+  // Nuevo: el valor es la cantidad de columnas configurada directamente.
+  if (w < 50) return Math.max(20, Math.round(w)); // 32, 40, 42, 48...
+
+  // Legacy: el valor está en mm → mapear a columnas (densidad térmica).
+  if (w <= 68) return 32;   // 58mm
+  if (w < 76) return 42;    // 70-75mm
+  if (w <= 85) return 48;   // 76-80mm
+  return Math.min(64, Math.round(w));
 }
 
 /**
@@ -201,16 +211,23 @@ export function printerWidthToChars(width?: number | null): number {
  */
 export function monedaSimboloAscii(moneda?: any): string {
   if (!moneda) return 'Gs.';
-  const codigo = String(moneda.codigo || '').toUpperCase();
-  switch (codigo) {
-    case 'PYG': return 'Gs.';
-    case 'USD': return '$';
-    case 'BRL': return 'R$';
-    case 'ARS': return '$';
-    case 'EUR': return 'EUR';
-    default:
-      return codigo || String(moneda.nombre || 'Gs.').toUpperCase().slice(0, 6);
+  // La entidad Moneda no tiene `codigo`/`nombre`: los campos reales son
+  // `countryCode` (PY/US/BR...), `simbolo` (puede ser no-ASCII, ej. '₲') y
+  // `denominacion`. Mapear por countryCode da un símbolo ASCII estable para la
+  // impresora térmica; si no matchea, se usa el símbolo guardado sanitizado a
+  // ASCII y, como último recurso, la denominación.
+  const cc = String(moneda.countryCode || '').toUpperCase();
+  switch (cc) {
+    case 'PY': return 'Gs.';
+    case 'US': return '$';
+    case 'BR': return 'R$';
+    case 'AR': return '$';
+    case 'EU':
+    case 'ES': return 'EUR';
   }
+  const sim = String(moneda.simbolo || '').replace(/[^\x20-\x7E]/g, '').trim();
+  if (sim) return sim;
+  return String(moneda.denominacion || 'Gs.').toUpperCase().slice(0, 6);
 }
 
 /**
@@ -218,10 +235,16 @@ export function monedaSimboloAscii(moneda?: any): string {
  */
 function buildThermalPrinter(printer: any): ThermalPrinter {
   let interfaceConfig: string;
+  let driver: any;
   if (printer.connectionType === 'network') {
     interfaceConfig = `tcp://${printer.address}:${printer.port || 9100}`;
   } else if (printer.connectionType === 'bluetooth') {
     interfaceConfig = `bt:${printer.address}`;
+  } else if (printer.connectionType === 'system') {
+    // Impresora instalada en el SO: se imprime RAW por el spooler usando el
+    // nombre. Requiere el driver nativo (@thiagoelg/node-printer).
+    interfaceConfig = `printer:${printer.address}`;
+    driver = getSystemPrinterDriver();
   } else if (printer.connectionType === 'lpr') {
     // Dummy interface: solo se usa el ThermalPrinter para acumular bytes
     // en su buffer interno y extraerlos con getBuffer() — nunca se llama
@@ -234,11 +257,12 @@ function buildThermalPrinter(printer: any): ThermalPrinter {
   return new ThermalPrinter({
     type: getPrinterType(printer.type) as PrinterTypes,
     interface: interfaceConfig,
+    driver,
     options: { timeout: 5000 },
     width: printerWidthToChars(printer.width),
     characterSet: (printer.characterSet ? getCharacterSet(printer.characterSet) : CharacterSet.PC437_USA) as CharacterSet,
     removeSpecialCharacters: false,
-  });
+  } as any);
 }
 
 /**
@@ -324,12 +348,169 @@ async function applyLine(tp: ThermalPrinter, line: TicketLine, width: number): P
 }
 
 /**
+ * Líneas en blanco que se alimentan al pie de TODO ticket antes del corte.
+ * El cortante de las térmicas/matriciales está ~2-3 cm por encima del cabezal,
+ * así que sin este feed las últimas líneas quedan por encima del corte (se
+ * "comen"). Centralizado acá para que aplique a todos los tickets por igual.
+ */
+const BOTTOM_SAFE_FEED = 6;
+
+/**
+ * Líneas en blanco al inicio de cada ticket. Sin este margen, la primera línea
+ * (típicamente el nombre de la empresa en doble alto) sale recortada por la
+ * mitad, porque el papel no avanzó lo suficiente cuando arranca el cabezal.
+ */
+const TOP_SAFE_FEED = 2;
+
+function feedTopSafeArea(tp: ThermalPrinter): void {
+  for (let i = 0; i < TOP_SAFE_FEED; i++) tp.newLine();
+}
+
+function feedBottomSafeArea(tp: ThermalPrinter): void {
+  for (let i = 0; i < BOTTOM_SAFE_FEED; i++) tp.newLine();
+}
+
+/**
+ * Construye las líneas de una PRUEBA DE IMPRESIÓN diagnóstica: sirve para
+ * verificar que la impresora esté configurada con la cantidad de columnas
+ * correcta y que los márgenes superior/inferior no recorten el contenido.
+ *
+ * Incluye:
+ *  - Datos de la impresora y columnas configuradas.
+ *  - Una REGLA de caracteres (línea de unidades + decenas) para contar cuántas
+ *    columnas entran realmente. Si la impresora hace wrap, las columnas
+ *    configuradas superan la capacidad real → hay que bajarlas.
+ *  - Muestras de alineación (izq/centro/der) y de tamaños (normal/alto/ancho/
+ *    grande).
+ *  - Una tabla de columnas (igual al comprobante) para verificar la separación.
+ *  - Marcadores de inicio y fin para chequear los márgenes.
+ */
+export function buildTestTicketLines(printer: any): TicketLine[] {
+  const width = printerWidthToChars(printer.width);
+
+  // Regla de caracteres: unidades (1..0 repetido) y decenas (marca cada 10).
+  let units = '';
+  let tens = '';
+  for (let i = 1; i <= width; i++) {
+    units += String(i % 10);
+    tens += (i % 10 === 0) ? String(Math.floor(i / 10) % 10) : ' ';
+  }
+
+  const tech = [printer.type, printer.connectionType].filter(Boolean).join(' / ');
+
+  const lines: TicketLine[] = [
+    ticketText('<< INICIO DEL TICKET >>', { align: 'C' }),
+    ticketSeparador('='),
+    ticketText('PRUEBA DE IMPRESION', { align: 'C', bold: true, size: 'tall' }),
+    ticketText(ticketFmtFechaHora(new Date()), { align: 'C' }),
+    ticketSeparador('='),
+    ticketText(`Impresora: ${(printer.name || '-').toUpperCase()}`),
+    ticketText(`Tecnologia: ${tech || '-'}`),
+    ticketText(`Columnas configuradas: ${width}`, { bold: true }),
+    ticketSeparador('-'),
+    ticketText('REGLA DE CARACTERES', { align: 'C', bold: true }),
+    ticketText('Deben entrar sin cortar ni', { align: 'C' }),
+    ticketText('pasar a otra linea:', { align: 'C' }),
+    ticketText(tens),
+    ticketText(units),
+    ticketText('='.repeat(width)),
+    ticketSeparador('-'),
+    ticketText('ALINEACION', { align: 'C', bold: true }),
+    ticketText('IZQUIERDA', { align: 'L' }),
+    ticketText('CENTRO', { align: 'C' }),
+    ticketText('DERECHA', { align: 'R' }),
+    ticketSeparador('-'),
+    ticketText('TAMANOS', { align: 'C', bold: true }),
+    ticketText('NORMAL'),
+    ticketText('ALTO', { size: 'tall' }),
+    ticketText('ANCHO', { size: 'wide' }),
+    ticketText('GRANDE', { size: 'big' }),
+    ticketSeparador('-'),
+    ticketText('TABLA DE COLUMNAS', { align: 'C', bold: true }),
+  ];
+
+  // Tabla igual a la del comprobante (misma lógica de anchos) para verificar
+  // que CANT / DESCRIPCION / TOTAL queden separados y alineados.
+  const totalW = 12;
+  const cantW = Math.max(5, Math.min(6, Math.floor(width * 0.12)));
+  const descW = width - cantW - totalW;
+  lines.push(ticketColumns([
+    { text: 'CANT', width: cantW, align: 'L' },
+    { text: 'DESCRIPCION', width: descW, align: 'L' },
+    { text: 'TOTAL', width: totalW, align: 'R' },
+  ]));
+  lines.push(ticketSeparador('-'));
+  lines.push(ticketColumns([
+    { text: '2', width: cantW, align: 'L' },
+    { text: 'PRODUCTO DE PRUEBA', width: descW, align: 'L' },
+    { text: '123.456', width: totalW, align: 'R' },
+  ]));
+  lines.push(ticketKv('TOTAL', 'Gs. 123.456', true));
+
+  lines.push(ticketSeparador('='));
+  lines.push(ticketText('Si ves esta linea completa,', { align: 'C' }));
+  lines.push(ticketText('el margen inferior esta OK.', { align: 'C' }));
+  lines.push(ticketText('<< FIN DEL TICKET >>', { align: 'C', bold: true }));
+
+  return lines;
+}
+
+/**
+ * Imprime la prueba diagnóstica en la impresora, pasando por el mismo pipeline
+ * (`printTicketSpec`) que los tickets reales: así valida columnas, tamaños,
+ * corte y safe-area inferior tal como saldrán en producción.
+ */
+export async function printTestTicket(printer: any): Promise<{ ok: boolean; error?: string }> {
+  const width = printerWidthToChars(printer.width);
+  const spec: TicketSpec = {
+    printerWidth: width,
+    lines: buildTestTicketLines(printer),
+    cutAtEnd: true,
+    beepAtEnd: true,
+  };
+  return await printTicketSpec(printer, spec);
+}
+
+/**
  * Imprime un `TicketSpec` en una impresora térmica. Maneja:
  * - Impresoras CUPS (address que empieza con `ticket-`) → fallback texto plano + `lp`.
  * - Impresoras network/USB/bluetooth → comandos ESC/POS vía `node-thermal-printer`.
  *
  * Retorna `{ ok, error? }`. NUNCA hace throw — el caller decide si bloquear o continuar.
  */
+/**
+ * Prueba la conectividad de una configuración de impresora SIN imprimir.
+ * Útil para validar antes de guardar (botón "Probar conexión").
+ */
+export async function probePrinterConnection(printer: any): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (printer.connectionType === 'lpr') {
+      const { host, port } = parseLprAddress(printer.address || '');
+      if (!host) return { ok: false, error: 'Falta el host en la dirección' };
+      const ok = await probeTcp(host, port || printer.port || 515, 4000);
+      return ok ? { ok: true } : { ok: false, error: `No se pudo conectar a ${host}:${port || printer.port || 515}` };
+    }
+    if (printer.connectionType === 'usb' && printer.address && printer.address.startsWith('ticket-')) {
+      return { ok: true }; // CUPS: sin prueba simple, se asume disponible
+    }
+    if (printer.connectionType === 'usb' || printer.connectionType === 'serial' || printer.connectionType === 'bluetooth') {
+      // Estas vías no tienen un chequeo de conectividad fiable previo a imprimir.
+      return { ok: true };
+    }
+    // network / system: build + isPrinterConnected (throw-safe)
+    const tp = buildThermalPrinter(printer);
+    let connected = false;
+    try {
+      connected = await tp.isPrinterConnected();
+    } catch {
+      connected = false;
+    }
+    return connected ? { ok: true } : { ok: false, error: `La impresora "${printer.address}" no responde` };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
 export async function printTicketSpec(
   printer: any,
   spec: TicketSpec
@@ -361,10 +542,14 @@ export async function printTicketSpec(
     // cola compartida de un servidor LPD remoto (típicamente Windows con
     // "Servicios de impresión LPD" habilitado).
     if (printer.connectionType === 'lpr') {
+      feedTopSafeArea(tp);
       for (const line of spec.lines) {
         await applyLine(tp, line, width);
       }
-      if (spec.cutAtEnd !== false) tp.cut({ verticalTabAmount: 0 });
+      if (spec.cutAtEnd !== false) {
+        feedBottomSafeArea(tp);
+        tp.cut({ verticalTabAmount: 0 });
+      }
       if (spec.beepAtEnd) tp.beep();
       const buffer = (tp as any).getBuffer?.() as Buffer | undefined;
       if (!buffer || buffer.length === 0) {
@@ -381,15 +566,26 @@ export async function printTicketSpec(
       });
     }
 
-    const connected = await tp.isPrinterConnected();
+    // isPrinterConnected puede lanzar (el interface 'printer:' hace `throw false`
+    // cuando la impresora no está disponible); lo tratamos como no conectada.
+    let connected = false;
+    try {
+      connected = await tp.isPrinterConnected();
+    } catch {
+      connected = false;
+    }
     if (!connected) {
       return { ok: false, error: `Impresora "${printer.name}" no responde (${printer.address})` };
     }
 
+    feedTopSafeArea(tp);
     for (const line of spec.lines) {
       await applyLine(tp, line, width);
     }
-    if (spec.cutAtEnd !== false) tp.cut({ verticalTabAmount: 0 });
+    if (spec.cutAtEnd !== false) {
+      feedBottomSafeArea(tp);
+      tp.cut({ verticalTabAmount: 0 });
+    }
     if (spec.beepAtEnd) tp.beep();
 
     await tp.execute();
@@ -413,6 +609,9 @@ export async function printTicketSpec(
 export function renderTicketToPlainText(spec: TicketSpec): string {
   const width = spec.printerWidth || 48;
   const out: string[] = [];
+
+  // Safe area superior (mismo criterio que el path ESC/POS).
+  for (let i = 0; i < TOP_SAFE_FEED; i++) out.push('');
 
   for (const line of spec.lines) {
     switch (line.type) {
@@ -460,6 +659,11 @@ export function renderTicketToPlainText(spec: TicketSpec): string {
         // omitidos en texto plano
         break;
     }
+  }
+  // Safe area inferior: mismas líneas en blanco que el path ESC/POS, para que
+  // el corte de CUPS/`lp` tampoco recorte el final del ticket.
+  if (spec.cutAtEnd !== false) {
+    for (let i = 0; i < BOTTOM_SAFE_FEED; i++) out.push('');
   }
   return out.join('\n') + '\n';
 }

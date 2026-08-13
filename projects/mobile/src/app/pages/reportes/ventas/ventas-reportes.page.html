@@ -1,0 +1,95 @@
+<div class="rep-page" #reporteRoot [class.presentando]="presentando">
+  <div class="rep-actions">
+    <span class="rep-periodo-label" *ngIf="periodoLabel">{{ periodoLabel }}<small *ngIf="comparaLabel"> · vs {{ comparaLabel }}</small></span>
+    <span class="sp"></span>
+    <button mat-icon-button [disabled]="!cargado" (click)="togglePresentacion()" aria-label="Pantalla completa">
+      <mat-icon>{{ presentando ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+    </button>
+    <button mat-icon-button [disabled]="!cargado || enviandoWa" (click)="enviarWhatsapp()" aria-label="WhatsApp">
+      <mat-icon>chat</mat-icon>
+    </button>
+    <button mat-icon-button [disabled]="!cargado" (click)="exportarPdf()" aria-label="Exportar PDF">
+      <mat-icon>picture_as_pdf</mat-icon>
+    </button>
+  </div>
+
+  <app-reporte-periodo-control (aplicar)="onAplicar($event)"></app-reporte-periodo-control>
+
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error && !loading" class="crud-error">{{ error }}</p>
+
+  <ng-container *ngIf="cargado && !loading && data?.kpis">
+    <!-- KPIs -->
+    <div class="kpi-grid">
+      <div class="kpi" *ngFor="let k of kpis">
+        <span class="kpi-label">{{ k.label }}</span>
+        <span class="kpi-value">{{ k.valor }}</span>
+        <span class="kpi-delta" *ngIf="k.tieneDelta" [class.up]="k.buena" [class.down]="!k.buena">
+          <mat-icon>{{ k.dir === 'up' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>{{ k.deltaTexto }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Tendencia -->
+    <section class="block" data-rep-titulo="Tendencia del período">
+      <h3 class="block-title">Tendencia del período</h3>
+      <div class="chart-box">
+        <canvas baseChart [type]="'line'" [data]="tendenciaData" [options]="lineOptions"></canvas>
+      </div>
+    </section>
+
+    <!-- Mix de pago -->
+    <section class="block" data-rep-titulo="Mix de forma de pago" *ngIf="mixLeyenda.length">
+      <h3 class="block-title">Mix de forma de pago</h3>
+      <div class="chart-box sm">
+        <canvas baseChart [type]="'doughnut'" [data]="mixData" [options]="doughnutOptions"></canvas>
+      </div>
+      <div class="leyenda">
+        <div class="ley-item" *ngFor="let l of mixLeyenda">
+          <span class="dot" [style.background]="l.color"></span>
+          <span class="ley-nombre">{{ l.nombre }}</span>
+          <span class="ley-pct">{{ l.pct }}%</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Día de la semana -->
+    <section class="block" *ngIf="diaSemana.length">
+      <h3 class="block-title">Por día de la semana</h3>
+      <div class="rank-row" *ngFor="let r of diaSemana">
+        <div class="rank-head"><span class="rank-nombre">{{ r.nombre }}</span><span class="rank-valor">{{ r.valor }}</span></div>
+        <mat-progress-bar mode="determinate" [value]="r.pct"></mat-progress-bar>
+      </div>
+    </section>
+
+    <!-- Top productos -->
+    <section class="block" *ngIf="topProductos.length">
+      <h3 class="block-title">Top productos</h3>
+      <div class="rank-row" *ngFor="let r of topProductos">
+        <div class="rank-head">
+          <span class="rank-nombre">{{ r.nombre }} <small>{{ r.detalle }}</small></span>
+          <span class="rank-valor">{{ r.valor }}</span>
+        </div>
+        <mat-progress-bar mode="determinate" [value]="r.pct"></mat-progress-bar>
+      </div>
+    </section>
+
+    <!-- Horas pico -->
+    <section class="block" *ngIf="horasPico.length">
+      <h3 class="block-title">Horas pico</h3>
+      <div class="row" *ngFor="let h of horasPico">
+        <span class="c-nombre">{{ h.etiqueta }}</span>
+        <span class="c-num strong">{{ h.tickets }} tickets</span>
+      </div>
+    </section>
+
+    <!-- Combinaciones -->
+    <section class="block" *ngIf="combinaciones.length">
+      <h3 class="block-title">Combinaciones frecuentes</h3>
+      <div class="row" *ngFor="let c of combinaciones">
+        <span class="c-nombre">{{ c.par }}</span>
+        <span class="c-num strong">{{ c.frecuencia }} veces</span>
+      </div>
+    </section>
+  </ng-container>
+</div>

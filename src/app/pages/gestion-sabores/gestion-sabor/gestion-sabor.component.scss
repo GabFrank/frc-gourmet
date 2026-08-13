@@ -23,7 +23,7 @@
 }
 
 .welcome-card mat-card-content mat-icon {
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .welcome-card mat-card-actions {

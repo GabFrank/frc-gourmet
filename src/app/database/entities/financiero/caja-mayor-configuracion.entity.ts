@@ -28,4 +28,14 @@ export class CajaMayorConfiguracion extends BaseModel {
 
   @Column({ name: 'mostrar_cuentas_por_cobrar', type: 'boolean', default: false })
   mostrarCuentasPorCobrar!: boolean;
+
+  /**
+   * Orden persistente de las cuentas bancarias (array JSON de ids) elegido por
+   * drag & drop en el diálogo de configuración. Define el ORDEN en que se
+   * muestran las cards de cuentas bancarias en el sidebar de `caja-mayor-detalle`.
+   * La M:M `cuentasBancariasVisibles` define QUÉ cuentas se muestran; esta
+   * columna define el orden. NULL / ids faltantes → al final por id ascendente.
+   */
+  @Column({ name: 'cuentas_bancarias_orden', type: 'text', nullable: true })
+  cuentasBancariasOrden?: string | null;
 }

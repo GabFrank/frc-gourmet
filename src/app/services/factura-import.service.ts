@@ -165,6 +165,10 @@ export class FacturaImportService {
   process(filePath: string): Observable<{ success: boolean; documentoId?: number; warnings?: string[]; error?: string }> {
     return from(this.api.facturaImportProcess({ filePath }) as Promise<any>);
   }
+  /** Procesa una factura subida por QR desde el celular (app:// URL en el bucket factura-imports). */
+  processFromUrl(url: string): Observable<{ success: boolean; documentoId?: number; warnings?: string[]; error?: string }> {
+    return from(this.api.facturaImportProcess({ url }) as Promise<any>);
+  }
   reprocess(documentoId: number): Observable<{ success: boolean; warnings?: string[]; error?: string }> {
     return from(this.api.facturaImportReprocess({ documentoId }) as Promise<any>);
   }

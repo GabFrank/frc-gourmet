@@ -1,0 +1,60 @@
+<h2 mat-dialog-title>{{ titulo }}</h2>
+
+<mat-dialog-content>
+  <div class="total-general">
+    <span class="total-label">Total (convertido a Gs)</span>
+    <span class="total-value">{{ totalGsDisplay }}</span>
+  </div>
+
+  <h3 class="seccion-titulo">Por moneda</h3>
+  <table mat-table [dataSource]="monedasVm" class="desglose-table" *ngIf="monedasVm.length; else sinDatos">
+    <ng-container matColumnDef="moneda">
+      <th mat-header-cell *matHeaderCellDef>Moneda</th>
+      <td mat-cell *matCellDef="let r">{{ r.moneda }}</td>
+    </ng-container>
+    <ng-container matColumnDef="monto">
+      <th mat-header-cell *matHeaderCellDef>Monto</th>
+      <td mat-cell *matCellDef="let r">{{ r.monto }}</td>
+    </ng-container>
+    <ng-container matColumnDef="cotizacion">
+      <th mat-header-cell *matHeaderCellDef>Cotización</th>
+      <td mat-cell *matCellDef="let r">{{ r.cotizacion }}</td>
+    </ng-container>
+    <ng-container matColumnDef="enGs">
+      <th mat-header-cell *matHeaderCellDef>En Gs</th>
+      <td mat-cell *matCellDef="let r">{{ r.enGs }}</td>
+    </ng-container>
+    <tr mat-header-row *matHeaderRowDef="monedaCols"></tr>
+    <tr mat-row *matRowDef="let row; columns: monedaCols"></tr>
+  </table>
+
+  <h3 class="seccion-titulo">Por forma de pago</h3>
+  <table mat-table [dataSource]="formasPagoVm" class="desglose-table" *ngIf="formasPagoVm.length; else sinDatos">
+    <ng-container matColumnDef="formaPago">
+      <th mat-header-cell *matHeaderCellDef>Forma de pago</th>
+      <td mat-cell *matCellDef="let r">{{ r.formaPago }}</td>
+    </ng-container>
+    <ng-container matColumnDef="moneda">
+      <th mat-header-cell *matHeaderCellDef>Moneda</th>
+      <td mat-cell *matCellDef="let r">{{ r.moneda }}</td>
+    </ng-container>
+    <ng-container matColumnDef="monto">
+      <th mat-header-cell *matHeaderCellDef>Monto</th>
+      <td mat-cell *matCellDef="let r">{{ r.monto }}</td>
+    </ng-container>
+    <ng-container matColumnDef="enGs">
+      <th mat-header-cell *matHeaderCellDef>En Gs</th>
+      <td mat-cell *matCellDef="let r">{{ r.enGs }}</td>
+    </ng-container>
+    <tr mat-header-row *matHeaderRowDef="formaPagoCols"></tr>
+    <tr mat-row *matRowDef="let row; columns: formaPagoCols"></tr>
+  </table>
+
+  <ng-template #sinDatos>
+    <p class="sin-datos">Sin ventas registradas.</p>
+  </ng-template>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cerrar()">Cerrar</button>
+</mat-dialog-actions>

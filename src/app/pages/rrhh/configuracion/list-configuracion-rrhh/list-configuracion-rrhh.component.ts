@@ -17,6 +17,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 const TIPOS = ['NUMBER', 'STRING', 'BOOLEAN', 'DATE'];
 
@@ -42,6 +43,7 @@ const TIPOS = ['NUMBER', 'STRING', 'BOOLEAN', 'DATE'];
     MatDialogModule,
     MatTooltipModule,
     MatSlideToggleModule,
+    HasPermissionDirective,
   ],
 })
 export class ListConfiguracionRrhhComponent implements OnInit {

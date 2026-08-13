@@ -23,6 +23,7 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
 import { EmitirChequeDialogComponent } from '../emitir-cheque/emitir-cheque-dialog.component';
 import { Optional, Inject } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-cheques',
@@ -36,6 +37,7 @@ import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
     MatFormFieldModule, MatInputModule, MatSelectModule, MatDatepickerModule,
     MatNativeDateModule, MatTooltipModule, MatPaginatorModule,
     DatePipe, DecimalPipe,
+    HasPermissionDirective,
   ]
 })
 export class ListChequesComponent implements OnInit {

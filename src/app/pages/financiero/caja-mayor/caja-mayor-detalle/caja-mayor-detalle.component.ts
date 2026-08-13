@@ -35,7 +35,10 @@ import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financi
 import { EmitirChequeDialogComponent } from '../cheques/emitir-cheque/emitir-cheque-dialog.component';
 import { PagarComprasDialogComponent } from '../pagar-compras-dialog/pagar-compras-dialog.component';
 import { MovimientosCuentaBancariaDialogComponent } from '../bancos/movimientos-cuenta-bancaria-dialog/movimientos-cuenta-bancaria-dialog.component';
+import { EgresoCajaInicialDialogComponent } from '../egreso-caja-inicial-dialog/egreso-caja-inicial-dialog.component';
+import { AbrirCajaDesdeConteoDialogComponent } from '../abrir-caja-desde-conteo-dialog/abrir-caja-desde-conteo-dialog.component';
 import { TabsService } from 'src/app/services/tabs.service';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 interface MovimientoConsolidado {
   fuente: 'CAJA' | 'BANCO';
@@ -47,11 +50,13 @@ interface MovimientoConsolidado {
   tipoIsIngreso: boolean;
   detalles: { monedaSimbolo: string; formaPagoNombre?: string; monto: number }[];
   responsableNombre: string;
-  observacion: string;
+  observacion: string;      // texto legible compuesto (display)
+  observacionRaw?: string;  // observacion cruda guardada (para editar)
   anulado: boolean;
   origen: string;             // 'GASTO'|'VALE'|'COBRO_CLIENTE'|... ('' para caja)
   gastoId?: number;
   retiroCajaId?: number;
+  conteoId?: number;
   movimientoIds: number[];
   esAnulacion: boolean; // este grupo es un contra-movimiento (toggle "Ver anulaciones")
   anulacion?: {
@@ -91,6 +96,7 @@ interface MovimientoConsolidado {
     MatDatepickerModule,
     MatNativeDateModule,
     DatePipe,
+    HasPermissionDirective,
   ]
 })
 export class CajaMayorDetalleComponent implements OnInit {
@@ -124,7 +130,7 @@ export class CajaMayorDetalleComponent implements OnInit {
   movimientosConsolidados: MovimientoConsolidado[] = [];
   loading = false;
   loadingMovimientos = false;
-  movimientosColumns = ['fuente', 'fecha', 'tipoMovimiento', 'detalles', 'observacion', 'responsable', 'actions'];
+  movimientosColumns = ['fuente', 'fecha', 'responsable', 'tipoMovimiento', 'observacion', 'detalles', 'actions'];
 
   // Filtro de fuente del panel consolidado: 'TODO' | 'CAJA' | 'BANCO' | '<accountId>'
   fuenteFilter: string = 'TODO';
@@ -183,6 +189,10 @@ export class CajaMayorDetalleComponent implements OnInit {
 
   // Toggle para mostrar tambien las contra-anulaciones (default: ocultas)
   verAnulaciones = false;
+
+  // Toggle para mostrar tambien los movimientos bancarios "ruidosos" (acreditaciones
+  // POS, etc.) que por defecto se ocultan de la consolidada para no poluir la lista.
+  verMovimientosOcultos = false;
 
   constructor(
     private repositoryService: RepositoryService,
@@ -284,8 +294,12 @@ export class CajaMayorDetalleComponent implements OnInit {
       ]);
 
       // Aplica filtros de config: si no hay config, mostrar todas las FPs y ninguna CB.
-      this.formasPagoVisiblesIds = config?.formasPagoVisibles
-        ? new Set<number>((config.formasPagoVisibles as any[]).map((fp) => fp.id))
+      // El diálogo ya no permite filtrar por forma de pago (en caja mayor solo hay
+      // EFECTIVO), así que una lista vacía se trata como "sin filtro" (mostrar todo)
+      // — nunca dejar el sidebar de efectivo vacío por una M:M vacía.
+      const fpVis = (config?.formasPagoVisibles as any[]) || [];
+      this.formasPagoVisiblesIds = fpVis.length > 0
+        ? new Set<number>(fpVis.map((fp) => fp.id))
         : null;
 
       this.mostrarCpp = !!config?.mostrarCuentasPorPagar;
@@ -298,7 +312,7 @@ export class CajaMayorDetalleComponent implements OnInit {
         : [];
       if (cbIds.length > 0) {
         const resumenes = await firstValueFrom(this.repositoryService.getCuentasBancariasResumenes(cbIds));
-        this.cuentasBancariasCards = (resumenes || []).map((r: any) => ({
+        const cards = (resumenes || []).map((r: any) => ({
           id: r.id,
           nombre: r.nombre,
           banco: r.banco,
@@ -308,6 +322,9 @@ export class CajaMayorDetalleComponent implements OnInit {
           saldoFuturo: Number(r.saldoFuturo) || 0,
           saldoReservado: Number(r.saldoReservado) || 0,
         }));
+        // Ordenar por el orden elegido en el diálogo (drag & drop). El resumen no
+        // respeta orden (viene por id); acá se aplica el orden guardado.
+        this.cuentasBancariasCards = this.ordenarCuentasBancarias(cards, config?.cuentasBancariasOrden);
       } else {
         this.cuentasBancariasCards = [];
       }
@@ -377,6 +394,7 @@ export class CajaMayorDetalleComponent implements OnInit {
         filtros.esIngreso = f.esIngreso === true || f.esIngreso === 'true';
       }
       if (this.verAnulaciones) filtros.incluirAnulaciones = true;
+      if (this.verMovimientosOcultos) filtros.incluirRuidosos = true;
 
       // Fuente y alcance de cuentas bancarias visibles para esta caja
       filtros.fuente = this.fuenteFilter;
@@ -403,6 +421,12 @@ export class CajaMayorDetalleComponent implements OnInit {
 
   onToggleVerAnulaciones(): void {
     this.verAnulaciones = !this.verAnulaciones;
+    this.pageIndex = 0;
+    this.loadMovimientos();
+  }
+
+  onToggleVerMovimientosOcultos(): void {
+    this.verMovimientosOcultos = !this.verMovimientosOcultos;
     this.pageIndex = 0;
     this.loadMovimientos();
   }
@@ -450,6 +474,30 @@ export class CajaMayorDetalleComponent implements OnInit {
     }
 
     return Array.from(map.values());
+  }
+
+  /**
+   * Ordena las cards de cuentas bancarias por el orden persistido en la config
+   * (`cuentasBancariasOrden`, array JSON de ids elegido por drag & drop). Las que
+   * no están en el orden guardado quedan al final por id ascendente.
+   */
+  private ordenarCuentasBancarias<T extends { id: number }>(cards: T[], ordenRaw: string | null | undefined): T[] {
+    let orden: number[] = [];
+    if (ordenRaw) {
+      try {
+        const arr = JSON.parse(ordenRaw);
+        if (Array.isArray(arr)) orden = arr.map((x) => Number(x)).filter((x) => !isNaN(x));
+      } catch { orden = []; }
+    }
+    if (!orden.length) return cards;
+    const pos = new Map<number, number>();
+    orden.forEach((id, i) => pos.set(id, i));
+    return [...cards].sort((a, b) => {
+      const pa = pos.has(a.id) ? pos.get(a.id)! : Number.MAX_SAFE_INTEGER;
+      const pb = pos.has(b.id) ? pos.get(b.id)! : Number.MAX_SAFE_INTEGER;
+      if (pa !== pb) return pa - pb;
+      return a.id - b.id;
+    });
   }
 
   // Cambio del toggle de fuente (Todo / Caja / Banco / cuenta puntual)
@@ -544,6 +592,31 @@ export class CajaMayorDetalleComponent implements OnInit {
     });
   }
 
+  // Egreso de caja inicial: cuenta el efectivo que sale de la caja mayor para
+  // sembrar la apertura de una caja (genera un Conteo reutilizable).
+  egresoCajaInicial(): void {
+    const dialogRef = this.dialog.open(EgresoCajaInicialDialogComponent, {
+      width: '600px',
+      maxHeight: '90vh',
+      data: { cajaMayorId: this.cajaMayor?.id },
+    });
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result?.success) this.loadData();
+    });
+  }
+
+  // Abre una caja reutilizando el conteo del egreso de caja inicial (fila EGRESO_CAJA_INICIAL).
+  abrirCajaDesdeConteo(mov: MovimientoConsolidado): void {
+    if (!mov?.conteoId) return;
+    const dialogRef = this.dialog.open(AbrirCajaDesdeConteoDialogComponent, {
+      width: '420px',
+      data: { conteoId: mov.conteoId },
+    });
+    dialogRef.afterClosed().subscribe((result) => {
+      if (result?.success) this.loadData();
+    });
+  }
+
   // Cuando un diálogo "selector" se cierra con false, puede haber abierto un sub-diálogo.
   // Buscamos el primer diálogo abierto que coincida con los componentes esperados,
   // y nos suscribimos a su cierre para recargar datos.
@@ -586,7 +659,7 @@ export class CajaMayorDetalleComponent implements OnInit {
             formaPagoId: formaPago?.id,
             monto: detalle?.monto,
           },
-          observacion: mov.observacion !== '-' ? mov.observacion : '',
+          observacion: (mov.observacionRaw ?? (mov.observacion !== '-' ? mov.observacion : '')) || '',
         },
       });
       dialogRef.afterClosed().subscribe(result => {

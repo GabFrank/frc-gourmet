@@ -6,6 +6,7 @@ import { UsuarioRole } from '../../src/app/database/entities/personas/usuario-ro
 import { Role } from '../../src/app/database/entities/personas/role.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { ensurePermission } from '../utils/auth.utils';
 
 const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string }> = [
   // RRHH - Funcionarios
@@ -44,6 +45,7 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   // Permisos sistema
   { codigo: 'SISTEMA_PERMISO_GESTIONAR', descripcion: 'Gestionar permisos y asignación a roles', modulo: 'SISTEMA' },
   { codigo: 'SISTEMA_ROL_GESTIONAR', descripcion: 'Gestionar roles del sistema', modulo: 'SISTEMA' },
+  { codigo: 'SISTEMA_MENU_CONFIGURAR', descripcion: 'Configurar visibilidad y orden del menú lateral', modulo: 'SISTEMA' },
   // Cuentas por Cobrar (Fase 7)
   { codigo: 'CPC_GESTIONAR', descripcion: 'Gestionar cuentas por cobrar (crear/editar)', modulo: 'FINANCIERO' },
   { codigo: 'CPC_COBRAR', descripcion: 'Registrar cobros de cuotas de clientes', modulo: 'FINANCIERO' },
@@ -63,6 +65,8 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'PRODUCTOS_DASHBOARD_VER', descripcion: 'Ver dashboard de Productos con KPIs', modulo: 'PRODUCTOS' },
   { codigo: 'FINANCIERO_DASHBOARD_VER', descripcion: 'Ver dashboard Financiero con KPIs', modulo: 'FINANCIERO' },
   { codigo: 'CAJA_MAYOR_DASHBOARD_VER', descripcion: 'Ver dashboard de Caja Mayor con KPIs', modulo: 'FINANCIERO' },
+  { codigo: 'VENTAS_REPORTES_VER', descripcion: 'Ver reportes de Ventas (cierre de mes)', modulo: 'VENTAS' },
+  { codigo: 'FINANCIERO_REPORTES_VER', descripcion: 'Ver reportes Financieros (cierre de mes)', modulo: 'FINANCIERO' },
 
   // Productos / Recetas / Stock
   { codigo: 'PRODUCTOS_VER', descripcion: 'Ver lista de productos', modulo: 'PRODUCTOS' },
@@ -81,7 +85,19 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
 
   // Ventas
   { codigo: 'VENTAS_PDV', descripcion: 'Operar punto de venta (PdV/mesas/comandas)', modulo: 'VENTAS' },
+  { codigo: 'VENTAS_PDV_CONFIGURAR', descripcion: 'Configurar el PdV (categorías, ítems, atajos, mesas, sectores, config)', modulo: 'VENTAS' },
   { codigo: 'VENTAS_HISTORICO_VER', descripcion: 'Ver historico de ventas concluidas', modulo: 'VENTAS' },
+  { codigo: 'PDV_PAGAR_VALE', descripcion: 'Crear/pagar vales de funcionario desde el cajón del PdV', modulo: 'VENTAS' },
+  { codigo: 'PDV_PAGAR_COMPRA', descripcion: 'Crear/pagar compras desde el cajón del PdV', modulo: 'VENTAS' },
+  { codigo: 'PDV_ANULAR_EGRESO', descripcion: 'Anular egresos de caja (vales/compras) del PdV', modulo: 'VENTAS' },
+
+  // Facturación legal (SET/SIFEN)
+  { codigo: 'FACTURACION_VER', descripcion: 'Ver facturas, timbrados y plantillas', modulo: 'FACTURACION' },
+  { codigo: 'FACTURACION_EMITIR', descripcion: 'Emitir facturas legales', modulo: 'FACTURACION' },
+  { codigo: 'FACTURACION_ANULAR', descripcion: 'Anular facturas emitidas', modulo: 'FACTURACION' },
+  { codigo: 'FACTURACION_TIMBRADO_GESTIONAR', descripcion: 'Gestionar timbrados y numeración', modulo: 'FACTURACION' },
+  { codigo: 'FACTURACION_PLANTILLA_GESTIONAR', descripcion: 'Gestionar plantillas/diseños de factura', modulo: 'FACTURACION' },
+  { codigo: 'FACTURACION_CONFIGURAR', descripcion: 'Configurar numeración/timbrado activo de facturación', modulo: 'FACTURACION' },
 
   // Compras / Proveedores
   { codigo: 'COMPRAS_VER', descripcion: 'Ver lista de compras', modulo: 'COMPRAS' },
@@ -99,6 +115,7 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   // Financiero
   { codigo: 'FINANCIERO_CAJA_VER', descripcion: 'Ver cajas y conteos', modulo: 'FINANCIERO' },
   { codigo: 'FINANCIERO_CAJA_GESTIONAR', descripcion: 'Crear/editar/cerrar cajas y conteos', modulo: 'FINANCIERO' },
+  { codigo: 'FINANCIERO_CAJA_AJUSTAR', descripcion: 'Ajustar una caja ya cerrada (corregir conteo, agregar gasto/retiro)', modulo: 'FINANCIERO' },
   { codigo: 'CAJA_MAYOR_OPERAR', descripcion: 'Registrar movimientos/gastos/retiros en caja mayor', modulo: 'FINANCIERO' },
   { codigo: 'MONEDAS_GESTIONAR', descripcion: 'Gestionar monedas y cotizaciones', modulo: 'FINANCIERO' },
   { codigo: 'BANCOS_VER', descripcion: 'Ver cuentas bancarias, cheques y POS', modulo: 'FINANCIERO' },
@@ -113,6 +130,11 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'SISTEMA_BD_CONFIGURAR', descripcion: 'Configurar base de datos (SQLite/Postgres)', modulo: 'SISTEMA' },
   { codigo: 'SISTEMA_MODO_CONFIGURAR', descripcion: 'Configurar modo de operacion (standalone/server/client)', modulo: 'SISTEMA' },
   { codigo: 'NOTIFICACIONES_CONFIGURAR', descripcion: 'Configurar notificaciones por Email/WhatsApp (canales, receptores, eventos)', modulo: 'SISTEMA' },
+
+  // Musica ambiental (Spotify Connect)
+  { codigo: 'MUSICA_VER', descripcion: 'Ver el estado de la musica ambiental del local', modulo: 'SISTEMA' },
+  { codigo: 'MUSICA_CONTROLAR', descripcion: 'Controlar la reproduccion: play/pausa, siguiente, volumen', modulo: 'SISTEMA' },
+  { codigo: 'MUSICA_CONFIGURAR', descripcion: 'Conectar la cuenta de Spotify y elegir el dispositivo de salida', modulo: 'SISTEMA' },
 
   // Documentos (PDFs A4 firmables, tickets térmicos, adjuntos)
   { codigo: 'DOCUMENTOS_GENERAR_PDF', descripcion: 'Generar PDFs A4 (pagarés, recibos, liquidaciones, reportes operativos)', modulo: 'DOCUMENTOS' },
@@ -172,6 +194,7 @@ export function registerPermissionsHandlers(
 
   ipcMain.handle('create-permission', async (_event, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_PERMISO_GESTIONAR');
       const repo = dataSource.getRepository(Permission);
       const entity = repo.create({
         codigo: (data.codigo || '').toUpperCase(),
@@ -189,6 +212,7 @@ export function registerPermissionsHandlers(
 
   ipcMain.handle('update-permission', async (_event, id: number, data: any) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_PERMISO_GESTIONAR');
       const repo = dataSource.getRepository(Permission);
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`Permission ${id} no encontrado`);
@@ -205,6 +229,7 @@ export function registerPermissionsHandlers(
 
   ipcMain.handle('delete-permission', async (_event, id: number) => {
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_PERMISO_GESTIONAR');
       const repo = dataSource.getRepository(Permission);
       await repo.delete(id);
       return { success: true };
@@ -228,6 +253,7 @@ export function registerPermissionsHandlers(
   });
 
   ipcMain.handle('set-role-permissions', async (_event, roleId: number, permissionIds: number[]) => {
+    await ensurePermission(dataSource, getCurrentUser, 'SISTEMA_PERMISO_GESTIONAR');
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();

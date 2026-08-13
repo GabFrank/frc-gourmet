@@ -19,10 +19,21 @@ import { CuentaPorPagar } from '../../src/app/database/entities/financiero/cuent
 import { CuentaPorPagarTipo, CuentaPorPagarEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
 import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
 import { CuotaEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
+import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
+import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
+import { MovimientoCliente } from '../../src/app/database/entities/financiero/movimiento-cliente.entity';
+import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
+import {
+  CuentaPorCobrarEstado,
+  CuentaPorCobrarCuotaEstado,
+  MovimientoClienteTipo,
+} from '../../src/app/database/entities/financiero/cuentas-por-cobrar-enums';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
+import { MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
+import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
@@ -41,6 +52,7 @@ const SEED_CONCEPTOS: Array<{ codigo: string; descripcion: string; esHaber: bool
   { codigo: 'AGUINALDO', descripcion: 'Aguinaldo', esHaber: true, esCalculadoAuto: true },
   { codigo: 'COMISION', descripcion: 'Comision por ventas', esHaber: true, esCalculadoAuto: true },
   { codigo: 'PRESTAMO_CUOTA', descripcion: 'Cuota de prestamo', esHaber: false, esCalculadoAuto: true },
+  { codigo: 'CREDITO_CONSUMO', descripcion: 'Consumo a credito (cliente)', esHaber: false, esCalculadoAuto: true },
 ];
 
 export async function seedLiquidacionConceptos(dataSource: DataSource) {
@@ -97,6 +109,7 @@ export function registerLiquidacionSueldoHandlers(
   });
 
   ipcMain.handle('update-liquidacion-concepto', async (_e, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_CONFIG_EDITAR');
     const repo = dataSource.getRepository(LiquidacionConcepto);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Concepto ${id} no encontrado`);
@@ -154,6 +167,7 @@ export function registerLiquidacionSueldoHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_LIQUIDACION_GENERAR');
       const funcionario = await queryRunner.manager.findOne(Funcionario, {
         where: { id: funcionarioId },
         relations: ['persona', 'monedaSalario'],
@@ -208,6 +222,33 @@ export function registerLiquidacionSueldoHandlers(
         .createQueryBuilder()
         .delete()
         .where('liquidacion_id = :lid AND manual = :m', { lid: liq.id, m: false })
+        .execute();
+
+      // C-04: liberar vales / ventas de vacaciones enlazados a ESTA liquidación
+      // (aún no pagados) antes de regenerar, para que la regeneración pueda volver
+      // a tomarlos sin fugarlos. El enlace se re-crea abajo al insertar cada item.
+      await queryRunner.manager.getRepository(Vale)
+        .createQueryBuilder()
+        .update(Vale)
+        .set({ liquidacionId: null as any })
+        .where('liquidacion_id = :lid AND estado = :est', { lid: liq.id, est: ValeEstado.CONFIRMADO })
+        .execute();
+      await queryRunner.manager.getRepository(VacacionVenta)
+        .createQueryBuilder()
+        .update(VacacionVenta)
+        .set({ liquidacionId: null as any })
+        .where('liquidacion_id = :lid AND estado = :est', { lid: liq.id, est: VacacionVentaEstado.PENDIENTE })
+        .execute();
+      // C-04 (CPC): liberar cuotas de consumo a crédito enlazadas a ESTA
+      // liquidación (aún no cobradas) para que la regeneración pueda re-tomarlas.
+      await queryRunner.manager.getRepository(CuentaPorCobrarCuota)
+        .createQueryBuilder()
+        .update(CuentaPorCobrarCuota)
+        .set({ liquidacionId: null as any })
+        .where('liquidacion_id = :lid AND estado IN (:...ests)', {
+          lid: liq.id,
+          ests: [CuentaPorCobrarCuotaEstado.PENDIENTE, CuentaPorCobrarCuotaEstado.PARCIAL],
+        })
         .execute();
 
       // Helpers para crear items
@@ -267,16 +308,23 @@ export function registerLiquidacionSueldoHandlers(
 
       // 5) Vales y adelantos pendientes (CONFIRMADO + (esAdelanto || vale))
       const valeRepo = queryRunner.manager.getRepository(Vale);
-      const valesPendientes = await valeRepo.find({
-        where: {
-          funcionario: { id: funcionarioId } as any,
-          estado: ValeEstado.CONFIRMADO,
-        },
-      });
+      // C-04: además del estado, exigir que el vale no esté ya enlazado a OTRA
+      // liquidación (liquidacion_id NULL o = esta). Antes se tomaban todos los
+      // CONFIRMADO sin importar el periodo, así que un vale podía descontarse en
+      // dos liquidaciones distintas (una por periodo) hasta que se pagara.
+      const valesPendientes = await valeRepo.createQueryBuilder('v')
+        .where('v.funcionario_id = :fid', { fid: funcionarioId })
+        .andWhere('v.estado = :est', { est: ValeEstado.CONFIRMADO })
+        .andWhere('(v.liquidacion_id IS NULL OR v.liquidacion_id = :lid)', { lid: liq.id })
+        .getMany();
       for (const v of valesPendientes) {
+        if (!(Number(v.monto) > 0)) continue;
         const concepto = v.esAdelanto ? 'ADELANTO_DESCUENTO' : 'VALE_DESCUENTO';
         const desc = v.esAdelanto ? `Adelanto #${v.id}` : `Vale #${v.id}`;
         await crearItem(concepto, desc, Number(v.monto), LiquidacionItemTipo.DESCUENTO, v.id, 'VALE');
+        // Enlazar el vale a esta liquidación para que otro periodo no lo tome.
+        v.liquidacionId = liq.id;
+        await valeRepo.save(v);
       }
 
       // 6) Cuotas de prestamo del periodo (PRESTAMO_FUNCIONARIO + cuotas pendientes/parciales con vencimiento dentro del periodo)
@@ -371,15 +419,56 @@ export function registerLiquidacionSueldoHandlers(
 
       // 10) Ventas de vacaciones pendientes (pago al funcionario como HABER)
       const ventaVacRepo = queryRunner.manager.getRepository(VacacionVenta);
+      // C-04: mismo guard que los vales — no tomar una venta de vacaciones ya
+      // enlazada a otra liquidación (evita el doble crédito entre periodos).
       const ventasVacPend = await ventaVacRepo.createQueryBuilder('vv')
         .leftJoin('vv.vacacion', 'vac')
         .leftJoin('vac.funcionario', 'vf')
         .where('vf.id = :fid', { fid: funcionarioId })
         .andWhere('vv.estado = :est', { est: VacacionVentaEstado.PENDIENTE })
+        .andWhere('(vv.liquidacion_id IS NULL OR vv.liquidacion_id = :lid)', { lid: liq.id })
         .getMany();
       for (const vv of ventasVacPend) {
         if (Number(vv.monto) > 0) {
           await crearItem('VACACION_VENTA', `Venta de ${vv.dias} dia(s) de vacaciones`, Number(vv.monto), LiquidacionItemTipo.HABER, vv.id, 'VACACION_VENTA');
+          // Enlazar a esta liquidación para que otro periodo no la tome.
+          vv.liquidacionId = liq.id;
+          await ventaVacRepo.save(vv);
+        }
+      }
+
+      // 11) Consumo a crédito del periodo (CPC del cliente vinculado a la misma
+      // persona del funcionario). Descontamos las cuotas que vencen en el periodo,
+      // análogo a las cuotas de préstamo. El cobro efectivo de la CPC ocurre al
+      // pagar la liquidación (queda neteado dentro del EGRESO_SALARIO).
+      const personaId = funcionario.persona?.id;
+      if (personaId) {
+        const clienteRepoLiq = queryRunner.manager.getRepository(Cliente);
+        const clienteFunc = await clienteRepoLiq.findOne({ where: { persona: { id: personaId } as any } });
+        if (clienteFunc) {
+          const cpcRepoLiq = queryRunner.manager.getRepository(CuentaPorCobrar);
+          const cpcCuotaRepo = queryRunner.manager.getRepository(CuentaPorCobrarCuota);
+          const cpcsActivas = await cpcRepoLiq.find({
+            where: { cliente: { id: clienteFunc.id } as any, estado: CuentaPorCobrarEstado.ACTIVO },
+          });
+          for (const cpc of cpcsActivas) {
+            const cpcCuotas = await cpcCuotaRepo.createQueryBuilder('c')
+              .where('c.cuenta_por_cobrar_id = :cpcid', { cpcid: cpc.id })
+              .andWhere('c.estado IN (:...ests)', {
+                ests: [CuentaPorCobrarCuotaEstado.PENDIENTE, CuentaPorCobrarCuotaEstado.PARCIAL],
+              })
+              .andWhere('c.fechaVencimiento BETWEEN :fd AND :ff', { fd: isoDate(fechaInicio), ff: isoDate(fechaFin) })
+              .andWhere('(c.liquidacion_id IS NULL OR c.liquidacion_id = :lid)', { lid: liq.id })
+              .getMany();
+            for (const c of cpcCuotas) {
+              const saldo = +(Number(c.monto) - Number(c.montoCobrado)).toFixed(2);
+              if (saldo > 0) {
+                await crearItem('CREDITO_CONSUMO', `Cuota #${c.numero} - ${cpc.descripcion || 'consumo a crédito'}`, saldo, LiquidacionItemTipo.DESCUENTO, c.id, 'CPC_CUOTA');
+                c.liquidacionId = liq.id;
+                await cpcCuotaRepo.save(c);
+              }
+            }
+          }
         }
       }
 
@@ -408,6 +497,7 @@ export function registerLiquidacionSueldoHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_LIQUIDACION_GENERAR');
       const liqRepo = queryRunner.manager.getRepository(LiquidacionSueldo);
       const itemRepo = queryRunner.manager.getRepository(LiquidacionItem);
       const liq = await liqRepo.findOne({ where: { id: liquidacionId } });
@@ -451,6 +541,7 @@ export function registerLiquidacionSueldoHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_LIQUIDACION_GENERAR');
       const itemRepo = queryRunner.manager.getRepository(LiquidacionItem);
       const liqRepo = queryRunner.manager.getRepository(LiquidacionSueldo);
       const item = await itemRepo.findOne({ where: { id: itemId }, relations: ['liquidacion'] });
@@ -539,6 +630,13 @@ export function registerLiquidacionSueldoHandlers(
         if (!cb) throw new Error('Cuenta bancaria no encontrada');
         cb.saldo = Number(cb.saldo) - monto;
         await queryRunner.manager.save(CuentaBancaria, cb);
+        await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+          cuentaBancariaId,
+          tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+          monto,
+          observacion: `LIQUIDACION ${liq.periodo} - ${liq.funcionario.persona?.nombre || ''} ${liq.funcionario.persona?.apellido || ''}`.trim(),
+          responsable: userEntity,
+        });
         liq.cuentaBancariaId = cuentaBancariaId;
       } else {
         const cajaMayorId = payload?.cajaMayorId;
@@ -605,6 +703,63 @@ export function registerLiquidacionSueldoHandlers(
               }
               await cppRepo.save(cpp);
             }
+          }
+        }
+      }
+
+      // Cobrar cuotas de CPC (consumo a crédito del funcionario-cliente).
+      // Va neteado dentro del EGRESO_SALARIO: NO se crea INGRESO_COBRO_CLIENTE
+      // en Caja Mayor (mismo criterio que las cuotas de préstamo).
+      const cpcItems = items.filter((i) => i.referenciaTipo === 'CPC_CUOTA' && i.referenciaId);
+      if (cpcItems.length) {
+        const cpcCuotaRepo = queryRunner.manager.getRepository(CuentaPorCobrarCuota);
+        const cpcRepo = queryRunner.manager.getRepository(CuentaPorCobrar);
+        const clienteRepoPago = queryRunner.manager.getRepository(Cliente);
+        const movClienteRepo = queryRunner.manager.getRepository(MovimientoCliente);
+        for (const it of cpcItems) {
+          const cuota = await cpcCuotaRepo.findOne({ where: { id: it.referenciaId! }, relations: ['cuentaPorCobrar'] });
+          if (!cuota) continue;
+          if (cuota.estado === CuentaPorCobrarCuotaEstado.COBRADO || cuota.estado === CuentaPorCobrarCuotaEstado.CANCELADO) continue;
+          const restante = +(Number(cuota.monto) - Number(cuota.montoCobrado)).toFixed(2);
+          const montoCobrar = Math.min(Number(it.monto), restante);
+          if (montoCobrar <= 0) continue;
+          cuota.montoCobrado = +(Number(cuota.montoCobrado) + montoCobrar).toFixed(2);
+          cuota.estado = cuota.montoCobrado >= Number(cuota.monto) - 0.005
+            ? CuentaPorCobrarCuotaEstado.COBRADO
+            : CuentaPorCobrarCuotaEstado.PARCIAL;
+          if (cuota.estado === CuentaPorCobrarCuotaEstado.COBRADO) cuota.fechaCobro = new Date();
+          cuota.liquidacionId = liq.id;
+          await cpcCuotaRepo.save(cuota);
+
+          const cpc = await cpcRepo.findOne({ where: { id: cuota.cuentaPorCobrar.id }, relations: ['cuotas', 'cliente'] });
+          if (!cpc) continue;
+          cpc.montoCobrado = +(Number(cpc.montoCobrado) + montoCobrar).toFixed(2);
+          const todasCobradas = (cpc.cuotas || []).every((c: any) =>
+            c.id === cuota.id
+              ? cuota.estado === CuentaPorCobrarCuotaEstado.COBRADO
+              : Number(c.montoCobrado) >= Number(c.monto) - 0.005);
+          if (todasCobradas) cpc.estado = CuentaPorCobrarEstado.COBRADO;
+          await cpcRepo.save(cpc);
+
+          const clienteId = cpc.cliente?.id;
+          if (clienteId) {
+            const cliente = await clienteRepoPago.findOne({ where: { id: clienteId } });
+            if (cliente) {
+              cliente.saldoActual = +(Number(cliente.saldoActual) - montoCobrar).toFixed(2);
+              await clienteRepoPago.save(cliente);
+            }
+            const movCliente = movClienteRepo.create({
+              cliente: { id: clienteId } as any,
+              tipo: MovimientoClienteTipo.PAGO,
+              monto: montoCobrar,
+              fecha: new Date(),
+              cuentaPorCobrarId: cpc.id,
+              cuentaPorCobrarCuotaId: cuota.id,
+              observacion: `LIQUIDACION ${liq.periodo} #${liq.id} - COBRO CUOTA #${cuota.numero}`,
+              registradoPor: userEntity || undefined,
+            });
+            await setEntityUserTracking(dataSource, movCliente, userId, false);
+            await movClienteRepo.save(movCliente);
           }
         }
       }
@@ -741,6 +896,56 @@ export function registerLiquidacionSueldoHandlers(
           }
         }
 
+        // CPC cuotas: revertir el cobro hecho por esta liquidación. La cuota
+        // vuelve a PENDIENTE/PARCIAL, se restaura el saldo del cliente y se borra
+        // el MovimientoCliente PAGO generado.
+        const cpcItemsAnular = items.filter((i) => i.referenciaTipo === 'CPC_CUOTA' && i.referenciaId);
+        if (cpcItemsAnular.length) {
+          const cpcCuotaRepo = queryRunner.manager.getRepository(CuentaPorCobrarCuota);
+          const cpcRepo = queryRunner.manager.getRepository(CuentaPorCobrar);
+          const clienteRepoAnular = queryRunner.manager.getRepository(Cliente);
+          const movClienteRepo = queryRunner.manager.getRepository(MovimientoCliente);
+          for (const it of cpcItemsAnular) {
+            const cuota = await cpcCuotaRepo.findOne({ where: { id: it.referenciaId! }, relations: ['cuentaPorCobrar'] });
+            if (!cuota || cuota.liquidacionId !== liq.id) continue;
+            const montoRevertir = Math.min(Number(it.monto), Number(cuota.montoCobrado));
+            cuota.montoCobrado = Math.max(0, +(Number(cuota.montoCobrado) - montoRevertir).toFixed(2));
+            cuota.estado = cuota.montoCobrado <= 0
+              ? CuentaPorCobrarCuotaEstado.PENDIENTE
+              : CuentaPorCobrarCuotaEstado.PARCIAL;
+            if (cuota.montoCobrado <= 0) (cuota as any).fechaCobro = null;
+            (cuota as any).liquidacionId = null;
+            await setEntityUserTracking(dataSource, cuota, userId, true);
+            await cpcCuotaRepo.save(cuota);
+
+            const cpc = await cpcRepo.findOne({ where: { id: cuota.cuentaPorCobrar.id }, relations: ['cliente'] });
+            if (cpc) {
+              cpc.montoCobrado = Math.max(0, +(Number(cpc.montoCobrado) - montoRevertir).toFixed(2));
+              if (cpc.estado === CuentaPorCobrarEstado.COBRADO) cpc.estado = CuentaPorCobrarEstado.ACTIVO;
+              await setEntityUserTracking(dataSource, cpc, userId, true);
+              await cpcRepo.save(cpc);
+
+              const clienteId = cpc.cliente?.id;
+              if (clienteId) {
+                const cliente = await clienteRepoAnular.findOne({ where: { id: clienteId } });
+                if (cliente) {
+                  cliente.saldoActual = +(Number(cliente.saldoActual) + montoRevertir).toFixed(2);
+                  await clienteRepoAnular.save(cliente);
+                }
+              }
+            }
+            // Borrar el MovimientoCliente PAGO generado por esta liquidación.
+            const movsPago = await movClienteRepo.find({
+              where: { cuentaPorCobrarCuotaId: cuota.id, tipo: MovimientoClienteTipo.PAGO },
+            });
+            for (const m of movsPago) {
+              if ((m.observacion || '').includes(`#${liq.id} `)) {
+                await movClienteRepo.remove(m);
+              }
+            }
+          }
+        }
+
         // Aguinaldos: PAGADO -> APROBADO, limpiar liquidacionId y fechaPago
         const aguiIds = items
           .filter((i) => i.referenciaTipo === 'AGUINALDO' && i.referenciaId)
@@ -829,6 +1034,13 @@ export function registerLiquidacionSueldoHandlers(
           if (cb) {
             cb.saldo = Number(cb.saldo) + Number(liq.totalNeto);
             await queryRunner.manager.save(CuentaBancaria, cb);
+            await registrarMovimientoBancario(queryRunner.manager, dataSource, {
+              cuentaBancariaId: liq.cuentaBancariaId,
+              tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
+              monto: Number(liq.totalNeto),
+              observacion: `ANULACION LIQ #${liq.id}` + (motivo ? ` - ${motivo}` : ''),
+              responsable: userEntity,
+            });
           }
         }
       }
@@ -864,6 +1076,7 @@ export function registerLiquidacionSueldoHandlers(
   });
 
   ipcMain.handle('create-bono', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_BONO_OTORGAR');
     const repo = dataSource.getRepository(Bono);
     const funcionario = await dataSource.getRepository(Funcionario).findOne({ where: { id: data.funcionarioId } });
     if (!funcionario) throw new Error(`Funcionario ${data.funcionarioId} no encontrado`);
@@ -882,6 +1095,7 @@ export function registerLiquidacionSueldoHandlers(
   });
 
   ipcMain.handle('anular-bono', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_BONO_OTORGAR');
     const repo = dataSource.getRepository(Bono);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Bono ${id} no encontrado`);
@@ -907,6 +1121,7 @@ export function registerLiquidacionSueldoHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'RRHH_LIQUIDACION_GENERAR');
       const aguiRepo = queryRunner.manager.getRepository(Aguinaldo);
       const liqRepo = queryRunner.manager.getRepository(LiquidacionSueldo);
       const funcRepo = queryRunner.manager.getRepository(Funcionario);

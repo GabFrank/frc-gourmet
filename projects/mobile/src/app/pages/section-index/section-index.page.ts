@@ -2,12 +2,15 @@ import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
+import { PermissionService } from '@frc/shared-core';
 
 export interface SectionItem {
   label: string;
   icon: string;
   path: string;
   enabled?: boolean;
+  /** Permiso(s) requerido(s) para ver el tile. Sin permiso → visible para todos. */
+  permiso?: string | string[];
 }
 
 /**
@@ -22,7 +25,7 @@ export interface SectionItem {
   template: `
     <div class="section">
       <a
-        *ngFor="let it of items"
+        *ngFor="let it of visibleItems"
         class="tile"
         [class.disabled]="it.enabled === false"
         [routerLink]="it.enabled === false ? null : it.path"
@@ -91,5 +94,20 @@ export interface SectionItem {
 })
 export class SectionIndexPage {
   private readonly route = inject(ActivatedRoute);
+  private readonly permission = inject(PermissionService);
   readonly items: SectionItem[] = (this.route.snapshot.data['items'] as SectionItem[]) || [];
+  visibleItems: SectionItem[] = this.filtrar();
+
+  constructor() {
+    // Recalcular cuando carguen/cambien los permisos del usuario.
+    this.permission.codigos$.subscribe(() => { this.visibleItems = this.filtrar(); });
+  }
+
+  private filtrar(): SectionItem[] {
+    return this.items.filter((it) => {
+      if (!it.permiso) return true;
+      const codes = Array.isArray(it.permiso) ? it.permiso : [it.permiso];
+      return codes.some((c) => this.permission.has(c));
+    });
+  }
 }

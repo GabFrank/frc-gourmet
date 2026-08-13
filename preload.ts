@@ -38,6 +38,9 @@ const ALWAYS_LOCAL_CHANNELS = new Set<string>([
   'print-receipt',
   'print-test-page',
   'get-printers',
+  'list-system-printers',
+  'scan-network-printers',
+  'test-printer-connection',
   // User session local (no JWT — el current-user se setea local tras login)
   'getCurrentUser',
   'restoreSession',
@@ -1231,9 +1234,36 @@ contextBridge.exposeInMainWorld('api', {
     return _originalInvoke('reset-password-with-code', { nickname, codigo, newPassword });
   },
 
+  // Login por QR (Device Authorization Grant) — solo modo cliente: el desktop es
+  // el dispositivo que muestra el QR; un teléfono ya logueado lo escanea y aprueba.
+  // `deviceToken` inyecta los tokens en el estado del preload (igual que `login`)
+  // para que las llamadas /api/rpc posteriores viajen autenticadas.
+  deviceStart: async (): Promise<any> => {
+    if (APP_MODE !== 'client') throw new Error('El login por QR solo está disponible en modo cliente');
+    return httpFetch('/api/auth/device/start', {}, false);
+  },
+  deviceToken: async (deviceCode: string): Promise<any> => {
+    if (APP_MODE !== 'client') throw new Error('El login por QR solo está disponible en modo cliente');
+    const data = await httpFetch('/api/auth/device/token', { deviceCode }, false);
+    if (data?.status === 'approved') {
+      accessToken = data.accessToken;
+      refreshToken = data.refreshToken;
+    }
+    return data;
+  },
+
   // Printer operations
   getPrinters: async (): Promise<PrinterConfig[]> => {
     return await ipcRenderer.invoke('get-printers');
+  },
+  listSystemPrinters: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('list-system-printers');
+  },
+  scanNetworkPrinters: async (opts?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('scan-network-printers', opts);
+  },
+  testPrinterConnection: async (config: any): Promise<{ ok: boolean; error?: string }> => {
+    return await ipcRenderer.invoke('test-printer-connection', config);
   },
   addPrinter: async (printer: PrinterConfig): Promise<{ success: boolean, printer: PrinterConfig }> => {
     return await ipcRenderer.invoke('add-printer', printer);
@@ -1370,6 +1400,20 @@ contextBridge.exposeInMainWorld('api', {
   },
   openBase64File: async (base64: string, fileName: string): Promise<{ ok: boolean; error?: string }> => {
     return await ipcRenderer.invoke('open-base64-file', { base64, fileName });
+  },
+
+  // === Subida por QR (emparejamiento con la PWA mobile) ===
+  qrUploadCreateSession: async (input: { carpeta: string; accept?: string; maxSizeMB?: number }): Promise<any> => {
+    return await ipcRenderer.invoke('qr-upload-create-session', input);
+  },
+  qrUploadEnableRemote: async (sessionId: string): Promise<any> => {
+    return await ipcRenderer.invoke('qr-upload-enable-remote', { sessionId });
+  },
+  qrUploadPoll: async (sessionId: string): Promise<any> => {
+    return await ipcRenderer.invoke('qr-upload-poll', { sessionId });
+  },
+  qrUploadClose: async (sessionId: string): Promise<any> => {
+    return await ipcRenderer.invoke('qr-upload-close', { sessionId });
   },
 
   // === Adjuntos polimorficos ===
@@ -1520,6 +1564,9 @@ contextBridge.exposeInMainWorld('api', {
   getCajaAbiertaByUsuario: async () => {
     return await ipcRenderer.invoke('get-caja-abierta-by-usuario');
   },
+  getCajasAbiertas: async () => {
+    return await ipcRenderer.invoke('get-cajas-abiertas');
+  },
 
   // CajaMoneda methods
   getCajasMonedas: () => ipcRenderer.invoke('get-cajas-monedas'),
@@ -1601,6 +1648,9 @@ contextBridge.exposeInMainWorld('api', {
   },
   finalizarCompra: async (id: number, payload: any) => {
     return await ipcRenderer.invoke('finalizar-compra', id, payload);
+  },
+  crearCompraSimplificada: async (payload: any) => {
+    return await ipcRenderer.invoke('crear-compra-simplificada', payload);
   },
   anularCompra: async (id: number, motivo: string) => {
     return await ipcRenderer.invoke('anular-compra', id, motivo);
@@ -1979,11 +2029,11 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // Sector methods
-  getSectores: async (): Promise<Sector[]> => {
-    return await ipcRenderer.invoke('getSectores');
+  getSectores: async (tipo?: string): Promise<Sector[]> => {
+    return await ipcRenderer.invoke('getSectores', tipo);
   },
-  getSectoresActivos: async (): Promise<Sector[]> => {
-    return await ipcRenderer.invoke('getSectoresActivos');
+  getSectoresActivos: async (tipo?: string): Promise<Sector[]> => {
+    return await ipcRenderer.invoke('getSectoresActivos', tipo);
   },
   getSector: async (id: number): Promise<Sector> => {
     return await ipcRenderer.invoke('getSector', id);
@@ -2239,6 +2289,41 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('delete-producto', productoId);
   },
 
+  // Pedidos online (bandeja en el PdV)
+  getPedidosOnlineAdmin: async (filtros: any = {}): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-pedidos-online-admin', filtros);
+  },
+  contarPedidosOnlinePendientes: async (): Promise<any> => {
+    return await ipcRenderer.invoke('contar-pedidos-online-pendientes');
+  },
+  aceptarPedidoOnline: async (pedidoId: number, data?: any): Promise<any> => {
+    return await ipcRenderer.invoke('aceptar-pedido-online', pedidoId, data);
+  },
+  rechazarPedidoOnline: async (pedidoId: number, motivo: string): Promise<any> => {
+    return await ipcRenderer.invoke('rechazar-pedido-online', pedidoId, motivo);
+  },
+  avanzarEstadoPedidoOnline: async (pedidoId: number, nuevoEstado: string): Promise<any> => {
+    return await ipcRenderer.invoke('avanzar-estado-pedido-online', pedidoId, nuevoEstado);
+  },
+  vincularVentaPedidoOnline: async (pedidoId: number, ventaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('vincular-venta-pedido-online', pedidoId, ventaId);
+  },
+  getTiendaOnlineConfig: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-tienda-online-config');
+  },
+  updateTiendaOnlineConfig: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-tienda-online-config', data);
+  },
+  getZonasDeliveryAdmin: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-zonas-delivery-admin');
+  },
+  guardarZonaDelivery: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('guardar-zona-delivery', data);
+  },
+  eliminarZonaDelivery: async (zonaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('eliminar-zona-delivery', zonaId);
+  },
+
   // Producción (buffet)
   crearProduccion: async (data: any): Promise<any> => {
     return await ipcRenderer.invoke('crear-produccion', data);
@@ -2414,6 +2499,40 @@ contextBridge.exposeInMainWorld('api', {
   recalculateRecipeCost: async (recetaId: number): Promise<any> => {
     return await ipcRenderer.invoke('recalculate-recipe-cost', recetaId);
   },
+  // Receta fases (modo de preparo) y materiales
+  getRecetaFases: async (recetaId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-receta-fases', recetaId);
+  },
+  createRecetaFase: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-receta-fase', data);
+  },
+  updateRecetaFase: async (faseId: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-receta-fase', faseId, data);
+  },
+  deleteRecetaFase: async (faseId: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-receta-fase', faseId);
+  },
+  reorderRecetaFases: async (recetaId: number, ordenIds: number[]): Promise<any> => {
+    return await ipcRenderer.invoke('reorder-receta-fases', recetaId, ordenIds);
+  },
+  setRecetaFaseIngredientes: async (faseId: number, recetaIngredienteIds: number[]): Promise<any> => {
+    return await ipcRenderer.invoke('set-receta-fase-ingredientes', faseId, recetaIngredienteIds);
+  },
+  getRecetaMateriales: async (recetaId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-receta-materiales', recetaId);
+  },
+  createRecetaMaterial: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-receta-material', data);
+  },
+  updateRecetaMaterial: async (materialId: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-receta-material', materialId, data);
+  },
+  deleteRecetaMaterial: async (materialId: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-receta-material', materialId);
+  },
+  exportRecetaPdf: async (recetaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('export-receta-pdf', recetaId);
+  },
   // StockMovimiento methods
   getStockMovimientos: async (): Promise<StockMovimiento[]> => {
     return await ipcRenderer.invoke('get-stock-movimientos');
@@ -2435,6 +2554,15 @@ contextBridge.exposeInMainWorld('api', {
   },
   revertirStockVenta: async (ventaId: number): Promise<any> => {
     return await ipcRenderer.invoke('revertirStockVenta', ventaId);
+  },
+  getEstadoCobroVenta: async (ventaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('getEstadoCobroVenta', ventaId);
+  },
+  registrarCobroParcial: async (ventaId: number, payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('registrarCobroParcial', ventaId, payload);
+  },
+  anularCobroParcial: async (cobroParcialId: number): Promise<any> => {
+    return await ipcRenderer.invoke('anularCobroParcial', cobroParcialId);
   },
 
   // Additional helper methods
@@ -2488,6 +2616,12 @@ contextBridge.exposeInMainWorld('api', {
   // Sabores por producto
   getSaboresByProducto: async (productoId: number): Promise<any[]> => {
     return await ipcRenderer.invoke('get-sabores-by-producto', productoId);
+  },
+  getAllSabores: async (filtros?: { productoId?: number | null; categoria?: string | null; activo?: boolean | null; texto?: string | null; }): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-all-sabores', filtros);
+  },
+  repararRecetasCompartidas: async (): Promise<{ recetasCompartidas: number; variacionesReparadas: number }> => {
+    return await ipcRenderer.invoke('reparar-recetas-compartidas');
   },
   createSabor: async (saborData: { nombre: string; categoria: string; descripcion?: string; productoId: number; }): Promise<any> => {
     return await ipcRenderer.invoke('create-sabor', saborData);
@@ -2657,7 +2791,7 @@ contextBridge.exposeInMainWorld('api', {
   saveCajaMayorConfiguracion: async (
     cajaMayorId: number,
     data: {
-      formaPagoIds: number[];
+      formaPagoIds?: number[];
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;
@@ -2711,6 +2845,48 @@ contextBridge.exposeInMainWorld('api', {
   editGasto: async (gastoId: number, data: any): Promise<any> => {
     return await ipcRenderer.invoke('edit-gasto', gastoId, data);
   },
+  createGastoCaja: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-gasto-caja', data);
+  },
+  getGastosCaja: async (cajaId: number, incluirAnulados?: boolean): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-gastos-caja', cajaId, incluirAnulados);
+  },
+  anularGastoCaja: async (gastoId: number, motivo?: string): Promise<any> => {
+    return await ipcRenderer.invoke('anular-gasto-caja', gastoId, motivo);
+  },
+  // Egresos de caja PdV (vales/compras pagados desde el cajón)
+  crearValeCaja: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('crear-vale-caja', data);
+  },
+  pagarValeCaja: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('pagar-vale-caja', data);
+  },
+  crearCompraSimplificadaCaja: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('crear-compra-simplificada-caja', data);
+  },
+  pagarCompraCuotaCaja: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('pagar-compra-cuota-caja', data);
+  },
+  anularEgresoCaja: async (egresoId: number, motivo?: string): Promise<any> => {
+    return await ipcRenderer.invoke('anular-egreso-caja', egresoId, motivo);
+  },
+  getEgresosCaja: async (cajaId: number, incluirAnulados?: boolean): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-egresos-caja', cajaId, incluirAnulados);
+  },
+  getValesPendientesFuncionario: async (funcionarioId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-vales-pendientes-funcionario', funcionarioId);
+  },
+  // Buscador global
+  buscarGlobal: async (termino: string): Promise<any> => {
+    return await ipcRenderer.invoke('buscar-global', termino);
+  },
+  // Config del menú (overrides del ADMIN sobre menu-tree)
+  getMenuConfig: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-menu-config');
+  },
+  saveMenuConfig: async (items: any[]): Promise<any> => {
+    return await ipcRenderer.invoke('save-menu-config', items);
+  },
   editCajaMayorMovimiento: async (movId: number, data: any): Promise<any> => {
     return await ipcRenderer.invoke('edit-caja-mayor-movimiento', movId, data);
   },
@@ -2730,6 +2906,21 @@ contextBridge.exposeInMainWorld('api', {
   },
   ingresarRetiroCaja: async (retiroId: number, cajaMayorId: number): Promise<any> => {
     return await ipcRenderer.invoke('ingresar-retiro-caja', retiroId, cajaMayorId);
+  },
+  generarRetiroCierreCaja: async (cajaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('generar-retiro-cierre-caja', cajaId);
+  },
+  puedeAjustarCaja: async (cajaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('puede-ajustar-caja', cajaId);
+  },
+  finalizarAjusteCaja: async (cajaId: number, motivo?: string): Promise<any> => {
+    return await ipcRenderer.invoke('finalizar-ajuste-caja', cajaId, motivo);
+  },
+  egresoCajaInicial: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('egreso-caja-inicial', data);
+  },
+  abrirCajaDesdeConteo: async (conteoId: number, dispositivoId: number): Promise<any> => {
+    return await ipcRenderer.invoke('abrir-caja-desde-conteo', conteoId, dispositivoId);
   },
 
   // Banking - Cuentas Bancarias
@@ -2843,6 +3034,15 @@ contextBridge.exposeInMainWorld('api', {
   },
   pagarCppCuota: async (payload: any): Promise<any> => {
     return await ipcRenderer.invoke('pagar-cpp-cuota', payload);
+  },
+  pagarCppCuotaMixto: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('pagar-cpp-cuota-mixto', payload);
+  },
+  anularPagoMixtoCuota: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('anular-pago-mixto-cuota', payload);
+  },
+  getCuotasConPagoMixto: async (cuentaPorPagarId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cuotas-con-pago-mixto', cuentaPorPagarId);
   },
   pagarCuotasComprasLote: async (payload: any): Promise<any> => {
     return await ipcRenderer.invoke('pagar-cuotas-compras-lote', payload);
@@ -3087,6 +3287,12 @@ contextBridge.exposeInMainWorld('api', {
   getHistoricoSalarios: async (funcionarioId: number): Promise<any[]> => {
     return await ipcRenderer.invoke('get-historico-salarios', funcionarioId);
   },
+  getFuncionarioResumenFinanciero: async (funcionarioId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-funcionario-resumen-financiero', funcionarioId);
+  },
+  getFuncionarioDeCliente: async (clienteId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-funcionario-de-cliente', clienteId);
+  },
 
   // =============================================
   // RRHH - Documentos del funcionario
@@ -3158,6 +3364,36 @@ contextBridge.exposeInMainWorld('api', {
   },
   marcarAsistenciaMasiva: async (payload: any): Promise<any> => {
     return await ipcRenderer.invoke('marcar-asistencia-masiva', payload);
+  },
+
+  // =============================================
+  // RRHH - Reconocimiento facial (rostros + fichaje)
+  // =============================================
+  enrolarRostro: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('enrolar-rostro', data);
+  },
+  getRostrosFuncionario: async (funcionarioId: number): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-rostros-funcionario', funcionarioId);
+  },
+  eliminarRostro: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('eliminar-rostro', id);
+  },
+  ficharFacial: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('fichar-facial', payload);
+  },
+  getFaceModelsStatus: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-face-models-status');
+  },
+  downloadFaceModels: async (): Promise<any> => {
+    return await ipcRenderer.invoke('download-face-models');
+  },
+  getFaceModelsBaseUrl: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-face-models-base-url');
+  },
+  onFaceModelsProgress: (handler: (p: { model: string; index: number; total: number }) => void) => {
+    const listener = (_event: any, p: any) => handler(p);
+    ipcRenderer.on('face-models-progress', listener);
+    return () => ipcRenderer.removeListener('face-models-progress', listener);
   },
 
   // =============================================
@@ -3572,6 +3808,17 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('get-dashboard-caja-mayor-kpis');
   },
 
+  // === Hub de Reportes (cierre de mes) ===
+  getReporteVentasCierre: async (params: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-reporte-ventas-cierre', params);
+  },
+  getReporteFinanzasCierre: async (params: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-reporte-finanzas-cierre', params);
+  },
+  enviarReporteWhatsapp: async (params: any): Promise<any> => {
+    return await ipcRenderer.invoke('enviar-reporte-whatsapp', params);
+  },
+
   // === Reportes RRHH (Fase 8) ===
   getReporteLiquidacionesMesData: async (periodo: string): Promise<any> => {
     return await ipcRenderer.invoke('get-reporte-liquidaciones-mes-data', periodo);
@@ -3649,6 +3896,9 @@ contextBridge.exposeInMainWorld('api', {
   },
   backupRestore: async (opts: { filePath: string }): Promise<any> => {
     return await ipcRenderer.invoke('backup-restore', opts);
+  },
+  backupSendWhatsapp: async (opts: { fullPath: string; destino?: string; caption?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('backup-send-whatsapp', opts);
   },
   backupConfigGet: async (): Promise<any> => {
     return await ipcRenderer.invoke('backup-config-get');
@@ -3735,7 +3985,7 @@ contextBridge.exposeInMainWorld('api', {
   facturaImportPickFile: async (): Promise<any> => {
     return await ipcRenderer.invoke('factura-import-pick-file');
   },
-  facturaImportProcess: async (payload: { filePath: string }): Promise<any> => {
+  facturaImportProcess: async (payload: { filePath?: string; url?: string }): Promise<any> => {
     return await ipcRenderer.invoke('factura-import-process', payload);
   },
   facturaImportReprocess: async (payload: { documentoId: number }): Promise<any> => {
@@ -3803,6 +4053,18 @@ contextBridge.exposeInMainWorld('api', {
     const listener = (_event: any, data: any) => handler(data);
     ipcRenderer.on('comanda-item-updates', listener);
     return () => ipcRenderer.removeListener('comanda-item-updates', listener);
+  },
+
+  /**
+   * Musica: suscribe al canal `musica-events` (emitido desde
+   * `electron/utils/musica-events.utils.ts`). Devuelve función para desuscribir.
+   * El canal ya existía para alimentar el SSE de la PWA; esto lo hace llegar
+   * también al header del desktop, que así se entera de los cambios sin poll.
+   */
+  onMusicaEvent: (handler: (payload: any) => void): (() => void) => {
+    const listener = (_event: any, data: any) => handler(data);
+    ipcRenderer.on('musica-events', listener);
+    return () => ipcRenderer.removeListener('musica-events', listener);
   },
 
 });

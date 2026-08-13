@@ -2,7 +2,7 @@
   <div class="header-container">
     <h1></h1>
     <div class="actions">
-      <button mat-raised-button color="primary" (click)="createDispositivo()">
+      <button mat-raised-button color="primary" (click)="createDispositivo()" *appHasPermission="'DISPOSITIVOS_GESTIONAR'">
         <mat-icon>add</mat-icon> Nuevo Dispositivo
       </button>
     </div>
@@ -94,11 +94,11 @@
               <mat-icon>more_vert</mat-icon>
             </button>
             <mat-menu #menu="matMenu">
-              <button mat-menu-item (click)="editDispositivo(dispositivo)">
+              <button mat-menu-item (click)="editDispositivo(dispositivo)" *appHasPermission="'DISPOSITIVOS_GESTIONAR'">
                 <mat-icon>edit</mat-icon>
                 <span>Editar</span>
               </button>
-              <button mat-menu-item (click)="deleteDispositivo(dispositivo.id)">
+              <button mat-menu-item (click)="deleteDispositivo(dispositivo.id)" *appHasPermission="'DISPOSITIVOS_GESTIONAR'">
                 <mat-icon color="warn">delete</mat-icon>
                 <span>Eliminar</span>
               </button>

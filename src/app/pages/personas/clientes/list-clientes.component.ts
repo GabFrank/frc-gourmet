@@ -23,6 +23,7 @@ import { TabsService } from '../../../services/tabs.service';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { CreateEditClienteDialogComponent } from './create-edit-cliente-dialog/create-edit-cliente-dialog.component';
 import { ClienteDetalleComponent } from './cliente-detalle/cliente-detalle.component';
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 
 type EstadoFilter = '' | 'true' | 'false';
 type CreditoFilter = '' | 'true' | 'false';
@@ -53,6 +54,7 @@ type ClienteRow = Cliente & {
     MatTooltipModule,
     MatSnackBarModule,
     MatDialogModule,
+    HasPermissionDirective,
   ],
   templateUrl: './list-clientes.component.html',
   styleUrls: ['./list-clientes.component.scss'],

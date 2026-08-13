@@ -9,6 +9,61 @@ import type { DataSource } from 'typeorm';
  */
 export async function runBootstrapMigrations(dataSource: DataSource): Promise<void> {
   await dropRecetaPresentacionUniqueRecetaId(dataSource);
+  await cancelarVentasHuerfanasYLiberarMesas(dataSource);
+}
+
+/**
+ * Limpieza idempotente de "ventas huérfanas": ventas que quedaron ABIERTA
+ * cuando su caja se cerró (antes de existir el guard en update-caja). La mesa
+ * de esas ventas queda OCUPADA para siempre y aparece ocupada para cualquier
+ * caja nueva.
+ *
+ * - Cancela las ventas ABIERTA cuya caja ya no está ABIERTO (no movieron stock:
+ *   el stock se procesa al FINALIZAR la venta, no al abrirla, así que no hay
+ *   nada que revertir; tampoco tienen pago porque nunca se cobraron).
+ * - Libera (DISPONIBLE) las mesas OCUPADO que ya no tienen ninguna venta
+ *   ABIERTA ni comanda OCUPADO asociada.
+ *
+ * Portable SQLite/Postgres (SQL estándar). Idempotente: tras la primera corrida
+ * no quedan filas que matcheen.
+ */
+async function cancelarVentasHuerfanasYLiberarMesas(dataSource: DataSource): Promise<void> {
+  try {
+    const huerfanas: any[] = await dataSource.query(
+      `SELECT COUNT(*) AS n
+         FROM ventas v
+         JOIN cajas c ON c.id = v.caja_id
+        WHERE v.estado = 'ABIERTA' AND c.estado <> 'ABIERTO'`
+    );
+    const n = Number(huerfanas?.[0]?.n ?? 0);
+    if (n > 0) {
+      console.log(`[bootstrap-migrations] cancelando ${n} venta(s) huerfana(s) (caja cerrada con venta abierta)`);
+      await dataSource.query(
+        `UPDATE ventas
+            SET estado = 'CANCELADA'
+          WHERE estado = 'ABIERTA'
+            AND caja_id IN (SELECT id FROM cajas WHERE estado <> 'ABIERTO')`
+      );
+    }
+
+    // Liberar mesas que quedaron OCUPADO sin ninguna cuenta activa (venta
+    // ABIERTA o comanda OCUPADO). Idempotente: si todas tienen cuenta activa,
+    // no afecta filas.
+    await dataSource.query(
+      `UPDATE pdv_mesas
+          SET estado = 'DISPONIBLE'
+        WHERE estado = 'OCUPADO'
+          AND id NOT IN (
+            SELECT mesa_id FROM ventas WHERE estado = 'ABIERTA' AND mesa_id IS NOT NULL
+          )
+          AND id NOT IN (
+            SELECT pdv_mesa_id FROM comandas
+             WHERE estado = 'OCUPADO' AND activo = true AND pdv_mesa_id IS NOT NULL
+          )`
+    );
+  } catch (e) {
+    console.error('[bootstrap-migrations] error limpiando ventas huerfanas / mesas:', e);
+  }
 }
 
 /**

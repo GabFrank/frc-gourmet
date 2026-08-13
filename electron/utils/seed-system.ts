@@ -477,7 +477,10 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       'SABORES_VER', 'SABORES_GESTIONAR',
       'STOCK_MOVIMIENTO_VER', 'STOCK_MOVIMIENTO_REGISTRAR',
       // Ventas
-      'VENTAS_PDV', 'VENTAS_HISTORICO_VER',
+      'VENTAS_PDV', 'VENTAS_PDV_CONFIGURAR', 'VENTAS_HISTORICO_VER',
+      // Facturación legal
+      'FACTURACION_VER', 'FACTURACION_EMITIR', 'FACTURACION_ANULAR',
+      'FACTURACION_TIMBRADO_GESTIONAR', 'FACTURACION_PLANTILLA_GESTIONAR', 'FACTURACION_CONFIGURAR',
       // Compras + Proveedores
       'COMPRAS_VER', 'COMPRAS_GESTIONAR',
       'PROVEEDORES_VER', 'PROVEEDORES_GESTIONAR',
@@ -501,6 +504,8 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       'DOCUMENTOS_REIMPRIMIR_TICKET_VENTA',
       'DOCUMENTOS_ADJUNTAR',
       'DOCUMENTOS_ADJUNTOS_ELIMINAR',
+      // Musica ambiental: el gerente configura la cuenta y el repertorio
+      'MUSICA_VER', 'MUSICA_CONTROLAR', 'MUSICA_CONFIGURAR',
       // NOTA: NO se asigna USUARIOS_GESTIONAR, SISTEMA_BD_CONFIGURAR,
       // SISTEMA_MODO_CONFIGURAR, SISTEMA_BACKUP, SISTEMA_PERMISO_GESTIONAR,
       // SISTEMA_ROL_GESTIONAR. Esos quedan exclusivos del ADMINISTRADOR.
@@ -511,6 +516,12 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
     permisos: [
       'HOME_DASHBOARD_VER', 'VENTAS_DASHBOARD_VER', 'CAJA_MAYOR_DASHBOARD_VER',
       'VENTAS_PDV', 'VENTAS_HISTORICO_VER',
+      // Facturación: el cajero factura al cobrar en el PdV
+      'FACTURACION_VER', 'FACTURACION_EMITIR',
+      // Vales/compras pagados desde el cajón del PdV (Utilitarios).
+      // PDV_ANULAR_EGRESO NO se asigna al cajero (separación de funciones:
+      // anular una salida de efectivo es acción de supervisor/gerente).
+      'PDV_PAGAR_VALE', 'PDV_PAGAR_COMPRA',
       'PRODUCTOS_VER',
       'CLIENTES_VER', 'CLIENTES_GESTIONAR', // crear cliente al cobrar venta a credito
       'FINANCIERO_CAJA_VER',
@@ -520,6 +531,9 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       'DOCUMENTOS_IMPRIMIR_TICKET',
       'DOCUMENTOS_REIMPRIMIR_COMANDA',
       'DOCUMENTOS_REIMPRIMIR_TICKET_VENTA',
+      // Musica: el cajero controla la reproduccion y vota "no va" desde la PWA.
+      // NO configura la cuenta ni el repertorio (eso es del gerente/admin).
+      'MUSICA_VER', 'MUSICA_CONTROLAR',
     ],
   },
   {
@@ -531,6 +545,9 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       // El mozo dispara y reimprime comandas al agregar items en mesas
       'DOCUMENTOS_IMPRIMIR_TICKET',
       'DOCUMENTOS_REIMPRIMIR_COMANDA',
+      // Musica: el mozo ve que suena pero no interviene (decision del dueno:
+      // solo cajeros, gerentes y admin votan).
+      'MUSICA_VER',
     ],
   },
 ];

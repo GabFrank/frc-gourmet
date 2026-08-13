@@ -1,89 +1,114 @@
-.detalle-page {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 16px;
+// Solo estilos específicos de la ficha del funcionario.
+// El padrón de dashboard (.dashboard-*) se hereda de _dashboard.scss (global).
 
-  .header-card {
-    width: 100%;
+.dashboard-stats-row.stats-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+
+  @media (max-width: 1200px) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
-    flex-wrap: wrap;
-
-    .header-left {
-      h2 {
-        margin: 0 0 8px 0;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-
-        .estado-chip {
-          margin-left: 8px;
-        }
-      }
-
-      .meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 16px;
-        opacity: 0.85;
-
-        span {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-
-          mat-icon {
-            font-size: 18px;
-            width: 18px;
-            height: 18px;
-          }
-        }
-      }
-    }
+  @media (max-width: 768px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+// Badge de estado ACTIVO / EGRESADO junto al título
+.estado-badge {
+  display: inline-block;
+  margin-left: 12px;
+  padding: 2px 12px;
+  border-radius: 12px;
+  font-size: 0.6em;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  vertical-align: middle;
+
+  &.badge-activo {
+    color: var(--success-color);
+    background: rgba(76, 175, 80, 0.14);
+  }
+  &.badge-egresado {
+    color: var(--error-color);
+    background: rgba(244, 67, 54, 0.14);
+  }
+}
+
+// Card que contiene el grupo de tabs (reemplaza el chart del padrón)
+.tabs-card {
+  padding: 0;
+  overflow: hidden;
 
   .tabs {
     width: 100%;
-
-    mat-card {
-      margin-top: 12px;
-    }
   }
 
-  .datos-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-
-    .full {
-      grid-column: 1 / -1;
-    }
+  .tab-body {
+    padding: 16px;
   }
 
-  .docs-header {
+  .tab-actions {
     display: flex;
     justify-content: flex-end;
     margin-bottom: 12px;
   }
+}
 
-  .full-width { width: 100%; }
-  .acciones-col { width: 60px; }
+.datos-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 
-  .spinner-container {
-    display: flex;
-    justify-content: center;
-    padding: 24px;
+  @media (max-width: 600px) {
+    grid-template-columns: 1fr;
   }
 
-  .empty {
-    padding: 16px;
-    text-align: center;
-    opacity: 0.7;
+  .full {
+    grid-column: 1 / -1;
   }
+}
+
+// Scroll horizontal local para las tablas (no desborda la tab)
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.full-width { width: 100%; }
+.acc-col { width: 60px; }
+
+// Chip de vínculo cruzado (También es cliente)
+.vinculo-chip {
+  margin-right: 8px;
+  line-height: 32px;
+  color: var(--info-color);
+  border-color: var(--info-color);
+}
+
+.spinner-container {
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+}
+
+.empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+// Aviso de cotización faltante (totales parciales)
+.cotizacion-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(255, 152, 0, 0.12);
+  color: var(--warning-color);
+  font-size: 0.85rem;
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
 }

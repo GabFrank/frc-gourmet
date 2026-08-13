@@ -4,6 +4,28 @@
     <span class="cm-bar-title">{{ nombre || 'Caja Mayor' }}</span>
     <span class="cm-spacer"></span>
     <span class="crud-chip" [class.off]="!abierta">{{ abierta ? 'Abierta' : 'Cerrada' }}</span>
+    <button
+      *ngIf="canGestionar && !loading && !error"
+      mat-icon-button
+      [matMenuTriggerFor]="cajaMenu"
+      aria-label="Acciones de la caja"
+    >
+      <mat-icon>more_vert</mat-icon>
+    </button>
+    <mat-menu #cajaMenu="matMenu">
+      <button mat-menu-item (click)="editarCaja()">
+        <mat-icon>edit</mat-icon><span>Editar datos</span>
+      </button>
+      <a mat-menu-item routerLink="/financiero/caja-mayor/configurar/{{ id }}">
+        <mat-icon>tune</mat-icon><span>Configurar</span>
+      </a>
+      <button mat-menu-item (click)="recalcularSaldos()">
+        <mat-icon>calculate</mat-icon><span>Recalcular saldos</span>
+      </button>
+      <button mat-menu-item *ngIf="abierta" (click)="cerrarCaja()">
+        <mat-icon color="warn">lock</mat-icon><span>Cerrar caja</span>
+      </button>
+    </mat-menu>
   </mat-toolbar>
 
   <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
@@ -39,6 +61,46 @@
           </div>
           <div class="cm-banco-titulo">{{ cb.titulo }}</div>
         </div>
+      </div>
+    </section>
+
+    <!-- Resumen Cuentas por Pagar (según config) -->
+    <section class="cm-section" *ngIf="mostrarCpp">
+      <div class="cm-mov-head">
+        <h3 class="cm-section-title">Cuentas por Pagar</h3>
+        <a mat-button color="primary" routerLink="/financiero/cxp">Ver todas</a>
+      </div>
+      <div class="cm-saldos-grid">
+        <div class="cm-saldo-card" *ngFor="let r of cppResumen">
+          <div class="cm-saldo-head">
+            <span class="cm-saldo-total">{{ r.simbolo }} {{ r.total | number: '1.0-2' }}</span>
+            <span class="cm-saldo-moneda">{{ r.denominacion }}</span>
+          </div>
+          <div class="cm-saldo-detalle"><span>Este mes</span><span>{{ r.simbolo }} {{ r.esteMes | number: '1.0-2' }}</span></div>
+          <div class="cm-saldo-detalle"><span>Mes que viene</span><span>{{ r.simbolo }} {{ r.mesQueViene | number: '1.0-2' }}</span></div>
+          <div class="cm-saldo-detalle"><span>Vencidas</span><span>{{ r.simbolo }} {{ r.vencidas | number: '1.0-2' }}</span></div>
+        </div>
+        <p *ngIf="cppResumen.length === 0" class="crud-empty">Sin cuentas por pagar pendientes.</p>
+      </div>
+    </section>
+
+    <!-- Resumen Cuentas por Cobrar (según config) -->
+    <section class="cm-section" *ngIf="mostrarCpc">
+      <div class="cm-mov-head">
+        <h3 class="cm-section-title">Cuentas por Cobrar</h3>
+        <a mat-button color="primary" routerLink="/financiero/cxc">Ver todas</a>
+      </div>
+      <div class="cm-saldos-grid">
+        <div class="cm-saldo-card" *ngFor="let r of cpcResumen">
+          <div class="cm-saldo-head">
+            <span class="cm-saldo-total">{{ r.simbolo }} {{ r.total | number: '1.0-2' }}</span>
+            <span class="cm-saldo-moneda">{{ r.denominacion }}</span>
+          </div>
+          <div class="cm-saldo-detalle"><span>Este mes</span><span>{{ r.simbolo }} {{ r.esteMes | number: '1.0-2' }}</span></div>
+          <div class="cm-saldo-detalle"><span>Mes que viene</span><span>{{ r.simbolo }} {{ r.mesQueViene | number: '1.0-2' }}</span></div>
+          <div class="cm-saldo-detalle"><span>Vencidas</span><span>{{ r.simbolo }} {{ r.vencidas | number: '1.0-2' }}</span></div>
+        </div>
+        <p *ngIf="cpcResumen.length === 0" class="crud-empty">Sin cuentas por cobrar pendientes.</p>
       </div>
     </section>
 
@@ -82,7 +144,7 @@
             </div>
           </div>
           <button
-            *ngIf="canOperar && m.puedeAnular && abierta"
+            *ngIf="canOperar && (m.puedeAnular || m.puedeEditar) && abierta"
             mat-icon-button
             [matMenuTriggerFor]="menu"
             aria-label="Acciones"
@@ -90,7 +152,10 @@
             <mat-icon>more_vert</mat-icon>
           </button>
           <mat-menu #menu="matMenu">
-            <button mat-menu-item (click)="anular(m)">
+            <button mat-menu-item *ngIf="m.puedeEditar" (click)="editarMov(m)">
+              <mat-icon>edit</mat-icon><span>Editar</span>
+            </button>
+            <button mat-menu-item *ngIf="m.puedeAnular" (click)="anular(m)">
               <mat-icon color="warn">block</mat-icon><span>Anular</span>
             </button>
           </mat-menu>
@@ -117,8 +182,14 @@
       <button mat-menu-item (click)="registrarEntradaVaria()">
         <mat-icon>savings</mat-icon><span>Entrada varia</span>
       </button>
+      <button mat-menu-item (click)="ingresarRetiro()">
+        <mat-icon>move_to_inbox</mat-icon><span>Ingresar retiro</span>
+      </button>
       <button mat-menu-item (click)="ajuste('ingreso')">
         <mat-icon>tune</mat-icon><span>Ajuste positivo</span>
+      </button>
+      <button mat-menu-item (click)="operacionFinanciera()">
+        <mat-icon>swap_horiz</mat-icon><span>Operación financiera</span>
       </button>
     </mat-menu>
 
@@ -128,6 +199,12 @@
     <mat-menu #egresoMenu="matMenu">
       <button mat-menu-item (click)="registrarGasto()">
         <mat-icon>receipt_long</mat-icon><span>Gasto</span>
+      </button>
+      <button mat-menu-item (click)="registrarVale()">
+        <mat-icon>badge</mat-icon><span>Registrar vale</span>
+      </button>
+      <button mat-menu-item *ngIf="canPagarCompras" (click)="pagarCompras()">
+        <mat-icon>shopping_cart_checkout</mat-icon><span>Pagar compras</span>
       </button>
       <button mat-menu-item (click)="ajuste('egreso')">
         <mat-icon>tune</mat-icon><span>Ajuste negativo</span>

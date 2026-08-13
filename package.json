@@ -24,8 +24,9 @@
     "start": "npm-run-all -p electron:serve ng:serve",
     "build": "npm run electron:serve-tsc && ng build --base-href ./",
     "build:mobile": "ng build mobile",
+    "build:web": "ng build frc-gourmet --configuration web",
     "build:dev": "npm run build -- -c dev && npm run build:mobile",
-    "build:prod": "npm run build -- -c production && npm run build:mobile",
+    "build:prod": "npm run build -- -c production && npm run build:mobile && npm run build:web && npm run build:storefront",
     "check": "npm run electron:serve-tsc && ng build --configuration production --base-href ./",
     "ng:serve": "ng serve --port 4201",
     "electron:serve-tsc": "tsc -p tsconfig.electron.json",
@@ -36,6 +37,20 @@
     "test": "ng test",
     "test:e2e": "npm run electron:serve-tsc && npx playwright test",
     "test:e2e:dev": "npm run electron:serve-tsc && npx playwright test",
+    "test:pedidos-online": "ts-node --project tsconfig.typeorm.json scripts/test-pedidos-online-e2e.ts",
+    "test:variacion-precios": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-variacion-precios-e2e.ts",
+    "test:gestion-sabores": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-gestion-sabores-e2e.ts",
+    "test:receta-por-variacion": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-receta-por-variacion-e2e.ts",
+    "test:reparar-recetas": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-reparar-recetas-e2e.ts",
+    "test:receta-ingrediente": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-receta-ingrediente-e2e.ts",
+    "test:cobro-parcial": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-cobro-parcial-e2e.ts",
+    "test:funcionario-vales": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-funcionario-vales-e2e.ts",
+    "test:resumen-multimoneda": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-resumen-multimoneda-e2e.ts",
+    "test:operacion-financiera": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-operacion-financiera-validacion-e2e.ts",
+    "test:fichaje-facial": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-fichaje-facial.ts",
+    "test:menu-tree": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-menu-tree.ts",
+    "test:mobile": "ng test mobile --watch=false",
+    "build:storefront": "ng build storefront --base-href /tienda/",
     "lint": "ng lint",
     "release": "semantic-release",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/app/database/datasource.ts",
@@ -45,7 +60,17 @@
     "migration:show": "typeorm-ts-node-commonjs migration:show -d src/app/database/datasource.ts",
     "icons": "node scripts/generate-icons.js",
     "generate:mobile-api": "node scripts/generate-mobile-api-map.js",
-    "prepare": "husky || true"
+    "generate:web-api": "node scripts/generate-mobile-api-map.js",
+    "prepare": "husky || true",
+    "test:mesa-qr": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-mesa-qr-e2e.ts",
+    "test:transferencia-bancaria": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-transferencia-bancaria-e2e.ts",
+    "test:reporte-ventas": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-reporte-ventas-e2e.ts",
+    "test:reporte-finanzas": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-reporte-finanzas-e2e.ts",
+    "test:config-caja-mayor": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-config-caja-mayor-e2e.ts",
+    "test:reportes-periodo": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-reportes-periodo.ts",
+    "test:pg-backup": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-pg-backup-e2e.ts",
+    "test:musica-estilos": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-musica-estilos-e2e.ts",
+    "test:musica-cuotas": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-musica-cuotas-e2e.ts"
   },
   "private": true,
   "dependencies": {
@@ -66,6 +91,8 @@
     "@fastify/static": "^6.12.0",
     "@napi-rs/canvas": "^1.0.0",
     "@types/uuid": "^9.0.7",
+    "@vladmandic/human": "^3.3.6",
+    "@zxing/library": "^0.21.3",
     "bcryptjs": "^3.0.3",
     "chart.js": "^4.5.1",
     "electron-pos-printer": "^1.3.7",
@@ -77,6 +104,7 @@
     "ng2-charts": "^4.1.1",
     "ngx-currency": "^2.5.3",
     "node-thermal-printer": "^4.4.4",
+    "bonjour-service": "^1.2.1",
     "nodemailer": "^6.10.1",
     "pdfjs-dist": "^3.11.174",
     "pdfmake": "^0.2.10",
@@ -89,6 +117,9 @@
     "typeorm": "^0.3.21",
     "uuid": "^9.0.1",
     "zone.js": "~0.12.0"
+  },
+  "optionalDependencies": {
+    "@thiagoelg/node-printer": "^0.6.2"
   },
   "devDependencies": {
     "@angular-builders/custom-webpack": "15.0.0",
@@ -135,6 +166,7 @@
     "jasmine-core": "4.6.0",
     "jasmine-spec-reporter": "7.0.0",
     "karma": "6.4.2",
+    "karma-chrome-launcher": "^3.2.0",
     "karma-coverage-istanbul-reporter": "3.0.3",
     "karma-electron": "7.3.0",
     "karma-jasmine": "5.1.0",
@@ -176,8 +208,11 @@
     "asarUnpack": [
       "**/node_modules/sqlite3/**",
       "**/node_modules/keytar/**",
+      "**/node_modules/@thiagoelg/node-printer/**",
       "**/node_modules/@napi-rs/canvas/**",
-      "dist/mobile/**"
+      "dist/mobile/**",
+      "dist/storefront/**",
+      "dist/frc-gourmet-web/**"
     ],
     "publish": [
       {
@@ -201,10 +236,10 @@
       "icon": "build/icon.ico"
     },
     "nsis": {
-      "oneClick": false,
+      "oneClick": true,
       "perMachine": false,
       "allowElevation": true,
-      "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "FRC Gourmet",

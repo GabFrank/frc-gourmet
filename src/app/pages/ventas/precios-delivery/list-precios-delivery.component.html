@@ -1,7 +1,7 @@
 <div class="page-container">
   <div class="page-header">
     <h2>PRECIOS DE DELIVERY</h2>
-    <button mat-raised-button color="primary" (click)="crear()">
+    <button mat-raised-button color="primary" (click)="crear()" *appHasPermission="'VENTAS_PDV_CONFIGURAR'">
       <mat-icon>add</mat-icon>
       NUEVO PRECIO
     </button>
@@ -36,11 +36,11 @@
           <mat-icon>more_vert</mat-icon>
         </button>
         <mat-menu #menu="matMenu">
-          <button mat-menu-item (click)="editar(p)">
+          <button mat-menu-item (click)="editar(p)" *appHasPermission="'VENTAS_PDV_CONFIGURAR'">
             <mat-icon>edit</mat-icon>
             <span>EDITAR</span>
           </button>
-          <button mat-menu-item (click)="eliminar(p)">
+          <button mat-menu-item (click)="eliminar(p)" *appHasPermission="'VENTAS_PDV_CONFIGURAR'">
             <mat-icon color="warn">delete</mat-icon>
             <span>ELIMINAR</span>
           </button>

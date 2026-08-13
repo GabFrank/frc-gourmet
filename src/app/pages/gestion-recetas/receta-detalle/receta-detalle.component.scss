@@ -9,7 +9,7 @@
     align-items: center;
     justify-content: center;
     padding: 48px;
-    color: #666;
+    color: var(--text-secondary);
 
     p {
       margin-top: 16px;
@@ -29,12 +29,12 @@
           margin: 0;
           font-size: 2rem;
           font-weight: 500;
-          color: #333;
+          color: var(--text-primary);
         }
 
         .subtitle {
           margin: 8px 0 0 0;
-          color: #666;
+          color: var(--text-secondary);
           font-size: 1rem;
         }
       }
@@ -66,17 +66,17 @@
 
           label {
             font-weight: 600;
-            color: #666;
+            color: var(--text-secondary);
             font-size: 0.875rem;
           }
 
           span {
-            color: #333;
+            color: var(--text-primary);
             font-size: 1rem;
 
             &.costo {
               font-weight: 600;
-              color: #1976d2;
+              color: var(--info-color);
             }
 
             &.estado-chip {
@@ -112,7 +112,7 @@
         justify-content: space-between;
         align-items: center;
         padding: 12px 0;
-        border-bottom: 1px solid #e0e0e0;
+        border-bottom: 1px solid var(--border-color);
 
         &:last-child {
           border-bottom: none;
@@ -127,12 +127,12 @@
           .ingredient-name,
           .adicional-name {
             font-weight: 500;
-            color: #333;
+            color: var(--text-primary);
           }
 
           .ingredient-quantity {
             font-size: 0.875rem;
-            color: #666;
+            color: var(--text-secondary);
           }
         }
 
@@ -146,20 +146,20 @@
           .cost-label,
           .price-label {
             font-size: 0.75rem;
-            color: #666;
+            color: var(--text-secondary);
           }
 
           .cost-value,
           .price-value {
             font-weight: 600;
-            color: #1976d2;
+            color: var(--info-color);
           }
         }
       }
 
       .no-data {
         text-align: center;
-        color: #666;
+        color: var(--text-secondary);
         font-style: italic;
         padding: 24px;
       }
@@ -178,19 +178,19 @@
       font-size: 64px;
       width: 64px;
       height: 64px;
-      color: #f44336;
+      color: var(--error-color);
       margin-bottom: 16px;
     }
 
     h3 {
       margin: 0 0 8px 0;
       font-size: 1.5rem;
-      color: #333;
+      color: var(--text-primary);
     }
 
     p {
       margin: 0 0 24px 0;
-      color: #666;
+      color: var(--text-secondary);
       font-size: 1rem;
     }
 

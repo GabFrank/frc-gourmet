@@ -1,0 +1,14 @@
+/* Config TS del storefront (web app de pedidos). */
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../out-tsc/storefront",
+    "types": []
+  },
+  "files": [
+    "src/main.ts"
+  ],
+  "include": [
+    "src/**/*.d.ts"
+  ]
+}

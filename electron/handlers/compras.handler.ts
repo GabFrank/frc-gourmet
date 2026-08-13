@@ -8,10 +8,12 @@ import { PagoDetalle } from '../../src/app/database/entities/compras/pago-detall
 import { ProveedorProducto } from '../../src/app/database/entities/compras/proveedor-producto.entity';
 import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
 import { CompraEstado } from '../../src/app/database/entities/compras/estado.enum';
+import { FormaPagoCompra } from '../../src/app/database/entities/compras/forma-pago-compra.enum';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
 import { Presentacion } from '../../src/app/database/entities/productos/presentacion.entity';
 import { PrecioCosto, FuenteCosto } from '../../src/app/database/entities/productos/precio-costo.entity';
 import { StockMovimiento, StockMovimientoTipo, StockMovimientoTipoReferencia } from '../../src/app/database/entities/productos/stock-movimiento.entity';
+import { Caja } from '../../src/app/database/entities/financiero/caja.entity';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { CuentaPorPagar } from '../../src/app/database/entities/financiero/cuenta-por-pagar.entity';
@@ -22,6 +24,7 @@ import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
+import { aplicarPagoCpoCuota } from './cuentas-por-pagar.handler';
 import { ensurePermission } from '../utils/auth.utils';
 
 // ===== Helpers internos =====
@@ -196,6 +199,86 @@ async function recalcularTotalCompra(qr: any, compraId: number): Promise<number>
   return +total.toFixed(2);
 }
 
+// Crea una compra SIMPLIFICADA (FINALIZADO, sin detalles) + su CPP + cuotas, SIN
+// asentar ningún pago. Devuelve los ids para que el caller aplique el pago como
+// quiera (Caja Mayor vía aplicarPagoCpoCuota, o cajón del PdV vía EgresoCaja).
+// NO commitea: corre dentro de la transacción del caller.
+export async function crearCompraSimplificadaTx(
+  qr: any,
+  payload: any,
+  userId: number | undefined,
+  deviceId: number | null,
+): Promise<{ compraId: number; cppId: number; cuotaId: number; total: number }> {
+  const proveedorId = Number(payload.proveedorId);
+  const monedaId = Number(payload.monedaId);
+  const total = +Number(payload.total).toFixed(2);
+  if (!proveedorId) throw new Error('La compra requiere proveedor.');
+  if (!monedaId) throw new Error('La compra requiere moneda.');
+  if (!(total > 0)) throw new Error('El total debe ser mayor a 0.');
+
+  const credito = !!payload.credito;
+  const fuente = String(payload.fuente || 'CAJA_MAYOR').toUpperCase();
+  const fechaBoleta = parseLocalDate(payload.fechaCompra) || new Date();
+
+  const compra = qr.manager.create(Compra, {
+    estado: CompraEstado.FINALIZADO,
+    simplificada: true,
+    isRecepcionMercaderia: false,
+    activo: true,
+    numeroNota: payload.numeroNota?.toUpperCase() || null,
+    tipoBoleta: payload.tipoBoleta || null,
+    fechaCompra: fechaBoleta,
+    credito,
+    proveedor: { id: proveedorId } as any,
+    compraCategoria: payload.compraCategoriaId ? { id: payload.compraCategoriaId } as any : null,
+    moneda: { id: monedaId } as any,
+    formaPagoCompra: fuente === 'CUENTA_BANCARIA' ? FormaPagoCompra.BANCO : FormaPagoCompra.EFECTIVO,
+    cuentaBancaria: (payload.pagarAhora && fuente === 'CUENTA_BANCARIA' && payload.cuentaBancariaId)
+      ? { id: Number(payload.cuentaBancariaId) } as any
+      : null,
+    dispositivo: deviceId != null ? ({ id: deviceId } as any) : null,
+    total,
+  });
+  await setEntityUserTracking(qr.connection, compra, userId, false);
+  const compraSaved = await qr.manager.save(Compra, compra);
+  const compraId = (Array.isArray(compraSaved) ? compraSaved[0] : compraSaved).id;
+
+  const cantidadCuotas = credito ? Math.max(1, Number(payload.cantidadCuotas) || 1) : 1;
+  const fechaInicio = credito
+    ? (parseLocalDate(payload.fechaCreditoInicio) || fechaBoleta)
+    : fechaBoleta;
+
+  const cppEntity = qr.manager.create(CuentaPorPagar, {
+    descripcion: `COMPRA #${compraId} — ${payload.proveedorNombre || ''}`.toUpperCase(),
+    tipo: CuentaPorPagarTipo.COMPRA,
+    proveedor: { id: proveedorId } as any,
+    montoTotal: total,
+    montoPagado: 0,
+    moneda: { id: monedaId } as any,
+    fechaInicio,
+    cantidadCuotas,
+    estado: CuentaPorPagarEstado.ACTIVO,
+    observacion: payload.numeroNota ? `NOTA ${String(payload.numeroNota).toUpperCase()}` : null,
+    compraId,
+  });
+  await setEntityUserTracking(qr.connection, cppEntity, userId, false);
+  const cppSaved = await qr.manager.save(CuentaPorPagar, cppEntity);
+  const cppId = (Array.isArray(cppSaved) ? cppSaved[0] : cppSaved).id;
+
+  await generarCuotasMensualesCPP(qr, cppId, total, cantidadCuotas, fechaInicio, userId);
+
+  compra.cuentaPorPagar = { id: cppId } as any;
+  await qr.manager.save(Compra, compra);
+
+  const primeraCuota = await qr.manager.getRepository(CuentaPorPagarCuota).findOne({
+    where: { cuentaPorPagar: { id: cppId } } as any,
+    order: { numero: 'ASC' },
+  });
+  if (!primeraCuota) throw new Error('No se pudo generar la cuota de la compra.');
+
+  return { compraId, cppId, cuotaId: primeraCuota.id, total };
+}
+
 export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
 
   // ===================== PROVEEDORES =====================
@@ -210,6 +293,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('createProveedor', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'PROVEEDORES_GESTIONAR');
     const repo = dataSource.getRepository(Proveedor);
     const entity = repo.create(data);
     await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -219,6 +303,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('updateProveedor', async (_event: any, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'PROVEEDORES_GESTIONAR');
     const repo = dataSource.getRepository(Proveedor);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`Proveedor ID ${id} not found`);
@@ -229,6 +314,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('deleteProveedor', async (_event: any, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'PROVEEDORES_GESTIONAR');
     const repo = dataSource.getRepository(Proveedor);
     const compraRepo = dataSource.getRepository(Compra);
     const entity = await repo.findOneBy({ id });
@@ -360,6 +446,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   // ===================== COMPRAS — workflow =====================
   // Crea compra en estado ABIERTO con sus detalles. NO impacta stock/caja/CPP.
   ipcMain.handle('create-compra-borrador', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const qr = dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
@@ -434,6 +521,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
 
   // Actualiza cabecera y reemplaza detalles. Solo permitido si estado=ABIERTO.
   ipcMain.handle('update-compra-borrador', async (_event: any, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const qr = dataSource.createQueryRunner();
     await qr.connect();
     await qr.startTransaction();
@@ -662,6 +750,82 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     }
   });
 
+  // Crea una compra SIMPLIFICADA (sin detalles): no mueve stock ni costo, solo genera la
+  // deuda (CPP tipo COMPRA) y, opcionalmente (contado + pagarAhora), registra el pago en
+  // Caja Mayor o Cuenta Bancaria. Todo atomico (patron crear-vale-confirmado). Nace FINALIZADO.
+  // payload: {
+  //   proveedorId: number,            // requerido
+  //   monedaId: number,               // requerido
+  //   total: number,                  // requerido > 0
+  //   fechaCompra?: string,
+  //   numeroNota?: string, tipoBoleta?: string, compraCategoriaId?: number,
+  //   credito?: boolean,
+  //   cantidadCuotas?: number,        // si credito
+  //   fechaCreditoInicio?: string,    // si credito: fecha 1ra cuota
+  //   pagarAhora?: boolean,           // solo si !credito
+  //   fuente?: 'CAJA_MAYOR' | 'CUENTA_BANCARIA',
+  //   cajaMayorId?, formaPagoId?,     // si fuente=CAJA_MAYOR (moneda = moneda de la compra)
+  //   cuentaBancariaId?,              // si fuente=CUENTA_BANCARIA
+  //   observacionPago?: string,
+  // }
+  ipcMain.handle('crear-compra-simplificada', async (_event: any, payload: any = {}) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
+    const qr = dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+    try {
+      const userId = getCurrentUser()?.id;
+      const currentUser = getCurrentUser();
+
+      const credito = !!payload.credito;
+      const pagarAhora = !credito && payload.pagarAhora === true;
+      const fuente = String(payload.fuente || 'CAJA_MAYOR').toUpperCase();
+      const deviceId = resolveRequestDeviceId(_event);
+      const monedaId = Number(payload.monedaId);
+
+      // 1-2. Crear la Compra simplificada + CPP + cuotas (sin pago)
+      const { compraId, cuotaId, total } = await crearCompraSimplificadaTx(qr, payload, userId, deviceId);
+
+      // 3. Pago inmediato (solo contado + pagarAhora): reutiliza aplicarPagoCpoCuota
+      if (pagarAhora) {
+        if (fuente === 'CUENTA_BANCARIA') {
+          if (!payload.cuentaBancariaId) throw new Error('Seleccione la cuenta bancaria para el pago.');
+          await aplicarPagoCpoCuota(qr, {
+            cuotaId,
+            monto: total,
+            fuente: 'CUENTA_BANCARIA',
+            cuentaBancariaId: Number(payload.cuentaBancariaId),
+            observacion: payload.observacionPago,
+          }, currentUser, dataSource);
+        } else {
+          if (!payload.cajaMayorId || !payload.formaPagoId) {
+            throw new Error('Seleccione caja mayor y forma de pago.');
+          }
+          await aplicarPagoCpoCuota(qr, {
+            cuotaId,
+            monto: total,
+            fuente: 'CAJA_MAYOR',
+            cajaMayorId: Number(payload.cajaMayorId),
+            monedaId,
+            formaPagoId: Number(payload.formaPagoId),
+            observacion: payload.observacionPago,
+          }, currentUser, dataSource);
+        }
+      }
+
+      await qr.commitTransaction();
+      return await dataSource.getRepository(Compra).findOne({
+        where: { id: compraId },
+        relations: ['proveedor', 'proveedor.persona', 'moneda', 'compraCategoria', 'cuentaPorPagar', 'cuentaBancaria'],
+      });
+    } catch (e) {
+      await qr.rollbackTransaction();
+      throw e;
+    } finally {
+      await qr.release();
+    }
+  });
+
   // Anula una compra. Si estaba ABIERTO solo marca CANCELADO. Si estaba FINALIZADO revierte stock+caja+CPP.
   ipcMain.handle('anular-compra', async (_event: any, id: number, motivo: string) => {
     await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
@@ -682,6 +846,21 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       const eraFinalizada = compra.estado === CompraEstado.FINALIZADO;
 
       if (eraFinalizada) {
+        // A-03: no permitir anular si parte del stock comprado ya fue
+        // consumido/vendido — revertirlo dejaría el stock en negativo. Se chequea
+        // ANTES de cualquier escritura para que la anulación falle limpia.
+        for (const det of compra.detalles || []) {
+          if (!det.producto?.controlaStock) continue;
+          const stockActual = await getStockActualUnidadBase(qr, det.producto.id);
+          const aRevertir = Number(det.cantidadUnidadBase);
+          if (stockActual + 1e-9 < aRevertir) {
+            throw new Error(
+              `No se puede anular: el stock de "${(det.producto as any).nombre || det.producto.id}" ya fue ` +
+              `consumido/vendido (disponible ${stockActual}, compra ${aRevertir}). Anule primero los movimientos que lo consumieron.`,
+            );
+          }
+        }
+
         // Si tiene CPP a credito: validar que ninguna cuota este pagada (parcial o total)
         if (compra.cuentaPorPagar?.id) {
           const cuotas = await qr.manager.getRepository(CuentaPorPagarCuota).find({
@@ -750,7 +929,14 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
           }
         }
 
-        // Revertir stock por cada detalle (solo los que controlan stock)
+        // Revertir stock por cada detalle (solo los que controlan stock).
+        // NOTA (A-03): el COSTO promedio ponderado NO se revierte aquí. Es
+        // dependiente del camino: si hubo compras/ventas posteriores, el aporte
+        // de esta compra al promedio no es recuperable por resta simple, y no se
+        // guarda un snapshot del costo previo al finalizar. Revertirlo requiere
+        // persistir el (stock, costo) previos al aplicar el promedio (cambio de
+        // esquema) — queda como follow-up. El guard de arriba evita al menos que
+        // el stock quede negativo.
         for (const det of compra.detalles || []) {
           if (!det.producto?.controlaStock) continue;
           const sm = qr.manager.create(StockMovimiento, {
@@ -785,6 +971,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
 
   // ===================== COMPRA — handlers legacy (mantener por compat) =====================
   ipcMain.handle('createCompra', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const repo = dataSource.getRepository(Compra);
     const { detalles, ...rest } = data;
     const entity: any = repo.create(rest);
@@ -798,6 +985,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('updateCompra', async (_event: any, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const repo = dataSource.getRepository(Compra);
     const { detalles, ...rest } = data;
     const entity = await repo.findOneBy({ id });
@@ -808,6 +996,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('deleteCompra', async (_event: any, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const repo = dataSource.getRepository(Compra);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`Compra ID ${id} not found`);
@@ -829,12 +1018,14 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('createCompraDetalle', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const repo = dataSource.getRepository(CompraDetalle);
     const entity = repo.create(data);
     return await repo.save(entity);
   });
 
   ipcMain.handle('updateCompraDetalle', async (_event: any, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const repo = dataSource.getRepository(CompraDetalle);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`CompraDetalle ID ${id} not found`);
@@ -843,6 +1034,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('deleteCompraDetalle', async (_event: any, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const repo = dataSource.getRepository(CompraDetalle);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`CompraDetalle ID ${id} not found`);
@@ -866,6 +1058,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('createProveedorProducto', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'PROVEEDORES_GESTIONAR');
     const repo = dataSource.getRepository(ProveedorProducto);
     const entity = repo.create(data);
     await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -873,6 +1066,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('updateProveedorProducto', async (_event: any, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'PROVEEDORES_GESTIONAR');
     const repo = dataSource.getRepository(ProveedorProducto);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`ProveedorProducto ID ${id} not found`);
@@ -882,6 +1076,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('deleteProveedorProducto', async (_event: any, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'PROVEEDORES_GESTIONAR');
     const repo = dataSource.getRepository(ProveedorProducto);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`ProveedorProducto ID ${id} not found`);
@@ -1097,6 +1292,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('createFormaPago', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const repo = dataSource.getRepository(FormasPago);
     const { maquinasPosIds, cuentasBancariasIds, ...rest } = data || {};
     const entity = repo.create(rest);
@@ -1107,6 +1303,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('updateFormaPago', async (_event: any, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const repo = dataSource.getRepository(FormasPago);
     const entity = await repo.findOne({ where: { id }, relations: ['maquinasPos', 'cuentasBancarias'] });
     if (!entity) throw new Error(`FormaPago ID ${id} not found`);
@@ -1119,6 +1316,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('deleteFormaPago', async (_event: any, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const repo = dataSource.getRepository(FormasPago);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`FormaPago ID ${id} not found`);
@@ -1140,13 +1338,36 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('createPago', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
+    // Cobro de venta: solo el dispositivo donde se abrio la caja puede cobrar.
+    // El flag `validarDispositivoCaja` lo envia unicamente el flujo de cobro de
+    // venta (cobrar-venta-dialog). Los pagos de compra no lo mandan, asi que no
+    // se ven afectados. Se descarta el flag antes de persistir el Pago.
+    const { validarDispositivoCaja, ...pagoData } = data ?? {};
+    if (validarDispositivoCaja) {
+      const cajaId = pagoData?.caja?.id ?? pagoData?.caja ?? null;
+      const cajaRepo = dataSource.getRepository(Caja);
+      const caja = cajaId
+        ? await cajaRepo.findOne({ where: { id: cajaId }, relations: ['dispositivo'] })
+        : null;
+      const dispositivoCajaId = caja?.dispositivo?.id ?? null;
+      const deviceActual = resolveRequestDeviceId(_event);
+      // Bloquea SOLO cuando se puede determinar positivamente que el dispositivo
+      // actual difiere del dueño de la caja. Si el dispositivo actual no se puede
+      // resolver (standalone sin device configurado), no se bloquea para no
+      // romper el cobro en instalaciones de un solo equipo.
+      if (deviceActual != null && dispositivoCajaId != null && deviceActual !== dispositivoCajaId) {
+        throw new Error('COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO');
+      }
+    }
     const repo = dataSource.getRepository(Pago);
-    const entity = repo.create(data);
+    const entity = repo.create(pagoData);
     await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
     return await repo.save(entity);
   });
 
   ipcMain.handle('updatePago', async (_event: any, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const repo = dataSource.getRepository(Pago);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`Pago ID ${id} not found`);
@@ -1156,6 +1377,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('deletePago', async (_event: any, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const repo = dataSource.getRepository(Pago);
     const entity = await repo.findOne({ where: { id }, relations: ['detalles'] });
     if (!entity) throw new Error(`Pago ID ${id} not found`);
@@ -1172,11 +1394,13 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('createPagoDetalle', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const repo = dataSource.getRepository(PagoDetalle);
     return await repo.save(repo.create(data));
   });
 
   ipcMain.handle('updatePagoDetalle', async (_event: any, id: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const repo = dataSource.getRepository(PagoDetalle);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`PagoDetalle ID ${id} not found`);
@@ -1185,6 +1409,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('deletePagoDetalle', async (_event: any, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const repo = dataSource.getRepository(PagoDetalle);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`PagoDetalle ID ${id} not found`);

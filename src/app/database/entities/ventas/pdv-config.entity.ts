@@ -37,6 +37,15 @@ export class PdvConfig extends BaseModel {
   @Column({ name: 'comandas_habilitadas', default: false })
   comandasHabilitadas!: boolean;
 
+  /**
+   * Si true, vincular una comanda a una mesa marca la mesa como OCUPADA, y al
+   * liberar/cerrar la comanda la mesa vuelve a DISPONIBLE solo si no quedan otras
+   * comandas OCUPADO ni una venta de mesa ABIERTA. Default false: la comanda no
+   * ocupa la mesa (cuenta portátil independiente).
+   */
+  @Column({ name: 'ocupar_mesa_al_vincular_comanda', default: false })
+  ocuparMesaAlVincularComanda!: boolean;
+
   // Tamaño del grid de atajos: 1=grande, 2=mediano, 3=pequeño
   @Column({ name: 'atajos_grid_size', type: 'int', default: 3 })
   atajosGridSize!: number;
@@ -80,4 +89,15 @@ export class PdvConfig extends BaseModel {
   // Factor para convertir el valor embebido a gramos (gramos = valor * factor).
   @Column({ name: 'balanza_factor_peso', type: 'decimal', precision: 10, scale: 3, default: 1 })
   balanzaFactorPeso!: number;
+
+  // ─── WhatsApp: envío automático del resumen al cerrar caja ───────────────
+  // Si está activo y hay un destino configurado, al cerrar una caja PdV se
+  // envía por WhatsApp (Evolution API, config de Notificaciones) una imagen con
+  // el resumen del cierre. Best-effort: si falla, no bloquea el cierre.
+  @Column({ name: 'whatsapp_cierre_caja_activo', default: false })
+  whatsappCierreCajaActivo!: boolean;
+
+  // Número internacional (ej. 595991123456) o JID de grupo (…@g.us).
+  @Column({ name: 'whatsapp_cierre_caja_destino', type: 'varchar', length: 120, nullable: true })
+  whatsappCierreCajaDestino?: string | null;
 }

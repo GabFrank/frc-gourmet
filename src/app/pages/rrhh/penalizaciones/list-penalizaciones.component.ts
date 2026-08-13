@@ -19,6 +19,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 const TIPOS = [
   'TARDANZA',
@@ -51,6 +52,7 @@ const TIPOS = [
     MatSnackBarModule,
     MatDialogModule,
     MatSlideToggleModule,
+    HasPermissionDirective,
   ],
   template: `
     <div class="page">
@@ -58,9 +60,11 @@ const TIPOS = [
         <mat-card-content>
           <div class="header">
             <div class="title"><mat-icon>gavel</mat-icon> <h2>Penalizaciones</h2></div>
-            <button mat-flat-button color="primary" (click)="showCreateForm()" *ngIf="!showInlineForm">
-              <mat-icon>add</mat-icon> Nueva penalizacion
-            </button>
+            <ng-container *appHasPermission="'RRHH_PENALIZACION_REGISTRAR'">
+              <button mat-flat-button color="primary" (click)="showCreateForm()" *ngIf="!showInlineForm">
+                <mat-icon>add</mat-icon> Nueva penalizacion
+              </button>
+            </ng-container>
           </div>
         </mat-card-content>
       </mat-card>
@@ -167,10 +171,12 @@ const TIPOS = [
                   <mat-icon>more_vert</mat-icon>
                 </button>
                 <mat-menu #menu="matMenu">
-                  <button mat-menu-item (click)="editar(p)" *ngIf="!p.autoGenerada">
-                    <mat-icon>edit</mat-icon><span>Editar</span>
-                  </button>
-                  <button mat-menu-item (click)="anular(p)">
+                  <ng-container *appHasPermission="'RRHH_PENALIZACION_REGISTRAR'">
+                    <button mat-menu-item (click)="editar(p)" *ngIf="!p.autoGenerada">
+                      <mat-icon>edit</mat-icon><span>Editar</span>
+                    </button>
+                  </ng-container>
+                  <button *appHasPermission="'RRHH_PENALIZACION_REGISTRAR'" mat-menu-item (click)="anular(p)">
                     <mat-icon>cancel</mat-icon><span>Anular</span>
                   </button>
                 </mat-menu>

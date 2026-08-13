@@ -1,0 +1,101 @@
+<div class="crud-page">
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+
+  <!-- Estado de vinculación -->
+  <div class="estado-fila">
+    <span class="crud-chip" [ngClass]="estadoClase">{{ estadoTexto }}</span>
+  </div>
+
+  <!-- Aviso: la vinculación es en la PC -->
+  <div class="aviso">
+    <mat-icon>info</mat-icon>
+    <span>
+      La vinculación con Spotify (conectar / autorizar) y abrir la app se hacen desde la
+      <strong>PC del local</strong> (Configuración → Música ambiente en el desktop). Acá podés
+      editar la configuración, elegir el dispositivo de salida y desvincular.
+    </span>
+  </div>
+
+  <!-- Configuración -->
+  <mat-card appearance="outlined" class="tarjeta">
+    <mat-card-header>
+      <mat-card-title>Configuración</mat-card-title>
+      <mat-card-subtitle>Cada local usa su propia app de Spotify y su cuenta Premium.</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <mat-form-field appearance="outline" class="campo">
+        <mat-label>Client ID de la app de Spotify</mat-label>
+        <input matInput [(ngModel)]="spotifyClientId" placeholder="32 caracteres" />
+        <mat-hint>Se obtiene en developer.spotify.com → Dashboard → tu app</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="campo">
+        <mat-label>Puerto del callback</mat-label>
+        <input matInput type="number" [(ngModel)]="redirectPort" />
+      </mat-form-field>
+
+      <div class="redirect-uri" *ngIf="redirectUri">
+        <mat-icon>link</mat-icon>
+        <div>
+          <div class="redirect-label">Redirect URI — cargalo igual en el dashboard de Spotify</div>
+          <code>{{ redirectUri }}</code>
+        </div>
+      </div>
+
+      <mat-slide-toggle [(ngModel)]="habilitado">Módulo de música habilitado</mat-slide-toggle>
+
+      <div class="acciones">
+        <button mat-flat-button color="primary" (click)="guardar()" [disabled]="guardando">
+          <mat-icon>save</mat-icon> Guardar
+        </button>
+        <button mat-stroked-button color="warn" *ngIf="conectado" (click)="desvincular()">
+          <mat-icon>link_off</mat-icon> Desvincular
+        </button>
+        <mat-progress-spinner *ngIf="guardando" mode="indeterminate" diameter="24"></mat-progress-spinner>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Salida de audio -->
+  <mat-card appearance="outlined" class="tarjeta">
+    <mat-card-header>
+      <mat-card-title>Salida de audio</mat-card-title>
+      <mat-card-subtitle>
+        Dispositivo actual: <strong>{{ deviceNombreSeleccionado || 'ninguno seleccionado' }}</strong>
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="acciones">
+        <button mat-flat-button color="primary" (click)="buscarDispositivos()" [disabled]="buscando">
+          <mat-icon>speaker</mat-icon> Buscar dispositivos
+        </button>
+        <mat-progress-spinner *ngIf="buscando" mode="indeterminate" diameter="24"></mat-progress-spinner>
+      </div>
+
+      <p class="ayuda" *ngIf="dispositivos.length === 0">
+        La app de Spotify tiene que estar abierta y con sesión iniciada en la cuenta del local para que
+        aparezca acá.
+      </p>
+
+      <mat-list *ngIf="dispositivos.length > 0">
+        <mat-list-item
+          *ngFor="let d of dispositivos"
+          class="dispositivo"
+          [class.activo]="d.id === deviceIdSeleccionado"
+        >
+          <mat-icon matListItemIcon>{{ d.activo ? 'volume_up' : 'devices' }}</mat-icon>
+          <div matListItemTitle>{{ d.nombre }}</div>
+          <div matListItemLine>{{ d.tipo }}</div>
+          <button
+            mat-stroked-button
+            matListItemMeta
+            [disabled]="d.id === deviceIdSeleccionado"
+            (click)="usarDispositivo(d)"
+          >
+            {{ d.id === deviceIdSeleccionado ? 'En uso' : 'Usar' }}
+          </button>
+        </mat-list-item>
+      </mat-list>
+    </mat-card-content>
+  </mat-card>
+</div>

@@ -56,6 +56,33 @@ El cast `as any` es necesario porque las entities tipan los campos como `Type | 
 
 **Bug original**: en `anular-liquidacion-sueldo`, los vales quedaban en estado DESCONTADO sin liquidación asociada porque el `liquidacionId = undefined` no se nuleaba en BD. (`feedback_typeorm_null_undefined`)
 
+## TypeORM: `@Column()` sin `type` sobre un tipo unión rompe Postgres
+
+Corolario del pitfall anterior. Si para poder nulear una columna se tipa el campo como unión, hay que declarar el `type` de la columna a mano:
+
+```typescript
+// ❌ Arranca bien en SQLite y explota en Postgres
+@Column({ nullable: true })
+escenaPreferida?: string | null;
+
+// ✅
+@Column({ type: 'varchar', nullable: true })
+escenaPreferida?: string | null;
+```
+
+Sin `type`, TypeORM infiere la columna del metadata de decoradores de TypeScript, y de una **unión** ese metadata emite `Object`. Postgres lo rechaza al **validar las entidades**, antes de correr una sola migración:
+
+```
+DataTypeNotSupportedError: Data type "Object" in
+"BloqueProgramacion.escenaPreferida" is not supported by "postgres"
+```
+
+**Por qué es traicionero:** SQLite lo tolera, así que la app dev, `npm run build`, `npm run check` y los tests e2e sobre SQLite pasan todos. El único que lo ve es el job de CI **"Migration run (Postgres baseline + incrementales)"** — y falla al conectar, no en la migración, así que el mensaje no apunta a la columna nueva de forma obvia.
+
+Los campos que ya usaban `| null` (`maxPorArtista?: number | null`, `factorDuracion?: number | null`) no fallaban porque siempre declararon `type: 'int'` / `type: 'float'`.
+
+**Bug original**: PR #234 (música, clasificación semántica). Tres revisores y toda la batería local en SQLite lo dejaron pasar; lo atajó el CI.
+
 ## TypeORM: leftJoin a tabla sin relación @ManyToOne
 
 Si una entidad tiene **columna plana** (`compraId: int`) pero no `@ManyToOne compra`, no se puede hacer `leftJoinAndSelect('cpp.compra', ...)`. Hay que joinear con la tabla raw:
@@ -68,13 +95,15 @@ qb.leftJoin('compras', 'compra', 'compra.id = cpp.compra_id')
 
 **Aplicado en:** `cuentas-por-pagar.handler` para enriquecer CPP con datos de la compra origen.
 
-## SQLite: `synchronize: true` con `NOT NULL` y datos legacy
+## Migraciones: columna NOT NULL nueva con datos legacy
 
-Al agregar columna NEW NOT NULL a una tabla con datos existentes, TypeORM falla con `NOT NULL constraint failed`. Soluciones:
+> **Importante:** el proyecto usa `synchronize: false` — NO hay auto-DDL. Toda columna nueva se agrega vía **migración** (driver-aware), no por TypeORM. Las migraciones corren al arranque.
 
-1. **Default value**: `@Column({ type: 'decimal', default: 0 })` — TypeORM rellena 0 en filas existentes.
+Al agregar una columna NOT NULL a una tabla con filas existentes, el `ALTER TABLE ADD COLUMN` falla si no hay valor para las filas viejas. Soluciones (en la migración y/o el `@Column`):
+
+1. **Default value**: `@Column({ type: 'decimal', default: 0 })` + `ADD COLUMN ... DEFAULT 0` — rellena las filas existentes.
 2. **Nullable**: `@Column({ type: 'int', nullable: true })` — permite NULL en datos legacy.
-3. **Backfill manual**: query SQL `UPDATE` antes de aplicar `synchronize` (no escalable, sólo para una sola vez).
+3. **Backfill en la migración**: `ADD COLUMN nullable` → `UPDATE` para poblar → (opcional) `SET NOT NULL` en una migración posterior.
 
 **Aplicado en compras** (refactor 2026-05-04): `costoUnitarioPresentacion` y `cantidad` necesitaron `default: 0`. FK `producto` en CompraDetalle y ProveedorProducto fueron relajadas a nullable.
 
@@ -257,7 +286,7 @@ dataSource.query(`UPDATE ventas SET vendedor_id = created_by WHERE vendedor_id I
   .catch((e: any) => console.warn('Migration vendedor_id:', e.message));
 ```
 
-Esta corre en cada arranque. Es idempotente (la próxima vez el WHERE está vacío). Patrón aceptable para data fixes simples cuando no querés hacer una migración formal.
+Corre en cada arranque (en el `then` de `DataSource.initialize`). Es idempotente (la próxima vez el WHERE está vacío). Patrón aceptable para data fixes simples; para cambios de esquema, usar una migración formal.
 
 ## TypeORM cascade en BaseModel.createdBy/updatedBy
 

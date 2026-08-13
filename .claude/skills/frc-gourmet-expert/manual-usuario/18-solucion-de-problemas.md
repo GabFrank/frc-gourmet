@@ -21,7 +21,7 @@
 
 ## La pantalla está rota / colores raros / texto invisible
 
-- Cambiá el tema (toolbar → toggle ☀ / 🌙). A veces el cambio fuerza un re-render.
+- Cambiá el tema (menú de usuario 👤 → Tema claro / Tema oscuro). A veces el cambio fuerza un re-render.
 - Cerrá y abrí la pestaña.
 - Cerrá y abrí la app.
 - Si persiste: posible bug de UI. Reportá.
@@ -151,7 +151,7 @@ Errores tipo "Error invoking remote method 'foo': Error: bar" → reportar al eq
 - Email al equipo de desarrollo.
 
 Incluir:
-- Versión de la app (en Configuración → Acerca de, TODO).
+- Versión de la app (se muestra en la barra superior, junto al nombre de la empresa: "FRC Gourmet vX.Y.Z").
 - OS (macOS / Windows / Linux).
 - Pasos para reproducir.
 - Captura.

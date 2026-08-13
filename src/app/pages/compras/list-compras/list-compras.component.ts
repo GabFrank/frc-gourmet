@@ -19,10 +19,12 @@ import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { firstValueFrom } from 'rxjs';
-import { RepositoryService } from 'src/app/database/repository.service';
+import { RepositoryService, QrUploadedFile } from 'src/app/database/repository.service';
+import { QrUploadDialogComponent } from 'src/app/shared/components/qr-upload-dialog/qr-upload-dialog.component';
 import { PromptDialogComponent, PromptDialogData } from 'src/app/shared/components/prompt-dialog/prompt-dialog.component';
 import { TabsService } from 'src/app/services/tabs.service';
 import { CreateEditCompraComponent } from '../create-edit-compra/create-edit-compra.component';
+import { CrearCompraSimplificadaDialogComponent } from '../crear-compra-simplificada-dialog/crear-compra-simplificada-dialog.component';
 import { CompraDetalleComponent } from '../compra-detalle/compra-detalle.component';
 import { RevisarFacturaComponent } from '../revisar-factura/revisar-factura.component';
 import { FacturaImportService } from 'src/app/services/factura-import.service';
@@ -234,6 +236,16 @@ export class ListComprasComponent implements OnInit {
     );
   }
 
+  compraSimplificada(): void {
+    const ref = this.dialog.open(CrearCompraSimplificadaDialogComponent, {
+      width: '680px',
+      maxWidth: '95vw',
+    });
+    ref.afterClosed().subscribe((ok: boolean) => {
+      if (ok) this.loadData();
+    });
+  }
+
   async importarConIA(): Promise<void> {
     if (this.importing) return;
     try {
@@ -250,6 +262,34 @@ export class ListComprasComponent implements OnInit {
         return;
       }
 
+      this.abrirRevisionTab(proc.documentoId);
+    } catch (e: any) {
+      this.importing = false;
+      this.snackBar.open('Error: ' + e?.message, 'Cerrar', { duration: 6000 });
+    }
+  }
+
+  async importarConIAQr(): Promise<void> {
+    if (this.importing) return;
+    const ref = this.dialog.open(QrUploadDialogComponent, {
+      data: { carpeta: 'factura-imports', accept: 'image/*,application/pdf', maxSizeMB: 5, multiple: false },
+      width: '420px',
+      maxWidth: '95vw',
+    });
+    const files: QrUploadedFile[] | undefined = await firstValueFrom(ref.afterClosed());
+    const f = files?.[0];
+    if (!f) return;
+    try {
+      this.importing = true;
+      this.snackBar.open('Procesando con IA, esto puede tardar 10-30s...', 'Cerrar', { duration: 5000 });
+      const proc = await firstValueFrom(this.facturaImport.processFromUrl(f.url));
+      this.importing = false;
+      // Limpiar el temporal subido (el proceso ya copió su propia versión al bucket).
+      this.repositoryService.deleteFile(f.url).subscribe({ error: () => { /* best-effort */ } });
+      if (!proc.success || !proc.documentoId) {
+        this.snackBar.open('Error al procesar: ' + (proc.error || 'desconocido'), 'Cerrar', { duration: 7000 });
+        return;
+      }
       this.abrirRevisionTab(proc.documentoId);
     } catch (e: any) {
       this.importing = false;

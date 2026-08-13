@@ -88,6 +88,9 @@ export class ConfigurarEmpresaComponent implements OnInit {
       pais: ['PARAGUAY', [Validators.required, Validators.maxLength(60)]],
       zonaHoraria: ['America/Asuncion', [Validators.required, Validators.maxLength(60)]],
       actividadEconomica: ['', [Validators.maxLength(120)]],
+      latitud: [null],
+      longitud: [null],
+      radioFichajeMetros: [200],
     });
   }
 
@@ -115,6 +118,9 @@ export class ConfigurarEmpresaComponent implements OnInit {
           pais: empresa.pais || 'PARAGUAY',
           zonaHoraria: empresa.zonaHoraria || 'America/Asuncion',
           actividadEconomica: empresa.actividadEconomica || '',
+          latitud: empresa.latitud ?? null,
+          longitud: empresa.longitud ?? null,
+          radioFichajeMetros: empresa.radioFichajeMetros ?? 200,
         });
         this.logoUrl = empresa.logoUrl || null;
         this.form.markAsPristine();
@@ -176,6 +182,27 @@ export class ConfigurarEmpresaComponent implements OnInit {
     }
   }
 
+  /** Completa lat/lng con la ubicación actual del dispositivo (para la geocerca). */
+  usarUbicacionActual(): void {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      this.snackBar.open('Este dispositivo no expone ubicación.', 'Cerrar', { duration: 3000 });
+      return;
+    }
+    this.snackBar.open('Obteniendo ubicación…', undefined, { duration: 1500 });
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        this.form.patchValue({
+          latitud: +p.coords.latitude.toFixed(7),
+          longitud: +p.coords.longitude.toFixed(7),
+        });
+        this.form.markAsDirty();
+        this.snackBar.open('Ubicación cargada. No olvides Guardar.', 'Cerrar', { duration: 3000 });
+      },
+      (err) => this.snackBar.open('No se pudo obtener la ubicación: ' + err.message, 'Cerrar', { duration: 4000 }),
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  }
+
   async guardar(): Promise<void> {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
@@ -200,6 +227,9 @@ export class ConfigurarEmpresaComponent implements OnInit {
         pais: raw.pais,
         zonaHoraria: raw.zonaHoraria,
         actividadEconomica: raw.actividadEconomica,
+        latitud: raw.latitud === '' || raw.latitud === null ? null : Number(raw.latitud),
+        longitud: raw.longitud === '' || raw.longitud === null ? null : Number(raw.longitud),
+        radioFichajeMetros: raw.radioFichajeMetros === '' || raw.radioFichajeMetros === null ? null : Number(raw.radioFichajeMetros),
       };
       await this.empresaService.update(payload);
       this.form.markAsPristine();

@@ -2,7 +2,7 @@
   <mat-card-header class="page-header">
     <mat-card-title>Timbrados</mat-card-title>
     <span class="spacer"></span>
-    <button mat-raised-button color="primary" (click)="addTimbrado()">
+    <button *appHasPermission="'FACTURACION_TIMBRADO_GESTIONAR'" mat-raised-button color="primary" (click)="addTimbrado()">
       <mat-icon>add</mat-icon> Nuevo timbrado
     </button>
   </mat-card-header>
@@ -60,10 +60,10 @@
           <button mat-icon-button color="primary" matTooltip="Puntos de expedición / rangos" (click)="openDetalles(t)">
             <mat-icon>format_list_numbered</mat-icon>
           </button>
-          <button mat-icon-button matTooltip="Editar" (click)="editTimbrado(t)">
+          <button *appHasPermission="'FACTURACION_TIMBRADO_GESTIONAR'" mat-icon-button matTooltip="Editar" (click)="editTimbrado(t)">
             <mat-icon>edit</mat-icon>
           </button>
-          <button mat-icon-button color="warn" matTooltip="Eliminar" (click)="deleteTimbrado(t)">
+          <button *appHasPermission="'FACTURACION_TIMBRADO_GESTIONAR'" mat-icon-button color="warn" matTooltip="Eliminar" (click)="deleteTimbrado(t)">
             <mat-icon>delete</mat-icon>
           </button>
         </td>

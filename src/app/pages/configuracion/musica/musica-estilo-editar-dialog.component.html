@@ -1,0 +1,73 @@
+<h2 mat-dialog-title>Editar estilo</h2>
+
+<mat-dialog-content>
+  <div class="cargando" *ngIf="cargando">
+    <mat-spinner diameter="36"></mat-spinner>
+  </div>
+
+  <ng-container *ngIf="!cargando && estilo">
+    <mat-form-field appearance="outline" class="ancho">
+      <mat-label>Nombre</mat-label>
+      <input matInput [(ngModel)]="nombre" maxlength="60" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="ancho">
+      <mat-label>Descripción</mat-label>
+      <textarea
+        matInput
+        rows="2"
+        [(ngModel)]="descripcion"
+        placeholder="Ej: covers modernos de pop y rock en clave bossa, no bossa clásica brasileña"
+      ></textarea>
+      <mat-hint>
+        Va al prompt del etiquetador: es lo que le permite distinguir dos estilos del mismo género.
+      </mat-hint>
+    </mat-form-field>
+
+    <div class="seccion">
+      <div class="seccion-titulo">
+        Géneros que caen acá
+        <span class="contador">{{ estilo.aliasDetalle.length }}</span>
+      </div>
+      <p class="ayuda">
+        Mover un género a otro estilo reclasifica todos sus temas de una. Quitarlo los deja sin
+        clasificar por género — el agente y las correcciones manuales no se tocan.
+      </p>
+
+      <div class="alias-lista" *ngIf="estilo.aliasDetalle.length; else sinAlias">
+        <div class="alias-fila" *ngFor="let a of estilo.aliasDetalle">
+          <span class="alias-valor">{{ a.valor }}</span>
+          <button mat-icon-button [matMenuTriggerFor]="menuAlias" matTooltip="Acciones">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <mat-menu #menuAlias="matMenu">
+            <button mat-menu-item [matMenuTriggerFor]="menuMover" *ngIf="otros.length">
+              <mat-icon>swap_horiz</mat-icon> Mover a…
+            </button>
+            <button mat-menu-item (click)="quitarAlias(a)">
+              <mat-icon>link_off</mat-icon> Quitar del catálogo
+            </button>
+          </mat-menu>
+          <mat-menu #menuMover="matMenu">
+            <button mat-menu-item *ngFor="let o of otros" (click)="moverAlias(a.valor, o)">
+              {{ o.nombre }}
+            </button>
+          </mat-menu>
+        </div>
+      </div>
+      <ng-template #sinAlias>
+        <p class="vacio">
+          Ningún género de Spotify mapea a este estilo todavía. Los temas llegan acá por el agente o
+          a mano desde Repertorio.
+        </p>
+      </ng-template>
+    </div>
+  </ng-container>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cerrar()">Cancelar</button>
+  <button mat-flat-button color="primary" [disabled]="!nombre || guardando" (click)="guardar()">
+    Guardar
+  </button>
+</mat-dialog-actions>

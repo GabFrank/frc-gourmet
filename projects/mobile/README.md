@@ -58,9 +58,13 @@ npx ts-node --project tsconfig.typeorm.json scripts/test-server-standalone.ts
 ## Build y deploy
 
 ```bash
-npx ng build mobile                 # genera dist/mobile (base-href "/")
+npm run build:mobile                # = ng build mobile → genera dist/mobile (base-href "/")
 npm run generate:mobile-api         # regenerar el mapa de canales tras tocar preload.ts
 ```
+
+`npm run build:mobile` es el alias de `ng build mobile` declarado en el `package.json` raíz.
+También se ejecuta como parte de `npm run build:dev` y `npm run build:prod` (que primero
+buildean el desktop y luego la PWA).
 
 El Fastify (modo server) sirve `dist/mobile` en `/` automáticamente (ver `electron/server/server.ts`,
 opción `staticRoot`). En empaquetado, `dist/mobile/**` está en `asarUnpack`.

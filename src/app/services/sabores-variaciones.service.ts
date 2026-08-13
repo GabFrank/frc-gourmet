@@ -147,10 +147,11 @@ export class SaboresVariacionesService {
       tap(result => {
         console.log('✅ Sabor creado:', result.sabor.nombre);
 
-        // Actualizar lista local
-        const saboresActuales = this._sabores$.value;
-        this._sabores$.next([...saboresActuales, result.sabor]);
-
+        // NOTA: no empujamos el sabor recién creado a `_sabores$` porque llega
+        // SIN su array `variaciones` (parcial). La vista de sabores/variaciones
+        // recarga los datos agrupados vía `cargarSaboresConVariaciones` tras crear;
+        // este push sólo dejaba una versión plana que borraba las variaciones de
+        // la tabla.
         this._loading$.next(false);
         this.showSuccess(result.mensaje);
       }),
@@ -617,18 +618,31 @@ export class SaboresVariacionesService {
           const unidadParaGuardar = ingredienteOriginal.unidadOriginal || ingredienteOriginal.unidad;
           const datosNuevoIngrediente: Partial<RecetaIngrediente> = {
             receta: { id: recetaId } as any, // Cast temporal para compatibilidad
-            ingrediente: { id: ingredienteOriginal.ingrediente.id } as any, // Cast temporal para compatibilidad
             cantidad: nuevoIngrediente.cantidad,
             unidad: unidadParaGuardar, // ✅ Usar unidad original
             unidadOriginal: ingredienteOriginal.unidadOriginal, // ✅ Mantener unidad original
+            // ✅ FIX: propagar descripción (item sin producto) y los flags; sin esto,
+            // un ingrediente "solo descripción" enviaba ni ingredienteId ni descripción
+            // → el backend lanzaba "Debe indicar un ingrediente o una descripción".
+            descripcion: ingredienteOriginal.descripcion,
             costoUnitario: ingredienteOriginal.costoUnitario,
-            costoTotal: nuevoIngrediente.cantidad * (ingredienteOriginal.costoUnitario || 0)
+            costoTotal: nuevoIngrediente.cantidad * (ingredienteOriginal.costoUnitario || 0),
+            esExtra: ingredienteOriginal.esExtra,
+            esOpcional: ingredienteOriginal.esOpcional,
+            esCambiable: ingredienteOriginal.esCambiable,
+            porcentajeAprovechamiento: ingredienteOriginal.porcentajeAprovechamiento,
+            esIngredienteBase: ingredienteOriginal.esIngredienteBase,
           };
+          // Sólo vincular el producto ingrediente si existe (si no, queda "solo descripción").
+          const ingId = ingredienteOriginal.ingrediente?.id ?? (ingredienteOriginal as any).ingredienteId;
+          if (ingId) {
+            (datosNuevoIngrediente as any).ingrediente = { id: ingId };
+          }
 
           // ✅ DEBUG: Log de los datos que se van a enviar
           console.log(`🔍 [agregarIngredienteMultiplesVariaciones] Datos para variación ${nuevoIngrediente.variacionId}:`, {
             recetaId,
-            ingredienteId: ingredienteOriginal.ingrediente.id,
+            ingredienteId: ingredienteOriginal.ingrediente?.id,
             cantidad: nuevoIngrediente.cantidad,
             unidad: unidadParaGuardar, // ✅ Unidad que se va a guardar
             unidadOriginal: ingredienteOriginal.unidadOriginal, // ✅ Unidad original

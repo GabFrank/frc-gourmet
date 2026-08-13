@@ -1,252 +1,190 @@
-# Entity IPC Handler List in main.ts
+# Lista de entidades — FRC Gourmet
 
-This document lists the IPC handlers identified in `main.ts`, grouped by their apparent entity or domain.
+> Regenerado: 2026-06-28 desde `src/app/database/entities/**/*.entity.ts`.
+> Total: **157 archivos `.entity.ts`** = 155 entidades de dominio + `printer.entity.ts` (raíz)
+> + `base.entity.ts` (la clase abstracta `BaseModel`, no es una tabla).
+> Todas las entidades extienden `BaseModel` (`id`, `createdAt`, `updatedAt`, `createdBy`, `updatedBy`)
+> y están registradas en `getEntitiesList()` de `database.config.ts`.
+>
+> Para regenerar: `find src/app/database/entities -name '*.entity.ts'` agrupado por carpeta.
 
-## Printers
-- `get-printers`
-- `add-printer`
-- `update-printer`
-- `delete-printer`
-- `print-test-page`
+## auth (2)
+- `login-session.entity.ts` — LoginSession
+- `refresh-token.entity.ts` — RefreshToken
 
-## Personas & Usuarios
-- **Persona:**
-    - `get-personas`
-    - `get-persona`
-    - `create-persona`
-    - `update-persona`
-    - `delete-persona`
-- **Usuario:**
-    - `get-usuarios`
-    - `get-usuario`
-    - `create-usuario`
-    - `update-usuario`
-    - `delete-usuario`
-    - `get-usuarios-paginated`
-- **Role:**
-    - `get-roles`
-    - `get-role`
-    - `create-role`
-    - `update-role`
-    - `delete-role`
-- **UsuarioRole:**
-    - `get-usuario-roles`
-    - `assign-role-to-usuario`
-    - `remove-role-from-usuario`
-- **TipoCliente:**
-    - `get-tipo-clientes`
-    - `get-tipo-cliente`
-    - `create-tipo-cliente`
-    - `update-tipo-cliente`
-    - `delete-tipo-cliente`
-- **Cliente:**
-    - `get-clientes`
-    - `get-cliente`
-    - `create-cliente`
-    - `update-cliente`
-    - `delete-cliente`
+## compras (12)
+- `proveedor.entity.ts` — Proveedor
+- `proveedor-producto.entity.ts` — ProveedorProducto
+- `compra.entity.ts` — Compra
+- `compra-detalle.entity.ts` — CompraDetalle
+- `compra-cuota.entity.ts` — CompraCuota
+- `compra-categoria.entity.ts` — CompraCategoria
+- `pago.entity.ts` — Pago
+- `pago-detalle.entity.ts` — PagoDetalle
+- `forma-pago.entity.ts` — FormaPago
+- `documento-compra-importado.entity.ts` — DocumentoCompraImportado (OCR/IA)
+- `ocr-alias-producto.entity.ts` — OcrAliasProducto
+- `ocr-alias-proveedor.entity.ts` — OcrAliasProveedor
 
-## Authentication (Auth)
-- `login`
-- `logout`
-- `updateSessionActivity`
-- `getLoginSessions`
-- `getCurrentUser`
-- `setCurrentUser`
+## financiero (35)
+- `moneda.entity.ts` — Moneda
+- `moneda-billete.entity.ts` — MonedaBillete
+- `moneda-cambio.entity.ts` — MonedaCambio
+- `tipo-precio.entity.ts` — TipoPrecio
+- `dispositivo.entity.ts` — Dispositivo
+- `caja.entity.ts` — Caja
+- `caja-moneda.entity.ts` — CajaMoneda
+- `conteo.entity.ts` — Conteo
+- `conteo-detalle.entity.ts` — ConteoDetalle
+- `caja-mayor.entity.ts` — CajaMayor
+- `caja-mayor-configuracion.entity.ts` — CajaMayorConfiguracion
+- `caja-mayor-movimiento.entity.ts` — CajaMayorMovimiento
+- `caja-mayor-saldo.entity.ts` — CajaMayorSaldo
+- `gasto.entity.ts` — Gasto
+- `gasto-detalle.entity.ts` — GastoDetalle
+- `gasto-categoria.entity.ts` — GastoCategoria
+- `entrada-varia.entity.ts` — EntradaVaria
+- `entrada-varia-categoria.entity.ts` — EntradaVariaCategoria
+- `operacion-financiera.entity.ts` — OperacionFinanciera
+- `operacion-financiera-categoria.entity.ts` — OperacionFinancieraCategoria
+- `cuenta-por-cobrar.entity.ts` — CuentaPorCobrar
+- `cuenta-por-cobrar-cuota.entity.ts` — CuentaPorCobrarCuota
+- `cuenta-por-pagar.entity.ts` — CuentaPorPagar
+- `cuenta-por-pagar-cuota.entity.ts` — CuentaPorPagarCuota
+- `cuenta-bancaria.entity.ts` — CuentaBancaria
+- `movimiento-bancario.entity.ts` — MovimientoBancario
+- `cheque.entity.ts` — Cheque
+- `chequera.entity.ts` — Chequera
+- `maquina-pos.entity.ts` — MaquinaPos
+- `acreditacion-pos.entity.ts` — AcreditacionPos
+- `cobro-consolidado.entity.ts` — CobroConsolidado
+- `cobro-consolidado-detalle.entity.ts` — CobroConsolidadoDetalle
+- `movimiento-cliente.entity.ts` — MovimientoCliente
+- `retiro-caja.entity.ts` — RetiroCaja
+- `retiro-caja-detalle.entity.ts` — RetiroCajaDetalle
 
-## Image Handling
-- **Profile Images:**
-    - `save-profile-image`
-    - `delete-profile-image`
-- **Product Images:**
-    - `getProductImages`
-    - `createProductImage`
-    - `updateProductImage`
-    - `deleteProductImage`
-    - `saveProductoImage`
-    - `deleteProductoImage`
+## ia (2)
+- `ia-prompt-config.entity.ts` — IaPromptConfig
+- `ia-prompt-sugerencia.entity.ts` — IaPromptSugerencia
 
-## Productos
-- **Categoria:**
-    - `getCategorias`
-    - `getCategoria`
-    - `createCategoria`
-    - `updateCategoria`
-    - `deleteCategoria`
-- **Subcategoria:**
-    - `getSubcategorias`
-    - `getSubcategoria`
-    - `getSubcategoriasByCategoria`
-    - `createSubcategoria`
-    - `updateSubcategoria`
-    - `deleteSubcategoria`
-- **Producto:**
-    - `getProductos`
-    - `getProducto`
-    - `getProductosBySubcategoria`
-    - `createProducto`
-    - `updateProducto`
-    - `deleteProducto`
-- **Presentacion:**
-    - `getPresentacionesByProducto`
-    - `createPresentacion`
-    - `updatePresentacion`
-    - `deletePresentacion`
-- **Codigo:**
-    - `getCodigosByPresentacion`
-    - `createCodigo`
-    - `updateCodigo`
-    - `deleteCodigo`
-- **Sabor:**
-    - `getSabores`
-    - `getSabor`
-    - `createSabor`
-    - `updateSabor`
-    - `deleteSabor`
-- **PresentacionSabor:**
-    - `getPresentacionSaboresByPresentacion`
-    - `getPresentacionSabor`
-    - `createPresentacionSabor`
-    - `updatePresentacionSabor`
-    - `deletePresentacionSabor`
-- **Receta:**
-    - `getRecetas`
-    - `getReceta`
-    - `createReceta`
-    - `updateReceta`
-    - `deleteReceta`
-- **RecetaItem:**
-    - `getRecetaItems`
-    - `getRecetaItem`
-    - `createRecetaItem`
-    - `updateRecetaItem`
-    - `deleteRecetaItem`
-- **Ingrediente:**
-    - `getIngredientes`
-    - `getIngrediente`
-    - `createIngrediente`
-    - `updateIngrediente`
-    - `deleteIngrediente`
-    - `searchIngredientesByDescripcion`
-- **RecetaVariacion:**
-    - `getRecetaVariaciones`
-    - `getRecetaVariacion`
-    - `createRecetaVariacion`
-    - `updateRecetaVariacion`
-    - `deleteRecetaVariacion`
-- **RecetaVariacionItem:**
-    - `getRecetaVariacionItems`
-    - `getRecetaVariacionItem`
-    - `createRecetaVariacionItem`
-    - `updateRecetaVariacionItem`
-    - `deleteRecetaVariacionItem`
+## personas (9)
+- `persona.entity.ts` — Persona
+- `usuario.entity.ts` — Usuario
+- `role.entity.ts` — Role
+- `permission.entity.ts` — Permission
+- `role-permission.entity.ts` — RolePermission
+- `usuario-role.entity.ts` — UsuarioRole
+- `cliente.entity.ts` — Cliente
+- `tipo-cliente.entity.ts` — TipoCliente
+- `convenio.entity.ts` — Convenio
 
-## Financiero
-- **Moneda:**
-    - `getMonedas`
-    - `getMoneda`
-    - `createMoneda`
-    - `updateMoneda`
-    - `deleteMoneda`
-- **TipoPrecio:**
-    - `getTipoPrecios`
-    - `getTipoPrecio`
-    - `createTipoPrecio`
-    - `updateTipoPrecio`
-    - `deleteTipoPrecio`
-- **PrecioVenta:**
-    - `getPreciosVentaByPresentacion`
-    - `getPreciosVentaByPresentacionSabor`
-    - `createPrecioVenta`
-    - `updatePrecioVenta`
-    - `deletePrecioVenta`
-- **MonedaBillete:**
-    - `get-monedas-billetes`
-    - `get-moneda-billete`
-    - `create-moneda-billete`
-    - `update-moneda-billete`
-    - `delete-moneda-billete`
-- **Conteo:**
-    - `get-conteos`
-    - `get-conteo`
-    - `create-conteo`
-    - `update-conteo`
-    - `delete-conteo`
-- **ConteoDetalle:**
-    - `get-conteo-detalles`
-    - `get-conteo-detalle`
-    - `create-conteo-detalle`
-    - `update-conteo-detalle`
-    - `delete-conteo-detalle`
-- **Dispositivo:**
-    - `get-dispositivos`
-    - `get-dispositivo`
-    - `create-dispositivo`
-    - `update-dispositivo`
-    - `delete-dispositivo`
-- **Caja:**
-    - `get-cajas`
-    - `get-caja`
-    - `get-caja-by-dispositivo`
-    - `create-caja`
-    - `update-caja`
-    - `delete-caja`
-- **CajaMoneda:**
-    - `get-cajas-monedas`
-    - `get-caja-moneda`
-    - `create-caja-moneda`
-    - `update-caja-moneda`
-    - `delete-caja-moneda`
-    - `save-cajas-monedas`
-- **MonedaCambio:**
-    - `get-monedas-cambio`
-    - `get-monedas-cambio-by-moneda-origen`
-    - `get-moneda-cambio`
-    - `create-moneda-cambio`
-    - `update-moneda-cambio`
-    - `delete-moneda-cambio`
+## personalizacion (2)
+- `dashboard-shortcut.entity.ts` — DashboardShortcut
+- `onboarding-task-override.entity.ts` — OnboardingTaskOverride
 
-## Compras
-- **Proveedor:**
-    - `getProveedores`
-    - `getProveedor`
-    - `createProveedor`
-    - `updateProveedor`
-    - `deleteProveedor`
-- **Compra:**
-    - `getCompras`
-    - `getCompra`
-    - `createCompra`
-    - `updateCompra`
-    - `deleteCompra`
-- **CompraDetalle:**
-    - `getCompraDetalles`
-    - `createCompraDetalle`
-    - `updateCompraDetalle`
-    - `deleteCompraDetalle`
-- **Pago:**
-    - `getPagos`
-    - `getPago`
-    - `createPago`
-    - `updatePago`
-    - `deletePago`
-- **PagoDetalle:**
-    - `getPagoDetalles`
-    - `createPagoDetalle`
-    - `updatePagoDetalle`
-    - `deletePagoDetalle`
-- **ProveedorProducto:**
-    - `getProveedorProductos`
-    - `getProveedorProducto`
-    - `createProveedorProducto`
-    - `updateProveedorProducto`
-    - `deleteProveedorProducto`
-- **FormasPago:**
-    - `getFormasPago`
-    - `getFormaPago`
-    - `createFormaPago`
-    - `updateFormaPago`
-    - `deleteFormaPago`
+## productos (33)
+- `familia.entity.ts` — Familia
+- `subfamilia.entity.ts` — Subfamilia
+- `producto.entity.ts` — Producto
+- `producto-sector.entity.ts` — ProductoSector
+- `producto-observacion.entity.ts` — ProductoObservacion
+- `presentacion.entity.ts` — Presentacion
+- `codigo-barra.entity.ts` — CodigoBarra
+- `precio-venta.entity.ts` — PrecioVenta
+- `precio-costo.entity.ts` — PrecioCosto
+- `observacion.entity.ts` — Observacion
+- `adicional.entity.ts` — Adicional
+- `combo.entity.ts` — Combo
+- `combo-producto.entity.ts` — ComboProducto
+- `promocion.entity.ts` — Promocion
+- `promocion-presentacion.entity.ts` — PromocionPresentacion
+- `sabor.entity.ts` — Sabor
+- `receta.entity.ts` — Receta
+- `receta-fase.entity.ts` — RecetaFase
+- `receta-fase-ingrediente.entity.ts` — RecetaFaseIngrediente
+- `receta-ingrediente.entity.ts` — RecetaIngrediente
+- `receta-ingrediente-intercambiable.entity.ts` — RecetaIngredienteIntercambiable
+- `receta-material.entity.ts` — RecetaMaterial
+- `receta-presentacion.entity.ts` — RecetaPresentacion
+- `receta-adicional-vinculacion.entity.ts` — RecetaAdicionalVinculacion
+- `produccion.entity.ts` — Produccion
+- `produccion-ingrediente.entity.ts` — ProduccionIngrediente
+- `stock-movimiento.entity.ts` — StockMovimiento
+- `tamanho-pizza.entity.ts` — TamanhoPizza
+- `sabor-pizza.entity.ts` — SaborPizza
+- `ensamblado-pizza.entity.ts` — EnsambladoPizza
+- `ensamblado-pizza-sabor.entity.ts` — EnsambladoPizzaSabor
+- `configuracion-monetaria.entity.ts` — ConfiguracionMonetaria
+- `conversion-moneda.entity.ts` — ConversionMoneda
 
-## System Info
-- `get-system-mac-address` 
+## rrhh (34)
+- `funcionario.entity.ts` — Funcionario
+- `funcionario-documento.entity.ts` — FuncionarioDocumento
+- `funcionario-turno.entity.ts` — FuncionarioTurno
+- `funcionario-regla-comision.entity.ts` — FuncionarioReglaComision
+- `cargo.entity.ts` — Cargo
+- `historico-cargo.entity.ts` — HistoricoCargo
+- `historico-salario.entity.ts` — HistoricoSalario
+- `turno.entity.ts` — Turno
+- `asistencia.entity.ts` — Asistencia
+- `hora-extra.entity.ts` — HoraExtra
+- `feriado.entity.ts` — Feriado
+- `vacacion.entity.ts` — Vacacion
+- `vacacion-periodo.entity.ts` — VacacionPeriodo
+- `vacacion-venta.entity.ts` — VacacionVenta
+- `aguinaldo.entity.ts` — Aguinaldo
+- `bono.entity.ts` — Bono
+- `penalizacion.entity.ts` — Penalizacion
+- `vale.entity.ts` — Vale
+- `motivo-vale.entity.ts` — MotivoVale
+- `liquidacion-sueldo.entity.ts` — LiquidacionSueldo
+- `liquidacion-item.entity.ts` — LiquidacionItem
+- `liquidacion-concepto.entity.ts` — LiquidacionConcepto
+- `liquidacion-final.entity.ts` — LiquidacionFinal
+- `liquidacion-final-item.entity.ts` — LiquidacionFinalItem
+- `liquidacion-comision.entity.ts` — LiquidacionComision
+- `liquidacion-comision-item.entity.ts` — LiquidacionComisionItem
+- `regla-comision.entity.ts` — ReglaComision
+- `regla-comision-producto.entity.ts` — ReglaComisionProducto
+- `regla-comision-requisito.entity.ts` — ReglaComisionRequisito
+- `equipo-comision.entity.ts` — EquipoComision
+- `equipo-comision-miembro.entity.ts` — EquipoComisionMiembro
+- `equipo-comision-regla.entity.ts` — EquipoComisionRegla
+- `configuracion-rrhh.entity.ts` — ConfiguracionRrhh
+- `notificacion-rrhh.entity.ts` — NotificacionRrhh
+
+## ventas (24)
+- `venta.entity.ts` — Venta
+- `venta-item.entity.ts` — VentaItem
+- `venta-item-adicional.entity.ts` — VentaItemAdicional
+- `venta-item-ingrediente-modificacion.entity.ts` — VentaItemIngredienteModificacion
+- `venta-item-observacion.entity.ts` — VentaItemObservacion
+- `venta-item-sabor.entity.ts` — VentaItemSabor
+- `pdv-config.entity.ts` — PdvConfig
+- `pdv-grupo-categoria.entity.ts` — PdvGrupoCategoria
+- `pdv-categoria.entity.ts` — PdvCategoria
+- `pdv-categoria-item.entity.ts` — PdvCategoriaItem
+- `pdv-item-producto.entity.ts` — PdvItemProducto
+- `pdv-atajo-grupo.entity.ts` — PdvAtajoGrupo
+- `pdv-atajo-grupo-item.entity.ts` — PdvAtajoGrupoItem
+- `pdv-atajo-item.entity.ts` — PdvAtajoItem
+- `pdv-atajo-item-producto.entity.ts` — PdvAtajoItemProducto
+- `pdv-mesa.entity.ts` — PdvMesa
+- `sector.entity.ts` — Sector
+- `sector-impresora.entity.ts` — SectorImpresora
+- `comanda.entity.ts` — Comanda
+- `comanda-item.entity.ts` — ComandaItem
+- `delivery.entity.ts` — Delivery
+- `precio-delivery.entity.ts` — PrecioDelivery
+- `reserva.entity.ts` — Reserva
+- `kds-pantalla.entity.ts` — KdsPantalla
+
+## shared (1)
+- `adjunto.entity.ts` — Adjunto
+
+## sistema (1)
+- `empresa.entity.ts` — Empresa
+
+## raíz (no agrupadas en un dominio)
+- `printer.entity.ts` — Printer (tabla `printers`)
+- `base.entity.ts` — `BaseModel` (clase abstracta, NO es una tabla)

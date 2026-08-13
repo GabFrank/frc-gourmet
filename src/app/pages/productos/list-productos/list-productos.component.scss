@@ -4,10 +4,10 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  background-color: #404040;
+  background-color: var(--background-color);
 
   mat-card {
-    background-color: #363636;
+    background-color: var(--card-background);
   }
 
   .loading-container {
@@ -16,7 +16,7 @@
     align-items: center;
     justify-content: center;
     padding: 48px;
-    color: #666;
+    color: var(--text-secondary);
 
     p {
       margin-top: 16px;
@@ -29,19 +29,19 @@
     justify-content: space-between;
     align-items: center;
     padding: 24px 36px;
-    border-bottom: 1px solid #444;
+    border-bottom: 1px solid var(--border-color);
 
     .title-section {
       h3 {
         margin: 0;
         font-size: 1.75rem;
         font-weight: 500;
-        color: #fff;
+        color: var(--text-primary);
       }
 
       .subtitle {
         margin: 8px 0 0 0;
-        color: #ccc;
+        color: var(--text-secondary);
         font-size: 1rem;
       }
     }
@@ -58,8 +58,8 @@
   .filters-section {
     margin: 10px;
     padding: 10px;
-    background-color: #363636;
-    border-bottom: 1px solid #444;
+    background-color: var(--card-background);
+    border-bottom: 1px solid var(--border-color);
 
     .search-row {
       display: flex;
@@ -92,11 +92,11 @@
 
   .table-container {
     flex: 1;
-    background: #363636;
+    background: var(--card-background);
     margin: 10px;
     padding: 10px;
     border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px var(--shadow-color);
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -104,10 +104,10 @@
 
     .productos-table {
       width: 100%;
-      background-color: #363636;
+      background-color: var(--card-background);
       border-radius: 8px;
       overflow: hidden;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 2px 8px var(--shadow-color);
 
       .mat-column-nombre {
         width: 30%;
@@ -142,12 +142,12 @@
         transition: all 0.2s ease;
 
         &.activo {
-          background-color: #4caf50;
+          background-color: var(--success-color);
           color: white;
         }
 
         &.inactivo {
-          background-color: #f44336;
+          background-color: var(--error-color);
           color: white;
         }
 
@@ -165,20 +165,20 @@
       justify-content: center;
       padding: 48px 24px;
       text-align: center;
-      color: #666;
+      color: var(--text-secondary);
 
       mat-icon {
         font-size: 48px;
         width: 48px;
         height: 48px;
-        color: #ccc;
+        color: var(--text-disabled);
         margin-bottom: 16px;
       }
 
       h3 {
         margin: 0 0 8px 0;
         font-size: 1.25rem;
-        color: #333;
+        color: var(--text-primary);
       }
 
       p {
@@ -194,8 +194,8 @@
     }
 
     mat-paginator {
-      background-color: #363636;
-      border-top: 1px solid #444;
+      background-color: var(--card-background);
+      border-top: 1px solid var(--border-color);
     }
   }
 }
@@ -259,35 +259,6 @@
   }
 }
 
-// Dark theme support
-@media (prefers-color-scheme: dark) {
-  .list-productos-container {
-    .header {
-      .title-section {
-        h3 {
-          color: #fff;
-        }
-
-        .subtitle {
-          color: #ccc;
-        }
-      }
-    }
-
-    .table-container {
-      .empty-state {
-        h3 {
-          color: #fff;
-        }
-
-        p {
-          color: #ccc;
-        }
-      }
-    }
-  }
-}
-
 // Theme variables (fallback)
 :host {
   --primary-color: #1976d2;
@@ -319,7 +290,7 @@
   gap: 4px;
   margin-left: 8px;
   padding: 2px 8px;
-  background: #ef6c00;
+  background: var(--warning-color);
   color: white;
   border-radius: 12px;
   font-size: 11px;

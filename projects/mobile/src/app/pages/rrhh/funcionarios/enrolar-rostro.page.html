@@ -1,0 +1,41 @@
+<div class="crud-edit">
+  <mat-toolbar color="primary" class="crud-edit-bar">
+    <button mat-icon-button (click)="volver()" aria-label="Volver"><mat-icon>arrow_back</mat-icon></button>
+    <span class="crud-edit-title">Rostros{{ funcionarioNombre ? ' — ' + funcionarioNombre : '' }}</span>
+    <span class="crud-spacer"></span>
+    <button mat-button (click)="guardar()" [disabled]="!capturas.length || saving">Guardar</button>
+  </mat-toolbar>
+
+  <mat-progress-bar *ngIf="saving" mode="indeterminate"></mat-progress-bar>
+
+  <div class="crud-form">
+    <p class="crud-sub">
+      Capturá entre 1 y {{ maxCapturas }} tomas (frente, leve giro) con buena luz.
+    </p>
+
+    <app-face-capture
+      facingMode="user"
+      captureLabel="Capturar rostro"
+      (captured)="onCaptured($event)"
+      (cameraError)="onCameraError($event)"
+    ></app-face-capture>
+
+    <div class="capturas" *ngIf="capturas.length">
+      <mat-chip-listbox>
+        <mat-chip-option *ngFor="let c of capturas; let i = index" [selectable]="false" (removed)="quitarCaptura(i)">
+          Toma {{ i + 1 }} · {{ (c.score * 100) | number:'1.0-0' }}%
+          <button matChipRemove aria-label="Quitar"><mat-icon>cancel</mat-icon></button>
+        </mat-chip-option>
+      </mat-chip-listbox>
+      <span class="count">{{ capturas.length }} / {{ maxCapturas }}</span>
+    </div>
+
+    <h3 class="rostros-title" *ngIf="rostros.length">Rostros registrados ({{ rostros.length }})</h3>
+    <div class="rostro-row" *ngFor="let r of rostros">
+      <span>{{ r.createdAt | date:'short' }} · {{ r.modelo }}</span>
+      <button mat-icon-button color="warn" (click)="eliminarRostro(r)" aria-label="Eliminar">
+        <mat-icon>delete</mat-icon>
+      </button>
+    </div>
+  </div>
+</div>

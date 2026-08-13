@@ -1,6 +1,6 @@
 import { Column, Entity, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { BaseModel } from '../base.entity';
-import { RetiroCajaEstado } from './caja-mayor-enums';
+import { RetiroCajaEstado, RetiroCajaOrigen } from './caja-mayor-enums';
 import { Usuario } from '../personas/usuario.entity';
 
 @Entity('retiros_caja')
@@ -19,6 +19,18 @@ export class RetiroCaja extends BaseModel {
     default: RetiroCajaEstado.FLOTANTE
   })
   estado!: RetiroCajaEstado;
+
+  @Column({
+    type: 'varchar',
+    enum: RetiroCajaOrigen,
+    default: RetiroCajaOrigen.MANUAL
+  })
+  origen!: RetiroCajaOrigen;
+
+  // Cierre de caja que originó el retiro (solo cuando origen = CIERRE).
+  @ManyToOne('Conteo', { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'conteo_cierre_id' })
+  conteoCierre?: any;
 
   @Column({ name: 'fecha_retiro' })
   fechaRetiro!: Date;

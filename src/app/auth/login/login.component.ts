@@ -11,6 +11,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog } from '@angular/material/dialog';
 import { AuthService } from '../../services/auth.service';
 import { ThemeService } from '../../services/theme.service';
@@ -18,6 +19,8 @@ import { trigger, transition, style, animate, query, stagger } from '@angular/an
 import { firstValueFrom, Subscription } from 'rxjs';
 import { ForceChangePasswordDialogComponent } from '../force-change-password-dialog/force-change-password-dialog.component';
 import { PasswordRecoveryDialogComponent } from '../password-recovery-dialog/password-recovery-dialog.component';
+import { QrLoginDialogComponent } from '../qr-login-dialog/qr-login-dialog.component';
+import { ConexionConfigDialogComponent } from '../conexion-config-dialog/conexion-config-dialog.component';
 
 @Component({
   selector: 'app-login',
@@ -33,7 +36,8 @@ import { PasswordRecoveryDialogComponent } from '../password-recovery-dialog/pas
     MatProgressSpinnerModule,
     MatSnackBarModule,
     MatCheckboxModule,
-    MatDividerModule
+    MatDividerModule,
+    MatTooltipModule
   ],
   templateUrl: './login.component.html',
   styleUrls: ['./login.component.scss'],
@@ -73,6 +77,8 @@ export class LoginComponent implements OnInit, OnDestroy {
   timeGreeting: string;
   rememberMe: boolean = false;
   isDarkTheme = false;
+  // El login por QR solo aplica en modo cliente (hay un server que emite el code).
+  puedeQr = false;
   private themeSub?: Subscription;
 
   constructor(
@@ -104,6 +110,13 @@ export class LoginComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // El login por QR requiere un server (modo cliente).
+    try {
+      this.puedeQr = (window as any).api?.getAppMode?.() === 'client';
+    } catch {
+      this.puedeQr = false;
+    }
+
     // Check if already logged in
     if (this.authService.isLoggedIn) {
       this.router.navigate(['/']);
@@ -127,6 +140,19 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.themeSub?.unsubscribe();
+  }
+
+  /** Abre el diálogo de login por QR; al aprobarse desde el teléfono, entra. */
+  loginConQr(): void {
+    const ref = this.dialog.open(QrLoginDialogComponent, { width: '380px', disableClose: false });
+    ref.afterClosed().subscribe((outcome) => {
+      if (outcome === 'approved') this.router.navigate(['/']);
+    });
+  }
+
+  /** Config de conexión (modo/URL server) accesible sin login. */
+  openConexionConfig(): void {
+    this.dialog.open(ConexionConfigDialogComponent, { width: '480px', autoFocus: false });
   }
 
   openPasswordRecovery(): void {

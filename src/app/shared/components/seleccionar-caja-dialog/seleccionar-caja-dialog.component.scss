@@ -1,0 +1,42 @@
+.hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.cajas-list {
+  padding: 0;
+}
+
+.caja-item {
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+
+  &:hover {
+    background-color: rgba(128, 128, 128, 0.12);
+  }
+}
+
+.caja-titulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background-color: rgba(76, 175, 80, 0.22);
+  color: #66bb6a;
+}
+
+.caja-sub {
+  font-size: 12px;
+  opacity: 0.7;
+}

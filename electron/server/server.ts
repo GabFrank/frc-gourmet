@@ -18,14 +18,19 @@ import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, mkdirSync } from 'fs';
+import * as path from 'path';
 import { DataSource } from 'typeorm';
 import { handlerRegistryCount } from '../utils/handler-registry';
 import { registerSpecialRoutes } from './special-routes';
 import { registerRpcRoute } from './rpc-router';
 import { registerAuthRoutes } from './auth-routes';
+import { registerDeviceAuthRoutes } from './device-auth-routes';
 import { registerFileRoutes } from './file-routes';
 import { registerKdsSseRoutes } from './kds-sse-routes';
+import { registerMusicaSseRoutes } from './musica-sse-routes';
+import { registerPublicRoutes } from './public-routes';
+import { registerQrUploadRoutes } from './qr-upload-routes';
 import { registerAuthPlugin } from './auth-middleware';
 
 export interface ServerOptions {
@@ -42,6 +47,20 @@ export interface ServerOptions {
    * la API). Si no se pasa o no existe, no se sirve nada estático.
    */
   staticRoot?: string;
+  /**
+   * Storefront de pedidos online (`dist/storefront`). Si existe, se sirve en
+   * `/tienda/` (la web pública del cliente), separado del bundle mobile (`/`).
+   * Debe buildearse con `--base-href /tienda/`.
+   */
+  storefrontRoot?: string;
+  /**
+   * Frontend desktop servido como web (`dist/frc-gourmet-web`). Es el mismo
+   * bundle Angular del desktop, buildeado con `--base-href /admin/` y un shim
+   * HTTP en vez del preload de Electron. Si existe, se sirve en `/admin/` para
+   * abrir el panel administrativo completo desde un browser (misma sesión y
+   * `/api/*` que la PWA). Debe buildearse con `--configuration web`.
+   */
+  adminRoot?: string;
   /**
    * HTTPS directo en LAN. Si `certPath`/`keyPath` existen, se abre un segundo
    * listener HTTPS en `httpsPort` (default 7443) con el mismo set de rutas, para
@@ -62,11 +81,22 @@ async function buildInstance(
   opts: ServerOptions,
   https: { key: Buffer; cert: Buffer } | null,
 ): Promise<FastifyInstance> {
+  // trustProxy: habilita leer el IP real del cliente vía X-Forwarded-For cuando el
+  // server está detrás de un reverse proxy (necesario para la validación de red de
+  // MESA_QR). ⚠️ SOLO habilitar si el server es alcanzable ÚNICAMENTE a través del
+  // proxy de confianza — si no, un cliente directo podría spoofear X-Forwarded-For.
+  // Config por env TRUST_PROXY: 'true'/'1' (confía en todos), o IP/CIDR/lista del
+  // proxy. Sin setear → false (usa el IP del socket).
+  const tpEnv = (process.env['TRUST_PROXY'] || '').trim();
+  const trustProxy: boolean | string =
+    tpEnv === '' ? false : (tpEnv === 'true' || tpEnv === '1') ? true : tpEnv;
+
   const fastify = Fastify({
     logger: {
       level: process.env['NODE_ENV'] === 'development' ? 'info' : 'warn',
     },
     bodyLimit: 50 * 1024 * 1024, // 50MB para uploads de imagenes/adjuntos
+    trustProxy,
     ...(https ? { https } : {}),
   });
 
@@ -101,14 +131,95 @@ async function buildInstance(
   // Auth (login + refresh, no requieren JWT previo)
   registerAuthRoutes(fastify, opts.dataSource);
 
+  // Login por QR (device grant): vincular TV KDS / desktop escaneando con el PWA
+  registerDeviceAuthRoutes(fastify, opts.dataSource);
+
   // RPC (requiere JWT — el middleware se aplica via onRequest hook).
   registerRpcRoute(fastify, opts.dataSource);
 
   // Files (requiere JWT)
   registerFileRoutes(fastify, opts.dataSource);
 
+  // Subida por QR (sin JWT — el token de sesión es la credencial).
+  registerQrUploadRoutes(fastify);
+
   // KDS: stream SSE para pantallas web en tiempo real (auth por token en query)
   registerKdsSseRoutes(fastify);
+  registerMusicaSseRoutes(fastify);
+
+  // Pedidos online: namespace público `/pub/*` con whitelist + JWT de cliente.
+  // Separado de `/api/rpc` (staff). Se registra ANTES del static/SPA fallback
+  // para que sus rutas explícitas matcheen primero.
+  registerPublicRoutes(fastify);
+
+  // Imágenes de producto públicas para la carta online (`app://producto-images/X`
+  // → `/pub/producto-image/X`). Sólo fotos de menú (no sensible). @fastify/static
+  // bloquea path-traversal. decorateReply:false para no chocar con otros statics.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { app } = require('electron');
+    const productoImagesDir = path.join(app.getPath('userData'), 'producto-images');
+    if (existsSync(productoImagesDir)) {
+      await fastify.register(fastifyStatic, {
+        root: productoImagesDir,
+        prefix: '/pub/producto-image/',
+        decorateReply: false,
+        wildcard: false,
+      });
+    }
+  } catch {
+    // Sin electron (tests) o sin dir: se omite el serving de imágenes.
+  }
+
+  // Modelos de reconocimiento facial (@vladmandic/human) en `/face-models/`.
+  // Público (no sensible): la PWA y el enrollment desktop los cargan desde acá.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { app } = require('electron');
+    const faceModelsDir = path.join(app.getPath('userData'), 'face-models');
+    if (!existsSync(faceModelsDir)) mkdirSync(faceModelsDir, { recursive: true });
+    await fastify.register(fastifyStatic, {
+      root: faceModelsDir,
+      prefix: '/face-models/',
+      decorateReply: false,
+      wildcard: false,
+    });
+  } catch {
+    // Sin electron (tests): se omite.
+  }
+
+  // Storefront de pedidos online en `/tienda/` (web pública del cliente).
+  // Se registra ANTES del static de mobile (`/`) para que su prefijo matchee.
+  const storefrontIndex =
+    opts.storefrontRoot && existsSync(opts.storefrontRoot)
+      ? path.join(opts.storefrontRoot, 'index.html')
+      : null;
+  if (opts.storefrontRoot && storefrontIndex && existsSync(storefrontIndex)) {
+    await fastify.register(fastifyStatic, {
+      root: opts.storefrontRoot,
+      prefix: '/tienda/',
+      decorateReply: false, // el static de mobile ya decora reply.sendFile
+      wildcard: false,
+      index: ['index.html'],
+    });
+  }
+
+  // Panel administrativo desktop servido como web en `/admin/` (bundle
+  // `dist/frc-gourmet-web`, base-href `/admin/`). Se registra ANTES del static de
+  // mobile (`/`) para que su prefijo matchee primero.
+  const adminIndex =
+    opts.adminRoot && existsSync(opts.adminRoot)
+      ? path.join(opts.adminRoot, 'index.html')
+      : null;
+  if (opts.adminRoot && adminIndex && existsSync(adminIndex)) {
+    await fastify.register(fastifyStatic, {
+      root: opts.adminRoot,
+      prefix: '/admin/',
+      decorateReply: false, // el static de mobile ya decora reply.sendFile
+      wildcard: false,
+      index: ['index.html'],
+    });
+  }
 
   // F2 (mobile PWA): servir el bundle estático de projects/mobile en `/`.
   if (opts.staticRoot && existsSync(opts.staticRoot)) {
@@ -128,6 +239,14 @@ async function buildInstance(
     fastify.setNotFoundHandler((request, reply) => {
       if (request.method === 'GET' && !request.url.startsWith('/api')) {
         reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+        // Deep-links del storefront → su propio index (SPA fallback).
+        if (storefrontIndex && request.url.startsWith('/tienda')) {
+          return reply.type('text/html').send(readFileSync(storefrontIndex));
+        }
+        // Deep-links del panel admin desktop-web → su propio index (SPA fallback).
+        if (adminIndex && request.url.startsWith('/admin')) {
+          return reply.type('text/html').send(readFileSync(adminIndex));
+        }
         return (reply as any).sendFile('index.html');
       }
       reply.code(404);

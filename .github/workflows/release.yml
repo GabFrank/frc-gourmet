@@ -88,7 +88,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        # windows-2022 (VS 2022 / v17): el runner windows-latest se actualizo a
+        # Visual Studio 2026 (v18), que el @electron/node-gyp pineado no reconoce
+        # ("unsupported version: 18") y rompe el rebuild nativo (node-printer) al
+        # empaquetar. windows-2022 mantiene un VS que node-gyp si soporta.
+        os: [windows-2022, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       # Checkout exacto al tag que semantic-release acaba de crear — evita race
@@ -120,13 +124,47 @@ jobs:
           "
           echo "package.json bumped a ${VERSION}"
 
-      - name: Install deps
-        # --omit=optional skip canvas (transitive de pdfjs-dist@optionalDependencies).
-        # canvas intenta compilar cairo y rompe en ambos OS porque no tenemos los
-        # headers nativos. El codigo usa @napi-rs/canvas (prebuilt napi binary)
-        # que monkey-patchea CanvasFactory de pdfjs, asi que canvas nativo no
-        # hace falta.
+      # Instalacion de dependencias, bifurcada por OS:
+      #
+      # Linux: --omit=optional saltea canvas (transitive de pdfjs-dist, compila
+      # cairo y rompe) y node-printer (exige CUPS). El codigo usa @napi-rs/canvas
+      # (prebuilt napi), no el canvas nativo.
+      - name: Install deps (Linux)
+        if: matrix.os != 'windows-2022'
         run: npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
+
+      # Windows: node-printer (driver del spooler `system`).
+      #
+      # CAUSA RAIZ (log del build, definitiva): node-printer trae un node-gyp 8.4.1
+      # viejo; su `gyp_main.py` hace `from distutils.version import StrictVersion`.
+      # El runner usa Python 3.12, y distutils FUE ELIMINADO del stdlib en Python 3.12
+      # (PEP 632) -> "ModuleNotFoundError: No module named 'distutils'" -> node-gyp
+      # falla al configurar -> node-printer no compila -> npm lo dropea (optional) ->
+      # nunca queda en node_modules -> la app tira "Cannot find module @thiagoelg/node-printer".
+      # (No era ni VS ni el empaquetado; VS2022 se detecta bien.)
+      #
+      # Fix: usar Python 3.11 (que SI trae distutils) para node-gyp, via npm_config_python.
+      # Ademas se lo declara dependency REQUERIDA (si algo falla, el job falla con el
+      # error real en vez de dropearlo en silencio) y electron-builder lo empaqueta.
+      - name: Setup Python 3.11 for node-gyp (Windows)
+        if: matrix.os == 'windows-2022'
+        id: py311
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps (Windows, con node-printer)
+        if: matrix.os == 'windows-2022'
+        shell: bash
+        env:
+          # node-gyp usa este Python (3.11 con distutils) en vez del 3.12 del runner.
+          npm_config_python: ${{ steps.py311.outputs.python-path }}
+        run: |
+          npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies=p.dependencies||{};p.dependencies['@thiagoelg/node-printer']=(p.optionalDependencies||{})['@thiagoelg/node-printer']||'^0.6.2';if(p.optionalDependencies)delete p.optionalDependencies['@thiagoelg/node-printer'];fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');console.log('node-printer declarado como dependency requerida');"
+          npm install --no-save --no-audit --no-fund --foreground-scripts --build-from-source @thiagoelg/node-printer@0.6.2
+          node -e "require.resolve('@thiagoelg/node-printer/package.json')"
+          rm -rf node_modules/canvas
 
       - name: Build app
         run: npm run build:prod
@@ -138,7 +176,7 @@ jobs:
       # publish-always tradicional. Detectamos en un step temprano y bifurcamos.
       - name: Detect SignPath availability (Windows only)
         id: signpath
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-2022'
         shell: bash
         env:
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -153,7 +191,7 @@ jobs:
 
       # Path A — sin SignPath (linux siempre, windows cuando no hay token)
       - name: Build & publish installer (unsigned)
-        if: matrix.os != 'windows-latest' || steps.signpath.outputs.enabled != 'true'
+        if: matrix.os != 'windows-2022' || steps.signpath.outputs.enabled != 'true'
         shell: bash
         run: |
           if [ -z "${CSC_LINK}" ]; then unset CSC_LINK CSC_KEY_PASSWORD; fi
@@ -169,7 +207,7 @@ jobs:
       # latest.yml/alpha.yml/beta.yml con el sha512 del .exe firmado → publish
       # final via gh release upload.
       - name: Package installer (windows, no publish)
-        if: matrix.os == 'windows-latest' && steps.signpath.outputs.enabled == 'true'
+        if: matrix.os == 'windows-2022' && steps.signpath.outputs.enabled == 'true'
         shell: bash
         run: |
           if [ -z "${CSC_LINK}" ]; then unset CSC_LINK CSC_KEY_PASSWORD; fi
@@ -179,7 +217,7 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
       - name: Upload unsigned exe to Actions artifacts (for SignPath)
-        if: matrix.os == 'windows-latest' && steps.signpath.outputs.enabled == 'true'
+        if: matrix.os == 'windows-2022' && steps.signpath.outputs.enabled == 'true'
         id: upload-unsigned
         uses: actions/upload-artifact@v4
         with:
@@ -188,7 +226,7 @@ jobs:
           retention-days: 1
 
       - name: Sign Windows installer with SignPath
-        if: matrix.os == 'windows-latest' && steps.signpath.outputs.enabled == 'true'
+        if: matrix.os == 'windows-2022' && steps.signpath.outputs.enabled == 'true'
         uses: SignPath/github-action-submit-signing-request@v1
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -200,12 +238,12 @@ jobs:
           output-artifact-directory: release/
 
       - name: Regenerate updater manifests with signed exe hash
-        if: matrix.os == 'windows-latest' && steps.signpath.outputs.enabled == 'true'
+        if: matrix.os == 'windows-2022' && steps.signpath.outputs.enabled == 'true'
         shell: bash
         run: node scripts/regenerate-updater-manifest.js
 
       - name: Publish signed Windows assets to GitHub Release
-        if: matrix.os == 'windows-latest' && steps.signpath.outputs.enabled == 'true'
+        if: matrix.os == 'windows-2022' && steps.signpath.outputs.enabled == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

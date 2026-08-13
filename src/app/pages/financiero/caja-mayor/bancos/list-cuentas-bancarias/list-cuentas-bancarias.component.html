@@ -1,7 +1,7 @@
 <div class="page-container">
   <div class="page-header">
     <h2>Cuentas Bancarias</h2>
-    <button mat-raised-button color="primary" (click)="crear()">
+    <button mat-raised-button color="primary" (click)="crear()" *appHasPermission="'BANCOS_GESTIONAR'">
       <mat-icon>add</mat-icon> Nueva Cuenta
     </button>
   </div>
@@ -52,8 +52,10 @@
           <button mat-icon-button [matMenuTriggerFor]="m"><mat-icon>more_vert</mat-icon></button>
           <mat-menu #m="matMenu">
             <button mat-menu-item (click)="verHistorico(row)"><mat-icon>history</mat-icon><span>Historico de movimientos</span></button>
-            <button mat-menu-item (click)="editar(row)"><mat-icon>edit</mat-icon><span>Editar</span></button>
-            <button mat-menu-item (click)="desactivar(row)" *ngIf="row.activo"><mat-icon>block</mat-icon><span>Desactivar</span></button>
+            <button mat-menu-item (click)="editar(row)" *appHasPermission="'BANCOS_GESTIONAR'"><mat-icon>edit</mat-icon><span>Editar</span></button>
+            <ng-container *appHasPermission="'BANCOS_GESTIONAR'">
+              <button mat-menu-item (click)="desactivar(row)" *ngIf="row.activo"><mat-icon>block</mat-icon><span>Desactivar</span></button>
+            </ng-container>
           </mat-menu>
         </td>
       </ng-container>

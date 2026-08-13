@@ -1,0 +1,171 @@
+/* ============================================================================
+   Storefront — sistema de diseño (tema claro, acento rojo cálido tipo iFood).
+   Tokens basados en la investigación de UX de apps de delivery.
+   El acento (--sf-primary) es override-able por local vía TiendaOnlineConfig.
+   ============================================================================ */
+:root {
+  /* Acento (rojo cálido iFood) — configurable por local */
+  --sf-primary: #EA1D2C;
+  --sf-primary-hover: #C8101E;
+  --sf-primary-active: #A50D18;
+  --sf-primary-surface: #FFEBED;
+  --sf-on-primary: #FFFFFF;
+
+  --sf-secondary: #FFB800;
+  --sf-success: #008A05;
+  --sf-success-bg: rgba(0, 138, 5, 0.10);
+  --sf-warning: #B8860B;
+  --sf-warning-bg: rgba(255, 184, 0, 0.15);
+  --sf-error: #D32F2F;
+  --sf-error-bg: rgba(211, 47, 47, 0.10);
+
+  /* Superficies */
+  --sf-bg: #F7F7F7;
+  --sf-surface: #FFFFFF;
+  --sf-surface-alt: #F2F2F2;
+  --sf-overlay: rgba(0, 0, 0, 0.5);
+
+  /* Texto */
+  --sf-text: #212121;
+  --sf-text-muted: #717171;
+  --sf-text-disabled: #9E9E9E;
+
+  /* Bordes */
+  --sf-border: #E0E0E0;
+  --sf-divider: #EEEEEE;
+
+  /* Radios */
+  --sf-radius-sm: 4px;
+  --sf-radius: 10px;
+  --sf-radius-lg: 14px;
+  --sf-radius-sheet: 20px;
+  --sf-pill: 999px;
+
+  /* Sombras */
+  --sf-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --sf-shadow-raised: 0 4px 12px rgba(0, 0, 0, 0.12);
+  --sf-shadow-sticky: 0 -2px 10px rgba(0, 0, 0, 0.08);
+  --sf-shadow-fab: 0 6px 16px rgba(0, 0, 0, 0.18);
+
+  /* Medidas */
+  --sf-header-h: 56px;
+  --sf-btn-h: 50px;
+  --sf-item-photo: 92px;
+
+  --sf-max: 720px; /* ancho máximo del contenido (mobile-first centrado) */
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--sf-bg);
+  color: var(--sf-text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+button { font-family: inherit; cursor: pointer; }
+a { color: var(--sf-primary); }
+img { max-width: 100%; }
+
+/* ---- Layout ---- */
+.sf-container { max-width: var(--sf-max); margin: 0 auto; padding: 16px; }
+.sf-muted { color: var(--sf-text-muted); }
+
+/* ---- Botones ---- */
+.sf-btn {
+  border: none;
+  border-radius: var(--sf-radius);
+  height: var(--sf-btn-h);
+  padding: 0 20px;
+  font-size: 16px;
+  font-weight: 600;
+  background: var(--sf-primary);
+  color: var(--sf-on-primary);
+  transition: background .15s ease, transform .05s ease;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.sf-btn:hover { background: var(--sf-primary-hover); }
+.sf-btn:active { transform: scale(.99); }
+.sf-btn:disabled { background: var(--sf-text-disabled); cursor: not-allowed; }
+.sf-btn--ghost { background: transparent; color: var(--sf-primary); border: 1.5px solid var(--sf-border); }
+.sf-btn--ghost:hover { background: var(--sf-surface-alt); }
+.sf-btn--block { width: 100%; }
+
+/* ---- Cards / inputs ---- */
+.sf-card {
+  background: var(--sf-surface);
+  border-radius: var(--sf-radius);
+  box-shadow: var(--sf-shadow-card);
+  padding: 16px;
+}
+.sf-input {
+  width: 100%;
+  height: 48px;
+  padding: 0 14px;
+  border: 1.5px solid var(--sf-border);
+  border-radius: var(--sf-radius);
+  background: var(--sf-surface);
+  color: var(--sf-text);
+  font-size: 16px;
+  transition: border-color .15s ease;
+}
+.sf-input:focus { outline: none; border-color: var(--sf-primary); }
+textarea.sf-input { height: auto; padding: 12px 14px; resize: vertical; }
+
+/* ---- Chips (categorías) ---- */
+.sf-chip {
+  border: none;
+  background: var(--sf-surface-alt);
+  color: var(--sf-text-muted);
+  border-radius: var(--sf-pill);
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background .15s ease, color .15s ease;
+}
+.sf-chip.active { background: var(--sf-primary-surface); color: var(--sf-primary); }
+
+/* ---- Badges ---- */
+.sf-badge {
+  display: inline-block;
+  background: var(--sf-primary);
+  color: #fff;
+  border-radius: var(--sf-radius-sm);
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  padding: 2px 6px; letter-spacing: .3px;
+}
+
+/* ---- Stepper cantidad ---- */
+.sf-stepper { display: inline-flex; align-items: center; gap: 14px; }
+.sf-stepper button {
+  width: 38px; height: 38px; border-radius: 50%;
+  border: 1.5px solid var(--sf-border); background: var(--sf-surface);
+  color: var(--sf-primary); font-size: 20px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.sf-stepper button:disabled { color: var(--sf-text-disabled); border-color: var(--sf-divider); }
+.sf-stepper .qty { min-width: 20px; text-align: center; font-weight: 700; font-size: 16px; }
+
+/* ---- Skeleton (shimmer) ---- */
+.sf-skel {
+  position: relative; overflow: hidden;
+  background: var(--sf-divider); border-radius: var(--sf-radius-sm);
+}
+.sf-skel::after {
+  content: ''; position: absolute; inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.6), transparent);
+  animation: sf-shimmer 1.4s infinite;
+}
+@keyframes sf-shimmer { 100% { transform: translateX(100%); } }
+
+/* ---- Barra sticky inferior (CTA / carrito) ---- */
+.sf-sticky-bar {
+  position: sticky; bottom: 0; left: 0; right: 0;
+  background: var(--sf-surface);
+  box-shadow: var(--sf-shadow-sticky);
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  z-index: 20;
+}

@@ -1,0 +1,124 @@
+:host { display: block; padding-bottom: 96px; }
+
+.co { padding-top: 16px; }
+.co-title { font-size: 22px; font-weight: 800; color: var(--sf-text); margin: 0 0 16px; }
+
+.sf-card h3 { margin: 0 0 12px; font-size: 16px; font-weight: 700; color: var(--sf-text); }
+
+.cerrada {
+  background: var(--sf-warning-bg);
+  color: var(--sf-warning);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.mt { margin-top: 12px; }
+
+/* Tipo de pedido */
+.choices { display: flex; gap: 12px; }
+.choice {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 8px;
+  border: 1.5px solid var(--sf-border);
+  border-radius: var(--sf-radius);
+  background: var(--sf-surface);
+  color: var(--sf-text);
+  font-weight: 600;
+  font-size: 15px;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.choice.active {
+  border-color: var(--sf-primary);
+  background: var(--sf-primary-surface);
+  color: var(--sf-primary);
+}
+.prep { margin: 12px 0 0; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+.choices.ubic { margin-bottom: 12px; }
+
+/* Labels & inputs */
+.lbl {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sf-text-muted);
+  margin: 14px 0 4px;
+}
+.lbl:first-child { margin-top: 0; }
+
+/* Mapa */
+.map-wrap {
+  position: relative;
+  margin-top: 8px;
+  border-radius: var(--sf-radius);
+  overflow: hidden;
+  border: 1px solid var(--sf-border);
+}
+.map { height: 230px; width: 100%; z-index: 0; }
+.map-pin {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -100%);
+  line-height: 0;
+  color: var(--sf-primary);
+  pointer-events: none;
+  z-index: 500;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35));
+}
+.map-loc {
+  position: absolute;
+  /* A la izquierda para no tapar la atribución de CARTO/OSM (abajo a la derecha). */
+  bottom: 10px; left: 10px;
+  z-index: 500;
+  padding: 8px 14px;
+  border: none;
+  border-radius: var(--sf-pill);
+  background: var(--sf-surface);
+  color: var(--sf-primary);
+  font-weight: 600;
+  font-size: 13px;
+  box-shadow: var(--sf-shadow-raised);
+}
+.map-dir { margin: 8px 0 0; font-size: 13px; }
+.map-hint { margin: 8px 0 0; font-size: 13px; }
+
+.link {
+  display: inline-block;
+  margin-top: 12px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--sf-primary);
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: underline;
+}
+
+/* Totales */
+.totales .row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  color: var(--sf-text);
+  font-size: 15px;
+}
+.totales .row + .row { border-top: 1px dashed var(--sf-border); }
+.totales .row.grand {
+  font-size: 18px;
+  border-top: 1px solid var(--sf-border);
+  margin-top: 4px;
+  padding-top: 12px;
+}
+
+.totales .row .acoordinar { color: var(--sf-text-muted); font-style: italic; }
+.envio-nota { text-align: center; font-size: 12px; margin: 8px 0 0; }
+
+.pago { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; margin: 0 0 8px; }
+.sf-error { color: var(--sf-error); text-align: center; font-weight: 600; margin: 8px 0 0; }

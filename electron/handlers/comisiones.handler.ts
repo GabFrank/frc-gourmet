@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
+import { invokeHandler } from '../utils/handler-registry';
 import { ReglaComision } from '../../src/app/database/entities/rrhh/regla-comision.entity';
 import { ReglaComisionProducto } from '../../src/app/database/entities/rrhh/regla-comision-producto.entity';
 import { ReglaComisionRequisito } from '../../src/app/database/entities/rrhh/regla-comision-requisito.entity';
@@ -450,6 +451,7 @@ export function registerComisionesHandlers(
   });
 
   ipcMain.handle('desasignar-funcionario-regla', async (_e, asignacionId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_REGLA_GESTIONAR');
     await dataSource.getRepository(FuncionarioReglaComision).delete(asignacionId);
     return { success: true };
   });
@@ -612,8 +614,10 @@ export function registerComisionesHandlers(
     const resultados: any[] = [];
     for (const fid of funcionarioIds) {
       try {
-        // Llamar de forma recursiva via IPC no funciona en main process; invocar directo la lógica
-        const result = await (ipcMain as any).listeners('generar-liquidacion-comision')[0]?.(null, { funcionarioId: fid, periodo });
+        // Invocar el handler real vía el registry (ipcMain.handle está
+        // monkey-patcheado y NO deja listeners en el EventEmitter, así que
+        // ipcMain.listeners(...) devolvía [] y esto era un no-op silencioso).
+        await invokeHandler('generar-liquidacion-comision', { funcionarioId: fid, periodo });
         resultados.push({ funcionarioId: fid, ok: true });
       } catch (err: any) {
         resultados.push({ funcionarioId: fid, ok: false, error: err.message });
@@ -645,6 +649,7 @@ export function registerComisionesHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'COMISION_LIQUIDACION_GENERAR');
       const userId = getCurrentUser()?.id;
       const liqRepo = queryRunner.manager.getRepository(LiquidacionComision);
       const itemRepo = queryRunner.manager.getRepository(LiquidacionComisionItem);
@@ -685,6 +690,7 @@ export function registerComisionesHandlers(
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'COMISION_LIQUIDACION_GENERAR');
       const userId = getCurrentUser()?.id;
       const itemRepo = queryRunner.manager.getRepository(LiquidacionComisionItem);
       const liqRepo = queryRunner.manager.getRepository(LiquidacionComision);
@@ -710,6 +716,7 @@ export function registerComisionesHandlers(
   });
 
   ipcMain.handle('anular-liquidacion-comision', async (_e, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'COMISION_LIQUIDACION_ANULAR');
     const repo = dataSource.getRepository(LiquidacionComision);
     const liq = await repo.findOne({ where: { id } });
     if (!liq) throw new Error(`Liquidacion comision ${id} no encontrada`);

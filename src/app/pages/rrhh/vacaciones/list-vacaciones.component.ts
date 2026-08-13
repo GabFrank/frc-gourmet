@@ -16,6 +16,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '../../../database/repository.service';
 import { VacacionDetalleDialogComponent } from './vacacion-detalle-dialog/vacacion-detalle-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
 @Component({
   selector: 'app-list-vacaciones',
@@ -35,6 +36,7 @@ import { VacacionDetalleDialogComponent } from './vacacion-detalle-dialog/vacaci
     MatTooltipModule,
     MatSnackBarModule,
     MatDialogModule,
+    HasPermissionDirective,
   ],
   templateUrl: './list-vacaciones.component.html',
   styleUrls: ['./list-vacaciones.component.scss'],

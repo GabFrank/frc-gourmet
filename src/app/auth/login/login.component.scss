@@ -144,6 +144,19 @@
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   background-color: var(--mat-card-background-color);
+  position: relative;
+}
+
+.login-config-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  color: var(--text-secondary);
+
+  &:hover {
+    color: var(--text-primary);
+  }
 }
 
 mat-card-header {
@@ -362,4 +375,13 @@ mat-card-actions {
     align-items: flex-start;
     gap: 12px;
   }
+}
+
+.qr-login-button {
+  width: 100%;
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }

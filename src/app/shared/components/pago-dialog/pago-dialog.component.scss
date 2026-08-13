@@ -120,7 +120,7 @@
     flex: 1.2;
     margin-right: 16px;
     overflow: auto;
-    background-color: #f5f5f5;
+    background-color: var(--surface-variant);
     border-radius: 4px;
 
     table {
@@ -131,21 +131,21 @@
       th {
         text-align: center;
         font-weight: bold;
-        background-color: #f5f5f5;
-        color: black;
+        background-color: var(--surface-variant);
+        color: var(--text-primary);
         padding: 8px 4px;
         font-size: 13px;
       }
 
       td {
         text-align: center;
-        color: black;
+        color: var(--text-primary);
         padding: 6px 4px;
         font-size: 13px;
       }
 
       tr.mat-row:nth-child(even) {
-        background-color: #f9f9f9;
+        background-color: var(--hover-bg);
       }
 
       .mat-column-menu {
@@ -159,7 +159,7 @@
         line-height: 30px;
 
         .mat-icon {
-          color: #333; /* Dark grey color for icons */
+          color: var(--text-secondary); /* Dark grey color for icons */
         }
       }
     }
@@ -463,29 +463,29 @@
 }
 
 .vuelto-type {
-  color: #f44336;  // Warn color for refunds/change
+  color: var(--error-color);  // Warn color for refunds/change
   font-weight: 500;
 }
 
 .descuento-type {
-  color: #f44336;  // Warn color for discounts
+  color: var(--error-color);  // Warn color for discounts
   font-weight: 500;
   font-style: italic;
 }
 
 .aumento-type {
-  color: #4caf50;  // Green color for increases
+  color: var(--success-color);  // Green color for increases
   font-weight: 500;
   font-style: italic;
 }
 
 .negative-balance:not(.active) {
-  border: 1px solid #f44336; // Warn color for negative balances
-  
+  border: 1px solid var(--error-color); // Warn color for negative balances
+
   // Add a subtle indicator for negative balances
   &::after {
     content: '↓';
-    color: #f44336;
+    color: var(--error-color);
     margin-left: 4px;
   }
 }

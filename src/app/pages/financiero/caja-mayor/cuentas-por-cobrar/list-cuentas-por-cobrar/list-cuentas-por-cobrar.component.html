@@ -5,6 +5,21 @@
       <button mat-stroked-button (click)="toggleFiltros()">
         <mat-icon>{{showFiltros ? 'expand_less' : 'filter_list'}}</mat-icon> Filtros
       </button>
+      <button mat-stroked-button *appHasPermission="'CLIENTES_VER'"
+              [matMenuTriggerFor]="convenioMenu"
+              matTooltip="Cobrar la deuda de todos los clientes de un convenio">
+        <mat-icon>payments</mat-icon> Cobro consolidado
+        <mat-icon>arrow_drop_down</mat-icon>
+      </button>
+      <mat-menu #convenioMenu="matMenu">
+        <button mat-menu-item *ngFor="let cv of conveniosActivos" (click)="abrirCobroConsolidado(cv)">
+          <mat-icon>handshake</mat-icon>
+          <span>{{ cv.nombre }}</span>
+        </button>
+        <button mat-menu-item *ngIf="!conveniosActivos.length" disabled>
+          <span>No hay convenios activos</span>
+        </button>
+      </mat-menu>
       <button mat-raised-button color="primary" (click)="crear()">
         <mat-icon>add</mat-icon> Nueva Cuenta
       </button>
@@ -12,6 +27,12 @@
   </div>
 
   <div class="filtros-bar" *ngIf="showFiltros" [formGroup]="filtrosForm">
+    <mat-form-field appearance="outline" class="f-field">
+      <mat-label>Cliente</mat-label>
+      <input matInput formControlName="cliente" placeholder="Nombre o razón social"
+             (keyup.enter)="aplicarFiltros()">
+      <mat-icon matSuffix>person_search</mat-icon>
+    </mat-form-field>
     <mat-form-field appearance="outline" class="f-field">
       <mat-label>Estado</mat-label>
       <mat-select formControlName="estado">

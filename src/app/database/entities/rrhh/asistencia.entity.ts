@@ -50,6 +50,20 @@ export class Asistencia extends BaseModel {
   @Column({ nullable: true })
   observacion?: string;
 
+  /** Cómo se registró la asistencia. Ej: 'MANUAL' | 'FACIAL'. */
+  @Column({ name: 'metodo_registro', nullable: true })
+  metodoRegistro?: string;
+
+  /** Score de similitud del match facial (0..1) cuando metodoRegistro='FACIAL'. */
+  @Column({
+    name: 'similitud_facial',
+    type: 'decimal',
+    precision: 5,
+    scale: 4,
+    nullable: true,
+  })
+  similitudFacial?: number;
+
   @ManyToOne(() => Usuario, { nullable: true })
   @JoinColumn({ name: 'registrado_por_id' })
   registradoPor?: Usuario;

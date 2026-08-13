@@ -1,0 +1,110 @@
+.repertorio-container {
+  padding: 4px;
+}
+
+.filtros {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+
+  .campo-buscar {
+    flex: 1 1 280px;
+  }
+
+  .campo-estado {
+    width: 200px;
+  }
+
+  .spacer {
+    flex: 1 1 auto;
+  }
+
+  .total {
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+}
+
+.tabla-repertorio {
+  width: 100%;
+  background: transparent;
+}
+
+.celda-tema {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.mini-caratula {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.tema-titulo {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.tema-artista {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.dato {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-right: 10px;
+  white-space: nowrap;
+}
+
+.chip-estado {
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+
+  &.estado-ok {
+    color: #2e7d32;
+    border-color: #2e7d32;
+  }
+
+  &.estado-pend {
+    color: #ef6c00;
+    border-color: #ef6c00;
+  }
+
+  &.estado-veto {
+    color: #c62828;
+    border-color: #c62828;
+  }
+}
+
+.vacio {
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+  padding: 24px 8px;
+}
+
+/* Estilo del tema: el que no tiene queda apagado, el corregido a mano marcado. */
+.sin-estilo {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.icono-manual {
+  font-size: 15px;
+  width: 15px;
+  height: 15px;
+  vertical-align: middle;
+  margin-left: 4px;
+  color: var(--text-secondary);
+}

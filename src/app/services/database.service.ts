@@ -21,6 +21,9 @@ declare global {
     api: {
       // Printer-related API methods
       getPrinters(): Promise<PrinterConfig[]>;
+      listSystemPrinters(): Promise<any[]>;
+      scanNetworkPrinters(opts?: any): Promise<any[]>;
+      testPrinterConnection(config: any): Promise<{ ok: boolean; error?: string }>;
       addPrinter(printer: PrinterConfig): Promise<{ success: boolean, printer: PrinterConfig }>;
       updatePrinter(printerId: number, printer: PrinterConfig): Promise<{ success: boolean, printer: PrinterConfig }>;
       deletePrinter(printerId: number): Promise<{ success: boolean }>;
@@ -51,6 +54,21 @@ export class DatabaseService {
   // Printer related methods
   getPrinters(): Promise<PrinterConfig[]> {
     return window.api.getPrinters();
+  }
+
+  /** Impresoras instaladas en el sistema operativo (spooler). */
+  listSystemPrinters(): Promise<any[]> {
+    return window.api.listSystemPrinters();
+  }
+
+  /** Descubre impresoras en la red local (mDNS + barrido TCP opcional). */
+  scanNetworkPrinters(opts?: any): Promise<any[]> {
+    return window.api.scanNetworkPrinters(opts);
+  }
+
+  /** Prueba la conectividad de una config de impresora sin guardar ni imprimir. */
+  testPrinterConnection(config: any): Promise<{ ok: boolean; error?: string }> {
+    return window.api.testPrinterConnection(config);
   }
 
   addPrinter(printer: PrinterConfig): Promise<{ success: boolean, printer: PrinterConfig }> {
