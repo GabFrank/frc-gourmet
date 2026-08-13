@@ -56,6 +56,33 @@ El cast `as any` es necesario porque las entities tipan los campos como `Type | 
 
 **Bug original**: en `anular-liquidacion-sueldo`, los vales quedaban en estado DESCONTADO sin liquidación asociada porque el `liquidacionId = undefined` no se nuleaba en BD. (`feedback_typeorm_null_undefined`)
 
+## TypeORM: `@Column()` sin `type` sobre un tipo unión rompe Postgres
+
+Corolario del pitfall anterior. Si para poder nulear una columna se tipa el campo como unión, hay que declarar el `type` de la columna a mano:
+
+```typescript
+// ❌ Arranca bien en SQLite y explota en Postgres
+@Column({ nullable: true })
+escenaPreferida?: string | null;
+
+// ✅
+@Column({ type: 'varchar', nullable: true })
+escenaPreferida?: string | null;
+```
+
+Sin `type`, TypeORM infiere la columna del metadata de decoradores de TypeScript, y de una **unión** ese metadata emite `Object`. Postgres lo rechaza al **validar las entidades**, antes de correr una sola migración:
+
+```
+DataTypeNotSupportedError: Data type "Object" in
+"BloqueProgramacion.escenaPreferida" is not supported by "postgres"
+```
+
+**Por qué es traicionero:** SQLite lo tolera, así que la app dev, `npm run build`, `npm run check` y los tests e2e sobre SQLite pasan todos. El único que lo ve es el job de CI **"Migration run (Postgres baseline + incrementales)"** — y falla al conectar, no en la migración, así que el mensaje no apunta a la columna nueva de forma obvia.
+
+Los campos que ya usaban `| null` (`maxPorArtista?: number | null`, `factorDuracion?: number | null`) no fallaban porque siempre declararon `type: 'int'` / `type: 'float'`.
+
+**Bug original**: PR #234 (música, clasificación semántica). Tres revisores y toda la batería local en SQLite lo dejaron pasar; lo atajó el CI.
+
 ## TypeORM: leftJoin a tabla sin relación @ManyToOne
 
 Si una entidad tiene **columna plana** (`compraId: int`) pero no `@ManyToOne compra`, no se puede hacer `leftJoinAndSelect('cpp.compra', ...)`. Hay que joinear con la tabla raw:
