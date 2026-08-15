@@ -25,7 +25,7 @@ import { getDataSourceOptions } from '../src/app/database/database.config';
 import { MusicaTrack } from '../src/app/database/entities/musica/musica-track.entity';
 import { BloqueProgramacion } from '../src/app/database/entities/musica/bloque-programacion.entity';
 import { MusicaEstilo } from '../src/app/database/entities/musica/musica-estilo.entity';
-import { EstadoTrack } from '../src/app/database/entities/musica/musica-enums';
+import { EstadoTrack, TipoVeto } from '../src/app/database/entities/musica/musica-enums';
 import {
   normalizarGenero,
   sembrarCatalogo,
@@ -41,8 +41,13 @@ import {
   guardarEstilo,
   aplicarResolucion,
   desacuerdosDeEstilo,
+  setPreferenciaEstilo,
+  vetarEstilo,
+  estilosVetados,
+  generosDelPool,
   RELACIONES_ESTILO,
 } from '../electron/services/musica-estilos.service';
+import { MusicaVeto } from '../src/app/database/entities/musica/musica-veto.entity';
 
 let passed = 0;
 let failed = 0;
@@ -368,6 +373,101 @@ async function main() {
     Math.abs(defNoche.objetivoMs - 7 * 1.5 * 3600000) < 1000,
     "'00:00' como fin cuenta como medianoche del día siguiente (7 h, no negativo)",
     defNoche.objetivoMs / 3600000,
+  );
+
+  // ─────────── Voto por estilo ───────────
+  //
+  // Es un dato para el descubridor, no una perilla de volumen: lo único que
+  // tiene que garantizar es que persista y que se acote a -1/0/1.
+  console.log('\npreferencia de estilo');
+  await setPreferenciaEstilo(ds, bossa.id, 1);
+  let conVoto = (await listarEstilos(ds)).find((e) => e.id === bossa.id)!;
+  ok(conVoto.preferencia === 1, 'el pulgar arriba persiste y se lista');
+
+  await setPreferenciaEstilo(ds, bossa.id, -1);
+  conVoto = (await listarEstilos(ds)).find((e) => e.id === bossa.id)!;
+  ok(conVoto.preferencia === -1, 'se puede cambiar de opinión');
+
+  await setPreferenciaEstilo(ds, bossa.id, 0);
+  conVoto = (await listarEstilos(ds)).find((e) => e.id === bossa.id)!;
+  ok(conVoto.preferencia === 0, 'volver a neutro borra el voto');
+
+  await setPreferenciaEstilo(ds, bossa.id, 7);
+  conVoto = (await listarEstilos(ds)).find((e) => e.id === bossa.id)!;
+  ok(conVoto.preferencia === 1, 'un valor fuera de rango se acota a 1');
+  await setPreferenciaEstilo(ds, bossa.id, 0);
+
+  // ─────────── Veto por estilo ───────────
+  console.log('\nvetar estilo');
+  const vetoRepo = ds.getRepository(MusicaVeto);
+
+  const r1 = await vetarEstilo(ds, electronica.id, true);
+  ok(r1.vetado === true, 'vetar devuelve el estado nuevo');
+  ok(r1.tracksAfectados === 2, 'informa cuántos temas aprobados se apagan', r1.tracksAfectados);
+  ok((await estilosVetados(ds)).has(electronica.id), 'el estilo queda en la lista de vetados');
+  ok(
+    (await listarEstilos(ds)).find((e) => e.id === electronica.id)!.vetado === true,
+    'listarEstilos lo marca vetado',
+  );
+
+  // Los temas NO se tocan: el veto es de elegibilidad, no destructivo. Si el
+  // veto los pusiera en VETADO, desvetar no podría distinguir los que el dueño
+  // ya había descartado uno por uno.
+  const tracksElectronica = await trackRepo.find({
+    where: { spotifyId: 's5' },
+    relations: RELACIONES_ESTILO,
+  });
+  ok(
+    tracksElectronica[0]?.estado === EstadoTrack.APROBADO,
+    'vetar el estilo NO cambia el estado de sus temas',
+    tracksElectronica[0]?.estado,
+  );
+
+  await vetarEstilo(ds, electronica.id, false);
+  ok(!(await estilosVetados(ds)).has(electronica.id), 'desvetar lo devuelve a la rotación');
+
+  await vetarEstilo(ds, electronica.id, true);
+  await vetarEstilo(ds, electronica.id, false);
+  await vetarEstilo(ds, electronica.id, true);
+  const filas = await vetoRepo.find({ where: { tipo: TipoVeto.ESTILO } });
+  ok(
+    filas.length === 1,
+    'prender y apagar reusa la misma fila en vez de acumular vetos',
+    filas.length,
+  );
+  await vetarEstilo(ds, electronica.id, false);
+
+  // Un veto acotado a un bloque no es lo mismo que apagar el estilo entero: si
+  // `estilosVetados` los mezclara, la pantalla mostraría como apagado un estilo
+  // que suena en 6 de los 7 días.
+  await vetoRepo.save(
+    vetoRepo.create({
+      tipo: TipoVeto.ESTILO,
+      valor: String(bossa.id),
+      estilo: { id: bossa.id } as any,
+      bloqueId: 999,
+      activo: true,
+    }),
+  );
+  ok(
+    !(await estilosVetados(ds)).has(bossa.id),
+    'un veto de un solo bloque no cuenta como estilo apagado',
+  );
+
+  // ─────────── Géneros para el filtro del repertorio ───────────
+  console.log('\ngenerosDelPool');
+  const generos = await generosDelPool(ds);
+  ok(
+    generos.some((g) => g.genero === 'POLKA PARAGUAYA'),
+    'incluye los géneros sin mapear',
+  );
+  ok(
+    generos.some((g) => g.genero === 'BOSSA NOVA'),
+    'y TAMBIÉN los ya clasificados, que es lo que generosSinClasificar esconde',
+  );
+  ok(
+    generos.every((g, i, arr) => i === 0 || arr[i - 1].cantidad >= g.cantidad),
+    'vienen ordenados por cantidad descendente',
   );
 
   await ds.destroy();

@@ -55,6 +55,8 @@ import {
   clasificarTodo,
   generosDelPool,
   generosSinClasificar,
+  setPreferenciaEstilo,
+  vetarEstilo,
   fijarEstiloTrack,
   desacuerdosDeEstilo,
   getMezcla,
@@ -712,6 +714,27 @@ export function registerMusicaHandlers(
     await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);
     return await generosDelPool(dataSource);
   });
+
+  /**
+   * Pulgar arriba/abajo sobre un estilo. Orienta al descubridor; NO cambia
+   * cuanto suena (eso es la mezcla por bloque).
+   */
+  ipcMain.handle(
+    'musica-estilo-preferencia',
+    async (_event, data: { estiloId: number; valor: number }) => {
+      await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+      return await setPreferenciaEstilo(dataSource, data.estiloId, Number(data.valor) || 0);
+    },
+  );
+
+  /** Apaga o vuelve a encender un estilo entero para el generador de playlists. */
+  ipcMain.handle(
+    'musica-estilo-vetar',
+    async (_event, data: { estiloId: number; vetar: boolean }) => {
+      await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+      return await vetarEstilo(dataSource, data.estiloId, !!data.vetar);
+    },
+  );
 
   ipcMain.handle(
     'musica-track-estilo',

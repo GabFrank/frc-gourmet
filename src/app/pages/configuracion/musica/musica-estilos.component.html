@@ -42,15 +42,45 @@
             <th>Estilo</th>
             <th class="num">Temas</th>
             <th class="num">Duración</th>
+            <th class="voto-col" matTooltip="Orienta al descubridor hacia dónde crecer. No cambia cuánto suena.">
+              Me gusta
+            </th>
             <th>Géneros de Spotify que incluye</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let e of estilos">
-            <td class="nombre">{{ e.nombre }}</td>
+          <tr *ngFor="let e of estilos" [class.fila-vetada]="e.vetado">
+            <td class="nombre">
+              {{ e.nombre }}
+              <mat-icon
+                *ngIf="e.vetado"
+                class="icono-vetado"
+                matTooltip="No suena: el generador de playlists lo saltea"
+              >
+                block
+              </mat-icon>
+            </td>
             <td class="num">{{ e.tracks | number: '1.0-0' }}</td>
             <td class="num suave">{{ e.horasTexto }}</td>
+            <td class="voto-col">
+              <button
+                mat-icon-button
+                [class.voto-activo]="e.preferencia === 1"
+                matTooltip="Quiero más de esto"
+                (click)="votar(e, 1)"
+              >
+                <mat-icon>thumb_up</mat-icon>
+              </button>
+              <button
+                mat-icon-button
+                [class.voto-activo-neg]="e.preferencia === -1"
+                matTooltip="Quiero menos de esto"
+                (click)="votar(e, -1)"
+              >
+                <mat-icon>thumb_down</mat-icon>
+              </button>
+            </td>
             <td class="alias suave">{{ e.aliasTexto }}</td>
             <td class="acciones-fila">
               <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones">
@@ -59,6 +89,10 @@
               <mat-menu #menu="matMenu">
                 <button mat-menu-item (click)="editarEstilo(e)">
                   <mat-icon>edit</mat-icon><span>Editar</span>
+                </button>
+                <button mat-menu-item (click)="alternarVeto(e)">
+                  <mat-icon>{{ e.vetado ? 'play_circle' : 'block' }}</mat-icon>
+                  <span>{{ e.vetado ? 'Volver a habilitar' : 'Que no suene' }}</span>
                 </button>
                 <button mat-menu-item (click)="eliminarEstilo(e)">
                   <mat-icon>delete</mat-icon><span>Eliminar</span>

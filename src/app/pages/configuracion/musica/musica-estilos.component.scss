@@ -5,6 +5,8 @@
   --es-suave: #666666;
   --es-borde: #e0e0e0;
   --es-fila-alt: rgba(0, 0, 0, 0.03);
+  --es-voto-si: #2e7d32;
+  --es-voto-no: #c62828;
 }
 
 :host-context(.dark-theme),
@@ -13,6 +15,8 @@
   --es-suave: #cccccc;
   --es-borde: rgba(255, 255, 255, 0.12);
   --es-fila-alt: rgba(255, 255, 255, 0.04);
+  --es-voto-si: #81c784;
+  --es-voto-no: #ef9a9a;
 }
 @media (prefers-color-scheme: dark) {
   :host {
@@ -104,6 +108,55 @@
     width: 44px;
     text-align: right;
   }
+
+  /* Los dos pulgares, apretados para que no ensanchen la fila. */
+  .voto-col {
+    width: 92px;
+    white-space: nowrap;
+    text-align: center;
+
+    .mat-mdc-icon-button {
+      width: 34px;
+      height: 34px;
+      padding: 5px;
+      color: var(--es-suave);
+    }
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+
+    .voto-activo {
+      color: var(--es-voto-si);
+    }
+
+    .voto-activo-neg {
+      color: var(--es-voto-no);
+    }
+  }
+
+  /*
+    El estilo apagado sigue visible a proposito: esconderlo dejaria al dueno sin
+    forma de volver a encenderlo desde esta pantalla.
+  */
+  .fila-vetada td {
+    opacity: 0.55;
+  }
+
+  .fila-vetada .nombre {
+    text-decoration: line-through;
+  }
+}
+
+.icono-vetado {
+  font-size: 15px;
+  width: 15px;
+  height: 15px;
+  vertical-align: middle;
+  margin-left: 4px;
+  color: var(--es-voto-no);
 }
 
 .alta {

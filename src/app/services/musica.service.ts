@@ -131,6 +131,10 @@ export interface EstiloConDatos {
   descripcion?: string;
   orden: number;
   activo: boolean;
+  /** `1` me gusta más · `-1` me gusta menos · `0` sin opinión. Sólo descubrimiento. */
+  preferencia: number;
+  /** true = veto global activo: sus temas no entran a ninguna playlist. */
+  vetado: boolean;
   /** Géneros crudos de Spotify que caen en este estilo. */
   alias: string[];
   /** Lo mismo con id, para poder quitarlos o reasignarlos desde la UI. */
@@ -381,6 +385,25 @@ export class MusicaService {
     mezclasBorradas: number;
   }> {
     return this.api.callIpc('musica-estilo-eliminar', id);
+  }
+
+  /**
+   * Pulgar arriba/abajo. Orienta al descubridor hacia dónde crecer; **no**
+   * cambia cuánto suena el estilo — eso es la mezcla por bloque.
+   */
+  setPreferenciaEstilo(estiloId: number, valor: number): Promise<any> {
+    return this.api.callIpc('musica-estilo-preferencia', { estiloId, valor });
+  }
+
+  /**
+   * Apaga o vuelve a encender un estilo entero para el generador de playlists.
+   * Reversible: no toca los temas, sólo deja de elegirlos.
+   */
+  vetarEstilo(
+    estiloId: number,
+    vetar: boolean,
+  ): Promise<{ success: boolean; vetado: boolean; tracksAfectados: number }> {
+    return this.api.callIpc('musica-estilo-vetar', { estiloId, vetar });
   }
 
   asignarAlias(genero: string, estiloId: number): Promise<any> {
