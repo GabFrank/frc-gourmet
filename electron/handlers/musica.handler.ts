@@ -53,6 +53,7 @@ import {
   sembrarCatalogo,
   reclasificarPool,
   clasificarTodo,
+  generosDelPool,
   generosSinClasificar,
   fijarEstiloTrack,
   desacuerdosDeEstilo,
@@ -429,25 +430,47 @@ export function registerMusicaHandlers(
     'musica-tracks-listar',
     async (
       _event,
-      filtros?: { estado?: EstadoTrack; texto?: string; page?: number; pageSize?: number },
+      filtros?: {
+        estado?: EstadoTrack;
+        texto?: string;
+        genero?: string;
+        /** Id del catalogo, o `SIN_ESTILO` para los que no cayeron en ninguno. */
+        estiloId?: number | 'SIN_ESTILO';
+        page?: number;
+        pageSize?: number;
+      },
     ) => {
       await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);
       const repo = dataSource.getRepository(MusicaTrack);
       const pageSize = Number(filtros?.pageSize) || 50;
       const page = Math.max(0, Number(filtros?.page) || 0);
 
-      const qb = repo.createQueryBuilder('t');
+      // Los joins van ANTES que los where: el filtro por estilo se expresa
+      // sobre el alias `estilo`, porque la FK `estilo_id` no tiene @Column
+      // propia y no es referenciable como `t.estiloId`.
+      const qb = repo
+        .createQueryBuilder('t')
+        .leftJoinAndSelect('t.estilo', 'estilo')
+        .leftJoinAndSelect('t.estiloManual', 'estiloManual');
+
       if (filtros?.estado) qb.andWhere('t.estado = :estado', { estado: filtros.estado });
       if (filtros?.texto) {
         qb.andWhere('(t.titulo LIKE :q OR t.artista LIKE :q)', {
           q: `%${filtros.texto.toUpperCase()}%`,
         });
       }
-      // Con las relaciones de estilo: la pantalla muestra en que estilo quedo
-      // cada tema y permite corregirlo, y sin esto vendrian todas undefined.
+      // Igualdad exacta contra el valor guardado, sin normalizar: las opciones
+      // del desplegable salen de `musica-generos-listar`, que devuelve la
+      // columna cruda.
+      if (filtros?.genero) qb.andWhere('t.genero = :genero', { genero: filtros.genero });
+
+      if (filtros?.estiloId === 'SIN_ESTILO') {
+        qb.andWhere('estilo.id IS NULL');
+      } else if (filtros?.estiloId) {
+        qb.andWhere('estilo.id = :estiloId', { estiloId: Number(filtros.estiloId) });
+      }
+
       const [items, total] = await qb
-        .leftJoinAndSelect('t.estilo', 'estilo')
-        .leftJoinAndSelect('t.estiloManual', 'estiloManual')
         .orderBy('t.artista', 'ASC')
         .addOrderBy('t.titulo', 'ASC')
         .skip(page * pageSize)
@@ -682,6 +705,12 @@ export function registerMusicaHandlers(
   ipcMain.handle('musica-generos-sin-clasificar', async () => {
     await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);
     return await generosSinClasificar(dataSource);
+  });
+
+  /** Todos los generos del repertorio: alimenta el filtro de la pantalla. */
+  ipcMain.handle('musica-generos-listar', async () => {
+    await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);
+    return await generosDelPool(dataSource);
   });
 
   ipcMain.handle(

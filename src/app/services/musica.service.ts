@@ -345,6 +345,10 @@ export class MusicaService {
   listarTracks(filtros?: {
     estado?: string;
     texto?: string;
+    /** Género crudo de Spotify, tal cual está guardado. */
+    genero?: string;
+    /** Id del catálogo, o `SIN_ESTILO` para los que no cayeron en ninguno. */
+    estiloId?: number | 'SIN_ESTILO';
     page?: number;
     pageSize?: number;
   }): Promise<{ items: MusicaTrack[]; total: number }> {
@@ -412,6 +416,11 @@ export class MusicaService {
 
   generosSinClasificar(): Promise<Array<{ genero: string; cantidad: number }>> {
     return this.api.callIpc('musica-generos-sin-clasificar');
+  }
+
+  /** Todos los géneros del repertorio (no sólo los sin mapear): para filtrar. */
+  generosDelPool(): Promise<Array<{ genero: string; cantidad: number }>> {
+    return this.api.callIpc('musica-generos-listar');
   }
 
   getMezcla(bloqueId: number): Promise<MezclaItem[]> {

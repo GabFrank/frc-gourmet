@@ -358,6 +358,35 @@ export async function generosSinClasificar(
     .sort((a, b) => b.cantidad - a.cantidad);
 }
 
+/**
+ * Todos los generos crudos presentes en el repertorio, con su conteo.
+ *
+ * Distinto de `generosSinClasificar`, que devuelve solo los que NINGUN alias
+ * mapea: eso sirve para curar la taxonomia, pero como filtro de la pantalla de
+ * repertorio esconderia justo los generos que ya estan bien clasificados, que
+ * son los que el dueno quiere mirar.
+ *
+ * El valor va CRUDO, sin `normalizarGenero`: es lo que esta guardado en la
+ * columna y es contra eso que el filtro compara por igualdad.
+ */
+export async function generosDelPool(
+  dataSource: DataSource,
+): Promise<Array<{ genero: string; cantidad: number }>> {
+  const filas = await dataSource
+    .getRepository(MusicaTrack)
+    .createQueryBuilder('t')
+    .select('t.genero', 'genero')
+    .addSelect('COUNT(*)', 'cantidad')
+    .where('t.genero IS NOT NULL')
+    .andWhere("t.genero <> ''")
+    .groupBy('t.genero')
+    .getRawMany();
+
+  return filas
+    .map((f) => ({ genero: String(f.genero), cantidad: Number(f.cantidad) || 0 }))
+    .sort((a, b) => b.cantidad - a.cantidad || a.genero.localeCompare(b.genero));
+}
+
 /* ─────────────────────── Siembra y reclasificacion ─────────────────────── */
 
 /**
