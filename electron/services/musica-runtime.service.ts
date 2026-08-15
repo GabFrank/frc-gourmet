@@ -23,7 +23,12 @@ import { TrackLog } from '../../src/app/database/entities/musica/track-log.entit
 import { VarianteEnergia } from '../../src/app/database/entities/musica/musica-enums';
 import { readAppSettings } from '../utils/app-settings.utils';
 import { getEstado, reproducir, setVolumen, normalizarModoReproduccion } from './spotify.service';
-import { getBloqueVigente, generarPlanDelDia } from './musica-planner.service';
+import {
+  asegurarPlanDelDia,
+  fechaLocalHoy,
+  getBloqueVigente,
+  generarPlanDelDia,
+} from './musica-planner.service';
 import { leerEstadoSalon } from './musica-salon.service';
 import { emitirEventoMusica } from '../utils/musica-events.utils';
 
@@ -47,6 +52,12 @@ export interface EstadoRuntime {
   modoManual: boolean;
   ultimoError: string | null;
   ultimoChequeo: string | null;
+  /**
+   * Como quedo la generacion automatica del plan de hoy. Antes esto no se
+   * mostraba en ningun lado: si fallaba, el dueno se enteraba cuando el local
+   * abria en silencio.
+   */
+  planDelDia: { fecha: string; generado: boolean; motivo?: string } | null;
 }
 
 let timer: NodeJS.Timeout | null = null;
@@ -61,6 +72,7 @@ const estado: EstadoRuntime = {
   modoManual: false,
   ultimoError: null,
   ultimoChequeo: null,
+  planDelDia: null,
 };
 
 /** Tracks que pusimos nosotros: sirve para detectar intervencion manual. */
@@ -83,6 +95,8 @@ let ultimoTrackLogueado = '';
 /** Desde cuando se sostiene la condicion actual del salon. */
 let condicionSalonDesde = 0;
 let condicionSalon: VarianteEnergia | null = null;
+/** Ultimo dia local para el que ya se corrio `asegurarPlanHoy`. */
+let diaDelUltimoPlan = '';
 
 export function getEstadoRuntime(): EstadoRuntime {
   return { ...estado };
@@ -117,6 +131,40 @@ export function iniciarRuntimeMusica(dataSource: DataSource, userDataPath: strin
   }, HEARTBEAT_MS);
   // Primer chequeo sin esperar el intervalo.
   void tick();
+  // Y el plan del dia por ADELANTADO, en paralelo: no se espera porque tarda
+  // minutos (OpenAI + hasta 15 playlists) y bloquearia el arranque de la app.
+  void asegurarPlanHoy();
+}
+
+/**
+ * Genera el plan de hoy si falta, y deja el resultado a la vista.
+ *
+ * Se llama al arrancar y cada vez que el heartbeat detecta que cambio el dia.
+ * La generacion perezosa de `getPlanBloque` sigue existiendo como red: cubre el
+ * caso de que esto falle o de que el dia cambie entre dos heartbeats.
+ */
+async function asegurarPlanHoy(): Promise<void> {
+  if (!dataSourceRef) return;
+  const fecha = fechaLocalHoy();
+  try {
+    const r = await asegurarPlanDelDia(dataSourceRef, userDataRef, fecha);
+    estado.planDelDia = { fecha: r.fecha, generado: r.generado, motivo: r.motivo };
+    diaDelUltimoPlan = fecha;
+    if (r.generado) {
+      console.log(`[musica] Plan del ${fecha} generado al arrancar.`);
+      emitirEventoMusica({ tipo: 'PLAN', detalle: `Plan del día generado (${fecha})` });
+    } else {
+      console.log(`[musica] No se genero plan del ${fecha}: ${r.motivo}`);
+    }
+  } catch (e) {
+    const motivo = (e as Error).message;
+    estado.planDelDia = { fecha, generado: false, motivo };
+    // Se marca el dia igual: si no, cada heartbeat reintentaria una generacion
+    // que tarda minutos y llama a OpenAI. El dueno puede forzarla a mano.
+    diaDelUltimoPlan = fecha;
+    estado.ultimoError = `No se pudo generar el plan del día: ${motivo}`;
+    emitirEventoMusica({ tipo: 'ALERTA', detalle: estado.ultimoError });
+  }
 }
 
 export function detenerRuntimeMusica(): void {
@@ -155,6 +203,13 @@ async function tick(): Promise<void> {
   estado.activo = true;
 
   try {
+    // Cruce de medianoche: el plan de mañana se prepara apenas cambia el día,
+    // no cuando el primer bloque ya tiene que sonar. En un local que cierra
+    // tarde el heartbeat está corriendo justo a esa hora.
+    if (fechaLocalHoy() !== diaDelUltimoPlan) {
+      void asegurarPlanHoy();
+    }
+
     // El modo manual vence solo; ademas se corta al cambiar de bloque.
     if (estado.modoManual && Date.now() > modoManualHasta) {
       estado.modoManual = false;
@@ -410,9 +465,3 @@ async function registrarLoQueSuena(): Promise<void> {
   }
 }
 
-function fechaLocalHoy(): string {
-  const d = new Date();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${mm}-${dd}`;
-}

@@ -26,7 +26,11 @@ import {
 import { PlanProgramacion } from '../../src/app/database/entities/musica/plan-programacion.entity';
 import { PlanBloque } from '../../src/app/database/entities/musica/plan-bloque.entity';
 import { PRESETS_MUSICA, getPreset } from '../utils/musica-presets';
-import { generarPlanDelDia, getBloqueVigente } from '../services/musica-planner.service';
+import {
+  fechaLocalHoy,
+  generarPlanDelDia,
+  getBloqueVigente,
+} from '../services/musica-planner.service';
 import {
   construirContexto,
   descubrirMusica,
@@ -72,17 +76,6 @@ import { VarianteEnergia } from '../../src/app/database/entities/musica/musica-e
 import { MusicaFeedback } from '../../src/app/database/entities/musica/musica-feedback.entity';
 import { TipoFeedback } from '../../src/app/database/entities/musica/musica-enums';
 
-/**
- * Fecha local en YYYY-MM-DD. `toISOString()` daria UTC y en Paraguay (UTC-3)
- * la noche caeria al dia siguiente: el plan de las 21:00 del sabado se
- * guardaria como domingo.
- */
-function fechaLocalHoy(): string {
-  const d = new Date();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${mm}-${dd}`;
-}
 import { ensurePermission } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import {

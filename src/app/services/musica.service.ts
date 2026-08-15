@@ -241,6 +241,11 @@ export interface EstadoRuntime {
   modoManual: boolean;
   ultimoError: string | null;
   ultimoChequeo?: string | null;
+  /**
+   * Cómo salió la generación automática del plan de hoy. Antes esto no se veía
+   * en ningún lado: si fallaba, el local abría en silencio y nadie sabía por qué.
+   */
+  planDelDia?: { fecha: string; generado: boolean; motivo?: string } | null;
   salon?: {
     mesasTotales: number;
     mesasOcupadas: number;
