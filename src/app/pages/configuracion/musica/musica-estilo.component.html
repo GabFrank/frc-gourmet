@@ -243,8 +243,8 @@
                   <td class="nombre">{{ f.estiloNombre }}</td>
                   <td class="num">faltan {{ f.faltanteHoras | number: '1.0-2' }} h</td>
                   <td class="num suave">
-                    {{ f.tracksFaltantes | number: '1.0-0' }} temas · hoy tiene
-                    {{ f.tracksDisponibles | number: '1.0-0' }}
+                    {{ f.tracksFaltantes | number: '1.0-2' }} temas · hoy tiene
+                    {{ f.tracksDisponibles | number: '1.0-2' }}
                   </td>
                 </tr>
               </table>
@@ -263,7 +263,7 @@
               <ul>
                 <li *ngIf="criterio.brief">Tu descripción del local</li>
                 <li *ngIf="criterio.bloques">
-                  {{ criterio.bloques | number: '1.0-0' }} bloques de la programación, con su
+                  {{ criterio.bloques | number: '1.0-2' }} bloques de la programación, con su
                   energía y sus notas
                 </li>
                 <li *ngIf="textoQueGusta">Que te gusta más: {{ textoQueGusta }}</li>
@@ -271,17 +271,17 @@
                 <li *ngIf="textoApagados">Estilos apagados (prohibidos): {{ textoApagados }}</li>
                 <li *ngIf="textoGenerosVetados">Géneros vetados: {{ textoGenerosVetados }}</li>
                 <li *ngIf="criterio.artistasVetados.length">
-                  {{ criterio.artistasVetados.length | number: '1.0-0' }} artistas vetados
+                  {{ criterio.artistasVetados.length | number: '1.0-2' }} artistas vetados
                 </li>
                 <li *ngIf="criterio.artistasEnPool">
-                  Los {{ criterio.artistasEnPool | number: '1.0-0' }} artistas que ya tenés, para
+                  Los {{ criterio.artistasEnPool | number: '1.0-2' }} artistas que ya tenés, para
                   proponer otros
                 </li>
                 <li *ngIf="criterio.rechazados">
-                  Los últimos {{ criterio.rechazados | number: '1.0-0' }} temas que sacaste
+                  Los últimos {{ criterio.rechazados | number: '1.0-2' }} temas que sacaste
                 </li>
                 <li *ngIf="criterio.gustados">
-                  Los últimos {{ criterio.gustados | number: '1.0-0' }} que marcaste "más de esto"
+                  Los últimos {{ criterio.gustados | number: '1.0-2' }} que marcaste "más de esto"
                 </li>
                 <li>Nada explícito, nada triste, y ningún idioma arriba del 50%</li>
               </ul>

@@ -169,10 +169,10 @@ mat-panel-description {
   gap: 6px;
   margin-top: 8px;
   font-size: 13px;
-  color: #ef6c00;
+  color: var(--warning-color);
 
   &.ok {
-    color: #2e7d32;
+    color: var(--success-color);
   }
 
   mat-icon {

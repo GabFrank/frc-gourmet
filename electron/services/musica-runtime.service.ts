@@ -142,16 +142,41 @@ export function iniciarRuntimeMusica(dataSource: DataSource, userDataPath: strin
  * Se llama al arrancar y cada vez que el heartbeat detecta que cambio el dia.
  * La generacion perezosa de `getPlanBloque` sigue existiendo como red: cubre el
  * caso de que esto falle o de que el dia cambie entre dos heartbeats.
+ *
+ * SERIALIZADA A PROPOSITO. Dos llamadas concurrentes generarian el plan DOS
+ * veces: el guard "ya hay plan" de `asegurarPlanDelDia` es un check-then-act
+ * sin lock, asi que ambas consultan antes de que ninguna inserte, ambas pasan,
+ * y ambas llaman a OpenAI y sobreescriben las 15 playlists — interleaved, que
+ * ademas deja el dia con bloques mezclados entre dos generaciones.
+ *
+ * Y no era un caso raro de timing: pasaba en TODO arranque. `iniciarRuntime`
+ * hace `void tick()` y despues `void asegurarPlanHoy()`, pero `tick()` corre
+ * sincrono hasta su primer await —`readAppSettings` usa `readFileSync`— asi que
+ * alcanza su propio chequeo de medianoche y dispara la primera generacion antes
+ * de devolver el control. Marcar `diaDelUltimoPlan` no alcanzaba: se escribia
+ * recien despues del await.
  */
-async function asegurarPlanHoy(): Promise<void> {
+let planEnCurso: Promise<void> | null = null;
+
+function asegurarPlanHoy(): Promise<void> {
+  if (planEnCurso) return planEnCurso;
+  planEnCurso = correrAsegurarPlan().finally(() => {
+    planEnCurso = null;
+  });
+  return planEnCurso;
+}
+
+async function correrAsegurarPlan(): Promise<void> {
   if (!dataSourceRef) return;
   const fecha = fechaLocalHoy();
+  // ANTES del await: es lo que evita que el proximo heartbeat, que corre
+  // mientras esta generacion sigue en vuelo, arranque otra.
+  diaDelUltimoPlan = fecha;
   try {
     const r = await asegurarPlanDelDia(dataSourceRef, userDataRef, fecha);
     estado.planDelDia = { fecha: r.fecha, generado: r.generado, motivo: r.motivo };
-    diaDelUltimoPlan = fecha;
     if (r.generado) {
-      console.log(`[musica] Plan del ${fecha} generado al arrancar.`);
+      console.log(`[musica] Plan del ${fecha} generado automaticamente.`);
       emitirEventoMusica({ tipo: 'PLAN', detalle: `Plan del día generado (${fecha})` });
     } else {
       console.log(`[musica] No se genero plan del ${fecha}: ${r.motivo}`);
@@ -159,9 +184,9 @@ async function asegurarPlanHoy(): Promise<void> {
   } catch (e) {
     const motivo = (e as Error).message;
     estado.planDelDia = { fecha, generado: false, motivo };
-    // Se marca el dia igual: si no, cada heartbeat reintentaria una generacion
-    // que tarda minutos y llama a OpenAI. El dueno puede forzarla a mano.
-    diaDelUltimoPlan = fecha;
+    // El dia queda marcado igual: si no, cada heartbeat reintentaria una
+    // generacion que tarda minutos y llama a OpenAI. El dueno puede forzarla a
+    // mano desde Programacion.
     estado.ultimoError = `No se pudo generar el plan del día: ${motivo}`;
     emitirEventoMusica({ tipo: 'ALERTA', detalle: estado.ultimoError });
   }
