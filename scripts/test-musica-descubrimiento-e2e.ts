@@ -35,6 +35,7 @@ import {
 import {
   construirContexto,
   construirPrompt,
+  construirPromptDirigido,
 } from '../electron/services/musica-descubrimiento.service';
 
 let passed = 0;
@@ -213,6 +214,35 @@ async function main() {
     !sinFaltantes.includes('LO QUE MAS FALTA'),
     'sin déficit, la sección no se emite vacía',
   );
+
+  // ─────────── Fuentes dirigidas ───────────
+  //
+  // El punto de elegir una fuente explícita es que el criterio acumulado NO
+  // mande: si el déficit siguiera entrando, pedir "covers de bossa" con el
+  // pagode en rojo devolvería pagode, que es exactamente el problema.
+  console.log('\nconstruirPromptDirigido');
+  const dirigido = construirPromptDirigido(ctx, 20, {
+    titulo: 'LO QUE TE PIDE:',
+    detalle: ['covers de rock clasico en version bossa'],
+  });
+
+  ok(dirigido.includes('covers de rock clasico'), 'el pedido va literal al prompt');
+  ok(!dirigido.includes('LO QUE MAS FALTA'), 'el déficit NO entra: taparía el pedido');
+  ok(!dirigido.includes('MOMENTOS DEL DIA'), 'la grilla tampoco');
+  ok(!dirigido.includes('LO QUE MAS LE GUSTA'), 'ni los votos');
+
+  // Las prohibiciones sí quedan: proponer un artista vetado gasta llamadas a
+  // Spotify y el filtro lo descarta igual, así que omitirlas sería sólo ruido.
+  ok(dirigido.includes('REGGAETON'), 'los géneros vetados siguen prohibidos');
+  ok(dirigido.includes('ARTISTA MALO'), 'los artistas vetados también');
+  ok(dirigido.includes('ELECTRONICA'), 'y los estilos apagados');
+  ok(dirigido.includes('local familiar'), 'la regla de contenido explícito se mantiene');
+
+  ok(
+    dirigido.includes('devolvé menos'),
+    'pide devolver menos antes que rellenar con otra cosa',
+  );
+  ok(dirigido.includes('20 canciones'), 'respeta la cantidad');
 
   await ds.destroy();
   console.log(`\n${passed} pasaron, ${failed} fallaron`);

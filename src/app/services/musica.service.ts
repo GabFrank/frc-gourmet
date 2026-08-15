@@ -75,6 +75,22 @@ export interface ResumenPool {
   sinFeatures: number;
 }
 
+/**
+ * De dónde sale el criterio de una ronda de descubrimiento.
+ *
+ * `AUTOMATICO` usa todo lo que el local ya dijo. Las otras cuatro ignoran ese
+ * criterio acumulado (menos las prohibiciones) porque a veces estorba: pedir
+ * covers de bossa cuando el déficit grita pagode daba siempre pagode.
+ */
+export type FuenteDescubrimiento = 'AUTOMATICO' | 'PROMPT' | 'ESTILO' | 'TEMA' | 'PLAYLIST';
+
+/** Qué se pudo leer de la referencia (tema o playlist de ejemplo). */
+export interface ReferenciaResuelta {
+  descripcion: string;
+  ejemplos: string[];
+  advertencia?: string;
+}
+
 export interface ResultadoDescubrimiento {
   propuestos: number;
   agregados: number;
@@ -83,6 +99,8 @@ export interface ResultadoDescubrimiento {
   filtrados: number;
   detalleFiltrados: string[];
   agregadosDetalle: Array<{ artista: string; tema: string; motivo?: string }>;
+  fuente: FuenteDescubrimiento;
+  referencia?: ReferenciaResuelta;
 }
 
 export interface BloqueProgramacion {
@@ -524,8 +542,18 @@ export class MusicaService {
 
   // ─────────── Descubrimiento con IA ───────────
 
-  descubrir(cantidad?: number, bloqueId?: number): Promise<ResultadoDescubrimiento> {
-    return this.api.callIpc('musica-descubrir', { cantidad, bloqueId });
+  descubrir(
+    cantidad?: number,
+    bloqueId?: number,
+    fuente?: {
+      fuente?: FuenteDescubrimiento;
+      prompt?: string;
+      estiloId?: number;
+      genero?: string;
+      referencia?: string;
+    },
+  ): Promise<ResultadoDescubrimiento> {
+    return this.api.callIpc('musica-descubrir', { cantidad, bloqueId, ...(fuente || {}) });
   }
 
   /** Con qué criterio va a buscar, sin gastar una llamada a la IA. */

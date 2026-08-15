@@ -110,12 +110,96 @@
       </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
+      <!--
+        Fuente del criterio. Por defecto "Todo lo que ya sé", que es el
+        comportamiento de siempre: elegir una fuente explícita es la excepción,
+        para cuando el dueño sabe exactamente qué quiere.
+      -->
       <div class="acciones-fila">
+        <mat-form-field appearance="outline" class="campo-fuente">
+          <mat-label>Buscar según</mat-label>
+          <mat-select [(ngModel)]="fuente" (selectionChange)="cambiarFuente()">
+            <mat-option value="AUTOMATICO">Todo lo que ya sé del local</mat-option>
+            <mat-option value="PROMPT">Un pedido que escribo</mat-option>
+            <mat-option value="ESTILO">Un estilo o género puntual</mat-option>
+            <mat-option value="TEMA">Un tema de ejemplo</mat-option>
+            <mat-option value="PLAYLIST">Una playlist de ejemplo</mat-option>
+          </mat-select>
+        </mat-form-field>
+
         <mat-form-field appearance="outline" class="campo-corto">
           <mat-label>Cantidad a proponer</mat-label>
           <input matInput type="number" [(ngModel)]="cantidadDescubrir" min="10" max="60" />
         </mat-form-field>
+      </div>
 
+      <p class="ayuda">{{ ayudaFuente }}</p>
+
+      <!-- El campo que la fuente elegida necesita. -->
+      <!--
+        Textarea PLANO, sin mat-form-field: styles.scss fija
+        `.mat-mdc-form-field-flex { height: 40px !important }` para todo
+        `appearance="outline"` y deja cualquier textarea con el contenido
+        desbordado. Mismo motivo por el que el brief tampoco usa Material.
+      -->
+      <div *ngIf="fuente === 'PROMPT'" class="pedido">
+        <label class="brief-label" for="pedido-libre">Qué querés que busque</label>
+        <textarea
+          id="pedido-libre"
+          class="pedido-textarea"
+          [(ngModel)]="promptLibre"
+          placeholder="Ej: covers de rock clásico en versión bossa, tipo lounge, para la tarde"
+        ></textarea>
+      </div>
+
+      <div class="acciones-fila" *ngIf="fuente === 'ESTILO'">
+        <mat-form-field appearance="outline" class="campo-medio">
+          <mat-label>Estilo</mat-label>
+          <mat-select [(ngModel)]="estiloElegido">
+            <mat-option [value]="0">— cualquiera —</mat-option>
+            <mat-option *ngFor="let e of estilos" [value]="e.id" [disabled]="e.vetado">
+              {{ e.nombre }}{{ e.vetado ? ' (apagado)' : '' }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="campo-medio">
+          <mat-label>Género (opcional)</mat-label>
+          <input matInput [(ngModel)]="generoElegido" placeholder="Ej: BOSSA NOVA" />
+        </mat-form-field>
+      </div>
+
+      <div class="acciones-fila" *ngIf="fuente === 'TEMA'">
+        <mat-form-field appearance="outline" class="campo-ancho">
+          <mat-label>Nombre del tema o link de Spotify</mat-label>
+          <input
+            matInput
+            [(ngModel)]="referencia"
+            placeholder="Ej: Nouvelle Vague — Just Can't Get Enough"
+          />
+        </mat-form-field>
+      </div>
+
+      <div class="acciones-fila" *ngIf="fuente === 'PLAYLIST'">
+        <mat-form-field appearance="outline" class="campo-ancho">
+          <mat-label>Link de la playlist de Spotify</mat-label>
+          <input
+            matInput
+            [(ngModel)]="referencia"
+            placeholder="https://open.spotify.com/playlist/..."
+          />
+        </mat-form-field>
+      </div>
+
+      <div class="aviso-orden" *ngIf="fuente === 'PLAYLIST'">
+        <mat-icon>info</mat-icon>
+        <span>
+          Spotify sólo deja leer los temas de playlists de <strong>tu propia cuenta</strong>. Si la
+          playlist es de otro, se va a usar igual su nombre y descripción como referencia, pero el
+          resultado va a ser menos preciso.
+        </span>
+      </div>
+
+      <div class="acciones-fila">
         <button mat-flat-button color="accent" (click)="descubrir()" [disabled]="descubriendo">
           <mat-icon>travel_explore</mat-icon> Descubrir música
         </button>
@@ -138,7 +222,7 @@
         antes el botón no explicaba con qué decidía, y sin eso no hay forma de
         saber si un resultado flojo es culpa del modelo o del criterio.
       -->
-      <div class="criterio">
+      <div class="criterio" *ngIf="fuente === 'AUTOMATICO'">
         <button mat-button (click)="alternarCriterio()">
           <mat-icon>{{ mostrarCriterio ? 'expand_less' : 'expand_more' }}</mat-icon>
           ¿Qué va a buscar?

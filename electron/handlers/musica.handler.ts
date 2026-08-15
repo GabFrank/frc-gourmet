@@ -31,6 +31,7 @@ import {
   construirContexto,
   descubrirMusica,
   rechazarTrack,
+  type FuenteDescubrimiento,
 } from '../services/musica-descubrimiento.service';
 import { enriquecerFeatures, etiquetarTracks } from '../services/musica-features.service';
 import { emitirStreamToken, StreamScope } from '../utils/stream-token.utils';
@@ -821,7 +822,18 @@ export function registerMusicaHandlers(
    */
   ipcMain.handle(
     'musica-descubrir',
-    async (_event, data?: { cantidad?: number; bloqueId?: number }) => {
+    async (
+      _event,
+      data?: {
+        cantidad?: number;
+        bloqueId?: number;
+        fuente?: FuenteDescubrimiento;
+        prompt?: string;
+        estiloId?: number;
+        genero?: string;
+        referencia?: string;
+      },
+    ) => {
       await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
       const { musica } = readAppSettings(userData());
       return await descubrirMusica(dataSource, userData(), {
@@ -829,6 +841,11 @@ export function registerMusicaHandlers(
         bloqueId: data?.bloqueId,
         brief: musica.brief || undefined,
         usuarioId: getCurrentUser()?.id,
+        fuente: data?.fuente,
+        prompt: data?.prompt,
+        estiloId: data?.estiloId,
+        genero: data?.genero,
+        referencia: data?.referencia,
       });
     },
   );

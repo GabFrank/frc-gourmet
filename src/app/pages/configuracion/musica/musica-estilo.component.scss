@@ -157,6 +157,44 @@ mat-card-title {
   width: 160px;
 }
 
+.campo-fuente {
+  width: 260px;
+}
+
+.campo-medio {
+  width: 230px;
+}
+
+/* Mismo motivo que `.brief-textarea`: Material rompe los textarea outline. */
+.pedido {
+  margin: 12px 0;
+}
+
+.pedido-textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--card-background);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+
+  &::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.7;
+  }
+
+  &:focus {
+    outline: none;
+    border-color: var(--primary-color);
+  }
+}
+
 .ayuda {
   color: var(--text-secondary);
   font-size: 13px;
