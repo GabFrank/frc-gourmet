@@ -27,7 +27,11 @@ import { PlanProgramacion } from '../../src/app/database/entities/musica/plan-pr
 import { PlanBloque } from '../../src/app/database/entities/musica/plan-bloque.entity';
 import { PRESETS_MUSICA, getPreset } from '../utils/musica-presets';
 import { generarPlanDelDia, getBloqueVigente } from '../services/musica-planner.service';
-import { descubrirMusica, rechazarTrack } from '../services/musica-descubrimiento.service';
+import {
+  construirContexto,
+  descubrirMusica,
+  rechazarTrack,
+} from '../services/musica-descubrimiento.service';
 import { enriquecerFeatures, etiquetarTracks } from '../services/musica-features.service';
 import { emitirStreamToken, StreamScope } from '../utils/stream-token.utils';
 import {
@@ -828,6 +832,34 @@ export function registerMusicaHandlers(
       });
     },
   );
+
+  /**
+   * El criterio con el que se va a descubrir, SIN llamar a la IA.
+   *
+   * Existe porque "Descubrir música nueva" no explicaba con que decidia, y sin
+   * eso el dueno no puede saber si el resultado flojo es culpa del modelo o de
+   * que el criterio esta incompleto. Usa la MISMA funcion que arma el prompt:
+   * si el panel consultara por su cuenta, en dos cambios diria una cosa y el
+   * prompt haria otra.
+   */
+  ipcMain.handle('musica-descubrimiento-criterio', async () => {
+    await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);
+    const { musica } = readAppSettings(userData());
+    const ctx = await construirContexto(dataSource, null, musica.avanzado?.factorDuracion || 1.5);
+    return {
+      brief: musica.brief || '',
+      estilosQueGustan: ctx.estilosQueGustan,
+      estilosQueGustanMenos: ctx.estilosQueGustanMenos,
+      estilosVetados: ctx.estilosVetados,
+      faltantes: ctx.faltantes,
+      generosVetados: ctx.generosVetados,
+      artistasVetados: ctx.artistasVetados,
+      bloques: ctx.bloques.length,
+      artistasEnPool: ctx.artistasEnPool.length,
+      rechazados: ctx.rechazados.length,
+      gustados: ctx.gustados.length,
+    };
+  });
 
   /**
    * "No va": saca el tema del repertorio y lo convierte en ejemplo negativo

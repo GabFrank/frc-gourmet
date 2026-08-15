@@ -15,7 +15,12 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { MusicaSemilla, MusicaService, ResumenPool } from 'src/app/services/musica.service';
+import {
+  CriterioDescubrimiento,
+  MusicaSemilla,
+  MusicaService,
+  ResumenPool,
+} from 'src/app/services/musica.service';
 
 /**
  * "Mi estilo": de donde sale la musica del local.
@@ -78,6 +83,16 @@ export class MusicaEstiloComponent implements OnInit {
 
   // Resultado de la ultima ronda de descubrimiento.
   ultimoResultado: { titulo: string; detalle: string[]; agregados: string[] } | null = null;
+
+  /** Panel "¿Qué va a buscar?": el criterio efectivo, sin llamar a la IA. */
+  mostrarCriterio = false;
+  cargandoCriterio = false;
+  criterio: CriterioDescubrimiento | null = null;
+  // Pre-computados: sin funciones ni getters en el template.
+  textoQueGusta = '';
+  textoQueGustaMenos = '';
+  textoApagados = '';
+  textoGenerosVetados = '';
 
   constructor(
     private musicaService: MusicaService,
@@ -270,12 +285,41 @@ export class MusicaEstiloComponent implements OnInit {
     this.propuestaDescripcion = [];
   }
 
+  /**
+   * Muestra el criterio con el que se va a buscar. Se carga al abrir y no en
+   * `ngOnInit` porque recorre las cuotas de todos los bloques: es barato pero
+   * no gratis, y la mayoría de las visitas a esta pantalla no lo miran.
+   */
+  async alternarCriterio(): Promise<void> {
+    this.mostrarCriterio = !this.mostrarCriterio;
+    if (!this.mostrarCriterio) return;
+    this.cargandoCriterio = true;
+    try {
+      const c = await this.musicaService.criterioDescubrimiento();
+      this.criterio = c;
+      this.textoQueGusta = c.estilosQueGustan.join(', ');
+      this.textoQueGustaMenos = c.estilosQueGustanMenos.join(', ');
+      this.textoApagados = c.estilosVetados.join(', ');
+      this.textoGenerosVetados = c.generosVetados.join(', ');
+    } catch (e: any) {
+      this.mostrarCriterio = false;
+      this.mostrarError(e);
+    } finally {
+      this.cargandoCriterio = false;
+    }
+  }
+
   async descubrir(): Promise<void> {
     this.descubriendo = true;
     this.ultimoResultado = null;
     try {
       const r = await this.musicaService.descubrir(this.cantidadDescubrir);
       await this.refrescarResumen();
+      // El déficit cambió: lo que se acaba de agregar ya no falta.
+      if (this.mostrarCriterio) {
+        this.mostrarCriterio = false;
+        await this.alternarCriterio();
+      }
       this.ultimoResultado = {
         titulo:
           `${r.agregados} temas nuevos de ${r.propuestos} propuestos ` +

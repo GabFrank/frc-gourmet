@@ -132,6 +132,80 @@
         </span>
       </div>
 
+      <!--
+        Qué va a buscar. Sale de la MISMA función que arma el prompt, así que
+        esto es literalmente lo que se le va a pedir a la IA. Existe porque
+        antes el botón no explicaba con qué decidía, y sin eso no hay forma de
+        saber si un resultado flojo es culpa del modelo o del criterio.
+      -->
+      <div class="criterio">
+        <button mat-button (click)="alternarCriterio()">
+          <mat-icon>{{ mostrarCriterio ? 'expand_less' : 'expand_more' }}</mat-icon>
+          ¿Qué va a buscar?
+        </button>
+
+        <div class="criterio-cuerpo" *ngIf="mostrarCriterio">
+          <mat-progress-spinner
+            *ngIf="cargandoCriterio"
+            mode="indeterminate"
+            diameter="24"
+          ></mat-progress-spinner>
+
+          <ng-container *ngIf="criterio && !cargandoCriterio">
+            <div class="criterio-bloque" *ngIf="criterio.faltantes.length">
+              <h5>Lo que más falta — es lo que va a priorizar</h5>
+              <table class="tabla-criterio">
+                <tr *ngFor="let f of criterio.faltantes">
+                  <td class="nombre">{{ f.estiloNombre }}</td>
+                  <td class="num">faltan {{ f.faltanteHoras | number: '1.0-2' }} h</td>
+                  <td class="num suave">
+                    {{ f.tracksFaltantes | number: '1.0-0' }} temas · hoy tiene
+                    {{ f.tracksDisponibles | number: '1.0-0' }}
+                  </td>
+                </tr>
+              </table>
+            </div>
+
+            <div class="criterio-bloque" *ngIf="!criterio.faltantes.length">
+              <h5>Lo que más falta</h5>
+              <p class="suave">
+                Ninguna cuota está corta de material. Sin déficit la búsqueda queda guiada sólo por
+                tu descripción y por los estilos que te gustan.
+              </p>
+            </div>
+
+            <div class="criterio-bloque">
+              <h5>Y además tiene en cuenta</h5>
+              <ul>
+                <li *ngIf="criterio.brief">Tu descripción del local</li>
+                <li *ngIf="criterio.bloques">
+                  {{ criterio.bloques | number: '1.0-0' }} bloques de la programación, con su
+                  energía y sus notas
+                </li>
+                <li *ngIf="textoQueGusta">Que te gusta más: {{ textoQueGusta }}</li>
+                <li *ngIf="textoQueGustaMenos">Que te gusta menos: {{ textoQueGustaMenos }}</li>
+                <li *ngIf="textoApagados">Estilos apagados (prohibidos): {{ textoApagados }}</li>
+                <li *ngIf="textoGenerosVetados">Géneros vetados: {{ textoGenerosVetados }}</li>
+                <li *ngIf="criterio.artistasVetados.length">
+                  {{ criterio.artistasVetados.length | number: '1.0-0' }} artistas vetados
+                </li>
+                <li *ngIf="criterio.artistasEnPool">
+                  Los {{ criterio.artistasEnPool | number: '1.0-0' }} artistas que ya tenés, para
+                  proponer otros
+                </li>
+                <li *ngIf="criterio.rechazados">
+                  Los últimos {{ criterio.rechazados | number: '1.0-0' }} temas que sacaste
+                </li>
+                <li *ngIf="criterio.gustados">
+                  Los últimos {{ criterio.gustados | number: '1.0-0' }} que marcaste "más de esto"
+                </li>
+                <li>Nada explícito, nada triste, y ningún idioma arriba del 50%</li>
+              </ul>
+            </div>
+          </ng-container>
+        </div>
+      </div>
+
       <mat-slide-toggle [(ngModel)]="autoAprobar" (change)="guardarBrief()">
         Aceptar automáticamente lo que pase los filtros
       </mat-slide-toggle>

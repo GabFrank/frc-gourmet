@@ -161,6 +161,34 @@ export interface DesacuerdoEstilo {
   hayManual: boolean;
 }
 
+/** Cuánto material falta de un estilo, según las cuotas de los bloques. */
+export interface FaltanteEstilo {
+  estiloNombre: string;
+  descripcion?: string;
+  faltanteHoras: number;
+  tracksFaltantes: number;
+  tracksDisponibles: number;
+}
+
+/**
+ * Con qué criterio va a buscar el descubridor. Sale de la misma función que
+ * arma el prompt, así que lo que se ve acá es literalmente lo que se le pide
+ * a la IA.
+ */
+export interface CriterioDescubrimiento {
+  brief: string;
+  estilosQueGustan: string[];
+  estilosQueGustanMenos: string[];
+  estilosVetados: string[];
+  faltantes: FaltanteEstilo[];
+  generosVetados: string[];
+  artistasVetados: string[];
+  bloques: number;
+  artistasEnPool: number;
+  rechazados: number;
+  gustados: number;
+}
+
 export interface MezclaItem {
   estiloId: number;
   estiloNombre: string;
@@ -498,6 +526,11 @@ export class MusicaService {
 
   descubrir(cantidad?: number, bloqueId?: number): Promise<ResultadoDescubrimiento> {
     return this.api.callIpc('musica-descubrir', { cantidad, bloqueId });
+  }
+
+  /** Con qué criterio va a buscar, sin gastar una llamada a la IA. */
+  criterioDescubrimiento(): Promise<CriterioDescubrimiento> {
+    return this.api.callIpc('musica-descubrimiento-criterio');
   }
 
   rechazar(

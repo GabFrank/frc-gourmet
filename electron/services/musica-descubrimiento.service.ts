@@ -35,6 +35,7 @@ import {
 import { readIaConfig } from '../utils/ia-config.utils';
 import { readAppSettings } from '../utils/app-settings.utils';
 import { spotifyApi } from './spotify.service';
+import { calcularDeficit, listarEstilos } from './musica-estilos.service';
 
 /**
  * Defaults; se sobreescriben desde Configuracion (musica.avanzado).
@@ -69,8 +70,28 @@ export interface ResultadoDescubrimiento {
 
 /* ─────────────────────── Contexto del local ─────────────────────── */
 
-interface ContextoMusical {
+/** Cuanto material falta de un estilo, sumado sobre todos los bloques. */
+export interface FaltanteEstilo {
+  estiloNombre: string;
+  /** Descripcion del catalogo: lo que distingue este estilo de otro del mismo genero. */
+  descripcion?: string;
+  /** Horas que piden las cuotas y no existen en el repertorio. */
+  faltanteHoras: number;
+  tracksFaltantes: number;
+  tracksDisponibles: number;
+}
+
+export interface ContextoMusical {
+  /** @deprecated Texto libre del bloque; lo reemplazo el catalogo de estilos. */
   generosPreferidos: string[];
+  /** Estilos del catalogo con voto positivo. */
+  estilosQueGustan: string[];
+  /** Estilos con voto negativo: no prohibidos, solo desaconsejados. */
+  estilosQueGustanMenos: string[];
+  /** Estilos apagados con un veto global: prohibidos, como los generos vetados. */
+  estilosVetados: string[];
+  /** Lo que las cuotas piden y el repertorio no tiene. Ordenado por urgencia. */
+  faltantes: FaltanteEstilo[];
   generosVetados: string[];
   artistasVetados: string[];
   artistasEnPool: string[];
@@ -79,16 +100,24 @@ interface ContextoMusical {
   bloques: Array<{ nombre: string; energia: number; generos: string[]; notas?: string }>;
 }
 
-async function construirContexto(
+/**
+ * Reune todo lo que el local ya dijo sobre su musica.
+ *
+ * ESTA EXPORTADA A PROPOSITO: la pantalla "Mi estilo" la usa para mostrar el
+ * criterio ANTES de descubrir. Si el panel se armara con otra consulta, en dos
+ * cambios diria una cosa y el prompt haria otra.
+ */
+export async function construirContexto(
   dataSource: DataSource,
   bloque?: BloqueProgramacion | null,
+  factorDuracion = 1.5,
 ): Promise<ContextoMusical> {
   const vetoRepo = dataSource.getRepository(MusicaVeto);
   const trackRepo = dataSource.getRepository(MusicaTrack);
   const bloqueRepo = dataSource.getRepository(BloqueProgramacion);
   const feedbackRepo = dataSource.getRepository(MusicaFeedback);
 
-  const vetos = await vetoRepo.find({ where: { activo: true } });
+  const vetos = await vetoRepo.find({ where: { activo: true }, relations: ['estilo'] });
   const bloques = bloque
     ? [bloque]
     : await bloqueRepo.find({ where: { activo: true }, order: { diaSemana: 'ASC' } });
@@ -117,13 +146,63 @@ async function construirContexto(
     order: { fecha: 'DESC' },
   });
 
-  // Los generos preferidos salen de la grilla: son los que el dueno ya eligio
-  // bloque por bloque, no una lista aparte que habria que mantener.
+  // Texto libre de la grilla. Se conserva porque los bloques viejos todavia lo
+  // tienen cargado, pero el criterio real ahora es el catalogo de estilos.
   const generosPreferidos = new Set<string>();
   for (const b of bloques) for (const g of b.generosPreferidos || []) generosPreferidos.add(g);
 
+  // ─────────── El catalogo de estilos ───────────
+  //
+  // ESTO ES LO QUE FALTABA. El descubridor leia `generosPreferidos` — el texto
+  // libre que el catalogo vino a reemplazar en F4 — y nunca veia ni las cuotas
+  // por bloque, ni los estilos apagados, ni el voto del dueno. Por eso el
+  // repertorio crecia donde el modelo tenia mas material de entrenamiento
+  // (indie anglo) en vez de donde las cuotas lo pedian: medido en produccion,
+  // PAGODE tenia 6 temas contra una cuota del 40%.
+  const catalogo = await listarEstilos(dataSource);
+  const estilosQueGustan = catalogo.filter((e) => e.preferencia > 0 && !e.vetado).map((e) => e.nombre);
+  const estilosQueGustanMenos = catalogo
+    .filter((e) => e.preferencia < 0 && !e.vetado)
+    .map((e) => e.nombre);
+  const estilosVetadosNombres = catalogo.filter((e) => e.vetado).map((e) => e.nombre);
+
+  // Deficit: cuanta musica piden las cuotas y no existe. Es el dato que
+  // convierte "proponeme musica linda" en "faltan 2 horas de pagode".
+  const descripcionPorEstilo = new Map(catalogo.map((e) => [e.nombre, e.descripcion || undefined]));
+  const disponiblePorEstilo = new Map(catalogo.map((e) => [e.nombre, e.tracks]));
+  const acumulado = new Map<string, { faltanteMs: number; tracksFaltantes: number }>();
+  for (const d of await calcularDeficit(dataSource, factorDuracion, bloque?.id)) {
+    for (const e of d.estilos) {
+      if (e.faltanteMs <= 0) continue;
+      const prev = acumulado.get(e.estiloNombre) || { faltanteMs: 0, tracksFaltantes: 0 };
+      // Se toma el MAXIMO y no la suma: la misma musica sirve para el almuerzo
+      // del lunes y el del martes. Sumar los 31 bloques diria que faltan 60
+      // horas de pagode cuando alcanza con cubrir el bloque mas exigente.
+      acumulado.set(e.estiloNombre, {
+        faltanteMs: Math.max(prev.faltanteMs, e.faltanteMs),
+        tracksFaltantes: Math.max(prev.tracksFaltantes, e.tracksFaltantes),
+      });
+    }
+  }
+  const faltantes: FaltanteEstilo[] = Array.from(acumulado.entries())
+    // Un estilo apagado no necesita material: pedirlo seria gastar la ronda en
+    // musica que nunca va a sonar.
+    .filter(([nombre]) => !estilosVetadosNombres.includes(nombre))
+    .map(([estiloNombre, v]) => ({
+      estiloNombre,
+      descripcion: descripcionPorEstilo.get(estiloNombre),
+      faltanteHoras: Math.round((v.faltanteMs / 3600000) * 10) / 10,
+      tracksFaltantes: v.tracksFaltantes,
+      tracksDisponibles: disponiblePorEstilo.get(estiloNombre) ?? 0,
+    }))
+    .sort((a, b) => b.faltanteHoras - a.faltanteHoras);
+
   return {
     generosPreferidos: Array.from(generosPreferidos),
+    estilosQueGustan,
+    estilosQueGustanMenos,
+    estilosVetados: estilosVetadosNombres,
+    faltantes,
     generosVetados: vetos.filter((v) => v.tipo === TipoVeto.GENERO).map((v) => v.valor),
     artistasVetados: vetos
       .filter((v) => v.tipo === TipoVeto.ARTISTA)
@@ -140,7 +219,7 @@ async function construirContexto(
   };
 }
 
-function construirPrompt(ctx: ContextoMusical, cantidad: number, brief?: string): string {
+export function construirPrompt(ctx: ContextoMusical, cantidad: number, brief?: string): string {
   const lineas: string[] = [];
 
   lineas.push(
@@ -151,6 +230,27 @@ function construirPrompt(ctx: ContextoMusical, cantidad: number, brief?: string)
 
   if (brief) {
     lineas.push('SOBRE EL LOCAL (escrito por el dueno):', brief, '');
+  }
+
+  // Lo que falta va PRIMERO y con numeros: es la unica seccion que le dice al
+  // modelo donde poner el esfuerzo. Sin esto proponia lo que mas abunda en su
+  // entrenamiento y las cuotas del planner se quedaban sin material.
+  if (ctx.faltantes.length) {
+    lineas.push(
+      'LO QUE MAS FALTA (esto es lo que el local NECESITA, priorizalo sobre todo lo demas):',
+    );
+    for (const f of ctx.faltantes.slice(0, 8)) {
+      lineas.push(
+        `- ${f.estiloNombre}: faltan ~${f.faltanteHoras} h (${f.tracksFaltantes} temas). ` +
+          `Hoy tiene ${f.tracksDisponibles}.` +
+          (f.descripcion ? ` Es: ${f.descripcion}` : ''),
+      );
+    }
+    lineas.push(
+      'Reparti las propuestas en proporcion a lo que falta: el estilo que encabeza la lista',
+      'tiene que ser el mas representado en tu respuesta.',
+      '',
+    );
   }
 
   if (ctx.bloques.length) {
@@ -164,13 +264,25 @@ function construirPrompt(ctx: ContextoMusical, cantidad: number, brief?: string)
     lineas.push('');
   }
 
+  if (ctx.estilosQueGustan.length) {
+    lineas.push(`LO QUE MAS LE GUSTA: ${ctx.estilosQueGustan.join(', ')}`, '');
+  }
+  if (ctx.estilosQueGustanMenos.length) {
+    lineas.push(
+      `LE GUSTA MENOS (no esta prohibido, pero proponé poco): ${ctx.estilosQueGustanMenos.join(', ')}`,
+      '',
+    );
+  }
   if (ctx.generosPreferidos.length) {
-    lineas.push(`ESTILOS QUE LE GUSTAN: ${ctx.generosPreferidos.join(', ')}`, '');
+    lineas.push(`TAMBIEN NOMBRO: ${ctx.generosPreferidos.join(', ')}`, '');
   }
 
   lineas.push(
     'PROHIBIDO (no propongas nada de esto, es motivo de rechazo inmediato):',
     `- Generos: ${ctx.generosVetados.join(', ') || '—'}`,
+    // Un estilo apagado es tan prohibido como un genero vetado, y hasta ahora
+    // no llegaba al prompt: el dueno lo apagaba y la IA lo seguia proponiendo.
+    `- Estilos que el local apago: ${ctx.estilosVetados.join(', ') || '—'}`,
     `- Artistas: ${ctx.artistasVetados.join(', ') || '—'}`,
     '- Canciones con contenido explicito, vulgar o de doble sentido (es un local familiar).',
     '- Canciones tristes, melancolicas o de despecho: el ambiente tiene que ser alegre.',
@@ -378,7 +490,11 @@ export async function descubrirMusica(
     ? await bloqueRepo.findOne({ where: { id: opts.bloqueId } })
     : null;
 
-  const ctx = await construirContexto(dataSource, bloque);
+  const ctx = await construirContexto(
+    dataSource,
+    bloque,
+    readAppSettings(userDataPath).musica.avanzado?.factorDuracion || 1.5,
+  );
   const cantidad =
     opts?.cantidad ||
     readAppSettings(userDataPath).musica.avanzado?.candidatosPorRonda ||

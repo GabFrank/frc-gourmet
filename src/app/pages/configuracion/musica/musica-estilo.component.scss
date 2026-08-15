@@ -261,3 +261,72 @@ mat-card-title {
     font-size: 12px;
   }
 }
+
+/*
+  Panel "¿Qué va a buscar?". Va colapsado por defecto: la mayoría de las
+  visitas sólo aprietan el botón, y desplegado empuja el resultado fuera de
+  pantalla.
+*/
+.criterio {
+  margin: 12px 0;
+
+  .criterio-cuerpo {
+    margin-top: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+  }
+
+  .criterio-bloque + .criterio-bloque {
+    margin-top: 16px;
+  }
+
+  h5 {
+    margin: 0 0 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  ul {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--text-primary);
+    font-size: 13px;
+    line-height: 1.8;
+  }
+
+  .suave {
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    margin: 0;
+  }
+
+  .tabla-criterio {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+
+    td {
+      padding: 3px 8px 3px 0;
+      color: var(--text-primary);
+      vertical-align: baseline;
+    }
+
+    .nombre {
+      font-weight: 600;
+    }
+
+    .num {
+      white-space: nowrap;
+      text-align: right;
+    }
+
+    .suave {
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+  }
+}
