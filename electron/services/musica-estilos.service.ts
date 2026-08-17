@@ -21,7 +21,8 @@ import { MusicaEstiloAlias } from '../../src/app/database/entities/musica/musica
 import { BloqueEstiloMezcla } from '../../src/app/database/entities/musica/bloque-estilo-mezcla.entity';
 import { BloqueProgramacion } from '../../src/app/database/entities/musica/bloque-programacion.entity';
 import { MusicaTrack } from '../../src/app/database/entities/musica/musica-track.entity';
-import { EstadoTrack } from '../../src/app/database/entities/musica/musica-enums';
+import { MusicaVeto } from '../../src/app/database/entities/musica/musica-veto.entity';
+import { EstadoTrack, TipoVeto } from '../../src/app/database/entities/musica/musica-enums';
 import { spotifyApi } from './spotify.service';
 import { generoPorIsrc } from './musicbrainz.service';
 
@@ -183,6 +184,10 @@ export interface EstiloConDatos {
   descripcion?: string;
   orden: number;
   activo: boolean;
+  /** `1` me gusta mas · `-1` me gusta menos · `0` sin opinion. Solo descubrimiento. */
+  preferencia: number;
+  /** true = hay un veto global activo: sus temas no entran a ninguna playlist. */
+  vetado: boolean;
   /** Generos crudos que caen en este estilo. */
   alias: string[];
   /** Lo mismo con id, para poder quitarlos o reasignarlos desde la UI. */
@@ -196,6 +201,7 @@ export interface EstiloConDatos {
 export async function listarEstilos(dataSource: DataSource): Promise<EstiloConDatos[]> {
   const estilos = await dataSource.getRepository(MusicaEstilo).find({ order: { orden: 'ASC', nombre: 'ASC' } });
   const alias = await dataSource.getRepository(MusicaEstiloAlias).find({ relations: ['estilo'] });
+  const vetados = await estilosVetados(dataSource);
 
   // Agregado en JS y no con GROUP BY: son decenas de estilos y cientos de
   // tracks, y asi el codigo queda igual en SQLite y en Postgres.
@@ -224,6 +230,8 @@ export async function listarEstilos(dataSource: DataSource): Promise<EstiloConDa
     descripcion: e.descripcion,
     orden: e.orden,
     activo: e.activo,
+    preferencia: e.preferencia ?? 0,
+    vetado: vetados.has(e.id),
     alias: alias.filter((a) => a.estilo?.id === e.id).map((a) => a.valor).sort(),
     aliasDetalle: alias
       .filter((a) => a.estilo?.id === e.id)
@@ -258,6 +266,97 @@ export async function guardarEstilo(
   if (datos.orden != null) estilo.orden = datos.orden;
   if (datos.activo != null) estilo.activo = datos.activo;
   return await repo.save(estilo);
+}
+
+/* ─────────────────────── Voto y veto por estilo ─────────────────────── */
+
+/**
+ * Voto del dueno: `1` mas de esto, `-1` menos de esto, `0` sin opinion.
+ *
+ * SOLO afecta al descubrimiento. Bajar el pulgar no saca al estilo de las
+ * playlists — para eso esta `vetarEstilo`, que es una decision mas fuerte y se
+ * toma aparte a proposito: "me gusta menos" y "no quiero que suene" son cosas
+ * distintas y confundirlas hace que el dueno no confie en ninguno de los dos.
+ */
+export async function setPreferenciaEstilo(
+  dataSource: DataSource,
+  estiloId: number,
+  valor: number,
+): Promise<MusicaEstilo> {
+  const repo = dataSource.getRepository(MusicaEstilo);
+  const estilo = await repo.findOne({ where: { id: estiloId } });
+  if (!estilo) throw new Error('ESTILO NO ENCONTRADO.');
+
+  // Se acota en vez de rechazar: el valor viene de tres botones de la UI, y un
+  // numero fuera de rango es un bug nuestro, no un dato del usuario.
+  const normalizado = valor > 0 ? 1 : valor < 0 ? -1 : 0;
+  estilo.preferencia = normalizado;
+  return await repo.save(estilo);
+}
+
+/** Ids de estilos con un veto GLOBAL activo (`bloqueId` null). */
+export async function estilosVetados(dataSource: DataSource): Promise<Set<number>> {
+  const vetos = await dataSource
+    .getRepository(MusicaVeto)
+    .find({ where: { tipo: TipoVeto.ESTILO, activo: true, bloqueId: IsNull() }, relations: ['estilo'] });
+  return new Set(vetos.map((v) => v.estilo?.id).filter((id): id is number => !!id));
+}
+
+/**
+ * Apaga o vuelve a encender un estilo entero.
+ *
+ * No necesita columna propia: se expresa con una fila en `musica_vetos` de tipo
+ * `ESTILO`, que es el mecanismo que el planner ya respeta por id
+ * (`pasaVetos`). Desvetar es `activo = false` sobre esa misma fila, asi que la
+ * accion es reversible en cualquier momento y sin perder nada — los temas no
+ * se tocan, solo dejan de ser elegibles.
+ *
+ * La fila se REUSA en vez de crear una nueva cada vez: si no, prender y apagar
+ * un estilo diez veces dejaria diez filas y la pantalla de vetos seria ilegible.
+ */
+export async function vetarEstilo(
+  dataSource: DataSource,
+  estiloId: number,
+  vetar: boolean,
+): Promise<{ success: boolean; vetado: boolean; tracksAfectados: number }> {
+  const estiloRepo = dataSource.getRepository(MusicaEstilo);
+  const estilo = await estiloRepo.findOne({ where: { id: estiloId } });
+  if (!estilo) throw new Error('ESTILO NO ENCONTRADO.');
+
+  const vetoRepo = dataSource.getRepository(MusicaVeto);
+  const existente = await vetoRepo.findOne({
+    where: { tipo: TipoVeto.ESTILO, estilo: { id: estiloId }, bloqueId: IsNull() },
+    relations: ['estilo'],
+  });
+
+  if (existente) {
+    existente.activo = vetar;
+    existente.etiqueta = estilo.nombre;
+    await vetoRepo.save(existente);
+  } else if (vetar) {
+    await vetoRepo.save(
+      vetoRepo.create({
+        tipo: TipoVeto.ESTILO,
+        // `valor` es NOT NULL y para los vetos por estilo el discriminador real
+        // es la FK: se guarda el id como texto solo para que la fila sea legible.
+        valor: String(estiloId),
+        estilo,
+        etiqueta: estilo.nombre,
+        bloqueId: null,
+        motivo: 'ESTILO RECHAZADO POR EL USUARIO',
+        activo: true,
+      }),
+    );
+  }
+
+  const tracksAfectados = await dataSource
+    .getRepository(MusicaTrack)
+    .createQueryBuilder('t')
+    .where('t.estilo_id = :id', { id: estiloId })
+    .andWhere('t.estado = :estado', { estado: EstadoTrack.APROBADO })
+    .getCount();
+
+  return { success: true, vetado: vetar, tracksAfectados };
 }
 
 /**
@@ -356,6 +455,35 @@ export async function generosSinClasificar(
   return Array.from(sueltos.entries())
     .map(([genero, cantidad]) => ({ genero, cantidad }))
     .sort((a, b) => b.cantidad - a.cantidad);
+}
+
+/**
+ * Todos los generos crudos presentes en el repertorio, con su conteo.
+ *
+ * Distinto de `generosSinClasificar`, que devuelve solo los que NINGUN alias
+ * mapea: eso sirve para curar la taxonomia, pero como filtro de la pantalla de
+ * repertorio esconderia justo los generos que ya estan bien clasificados, que
+ * son los que el dueno quiere mirar.
+ *
+ * El valor va CRUDO, sin `normalizarGenero`: es lo que esta guardado en la
+ * columna y es contra eso que el filtro compara por igualdad.
+ */
+export async function generosDelPool(
+  dataSource: DataSource,
+): Promise<Array<{ genero: string; cantidad: number }>> {
+  const filas = await dataSource
+    .getRepository(MusicaTrack)
+    .createQueryBuilder('t')
+    .select('t.genero', 'genero')
+    .addSelect('COUNT(*)', 'cantidad')
+    .where('t.genero IS NOT NULL')
+    .andWhere("t.genero <> ''")
+    .groupBy('t.genero')
+    .getRawMany();
+
+  return filas
+    .map((f) => ({ genero: String(f.genero), cantidad: Number(f.cantidad) || 0 }))
+    .sort((a, b) => b.cantidad - a.cantidad || a.genero.localeCompare(b.genero));
 }
 
 /* ─────────────────────── Siembra y reclasificacion ─────────────────────── */

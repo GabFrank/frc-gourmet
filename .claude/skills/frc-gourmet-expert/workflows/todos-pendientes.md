@@ -320,10 +320,20 @@ Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `proje
 - Si la importación de una semilla falla, **la semilla queda creada con 0 temas** y "Reimportar todo" la reintenta cada vez. Debería revertirse.
 - Tamaños de inputs y espaciados en general (el dueño marcó que hay varios).
 
-**Pendiente después de la clasificación semántica (2026-08-12):**
-- **Semilla que declara su estilo.** La procedencia es el discriminador más barato y confiable: lo que entró por *Bossa Nova Covers* **es** un cover, sin inferencia. Columna en `MusicaSemilla` + migración; encaja entre manual y agente en la cadena de precedencia que ya existe.
-- **El repertorio, no el algoritmo, es el limitante.** Medido en producción: `PAGODE 6 temas · SERTANEJO 6 · BRASIL FESTIVO 0` contra `INDIE 53 · POP 47 · ROCK 44`. Cualquier cuota brasileña por encima del 10% es inalcanzable hasta salir a descubrir material. Mirar `musica-deficit` del bloque antes de tocar nada.
-- **Paridad en la PWA mobile**: los ejes de ánimo y momento y las acciones nuevas de catálogo están solo en el desktop. No es regresión (el handler solo actualiza lo que recibe), pero la programación desde el teléfono queda incompleta.
+**Hecho en el descubrimiento dirigido (2026-08-15, PR de `feat/musica-descubrimiento-dirigido`):**
+- ~~El descubridor leía `generosPreferidos` y nunca veía las cuotas por bloque~~ → ahora el déficit encabeza el prompt. **Era la causa de que el repertorio creciera en indie anglo y no donde las cuotas lo pedían.**
+- ~~No había forma de decirle a la IA qué estilos gustan más~~ → voto por estilo (`preferencia`).
+- ~~Apagar un estilo entero requería tocar la tabla de vetos a mano~~ → toggle *Que no suene* en la pestaña Estilos.
+- ~~"Descubrir música nueva" no explicaba su criterio~~ → panel *¿Qué va a buscar?*.
+- ~~No se podía dirigir una búsqueda~~ → cinco fuentes (`AUTOMATICO`/`PROMPT`/`ESTILO`/`TEMA`/`PLAYLIST`).
+- ~~El plan del día se generaba recién cuando había que reproducirlo~~ → `asegurarPlanDelDia` al arrancar y al cruzar la medianoche.
+- ~~Buscar "qué hay de bossa" en el repertorio era scrollear 12 páginas~~ → filtros por estilo y género.
+
+**Pendiente:**
+- **Semilla que declara su estilo.** La procedencia es el discriminador más barato y confiable: lo que entró por *Bossa Nova Covers* **es** un cover, sin inferencia. Columna en `MusicaSemilla` + migración; encaja entre manual y agente en la cadena de precedencia que ya existe. **Sigue siendo lo más valioso que queda**, y ahora encaja aún mejor: la fuente `PLAYLIST` del descubrimiento ya trabaja con playlists de referencia.
+- **El repertorio, no el algoritmo, es el limitante.** Medido en producción: `PAGODE 6 temas · SERTANEJO 6 · BRASIL FESTIVO 0` contra `INDIE 53 · POP 47 · ROCK 44`. El descubrimiento dirigido mejora *con qué* se pide música pero **no agrega un solo tema por sí solo**: hay que correr rondas. Mirar `musica-deficit` del bloque antes de tocar nada.
+- **Recalibrar los rangos de BPM de la grilla** con los datos reales de ReccoBeats: SOBREMESA pide 50–70 y el repertorio no tiene nada por debajo de 75, así que ese bloque cae siempre en modo relajado.
+- **Paridad en la PWA mobile**: los ejes de ánimo y momento, las acciones de catálogo, el voto de estilos y las fuentes de descubrimiento están solo en el desktop. No es regresión (el handler solo actualiza lo que recibe), pero la configuración desde el teléfono queda incompleta.
 
 **Notas de operación:**
 - **La música paraguaya no aparece por descubrimiento**: el modelo no conoce bien esa escena. Se siembra con **semillas de artista** (Kchiporros, Tierra Adentro) — los links de artista funcionan desde cualquier cuenta, a diferencia de las playlists ajenas.

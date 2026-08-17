@@ -22,6 +22,8 @@ export type MusicaEventTipo =
   | 'VARIANTE'
   /** Entró o salió del modo manual. */
   | 'MODO'
+  /** Se generó el plan del día automáticamente. */
+  | 'PLAN'
   /** Algo falla: device caído, sin plan, error de API. */
   | 'ALERTA';
 

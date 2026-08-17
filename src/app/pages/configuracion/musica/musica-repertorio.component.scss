@@ -17,6 +17,13 @@
     width: 200px;
   }
 
+  // Los nombres de estilo y los generos crudos de Spotify son largos
+  // ("ELECTRONICA CHILL", "BRAZILIAN GOSPEL"), y encima llevan el conteo.
+  .campo-estilo,
+  .campo-genero {
+    width: 220px;
+  }
+
   .spacer {
     flex: 1 1 auto;
   }

@@ -69,11 +69,16 @@ export class MusicaRepertorioComponent implements OnInit, OnChanges {
 
   filtroTexto = '';
   filtroEstado = 'APROBADO';
+  filtroGenero = '';
+  /** '' = todos · 'SIN_ESTILO' = los que no cayeron en ninguno · id del catálogo. */
+  filtroEstilo: number | 'SIN_ESTILO' | '' = '';
 
   columnas = ['tema', 'genero', 'estilo', 'datos', 'estado', 'acciones'];
 
-  /** Para el submenú "Cambiar estilo". */
+  /** Para el submenú "Cambiar estilo" y para el filtro por estilo. */
   estilos: EstiloConDatos[] = [];
+  /** Géneros crudos presentes en el repertorio, con su conteo. */
+  generos: Array<{ genero: string; cantidad: number }> = [];
 
   constructor(
     private musicaService: MusicaService,
@@ -82,12 +87,17 @@ export class MusicaRepertorioComponent implements OnInit, OnChanges {
   ) {}
 
   async ngOnInit(): Promise<void> {
-    // Sin catálogo la acción de corregir estilo no tiene destinos: no es un
-    // error, simplemente el menú queda sin esa opción.
+    // Sin catálogo la acción de corregir estilo no tiene destinos, y sin
+    // géneros el desplegable queda vacío: ninguna de las dos es un error, así
+    // que fallan en silencio y la pantalla sigue funcionando sin ese filtro.
     this.musicaService
       .listarEstilos()
       .then((e) => (this.estilos = e))
       .catch(() => (this.estilos = []));
+    this.musicaService
+      .generosDelPool()
+      .then((g) => (this.generos = g))
+      .catch(() => (this.generos = []));
     await this.buscar();
   }
 
@@ -97,6 +107,16 @@ export class MusicaRepertorioComponent implements OnInit, OnChanges {
     }
   }
 
+  /**
+   * Aplica los filtros desde cero. Va aparte de `buscar()` porque estrechar el
+   * filtro estando en la página 5 dejaba la tabla vacía: el resultado nuevo no
+   * tiene esa página.
+   */
+  async filtrar(): Promise<void> {
+    this.page = 0;
+    await this.buscar();
+  }
+
   /** Filtro explícito con botón: sin live filtering. */
   async buscar(): Promise<void> {
     this.cargando = true;
@@ -104,6 +124,8 @@ export class MusicaRepertorioComponent implements OnInit, OnChanges {
       const r = await this.musicaService.listarTracks({
         estado: this.filtroEstado || undefined,
         texto: this.filtroTexto || undefined,
+        genero: this.filtroGenero || undefined,
+        estiloId: this.filtroEstilo === '' ? undefined : this.filtroEstilo,
         page: this.page,
         pageSize: this.pageSize,
       });
@@ -157,6 +179,8 @@ export class MusicaRepertorioComponent implements OnInit, OnChanges {
   async limpiarFiltros(): Promise<void> {
     this.filtroTexto = '';
     this.filtroEstado = 'APROBADO';
+    this.filtroGenero = '';
+    this.filtroEstilo = '';
     this.page = 0;
     await this.buscar();
   }
