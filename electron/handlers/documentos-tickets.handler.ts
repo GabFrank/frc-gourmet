@@ -603,38 +603,90 @@ function convertirAPrincipal(valor: number, moneda: any, principal: any, cambios
   return rate > 0 ? valor * rate : valor; // 1 moneda = rate principal
 }
 
-export async function printVentaTicketInternal(
+/**
+ * Adicionales/extras **activos** de cada ítem, ya formateados (`2x TOCINO` /
+ * `TOCINO`), indexados por `ventaItem.id`. Mismo criterio que la comanda de
+ * cocina: `activo = false` es un extra dado de baja y no se muestra.
+ *
+ * Best-effort: si la consulta falla, devuelve un mapa vacío — el ticket se
+ * imprime igual, sin el detalle de extras.
+ */
+async function getAdicionalesActivosPorItem(
+  dataSource: DataSource,
+  itemIds: number[],
+): Promise<Map<number, string[]>> {
+  const porItem = new Map<number, string[]>();
+  if (itemIds.length === 0) return porItem;
+  try {
+    const adics = await dataSource.getRepository(VentaItemAdicional).find({
+      where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+      relations: ['adicional', 'ventaItem'],
+    });
+    for (const a of adics) {
+      const iid = (a as any).ventaItem?.id;
+      if (!iid) continue;
+      const cant = Number((a as any).cantidad || 1);
+      const nom = ((a as any).adicional?.nombre || 'ADICIONAL').toUpperCase();
+      if (!porItem.has(iid)) porItem.set(iid, []);
+      porItem.get(iid)!.push(cant > 1 ? `${cant}x ${nom}` : nom);
+    }
+  } catch (e) {
+    console.warn('[getAdicionalesActivosPorItem] no se pudieron cargar los extras del ítem:', e);
+  }
+  return porItem;
+}
+
+/** Resultado de armar el contenido del ticket de venta / pre-cuenta. */
+export interface VentaTicketBuild {
+  lines: TicketLine[];
+  /** Bruto de los ítems impresos (precio + adicionales, sin descuentos). */
+  bruto: number;
+  /** Descuento de nivel ítem de los ítems impresos. */
+  descItems: number;
+  /** Descuento total (ítems + ajustes del pago). */
+  descuentoTotal: number;
+  /** Total en moneda principal, tal como sale impreso. */
+  totalPrincipal: number;
+  /** Cantidad de ítems que entraron al ticket (excluye cancelados). */
+  itemsImpresos: number;
+}
+
+/**
+ * Arma el contenido del ticket de venta (o pre-cuenta) de una `Venta`, sin
+ * tocar impresoras. Separado de `printVentaTicketInternal` para poder testear
+ * el contenido sin hardware.
+ *
+ * **Sólo entran los ítems `estado = ACTIVO`**: un ítem cancelado en el PdV no
+ * se imprime ni suma a los totales — mismo criterio que la comanda de cocina,
+ * el cobro (`cobrar-venta-dialog`), el descuento de stock y los reportes. Es
+ * crítico en la pre-cuenta: ahí `venta.total` todavía es null (se escribe al
+ * cobrar), así que el TOTAL sale del cálculo local y un cancelado lo inflaba.
+ *
+ * Devuelve `null` si la venta no existe.
+ */
+export async function buildVentaTicketLines(
   dataSource: DataSource,
   ventaId: number,
-  opts: { printerId?: number; isPrecuenta?: boolean; dispositivoId?: number } = {},
-): Promise<ImpresionResultado> {
-  const errors: ImpresionResultado['errors'] = [];
-
+  opts: { width: number; isPrecuenta?: boolean },
+): Promise<VentaTicketBuild | null> {
   const venta = await dataSource.getRepository(Venta).findOne({
     where: { id: ventaId },
-    relations: ['cliente', 'cliente.persona', 'mesa', 'formaPago', 'dispositivo', 'pago'],
+    relations: ['cliente', 'cliente.persona', 'mesa', 'formaPago', 'pago'],
   });
-  if (!venta) {
-    return { ok: false, printed: [], errors: [{ message: `Venta ${ventaId} no encontrada` }] };
-  }
-
-  // Resolver dispositivoId: opts gana, sino el de la venta
-  const dispositivoId = opts.dispositivoId ?? (venta as any).dispositivo?.id;
+  if (!venta) return null;
 
   const items = await dataSource.getRepository(VentaItem).find({
-    where: { venta: { id: ventaId } as any },
+    where: { venta: { id: ventaId } as any, estado: EstadoVentaItem.ACTIVO },
     relations: ['producto', 'presentacion'],
   });
 
-  const rolTicket = opts.isPrecuenta ? SectorImpresoraRol.PRECUENTA : SectorImpresoraRol.TICKET_VENTA;
-  const printer = await getPrinterByRol(dataSource, rolTicket, { printerId: opts.printerId, dispositivoId })
-    // Fallback: si pidió PRECUENTA y no hay, intentar con TICKET_VENTA
-    || (opts.isPrecuenta ? await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, { printerId: opts.printerId, dispositivoId }) : null);
-  if (!printer) {
-    return { ok: false, printed: [], errors: [{ message: 'No hay impresora configurada para tickets de venta' }] };
-  }
+  // Adicionales/extras activos de esos ítems, para detallarlos bajo el producto.
+  // El monto NO se imprime por adicional: en pizzas `VentaItem.precioAdicionales`
+  // está ponderado por la proporción de cada sabor, así que la suma de los
+  // `precioCobrado` de las filas no coincidiría con lo que se cobra.
+  const adicionalesByItem = await getAdicionalesActivosPorItem(dataSource, items.map(i => i.id));
 
-  const width = printerWidthToChars(printer.width);
+  const width = opts.width;
   const headerLines = await ticketHeaderEmpresa(dataSource, width, { showTimbrado: !opts.isPrecuenta });
 
   // Monedas activas + cotizaciones para mostrar los totales en cada moneda.
@@ -674,7 +726,7 @@ export async function printVentaTicketInternal(
         else if ((d as any).tipo === TipoDetalle.AUMENTO) aumPago += valP;
       }
     } catch (e) {
-      console.warn('[printVentaTicketInternal] no se pudieron cargar ajustes del pago:', e);
+      console.warn('[buildVentaTicketLines] no se pudieron cargar ajustes del pago:', e);
     }
   }
   const descuentoTotal = descItems + descPago;
@@ -730,6 +782,14 @@ export async function printVentaTicketInternal(
       { text: nombre, width: descW, align: 'L' },
       { text: ticketFmtMonto(total), width: totalW, align: 'R' },
     ]));
+    // Extras del ítem, indentados bajo el producto. Su precio ya está dentro
+    // del TOTAL de la línea de arriba (`precioAdicionales`).
+    for (const extra of (adicionalesByItem.get(it.id) || [])) {
+      lines.push(ticketColumns([
+        { text: '', width: cantW, align: 'L' },
+        { text: `+ ${extra}`, width: descW + totalW, align: 'L' },
+      ]));
+    }
   }
 
   lines.push(ticketSeparador('-'));
@@ -766,7 +826,47 @@ export async function printVentaTicketInternal(
     lines.push(ticketText('GRACIAS POR SU COMPRA', { align: 'C', bold: true }));
   }
 
-  const spec: TicketSpec = { printerWidth: width, lines, cutAtEnd: true };
+  return {
+    lines,
+    bruto,
+    descItems,
+    descuentoTotal,
+    totalPrincipal,
+    itemsImpresos: items.length,
+  };
+}
+
+export async function printVentaTicketInternal(
+  dataSource: DataSource,
+  ventaId: number,
+  opts: { printerId?: number; isPrecuenta?: boolean; dispositivoId?: number } = {},
+): Promise<ImpresionResultado> {
+  const venta = await dataSource.getRepository(Venta).findOne({
+    where: { id: ventaId },
+    relations: ['dispositivo'],
+  });
+  if (!venta) {
+    return { ok: false, printed: [], errors: [{ message: `Venta ${ventaId} no encontrada` }] };
+  }
+
+  // Resolver dispositivoId: opts gana, sino el de la venta
+  const dispositivoId = opts.dispositivoId ?? (venta as any).dispositivo?.id;
+
+  const rolTicket = opts.isPrecuenta ? SectorImpresoraRol.PRECUENTA : SectorImpresoraRol.TICKET_VENTA;
+  const printer = await getPrinterByRol(dataSource, rolTicket, { printerId: opts.printerId, dispositivoId })
+    // Fallback: si pidió PRECUENTA y no hay, intentar con TICKET_VENTA
+    || (opts.isPrecuenta ? await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, { printerId: opts.printerId, dispositivoId }) : null);
+  if (!printer) {
+    return { ok: false, printed: [], errors: [{ message: 'No hay impresora configurada para tickets de venta' }] };
+  }
+
+  const width = printerWidthToChars(printer.width);
+  const build = await buildVentaTicketLines(dataSource, ventaId, { width, isPrecuenta: opts.isPrecuenta });
+  if (!build) {
+    return { ok: false, printed: [], errors: [{ message: `Venta ${ventaId} no encontrada` }] };
+  }
+
+  const spec: TicketSpec = { printerWidth: width, lines: build.lines, cutAtEnd: true };
   const res = await printTicketSpec(printer, spec);
 
   if (!res.ok) {

@@ -1232,11 +1232,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   });
 
   // --- VentaItemAdicional Handlers ---
+  // Devuelve SOLO los adicionales activos: `activo = false` es un extra dado de
+  // baja y no debe reaparecer al re-personalizar el ítem ni en el ticket/comanda
+  // (esos ya filtran por su lado).
   ipcMain.handle('getVentaItemAdicionales', async (_event: any, ventaItemId: number) => {
     try {
       const repo = dataSource.getRepository(VentaItemAdicional);
       return await repo.find({
-        where: { ventaItem: { id: ventaItemId } },
+        where: { ventaItem: { id: ventaItemId }, activo: true },
         relations: ['adicional'],
       });
     } catch (error) {
