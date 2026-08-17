@@ -9,6 +9,12 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '@frc/shared-core';
 import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
+import {
+  ajustarProporcion,
+  calcularTotalesVariacion,
+  etiquetaProporcion,
+  proporcionesIguales,
+} from './variacion-precio.util';
 
 export interface SeleccionarVariacionData {
   productoId: number;
@@ -464,29 +470,19 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
 
   // ===== Proporciones (mitad y mitad, 60/40, …) =====
 
-  /** ¿Todas las proporciones son iguales? */
-  private get proporcionesIguales(): boolean {
-    if (this.seleccionados.length <= 1) return true;
-    const p0 = this.seleccionados[0].proporcion;
-    return this.seleccionados.every((s) => Math.abs(s.proporcion - p0) < 0.001);
-  }
-
   /**
    * Ajusta el % de un sabor compensando en el resto para que siga sumando 100.
-   * Mismo algoritmo que el desktop (tope 10–90% por sabor).
+   * La matemática vive en `variacion-precio.util` (compartida con sus tests).
    */
   ajustarProporcion(s: SaborVM, deltaPct: number): void {
-    const otros = this.seleccionados.filter((x) => x !== s);
-    if (!otros.length) return;
-    const actual = Math.round(s.proporcion * 100);
-    const nuevo = Math.min(90, Math.max(10, actual + deltaPct));
-    const realDelta = nuevo - actual;
-    if (realDelta === 0) return;
-    s.proporcion = nuevo / 100;
-    const compensacion = -realDelta / otros.length / 100;
-    for (const o of otros) {
-      o.proporcion = Math.max(0.05, o.proporcion + compensacion);
-    }
+    const idx = this.seleccionados.indexOf(s);
+    if (idx < 0) return;
+    const nuevas = ajustarProporcion(
+      this.seleccionados.map((x) => x.proporcion),
+      idx,
+      deltaPct,
+    );
+    this.seleccionados.forEach((x, i) => (x.proporcion = nuevas[i]));
     this.proporcionesManuales = true;
     this.recalcular();
   }
@@ -521,23 +517,17 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
     }
     // Partes iguales salvo que el usuario haya ajustado los porcentajes.
     if (!this.proporcionesManuales) {
-      const iguales = n === 1 ? 1 : Number((1 / n).toFixed(4));
-      for (const s of this.seleccionados) s.proporcion = iguales;
+      const iguales = proporcionesIguales(n);
+      this.seleccionados.forEach((s, i) => (s.proporcion = iguales[i]));
     }
     // Etiqueta de porción pre-computada (el template no llama funciones).
-    const iguales = this.proporcionesIguales;
-    for (const s of this.seleccionados) {
-      s.etiqueta = n <= 1 ? '' : iguales ? `1/${n}` : `${Math.round(s.proporcion * 100)}%`;
-    }
-    const precios = this.seleccionados.map((s) => s.precio);
-    this.precioCalculado =
-      this.estrategia === 'PROMEDIO'
-        ? precios.reduce((a, b) => a + b, 0) / n
-        : Math.max(...precios);
-    // Los adicionales se ponderan por la proporción del sabor: un extra cargado
-    // en media pizza cuesta la mitad. Igual que `addVariacionItem` del desktop.
-    this.totalAdicionales = this.seleccionados.reduce((sum, s) => sum + s.adicTotal * s.proporcion, 0);
-    this.costoCalculado = this.seleccionados.reduce((sum, s) => sum + s.costo * s.proporcion, 0);
+    const props = this.seleccionados.map((s) => s.proporcion);
+    this.seleccionados.forEach((s, i) => (s.etiqueta = etiquetaProporcion(props, i)));
+
+    const totales = calcularTotalesVariacion(this.seleccionados, this.estrategia);
+    this.precioCalculado = totales.precioCalculado;
+    this.totalAdicionales = totales.totalAdicionales;
+    this.costoCalculado = totales.costoCalculado;
     this.totalLinea = (this.precioCalculado + this.totalAdicionales) * this.cantidad;
     const tam = this.presentacionSel?.nombre ? `${this.presentacionSel.nombre} ` : '';
     this.ensamblado = `${this.data.nombre} ${tam}${this.seleccionados
