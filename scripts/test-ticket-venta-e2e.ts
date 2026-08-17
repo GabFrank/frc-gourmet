@@ -32,8 +32,8 @@ function ok(cond: boolean, name: string, extra?: any) {
 }
 
 /** Texto plano del ticket, para asertar presencia/ausencia de líneas. */
-function render(lines: any[]): string {
-  return renderTicketToPlainText({ printerWidth: WIDTH, lines, cutAtEnd: true });
+function render(lines: any[], width: number = WIDTH): string {
+  return renderTicketToPlainText({ printerWidth: width, lines, cutAtEnd: true });
 }
 
 async function main() {
@@ -163,14 +163,42 @@ async function main() {
   ok(textoDesc.includes('48.000'), 'el SUBTOTAL impreso es el bruto de los activos (48.000)');
   await ds.getRepository(VentaItem).update({ id: itemSimple.id }, { descuentoUnitario: 0 } as any);
 
-  // ── Comprobante post-cobro: respeta venta.total ──────────────────────────
-  await ds.getRepository(Venta).update({ id: venta.id }, { total: 48000, estado: 'CONCLUIDA' } as any);
+  // ── Comprobante post-cobro (camino real: `Venta.total` nunca se persiste) ─
+  // Ningún flujo del repo escribe `Venta.total`, así que el comprobante también
+  // recalcula en vivo → el cancelado también lo inflaba acá, no sólo en la pre-cuenta.
+  await ds.getRepository(Venta).update({ id: venta.id }, { estado: 'CONCLUIDA' } as any);
   const post = await buildVentaTicketLines(ds, venta.id, { width: WIDTH });
   const textoPost = render(post!.lines);
-  ok(post!.totalPrincipal === 48000, 'comprobante: TOTAL = venta.total', post!.totalPrincipal);
+  ok(post!.totalPrincipal === 48000, 'comprobante sin venta.total: TOTAL recalculado = 48.000', post!.totalPrincipal);
   ok(textoPost.includes('COMPROBANTE DE VENTA'), 'comprobante lleva su título');
   ok(!textoPost.includes('TARTA'), 'comprobante: el ítem CANCELADO tampoco aparece');
   ok(textoPost.includes('+ 2x TOCINO'), 'comprobante: también detalla los extras');
+
+  // Rama defensiva: si algún día se persiste `Venta.total`, el ticket lo respeta.
+  await ds.getRepository(Venta).update({ id: venta.id }, { total: 44000 } as any);
+  const postConTotal = await buildVentaTicketLines(ds, venta.id, { width: WIDTH });
+  ok(postConTotal!.totalPrincipal === 44000, 'con venta.total persistido, el TOTAL lo respeta', postConTotal!.totalPrincipal);
+  await ds.getRepository(Venta).update({ id: venta.id }, { total: null } as any);
+
+  // ── Impresora angosta: 58mm / 32 columnas ───────────────────────────────
+  // Es el ancho donde la sub-línea del extra puede desbordar: cantW=5,
+  // descW=32-5-12=15, así que el extra dispone de 27 columnas.
+  const angosto = await buildVentaTicketLines(ds, venta.id, { width: 32, isPrecuenta: true });
+  const lineasAngostas = render(angosto!.lines, 32).split('\n');
+  const desborde = lineasAngostas.filter(l => l.length > 32);
+  ok(desborde.length === 0, 'a 32 columnas ninguna línea desborda el ancho', desborde);
+  const extraAngosto = lineasAngostas.find(l => l.includes('CEBOLLA') === false && l.trimStart().startsWith('+ '));
+  ok(!!extraAngosto, 'a 32 columnas el extra sigue saliendo como sub-línea', extraAngosto);
+
+  // ── Todos los ítems cancelados → no se imprime nada ─────────────────────
+  await ds.getRepository(VentaItem).update({ venta: { id: venta.id } } as any, { estado: 'CANCELADO' } as any);
+  const vacio = await buildVentaTicketLines(ds, venta.id, { width: WIDTH, isPrecuenta: true });
+  ok(vacio!.itemsImpresos === 0, 'sin ítems activos → itemsImpresos = 0', vacio!.itemsImpresos);
+  ok(vacio!.bruto === 0, 'sin ítems activos → bruto = 0', vacio!.bruto);
+  const textoVacio = render(vacio!.lines);
+  ok(!textoVacio.includes('HAMBURGUESA') && !textoVacio.includes('GASEOSA'), 'sin ítems activos no se lista ningún producto');
+  // `printVentaTicketInternal` corta ahí y devuelve error en vez de gastar papel
+  // (no se testea acá porque requiere una impresora configurada).
 
   // ── Venta inexistente ───────────────────────────────────────────────────
   const nula = await buildVentaTicketLines(ds, 999999, { width: WIDTH });

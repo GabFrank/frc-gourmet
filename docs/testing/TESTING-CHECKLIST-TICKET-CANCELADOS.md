@@ -36,8 +36,9 @@ Marcar `[x]` cuando el test pase, `[!]` si falla (registrar en `ERRORES-PDV.md`)
 - [ ] Imprimir pre-cuenta (`Pre-cuenta` en la barra del PdV).
 - [ ] **El ticket NO muestra el ítem cancelado.**
 - [ ] **El TOTAL del ticket dice 40.000** — igual al del PdV. *(Antes del fix
-      salía 65.000: el cancelado se sumaba porque `venta.total` todavía es null
-      en la pre-cuenta.)*
+      salía 65.000: el cancelado se sumaba. El TOTAL del ticket siempre se
+      recalcula desde los ítems porque `Venta.total` no se persiste en ningún
+      flujo, así que el problema afectaba también al comprobante post-cobro.)*
 - [ ] El ticket dice `*** NO ES COMPROBANTE FISCAL ***` y no lleva el título
       "COMPROBANTE DE VENTA".
 
@@ -55,8 +56,8 @@ Marcar `[x]` cuando el test pase, `[!]` si falla (registrar en `ERRORES-PDV.md`)
 
 ### 1.4 Todos los ítems cancelados
 - [ ] Cancelar todos los ítems de la mesa e imprimir pre-cuenta.
-- [ ] El ticket sale sin líneas de producto y con TOTAL 0 (no debe romperse ni
-      imprimir el cancelado).
+- [ ] **No se imprime nada** y aparece el aviso "La venta no tiene ítems activos
+      para imprimir" (no se gasta papel en un ticket con TOTAL 0).
 
 ---
 

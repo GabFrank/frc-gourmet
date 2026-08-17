@@ -61,11 +61,10 @@ bien) pero al imprimir la pre-cuenta el ítem seguía apareciendo, y el **TOTAL 
 salía inflado**: el mozo le mostraba al cliente más de lo que debía pagar.
 
 **Causa:** `printVentaTicketInternal` cargaba los `VentaItem` sin filtrar por estado, y
-esa misma lista alimentaba las líneas **y** los totales. En la pre-cuenta `venta.total`
-todavía es null (se escribe al cobrar), así que el TOTAL sale del cálculo local
-`bruto - descItems - descPago + aumPago` → el cancelado lo inflaba. En el comprobante
-post-cobro el TOTAL estaba bien (usa `venta.total`) pero las líneas y el
-SUBTOTAL/DESCUENTO también salían con el cancelado.
+esa misma lista alimentaba las líneas **y** los totales. Como `Venta.total` nunca se
+persiste (ver el bug de abajo), el TOTAL impreso sale siempre del cálculo local
+`bruto - descItems - descPago + aumPago` → el cancelado lo inflaba **en los dos
+documentos**: pre-cuenta y comprobante post-cobro.
 
 **Fix:** filtro `estado: EstadoVentaItem.ACTIVO` en `buildVentaTicketLines` (extraída de
 `printVentaTicketInternal` para poder testear el contenido sin impresora). El ticket
@@ -74,6 +73,30 @@ también detalla ahora los adicionales activos. Test: `npm run test:ticket-venta
 **Gotcha para el futuro:** cualquier lugar nuevo que arme una vista de los ítems de una
 venta arranca filtrando `estado = ACTIVO` — es lo que hacen comanda, cobro, stock,
 comisiones, reportes y factura legal. Un `find` sin filtro es el bug.
+
+### `Venta.total` nunca se persiste → comisiones META_VENTA_LOCAL y "Top 5 Vendedores" siempre en 0
+
+**Descubierto** auditando el ticket de venta (2026-08-17). **Pendiente**, no se arregló ahí
+para no mezclar dominios.
+
+**Hecho de base:** la columna `ventas.total` (`Venta.total`, nullable) **no se escribe en
+ningún flujo del repo**. Al cobrar, `cobrar-venta-dialog` hace
+`updateVenta({ estado, formaPago, pago, fechaCierre })` sin `total`; la venta a crédito
+tampoco lo setea. A diferencia de `Compra.total` o `PedidoOnline.total`, que sí se
+persisten. Quien necesite el total de una venta tiene que sumar sus `VentaItem` activos.
+
+**Consecuencias detectadas:**
+
+- `comisiones.handler.ts` — `totalMontoVentaLocal` se acumula desde `v.total as "ventaTotal"`,
+  así que queda 0. La regla `TipoReglaComision.META_VENTA_LOCAL` compara
+  `totalMontoVentaLocal >= metaMontoLocal`: con una meta > 0 **nunca paga**, en silencio.
+- `dashboard-rrhh.handler.ts` — `SELECT v.vendedor_id, SUM(v.total) as totalVendido … GROUP BY
+  v.vendedor_id` para el widget "Top 5 Vendedores": todos los montos salen 0.
+
+**Fix posible (a decidir):** o se empieza a persistir `Venta.total` al concluir la venta
+(y hay que decidir si es bruto o neto de ajustes del pago), o esos dos consumidores pasan
+a sumar `VentaItem` activos como hacen los reportes (`reportes-ventas.helper.ts`). La
+segunda opción no necesita migración ni backfill de las ventas históricas.
 
 ### CajaMayorMovimiento huérfano
 

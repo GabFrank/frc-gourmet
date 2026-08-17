@@ -174,12 +174,20 @@ async function printPosReceipt(printer, content): Promise<boolean> {
 `printVentaTicketInternal` sólo resuelve la impresora y manda a imprimir.
 
 Hasta 2026-08 el ticket cargaba **todos** los ítems sin filtrar por estado: un ítem
-cancelado en el PdV salía impreso y, peor, sumaba a los totales. En la pre-cuenta eso
-daba un **total inflado**, porque `venta.total` se escribe recién al cobrar
-(`cobrar-venta-dialog`) y hasta entonces el TOTAL sale del cálculo local
-`bruto - descItems - descPago + aumPago`. El mozo le mostraba al cliente un total
-mayor que el del PdV. Fix: filtro `estado: EstadoVentaItem.ACTIVO`, mismo criterio que
-ya usaban la comanda, el cobro, el descuento de stock y los reportes.
+cancelado en el PdV salía impreso y, peor, sumaba a los totales → **total inflado**, y
+el mozo le mostraba al cliente más de lo que debía pagar. Fix: filtro
+`estado: EstadoVentaItem.ACTIVO`, mismo criterio que ya usaban la comanda, el cobro, el
+descuento de stock y los reportes.
+
+> **Gotcha importante: `Venta.total` NO se persiste nunca.** Ningún flujo del repo lo
+> escribe — al cobrar, `cobrar-venta-dialog` manda `estado`/`formaPago`/`pago`/
+> `fechaCierre` y nada más; la venta a crédito (`cuentas-por-cobrar.handler.ts`) tampoco.
+> Por eso el TOTAL del ticket **siempre** sale del recálculo local
+> `bruto - descItems - descPago + aumPago` (la rama `venta.total > 0` de
+> `buildVentaTicketLines` es defensiva y hoy no se ejecuta), y por eso el ítem cancelado
+> inflaba también el comprobante post-cobro, no sólo la pre-cuenta. Ojo al leer otros
+> módulos: hay consumidores de `Venta.total` que por esto reciben 0 — ver
+> [reference/known-bugs.md](../reference/known-bugs.md).
 
 **Adicionales/extras:** se listan como sub-líneas indentadas bajo su producto
 (`+ EXTRA QUESO`, `+ 2x TOCINO`), sólo los `activo = true` y sólo de ítems no

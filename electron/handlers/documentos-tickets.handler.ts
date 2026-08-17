@@ -658,9 +658,11 @@ export interface VentaTicketBuild {
  *
  * **Sólo entran los ítems `estado = ACTIVO`**: un ítem cancelado en el PdV no
  * se imprime ni suma a los totales — mismo criterio que la comanda de cocina,
- * el cobro (`cobrar-venta-dialog`), el descuento de stock y los reportes. Es
- * crítico en la pre-cuenta: ahí `venta.total` todavía es null (se escribe al
- * cobrar), así que el TOTAL sale del cálculo local y un cancelado lo inflaba.
+ * el cobro (`cobrar-venta-dialog`), el descuento de stock y los reportes.
+ * Afecta directo al TOTAL: `Venta.total` **no se persiste nunca** (ver el
+ * cálculo de `totalPrincipal` abajo), así que el total impreso sale siempre del
+ * cálculo local y un ítem cancelado lo inflaba, tanto en la pre-cuenta como en
+ * el comprobante post-cobro.
  *
  * Devuelve `null` si la venta no existe.
  */
@@ -730,6 +732,11 @@ export async function buildVentaTicketLines(
     }
   }
   const descuentoTotal = descItems + descPago;
+  // OJO: hoy `Venta.total` NO se escribe en ningún flujo del repo — ni al cobrar
+  // (`cobrar-venta-dialog` manda estado/formaPago/pago/fechaCierre, sin total),
+  // ni en la venta a crédito. La rama de abajo es defensiva por si algún día se
+  // persiste; el camino real SIEMPRE es el recálculo local. Por eso el ítem
+  // cancelado inflaba también el comprobante post-cobro, no sólo la pre-cuenta.
   const totalPrincipal = Number((venta as any).total) > 0
     ? Number((venta as any).total)
     : bruto - descItems - descPago + aumPago;
@@ -864,6 +871,17 @@ export async function printVentaTicketInternal(
   const build = await buildVentaTicketLines(dataSource, ventaId, { width, isPrecuenta: opts.isPrecuenta });
   if (!build) {
     return { ok: false, printed: [], errors: [{ message: `Venta ${ventaId} no encontrada` }] };
+  }
+
+  // Sin ítems activos no hay nada que mostrar: imprimir sólo el encabezado y un
+  // "TOTAL Gs. 0" gasta papel y confunde. Pasa cuando se cancelaron todos los
+  // ítems de la venta. El caller muestra el mensaje (snackbar en el PdV).
+  if (build.itemsImpresos === 0) {
+    return {
+      ok: false,
+      printed: [],
+      errors: [{ printerId: printer.id, message: 'La venta no tiene ítems activos para imprimir' }],
+    };
   }
 
   const spec: TicketSpec = { printerWidth: width, lines: build.lines, cutAtEnd: true };
