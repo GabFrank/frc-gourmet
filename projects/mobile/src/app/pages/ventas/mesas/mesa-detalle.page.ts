@@ -20,6 +20,7 @@ import { ItemInfoDialogComponent } from './item-info-dialog.component';
 import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
 import { AbrirComandaDialogComponent, AbrirComandaResult } from './abrir-comanda-dialog.component';
 import { flagFor } from './moneda-flag.util';
+import { etiquetaProporcion } from './variacion-precio.util';
 
 interface ItemVM {
   id: number;
@@ -39,6 +40,13 @@ interface ItemVM {
   observaciones: { id: number; texto: string }[];
   ingredientes: { id: number; texto: string }[];
   sabores: string[];
+  /**
+   * Cantidad de sabores según la columna del propio `VentaItem`. Es el dato
+   * confiable para saber si el ítem es una variación: `sabores` viene de una
+   * llamada aparte que ante un error de red cae a `[]` en silencio, y tratar una
+   * pizza como producto simple hace que "Editar" borre personalizaciones.
+   */
+  cantidadSabores: number;
 }
 
 /**
@@ -296,11 +304,18 @@ export class MesaDetallePage implements OnInit {
                 : `Sin ${nom}`,
           };
         }),
-      sabores: (p.sab || []).map((s) => {
-        const prop = Number(s.proporcion) || 1;
-        const frac = prop < 1 ? `1/${Math.round(1 / prop)} ` : '';
-        return `${frac}${s.recetaPresentacion?.sabor?.nombre || 'Sabor'}`;
-      }),
+      cantidadSabores: Number(i.cantidadSabores) || 0,
+      // La porción se etiqueta con el mismo criterio que el diálogo: fracción si
+      // el reparto es parejo, porcentaje si el mozo lo ajustó (60/40). Con
+      // `1/round(1/prop)` un 60% se mostraba como "1/2", contradiciendo lo cobrado.
+      sabores: ((): string[] => {
+        const props = (p.sab || []).map((s) => Number(s.proporcion) || 1);
+        return (p.sab || []).map((s, idx) => {
+          const etiqueta = etiquetaProporcion(props, idx);
+          const nombre = s.recetaPresentacion?.sabor?.nombre || 'Sabor';
+          return etiqueta ? `${etiqueta} ${nombre}` : nombre;
+        });
+      })(),
     };
   }
 
@@ -344,7 +359,10 @@ export class MesaDetallePage implements OnInit {
     if (item.cancelado || this.quitando) return;
     // Variaciones (pizza): edición acotada a cantidad + observaciones (los sabores
     // y el precio de adicionales por-sabor no se tocan acá).
-    const esVariacion = item.sabores.length > 0;
+    // Se mira PRIMERO la columna del ítem: si `getVentaItemSabores` falló al
+    // cargar la mesa, `sabores` queda vacío y una pizza pasaría por producto
+    // simple — y abajo se borrarían sus adicionales/ingredientes sin recrearlos.
+    const esVariacion = item.cantidadSabores > 0 || item.sabores.length > 0;
     this.quitando = true;
     let adicRows: any[] = [];
     let obsRows: any[] = [];
@@ -379,13 +397,17 @@ export class MesaDetallePage implements OnInit {
           recetaIngredienteId: m.recetaIngrediente.id,
           reemplazoProductoId: m.ingredienteReemplazo.id,
         }));
+      // Las observaciones de una mitad (FK `ventaItemSabor`) NO se editan desde
+      // acá: este diálogo es del ítem entero y no sabe de sabores. Se dejan
+      // intactas — antes se borraban todas y se recreaban sin sabor, mezclando
+      // las mitades y perdiendo una de las notas.
+      const obsDelItem = obsRows.filter((o) => o.activo !== false && !o.ventaItemSabor);
       // La fila de la nota libre cuelga del sentinel NOTA DEL CLIENTE: se excluye
       // de los chips seleccionados y es la que precarga el textarea de la nota.
-      const observacionesPreSel = obsRows
-        .filter((o) => o.activo !== false && o.observacion && !o.observacionLibre)
+      const observacionesPreSel = obsDelItem
+        .filter((o) => o.observacion && !o.observacionLibre)
         .map((o) => o.observacion.id);
-      const observacionLibreInicial =
-        obsRows.find((o) => o.activo !== false && o.observacionLibre)?.observacionLibre || '';
+      const observacionLibreInicial = obsDelItem.find((o) => o.observacionLibre)?.observacionLibre || '';
       this.quitando = false;
 
       const res = (await firstValueFrom(
@@ -417,8 +439,9 @@ export class MesaDetallePage implements OnInit {
       }
 
       this.quitando = true;
-      // Observaciones: reconciliar siempre (borrar actuales + recrear selección).
-      for (const o of obsRows) await firstValueFrom(this.repo.deleteVentaItemObservacion(o.id));
+      // Observaciones del ítem: reconciliar (borrar actuales + recrear selección).
+      // Las de un sabor concreto quedan intactas — ver `obsDelItem`.
+      for (const o of obsDelItem) await firstValueFrom(this.repo.deleteVentaItemObservacion(o.id));
       for (const oid of res.observaciones) {
         await firstValueFrom(
           this.repo.createVentaItemObservacion({ ventaItem: { id: item.id }, observacion: { id: oid } }),

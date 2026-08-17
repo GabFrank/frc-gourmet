@@ -1193,7 +1193,9 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(VentaItemObservacion);
       return await repo.find({
         where: { ventaItem: { id: ventaItemId }, activo: true },
-        relations: ['observacion'],
+        // `ventaItemSabor` viaja para poder distinguir las observaciones de una
+        // mitad concreta (pizza) de las del ítem entero.
+        relations: ['observacion', 'ventaItemSabor'],
       });
     } catch (error) {
       console.error(`Error getting observaciones for venta item ${ventaItemId}:`, error);

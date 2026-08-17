@@ -103,6 +103,11 @@ async function main() {
   const calabresa = await mkSabor('CALABRESA', ['ACEITUNAS', 'CEBOLLA']);
   const muzzarella = await mkSabor('MUZZARELLA', ['ORÉGANO']);
 
+  // Producto que sirve de reemplazo en el intercambio de ingrediente.
+  const cebollaMorada = await ds.getRepository(Producto).save(ds.getRepository(Producto).create({
+    nombre: 'CEBOLLA MORADA', tipo: 'RETAIL_INGREDIENTE', activo: true,
+  } as any));
+
   const borde = await ds.getRepository(Adicional).save(ds.getRepository(Adicional).create({ nombre: 'BORDE CHEDDAR', precioBase: 10000, activo: true } as any));
   const obsBuscar = await ds.getRepository(Observacion).save(ds.getRepository(Observacion).create({ descripcion: 'BUSCAR', activo: true } as any));
 
@@ -138,11 +143,19 @@ async function main() {
   });
   ok(!!saborCal?.id && !!saborMuz?.id, 'se crean los dos VentaItemSabor');
 
-  // Personalización SOLO de la mitad calabresa.
+  // Personalización SOLO de la mitad calabresa: quitar ACEITUNAS y cambiar
+  // CEBOLLA por otro producto.
   await invokeHandlerWithContext('createVentaItemIngredienteModificacion', undefined, {
     ventaItem: { id: item.id },
     recetaIngrediente: { id: calabresa.ings[0].id }, // ACEITUNAS
     tipoModificacion: 'REMOVIDO',
+    ventaItemSabor: { id: saborCal.id },
+  });
+  await invokeHandlerWithContext('createVentaItemIngredienteModificacion', undefined, {
+    ventaItem: { id: item.id },
+    recetaIngrediente: { id: calabresa.ings[1].id }, // CEBOLLA
+    tipoModificacion: 'INTERCAMBIADO',
+    ingredienteReemplazo: { id: cebollaMorada.id },
     ventaItemSabor: { id: saborCal.id },
   });
   await invokeHandlerWithContext('createVentaItemAdicional', undefined, {
@@ -166,12 +179,20 @@ async function main() {
 
   const mods = await ds.getRepository(VentaItemIngredienteModificacion).find({
     where: { ventaItem: { id: item.id } } as any,
-    relations: ['recetaIngrediente', 'ventaItemSabor'],
+    relations: ['recetaIngrediente', 'ingredienteReemplazo', 'ventaItemSabor'],
   });
-  ok(mods.length === 1, 'se guarda 1 modificación de ingrediente', mods.length);
-  ok((mods[0] as any).tipoModificacion === 'REMOVIDO', 'del tipo REMOVIDO', (mods[0] as any).tipoModificacion);
-  ok((mods[0] as any).recetaIngrediente?.descripcion === 'ACEITUNAS', 'sobre el ingrediente correcto', (mods[0] as any).recetaIngrediente?.descripcion);
-  ok((mods[0] as any).ventaItemSabor?.id === saborCal.id, 'atribuida a la mitad CALABRESA, no a la otra', (mods[0] as any).ventaItemSabor?.id);
+  ok(mods.length === 2, 'se guardan las 2 modificaciones de ingrediente', mods.length);
+  const removido = mods.find((m: any) => m.tipoModificacion === 'REMOVIDO') as any;
+  const cambiado = mods.find((m: any) => m.tipoModificacion === 'INTERCAMBIADO') as any;
+  ok(!!removido && !!cambiado, 'una REMOVIDO y una INTERCAMBIADO');
+  ok(removido?.recetaIngrediente?.descripcion === 'ACEITUNAS', 'el removido es ACEITUNAS', removido?.recetaIngrediente?.descripcion);
+  ok(cambiado?.recetaIngrediente?.descripcion === 'CEBOLLA', 'el intercambiado parte de CEBOLLA', cambiado?.recetaIngrediente?.descripcion);
+  ok(cambiado?.ingredienteReemplazo?.nombre === 'CEBOLLA MORADA', 'y guarda el producto de reemplazo', cambiado?.ingredienteReemplazo?.nombre);
+  ok(
+    mods.every((m: any) => m.ventaItemSabor?.id === saborCal.id),
+    'las dos atribuidas a la mitad CALABRESA, no a la otra',
+    mods.map((m: any) => m.ventaItemSabor?.id),
+  );
 
   const adics = await ds.getRepository(VentaItemAdicional).find({
     where: { ventaItem: { id: item.id } } as any, relations: ['ventaItemSabor'],
@@ -196,8 +217,17 @@ async function main() {
     textos,
   );
   const nombreIng =
-    (mods[0] as any).recetaIngrediente?.ingrediente?.nombre || (mods[0] as any).recetaIngrediente?.descripcion;
+    removido?.recetaIngrediente?.ingrediente?.nombre || removido?.recetaIngrediente?.descripcion;
   ok(nombreIng === 'ACEITUNAS', 'la comanda puede imprimir "SIN ACEITUNAS" (fallback a descripcion)', nombreIng);
+
+  // Las observaciones de un sabor viajan con su FK, para que editar el ítem
+  // desde el detalle de mesa no las pise (ese diálogo es del ítem entero).
+  const obsConSabor = await invokeHandlerWithContext('getObservacionesByVentaItem', undefined, item.id);
+  ok(
+    (obsConSabor || []).every((o: any) => o.ventaItemSabor?.id === saborCal.id),
+    'getObservacionesByVentaItem devuelve la FK del sabor',
+    (obsConSabor || []).map((o: any) => o.ventaItemSabor?.id),
+  );
 
   // ── Precio: el adicional de media pizza se cobró a la mitad ─────────────
   const itemDb: any = await ds.getRepository(VentaItem).findOne({ where: { id: item.id } as any });
