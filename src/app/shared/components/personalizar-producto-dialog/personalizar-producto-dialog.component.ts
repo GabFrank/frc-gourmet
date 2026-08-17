@@ -151,7 +151,10 @@ export class PersonalizarProductoDialogComponent implements OnInit {
       this.clasificarIngredientes(ingredientes || []);
       this.tieneIngredientes = (this.ingredientesOpcionales.length + this.ingredientesCambiables.length) > 0;
       const fijos = [...this.ingredientesBase, ...this.ingredientesNormales];
-      this.textoIngredientesFijos = fijos.map(i => i.ingrediente?.nombre).filter(Boolean).join(', ');
+      // `RecetaIngrediente.ingrediente` es opcional: un ingrediente puede estar
+      // cargado sólo con `descripcion` (ej. "KIT DE CARNES"). Sin este fallback
+      // el ítem aparece sin nombre.
+      this.textoIngredientesFijos = fijos.map(i => i.ingrediente?.nombre || i.descripcion).filter(Boolean).join(', ');
 
       // Cargar intercambiables
       if (this.ingredientesCambiables.length > 0) {

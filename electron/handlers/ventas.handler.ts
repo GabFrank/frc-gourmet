@@ -13,6 +13,7 @@ import { PdvCategoria } from '../../src/app/database/entities/ventas/pdv-categor
 import { PdvCategoriaItem } from '../../src/app/database/entities/ventas/pdv-categoria-item.entity';
 import { PdvItemProducto } from '../../src/app/database/entities/ventas/pdv-item-producto.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { ensureObservacionNotaLibreId } from '../utils/observacion-libre.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
@@ -174,18 +175,10 @@ export async function materializarPedidoOnlineEnVenta(
     // FK obligatoria; la nota va en observacionLibre colgada de esta observación).
     // Se asegura vía dataSource (fuera de la transacción) tolerando la colisión de
     // unique, para no abortar la materialización si dos mesas lo crean a la vez.
+    // Se memoiza por llamada: la materialización puede tener varios ítems con nota.
     let sentinelObsId: number | null = null;
     const getSentinelObs = async (): Promise<number> => {
-      if (sentinelObsId != null) return sentinelObsId;
-      const desc = 'NOTA DEL CLIENTE';
-      const repoObs = dataSource.getRepository(Observacion);
-      let obs = await repoObs.findOne({ where: { descripcion: desc } });
-      if (!obs) {
-        try { obs = await repoObs.save(repoObs.create({ descripcion: desc, activo: true })); }
-        catch { obs = await repoObs.findOne({ where: { descripcion: desc } }); }
-      }
-      if (!obs) throw new Error('no_se_pudo_asegurar_observacion_sentinel');
-      sentinelObsId = obs.id;
+      if (sentinelObsId == null) sentinelObsId = await ensureObservacionNotaLibreId(dataSource);
       return sentinelObsId;
     };
 
@@ -1192,11 +1185,13 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   });
 
   // --- VentaItemObservacion Handlers ---
+  // Sólo las activas: `activo = false` es una observación dada de baja y no debe
+  // reaparecer al re-personalizar el ítem (la comanda y el KDS ya filtran así).
   ipcMain.handle('getObservacionesByVentaItem', async (_event: any, ventaItemId: number) => {
     try {
       const repo = dataSource.getRepository(VentaItemObservacion);
       return await repo.find({
-        where: { ventaItem: { id: ventaItemId } },
+        where: { ventaItem: { id: ventaItemId }, activo: true },
         relations: ['observacion'],
       });
     } catch (error) {
@@ -1205,11 +1200,28 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     }
   });
 
+  /**
+   * Crea una `VentaItemObservacion`. Dos usos:
+   *
+   * 1. Observación del catálogo → mandar `observacion: { id }`.
+   * 2. **Nota libre** → mandar `observacionLibre` y **omitir** `observacion`: acá
+   *    se resuelve el sentinel `NOTA DEL CLIENTE`, porque la FK es NOT NULL.
+   *    Antes cada caller improvisaba: colgar la nota de la primera observación
+   *    seleccionada (la duplicaba en pantalla y en la comanda) o mandar
+   *    `observacion: null` (rompía el NOT NULL y la nota se perdía callada).
+   */
   ipcMain.handle('createVentaItemObservacion', async (_event: any, data: any) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemObservacion);
-      const entity = repo.create(data);
+      const payload: any = { ...(data || {}) };
+      const nota = typeof payload.observacionLibre === 'string' ? payload.observacionLibre.trim() : '';
+      if (!payload.observacion?.id) {
+        if (!nota) throw new Error('venta_item_observacion_sin_observacion_ni_nota');
+        payload.observacion = { id: await ensureObservacionNotaLibreId(dataSource) };
+      }
+      payload.observacionLibre = nota ? nota.toUpperCase().slice(0, 500) : null;
+      const entity = repo.create(payload);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating venta item observacion:', error);
