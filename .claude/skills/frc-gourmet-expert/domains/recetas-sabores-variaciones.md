@@ -100,6 +100,15 @@ class Receta extends BaseModel {
 | `ingrediente_id` | FK, **nullable** | Producto (RETAIL_INGREDIENTE o ELABORADO_SIN_VARIACION). Nullable: puede ser un ítem solo-descripción |
 | `reemplazoDefault_id` | FK, nullable (col `reemplazo_default_id`) | Sustituto por defecto |
 
+> ⚠️ **Para mostrar el nombre de un ingrediente SIEMPRE hay que hacer
+> `ingrediente?.nombre || descripcion`.** `ingrediente_id` es nullable a
+> propósito (ítem solo-descripción), así que leer sólo `ingrediente.nombre` deja
+> el nombre en blanco. El backend ya lo hace bien en la comanda
+> (`documentos-tickets.handler.ts`) y en el KDS (`kds.handler.ts`); al frontend
+> le faltaba en 6 lugares y se arregló el 2026-08-17 — el síntoma era un chip
+> "OPCIONALES" sin texto en el diálogo de personalización y un chip `SIN` sin
+> nombre en el PdV, mientras la comanda impresa sí decía `SIN ACEITUNAS`.
+
 ### RecetaIngredienteIntercambiable
 
 `receta-ingrediente-intercambiable.entity.ts`:

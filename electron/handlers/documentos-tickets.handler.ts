@@ -151,6 +151,18 @@ async function registrarImpresion(
   await repo.save(item);
 }
 
+/**
+ * Texto de una `VentaItemObservacion` para la comanda de cocina.
+ *
+ * `observacionLibre` gana: la fila de la nota libre cuelga del sentinel
+ * `NOTA DEL CLIENTE`, y lo que le importa a cocina es el texto escrito, no el
+ * nombre del sentinel. Antes esto leía `o.descripcion` — un campo que
+ * **no existe** en la entidad — así que la nota libre nunca llegaba a imprimirse.
+ */
+export function textoObservacionParaTicket(o: any): string {
+  return String(o?.observacionLibre || o?.observacion?.descripcion || '').toUpperCase().trim();
+}
+
 function safeParseJson(s: string): any[] {
   try { const v = JSON.parse(s); return Array.isArray(v) ? v : []; }
   catch { return []; }
@@ -307,7 +319,7 @@ export async function printComandaInternal(
       for (const o of obs) {
         const iid = (o as any).ventaItem?.id;
         if (!iid) continue;
-        const txt = String((o as any).descripcion || (o as any).observacion?.descripcion || '').toUpperCase().trim();
+        const txt = textoObservacionParaTicket(o);
         if (txt) pushMap(observacionesByItem, iid, `>> ${txt}`);
       }
 

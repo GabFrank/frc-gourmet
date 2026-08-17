@@ -276,15 +276,18 @@ export class MesaDetallePage implements OnInit {
         .filter((o) => o.activo !== false)
         .map((o) => ({
           id: o.id,
-          texto: [o.observacion?.descripcion || o.observacion?.nombre, o.observacionLibre]
-            .filter(Boolean)
-            .join(' — '),
+          // La nota libre cuelga del sentinel NOTA DEL CLIENTE, así que se muestra
+          // el texto y no la descripción del sentinel.
+          texto: o.observacionLibre || o.observacion?.descripcion || o.observacion?.nombre || '',
         }))
         .filter((o) => !!o.texto),
       ingredientes: (p.ing || [])
         .filter((m) => m.activo !== false)
         .map((m) => {
-          const nom = m.recetaIngrediente?.ingrediente?.nombre || 'ingrediente';
+          // `RecetaIngrediente.ingrediente` es opcional: puede venir sólo con
+          // `descripcion`. Sin el fallback salía el literal "ingrediente".
+          const nom =
+            m.recetaIngrediente?.ingrediente?.nombre || m.recetaIngrediente?.descripcion || 'ingrediente';
           return {
             id: m.id,
             texto:
@@ -359,11 +362,13 @@ export class MesaDetallePage implements OnInit {
       const adicionalesPreSel = esVariacion
         ? []
         : adicRows.filter((a) => a.activo !== false && a.adicional).map((a) => a.adicional.id);
+      // La fila de la nota libre cuelga del sentinel NOTA DEL CLIENTE: se excluye
+      // de los chips seleccionados y es la que precarga el textarea de la nota.
       const observacionesPreSel = obsRows
-        .filter((o) => o.activo !== false && o.observacion)
+        .filter((o) => o.activo !== false && o.observacion && !o.observacionLibre)
         .map((o) => o.observacion.id);
       const observacionLibreInicial =
-        obsRows.find((o) => o.observacionLibre && !o.observacion)?.observacionLibre || '';
+        obsRows.find((o) => o.activo !== false && o.observacionLibre)?.observacionLibre || '';
       this.quitando = false;
 
       const res = (await firstValueFrom(
