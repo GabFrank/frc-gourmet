@@ -1245,9 +1245,19 @@ export class PdvComponent implements OnInit, OnDestroy {
           item.modificado = true;
           item.historialCambios = JSON.stringify(historial);
 
-          // Guardar observaciones: una fila por observación del catálogo (sin la
-          // nota adentro — antes se repetía en todas) + una sola fila para la
-          // nota libre, que el handler cuelga del sentinel NOTA DEL CLIENTE.
+          // Guardar observaciones. El diálogo precarga lo que el ítem ya tenía y
+          // devuelve la selección COMPLETA, así que hay que reconciliar: borrar
+          // las actuales y recrear. Sin esto, cada "Editar" (aunque sólo cambies
+          // la cantidad) volvía a insertar todo y las observaciones se
+          // multiplicaban en pantalla y en la comanda. Mismo criterio que
+          // `personalizarItem()` y que el flujo de mobile.
+          const obsActuales = await firstValueFrom(this.repositoryService.getObservacionesByVentaItem(item.id));
+          for (const o of (obsActuales || [])) {
+            await firstValueFrom(this.repositoryService.deleteVentaItemObservacion(o.id));
+          }
+          // Una fila por observación del catálogo (sin la nota adentro — antes se
+          // repetía en todas) + una sola fila para la nota libre, que el handler
+          // cuelga del sentinel NOTA DEL CLIENTE.
           for (const obsId of (result.observacionIds || [])) {
             await firstValueFrom(this.repositoryService.createVentaItemObservacion({
               ventaItem: { id: item.id },

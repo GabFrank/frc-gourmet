@@ -76,11 +76,23 @@ pantalla: el diálogo de personalización de un ítem.
       nota como chip aparte. *(Antes la nota se pegaba dentro de cada
       observación seleccionada.)*
 
-### 2.5 Pizza / producto con variación
+### 2.5 Editar dos veces no multiplica las observaciones ⚠️
+El caso más fácil de romper: el diálogo de Editar precarga lo ya guardado, así
+que al guardar hay que **reconciliar** (borrar y recrear), no sólo insertar.
+
+- [ ] Sobre el ítem de 2.4, abrí **Editar** de nuevo y cambiá **sólo la
+      cantidad**. Guardá.
+- [ ] El detalle sigue mostrando **una** observación y **una** nota.
+      *(Antes: se duplicaban en cada edición — 2×, después 3×… y así también en
+      la comanda.)*
+- [ ] Repetí una tercera vez: sigue sin duplicarse.
+- [ ] Desmarcá la observación en Editar y guardá: desaparece del detalle.
+
+### 2.6 Pizza / producto con variación
 - [ ] Agregá una pizza, personalizá **un sabor** con una observación + nota.
 - [ ] Mismo resultado que 2.1: sin duplicados y con la nota visible.
 
-### 2.6 Mobile
+### 2.7 Mobile
 - [ ] Desde el cliente mobile, editá un ítem: marcá observación + nota, guardá.
 - [ ] El detalle muestra ambas por separado; al reabrir, la nota viene
       precargada y el sentinel no aparece marcado.
@@ -117,20 +129,27 @@ WHERE vio.venta_item_id = <ID_DEL_ITEM>;
 - [ ] Existe **una sola** `Observacion` con descripción `NOTA DEL CLIENTE` en
       todo el catálogo:
       `SELECT COUNT(*) FROM observacion WHERE descripcion = 'NOTA DEL CLIENTE';`
-- [ ] Esa observación **no** aparece como opción marcable en el diálogo de
-      personalización (sólo se vinculan al producto las que vos elegís en
-      *Gestionar producto → Observaciones*).
+- [ ] En *Gestionar producto → Observaciones*, el buscador **no ofrece**
+      `NOTA DEL CLIENTE` (ni escribiéndolo entero): el sentinel está excluido del
+      catálogo para que nadie pueda vincularlo a un producto y terminar
+      mostrándoselo al cajero como si fuera una observación real.
+- [ ] Las demás observaciones sí se buscan y vinculan normalmente.
 
 ---
 
 ## Cobertura automática
 
-`npm run test:observacion-libre` (13 asserts) cubre la parte de backend: nota
+`npm run test:observacion-libre` (20 asserts) cubre la parte de backend: nota
 sola, observación + nota, varias observaciones + nota, el texto que arma la
-comanda, el rechazo de la llamada vacía y la reutilización del sentinel.
+comanda, el truncado a 500, los payloads inválidos (vacío, sólo espacios,
+observación + nota mezcladas), la reutilización del sentinel y su exclusión del
+catálogo.
 
-El fallback del **nombre del ingrediente** es de templates Angular, así que no
-está cubierto por ese test: se verifica con el bloque 1 de este checklist.
+Quedan fuera del test y se verifican a mano acá:
+
+- el fallback del **nombre del ingrediente** (bloque 1), porque vive en
+  templates de Angular;
+- la **reconciliación al editar** (2.5), que es lógica del componente del PdV.
 
 > **Gotcha al correr los `test:*` localmente:** los `.js` compilados que quedan
 > en `electron/` (gitignorados) le ganan a los `.ts` en ts-node. Si editaste un

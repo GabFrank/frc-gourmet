@@ -174,6 +174,18 @@ mano no puede guardarse "sin observación". La única forma soportada:
 - **Al reabrir el diálogo de personalización**, las filas con `observacionLibre`
   se excluyen de los chips seleccionados (si no, el sentinel vuelve marcado como
   si el cajero lo hubiera elegido) y son las que precargan el textarea.
+- El handler las trata como **excluyentes**: mandar `observacion` del catálogo
+  **y** `observacionLibre` en la misma fila se rechaza, porque al renderizar la
+  nota tapa a la observación (era el bug viejo).
+- El sentinel está **excluido del catálogo** (`getObservaciones` /
+  `searchObservaciones` en `productos.handler.ts`): si se lo pudiera vincular a
+  un producto, aparecería como chip elegible y el cajero vería el texto interno
+  "NOTA DEL CLIENTE".
+- **Guardar observaciones desde un diálogo que las precarga = reconciliar**
+  (borrar las actuales y recrear la selección), nunca sólo insertar.
+  `personalizarItem()` y el flujo de mobile ya lo hacían; `editItem()` no, y
+  duplicaba todas las observaciones **en cada edición**, aunque sólo cambiaras la
+  cantidad (2×, 3×, …). Arreglado el 2026-08-17.
 
 Bug histórico (arreglado 2026-08-17): los tres sitios del PdV que persistían
 observaciones colgaban la nota de `observacionIds[0]` — duplicando esa

@@ -30,6 +30,7 @@ import { DataSource } from 'typeorm';
 import { invokeHandlerWithContext } from '../electron/utils/handler-registry';
 import { getDataSourceOptions } from '../src/app/database/database.config';
 import { registerVentasHandlers } from '../electron/handlers/ventas.handler';
+import { registerProductosHandlers } from '../electron/handlers/productos.handler';
 import { textoObservacionParaTicket } from '../electron/handlers/documentos-tickets.handler';
 import { OBSERVACION_NOTA_LIBRE_DESC } from '../electron/utils/observacion-libre.utils';
 
@@ -128,16 +129,50 @@ async function main() {
   ok(rows3.length === 3, '2 observaciones + nota → 3 filas', rows3.length);
   ok(JSON.stringify(textos(rows3).sort()) === JSON.stringify(['BUSCAR', 'PARA LLEVAR', 'SIN SAL']), 'los 3 textos son distintos', textos(rows3));
 
-  // ── Caso 4: sin observación y sin nota → rechazado ──────────────────────
-  let threw = false;
-  try {
-    await invokeHandlerWithContext('createVentaItemObservacion', undefined, { ventaItem: { id: item3.id } });
-  } catch { threw = true; }
-  ok(threw, 'sin observación ni nota → error explícito');
+  // ── Caso 4: payloads inválidos ──────────────────────────────────────────
+  const rechaza = async (payload: any): Promise<boolean> => {
+    try { await invokeHandlerWithContext('createVentaItemObservacion', undefined, payload); return false; }
+    catch { return true; }
+  };
+  ok(await rechaza({ ventaItem: { id: item3.id } }), 'sin observación ni nota → error explícito');
+  ok(await rechaza({ ventaItem: { id: item3.id }, observacionLibre: '   ' }), 'nota de puros espacios → rechazada');
+  ok(
+    await rechaza({ ventaItem: { id: item3.id }, observacion: { id: obsBuscar.id }, observacionLibre: 'mezcla' }),
+    'observación del catálogo + nota en la misma fila → rechazada (es el bug viejo)',
+  );
+
+  // ── Caso 4.b: la nota se corta a 500 (largo de la columna) ──────────────
+  const itemLargo = await mkItem();
+  await invokeHandlerWithContext('createVentaItemObservacion', undefined, {
+    ventaItem: { id: itemLargo.id }, observacionLibre: 'a'.repeat(600),
+  });
+  const rowsLargo = await invokeHandlerWithContext('getObservacionesByVentaItem', undefined, itemLargo.id);
+  ok(rowsLargo[0]?.observacionLibre?.length === 500, 'la nota se corta a 500 caracteres', rowsLargo[0]?.observacionLibre?.length);
 
   // ── Caso 5: el sentinel se reutiliza, no se crea uno por ítem ───────────
   const sentinels = await obsRepo.find({ where: { descripcion: OBSERVACION_NOTA_LIBRE_DESC } as any });
   ok(sentinels.length === 1, 'existe UN solo sentinel para todas las notas', sentinels.length);
+
+  // ── Caso 5.b: el sentinel NO se ofrece como observación del catálogo ────
+  // Si se pudiera vincular a un producto, aparecería como chip elegible en el
+  // PdV y el cajero vería el texto interno "NOTA DEL CLIENTE".
+  registerProductosHandlers(ds, () => admin);
+  const catalogo = await invokeHandlerWithContext('getObservaciones', undefined);
+  const enCatalogo = (catalogo || []).some((o: any) => o.descripcion === OBSERVACION_NOTA_LIBRE_DESC);
+  ok(!enCatalogo, 'getObservaciones no devuelve el sentinel', (catalogo || []).map((o: any) => o.descripcion));
+  ok((catalogo || []).length === 2, 'sí devuelve las observaciones reales', (catalogo || []).length);
+  const buscados = await invokeHandlerWithContext('searchObservaciones', undefined, 'NOTA');
+  ok(
+    !(buscados || []).some((o: any) => o.descripcion === OBSERVACION_NOTA_LIBRE_DESC),
+    'searchObservaciones tampoco lo devuelve, ni buscándolo por nombre',
+    (buscados || []).map((o: any) => o.descripcion),
+  );
+  const buscadosSinSal = await invokeHandlerWithContext('searchObservaciones', undefined, 'SAL');
+  ok(
+    (buscadosSinSal || []).some((o: any) => o.descripcion === 'SIN SAL'),
+    'la búsqueda del catálogo sigue funcionando',
+    (buscadosSinSal || []).map((o: any) => o.descripcion),
+  );
 
   // ── Caso 6: fila dada de baja no vuelve al re-personalizar ──────────────
   await ds.getRepository(VentaItemObservacion).update({ id: rows1[0].id }, { activo: false } as any);

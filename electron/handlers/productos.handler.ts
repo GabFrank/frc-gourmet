@@ -33,7 +33,8 @@ import { ProductoObservacion } from '../../src/app/database/entities/productos/p
 import { RecetaIngredienteIntercambiable } from '../../src/app/database/entities/productos/receta-ingrediente-intercambiable.entity';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { TipoPrecio } from '../../src/app/database/entities/financiero/tipo-precio.entity';
-import { Not, Like, In } from 'typeorm';
+import { Not, Like, In, And } from 'typeorm';
+import { OBSERVACION_NOTA_LIBRE_DESC } from '../utils/observacion-libre.utils';
 import { Sabor } from '../../src/app/database/entities/productos/sabor.entity';
 import { RecetaPresentacion } from '../../src/app/database/entities/productos/receta-presentacion.entity';
 
@@ -1172,10 +1173,17 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   // --- Observacion Handlers ---
+  // El sentinel NOTA DEL CLIENTE se excluye del catálogo: es un detalle interno
+  // (soporta la nota libre, que la FK NOT NULL de VentaItemObservacion obliga a
+  // colgar de alguna Observacion). Si se lo pudiera vincular a un producto,
+  // aparecería como chip elegible en el PdV y el cajero vería ese texto.
   ipcMain.handle('getObservaciones', async () => {
     try {
       const observacionRepository = dataSource.getRepository(Observacion);
-      return await observacionRepository.find({ where: { activo: true }, order: { descripcion: 'ASC' } });
+      return await observacionRepository.find({
+        where: { activo: true, descripcion: Not(OBSERVACION_NOTA_LIBRE_DESC) },
+        order: { descripcion: 'ASC' },
+      });
     } catch (error) {
       console.error('Error getting observaciones:', error);
       throw error;
@@ -1185,9 +1193,9 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   ipcMain.handle('searchObservaciones', async (_event: any, search: string) => {
     try {
       const observacionRepository = dataSource.getRepository(Observacion);
-      const where: any = { activo: true };
+      const where: any = { activo: true, descripcion: Not(OBSERVACION_NOTA_LIBRE_DESC) };
       if (search) {
-        where.descripcion = Like(`%${search.toUpperCase()}%`);
+        where.descripcion = And(Not(OBSERVACION_NOTA_LIBRE_DESC), Like(`%${search.toUpperCase()}%`));
       }
       return await observacionRepository.find({ where, order: { descripcion: 'ASC' }, take: 50 });
     } catch (error) {

@@ -313,7 +313,8 @@ export async function materializarPedidoOnlineEnVenta(
           libres.push(desc);
         }
       }
-      const notaLibre = pers.notaLibre ? String(pers.notaLibre).trim() : '';
+      // UPPERCASE como todo string que va a BD (las de catálogo ya se normalizan arriba).
+      const notaLibre = pers.notaLibre ? String(pers.notaLibre).trim().toUpperCase() : '';
       if (notaLibre) libres.push(notaLibre);
       if (libres.length) {
         const vo = obsItemRepo.create({
@@ -1216,6 +1217,12 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(VentaItemObservacion);
       const payload: any = { ...(data || {}) };
       const nota = typeof payload.observacionLibre === 'string' ? payload.observacionLibre.trim() : '';
+      // Excluyentes: una fila es o una observación del catálogo, o la nota libre.
+      // Mandar las dos juntas es justamente el bug viejo — al renderizar gana la
+      // nota y la observación elegida queda tapada.
+      if (payload.observacion?.id && nota) {
+        throw new Error('venta_item_observacion_no_combina_observacion_y_nota');
+      }
       if (!payload.observacion?.id) {
         if (!nota) throw new Error('venta_item_observacion_sin_observacion_ni_nota');
         payload.observacion = { id: await ensureObservacionNotaLibreId(dataSource) };
