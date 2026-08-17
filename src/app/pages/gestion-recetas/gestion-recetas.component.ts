@@ -390,43 +390,74 @@ export class GestionRecetasComponent implements OnInit {
           return;
         }
 
-        // 2. Abrir el diálogo de gestión
-        // ✅ CORREGIDO: Pasar la información original para mostrar correctamente
-        const cantidadOriginal = ingredienteOriginal.unidadOriginal && ingredienteOriginal.unidadOriginal !== ingredienteOriginal.unidad
-          ? this.convertirCantidadParaMostrar(ingredienteOriginal.cantidad ?? 0, ingredienteOriginal.unidad || '', ingredienteOriginal.unidadOriginal)
-          : (ingredienteOriginal.cantidad ?? 0);
+        // 2. Averiguar en qué recetas destino ya está el ingrediente, para que el
+        //    diálogo las muestre bloqueadas en vez de duplicar la fila.
+        const recetaIds = Array.from(new Set(
+          variacionesDelSabor.map(v => v.receta?.id).filter((id): id is number => !!id)
+        ));
 
-        const dialogRef = this.dialog.open(GestionarIngredienteMultiVariacionDialogComponent, {
-          width: '700px',
-          data: {
-            nombreIngrediente: ingredienteOriginal.ingrediente?.nombre || ingredienteOriginal.descripcion || '',
-            unidadIngrediente: ingredienteOriginal.unidad,
-            variaciones: variacionesDelSabor,
-            ingredienteOriginal: ingredienteOriginal,
-            // ✅ NUEVO: Información para mostrar correctamente
-            cantidadOriginal: cantidadOriginal,
-            unidadOriginal: ingredienteOriginal.unidadOriginal || ingredienteOriginal.unidad
-          }
-        });
-
-        dialogRef.afterClosed().subscribe(resultado => {
-          if (resultado && resultado.length > 0) {
-            // 3. Llamar al servicio para guardar los nuevos ingredientes
-            this.saboresVariacionesService.agregarIngredienteMultiplesVariaciones(ingredienteOriginal, resultado)
-              .subscribe({
-                next: () => {
-                  // Opcional: Recargar datos o mostrar un mensaje más detallado.
-                },
-                error: (err) => {
-                  console.error('Error en el flujo de asistente de ingredientes:', err);
-                }
-              });
+        this.saboresVariacionesService.getRecetasConIngrediente(
+          recetaIds,
+          ingredienteOriginal.ingrediente?.id ?? null,
+          ingredienteOriginal.descripcion ?? null
+        ).subscribe({
+          next: (recetasConIngrediente) => {
+            this.mostrarDialogoGestionMultiVariacion(ingredienteOriginal, variacionesDelSabor, recetasConIngrediente || []);
+          },
+          error: (error) => {
+            console.error('Error verificando ingredientes existentes:', error);
+            // Sin el chequeo previo igual se puede continuar: el backend descarta
+            // duplicados de todos modos.
+            this.mostrarDialogoGestionMultiVariacion(ingredienteOriginal, variacionesDelSabor, []);
           }
         });
       },
       error: (error) => {
         console.error('Error obteniendo variaciones:', error);
         this.snackBar.open('Error al obtener las variaciones del producto', 'Cerrar', { duration: 3000 });
+      }
+    });
+  }
+
+  private mostrarDialogoGestionMultiVariacion(
+    ingredienteOriginal: RecetaIngrediente,
+    variacionesDelSabor: any[],
+    recetasConIngrediente: number[]
+  ): void {
+    // ✅ CORREGIDO: Pasar la información original para mostrar correctamente
+    const cantidadOriginal = ingredienteOriginal.unidadOriginal && ingredienteOriginal.unidadOriginal !== ingredienteOriginal.unidad
+      ? this.convertirCantidadParaMostrar(ingredienteOriginal.cantidad ?? 0, ingredienteOriginal.unidad || '', ingredienteOriginal.unidadOriginal)
+      : (ingredienteOriginal.cantidad ?? 0);
+
+    const dialogRef = this.dialog.open(GestionarIngredienteMultiVariacionDialogComponent, {
+      width: '700px',
+      data: {
+        nombreIngrediente: ingredienteOriginal.ingrediente?.nombre || ingredienteOriginal.descripcion || '',
+        unidadIngrediente: ingredienteOriginal.unidad,
+        variaciones: variacionesDelSabor,
+        ingredienteOriginal: ingredienteOriginal,
+        // ✅ NUEVO: Información para mostrar correctamente
+        cantidadOriginal: cantidadOriginal,
+        unidadOriginal: ingredienteOriginal.unidadOriginal || ingredienteOriginal.unidad,
+        recetasConIngrediente,
+        recetaActualId: this.receta?.id
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(resultado => {
+      if (resultado && resultado.length > 0) {
+        // Guardar en el backend (transaccional: deduplica y omite las que ya lo tienen).
+        this.saboresVariacionesService.agregarIngredienteMultiplesVariaciones(ingredienteOriginal, resultado)
+          .subscribe({
+            next: () => {
+              // La receta actual puede compartirse con otra variación: recargar para
+              // reflejar el estado real de la tabla.
+              this.loadIngredientes();
+            },
+            error: (err) => {
+              console.error('Error en el flujo de asistente de ingredientes:', err);
+            }
+          });
       }
     });
   }

@@ -62,6 +62,23 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
     }
   };
 
+  /**
+   * Pasa una cantidad expresada en la unidad que ve el usuario (`unidadOriginal`) a
+   * la unidad en la que se persiste (`unidad`, la base del producto). Es la misma
+   * conversión que hace `normalizarDatosParaGuardar` en el diálogo de ingrediente;
+   * sin ella, `calculateRecipeCost` (costoUnitario × cantidad) costea 1000× de más.
+   */
+  const normalizarCantidadIngrediente = (
+    cantidad: number,
+    unidad?: string | null,
+    unidadOriginal?: string | null
+  ): number => {
+    if (!unidad || !unidadOriginal || unidad === unidadOriginal) return cantidad;
+    if (unidad === 'KILOGRAMOS' && unidadOriginal === 'GRAMOS') return cantidad / 1000;
+    if (unidad === 'LITROS' && unidadOriginal === 'MILILITROS') return cantidad / 1000;
+    return cantidad;
+  };
+
   // Helper function to calculate recipe cost
   const calculateRecipeCost = async (recetaId: number): Promise<number> => {
     try {
@@ -999,6 +1016,181 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       console.error('Error updating receta ingrediente:', error);
       throw error;
     }
+  });
+
+  ipcMain.handle('get-recetas-con-ingrediente', async (_event: any, data: {
+    recetaIds: number[];
+    ingredienteId?: number | null;
+    descripcion?: string | null;
+  }) => {
+    try {
+      const recetaIds = (data?.recetaIds || []).filter((id) => Number.isInteger(id));
+      if (recetaIds.length === 0) return [];
+
+      const descripcion = (data?.descripcion || '').trim().toUpperCase() || null;
+      if (!data?.ingredienteId && !descripcion) return [];
+
+      const qb = dataSource.getRepository(RecetaIngrediente)
+        .createQueryBuilder('ri')
+        .select('ri.receta_id', 'recetaId')
+        .where('ri.receta_id IN (:...recetaIds)', { recetaIds });
+
+      if (data.ingredienteId) {
+        qb.andWhere('ri.ingrediente_id = :ingredienteId', { ingredienteId: data.ingredienteId });
+      } else {
+        qb.andWhere('ri.ingrediente_id IS NULL')
+          .andWhere('UPPER(ri.descripcion) = :descripcion', { descripcion });
+      }
+
+      const filas = await qb.getRawMany();
+      return Array.from(new Set(filas.map((f: any) => Number(f.recetaId))));
+    } catch (error) {
+      console.error('Error en get-recetas-con-ingrediente:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Copia un ingrediente ya existente a las recetas de otras variaciones del mismo sabor.
+   *
+   * Antes esto lo hacía el frontend con un `create-receta-ingrediente` suelto por
+   * variación, sin ninguna validación: si dos variaciones compartían receta (datos
+   * previos al refactor "una receta por variación") las N inserciones caían en la
+   * MISMA receta, y volver a correr el asistente desde otra variación insertaba de
+   * nuevo en todas. Resultado: el mismo ingrediente repetido N veces por receta.
+   *
+   * Este handler es la única vía: deduplica recetas destino, excluye la receta de
+   * origen, omite las que ya tienen el ingrediente y normaliza la cantidad a la
+   * unidad base del ingrediente original (la copia guardaba 100 GRAMOS donde el
+   * original tenía 0.1 KILOGRAMOS, y el costo salía 1000× por `costoUnitario × cantidad`).
+   */
+  ipcMain.handle('agregar-ingrediente-multiples-variaciones', async (_event: any, data: {
+    recetaIngredienteId: number;
+    variaciones: Array<{ variacionId: number; cantidad: number }>;
+  }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'INGREDIENTES_GESTIONAR');
+
+    if (!Number.isInteger(data?.recetaIngredienteId)) {
+      throw new Error('agregar-ingrediente-multiples-variaciones: recetaIngredienteId inválido');
+    }
+    const solicitadas = (data?.variaciones || []).filter(
+      (v) => Number.isInteger(v?.variacionId) && Number(v?.cantidad) > 0
+    );
+    if (solicitadas.length === 0) {
+      return { success: true, agregadas: 0, recetasAfectadas: [], omitidasPorDuplicado: [], omitidasPorRecetaCompartida: [], omitidasSinReceta: [] };
+    }
+
+    const origen = await dataSource.getRepository(RecetaIngrediente).findOne({
+      where: { id: data.recetaIngredienteId },
+      relations: ['receta', 'ingrediente']
+    });
+    if (!origen?.receta?.id) {
+      throw new Error('Ingrediente de origen no encontrado');
+    }
+
+    // Recetas destino de cada variación solicitada.
+    const variaciones = await dataSource.getRepository(RecetaPresentacion).find({
+      where: { id: In(solicitadas.map((v) => v.variacionId)) },
+      relations: ['receta']
+    });
+    const porVariacion = new Map<number, RecetaPresentacion>(variaciones.map((v) => [v.id, v]));
+
+    const omitidasSinReceta: string[] = [];
+    const omitidasPorRecetaCompartida: string[] = [];
+    const omitidasPorDuplicado: string[] = [];
+
+    // 1) Resolver variación → receta, descartando la receta de origen y las repetidas.
+    const destinos: Array<{ recetaId: number; cantidad: number; nombre: string }> = [];
+    const recetasVistas = new Set<number>([origen.receta.id]);
+    for (const solicitada of solicitadas) {
+      const variacion = porVariacion.get(solicitada.variacionId);
+      const nombre = variacion?.nombre_generado || `Variación ${solicitada.variacionId}`;
+      const recetaId = variacion?.receta?.id;
+
+      if (!recetaId) { omitidasSinReceta.push(nombre); continue; }
+      // Comparte receta con el origen (o con otra variación ya procesada): insertar
+      // ahí duplicaría la fila dentro de la misma receta.
+      if (recetasVistas.has(recetaId)) { omitidasPorRecetaCompartida.push(nombre); continue; }
+
+      recetasVistas.add(recetaId);
+      destinos.push({ recetaId, cantidad: Number(solicitada.cantidad), nombre });
+    }
+
+    // 2) Descartar las recetas que ya tienen este ingrediente.
+    const descripcionOrigen = (origen.descripcion || '').trim().toUpperCase() || null;
+    const candidatos: typeof destinos = [];
+    for (const destino of destinos) {
+      const yaExiste = await dataSource.getRepository(RecetaIngrediente).findOne({
+        where: origen.ingrediente
+          ? { receta: { id: destino.recetaId }, ingrediente: { id: origen.ingrediente.id } }
+          : { receta: { id: destino.recetaId }, descripcion: descripcionOrigen as any }
+      });
+      if (yaExiste) { omitidasPorDuplicado.push(destino.nombre); continue; }
+      candidatos.push(destino);
+    }
+
+    if (candidatos.length === 0) {
+      return {
+        success: true, agregadas: 0, recetasAfectadas: [],
+        omitidasPorDuplicado, omitidasPorRecetaCompartida, omitidasSinReceta
+      };
+    }
+
+    // 3) Insertar en una sola transacción.
+    const currentUser = getCurrentUser();
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const repo = queryRunner.manager.getRepository(RecetaIngrediente);
+      for (const destino of candidatos) {
+        // La cantidad viaja en la unidad que ve el usuario (unidadOriginal); se guarda
+        // en la unidad base del ingrediente, igual que el alta manual.
+        const cantidad = normalizarCantidadIngrediente(destino.cantidad, origen.unidad, origen.unidadOriginal);
+        const costoUnitario = Number(origen.costoUnitario || 0);
+
+        const nuevo = repo.create({
+          cantidad,
+          unidad: origen.unidad ?? null,
+          unidadOriginal: origen.unidadOriginal ?? null,
+          descripcion: descripcionOrigen,
+          costoUnitario,
+          costoTotal: costoUnitario * cantidad,
+          esExtra: origen.esExtra,
+          esOpcional: origen.esOpcional,
+          esCambiable: origen.esCambiable,
+          costoExtra: origen.costoExtra || 0,
+          porcentajeAprovechamiento: origen.porcentajeAprovechamiento,
+          esIngredienteBase: origen.esIngredienteBase,
+          activo: true,
+          receta: { id: destino.recetaId },
+          ingrediente: origen.ingrediente ?? null
+        } as any);
+        setEntityUserTracking(dataSource, nuevo, currentUser?.id, false);
+        await repo.save(nuevo);
+      }
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error en agregar-ingrediente-multiples-variaciones:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+
+    // 4) Recalcular costos fuera de la transacción (calculateRecipeCost usa el dataSource).
+    for (const destino of candidatos) {
+      await calculateRecipeCost(destino.recetaId);
+    }
+
+    return {
+      success: true,
+      agregadas: candidatos.length,
+      recetasAfectadas: candidatos.map((c) => c.recetaId),
+      omitidasPorDuplicado,
+      omitidasPorRecetaCompartida,
+      omitidasSinReceta
+    };
   });
 
   ipcMain.handle('delete-receta-ingrediente', async (_event: any, recetaIngredienteId: number) => {

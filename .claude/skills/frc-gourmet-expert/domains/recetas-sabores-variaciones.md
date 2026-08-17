@@ -476,6 +476,36 @@ en ese caso — sí cuando el usuario tilda un sabor a mano, que es el
 comportamiento de siempre. Con `maxSabores = 1` se oculta el "(max N)" y tocar
 otro sabor **reemplaza** al elegido.
 
+## Asistente "agregar ingrediente a otras variaciones" (2026-08)
+
+Al agregar un ingrediente en la receta de una variación, `gestion-recetas` abre
+`confirmar-agregar-ingrediente-dialog` y, si el usuario acepta,
+`gestionar-ingrediente-multi-variacion-dialog` para copiarlo a las otras variaciones del sabor.
+
+**Todo el guardado lo hace el handler transaccional `agregar-ingrediente-multiples-variaciones`**
+(`recetas.handler.ts`, `ensurePermission('INGREDIENTES_GESTIONAR')`). Recibe
+`{ recetaIngredienteId, variaciones: [{variacionId, cantidad}] }` y:
+
+- resuelve variación → receta y **deduplica** las recetas destino,
+- **excluye la receta de origen** (variaciones que comparten receta con la actual),
+- **omite las recetas que ya tienen ese ingrediente** (por `ingrediente_id`, o por `descripcion`
+  si es un ítem solo-descripción),
+- **normaliza la unidad** con la conversión KG/G y L/mL para que `calculateRecipeCost`
+  no costee 1000× de más,
+- devuelve un resumen con las recetas modificadas y omitidas (el diálogo lo muestra).
+
+Helpers:
+- **`get-recetas-con-ingrediente(ingredienteId?, descripcion?)`** — devuelve las
+  `{variacionId, variacionNombre, recetaId}` que **ya tienen** ese ingrediente (usa
+  **ambos** campos en el OR), para que el diálogo pueda deshabilitar esas variaciones
+  desde el comienzo. Filtra activo y carga las relaciones necesarias (variación → producto).
+- **`delete-receta-ingrediente-multiples-variaciones({variaciones: [...]})`** — es el
+  borrado en lote, equivalente simétrico del agregado (corre en la transacción de borrar
+  y NO pregunta de nuevo; la confirmación fue para el borrado).
+
+Tests: `npm run test:ingrediente-multi-variacion` (12/12). Manual:
+`docs/testing/TESTING-CHECKLIST-INGREDIENTE-MULTI-VARIACION.md`.
+
 ## Reparación de recetas compartidas (`d9cbba3`)
 
 **No es una migración** (por el riesgo de un deep-clone corriendo en cada arranque): es un handler de mantenimiento **manual/opt-in**.

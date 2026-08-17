@@ -1,6 +1,6 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
-import { FormBuilder, FormGroup, FormArray, FormControl } from '@angular/forms';
+import { FormBuilder, FormGroup, FormArray } from '@angular/forms';
 import { RecetaPresentacion } from '../../../../database/entities/productos/receta-presentacion.entity';
 import { RecetaIngrediente } from '../../../../database/entities/productos/receta-ingrediente.entity';
 
@@ -12,6 +12,10 @@ export interface GestionarIngredienteMultiVariacionDialogData {
   // ✅ NUEVO: Información para mostrar correctamente las unidades
   cantidadOriginal: number;
   unidadOriginal: string;
+  /** Ids de receta que YA tienen este ingrediente: no se pueden volver a agregar. */
+  recetasConIngrediente: number[];
+  /** Id de la receta que se está editando: las variaciones que la comparten ya lo tienen. */
+  recetaActualId?: number;
 }
 
 @Component({
@@ -23,6 +27,12 @@ export class GestionarIngredienteMultiVariacionDialogComponent implements OnInit
 
   form: FormGroup;
   loading = false;
+
+  /** Hay al menos una variación bloqueada: se explica en el pie del diálogo. */
+  hayBloqueadas = false;
+
+  /** Datos planos para la tabla (el template no llama funciones ni getters). */
+  variacionesInfo: Array<{ id?: number; nombre: string; bloqueada: boolean; motivoBloqueo: string }> = [];
 
   constructor(
     private fb: FormBuilder,
@@ -40,19 +50,45 @@ export class GestionarIngredienteMultiVariacionDialogComponent implements OnInit
 
   private buildForm(): void {
     const variacionesFormArray = this.form.get('variaciones') as FormArray;
+    const recetasConIngrediente = new Set(this.data.recetasConIngrediente || []);
+
     this.data.variaciones.forEach(variacion => {
-      variacionesFormArray.push(this.fb.group({
+      const recetaId = variacion.receta?.id;
+      // Comparte la receta que se está editando: agregar ahí duplicaría la fila
+      // dentro de la misma receta (datos con recetas compartidas).
+      const comparteReceta = !!recetaId && recetaId === this.data.recetaActualId;
+      const yaLoTiene = !!recetaId && recetasConIngrediente.has(recetaId);
+      const bloqueada = comparteReceta || yaLoTiene;
+
+      let motivoBloqueo = '';
+      if (comparteReceta) motivoBloqueo = 'COMPARTE LA RECETA ACTUAL';
+      else if (yaLoTiene) motivoBloqueo = 'YA LO TIENE';
+
+      const grupo = this.fb.group({
         id: [variacion.id],
         nombre: [variacion.nombre_generado],
-        seleccionada: [true], // Por defecto todas seleccionadas
+        // Sólo se preseleccionan las variaciones a las que sí se puede agregar.
+        seleccionada: [!bloqueada],
+        bloqueada: [bloqueada],
+        motivoBloqueo: [motivoBloqueo],
         // ✅ CORREGIDO: Usar la cantidad original en lugar de la convertida
         cantidad: [this.data.cantidadOriginal || 0]
-      }));
-    });
-  }
+      });
 
-  get variacionesControls() {
-    return (this.form.get('variaciones') as FormArray).controls;
+      if (bloqueada) {
+        this.hayBloqueadas = true;
+        grupo.get('seleccionada')?.disable();
+        grupo.get('cantidad')?.disable();
+      }
+
+      variacionesFormArray.push(grupo);
+      this.variacionesInfo.push({
+        id: variacion.id,
+        nombre: variacion.nombre_generado,
+        bloqueada,
+        motivoBloqueo
+      });
+    });
   }
 
   onCancel(): void {
@@ -61,8 +97,10 @@ export class GestionarIngredienteMultiVariacionDialogComponent implements OnInit
 
   onSave(): void {
     if (this.form.valid) {
-      const resultado = this.form.value.variaciones
-        .filter((v: any) => v.seleccionada && v.cantidad > 0)
+      // getRawValue() no incluye los controles deshabilitados en `value`; se filtra
+      // igual por `bloqueada` para no depender del estado del control.
+      const resultado = (this.form.getRawValue().variaciones || [])
+        .filter((v: any) => !v.bloqueada && v.seleccionada && v.cantidad > 0)
         .map((v: any) => ({
           variacionId: v.id,
           cantidad: v.cantidad
@@ -72,8 +110,7 @@ export class GestionarIngredienteMultiVariacionDialogComponent implements OnInit
     }
   }
 
-  trackById(index: number, item: any): number {
-    return item.value.id;
+  trackById(index: number, item: { id?: number }): number {
+    return item.id ?? index;
   }
 }
-
