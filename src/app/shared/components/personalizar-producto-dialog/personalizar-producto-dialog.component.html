@@ -26,7 +26,7 @@
               (click)="toggleIngrediente(ing)">
               <mat-icon class="chip-icon" *ngIf="!isIngredienteRemovido(ing)">check</mat-icon>
               <mat-icon class="chip-icon" *ngIf="isIngredienteRemovido(ing)">close</mat-icon>
-              {{ ing.ingrediente?.nombre }}
+              {{ ing.ingrediente?.nombre || ing.descripcion }}
             </span>
           </div>
         </div>
@@ -39,7 +39,7 @@
               <span class="ing-chip intercambiable"
                 [class.swapped]="isIngredienteIntercambiado(ing)">
                 <mat-icon class="chip-icon">swap_horiz</mat-icon>
-                {{ ing.ingrediente?.nombre }}
+                {{ ing.ingrediente?.nombre || ing.descripcion }}
                 <span class="swap-label" *ngIf="isIngredienteIntercambiado(ing)">→ {{ getSwapLabel(ing) }}</span>
               </span>
               <mat-form-field appearance="outline" class="swap-select" *ngIf="intercambiablesMap.get(ing.id)?.length">
@@ -99,7 +99,7 @@
         <!-- Observación libre -->
         <mat-form-field appearance="outline" class="obs-libre-field">
           <mat-label>OBSERVACION LIBRE</mat-label>
-          <input matInput [formControl]="observacionLibreControl" placeholder="Ej: sin sal, bien cocido..." />
+          <input matInput [formControl]="observacionLibreControl" maxlength="500" placeholder="Ej: sin sal, bien cocido..." />
         </mat-form-field>
       </div>
     </div>

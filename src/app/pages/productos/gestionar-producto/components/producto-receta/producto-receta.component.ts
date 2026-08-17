@@ -216,7 +216,8 @@ export class ProductoRecetaComponent implements OnInit, OnDestroy {
 
       return {
         ingrediente,
-        nombre: ingrediente.ingrediente?.nombre || 'Producto no encontrado',
+        // `ingrediente` es nullable: puede ser un ítem solo-descripción.
+        nombre: ingrediente.ingrediente?.nombre || ingrediente.descripcion || 'Producto no encontrado',
         tipo: ingrediente.ingrediente?.tipo || '',
         cantidadFormateada: `${cantidad} ${unidad}`,
         costoFormateado: costo

@@ -288,6 +288,28 @@ dataSource.query(`UPDATE ventas SET vendedor_id = created_by WHERE vendedor_id I
 
 Corre en cada arranque (en el `then` de `DataSource.initialize`). Es idempotente (la próxima vez el WHERE está vacío). Patrón aceptable para data fixes simples; para cambios de esquema, usar una migración formal.
 
+## Los `.js` compilados de `electron/` le ganan a los `.ts` en los tests ts-node
+
+Los scripts `npm run test:*` corren con ts-node e importan los handlers por ruta
+sin extensión (`require('../electron/handlers/ventas.handler')`). Node resuelve
+`.js` **antes** que `.ts`, y `electron/**/*.js` está gitignorado pero **existe en
+tu working copy** apenas corriste `npm start`, `npm run build`, `npm run check` o
+el hook de pre-commit (todos ejecutan `tsc -p tsconfig.electron.json`, que emite).
+
+Resultado: editás un handler, corrés su test y estás ejecutando **la versión
+compilada vieja** — el test pasa (o falla) por motivos que no tienen nada que ver
+con tu cambio. Pasó el 2026-08-17: un test nuevo "fallaba" contra el bug que
+acababa de arreglarse, porque corría el `.js` de otra rama.
+
+**Regla:** después de tocar cualquier cosa en `electron/`, correr
+`npm run electron:serve-tsc` antes de los `test:*`. En CI no aplica (clona
+limpio, no hay `.js`) — pero eso significa que **CI y local pueden diferir**:
+si un test se comporta distinto en los dos, sospechá de esto primero.
+
+Corolario: los `test:*` que corren ts-node **sin** `--transpile-only` (hoy sólo
+`test:pedidos-online`) type-chequean los `.ts` en local sólo cuando no hay `.js`
+que los tape.
+
 ## TypeORM cascade en BaseModel.createdBy/updatedBy
 
 `createdBy: Usuario` con `@ManyToOne('Usuario', { nullable: true })`. Si se borra el usuario, las FKs **no se nulean automáticamente**. Si bien las entidades quedan con `created_by_id` apuntando a un usuario inexistente, las queries con `relations: ['createdBy']` pueden fallar o devolver `null`.
