@@ -26,7 +26,6 @@ export interface GestionarIngredienteMultiVariacionDialogData {
 export class GestionarIngredienteMultiVariacionDialogComponent implements OnInit {
 
   form: FormGroup;
-  loading = false;
 
   /** Hay al menos una variación bloqueada: se explica en el pie del diálogo. */
   hayBloqueadas = false;

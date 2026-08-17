@@ -164,6 +164,32 @@ async function main() {
   const totalNapolitana = await repoRI.count({ where: { ingrediente: { id: queso.id } } });
   ok(totalNapolitana === 4, 'total de filas del ingrediente: 1 (compartida) + 3 (napolitana), sin duplicados', totalNapolitana);
 
+  // ── CASO 4: fila desactivada por un borrado previo (soft delete) ────────────
+  // `delete-receta-ingrediente` desactiva la fila la primera vez y
+  // `get-receta-ingredientes` no filtra `activo`: insertar al lado volvería a
+  // mostrar el ingrediente repetido. Debe REACTIVARSE la fila existente.
+  console.log('\n[ingrediente-multi-variacion] === CASO 4: fila desactivada ===');
+  const copiaFamiliar = await repoRI.findOne({ where: { receta: { id: variaciones2[2].receta.id }, ingrediente: { id: queso.id } } });
+  await repoRI.update(copiaFamiliar!.id, { activo: false } as any);
+
+  const bloqueadasAntes = await invoke('get-recetas-con-ingrediente', {
+    recetaIds: [variaciones2[2].receta.id],
+    ingredienteId: queso.id
+  });
+  ok(bloqueadasAntes.length === 0, 'una fila desactivada NO bloquea la variación en el diálogo', bloqueadasAntes);
+
+  const res4 = await invoke('agregar-ingrediente-multiples-variaciones', {
+    recetaIngredienteId: origen2.id,
+    variaciones: [{ variacionId: variaciones2[2].id, cantidad: 250 }]
+  });
+  ok(res4.agregadas === 1, 'reactiva la variación con la fila desactivada', res4);
+
+  const filasFamiliar = await repoRI.count({ where: { receta: { id: variaciones2[2].receta.id }, ingrediente: { id: queso.id } } });
+  ok(filasFamiliar === 1, 'sigue habiendo UNA sola fila (se reactivó, no se insertó otra)', filasFamiliar);
+
+  const reactivada = await repoRI.findOne({ where: { id: copiaFamiliar!.id } });
+  ok(reactivada!.activo === true && Number(reactivada!.cantidad) === 0.25, 'la fila reactivada toma la cantidad nueva normalizada', { activo: reactivada!.activo, cantidad: reactivada!.cantidad });
+
   // ── get-recetas-con-ingrediente: alimenta el bloqueo en el diálogo ──────────
   console.log('\n[ingrediente-multi-variacion] === get-recetas-con-ingrediente ===');
   const conIngrediente = await invoke('get-recetas-con-ingrediente', {

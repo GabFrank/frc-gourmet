@@ -488,11 +488,17 @@ Al agregar un ingrediente en la receta de una variación, `gestion-recetas` abre
 
 - resuelve variación → receta y **deduplica** las recetas destino,
 - **excluye la receta de origen** (variaciones que comparten receta con la actual),
-- **omite las recetas que ya tienen ese ingrediente** (por `ingrediente_id`, o por `descripcion`
-  si es un ítem solo-descripción),
-- **normaliza la unidad** con la conversión KG/G y L/mL para que `calculateRecipeCost`
-  no costee 1000× de más,
-- devuelve un resumen con las recetas modificadas y omitidas (el diálogo lo muestra).
+- **omite las recetas que ya tienen ese ingrediente ACTIVO** (por `ingrediente_id`, o por
+  `descripcion` si es un ítem solo-descripción). Si la fila existe pero está **desactivada**
+  (`delete-receta-ingrediente` hace soft delete la primera vez y `get-receta-ingredientes` **no
+  filtra `activo`**, así que insertar al lado volvería a mostrarla repetida), la **reactiva** con
+  la cantidad nueva en vez de insertar otra,
+- **normaliza la cantidad** de la unidad del usuario (`unidadOriginal`) a la unidad base
+  (`unidad`) con `normalizarCantidadIngrediente`,
+- hace el chequeo de duplicado **dentro** de la transacción (no hay índice único
+  `(receta_id, ingrediente_id)` que lo ataje a nivel de BD) y recalcula el costo de cada receta
+  afectada al salir,
+- devuelve `{ agregadas, recetasAfectadas, omitidasPorDuplicado, omitidasPorRecetaCompartida, omitidasSinReceta }`.
 
 Helpers:
 - **`get-recetas-con-ingrediente(ingredienteId?, descripcion?)`** — devuelve las
@@ -503,7 +509,7 @@ Helpers:
   borrado en lote, equivalente simétrico del agregado (corre en la transacción de borrar
   y NO pregunta de nuevo; la confirmación fue para el borrado).
 
-Tests: `npm run test:ingrediente-multi-variacion` (12/12). Manual:
+Tests: `npm run test:ingrediente-multi-variacion` (16/16). Manual:
 `docs/testing/TESTING-CHECKLIST-INGREDIENTE-MULTI-VARIACION.md`.
 
 ## Reparación de recetas compartidas (`d9cbba3`)

@@ -64,6 +64,18 @@ Sólo aplica si el producto viene de antes del refactor de recetas por variació
       (≈ 1.5× si la cantidad es 1.5×), **no** 1000× mayor
 - [ ] Lo mismo con un producto `unidadBase = LITRO` cargado en MILILITROS
 
+## Ingrediente borrado y vuelto a agregar
+
+`delete-receta-ingrediente` desactiva la fila la primera vez (soft delete) y la lista de
+ingredientes no filtra por `activo`, así que insertar una fila nueva al lado volvería a
+mostrarlo repetido. El handler reactiva la fila existente.
+
+- [ ] En la receta de GRANDE, borrar QUESO MOZARELLA **una sola vez** (queda desactivado)
+- [ ] Volver a la receta de MEDIANO, agregar QUESO MOZARELLA y decir **Sí** al asistente
+- [ ] GRANDE aparece **habilitada** (no bloqueada por la fila desactivada)
+- [ ] Guardar → la receta de GRANDE queda con **una sola** fila de QUESO MOZARELLA, activa,
+      con la cantidad nueva
+
 ## Casos borde
 
 - [ ] Ingrediente **solo descripción** (sin producto vinculado): el asistente lo copia igual y
@@ -76,7 +88,7 @@ Sólo aplica si el producto viene de antes del refactor de recetas por variació
 ## Automatizado
 
 ```bash
-npm run test:ingrediente-multi-variacion   # 12 checks
+npm run test:ingrediente-multi-variacion   # 16 checks
 npm run test:reparar-recetas               # recetas compartidas (regresión)
 npm run test:receta-por-variacion          # una receta por variación (regresión)
 ```

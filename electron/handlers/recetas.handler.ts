@@ -1035,7 +1035,10 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         // Alias en minúsculas: Postgres baja a minúsculas los alias sin comillas,
         // así la lectura de la fila cruda es igual en SQLite y en Postgres.
         .select('ri.receta_id', 'receta_id')
-        .where('ri.receta_id IN (:...recetaIds)', { recetaIds });
+        .where('ri.receta_id IN (:...recetaIds)', { recetaIds })
+        // Sólo las filas ACTIVAS bloquean: una desactivada por un borrado previo se
+        // reactiva en `agregar-ingrediente-multiples-variaciones`, no duplica.
+        .andWhere('ri.activo = :activo', { activo: true });
 
       if (data.ingredienteId) {
         qb.andWhere('ri.ingrediente_id = :ingredienteId', { ingredienteId: data.ingredienteId });
@@ -1118,40 +1121,35 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       destinos.push({ recetaId, cantidad: Number(solicitada.cantidad), nombre });
     }
 
-    // 2) Descartar las recetas que ya tienen este ingrediente.
+    // 2) Insertar dentro de la transacción, descartando ahí mismo las recetas que ya
+    //    tienen el ingrediente. El chequeo va DENTRO de la transacción para no dejar
+    //    una ventana entre "verifiqué que no está" y "lo inserto" (no hay índice único
+    //    en (receta_id, ingrediente_id) que lo ataje a nivel de BD).
     const descripcionOrigen = (origen.descripcion || '').trim().toUpperCase() || null;
-    const candidatos: typeof destinos = [];
-    for (const destino of destinos) {
-      const yaExiste = await dataSource.getRepository(RecetaIngrediente).findOne({
-        where: origen.ingrediente
-          ? { receta: { id: destino.recetaId }, ingrediente: { id: origen.ingrediente.id } }
-          : { receta: { id: destino.recetaId }, descripcion: descripcionOrigen as any }
-      });
-      if (yaExiste) { omitidasPorDuplicado.push(destino.nombre); continue; }
-      candidatos.push(destino);
-    }
-
-    if (candidatos.length === 0) {
-      return {
-        success: true, agregadas: 0, recetasAfectadas: [],
-        omitidasPorDuplicado, omitidasPorRecetaCompartida, omitidasSinReceta
-      };
-    }
-
-    // 3) Insertar en una sola transacción.
     const currentUser = getCurrentUser();
+    const afectadas: number[] = [];
+
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
       const repo = queryRunner.manager.getRepository(RecetaIngrediente);
-      for (const destino of candidatos) {
+
+      for (const destino of destinos) {
+        const existente = await repo.findOne({
+          where: origen.ingrediente
+            ? { receta: { id: destino.recetaId }, ingrediente: { id: origen.ingrediente.id } }
+            : { receta: { id: destino.recetaId }, descripcion: descripcionOrigen as any }
+        });
+
+        // Ya lo tiene y está activo: no se toca.
+        if (existente?.activo) { omitidasPorDuplicado.push(destino.nombre); continue; }
+
         // La cantidad viaja en la unidad que ve el usuario (unidadOriginal); se guarda
         // en la unidad base del ingrediente, igual que el alta manual.
         const cantidad = normalizarCantidadIngrediente(destino.cantidad, origen.unidad, origen.unidadOriginal);
         const costoUnitario = Number(origen.costoUnitario || 0);
-
-        const nuevo = repo.create({
+        const datos = {
           cantidad,
           unidad: origen.unidad ?? null,
           unidadOriginal: origen.unidadOriginal ?? null,
@@ -1164,13 +1162,28 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
           costoExtra: origen.costoExtra || 0,
           porcentajeAprovechamiento: origen.porcentajeAprovechamiento,
           esIngredienteBase: origen.esIngredienteBase,
-          activo: true,
-          receta: { id: destino.recetaId },
-          ingrediente: origen.ingrediente ?? null
-        } as any);
-        setEntityUserTracking(dataSource, nuevo, currentUser?.id, false);
-        await repo.save(nuevo);
+          activo: true
+        };
+
+        if (existente) {
+          // Quedó una fila desactivada de un borrado anterior (`delete-receta-ingrediente`
+          // hace soft delete la primera vez y `get-receta-ingredientes` no filtra `activo`,
+          // así que insertar al lado volvería a mostrar la fila repetida). Se reactiva.
+          Object.assign(existente, datos);
+          setEntityUserTracking(dataSource, existente, currentUser?.id, true);
+          await repo.save(existente);
+        } else {
+          const nuevo = repo.create({
+            ...datos,
+            receta: { id: destino.recetaId },
+            ingrediente: origen.ingrediente ?? null
+          } as any);
+          setEntityUserTracking(dataSource, nuevo, currentUser?.id, false);
+          await repo.save(nuevo);
+        }
+        afectadas.push(destino.recetaId);
       }
+
       await queryRunner.commitTransaction();
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -1180,15 +1193,15 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       await queryRunner.release();
     }
 
-    // 4) Recalcular costos fuera de la transacción (calculateRecipeCost usa el dataSource).
-    for (const destino of candidatos) {
-      await calculateRecipeCost(destino.recetaId);
+    // 3) Recalcular costos fuera de la transacción (calculateRecipeCost usa el dataSource).
+    for (const recetaId of afectadas) {
+      await calculateRecipeCost(recetaId);
     }
 
     return {
       success: true,
-      agregadas: candidatos.length,
-      recetasAfectadas: candidatos.map((c) => c.recetaId),
+      agregadas: afectadas.length,
+      recetasAfectadas: afectadas,
       omitidasPorDuplicado,
       omitidasPorRecetaCompartida,
       omitidasSinReceta
