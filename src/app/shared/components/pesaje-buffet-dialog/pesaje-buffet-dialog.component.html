@@ -60,7 +60,12 @@
       <mat-icon>close</mat-icon>
       CANCELAR
     </button>
-    <button mat-raised-button color="primary" (click)="agregar()" [disabled]="!puedeAgregar">
+    <button
+      #btnAgregar
+      mat-raised-button
+      color="primary"
+      (click)="agregar()"
+      [disabled]="!puedeAgregar">
       <mat-icon>add_shopping_cart</mat-icon>
       AGREGAR
     </button>
