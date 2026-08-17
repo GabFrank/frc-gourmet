@@ -345,20 +345,37 @@ export class MesaDetallePage implements OnInit {
     this.quitando = true;
     let adicRows: any[] = [];
     let obsRows: any[] = [];
+    let ingRows: any[] = [];
     try {
-      const [adic, obs, prod] = await Promise.all([
+      const [adic, obs, ing, prod] = await Promise.all([
         firstValueFrom(this.repo.getVentaItemAdicionales(item.id).pipe(catchError(() => of([] as any[])))),
         firstValueFrom(this.repo.getObservacionesByVentaItem(item.id).pipe(catchError(() => of([] as any[])))),
+        firstValueFrom(
+          this.repo.getVentaItemIngredienteModificaciones(item.id).pipe(catchError(() => of([] as any[]))),
+        ),
         item.productoId
           ? firstValueFrom(this.repo.getProducto(item.productoId).pipe(catchError(() => of(null as any))))
           : Promise.resolve(null),
       ]);
       adicRows = (adic as any[]) || [];
       obsRows = (obs as any[]) || [];
+      ingRows = (ing as any[]) || [];
       const recetaId = esVariacion ? null : ((prod as any)?.receta?.id ?? null);
       const adicionalesPreSel = esVariacion
         ? []
         : adicRows.filter((a) => a.activo !== false && a.adicional).map((a) => a.adicional.id);
+      // Ingredientes: igual que adicionales, en variación son por-sabor y no se
+      // tocan desde acá (el diálogo tampoco los carga porque no hay recetaId).
+      const ingActivos = esVariacion ? [] : ingRows.filter((m) => m.activo !== false && m.recetaIngrediente);
+      const ingredientesRemovidosPreSel = ingActivos
+        .filter((m) => m.tipoModificacion === 'REMOVIDO')
+        .map((m) => m.recetaIngrediente.id);
+      const ingredientesIntercambiadosPreSel = ingActivos
+        .filter((m) => m.tipoModificacion === 'INTERCAMBIADO' && m.ingredienteReemplazo)
+        .map((m) => ({
+          recetaIngredienteId: m.recetaIngrediente.id,
+          reemplazoProductoId: m.ingredienteReemplazo.id,
+        }));
       const observacionesPreSel = obsRows
         .filter((o) => o.activo !== false && o.observacion)
         .map((o) => o.observacion.id);
@@ -379,6 +396,8 @@ export class MesaDetallePage implements OnInit {
               adicionalesPreSel,
               observacionesPreSel,
               observacionLibreInicial,
+              ingredientesRemovidosPreSel,
+              ingredientesIntercambiadosPreSel,
             },
             width: '340px',
             maxHeight: '85vh',
@@ -407,7 +426,8 @@ export class MesaDetallePage implements OnInit {
       }
       const cambios: any = { cantidad: res.cantidad, modificado: true, horaModificacion: new Date() };
       if (!esVariacion) {
-        // Adicionales: solo para no-variación (en variación son por-sabor y no se tocan acá).
+        // Adicionales e ingredientes: solo para no-variación (en variación son
+        // por-sabor y no se tocan acá). Se reconcilian: borrar + recrear.
         for (const a of adicRows) await firstValueFrom(this.repo.deleteVentaItemAdicional(a.id));
         for (const a of res.adicionales) {
           await firstValueFrom(
@@ -416,6 +436,28 @@ export class MesaDetallePage implements OnInit {
               adicional: { id: a.id },
               precioCobrado: a.precio,
               cantidad: 1,
+            }),
+          );
+        }
+        for (const m of ingRows) {
+          await firstValueFrom(this.repo.deleteVentaItemIngredienteModificacion(m.id));
+        }
+        for (const recetaIngredienteId of res.ingredientesRemovidos || []) {
+          await firstValueFrom(
+            this.repo.createVentaItemIngredienteModificacion({
+              ventaItem: { id: item.id },
+              recetaIngrediente: { id: recetaIngredienteId },
+              tipoModificacion: 'REMOVIDO',
+            }),
+          );
+        }
+        for (const swap of res.ingredientesIntercambiados || []) {
+          await firstValueFrom(
+            this.repo.createVentaItemIngredienteModificacion({
+              ventaItem: { id: item.id },
+              recetaIngrediente: { id: swap.recetaIngredienteId },
+              tipoModificacion: 'INTERCAMBIADO',
+              ingredienteReemplazo: { id: swap.reemplazoProductoId },
             }),
           );
         }
