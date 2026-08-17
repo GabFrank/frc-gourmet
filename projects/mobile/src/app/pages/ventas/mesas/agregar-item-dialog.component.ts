@@ -7,6 +7,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { RepositoryService } from '@frc/shared-core';
 
@@ -23,6 +24,10 @@ export interface AgregarItemData {
   adicionalesPreSel?: number[]; // ids de Adicional ya seleccionados
   observacionesPreSel?: number[]; // ids de Observacion ya seleccionados
   observacionLibreInicial?: string;
+  /** ids de RecetaIngrediente ya quitados */
+  ingredientesRemovidosPreSel?: number[];
+  /** intercambios ya elegidos */
+  ingredientesIntercambiadosPreSel?: { recetaIngredienteId: number; reemplazoProductoId: number }[];
 }
 
 /** Sentinela que devuelve el diálogo cuando se pide quitar el ítem (modo edición). */
@@ -34,6 +39,10 @@ export interface AgregarItemResult {
   adicionales: { id: number; precio: number }[];
   observaciones: number[]; // ids de Observacion predefinida
   observacionLibre?: string;
+  /** ids de RecetaIngrediente quitados → VentaItemIngredienteModificacion REMOVIDO */
+  ingredientesRemovidos: number[];
+  /** cambios de ingrediente → VentaItemIngredienteModificacion INTERCAMBIADO */
+  ingredientesIntercambiados: { recetaIngredienteId: number; reemplazoProductoId: number }[];
 }
 
 interface AdicionalVM {
@@ -47,6 +56,22 @@ interface ObsVM {
   id: number;
   descripcion: string;
   sel: boolean;
+}
+
+/** Ingrediente opcional de la receta: se puede quitar ("SIN X"). */
+interface IngredienteOpcionalVM {
+  recetaIngredienteId: number;
+  nombre: string;
+  quitado: boolean;
+}
+
+/** Ingrediente cambiable: se puede reemplazar por una de sus opciones. */
+interface IngredienteCambiableVM {
+  recetaIngredienteId: number;
+  nombre: string;
+  opciones: { productoId: number; nombre: string }[];
+  /** productoId elegido, o null = original */
+  reemplazoSel: number | null;
 }
 
 /**
@@ -67,6 +92,7 @@ interface ObsVM {
     MatCheckboxModule,
     MatFormFieldModule,
     MatInputModule,
+    MatSelectModule,
     MatProgressBarModule,
   ],
   template: `
@@ -84,6 +110,37 @@ interface ObsVM {
           <button mat-icon-button (click)="inc()" aria-label="Más">
             <mat-icon>add_circle</mat-icon>
           </button>
+        </div>
+      </ng-container>
+
+      <p class="fijos" *ngIf="textoIngredientesFijos">{{ textoIngredientesFijos }}</p>
+
+      <ng-container *ngIf="opcionales.length">
+        <h3 class="sec">Ingredientes <span class="hint">(tocá para quitar)</span></h3>
+        <div class="chips">
+          <button
+            *ngFor="let ing of opcionales"
+            type="button"
+            class="ing-chip"
+            [class.ing-quitado]="ing.quitado"
+            (click)="toggleIngrediente(ing)"
+          >
+            <mat-icon class="ing-icon">{{ ing.quitado ? 'close' : 'check' }}</mat-icon>
+            {{ ing.nombre }}
+          </button>
+        </div>
+      </ng-container>
+
+      <ng-container *ngIf="cambiables.length">
+        <h3 class="sec">Cambiar por</h3>
+        <div class="cambiable" *ngFor="let ing of cambiables">
+          <span class="cambiable-nombre">{{ ing.nombre }}</span>
+          <mat-form-field appearance="outline" class="cambiable-select">
+            <mat-select [(ngModel)]="ing.reemplazoSel">
+              <mat-option [value]="null">Original</mat-option>
+              <mat-option *ngFor="let o of ing.opciones" [value]="o.productoId">{{ o.nombre }}</mat-option>
+            </mat-select>
+          </mat-form-field>
         </div>
       </ng-container>
 
@@ -152,6 +209,61 @@ interface ObsVM {
         text-transform: uppercase;
         color: var(--text-secondary, rgba(0, 0, 0, 0.6));
       }
+      .hint {
+        text-transform: none;
+        font-weight: 400;
+      }
+      .fijos {
+        margin: 8px 0 0;
+        font-size: 0.8rem;
+        color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      /* Chip táctil: alto cómodo para el dedo, igual criterio que el resto del PWA. */
+      .ing-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        min-height: 40px;
+        border: 1px solid var(--border-color, rgba(0, 0, 0, 0.2));
+        background: var(--card-background, #fff);
+        color: var(--text-primary, inherit);
+        border-radius: 20px;
+        padding: 6px 14px;
+        font-size: 0.9rem;
+        cursor: pointer;
+      }
+      .ing-quitado {
+        background: var(--warn-bg, #fdecea);
+        border-color: var(--warn-color, #c62828);
+        color: var(--warn-color, #c62828);
+        text-decoration: line-through;
+      }
+      .ing-icon {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+      }
+      .cambiable {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 4px;
+      }
+      .cambiable-nombre {
+        flex: 0 0 40%;
+        font-size: 0.9rem;
+      }
+      .cambiable-select {
+        flex: 1 1 auto;
+      }
+      .cambiable-select ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+        display: none;
+      }
       .opt {
         display: flex;
         align-items: center;
@@ -188,6 +300,10 @@ export class AgregarItemDialogComponent implements OnInit {
   cantidad = 1;
   adicionales: AdicionalVM[] = [];
   observaciones: ObsVM[] = [];
+  opcionales: IngredienteOpcionalVM[] = [];
+  cambiables: IngredienteCambiableVM[] = [];
+  /** Ingredientes que no se pueden tocar (base + normales), sólo informativos. */
+  textoIngredientesFijos = '';
   observacionLibre = '';
   cargando = true;
 
@@ -210,6 +326,7 @@ export class AgregarItemDialogComponent implements OnInit {
     const tasks: Promise<void>[] = [];
 
     if (this.data.recetaId) {
+      tasks.push(this.cargarIngredientes(this.data.recetaId as number));
       tasks.push(
         new Promise<void>((resolve) => {
           this.repo.getRecetaAdicionalVinculaciones(this.data.recetaId as number).subscribe({
@@ -254,6 +371,85 @@ export class AgregarItemDialogComponent implements OnInit {
     });
   }
 
+  /**
+   * Ingredientes de la receta, clasificados igual que el PdV desktop
+   * (`personalizar-producto-dialog`): base → cambiables → opcionales → normales,
+   * en ese orden de prioridad. Sólo opcionales y cambiables son accionables; el
+   * resto se muestra como texto informativo.
+   *
+   * `RecetaIngrediente.ingrediente` es nullable (ítem solo-descripción), por eso
+   * el nombre siempre sale con fallback a `descripcion`.
+   */
+  private cargarIngredientes(recetaId: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.repo.getRecetaIngredientesActivos(recetaId).subscribe({
+        next: async (ings: any[]) => {
+          const fijos: string[] = [];
+          const cambiables: IngredienteCambiableVM[] = [];
+          for (const ing of ings || []) {
+            const nombre = String(ing.ingrediente?.nombre || ing.descripcion || '').trim();
+            if (ing.esIngredienteBase) {
+              if (nombre) fijos.push(nombre);
+            } else if (ing.esCambiable) {
+              cambiables.push({ recetaIngredienteId: ing.id, nombre, opciones: [], reemplazoSel: null });
+            } else if (ing.esOpcional) {
+              this.opcionales.push({
+                recetaIngredienteId: ing.id,
+                nombre,
+                quitado: (this.data.ingredientesRemovidosPreSel || []).includes(ing.id),
+              });
+            } else if (nombre) {
+              fijos.push(nombre);
+            }
+          }
+          this.textoIngredientesFijos = fijos.join(', ');
+
+          // Opciones de cada cambiable (una consulta por ingrediente, como el desktop).
+          await Promise.all(
+            cambiables.map(
+              (c) =>
+                new Promise<void>((res) => {
+                  this.repo.getRecetaIngredientesIntercambiables(c.recetaIngredienteId).subscribe({
+                    next: (items: any[]) => {
+                      c.opciones = (items || [])
+                        .filter((i) => i.activo !== false && i.ingredienteOpcion)
+                        .map((i) => ({
+                          productoId: i.ingredienteOpcion.id,
+                          nombre: i.ingredienteOpcion.nombre,
+                        }));
+                      const pre = (this.data.ingredientesIntercambiadosPreSel || []).find(
+                        (s) => s.recetaIngredienteId === c.recetaIngredienteId,
+                      );
+                      if (pre && c.opciones.some((o) => o.productoId === pre.reemplazoProductoId)) {
+                        c.reemplazoSel = pre.reemplazoProductoId;
+                      }
+                      res();
+                    },
+                    error: () => res(),
+                  });
+                }),
+            ),
+          );
+          // Un cambiable sin opciones no se puede cambiar: se muestra como fijo.
+          this.cambiables = cambiables.filter((c) => c.opciones.length > 0);
+          for (const sinOpciones of cambiables.filter((c) => c.opciones.length === 0)) {
+            if (sinOpciones.nombre) {
+              this.textoIngredientesFijos = this.textoIngredientesFijos
+                ? `${this.textoIngredientesFijos}, ${sinOpciones.nombre}`
+                : sinOpciones.nombre;
+            }
+          }
+          resolve();
+        },
+        error: () => resolve(),
+      });
+    });
+  }
+
+  toggleIngrediente(ing: IngredienteOpcionalVM): void {
+    ing.quitado = !ing.quitado;
+  }
+
   inc(): void {
     this.cantidad++;
     this.recalcular();
@@ -280,6 +476,13 @@ export class AgregarItemDialogComponent implements OnInit {
       adicionales: this.adicionales.filter((a) => a.sel).map((a) => ({ id: a.id, precio: a.precio })),
       observaciones: this.observaciones.filter((o) => o.sel).map((o) => o.id),
       observacionLibre: this.observacionLibre.trim() || undefined,
+      ingredientesRemovidos: this.opcionales.filter((i) => i.quitado).map((i) => i.recetaIngredienteId),
+      ingredientesIntercambiados: this.cambiables
+        .filter((c) => c.reemplazoSel != null)
+        .map((c) => ({
+          recetaIngredienteId: c.recetaIngredienteId,
+          reemplazoProductoId: c.reemplazoSel as number,
+        })),
     };
     this.ref.close(result);
   }

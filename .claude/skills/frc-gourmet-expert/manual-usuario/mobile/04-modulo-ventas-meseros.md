@@ -72,6 +72,10 @@ Según el tipo de producto, al tocarlo se abre un diálogo distinto:
 
 Diálogo con:
 - **Cantidad** (botones – / +).
+- **Ingredientes**: los opcionales aparecen como chips — **tocá uno para quitarlo**
+  (queda tachado y sale como "SIN ..." en la comanda). Los que se pueden cambiar
+  tienen un desplegable para elegir el reemplazo. Los ingredientes fijos se
+  muestran como texto, sólo informativo.
 - **Adicionales** del producto (los que tenga configurados, ej. EXTRA QUESO).
 - **Observaciones** predefinidas (ej. SIN CEBOLLA) y una **nota libre** opcional.
 
@@ -81,11 +85,24 @@ Tocá **Agregar** para sumarlo a la cuenta.
 
 Diálogo para elegir:
 - **Tamaño** (presentación).
-- **Sabores** (hasta el máximo configurado; por ejemplo, pizza de varios sabores).
+- **Sabores** (hasta el máximo configurado; los que no tienen precio cargado no
+  aparecen).
+- **Cuánto ocupa cada sabor**: por defecto se reparte en partes iguales (`1/2` y
+  `1/2`). Con los botones **–** y **+** lo cambiás a 60/40, 70/30, etc.; el botón
+  **Partes iguales** vuelve al reparto parejo.
 - **Cantidad.**
 
-El precio se calcula según la estrategia configurada en el sistema (mayor precio o
-promedio). Cada sabor se puede personalizar con sus propios adicionales/observaciones.
+Al elegir un sabor se abre solo su **personalización**: mismos ingredientes,
+adicionales, observaciones y nota que un producto común, pero aplicados **sólo a
+esa mitad**. El ✓ al lado del sabor indica que tiene algo cargado; tocá
+**Personalizar** para volver a verlo o cambiarlo.
+
+El precio base se calcula según la estrategia configurada (mayor precio o
+promedio) y **no** depende del reparto: la pizza es del mismo tamaño. Los
+adicionales sí: un extra cargado en media pizza se cobra a la mitad.
+
+> Una vez agregada, la pizza no se puede volver a personalizar (igual que en la
+> caja): si hay que cambiarle algo, se quita y se carga de nuevo.
 
 ### Producto pesable (buffet por kilo)
 
