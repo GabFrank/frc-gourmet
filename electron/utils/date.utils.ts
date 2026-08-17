@@ -11,6 +11,31 @@
  *   parseLocalDate(date)          -> el mismo Date
  *   parseLocalDate(undefined)     -> undefined
  */
+/**
+ * Formatea una fecha como parámetro para comparar contra una columna
+ * `datetime`/`timestamp` en SQL crudo, **según el driver**.
+ *
+ * Es necesario porque SQLite guarda esas columnas como TEXT con el formato de
+ * TypeORM — `2026-08-01 18:00:00.000`, con espacio y sin `Z` — y compara TEXT
+ * byte a byte. Pasarle un `toISOString()` (`2026-08-01T18:00:00.000Z`) rompe la
+ * comparación en el separador: `' '` (0x20) es menor que `'T'` (0x54), así que
+ * **todas** las filas del día del límite inferior quedan afuera del `>=`, y las
+ * del día del límite superior se cuelan en el `<=`. En un reporte mensual eso
+ * significa perder el día 1 entero y sumar ventas del mes siguiente.
+ *
+ * En Postgres la columna es `timestamp` nativo y el driver parsea el ISO bien,
+ * así que ahí se manda tal cual.
+ *
+ * ⚠️ Cualquier query nueva que compare `created_at` (u otra `datetime`) contra
+ * una fecha tiene que pasar por acá.
+ */
+export function fechaParamSql(dataSource: { options: { type: string } }, fecha: Date): string {
+  const iso = fecha.toISOString();
+  if (dataSource?.options?.type === 'postgres') return iso;
+  // '2026-08-01T18:00:00.000Z' → '2026-08-01 18:00:00.000'
+  return iso.slice(0, 23).replace('T', ' ');
+}
+
 export function parseLocalDate(s: any): Date | undefined {
   if (!s) return undefined;
   if (s instanceof Date) return s;

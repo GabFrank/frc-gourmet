@@ -14,6 +14,7 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { dbQuery } from '../utils/db-query';
 import { getMonedaPrincipal, getCotizacionCompraLocal } from '../utils/moneda.utils';
 import { getTotalesPorVenta } from '../utils/venta-total.utils';
+import { fechaParamSql } from '../utils/date.utils';
 
 export function registerDashboardRrhhHandlers(
   dataSource: DataSource,
@@ -150,7 +151,7 @@ export function registerDashboardRrhhHandlers(
           WHERE v.estado = 'CONCLUIDA'
             AND v.created_at >= ? AND v.created_at <= ?
             AND v.vendedor_id IS NOT NULL
-        `, [fechaInicio.toISOString(), finMes.toISOString()]);
+        `, [fechaParamSql(dataSource, fechaInicio), fechaParamSql(dataSource, finMes)]);
 
         const totalesPorVenta = await getTotalesPorVenta(dataSource, ventasPeriodo.map((v) => Number(v.id)));
         const acum = new Map<number, { totalVendido: number; cantVentas: number }>();

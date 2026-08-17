@@ -166,6 +166,40 @@ async function main() {
   ok(suma >= 300000, 'con una meta de 300.000 la regla PAGA', suma);
   ok(!(suma >= 400000), 'con una meta de 400.000 la regla NO paga', suma);
 
+  // ── Top 5 Vendedores del dashboard RRHH ─────────────────────────────────
+  // Se ejercita el handler real porque ahí vivía el bug: leía `Venta.total`
+  // (siempre 0) y filtraba el período con `strftime`, que es sólo SQLite.
+  const { Usuario } = require('../src/app/database/entities/personas/usuario.entity');
+  const { registerDashboardRrhhHandlers } = require('../electron/handlers/dashboard-rrhh.handler');
+  const { invokeHandlerWithContext } = require('../electron/utils/handler-registry');
+
+  const vendedor = await ds.getRepository(Usuario).save(
+    ds.getRepository(Usuario).create({ nickname: 'vendedor1', password: 'x', activo: true } as any),
+  );
+  // Una venta el DÍA 1 del mes (el caso que el filtro de fechas se comía en
+  // SQLite: el string 'YYYY-MM-DD HH:MM' compara menor que 'YYYY-MM-DDTHH:MMZ')
+  // y otra a mitad de mes, ambas del mismo vendedor.
+  const mkVentaFecha = async (createdAt: Date) => {
+    const v: any = await ventaRepo.save(ventaRepo.create({ estado: 'CONCLUIDA', vendedor, createdAt } as any));
+    await mkItem(v, { pvu: 40000 });
+    return v;
+  };
+  const hoy = new Date();
+  const anioT = hoy.getFullYear();
+  const mesT = hoy.getMonth(); // 0-based
+  await mkVentaFecha(new Date(anioT, mesT, 1, 12, 0, 0));
+  await mkVentaFecha(new Date(anioT, mesT, 15, 12, 0, 0));
+  // Una del mes siguiente, que NO debe contarse.
+  await mkVentaFecha(new Date(anioT, mesT + 1, 1, 12, 0, 0));
+
+  registerDashboardRrhhHandlers(ds, () => null);
+  const periodoT = `${anioT}-${String(mesT + 1).padStart(2, '0')}`;
+  const kpis = await invokeHandlerWithContext('get-dashboard-rrhh-kpis', undefined, periodoT);
+  const fila = (kpis?.top5Vendedores || []).find((t: any) => t.usuarioId === vendedor.id);
+  ok(!!fila, 'el vendedor aparece en el Top 5 (antes el widget quedaba vacío o en 0)', kpis?.top5Vendedores);
+  ok(fila?.totalVendido === 80000, 'suma las 2 ventas del mes: 80.000 — incluye la del día 1', fila?.totalVendido);
+  ok(fila?.cantVentas === 2, 'cuenta 2 ventas, sin colarse la del mes siguiente', fila?.cantVentas);
+
   await ds.destroy();
   console.log(`\n[comision-meta-venta] ${passed} OK, ${failed} FALLARON`);
   process.exit(failed > 0 ? 1 : 0);
