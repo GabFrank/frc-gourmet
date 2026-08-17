@@ -30,6 +30,8 @@
 
 > ⚠️ **Sin permisos dedicados.** No existe código de permiso de facturación; los ítems del menú Facturación no tienen `permiso` y el handler solo usa `getCurrentUser()?.id` para auditoría. RUC/razón social del emisor sí están bajo `EMPRESA_CONFIGURAR` (entidad Empresa). Pendiente: agregar `FACTURACION_*` y gatear. → [reference/known-bugs.md](../reference/known-bugs.md).
 
+> ⚠️ **`create-factura` confía en los ítems del payload.** Persiste los `FacturaItem` tal como vienen: no valida que el ítem pertenezca a la venta, que su `estado` sea `ACTIVO`, ni que el total cuadre con la suma de los ítems. Hoy no se manifiesta porque el único emisor manda `activeItems` ya filtrados, pero `/api/rpc` es default-allow → cualquier JWT válido podría emitir un comprobante legal con un ítem cancelado. Issue [#240](https://github.com/GabFrank/frc-gourmet/issues/240).
+
 ## Flujo de emisión desde el PdV
 
 1. `cobrar-venta-dialog` → botón **"Factura"** abre `FacturarDialogComponent` (`facturas/facturar-dialog/`) con `{venta, items, cliente, total}`.

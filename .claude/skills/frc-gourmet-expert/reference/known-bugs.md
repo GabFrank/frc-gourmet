@@ -76,8 +76,9 @@ comisiones, reportes y factura legal. Un `find` sin filtro es el bug.
 
 ### `Venta.total` nunca se persiste → comisiones META_VENTA_LOCAL y "Top 5 Vendedores" siempre en 0
 
-**Descubierto** auditando el ticket de venta (2026-08-17). **Pendiente**, no se arregló ahí
-para no mezclar dominios.
+**Descubierto** auditando el ticket de venta (2026-08-17). **Pendiente** → issue
+[#239](https://github.com/GabFrank/frc-gourmet/issues/239). No se arregló ahí para no
+mezclar dominios.
 
 **Hecho de base:** la columna `ventas.total` (`Venta.total`, nullable) **no se escribe en
 ningún flujo del repo**. Al cobrar, `cobrar-venta-dialog` hace
@@ -97,6 +98,33 @@ persisten. Quien necesite el total de una venta tiene que sumar sus `VentaItem` 
 (y hay que decidir si es bruto o neto de ajustes del pago), o esos dos consumidores pasan
 a sumar `VentaItem` activos como hacen los reportes (`reportes-ventas.helper.ts`). La
 segunda opción no necesita migración ni backfill de las ventas históricas.
+
+### `create-factura` no revalida que los ítems facturados sean ACTIVO de la venta
+
+**Descubierto** auditando el ticket de venta (2026-08-17). **Pendiente** → issue
+[#240](https://github.com/GabFrank/frc-gourmet/issues/240).
+
+**Síntoma:** ninguno hoy. El único emisor (`cobrar-venta-dialog` → `FacturarDialogComponent`)
+manda `items: activeItems`, ya filtrados.
+
+**Riesgo:** `create-factura` (`facturacion.handler.ts`) persiste los `FacturaItem` tal como
+vienen en el payload — no valida que el ítem exista, que pertenezca a esa venta, que su
+estado sea `ACTIVO`, ni que el total cuadre con la suma de los ítems. Como **`/api/rpc` es
+default-allow** (regla #22), cualquier cliente con JWT válido puede emitir un comprobante
+**legal** con un ítem cancelado o un total arbitrario. Revisar también que tenga
+`ensurePermission` — la facturación quedó sin permisos dedicados.
+
+### Pre-cuenta tras cobro parcial muestra el total, no el saldo
+
+**Pendiente, necesita decisión de producto** → issue
+[#241](https://github.com/GabFrank/frc-gourmet/issues/241).
+
+`buildVentaTicketLines` no resta `VentaItem.montoCubierto`, así que si una mesa pagó parte
+con cobro parcial por ítems y se reimprime la pre-cuenta, el papel muestra el total del
+pedido y no lo que falta. Los importes son correctos (una pre-cuenta es el detalle del
+pedido) y el PdV sí muestra el saldo en pantalla; la opción sugerida es imprimir un bloque
+`PAGADO`/`SALDO` **sólo** cuando hay rondas activas. El comprobante final no tiene el
+problema: `canFinalizar` exige saldo ≤ 0.
 
 ### CajaMayorMovimiento huérfano
 

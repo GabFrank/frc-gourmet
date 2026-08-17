@@ -522,6 +522,8 @@ Patrón: master con 2 paneles. Izq: totales/saldos por moneda → tarjeta de con
 
 **UI:** panel de ítems como **tab** dentro del panel izquierdo del `cobrar-venta-dialog` (Pagos | Items) para no ensanchar; footer fijo. En `pdv.component.ts`: chips PAGADO (verde)/PARCIAL (naranja); `bloqueadoPorCobro(item)` impide editar/cancelar/mover ítems con `montoCubierto > 0.5` ("Anulá el cobro parcial primero").
 
+> **El ticket impreso NO conoce el cobro parcial.** `buildVentaTicketLines` no resta `montoCubierto`, así que una pre-cuenta reimpresa después de una ronda muestra el total del pedido y no el saldo (el PdV sí lo muestra en pantalla). Decisión de producto pendiente en el issue [#241](https://github.com/GabFrank/frc-gourmet/issues/241).
+
 ### Cajas
 
 - **Compartida multi-dispositivo** (`0ac7868`): `get-cajas-abiertas` (todas las ABIERTO). El cobro se restringe: el flujo de venta manda `validarDispositivoCaja:true` y `createPago` rechaza con `COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO` si el dispositivo del request ≠ `caja.dispositivo.id`. (Repo HTTP de `getCajasAbiertas` aún NO implementado — pendiente client mode.)
