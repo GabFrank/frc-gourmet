@@ -164,6 +164,9 @@ Estado item → CANCELADO. Aparece tachado en la tabla. NO suma al total.
 
 No se borra (queda en historial con `canceladoPor`, `horaCancelado`).
 
+Tampoco sale impreso: ni en la pre-cuenta, ni en el ticket de venta, ni en la
+comanda de cocina. El total del ticket es el mismo que muestra el PdV.
+
 ## 7. Cliente
 
 ### Asignar nombre rápido

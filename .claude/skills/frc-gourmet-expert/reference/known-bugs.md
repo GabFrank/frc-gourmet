@@ -54,6 +54,27 @@ Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo
 
 ## Backend / Datos
 
+### ✅ RESUELTO — El ticket/pre-cuenta imprimía y cobraba los ítems cancelados (2026-08-17)
+
+**Síntoma:** se cancelaba un ítem en el PdV (quedaba tachado, el cobro lo descontaba
+bien) pero al imprimir la pre-cuenta el ítem seguía apareciendo, y el **TOTAL impreso
+salía inflado**: el mozo le mostraba al cliente más de lo que debía pagar.
+
+**Causa:** `printVentaTicketInternal` cargaba los `VentaItem` sin filtrar por estado, y
+esa misma lista alimentaba las líneas **y** los totales. En la pre-cuenta `venta.total`
+todavía es null (se escribe al cobrar), así que el TOTAL sale del cálculo local
+`bruto - descItems - descPago + aumPago` → el cancelado lo inflaba. En el comprobante
+post-cobro el TOTAL estaba bien (usa `venta.total`) pero las líneas y el
+SUBTOTAL/DESCUENTO también salían con el cancelado.
+
+**Fix:** filtro `estado: EstadoVentaItem.ACTIVO` en `buildVentaTicketLines` (extraída de
+`printVentaTicketInternal` para poder testear el contenido sin impresora). El ticket
+también detalla ahora los adicionales activos. Test: `npm run test:ticket-venta`.
+
+**Gotcha para el futuro:** cualquier lugar nuevo que arme una vista de los ítems de una
+venta arranca filtrando `estado = ACTIVO` — es lo que hacen comanda, cobro, stock,
+comisiones, reportes y factura legal. Un `find` sin filtro es el bug.
+
 ### CajaMayorMovimiento huérfano
 
 **Síntoma:** movimiento con FK plana (`compraId`, `valeId`, etc.) apuntando a entidad inexistente.

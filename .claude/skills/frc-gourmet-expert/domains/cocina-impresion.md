@@ -165,9 +165,38 @@ async function printPosReceipt(printer, content): Promise<boolean> {
 | Resumen completo de cierre de caja | ❌ TODO | — |
 | Recibo de liquidación RRHH | ❌ TODO (existe `comprobante_url` en LiquidacionSueldo) | — |
 
+## Qué ítems entran al ticket de venta / pre-cuenta
+
+**Sólo los `VentaItem` con `estado = ACTIVO`.** El contenido lo arma
+`buildVentaTicketLines(dataSource, ventaId, { width, isPrecuenta })` — separada de
+`printVentaTicketInternal` justamente para poder testearla sin impresora; devuelve
+`{ lines, bruto, descItems, descuentoTotal, totalPrincipal, itemsImpresos }`.
+`printVentaTicketInternal` sólo resuelve la impresora y manda a imprimir.
+
+Hasta 2026-08 el ticket cargaba **todos** los ítems sin filtrar por estado: un ítem
+cancelado en el PdV salía impreso y, peor, sumaba a los totales. En la pre-cuenta eso
+daba un **total inflado**, porque `venta.total` se escribe recién al cobrar
+(`cobrar-venta-dialog`) y hasta entonces el TOTAL sale del cálculo local
+`bruto - descItems - descPago + aumPago`. El mozo le mostraba al cliente un total
+mayor que el del PdV. Fix: filtro `estado: EstadoVentaItem.ACTIVO`, mismo criterio que
+ya usaban la comanda, el cobro, el descuento de stock y los reportes.
+
+**Adicionales/extras:** se listan como sub-líneas indentadas bajo su producto
+(`+ EXTRA QUESO`, `+ 2x TOCINO`), sólo los `activo = true` y sólo de ítems no
+cancelados. **Sin monto por adicional**: en pizzas `VentaItem.precioAdicionales` está
+ponderado por la proporción de cada sabor (`pdv.component.ts` → `addVariacionItem`), así
+que la suma de los `precioCobrado` de las filas `VentaItemAdicional` NO coincide con lo
+que se cobra. La plata siempre sale de `precioAdicionales`, nunca de recalcular las filas.
+
+`getVentaItemAdicionales` también filtra `activo = true`.
+
+Test: `npm run test:ticket-venta` (`scripts/test-ticket-venta-e2e.ts`) — arma el ticket
+contra SQLite y lo asserta sobre `renderTicketToPlainText`. Pruebas manuales:
+`docs/testing/TESTING-CHECKLIST-TICKET-CANCELADOS.md`.
+
 ## Estructura de un ticket de venta (ilustrativo)
 
-> Layout de referencia. La salida real la arma `printVentaTicketInternal` con `ticketHeaderEmpresa` (datos de empresa/timbrado desde BD) y columnas CANT/DESCRIPCION/TOTAL via `ticketColumns`. El título real es "COMPROBANTE DE VENTA" (o "PRE-CUENTA").
+> Layout de referencia. La salida real la arma `buildVentaTicketLines` con `ticketHeaderEmpresa` (datos de empresa/timbrado desde BD) y columnas CANT/DESCRIPCION/TOTAL via `ticketColumns`. El título real es "COMPROBANTE DE VENTA" (la pre-cuenta no lleva título; cierra con `*** NO ES COMPROBANTE FISCAL ***`).
 
 ```
 ==============================
