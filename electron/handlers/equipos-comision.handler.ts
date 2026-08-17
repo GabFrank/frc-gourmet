@@ -13,6 +13,7 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { ensurePermission } from '../utils/auth.utils';
+import { sqlTotalLineaItem } from '../utils/venta-total.utils';
 
 function getPeriodoBounds(periodo: string): { fechaInicio: Date; fechaFin: Date } {
   const [yStr, mStr] = periodo.split('-');
@@ -242,7 +243,9 @@ export function registerEquiposComisionHandlers(
           .innerJoin('ventas', 'v', 'vi.venta_id = v.id')
           .select([
             'SUM(vi.cantidad) as "totalUnidades"',
-            `SUM((vi.precio_venta_unitario - vi.descuento_unitario) * vi.cantidad + vi.precio_adicionales) as "totalMonto"`,
+            // El adicional es POR UNIDAD, así que entra dentro del × cantidad.
+            // Antes quedaba afuera y se contaba una sola vez por línea.
+            `SUM(${sqlTotalLineaItem('vi')}) as "totalMonto"`,
           ])
           .where('v.estado = :estado', { estado: 'CONCLUIDA' })
           .andWhere(`(date(v.fecha_cierre) >= :fd OR date(v.created_at) >= :fd)`)

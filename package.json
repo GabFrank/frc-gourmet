@@ -86,6 +86,7 @@
     "test:musica-cuotas": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-musica-cuotas-e2e.ts",
     "test:musica-descubrimiento": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-musica-descubrimiento-e2e.ts",
     "test:musica-plan-automatico": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-musica-plan-automatico-e2e.ts",
+    "test:comision-meta-venta": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-comision-meta-venta-e2e.ts",
     "test:observacion-libre": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-observacion-libre-e2e.ts",
     "test:variacion-mobile": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-variacion-mobile-e2e.ts",
     "test:variacion-config": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-variacion-config-e2e.ts",
