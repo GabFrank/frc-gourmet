@@ -171,7 +171,45 @@ function parseLocalDate(s: string): Date {
 
 **Aplicado en compras**. Pendiente sweep en otros handlers (`gastos`, `retiros-caja`, `caja-mayor`, `entradas-varias`, `cheques`, `cuentas-por-pagar`, `vacaciones`, `feriados`, `asistencias`, etc.). (`project_todo_fechas_local_timezone`)
 
-Las columnas `datetime` no tienen el problema (guardan timestamp completo).
+Las columnas `datetime` no tienen el problema **de la fecha corrida**, pero tienen el suyo propio — el de acá abajo.
+
+## SQL crudo: comparar un `datetime` contra `toISOString()` rompe en SQLite
+
+En SQLite las columnas `datetime` son **TEXT** con el formato que persiste TypeORM:
+
+```
+'2026-08-01 18:00:00.000'     ← separador ESPACIO, sin Z
+```
+
+y SQLite compara TEXT **byte a byte**. Un límite armado con `fecha.toISOString()`
+trae `'2026-08-01T00:00:00.000Z'`, con `T`. En la posición 10 chocan `' '` (0x20)
+contra `'T'` (0x54), y como `' ' < 'T'`:
+
+- en un `WHERE created_at >= :desde` se caen **todas** las filas del día del
+  límite (en un reporte mensual: el día 1 entero, no un caso borde);
+- en un `WHERE created_at <= :hasta` se **cuelan** las del día del límite
+  superior — con huso negativo, el día 1 del mes siguiente.
+
+Verificado sobre una BD creada con las migraciones del repo:
+
+```sql
+-- created_at guardado: '2026-08-01 18:00:00.000'
+SELECT id FROM ventas WHERE created_at >= '2026-08-01T00:00:00.000Z';  -- []  ← se pierde
+```
+
+En **Postgres no pasa**: la columna es `timestamp` nativo y el driver parsea el ISO.
+O sea que el bug sólo se ve en standalone, que es el despliegue default.
+
+**Regla:** todo parámetro de fecha que se compare contra una columna
+`datetime`/`timestamp` en SQL crudo pasa por
+`fechaParamSql(dataSource, fecha)` (`electron/utils/date.utils.ts`), que formatea
+según el driver. No usar `.toISOString()` suelto.
+
+> Los reportes y dashboards de Ventas todavía tienen este bug (`filtroRango` en
+> `dashboard-ventas.handler.ts` y las queries de `reportes-ventas.helper.ts`):
+> issue [#249](https://github.com/GabFrank/frc-gourmet/issues/249). Ojo al
+> arreglarlo: los totales publicados **cambian** (aparece el día 1, desaparece el
+> arrastre del mes siguiente).
 
 ## TypeORM `find` con relations no carga columnas raw
 

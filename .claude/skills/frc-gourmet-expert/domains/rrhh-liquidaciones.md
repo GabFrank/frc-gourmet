@@ -300,6 +300,15 @@ EquipoComisionRegla {
 
 > El funcionario **debe** tener `usuario_id`; si no, la evaluación lanza error (las ventas se atribuyen por usuario).
 
+> ⚠️ **Nunca leer `Venta.total`**: esa columna no se escribe en ningún flujo del
+> repo. Hasta 2026-08 `totalMontoVentaLocal` salía de ahí, así que valía 0 y la
+> regla `META_VENTA_LOCAL` **no pagaba nunca, en silencio** (issue #239). El
+> total de una venta se calcula desde los ítems con
+> `electron/utils/venta-total.utils.ts`, que es el único lugar donde vive esa
+> cuenta: `sqlTotalLineaItem` para la línea — ojo, **el adicional es por unidad y
+> va dentro del × cantidad** — y `getTotalesPorVenta` / `sumarTotalesDeVentas`
+> para el total neto de los descuentos y aumentos globales del cobro.
+
 ```
 1. Query venta_items JOIN ventas (SQL crudo):
    - v.estado = 'CONCLUIDA'
@@ -310,8 +319,9 @@ EquipoComisionRegla {
 
 2. Métricas:
    - totalUnidades        = SUM(vi.cantidad)
-   - totalMontoProductos  = SUM(precioUnitario×cant − descuentoUnitario×cant + precioAdicionales)
-   - totalMontoVentaLocal = SUM(v.total) de las ventas únicas tocadas
+   - totalMontoProductos  = SUM((precioUnitario + precioAdicionales − descuentoUnitario) × cantidad)
+   - totalMontoVentaLocal = suma del total COMPLETO de las ventas únicas tocadas,
+                            vía `sumarTotalesDeVentas` (venta-total.utils)
 
 3. Evaluar requisitos (cada ReglaComisionRequisito) → factorRequisitos:
    FOR EACH requisito:
