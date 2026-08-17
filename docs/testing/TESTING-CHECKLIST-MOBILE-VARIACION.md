@@ -31,6 +31,13 @@ los ingredientes**: un mozo no podía mandar "SIN ACEITUNAS" desde la mesa.
 - [ ] Un sabor **sin precio vigente no aparece** en la lista.
 - [ ] Elegí un sabor → **se abre solo el diálogo de personalización** (igual que
       el desktop, sin tener que buscar el botón).
+- [ ] **El teclado del sistema NO se abre solo** al abrir ese diálogo, y los
+      ítems (ingredientes, adicionales, observaciones) quedan visibles apenas
+      terminan de cargar. *(Antes: el campo de nota era lo único presente
+      mientras cargaba, el diálogo le daba el foco, saltaba el teclado y tapaba
+      todo lo que aparecía después.)*
+- [ ] El campo **Nota libre** aparece al final, recién cuando terminó la carga; al
+      tocarlo, ahí sí se abre el teclado.
 
 ## 2. Personalización de un sabor — lo que faltaba
 
