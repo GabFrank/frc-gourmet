@@ -14,6 +14,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { mensajeDeError } from 'src/app/shared/utils/error-message.util';
 import { FormControl, FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { Observable, of, firstValueFrom, async } from 'rxjs';
 import { debounceTime, distinctUntilChanged, map, startWith, switchMap } from 'rxjs/operators';
@@ -1382,6 +1383,7 @@ export class PdvComponent implements OnInit, OnDestroy {
         this.ventaItemsDataSource.data = auxList;
       } catch (error) {
         console.error('Error al guardar el item de venta:', error);
+        this.mostrarErrorItem(error, 'NO SE PUDO AGREGAR EL ITEM');
       }
 
       // Recalculate totals after adding item
@@ -1578,7 +1580,21 @@ export class PdvComponent implements OnInit, OnDestroy {
       this.calculateTotals();
     } catch (error) {
       console.error('Error al guardar item de variación:', error);
+      this.mostrarErrorItem(error, 'NO SE PUDO AGREGAR EL ITEM');
     }
+  }
+
+  /**
+   * Muestra el motivo real por el que el backend rechazó el ítem. Antes estos
+   * catch sólo hacían `console.error`, así que un rechazo de permisos (o el
+   * 'DEBE CAMBIAR SU CONTRASEÑA ANTES DE CONTINUAR' de un usuario con
+   * contraseña temporal) se veía como si no hubiera pasado nada.
+   */
+  private mostrarErrorItem(error: any, fallback: string): void {
+    this.snackBar.open(mensajeDeError(error, fallback), 'CERRAR', {
+      duration: 6000,
+      panelClass: 'error-snackbar',
+    });
   }
 
   private async persistirPersonalizacionConSabor(ventaItemId: number, result: PersonalizarProductoDialogResult, ventaItemSaborId: number): Promise<void> {

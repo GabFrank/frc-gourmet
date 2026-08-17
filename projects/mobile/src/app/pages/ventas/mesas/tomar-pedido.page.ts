@@ -13,7 +13,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { firstValueFrom, forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
-import { AuthService, RepositoryService } from '@frc/shared-core';
+import { AuthService, RepositoryService, mensajeDeError } from '@frc/shared-core';
 import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
 import {
   SeleccionarVariacionDialogComponent,
@@ -570,8 +570,8 @@ export class TomarPedidoPage implements OnInit {
       this.pedido.unshift({ nombre: p.nombre, cantidad: sel.cantidad, precio: precioLinea });
       this.totalPedido += precioLinea * sel.cantidad;
       this.snack.open(`Agregado: ${sel.cantidad} × ${p.nombre}`, undefined, { duration: 1200 });
-    } catch {
-      this.snack.open('No se pudo agregar el producto', 'CERRAR', { duration: 4000 });
+    } catch (e) {
+      this.snack.open(mensajeDeError(e, 'No se pudo agregar el producto'), 'CERRAR', { duration: 6000 });
     } finally {
       this.guardando = false;
     }
@@ -633,8 +633,8 @@ export class TomarPedidoPage implements OnInit {
       this.pedido.unshift({ nombre: p.nombre, cantidad: 1, precio: res.total });
       this.totalPedido += res.total;
       this.snack.open(`Agregado: ${p.nombre}`, undefined, { duration: 1200 });
-    } catch {
-      this.snack.open('No se pudo agregar el producto de buffet', 'CERRAR', { duration: 4000 });
+    } catch (e) {
+      this.snack.open(mensajeDeError(e, 'No se pudo agregar el producto de buffet'), 'CERRAR', { duration: 6000 });
     } finally {
       this.guardando = false;
     }
@@ -727,8 +727,8 @@ export class TomarPedidoPage implements OnInit {
       this.pedido.unshift({ nombre: sel.ensambladoDescripcion, cantidad: sel.cantidad, precio: precioLineaVar });
       this.totalPedido += precioLineaVar * sel.cantidad;
       this.snack.open(`Agregado: ${sel.cantidad} × ${p.nombre}`, undefined, { duration: 1200 });
-    } catch {
-      this.snack.open('No se pudo agregar la variación', 'CERRAR', { duration: 4000 });
+    } catch (e) {
+      this.snack.open(mensajeDeError(e, 'No se pudo agregar la variación'), 'CERRAR', { duration: 6000 });
     } finally {
       this.guardando = false;
     }

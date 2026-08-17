@@ -90,6 +90,7 @@ import { MenuConfigComponent } from 'src/app/pages/sistema/menu-config/menu-conf
 import { ConfigMonedasDialogComponent } from 'src/app/pages/financiero/monedas/config-monedas/config-monedas-dialog.component';
 import { PdvConfigDialogComponent } from 'src/app/shared/components/pdv-config-dialog/pdv-config-dialog.component';
 import { AtajoConfigDialogComponent } from 'src/app/shared/components/atajo-config-dialog/atajo-config-dialog.component';
+import { ForceChangePasswordDialogComponent } from 'src/app/auth/force-change-password-dialog/force-change-password-dialog.component';
 import { PrinterSettingsComponent } from 'src/app/components/printer-settings/printer-settings.component';
 import { SectoresImpresorasSettingsComponent } from 'src/app/components/sectores-impresoras-settings/sectores-impresoras-settings.component';
 
@@ -520,6 +521,12 @@ export const MENU_TREE: MenuNode[] = [
       { id: 'menu-config', label: 'Configuración del menú', icon: 'menu_open', permiso: 'SISTEMA_MENU_CONFIGURAR', esConfig: true,
         keywords: ['menu', 'sidenav', 'buscador', 'navegacion', 'visibilidad', 'orden'],
         action: { component: MenuConfigComponent, title: 'Configuración del menú', tabId: 'menu-config-tab', data: NAV } },
+      // Sin permiso: cualquiera cambia SU propia contraseña. Vive en el menú de
+      // usuario de la toolbar, acá sólo para que el buscador global lo encuentre.
+      { id: 'cambiar-password', label: 'Cambiar mi contraseña', icon: 'password', esConfig: true, enSidenav: false,
+        keywords: ['contrasena', 'contraseña', 'password', 'clave', 'cambiar', 'seguridad'],
+        action: { mode: 'dialog', component: ForceChangePasswordDialogComponent, title: 'Cambiar mi contraseña',
+          data: { modo: 'self' }, dialogConfig: { width: '480px' } } },
     ],
   },
 ];

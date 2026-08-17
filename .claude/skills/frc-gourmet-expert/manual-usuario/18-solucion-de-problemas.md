@@ -17,7 +17,15 @@
 - ¿CapsLock activado?
 - Verificá el nickname (el sistema lo trata case-insensitive: `admin = ADMIN = Admin`).
 - Si dice "Usuario inactivo": el admin debe reactivarte (cap. 3, `activo = true`).
-- Si olvidaste contraseña: el admin debe editarla (no hay recuperación auto).
+- Si olvidaste contraseña: usá "¿Olvidaste tu contraseña?" en el login, o pedile al admin que te la resetee (te da un código temporal que vas a tener que cambiar al entrar).
+
+## Un usuario nuevo no puede cargar ítems / guardar nada
+
+Síntoma: entra sin problemas, ve todo, pero cualquier acción falla ("no se pudo agregar el ítem"). Suele pasar con usuarios recién creados o con la contraseña recién reseteada por el admin.
+
+Causa: tiene **contraseña temporal pendiente de cambio**. Mientras no la cambie, el sistema rechaza toda operación que guarde datos, tenga los roles que tenga.
+
+Solución: menú de usuario 👤 → **Cambiar mi contraseña** (cap. 1). Después de cambiarla funciona normalmente.
 
 ## La pantalla está rota / colores raros / texto invisible
 
