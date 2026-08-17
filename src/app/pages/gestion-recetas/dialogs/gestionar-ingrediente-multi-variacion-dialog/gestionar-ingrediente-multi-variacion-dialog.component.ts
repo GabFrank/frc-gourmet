@@ -31,6 +31,9 @@ export class GestionarIngredienteMultiVariacionDialogComponent implements OnInit
   /** Hay al menos una variación bloqueada: se explica en el pie del diálogo. */
   hayBloqueadas = false;
 
+  /** Ninguna variación se puede seleccionar: no tiene sentido habilitar Guardar. */
+  haySeleccionables = false;
+
   /** Datos planos para la tabla (el template no llama funciones ni getters). */
   variacionesInfo: Array<{ id?: number; nombre: string; bloqueada: boolean; motivoBloqueo: string }> = [];
 
@@ -79,6 +82,8 @@ export class GestionarIngredienteMultiVariacionDialogComponent implements OnInit
         this.hayBloqueadas = true;
         grupo.get('seleccionada')?.disable();
         grupo.get('cantidad')?.disable();
+      } else {
+        this.haySeleccionables = true;
       }
 
       variacionesFormArray.push(grupo);

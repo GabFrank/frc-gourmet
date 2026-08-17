@@ -1032,7 +1032,9 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
       const qb = dataSource.getRepository(RecetaIngrediente)
         .createQueryBuilder('ri')
-        .select('ri.receta_id', 'recetaId')
+        // Alias en minúsculas: Postgres baja a minúsculas los alias sin comillas,
+        // así la lectura de la fila cruda es igual en SQLite y en Postgres.
+        .select('ri.receta_id', 'receta_id')
         .where('ri.receta_id IN (:...recetaIds)', { recetaIds });
 
       if (data.ingredienteId) {
@@ -1043,7 +1045,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       }
 
       const filas = await qb.getRawMany();
-      return Array.from(new Set(filas.map((f: any) => Number(f.recetaId))));
+      return Array.from(new Set(filas.map((f: any) => Number(f.receta_id))));
     } catch (error) {
       console.error('Error en get-recetas-con-ingrediente:', error);
       throw error;
