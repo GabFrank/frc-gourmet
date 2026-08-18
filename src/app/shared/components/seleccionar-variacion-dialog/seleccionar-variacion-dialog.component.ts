@@ -79,6 +79,8 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
   variacionesDisponibles: any[] = [];
   saboresSeleccionados: SaborSeleccionado[] = [];
   maxSabores = 2;
+  /** false si el producto acepta un solo sabor por ítem (sin mitad y mitad). */
+  permiteMultiple = true;
 
   // Paso 3: Resumen
   cantidad: number;
@@ -103,8 +105,20 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
     private dialog: MatDialog
   ) {
     this.cantidad = data.cantidad || 1;
-    this.maxSabores = data.pdvConfig?.pizzaMaxSabores || 2;
-    this.estrategiaPrecio = data.pdvConfig?.pizzaEstrategiaPrecio || 'MAYOR_PRECIO';
+    // El máximo de sabores y la estrategia de precio se configuran POR PRODUCTO
+    // (una pizza admite mitad y mitad, una milanesa normalmente no). Si el
+    // producto no los define, rige el global del PdV.
+    const producto: any = data.producto || {};
+    const configProducto: any = producto.variacionConfig || {};
+    const maxProducto = Number(producto.maxVariacionesSimultaneas ?? configProducto.maxSabores);
+    this.maxSabores = Number.isFinite(maxProducto) && maxProducto >= 1
+      ? Math.floor(maxProducto)
+      : (data.pdvConfig?.pizzaMaxSabores || 2);
+    const estrategiaProducto = String(producto.estrategiaPrecioVariacion || configProducto.estrategia || '').toUpperCase();
+    this.estrategiaPrecio = estrategiaProducto === 'PROMEDIO' || estrategiaProducto === 'MAYOR_PRECIO'
+      ? estrategiaProducto
+      : (data.pdvConfig?.pizzaEstrategiaPrecio || 'MAYOR_PRECIO');
+    this.permiteMultiple = this.maxSabores > 1;
   }
 
   async ngOnInit(): Promise<void> {
@@ -156,6 +170,16 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
 
       // Avanzar al paso 2
       this.pasoActual = 1;
+
+      // Autoselección: si el tamaño tiene un solo sabor con precio, no tiene
+      // sentido pedir que lo elija — se marca solo y el diálogo salta a
+      // confirmar. No se abre la personalización automáticamente (el usuario
+      // no eligió nada todavía); queda el botón PERSONALIZAR.
+      const disponibles = this.variacionesDisponibles.filter(v => this.isSaborDisponible(v));
+      if (disponibles.length === 1 && this.saboresSeleccionados.length === 0) {
+        this.agregarSabor(disponibles[0], false);
+        this.pasoActual = 2;
+      }
     } catch (error) {
       console.error('Error loading variaciones:', error);
     }
@@ -189,6 +213,12 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
       return;
     }
 
+    // Producto de un solo sabor: tocar otro reemplaza al elegido (si se ignorara
+    // el click, el usuario no tendría forma de cambiar de sabor sin destildar).
+    if (!this.permiteMultiple && this.saboresSeleccionados.length > 0) {
+      this.saboresSeleccionados = [];
+    }
+
     // Verificar máximo
     if (this.saboresSeleccionados.length >= this.maxSabores) return;
 
@@ -202,6 +232,16 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
       return;
     }
 
+    this.agregarSabor(variacion, true);
+  }
+
+  /**
+   * Agrega una variación a la selección. `abrirPersonalizacion` es true cuando
+   * el usuario tocó el sabor (se le abre el diálogo de personalización sin que
+   * tenga que buscar el botón) y false cuando lo elegimos nosotros por él
+   * (autoselección del único sabor disponible).
+   */
+  private agregarSabor(variacion: any, abrirPersonalizacion: boolean): void {
     const nuevo: SaborSeleccionado = {
       recetaPresentacion: variacion,
       proporcion: 1, // Se recalcula abajo
@@ -214,9 +254,9 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
     this.recalcularProporciones();
     this.recalcular();
 
-    // Abrir la personalización del sabor recién elegido (agregar/quitar,
-    // observaciones) sin que el usuario tenga que buscar el botón.
-    void this.personalizarSabor(nuevo);
+    if (abrirPersonalizacion) {
+      void this.personalizarSabor(nuevo);
+    }
   }
 
   private recalcularProporciones(): void {

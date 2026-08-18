@@ -56,6 +56,8 @@ interface ProductoVM {
   // ELABORADO_CON_VARIACION: no hay un precio único sino un rango (sabor × tamaño).
   // `precio` queda con el más barato; la lista muestra "desde – hasta".
   esRangoVariacion?: boolean;
+  // Config de multi-sabor resuelta por el backend (override del producto o global).
+  variacionConfig?: { maxSabores?: number; estrategia?: string } | null;
   precioDesde?: number;
   precioHasta?: number;
   variacionesDetalle?: string;
@@ -330,6 +332,7 @@ export class TomarPedidoPage implements OnInit {
       precioMinimo: precioObj?.precioMinimo ?? null,
       precioMaximo: precioObj?.precioMaximo ?? null,
       esRangoVariacion: rango.esRango,
+      variacionConfig: esVariacion ? (prod.variacionConfig ?? null) : null,
       precioDesde: rango.precioDesde,
       precioHasta: rango.precioHasta,
       variacionesDetalle: rango.detalle,
@@ -477,6 +480,7 @@ export class TomarPedidoPage implements OnInit {
       precioMinimo: precioObj?.precioMinimo ?? null,
       precioMaximo: precioObj?.precioMaximo ?? null,
       esRangoVariacion: rango.esRango,
+      variacionConfig: esVariacion ? (p.variacionConfig ?? null) : null,
       precioDesde: rango.precioDesde,
       precioHasta: rango.precioHasta,
       variacionesDetalle: rango.detalle,
@@ -733,7 +737,7 @@ export class TomarPedidoPage implements OnInit {
     const sel = (await firstValueFrom(
       this.dialog
         .open(SeleccionarVariacionDialogComponent, {
-          data: { productoId: p.id, nombre: p.nombre },
+          data: { productoId: p.id, nombre: p.nombre, variacionConfig: p.variacionConfig ?? null },
           width: '360px',
           maxHeight: '85vh',
         })
