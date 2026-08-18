@@ -440,6 +440,8 @@ export class GestionarProductoService {
           stockMaximo: producto.stockMaximo,
           taraGramos: (producto as any).taraGramos ?? null,
           pesoMinimoGramos: (producto as any).pesoMinimoGramos ?? null,
+          maxVariacionesSimultaneas: (producto as any).maxVariacionesSimultaneas ?? null,
+          estrategiaPrecioVariacion: (producto as any).estrategiaPrecioVariacion ?? null,
           descuentaPorReceta: (producto as any).descuentaPorReceta ?? false,
           imageUrl: (producto as any).imageUrl ?? null
         });
@@ -517,7 +519,11 @@ export class GestionarProductoService {
         // Buffet por peso (solo BUFFET_POR_PESO)
         taraGramos: [null, [Validators.min(0)]],
         pesoMinimoGramos: [null, [Validators.min(0)]],
-        descuentaPorReceta: [false]
+        descuentaPorReceta: [false],
+        // Variaciones (solo ELABORADO_CON_VARIACION). null = heredar la config
+        // global del PdV (pizzaMaxSabores / pizzaEstrategiaPrecio).
+        maxVariacionesSimultaneas: [null, [Validators.min(1)]],
+        estrategiaPrecioVariacion: [null]
       }, { validators: this.stockRangeValidator }),
       presentaciones: this.fb.array([]),
       precios: this.fb.group({
@@ -794,6 +800,13 @@ export class GestionarProductoService {
       taraGramos: productoData.taraGramos ?? null,
       pesoMinimoGramos: productoData.pesoMinimoGramos ?? null,
       descuentaPorReceta: productoData.descuentaPorReceta ?? false,
+      // Solo aplican a ELABORADO_CON_VARIACION; null = heredar el global del PdV.
+      maxVariacionesSimultaneas: productoData.tipo === ProductoTipo.ELABORADO_CON_VARIACION
+        ? (Number(productoData.maxVariacionesSimultaneas) || null)
+        : null,
+      estrategiaPrecioVariacion: productoData.tipo === ProductoTipo.ELABORADO_CON_VARIACION
+        ? (productoData.estrategiaPrecioVariacion || null)
+        : null,
       subfamiliaId: productoData.subfamiliaId,
       imageUrl: productoData.imageUrl ?? null
     };

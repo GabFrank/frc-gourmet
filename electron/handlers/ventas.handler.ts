@@ -14,6 +14,7 @@ import { PdvCategoriaItem } from '../../src/app/database/entities/ventas/pdv-cat
 import { PdvItemProducto } from '../../src/app/database/entities/ventas/pdv-item-producto.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { getRangoPrecioVariacion } from '../utils/variacion-precio.utils';
+import { getVariacionConfig } from '../utils/variacion-config.utils';
 import { ensureObservacionNotaLibreId } from '../utils/observacion-libre.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
@@ -3090,6 +3091,8 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           // El precio de una variación cuelga de `receta_presentacion_id`, no de
           // la receta (y menos del 1:1 legacy `receta.producto_id`, que dejaba el
           // atajo en 0). Se muestra el rango "desde / hasta" de sus variaciones.
+          const cfgVariacion = await getVariacionConfig(dataSource, p);
+          p.variacionConfig = { maxSabores: cfgVariacion.maxSabores, estrategia: cfgVariacion.estrategia };
           const rango = await getRangoPrecioVariacion(dataSource, p.id);
           if (rango.variacionesCount > 0) {
             p.precioDirecto = rango.precioReferencia;

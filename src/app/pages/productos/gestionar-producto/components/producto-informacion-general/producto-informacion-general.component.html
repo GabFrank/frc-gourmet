@@ -204,6 +204,29 @@
           </mat-slide-toggle>
         </div>
 
+        <!-- Variaciones (sabores): cuántos se pueden combinar y cómo se cotizan -->
+        <div class="form-row" *ngIf="informacionPrincipalForm.get('tipo')?.value === ProductoTipo.ELABORADO_CON_VARIACION">
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Máximo de sabores por ítem</mat-label>
+            <input matInput type="number" formControlName="maxVariacionesSimultaneas" min="1" step="1" placeholder="Global">
+            <mat-icon matSuffix matTooltip="1 = un solo sabor (sin mitad y mitad). Vacío = usar la configuración global del PdV." matTooltipPosition="above">info_outline</mat-icon>
+            <mat-hint>Vacío = usar la configuración global del PdV</mat-hint>
+            <mat-error *ngIf="informacionPrincipalForm.get('maxVariacionesSimultaneas')?.hasError('min')">
+              Debe ser 1 o más
+            </mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Precio con varios sabores</mat-label>
+            <mat-select formControlName="estrategiaPrecioVariacion">
+              <mat-option [value]="null">Global del PdV</mat-option>
+              <mat-option value="MAYOR_PRECIO">El más caro</mat-option>
+              <mat-option value="PROMEDIO">Promedio</mat-option>
+            </mat-select>
+            <mat-hint>Cómo se cotiza un ítem que combina sabores</mat-hint>
+          </mat-form-field>
+        </div>
+
         <!-- Imagen principal del producto -->
         <div class="form-row imagen-row">
           <div class="imagen-section">

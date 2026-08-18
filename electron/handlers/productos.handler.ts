@@ -38,6 +38,21 @@ import { OBSERVACION_NOTA_LIBRE_DESC } from '../utils/observacion-libre.utils';
 import { Sabor } from '../../src/app/database/entities/productos/sabor.entity';
 import { RecetaPresentacion } from '../../src/app/database/entities/productos/receta-presentacion.entity';
 import { getRangosPrecioVariacion } from '../utils/variacion-precio.utils';
+import { getVariacionConfig, getVariacionConfigGlobal } from '../utils/variacion-config.utils';
+
+/**
+ * Config de variaciones por producto (ELABORADO_CON_VARIACION). `null` = el
+ * producto hereda el global del PdV, que es el default de todo el catálogo.
+ */
+function normalizarMaxVariaciones(valor: any): number | null {
+  const max = Number(valor);
+  return Number.isFinite(max) && max >= 1 ? Math.floor(max) : null;
+}
+
+function normalizarEstrategiaVariacion(valor: any): string | null {
+  const estrategia = String(valor || '').toUpperCase();
+  return estrategia === 'PROMEDIO' || estrategia === 'MAYOR_PRECIO' ? estrategia : null;
+}
 
 export function registerProductosHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
 
@@ -554,6 +569,9 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         taraGramos: productoData.taraGramos ?? null,
         pesoMinimoGramos: productoData.pesoMinimoGramos ?? null,
         descuentaPorReceta: productoData.descuentaPorReceta !== undefined ? productoData.descuentaPorReceta : false,
+        // Variaciones (ELABORADO_CON_VARIACION): null = heredar la config global del PdV.
+        maxVariacionesSimultaneas: normalizarMaxVariaciones(productoData.maxVariacionesSimultaneas),
+        estrategiaPrecioVariacion: normalizarEstrategiaVariacion(productoData.estrategiaPrecioVariacion),
         registroCompleto: productoData.registroCompleto !== undefined ? productoData.registroCompleto : true,
         imageUrl: productoData.imageUrl || undefined,
       });
@@ -610,6 +628,13 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         (producto as any).pesoMinimoGramos = productoData.pesoMinimoGramos ?? null;
       if (productoData.descuentaPorReceta !== undefined)
         producto.descuentaPorReceta = productoData.descuentaPorReceta;
+
+      // Variaciones: null explícito = volver a heredar la config global del PdV
+      // (TypeORM sólo genera el UPDATE con null, nunca con undefined).
+      if (productoData.maxVariacionesSimultaneas !== undefined)
+        (producto as any).maxVariacionesSimultaneas = normalizarMaxVariaciones(productoData.maxVariacionesSimultaneas);
+      if (productoData.estrategiaPrecioVariacion !== undefined)
+        (producto as any).estrategiaPrecioVariacion = normalizarEstrategiaVariacion(productoData.estrategiaPrecioVariacion);
 
       // IVA con validacion
       if (productoData.iva !== undefined) {
@@ -1825,11 +1850,17 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         dataSource,
         filtered.filter(p => p.tipo === 'ELABORADO_CON_VARIACION').map(p => p.id)
       );
+      // Config de multi-sabor ya resuelta (override del producto o global), para
+      // que el PdV y la PWA no tengan que consultarla aparte.
+      const configGlobalVariacion = filtered.some(p => p.tipo === 'ELABORADO_CON_VARIACION')
+        ? await getVariacionConfigGlobal(dataSource)
+        : null;
 
       return await Promise.all(filtered.map(async p => {
         let principalPresentacion: any = null;
         let principalPrecio: any = null;
         let variacionResumen: any = null;
+        let variacionConfig: any = null;
 
         if (p.tipo === 'RETAIL' || p.tipo === 'RETAIL_INGREDIENTE' || p.tipo === 'BUFFET_POR_PESO') {
           const pres = (p.presentaciones as any[])?.find((pr: any) => pr.principal)
@@ -1853,6 +1884,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
           // Rango "desde / hasta" sobre las variaciones (sabor × tamaño) con
           // precio vigente. `principalPrecio` = la variación más barata, para
           // los consumidores que esperan un precio único.
+          const cfgVariacion = await getVariacionConfig(dataSource, p, configGlobalVariacion || undefined);
+          variacionConfig = { maxSabores: cfgVariacion.maxSabores, estrategia: cfgVariacion.estrategia };
           const rango = rangosVariacion.get(p.id);
           if (rango && rango.variacionesCount > 0) {
             principalPrecio = mapPrecio(rango.precioReferencia);
@@ -1884,8 +1917,10 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
           recetas: (p as any).recetas?.map((r: any) => ({ id: r.id, costoCalculado: r.costoCalculado })) || [],
           principalPresentacion,
           principalPrecio,
-          // Solo ELABORADO_CON_VARIACION: rango de precios de sus variaciones.
+          // Solo ELABORADO_CON_VARIACION: rango de precios de sus variaciones y
+          // config de multi-sabor resuelta (producto > global).
           variacionResumen,
+          variacionConfig,
           // true si el término de búsqueda matcheó EXACTAMENTE un código de
           // barra de este producto. El PdV/buscador lo usa para auto-seleccionar
           // (como un click en la fila) cuando hay un único match exacto.
