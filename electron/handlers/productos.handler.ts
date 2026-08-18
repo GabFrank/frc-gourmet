@@ -37,6 +37,7 @@ import { Not, Like, In, And } from 'typeorm';
 import { OBSERVACION_NOTA_LIBRE_DESC } from '../utils/observacion-libre.utils';
 import { Sabor } from '../../src/app/database/entities/productos/sabor.entity';
 import { RecetaPresentacion } from '../../src/app/database/entities/productos/receta-presentacion.entity';
+import { getRangosPrecioVariacion } from '../utils/variacion-precio.utils';
 
 export function registerProductosHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
 
@@ -1817,9 +1818,18 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         principal: pres.principal, activo: pres.activo,
       } : null;
 
+      // Productos con variación: el precio vive en `PrecioVenta.receta_presentacion_id`
+      // (una fila por sabor × tamaño), así que no hay "un" precio sino un rango.
+      // Se resuelve en batch para no hacer N+1 sobre la lista de resultados.
+      const rangosVariacion = await getRangosPrecioVariacion(
+        dataSource,
+        filtered.filter(p => p.tipo === 'ELABORADO_CON_VARIACION').map(p => p.id)
+      );
+
       return await Promise.all(filtered.map(async p => {
         let principalPresentacion: any = null;
         let principalPrecio: any = null;
+        let variacionResumen: any = null;
 
         if (p.tipo === 'RETAIL' || p.tipo === 'RETAIL_INGREDIENTE' || p.tipo === 'BUFFET_POR_PESO') {
           const pres = (p.presentaciones as any[])?.find((pr: any) => pr.principal)
@@ -1840,16 +1850,20 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
             principalPrecio = mapPrecio(precios?.[0] || null);
           }
         } else if (p.tipo === 'ELABORADO_CON_VARIACION') {
-          // Query prices linked to any receta of this product
-          const precios = await pvRepo
-            .createQueryBuilder('pv')
-            .leftJoinAndSelect('pv.moneda', 'moneda')
-            .innerJoin('pv.receta', 'receta')
-            .where('receta.productoVariacion = :prodId', { prodId: p.id })
-            .andWhere('pv.activo = :activo', { activo: true })
-            .orderBy('pv.principal', 'DESC')
-            .getMany();
-          principalPrecio = mapPrecio(precios?.[0] || null);
+          // Rango "desde / hasta" sobre las variaciones (sabor × tamaño) con
+          // precio vigente. `principalPrecio` = la variación más barata, para
+          // los consumidores que esperan un precio único.
+          const rango = rangosVariacion.get(p.id);
+          if (rango && rango.variacionesCount > 0) {
+            principalPrecio = mapPrecio(rango.precioReferencia);
+            variacionResumen = {
+              precioDesde: rango.precioDesde,
+              precioHasta: rango.precioHasta,
+              variacionesCount: rango.variacionesCount,
+              saboresCount: rango.saboresCount,
+              presentacionesCount: rango.presentacionesCount,
+            };
+          }
         } else if (p.tipo === 'COMBO') {
           const precios = await pvRepo.find({
             where: { producto: { id: p.id }, activo: true },
@@ -1870,6 +1884,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
           recetas: (p as any).recetas?.map((r: any) => ({ id: r.id, costoCalculado: r.costoCalculado })) || [],
           principalPresentacion,
           principalPrecio,
+          // Solo ELABORADO_CON_VARIACION: rango de precios de sus variaciones.
+          variacionResumen,
           // true si el término de búsqueda matcheó EXACTAMENTE un código de
           // barra de este producto. El PdV/buscador lo usa para auto-seleccionar
           // (como un click en la fila) cuando hay un único match exacto.

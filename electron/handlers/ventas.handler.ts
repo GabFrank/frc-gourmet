@@ -13,6 +13,7 @@ import { PdvCategoria } from '../../src/app/database/entities/ventas/pdv-categor
 import { PdvCategoriaItem } from '../../src/app/database/entities/ventas/pdv-categoria-item.entity';
 import { PdvItemProducto } from '../../src/app/database/entities/ventas/pdv-item-producto.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { getRangoPrecioVariacion } from '../utils/variacion-precio.utils';
 import { ensureObservacionNotaLibreId } from '../utils/observacion-libre.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
@@ -3086,15 +3087,20 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             p.precioDirecto = pickPrecio(precios);
           }
         } else if (p.tipo === 'ELABORADO_CON_VARIACION') {
-          const precios = await pvRepo
-            .createQueryBuilder('pv')
-            .leftJoinAndSelect('pv.moneda', 'moneda')
-            .innerJoin('pv.receta', 'receta')
-            .where('receta.producto_id = :prodId', { prodId: p.id })
-            .andWhere('pv.activo = :activo', { activo: true })
-            .orderBy('pv.principal', 'DESC')
-            .getMany();
-          p.precioDirecto = pickPrecio(precios);
+          // El precio de una variación cuelga de `receta_presentacion_id`, no de
+          // la receta (y menos del 1:1 legacy `receta.producto_id`, que dejaba el
+          // atajo en 0). Se muestra el rango "desde / hasta" de sus variaciones.
+          const rango = await getRangoPrecioVariacion(dataSource, p.id);
+          if (rango.variacionesCount > 0) {
+            p.precioDirecto = rango.precioReferencia;
+            p.variacionResumen = {
+              precioDesde: rango.precioDesde,
+              precioHasta: rango.precioHasta,
+              variacionesCount: rango.variacionesCount,
+              saboresCount: rango.saboresCount,
+              presentacionesCount: rango.presentacionesCount,
+            };
+          }
         } else if (p.tipo === 'COMBO') {
           const precios = await pvRepo.find({
             where: { producto: { id: p.id }, activo: true },
