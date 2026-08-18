@@ -500,6 +500,19 @@ export abstract class RepositoryService {
     page?: number;
     pageSize?: number;
   }): Observable<{items: Receta[], total: number, page: number, pageSize: number}>;
+  /**
+   * Recetas libres, asignables a un producto simple. Excluye las que ya son de
+   * otro producto, de un adicional o de una variacion sabor x tamano.
+   */
+  abstract getRecetasAsignables(params: {
+    productoId?: number | null;
+    search?: string;
+    activo?: boolean | null;
+    page?: number;
+    pageSize?: number;
+  }): Observable<{items: Receta[], total: number, page: number, pageSize: number}>;
+  abstract vincularRecetaAProducto(productoId: number, recetaId: number): Observable<any>;
+  abstract desvincularRecetaDeProducto(productoId: number): Observable<any>;
   abstract getReceta(recetaId: number): Observable<Receta>;
   abstract createReceta(recetaData: Partial<Receta>): Observable<Receta>;
   abstract updateReceta(recetaId: number, recetaData: Partial<Receta>): Observable<any>;

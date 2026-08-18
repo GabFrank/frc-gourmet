@@ -1173,6 +1173,21 @@ export class RepositoryHttpService extends RepositoryService {
   }): Observable<{items: Receta[], total: number, page: number, pageSize: number}> {
     return throwError(() => new Error(`RepositoryHttpService.getRecetasWithFilters() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getRecetasAsignables(params: {
+    productoId?: number | null;
+    search?: string;
+    activo?: boolean | null;
+    page?: number;
+    pageSize?: number;
+  }): Observable<{items: Receta[], total: number, page: number, pageSize: number}> {
+    return throwError(() => new Error(`RepositoryHttpService.getRecetasAsignables() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  vincularRecetaAProducto(productoId: number, recetaId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.vincularRecetaAProducto() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  desvincularRecetaDeProducto(productoId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.desvincularRecetaDeProducto() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getReceta(recetaId: number): Observable<Receta> {
     return throwError(() => new Error(`RepositoryHttpService.getReceta() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

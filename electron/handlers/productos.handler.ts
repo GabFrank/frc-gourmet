@@ -641,10 +641,14 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         }
       }
 
-      // Actualizar receta si se proporciona
+      // Actualizar receta si se proporciona.
+      // OJO: para DESVINCULAR hay que asignar `null`, no `undefined` — TypeORM
+      // ignora `undefined` y no emite el UPDATE, con lo que `producto.receta_id`
+      // quedaba intacto y la receta seguia vinculada (y ocupando el UNIQUE de
+      // la columna, rompiendo cualquier reasignacion posterior).
       if (productoData.recetaId !== undefined) {
         if (productoData.recetaId === null) {
-          producto.receta = undefined;
+          (producto as any).receta = null;
         } else {
           const recetaRepository = dataSource.getRepository(Receta);
           const receta = await recetaRepository.findOneBy({ id: productoData.recetaId });
