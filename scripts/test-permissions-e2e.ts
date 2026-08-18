@@ -91,6 +91,18 @@ async function asserPermissionOk(
   else fail(name, `Esperado ok=true, recibido ${JSON.stringify(r)}`);
 }
 
+async function asserPermissionBloqueadoPorPassword(
+  dataSource: DataSource,
+  user: Usuario,
+  permiso: string,
+  name: string,
+) {
+  clearPermissionCache(user.id);
+  const r = await checkPermission(dataSource, () => user, permiso);
+  if (!r.ok && r.code === 'FORBIDDEN' && r.message.includes('DEBE CAMBIAR SU CONTRASEÑA')) pass(name);
+  else fail(name, `Esperado FORBIDDEN por contraseña temporal, recibido ${JSON.stringify(r)}`);
+}
+
 async function asserPermissionDenied(
   dataSource: DataSource,
   user: Usuario,
@@ -212,6 +224,21 @@ async function main() {
   await usuarioRoleRepo.save(usuarioRoleRepo.create({ usuario: cajero, role: rolCajero }));
   console.log(`[setup] Cajero id=${cajero.id} creado con rol CAJERO.`);
 
+  // Cajero con contraseña temporal (como lo deja el reset administrativo o la
+  // creación rápida de usuario): mismos roles, pero `mustChangePassword=true`.
+  const personaTemporal = await personaRepo.save(personaRepo.create({
+    nombre: 'CAJERO', apellido: 'TEMPORAL', activo: true,
+  } as any));
+  const cajeroTemporal = await userRepo.save(userRepo.create({
+    persona: personaTemporal,
+    nickname: 'cajero_temporal',
+    password: await hashPassword('temporal'),
+    activo: true,
+    mustChangePassword: true,
+  }));
+  await usuarioRoleRepo.save(usuarioRoleRepo.create({ usuario: cajeroTemporal, role: rolCajero }));
+  console.log(`[setup] Cajero temporal id=${cajeroTemporal.id} creado (mustChangePassword=true).`);
+
   // Registrar todos los handlers contra el ipcMain mock — esto los carga
   // en handlerRegistry para que podamos invocarlos directamente.
   let currentUser: Usuario | null = admin;
@@ -222,6 +249,35 @@ async function main() {
   console.log(`[setup] ${handlerRegistry.size} handlers registrados.\n`);
 
   // ===================== TESTS =====================
+  console.log('\n=== Tests contraseña temporal (mustChangePassword) ===\n');
+
+  // El gate de contraseña temporal corta ANTES de mirar permisos: un cajero con
+  // contraseña temporal tiene VENTAS_PDV y aun así no puede operar. Este es el
+  // mecanismo del bug de agosto 2026 (usuario nuevo no podía cargar ítems).
+  await asserPermissionBloqueadoPorPassword(
+    dataSource, cajeroTemporal, 'VENTAS_PDV',
+    'cajero con contraseña temporal ✗ VENTAS_PDV (bloquea aunque tenga el permiso)');
+
+  // El admin del seed también nace con contraseña temporal. Lo primero que hace
+  // cualquier instalación real es cambiarla — acá lo hacemos con el handler
+  // self-service para que el resto de la batería pueda testear permisos.
+  {
+    const changePassword = handlerRegistry.get('change-password');
+    const r = changePassword
+      ? await changePassword({ sender: { id: -1 } }, {
+          usuarioId: admin.id, currentPassword: 'admin', newPassword: 'admin123',
+        })
+      : null;
+    if (r?.success) pass('change-password del admin (baja mustChangePassword)');
+    else fail('change-password del admin', `respuesta: ${JSON.stringify(r)}`);
+    clearPermissionCache(admin.id);
+    const adminRecargado = await userRepo.findOne({ where: { id: admin.id } });
+    if (adminRecargado?.mustChangePassword === false) pass('admin quedó con mustChangePassword=false en BD');
+    else fail('admin quedó con mustChangePassword=false en BD', `valor: ${adminRecargado?.mustChangePassword}`);
+    // `currentUser` en memoria es el mismo objeto que usa checkPermission.
+    (admin as any).mustChangePassword = false;
+  }
+
   console.log('\n=== Tests checkPermission directos ===\n');
 
   // Admin tiene todos los permisos
@@ -375,11 +431,36 @@ async function main() {
   const loginAdmin = await fastify.inject({
     method: 'POST',
     url: '/api/auth/login',
-    payload: { nickname: 'admin', password: 'admin' },
+    payload: { nickname: 'admin', password: 'admin123' },
   });
   const adminToken = loginAdmin.statusCode === 200 ? JSON.parse(loginAdmin.body).accessToken : null;
   if (adminToken) pass('HTTP login admin (200 + accessToken)');
   else fail('HTTP login admin', `status=${loginAdmin.statusCode} body=${loginAdmin.body}`);
+
+  // El payload de login DEBE traer `mustChangePassword`: es lo que hace que la
+  // PWA mobile / web /admin / desktop mode=client fuercen el cambio. Sin este
+  // campo el usuario entraba y después TODO handler le devolvía 403.
+  {
+    const usuarioAdmin = loginAdmin.statusCode === 200 ? JSON.parse(loginAdmin.body).usuario : null;
+    if (usuarioAdmin?.mustChangePassword === false) pass('HTTP login admin expone mustChangePassword=false');
+    else fail('HTTP login admin expone mustChangePassword=false', `usuario=${JSON.stringify(usuarioAdmin)}`);
+  }
+
+  // Login del usuario con contraseña temporal: entra (200) pero la bandera viaja
+  // en true, y cualquier RPC suyo rebota con el motivo real.
+  const loginTemporal = await fastify.inject({
+    method: 'POST',
+    url: '/api/auth/login',
+    payload: { nickname: 'cajero_temporal', password: 'temporal' },
+  });
+  const temporalBody = loginTemporal.statusCode === 200 ? JSON.parse(loginTemporal.body) : null;
+  const temporalToken = temporalBody?.accessToken || null;
+  if (temporalBody?.usuario?.mustChangePassword === true) {
+    pass('HTTP login con contraseña temporal expone mustChangePassword=true');
+  } else {
+    fail('HTTP login con contraseña temporal expone mustChangePassword=true',
+      `status=${loginTemporal.statusCode} body=${loginTemporal.body}`);
+  }
 
   // Login cajero via HTTP
   const loginCajero = await fastify.inject({
@@ -417,6 +498,16 @@ async function main() {
     fail(name, `Esperado 403 PERMISO REQUERIDO, recibido status=${r.status} body=${JSON.stringify(r.body).slice(0, 200)}`);
   }
 
+  /** Canal de infraestructura: /api/rpc lo bloquea antes del handler. */
+  async function asserRpcCanalBloqueado(token: string | null, method: string, name: string) {
+    const r = await rpcCall(token, method, [{}]);
+    if (r.status === 403 && typeof r.body?.error === 'string' && r.body.error.includes('channel_bloqueado_para_http')) {
+      pass(name);
+      return;
+    }
+    fail(name, `Esperado 403 channel_bloqueado_para_http, recibido status=${r.status} body=${JSON.stringify(r.body).slice(0, 200)}`);
+  }
+
   async function asserRpcOk(token: string | null, method: string, params: any[], name: string) {
     const r = await rpcCall(token, method, params);
     if (r.status === 200) {
@@ -447,7 +538,9 @@ async function main() {
   if (cajeroToken) {
     await asserRpcDenied(cajeroToken, 'pagar-liquidacion-sueldo', [999, {}], 'HTTP cajero ✗ pagar-liquidacion-sueldo');
     await asserRpcDenied(cajeroToken, 'anular-compra', [999, 'X'], 'HTTP cajero ✗ anular-compra');
-    await asserRpcDenied(cajeroToken, 'backup-create', [{}], 'HTTP cajero ✗ backup-create');
+    // `backup-create` está en BLOCKED_CHANNELS: /api/rpc lo corta antes de
+    // llegar al handler, para cualquier usuario (ver rpc-router.ts).
+    await asserRpcCanalBloqueado(cajeroToken, 'backup-create', 'HTTP cajero ✗ backup-create (canal bloqueado)');
     await asserRpcDenied(cajeroToken, 'create-gasto', [{}], 'HTTP cajero ✗ create-gasto');
     await asserRpcDenied(cajeroToken, 'anular-caja-mayor-movimiento', [999, 'X'], 'HTTP cajero ✗ anular-caja-mayor-movimiento');
     await asserRpcDenied(cajeroToken, 'create-cuenta-bancaria', [{}], 'HTTP cajero ✗ create-cuenta-bancaria');
@@ -462,7 +555,7 @@ async function main() {
 
   // Admin (JWT) → handlers protegidos deben pasar autorizacion
   if (adminToken) {
-    await asserRpcOk(adminToken, 'backup-create', [{}], 'HTTP admin → backup-create');
+    await asserRpcCanalBloqueado(adminToken, 'backup-create', 'HTTP admin ✗ backup-create (canal bloqueado, ni el admin pasa)');
     await asserRpcOk(adminToken, 'create-producto', [{}], 'HTTP admin → create-producto');
     await asserRpcOk(adminToken, 'update-empresa', [{}], 'HTTP admin → update-empresa');
     await asserRpcOk(adminToken, 'create-gasto', [{}], 'HTTP admin → create-gasto');
@@ -472,6 +565,19 @@ async function main() {
   if (cajeroToken) {
     await asserRpcOk(cajeroToken, 'create-cliente', [{}], 'HTTP cajero → create-cliente (CLIENTES_GESTIONAR)');
     await asserRpcOk(cajeroToken, 'create-asistencia', [{}], 'HTTP cajero → create-asistencia (RRHH_ASISTENCIA_REGISTRAR)');
+  }
+
+  // Cajero con contraseña temporal (JWT) → aunque el rol le da VENTAS_PDV, el
+  // gate de contraseña lo corta. Este es exactamente el síntoma reportado:
+  // "no se pudo cargar el ítem" al agregar un producto a una mesa.
+  if (temporalToken) {
+    const r = await rpcCall(temporalToken, 'createVentaItem', [{}]);
+    if (r.status === 403 && typeof r.body?.error === 'string' && r.body.error.includes('DEBE CAMBIAR SU CONTRASEÑA')) {
+      pass('HTTP cajero temporal ✗ createVentaItem (403 por contraseña temporal)');
+    } else {
+      fail('HTTP cajero temporal ✗ createVentaItem (403 por contraseña temporal)',
+        `recibido status=${r.status} body=${JSON.stringify(r.body).slice(0, 200)}`);
+    }
   }
 
   await fastify.close();

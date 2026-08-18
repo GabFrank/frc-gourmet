@@ -97,6 +97,12 @@ Cada 5 minutos el sistema actualiza tu "última actividad" para mantener la sesi
 
 Si cerrás sesión, todas tus pestañas abiertas se cierran y volvés a la pantalla de login.
 
+## Cambiar tu contraseña
+
+Menú de usuario 👤 (arriba a la derecha) → **Cambiar mi contraseña**. Te pide la contraseña actual y la nueva (mínimo 6 caracteres). También lo encontrás con el buscador global (Ctrl+Espacio, "contraseña"). En la app mobile: menú → Cambiar contraseña.
+
+**Contraseña temporal:** si el admin te creó el usuario o te reseteó la contraseña, entrás con un código temporal y el sistema te obliga a cambiarla apenas iniciás sesión. **Hasta que la cambies no vas a poder guardar nada** — cargar un ítem a una mesa, cobrar, etc. van a fallar. Si ya entraste y no te apareció el diálogo, cambiala desde el menú de usuario.
+
 ## Atajos de teclado generales
 
 | Tecla | Función |

@@ -49,6 +49,7 @@
     "test:operacion-financiera": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-operacion-financiera-validacion-e2e.ts",
     "test:fichaje-facial": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-fichaje-facial.ts",
     "test:menu-tree": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-menu-tree.ts",
+    "test:permisos": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-permissions-e2e.ts",
     "test:mobile": "ng test mobile --watch=false",
     "build:storefront": "ng build storefront --base-href /tienda/",
     "lint": "ng lint",

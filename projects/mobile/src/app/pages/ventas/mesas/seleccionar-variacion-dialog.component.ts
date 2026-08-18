@@ -449,6 +449,9 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
           },
           width: '340px',
           maxHeight: '85vh',
+          // Sin autofocus: en el celular, enfocar un campo de texto abre el
+          // teclado del sistema y tapa media pantalla apenas se abre el diálogo.
+          autoFocus: false,
         })
         .afterClosed(),
     )) as AgregarItemResult | undefined;
