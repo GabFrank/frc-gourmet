@@ -363,6 +363,15 @@ Producto tipo **`BUFFET_POR_PESO`** (Fases 1-4, merged 2026). Flujo `addBuffetPo
 
 **Escaneo de etiqueta EAN-13 de balanza** (`tryHandleBalanzaScan` → `parseEtiquetaBalanza`): usa config de `PdvConfig` (`balanzaPrefijo` def '2', `balanzaModo` PESO/PRECIO, `balanzaFactorPeso`). Si el código resuelve a un producto buffet, agrega el item con el peso de la etiqueta sin abrir el buscador.
 
+> **Foco del diálogo cuando el peso vino escaneado (2026-08).** El lector cierra el
+> escaneo con un **Enter**, que es justo lo que abre el diálogo. Por eso el foco NO
+> arranca en AGREGAR: se queda en el campo de peso (donde un Enter suelto no hace
+> nada, porque el diálogo no tiene `<form>`) y recién a los `FOCO_AGREGAR_DELAY_MS`
+> (400 ms) pasa a AGREGAR, para que el cajero confirme con Enter. Sólo pasa cuando
+> `pesoInicialGramos > 0`; abierto a mano, el foco se queda donde hay que escribir.
+> **Si algún día se agrega un botón antes del campo de peso, o un `<form>`, revisá
+> esto**: el Enter del lector volvería a disparar la acción sola.
+
 **Backend**: descuento de stock por `processBuffetPorPeso` (híbrido: por receta si `descuentaPorReceta`, si no por kg neto del propio producto; stock se carga vía Producción). Métricas en `get-buffet-metricas` → dashboard buffet. Detalle → `docs/buffet-por-kilo.md`.
 
 ### 4. Editar item
