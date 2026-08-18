@@ -115,6 +115,14 @@ export function registerAuthRoutes(fastify: FastifyInstance, dataSource: DataSou
         id: usuario.id,
         nickname: usuario.nickname,
         persona: usuario.persona,
+        // P0-3: el cliente HTTP (PWA mobile, web /admin, desktop mode=client)
+        // necesita esta bandera para forzar el cambio de la contraseña temporal
+        // — el guard de la PWA y el diálogo bloqueante del login la leen del
+        // usuario devuelto acá. Sin ella el usuario entraba normal pero DESPUÉS
+        // todo handler con `ensurePermission` fallaba con FORBIDDEN
+        // ('DEBE CAMBIAR SU CONTRASEÑA ANTES DE CONTINUAR'), porque el
+        // rpc-router sí carga el Usuario completo desde la BD.
+        mustChangePassword: usuario.mustChangePassword === true,
       },
       accessToken,
       refreshToken: refresh.token,

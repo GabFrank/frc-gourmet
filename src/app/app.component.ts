@@ -102,6 +102,7 @@ import { RepositoryService } from './database/repository.service';
 import { UpdateService } from './services/update.service';
 import { PrinterEventsService } from './services/printer-events.service';
 import { UpdateChannelDialogComponent } from './shared/components/update-channel-dialog/update-channel-dialog.component';
+import { ForceChangePasswordDialogComponent } from './auth/force-change-password-dialog/force-change-password-dialog.component';
 import { MusicaControlDialogComponent } from './shared/components/musica-control-dialog/musica-control-dialog.component';
 import { MusicaService } from './services/musica.service';
 import { EmpresaService } from './shared/services/empresa.service';
@@ -602,6 +603,20 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     this.dialog.open(UpdateChannelDialogComponent, {
       width: '520px',
       maxHeight: '90vh',
+    });
+  }
+
+  /**
+   * Cambio de contraseña self-service. Hasta ahora el único acceso al handler
+   * `change-password` era el diálogo forzado del login, así que un usuario con
+   * contraseña temporal que ya había entrado no tenía dónde cambiarla.
+   */
+  openCambiarPassword(): void {
+    const usuario = this.authService.currentUser;
+    if (!usuario?.id) return;
+    this.dialog.open(ForceChangePasswordDialogComponent, {
+      width: '480px',
+      data: { usuarioId: usuario.id, nickname: usuario.nickname, modo: 'self' },
     });
   }
 

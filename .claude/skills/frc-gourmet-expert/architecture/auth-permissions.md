@@ -21,7 +21,7 @@ Persona (entidad raíz, datos personales)
 - `persona_id` FK (M:1)
 - `nickname` UNIQUE
 - `password` — **hash bcrypt** (`bcryptjs`). El login compara con `verifyPassword(plain, stored)` (`electron/utils/password.utils.ts`). Al arranque `migratePlaintextPasswords()` re-hashea cualquier password plano residual.
-- `mustChangePassword` — fuerza cambio de password en el próximo login (el admin default `admin/admin` arranca con este flag).
+- `mustChangePassword` — fuerza cambio de password en el próximo login. Lo prende el admin default `admin/admin` del seed, la **creación rápida de usuario** y el **reset administrativo** (contraseña temporal). Ver "Contraseña temporal" abajo — la bandera **bloquea TODOS los handlers con `ensurePermission`**, no sólo la navegación.
 - `activo`
 
 **LoginSession** (`auth/login-session.entity.ts`):
@@ -59,6 +59,21 @@ Persona (entidad raíz, datos personales)
 **Refresh tokens:** el modo server (Fastify + `@fastify/jwt`) emite access + refresh tokens. En modo `client`/PWA el access token va en `Authorization: Bearer` a `/api/rpc` y el shim hace refresh automático ante 401.
 
 **Validación en backend:** en modo server, el `jwt.verify` corre en el middleware de Fastify y el usuario del token se propaga vía `withRequestUser(...)` (AsyncLocalStorage) a los handlers. En desktop standalone el handler confía en `getCurrentUser()` del main process. En ambos casos, los handlers sensibles **revalidan permisos** (`ensurePermission`).
+
+## Contraseña temporal (`mustChangePassword`)
+
+Se prende en tres lugares: el seed del admin (`seed-system.ts`), la **creación rápida de usuario** (`create-usuario-rapido-dialog`) y el **reset administrativo** (`reset-password-dialog`, que genera un código numérico temporal).
+
+Mientras la bandera está prendida, `checkPermission` (`electron/utils/auth.utils.ts`) devuelve **FORBIDDEN `DEBE CAMBIAR SU CONTRASEÑA ANTES DE CONTINUAR`** en *todo* handler que llame `ensurePermission` — no es sólo una restricción de navegación. Un usuario en ese estado puede loguearse y ver la app, pero cada acción que muta datos falla (ej. `createVentaItem` → "no se pudo agregar el ítem"). `change-password` es self-service y no pasa por el guard, así que siempre puede cumplir.
+
+Dónde se cambia:
+
+| Cliente | Camino |
+|---|---|
+| Desktop / web `/admin` | Diálogo bloqueante post-login (`ForceChangePasswordDialogComponent`, `modo: 'forzado'`) **o** menú de usuario → "Cambiar mi contraseña" (`modo: 'self'`, también en el buscador global, hoja `cambiar-password`) |
+| PWA mobile | `authGuard` redirige a `/cambiar-password` |
+
+> **Bug corregido (2026-08):** `/api/auth/login` devolvía un `usuario` recortado **sin** `mustChangePassword`, así que en PWA mobile, web `/admin` y desktop en `mode=client` ni el guard ni el diálogo se disparaban. El usuario entraba normal y después TODO fallaba con un error genérico, porque el `rpc-router` sí carga el `Usuario` completo de la BD y el guard lo bloqueaba. La ruta ahora devuelve la bandera. Si tocás el payload de login, **no la saques**.
 
 ## Sesión
 
@@ -156,6 +171,7 @@ Pasada como callback a cada handler. Los handlers la usan para popular `createdB
 | Refresh tokens | ✅ en modo server/client |
 | Validación de permisos en backend | ✅ `ensurePermission`/`checkPermission` en handlers sensibles |
 | Forzar cambio de password (admin default) | ✅ `mustChangePassword` + dialog bloqueante post-login |
+| Cambio de contraseña self-service | ✅ menú de usuario → "Cambiar mi contraseña" (desktop/web) y `/cambiar-password` (PWA) |
 | Recuperación de contraseña | ❌ |
 | Bloqueo por intentos fallidos | ❌ |
 | 2FA / MFA | ❌ |
