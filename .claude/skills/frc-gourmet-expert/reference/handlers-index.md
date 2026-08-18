@@ -52,7 +52,7 @@
 | **productos.handler.ts** | 2275 | Familia, Subfamilia, Producto, Presentacion, CodigoBarra, PrecioVenta, PrecioCosto, Adicional, Observacion + search por modo venta/compra |
 | **qr-upload.handler.ts** | ~110 | Emparejamiento QR → subida desde la PWA mobile (`qr-upload-{create-session,enable-remote,poll,close}`). Store en `server/qr-upload-store.ts`, rutas Fastify en `server/qr-upload-routes.ts`, arranque on-demand en `server/pairing.ts`. Detalles → [domains/archivos-y-adjuntos.md](../domains/archivos-y-adjuntos.md) §8 |
 | **receta-presentacion.handler.ts** | 556 | Helpers `generarNombreVariacion`, `generarSKU` usados desde recetas.handler (NO se registra como handler propio) |
-| **recetas.handler.ts** | 2427 | Receta, RecetaIngrediente*, RecetaAdicionalVinculacion **+ RecetaPresentacion (variaciones) + Sabores** (unificado) |
+| **recetas.handler.ts** | 2427 | Receta, RecetaIngrediente*, RecetaAdicionalVinculacion **+ RecetaPresentacion (variaciones) + Sabores** (unificado) + vínculo producto↔receta (`get-recetas-asignables`, `vincular-receta-a-producto`, `desvincular-receta-de-producto`) |
 | **remote-tunnel.handler.ts** | 172 | Acceso remoto vía Cloudflare quick tunnel |
 | **reportes.handler.ts** | 73 | Reportes de cierre de mes: `get-reporte-ventas-cierre`, `get-reporte-finanzas-cierre`, `enviar-reporte-whatsapp`. Delega en `reportes-{ventas,finanzas}.helper.ts` + `reportes-periodo.util.ts`. → [domains/reportes.md](../domains/reportes.md) |
 | **reportes-rrhh.handler.ts** | 472 | Exports PDF/Excel (pdfmake + exceljs) |
@@ -136,6 +136,7 @@ Los handlers sensibles llaman `ensurePermission(dataSource, getCurrentUser, 'COD
 - Cobro parcial: `getEstadoCobroVenta`/`registrarCobroParcial`/`anularCobroParcial` (en `ventas.handler.ts`).
 - Cajas: `get-cajas-abiertas`, `generar-retiro-cierre-caja`, `puede-ajustar-caja`/`finalizar-ajuste-caja`.
 - Sabores: `get-all-sabores`, `reparar-recetas-compartidas` (en `recetas.handler.ts`).
+- Vínculo producto↔receta: `get-recetas-asignables`, `vincular-receta-a-producto`, `desvincular-receta-de-producto` (en `recetas.handler.ts`, perm `PRODUCTOS_GESTIONAR`). Únicos caminos válidos: **no** encadenar `update-producto` + `update-receta`. → [domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
 - Login QR: rutas Fastify `electron/server/device-auth-routes.ts` (`/api/auth/device/*`).
 - Rutas Fastify: `electron/server/public-routes.ts` (`/pub/*`), `kds-sse-routes.ts` (`/api/kds/stream`), static `/admin/` + `/tienda/`.
 - Impresoras: `list-system-printers`, `scan-network-printers`, `test-printer-connection`, `print-cierre-caja`.
