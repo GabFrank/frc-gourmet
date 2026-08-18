@@ -61,6 +61,17 @@ export class AtajoProductosDialogComponent implements OnInit {
     try {
       const items = await firstValueFrom(this.repositoryService.getPdvAtajoItemProductos(this.data.atajoItemId));
       this.productos = items.filter((item: any) => item.activo && item.producto);
+      // Precio pre-computado (el template no llama funciones). Los productos con
+      // variación no tienen un precio único: muestran el rango "desde – hasta"
+      // de sus combinaciones sabor × tamaño.
+      for (const item of this.productos) {
+        const resumen = item.producto?.variacionResumen;
+        const desde = Number(resumen?.precioDesde) || 0;
+        const hasta = Number(resumen?.precioHasta) || 0;
+        item.precio = desde > 0 ? desde : this.getPrice(item);
+        item.precioHasta = hasta;
+        item.esRangoVariacion = desde > 0 && hasta > desde;
+      }
     } catch (error) {
       console.error('Error loading atajo productos:', error);
     } finally {
@@ -143,7 +154,7 @@ export class AtajoProductosDialogComponent implements OnInit {
     }
   }
 
-  getPrice(item: any): number {
+  private getPrice(item: any): number {
     const producto = item.producto;
     // For elaborados/combos: use precioDirecto
     if (producto?.precioDirecto) {
