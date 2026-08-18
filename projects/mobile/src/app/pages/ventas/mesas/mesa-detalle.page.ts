@@ -428,6 +428,9 @@ export class MesaDetallePage implements OnInit {
             },
             width: '340px',
             maxHeight: '85vh',
+            // Sin autofocus: enfocar un campo de texto abre el teclado del
+            // sistema y tapa los ítems del diálogo apenas se abre.
+            autoFocus: false,
           })
           .afterClosed(),
       )) as AgregarItemResult | 'QUITAR' | undefined;

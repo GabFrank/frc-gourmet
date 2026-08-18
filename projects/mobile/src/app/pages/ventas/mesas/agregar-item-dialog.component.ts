@@ -161,7 +161,14 @@ interface IngredienteCambiableVM {
         </div>
       </ng-container>
 
-      <mat-form-field appearance="outline" class="full">
+      <!--
+        La nota va ÚLTIMA y sólo después de cargar. Mientras se cargaban
+        ingredientes/adicionales/observaciones, este textarea era el único campo
+        presente: el diálogo le daba el foco, se abría el teclado del sistema y
+        tapaba los ítems que aparecían un instante después. Además del ngIf, los
+        tres open() de este diálogo pasan autoFocus false.
+      -->
+      <mat-form-field appearance="outline" class="full" *ngIf="!cargando">
         <mat-label>Nota libre (opcional)</mat-label>
         <textarea matInput [(ngModel)]="observacionLibre" rows="2" maxlength="500"></textarea>
       </mat-form-field>

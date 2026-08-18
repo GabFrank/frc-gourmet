@@ -68,6 +68,16 @@ Notificaciones, Cajas, CxC, Compras, Proveedores, Productos, Comisiones (reglas/
 **Diferido:** Sabores/Recetas (variaciones), Monedas (sin handler create),
 Préstamos, Config RRHH.
 
+> ⚠️ **Diálogos con campos de texto en el celular: `autoFocus: false`.** `MatDialog`
+> enfoca por defecto el primer elemento tabbable al abrir. En un celular eso abre el
+> teclado del sistema, que tapa media pantalla — y si el diálogo carga sus datos
+> async, el único campo presente al abrir suele ser justamente el input de texto, así
+> que el teclado salta y tapa los ítems que aparecen un instante después. Regla:
+> `autoFocus: false` en el `open()` (ya lo hacían `home.page` y `qr-upload.page`), y
+> los campos de texto **al final** del template y detrás de `*ngIf="!cargando"`.
+> Excepción: un diálogo cuyo único propósito es escribir algo (peso del buffet,
+> observación de la comanda) puede querer el foco desde el arranque.
+
 ## Ventas mobile: el flow de pizza está completo (2026-08-17)
 
 `projects/mobile/src/app/pages/ventas/mesas/` replica el flow del PdV desktop para
