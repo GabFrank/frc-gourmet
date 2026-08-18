@@ -535,36 +535,8 @@ export class TomarPedidoPage implements OnInit {
         } as any),
       );
 
-      // Adicionales y observaciones se crean tras el item (necesitan su id).
-      const itemId = item?.id;
-      if (itemId) {
-        for (const ad of sel.adicionales) {
-          await firstValueFrom(
-            this.repo.createVentaItemAdicional({
-              ventaItem: { id: itemId },
-              adicional: { id: ad.id },
-              precioCobrado: ad.precio,
-              cantidad: 1,
-            }),
-          );
-        }
-        for (const obsId of sel.observaciones) {
-          await firstValueFrom(
-            this.repo.createVentaItemObservacion({
-              ventaItem: { id: itemId },
-              observacion: { id: obsId },
-            }),
-          );
-        }
-        if (sel.observacionLibre) {
-          await firstValueFrom(
-            this.repo.createVentaItemObservacion({
-              ventaItem: { id: itemId },
-              observacionLibre: sel.observacionLibre,
-            }),
-          );
-        }
-      }
+      // La personalización se crea tras el item (necesita su id).
+      if (item?.id) await this.persistirPersonalizacion(item.id, sel);
 
       const precioLinea = p.precio + sel.precioAdicionalTotal;
       this.pedido.unshift({ nombre: p.nombre, cantidad: sel.cantidad, precio: precioLinea });
@@ -574,6 +546,83 @@ export class TomarPedidoPage implements OnInit {
       this.snack.open(mensajeDeError(e, 'No se pudo agregar el producto'), 'CERRAR', { duration: 6000 });
     } finally {
       this.guardando = false;
+    }
+  }
+
+  /**
+   * Persiste la personalización de un ítem: ingredientes quitados/cambiados,
+   * adicionales, observaciones y nota libre. Réplica de `persistirPersonalizacion`
+   * del PdV desktop.
+   *
+   * `ventaItemSaborId` sólo viaja en productos con variación (pizza): la
+   * personalización pertenece a una mitad concreta, aunque todas las filas
+   * cuelguen igual del `VentaItem`.
+   *
+   * La nota libre va en su propia fila y **sin** `observacion`: el backend la
+   * cuelga del sentinel NOTA DEL CLIENTE.
+   */
+  private async persistirPersonalizacion(
+    ventaItemId: number,
+    sel: {
+      adicionales: { id: number; precio: number }[];
+      observaciones: number[];
+      observacionLibre?: string;
+      ingredientesRemovidos?: number[];
+      ingredientesIntercambiados?: { recetaIngredienteId: number; reemplazoProductoId: number }[];
+    },
+    ventaItemSaborId?: number,
+  ): Promise<void> {
+    const conSabor = ventaItemSaborId ? { ventaItemSabor: { id: ventaItemSaborId } } : {};
+
+    for (const recetaIngredienteId of sel.ingredientesRemovidos || []) {
+      await firstValueFrom(
+        this.repo.createVentaItemIngredienteModificacion({
+          ventaItem: { id: ventaItemId },
+          recetaIngrediente: { id: recetaIngredienteId },
+          tipoModificacion: 'REMOVIDO',
+          ...conSabor,
+        }),
+      );
+    }
+    for (const swap of sel.ingredientesIntercambiados || []) {
+      await firstValueFrom(
+        this.repo.createVentaItemIngredienteModificacion({
+          ventaItem: { id: ventaItemId },
+          recetaIngrediente: { id: swap.recetaIngredienteId },
+          tipoModificacion: 'INTERCAMBIADO',
+          ingredienteReemplazo: { id: swap.reemplazoProductoId },
+          ...conSabor,
+        }),
+      );
+    }
+    for (const ad of sel.adicionales) {
+      await firstValueFrom(
+        this.repo.createVentaItemAdicional({
+          ventaItem: { id: ventaItemId },
+          adicional: { id: ad.id },
+          precioCobrado: ad.precio,
+          cantidad: 1,
+          ...conSabor,
+        }),
+      );
+    }
+    for (const obsId of sel.observaciones) {
+      await firstValueFrom(
+        this.repo.createVentaItemObservacion({
+          ventaItem: { id: ventaItemId },
+          observacion: { id: obsId },
+          ...conSabor,
+        }),
+      );
+    }
+    if (sel.observacionLibre) {
+      await firstValueFrom(
+        this.repo.createVentaItemObservacion({
+          ventaItem: { id: ventaItemId },
+          observacionLibre: sel.observacionLibre,
+          ...conSabor,
+        }),
+      );
     }
   }
 
@@ -689,37 +738,9 @@ export class TomarPedidoPage implements OnInit {
               costoReferencia: s.costoReferencia,
             }),
           );
-          // Personalización por-sabor: adicionales/observaciones con FK ventaItemSabor.
-          const saborId = savedSabor?.id;
-          for (const ad of s.adicionales) {
-            await firstValueFrom(
-              this.repo.createVentaItemAdicional({
-                ventaItem: { id: itemId },
-                adicional: { id: ad.id },
-                precioCobrado: ad.precio,
-                cantidad: 1,
-                ...(saborId ? { ventaItemSabor: { id: saborId } } : {}),
-              }),
-            );
-          }
-          for (const obsId of s.observaciones) {
-            await firstValueFrom(
-              this.repo.createVentaItemObservacion({
-                ventaItem: { id: itemId },
-                observacion: { id: obsId },
-                ...(saborId ? { ventaItemSabor: { id: saborId } } : {}),
-              }),
-            );
-          }
-          if (s.observacionLibre) {
-            await firstValueFrom(
-              this.repo.createVentaItemObservacion({
-                ventaItem: { id: itemId },
-                observacionLibre: s.observacionLibre,
-                ...(saborId ? { ventaItemSabor: { id: saborId } } : {}),
-              }),
-            );
-          }
+          // Personalización por-sabor: todo cuelga del ítem, con FK al sabor para
+          // saber a qué mitad corresponde (igual que el PdV desktop).
+          await this.persistirPersonalizacion(itemId, s, savedSabor?.id);
         }
       }
 

@@ -461,11 +461,11 @@
                       <ng-container *ngFor="let mod of item.ingredientesModificados">
                         <span class="mod-chip removido" *ngIf="mod.tipoModificacion === 'REMOVIDO'">
                           <mat-icon class="mod-chip-icon">remove_circle</mat-icon>
-                          SIN {{ mod.recetaIngrediente?.ingrediente?.nombre }}
+                          SIN {{ mod.recetaIngrediente?.ingrediente?.nombre || mod.recetaIngrediente?.descripcion }}
                         </span>
                         <span class="mod-chip intercambiado" *ngIf="mod.tipoModificacion === 'INTERCAMBIADO'">
                           <mat-icon class="mod-chip-icon">swap_horiz</mat-icon>
-                          {{ mod.recetaIngrediente?.ingrediente?.nombre }} → {{ mod.ingredienteReemplazo?.nombre }}
+                          {{ mod.recetaIngrediente?.ingrediente?.nombre || mod.recetaIngrediente?.descripcion }} → {{ mod.ingredienteReemplazo?.nombre }}
                         </span>
                       </ng-container>
                     </div>
@@ -491,7 +491,7 @@
                     <div class="detail-section-chips">
                       <span *ngFor="let ov of item.observacionesVinculadas" class="mod-chip observacion">
                         <mat-icon class="mod-chip-icon">comment</mat-icon>
-                        {{ ov.observacion?.descripcion || ov.observacionLibre }}
+                        {{ ov.observacionLibre || ov.observacion?.descripcion }}
                       </span>
                     </div>
                   </div>

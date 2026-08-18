@@ -150,11 +150,49 @@ REMOVIDO: "sin tomate". INTERCAMBIADO: "Mozzarella → Queso de Cabra" (ingredie
 ```typescript
 {
   ventaItem_id (CASCADE)
-  observacion_id: Observacion    // predefinida (catálogo)
+  observacion_id: Observacion    // predefinida (catálogo) — NOT NULL
   observacionLibre: varchar       // texto libre
   ventaItemSabor_id nullable
 }
 ```
+
+### Nota libre: el sentinel `NOTA DEL CLIENTE` (2026-08)
+
+`observacion_id` es **NOT NULL** en las dos baselines, así que una nota escrita a
+mano no puede guardarse "sin observación". La única forma soportada:
+
+- El caller manda `createVentaItemObservacion({ ventaItem, observacionLibre })`
+  **sin** `observacion`, y el handler cuelga la fila de la `Observacion` sentinel
+  `NOTA DEL CLIENTE` (`electron/utils/observacion-libre.utils.ts` →
+  `ensureObservacionNotaLibreId`, que la crea si no existe). También normaliza a
+  UPPERCASE y corta a 500. Una llamada sin observación **y** sin nota se rechaza.
+- **Una sola fila por nota.** Una observación del catálogo y la nota son filas
+  distintas: nunca meter la nota dentro de la fila de una observación elegida.
+- **Al renderizar gana `observacionLibre`**: `observacionLibre || observacion?.descripcion`.
+  Si se muestra la descripción primero, la nota queda invisible y el usuario ve
+  "NOTA DEL CLIENTE" en vez del texto.
+- **Al reabrir el diálogo de personalización**, las filas con `observacionLibre`
+  se excluyen de los chips seleccionados (si no, el sentinel vuelve marcado como
+  si el cajero lo hubiera elegido) y son las que precargan el textarea.
+- El handler las trata como **excluyentes**: mandar `observacion` del catálogo
+  **y** `observacionLibre` en la misma fila se rechaza, porque al renderizar la
+  nota tapa a la observación (era el bug viejo).
+- El sentinel está **excluido del catálogo** (`getObservaciones` /
+  `searchObservaciones` en `productos.handler.ts`): si se lo pudiera vincular a
+  un producto, aparecería como chip elegible y el cajero vería el texto interno
+  "NOTA DEL CLIENTE".
+- **Guardar observaciones desde un diálogo que las precarga = reconciliar**
+  (borrar las actuales y recrear la selección), nunca sólo insertar.
+  `personalizarItem()` y el flujo de mobile ya lo hacían; `editItem()` no, y
+  duplicaba todas las observaciones **en cada edición**, aunque sólo cambiaras la
+  cantidad (2×, 3×, …). Arreglado el 2026-08-17.
+
+Bug histórico (arreglado 2026-08-17): los tres sitios del PdV que persistían
+observaciones colgaban la nota de `observacionIds[0]` — duplicando esa
+observación en pantalla y en la comanda — o mandaban `observacion: null`, que
+reventaba contra el NOT NULL y perdía la nota en silencio. Además la comanda leía
+`o.descripcion`, campo inexistente en la entidad, así que la nota nunca se
+imprimía. Test: `npm run test:observacion-libre`.
 
 ## Mesas y sectores
 

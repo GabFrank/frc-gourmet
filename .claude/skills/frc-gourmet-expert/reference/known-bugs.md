@@ -52,6 +52,41 @@ Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo
 
 **Fix:** subir el budget a 15-20 KB en `angular.json`, o partir SCSS grandes en sub-archivos.
 
+### ✅ RESUELTO — Ingrediente opcional sin nombre en el PdV (2026-08-17)
+
+**Síntoma:** en el diálogo de personalización, el chip de un ingrediente
+OPCIONAL salía vacío (sólo el tilde), y el chip del detalle del ítem decía `SIN`
+sin el nombre. La comanda impresa, en cambio, decía `SIN ACEITUNAS`.
+
+**Causa:** `RecetaIngrediente.ingrediente` es nullable — el ingrediente puede
+estar cargado sólo con `descripcion`. La comanda y el KDS ya hacían
+`ingrediente?.nombre || recetaIngrediente?.descripcion`; al frontend le faltaba
+en 6 lugares (2 chips del diálogo, texto de ingredientes fijos, 2 chips del PdV,
+mobile — que además mostraba el literal `"ingrediente"`).
+
+**Gotcha:** cualquier vista nueva que muestre ingredientes necesita ese fallback.
+→ [../domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
+
+### ✅ RESUELTO — La nota libre del ítem se duplicaba o se perdía (2026-08-17)
+
+**Síntoma:** marcando una observación del catálogo (ej. `BUSCAR`) **y**
+escribiendo una nota libre, el ítem mostraba dos chips `BUSCAR` y la nota no
+aparecía; la comanda imprimía `>> BUSCAR` dos veces. Escribiendo **sólo** la
+nota, no se guardaba nada.
+
+**Causa:** `venta_item_observaciones.observacion_id` es NOT NULL. Los tres sitios
+del PdV que persistían observaciones colgaban la nota de `observacionIds[0]`
+(duplicando esa observación) o mandaban `observacion: null` (violaba el NOT NULL
+y el error moría en el `catch`). Encima el render priorizaba
+`observacion.descripcion` sobre `observacionLibre`, y la comanda leía
+`o.descripcion` — campo que no existe en la entidad — así que la nota nunca se
+imprimía.
+
+**Fix:** sentinel `NOTA DEL CLIENTE` resuelto en el backend
+(`electron/utils/observacion-libre.utils.ts`), una sola fila por nota, y
+`observacionLibre` primero al renderizar. Test: `npm run test:observacion-libre`.
+Detalle y reglas → [../domains/ventas-pdv.md](../domains/ventas-pdv.md).
+
 ## Backend / Datos
 
 ### CajaMayorMovimiento huérfano

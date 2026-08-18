@@ -96,11 +96,12 @@ export class EditVentaItemDialogComponent implements OnInit {
     // Cargar observaciones ya asignadas al item
     const assigned = await firstValueFrom(this.repositoryService.getObservacionesByVentaItem(item.id));
     assigned.forEach((a: any) => {
-      if (a.observacion?.id) {
-        this.selectedObservacionIds.add(a.observacion.id);
-      }
+      // La fila con nota libre cuelga del sentinel NOTA DEL CLIENTE: es la nota,
+      // no una observación del catálogo elegida por el cajero.
       if (a.observacionLibre) {
         this.observacionLibreControl.setValue(a.observacionLibre);
+      } else if (a.observacion?.id) {
+        this.selectedObservacionIds.add(a.observacion.id);
       }
     });
   }
