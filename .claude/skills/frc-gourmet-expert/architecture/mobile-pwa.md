@@ -80,7 +80,10 @@ Préstamos, Config RRHH.
 | `tomar-pedido.page.ts` → `persistirPersonalizacion()` | `pdv.component.ts` → `persistirPersonalizacion` / `…ConSabor` |
 | `variacion-precio.util.ts` (+ spec) | cálculo inline en el diálogo + `addVariacionItem` |
 
-Cubre: tamaño → sabores (tope `pizzaMaxSabores`, sin listar los que no tienen precio) →
+Cubre: tamaño → sabores (tope `Producto.maxVariacionesSimultaneas ?? pizzaMaxSabores`,
+que llega ya resuelto en `variacionConfig` del payload de búsqueda/atajos; con tope 1
+la selección es única y se oculta el "(hasta N)"; **si queda un solo sabor con precio
+se autoselecciona** sin abrir la personalización; los sabores sin precio no se listan) →
 personalización por sabor (**ingredientes opcionales quitados, cambiables
 intercambiados**, adicionales, observaciones, nota libre) → proporciones ajustables
 (±10% compensado, tope 10–90%) → cantidad. Persiste `VentaItem` + un `VentaItemSabor`
@@ -97,6 +100,10 @@ cobraba enteros, o sea cobraba de más que el desktop.
 re-personalizar (el producto con variación no tiene receta propia; las recetas viven
 por `RecetaPresentacion`). Desde el detalle de la mesa sólo se edita cantidad y
 observaciones. No es un gap de mobile.
+
+En la lista de productos, un `ELABORADO_CON_VARIACION` muestra el **rango**
+`desde – hasta` (campo `variacionResumen` del payload) más un detalle
+`N tamaños · N sabores`, y no muestra conversiones de moneda (serían ambiguas).
 
 Tests: `npm run test:variacion-mobile` (estructura persistida) y el spec del util
 dentro de `npm run test:mobile`. Checklist manual:

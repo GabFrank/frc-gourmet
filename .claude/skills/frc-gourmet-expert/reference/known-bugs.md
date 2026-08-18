@@ -52,6 +52,27 @@ Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo
 
 **Fix:** subir el budget a 15-20 KB en `angular.json`, o partir SCSS grandes en sub-archivos.
 
+### ✅ RESUELTO — Elaborados con variación mostraban precio `0` en las listas (2026-08-18)
+
+**Síntoma:** en el buscador del PdV, en el grid de atajos y en la búsqueda /
+atajos de la PWA, una pizza o una milanesa con variación aparecía con precio
+`0`, aunque sus variaciones tuvieran precio cargado.
+
+**Causa:** `search-productos-by-nombre` resolvía el precio con
+`innerJoin pv.receta … receta.productoVariacion`, y `getPdvAtajoItemProductos`
+con el 1:1 legacy `receta.producto_id`. Desde el refactor de julio el precio de
+una variación cuelga de **`PrecioVenta.receta_presentacion_id`**, así que ninguna
+de las dos consultas devolvía filas.
+
+**Fix:** helper único `electron/utils/variacion-precio.utils.ts`
+(`getRangosPrecioVariacion`, batch + fallback legacy); ambos handlers devuelven
+`variacionResumen` con el rango y `principalPrecio` pasa a ser la variación más
+barata. Las listas muestran `desde – hasta`.
+
+**Gotcha:** un producto con variación **no tiene un precio**; cualquier vista
+nueva que necesite mostrarlo debe usar ese helper, nunca `pv.receta_id`.
+→ [../domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
+
 ### ✅ RESUELTO — Ingrediente opcional sin nombre en el PdV (2026-08-17)
 
 **Síntoma:** en el diálogo de personalización, el chip de un ingrediente

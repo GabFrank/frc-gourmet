@@ -371,6 +371,65 @@ El precio de una variación vive en **`PrecioVenta.receta_presentacion_id`** (4�
 - **Escritura**: `create-precio-venta`/`update-precio-venta` aceptan `recetaPresentacionId` como 4ª rama; el flag `principal` se acota a esa `RecetaPresentacion`.
 - **Frontend**: `precio-venta-dialog`, `producto-sabores`, `variacion-dialog` y `variaciones-sabor-dialog` usan `relationField: 'recetaPresentacionId'`. Alinea gestión + PdV + storefront.
 
+## Config de variaciones POR PRODUCTO (2026-08)
+
+Antes, el máximo de sabores combinables y la estrategia de precio salían **sólo**
+de `PdvConfig` (`pizza_max_sabores` / `pizza_estrategia_precio`): una regla única
+para todo el local, con lo que una milanesa con variación heredaba el "mitad y
+mitad" de la pizza.
+
+Ahora `Producto` tiene dos columnas **nullable** (`null` = heredar el global, que
+es el estado de todo el catálogo ya cargado):
+
+| Columna | Entidad | Significado |
+|---|---|---|
+| `max_variaciones_simultaneas` | `Producto.maxVariacionesSimultaneas` | Sabores combinables por ítem. `1` = un solo sabor (sin mitad y mitad). |
+| `estrategia_precio_variacion` | `Producto.estrategiaPrecioVariacion` | `MAYOR_PRECIO` \| `PROMEDIO`. |
+
+- **Fuente única de resolución:** `electron/utils/variacion-config.utils.ts` →
+  `getVariacionConfig(dataSource, producto | id, global?)` y
+  `getVariacionConfigGlobal(dataSource)`. Valores inválidos (max < 1, estrategia
+  desconocida) se descartan y se hereda el global.
+- **`getPizzaConfig(dataSource, producto?)`** (`pedidos-online-config.handler.ts`)
+  ahora delega en ese helper: la carta online y la **validación server-side del
+  pedido** (`demasiados_sabores`) respetan el límite del producto.
+- **Payloads:** `search-productos-by-nombre` y `getPdvAtajoItemProductos`
+  devuelven `variacionConfig: { maxSabores, estrategia }` ya resuelta, para que
+  la PWA no tenga que consultarla aparte. El PdV desktop recarga el producto
+  completo antes de abrir el diálogo, así que lee las columnas directamente.
+- **UI:** campos en *Gestionar producto → Información general* (visibles sólo
+  para `ELABORADO_CON_VARIACION`); el detalle read-only del mobile los muestra.
+- Test: `npm run test:variacion-config`.
+
+## Precio de un producto con variación en las LISTAS (rango desde/hasta)
+
+Un `ELABORADO_CON_VARIACION` **no tiene un precio**: tiene uno por cada
+combinación sabor × tamaño. Las listas (buscador del PdV, grid de atajos,
+búsqueda y atajos de la PWA) mostraban `0` porque resolvían el precio por
+`PrecioVenta.receta_id` — o peor, por el 1:1 legacy `receta.producto_id` — y
+desde el refactor de julio el precio cuelga de `receta_presentacion_id`.
+
+- **Helper único:** `electron/utils/variacion-precio.utils.ts` →
+  `getRangosPrecioVariacion(dataSource, ids[])` (batch, evita N+1) y
+  `getRangoPrecioVariacion(dataSource, id)`. Considera sólo variaciones,
+  sabores y presentaciones activos, y **cae al esquema viejo** (precio en la
+  receta) para datos pre-refactor, marcando `legacy: true`.
+- Los handlers devuelven `variacionResumen: { precioDesde, precioHasta,
+  variacionesCount, saboresCount, presentacionesCount }` y `principalPrecio`
+  pasa a ser **la variación más barata**.
+- La UI muestra `50.000 – 65.000` (y en mobile un detalle `2 tamaños · 1 sabor`);
+  con un solo precio muestra el valor único.
+- Test: `npm run test:variacion-precios` (incluye el caso legacy).
+
+## Autoselección del sabor único (PdV + PWA)
+
+Si el tamaño elegido tiene **una sola variación con precio**, ambos diálogos la
+marcan solos y el desktop salta al paso de confirmar (con una sola presentación,
+el diálogo abre directo ahí). La personalización **no** se abre automáticamente
+en ese caso — sí cuando el usuario tilda un sabor a mano, que es el
+comportamiento de siempre. Con `maxSabores = 1` se oculta el "(max N)" y tocar
+otro sabor **reemplaza** al elegido.
+
 ## Reparación de recetas compartidas (`d9cbba3`)
 
 **No es una migración** (por el riesgo de un deep-clone corriendo en cada arranque): es un handler de mantenimiento **manual/opt-in**.

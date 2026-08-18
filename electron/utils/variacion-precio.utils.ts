@@ -131,12 +131,3 @@ export async function getRangosPrecioVariacion(
 
   return resultado;
 }
-
-/** Azúcar para un solo producto. */
-export async function getRangoPrecioVariacion(
-  dataSource: DataSource,
-  productoId: number,
-): Promise<RangoPrecioVariacion> {
-  const mapa = await getRangosPrecioVariacion(dataSource, [productoId]);
-  return mapa.get(productoId) || vacio();
-}
