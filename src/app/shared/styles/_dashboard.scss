@@ -346,6 +346,22 @@
   &:hover {
     background: var(--hover-bg);
   }
+
+  // Solo los rankings que declaran [clickable] llevan cursor: el hover de
+  // fondo existe siempre (es feedback de lectura), el puntero no.
+  &.ranking-item-clickable {
+    cursor: pointer;
+
+    .dashboard-ranking-name {
+      text-decoration: underline;
+      text-decoration-color: transparent;
+      transition: text-decoration-color 0.15s;
+    }
+
+    &:hover .dashboard-ranking-name {
+      text-decoration-color: currentColor;
+    }
+  }
 }
 
 .dashboard-ranking-rank {
