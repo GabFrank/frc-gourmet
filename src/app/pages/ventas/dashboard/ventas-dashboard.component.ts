@@ -30,6 +30,7 @@ import { DashSectionHeaderComponent } from 'src/app/shared/components/dashboard/
 import { DashChartCardComponent } from 'src/app/shared/components/dashboard/chart-card/dash-chart-card.component';
 import { getDashboardChartOptions, DASHBOARD_CHART_COLORS, buildLineDataset } from 'src/app/shared/utils/dashboard-chart-theme';
 import { VentasDesgloseDialogComponent } from 'src/app/shared/components/ventas-desglose-dialog/ventas-desglose-dialog.component';
+import { Rango, RangoChip, buildRangoChips } from 'src/app/shared/utils/dashboard-rangos.util';
 
 interface CajaAbierta {
   id: number;
@@ -41,12 +42,6 @@ interface CajaAbierta {
   ventaTotal: number;
   mesasAtendidas: number;
   cantidadVentas: number;
-}
-
-interface RangoChip {
-  label: string;
-  value: 'week' | 'month' | '3months' | '6months';
-  selected: boolean;
 }
 
 @Component({
@@ -109,13 +104,9 @@ export class VentasDashboardComponent implements OnInit {
   labelTotal = 'Total hoy';
 
   // --- Rango ---
-  rangosChips: RangoChip[] = [
-    { label: 'Esta semana', value: 'week', selected: true },
-    { label: 'Este mes', value: 'month', selected: false },
-    { label: '3 meses', value: '3months', selected: false },
-    { label: '6 meses', value: '6months', selected: false },
-  ];
-  rangoSeleccionado: 'week' | 'month' | '3months' | '6months' = 'week';
+  // 'today' grafica por hora; el resto por dia/semana/mes (ver bucketsForRango).
+  rangoSeleccionado: Rango = 'week';
+  rangosChips: RangoChip[] = buildRangoChips(['today', 'week', 'month', '3months', '6months'], 'week');
 
   // --- Chart ---
   chartData: ChartData<'line'> = { labels: [], datasets: [] };
