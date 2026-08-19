@@ -62,7 +62,8 @@ class Receta extends BaseModel {
   imageUrl?: string;                 // app://producto-images/<file>
   activo: boolean;
 
-  @OneToOne 'Producto' producto;     // legacy 1:1 (pre-refactor) — deprecated, FK producto_id
+  @OneToOne 'Producto' producto;     // ⚠️ DEPRECADO — FK producto_id, SIEMPRE NULL. Ver abajo.
+  productoVinculado?: {id,nombre}|null; // VIRTUAL — el producto real, por producto.receta_id
   @OneToOne 'Adicional' adicional;   // si la receta es de un Adicional complejo
   @OneToMany RecetaIngrediente[] ingredientes;
   @OneToMany 'RecetaFase' fases;     // fases del modo de preparo (ordenadas)
@@ -77,6 +78,51 @@ class Receta extends BaseModel {
 ```
 
 (Entidades nuevas relacionadas: `RecetaFase` / `RecetaFaseIngrediente` para el modo de preparo por pasos, y `RecetaMaterial` para utensilios — ver archivos homónimos en `entities/productos/`.)
+
+### ⚠️ Las cuatro FKs de "dueño" de una Receta (leer antes de tocar el vínculo)
+
+Una `Receta` puede pertenecer a cuatro cosas distintas. Confundirlas fue la causa
+de un bug de larga data (arreglado 2026-08, ver más abajo):
+
+| Dueño | Columna | UNIQUE | ¿La escribe la app? |
+|---|---|---|---|
+| **Producto simple** (`ELABORADO_SIN_VARIACION`) | `producto.receta_id` | **sí** | **SÍ — fuente de verdad** |
+| Adicional complejo | `adicional.receta_id` | sí | sí |
+| Variación sabor × tamaño | `receta_presentacion.receta_id` | no | sí (una receta por variación) |
+| Producto con variaciones | `receta.producto_variacion_id` | no | sólo lectura en handlers |
+| ~~Legacy 1:1~~ | ~~`receta.producto_id`~~ | sí | **NO — DEPRECADA, siempre NULL** |
+
+**`receta.producto_id` está DEPRECADA.** Nació en el refactor de 2026-03 junto con
+`producto.receta_id`: quedó un 1:1 con **dos owning sides**, cada uno con su propia
+columna, y sólo prosperó `producto.receta_id`. Ningún handler la escribe.
+
+- Para "el producto de esta receta" usar la **virtual `receta.productoVinculado`**,
+  que resuelven `get-receta` y `get-recetas-with-filters` por `producto.receta_id`
+  (una query por lote, sin N+1). **Nunca** leer `receta.producto`.
+- Para las recetas de un producto **con** variaciones, usar `productoVariacion`.
+- La columna no se borra: las migraciones del proyecto son aditivas.
+
+### Vincular / desvincular una receta a un producto simple
+
+Se hace **sólo** con estos handlers, nunca con `update-producto` + `update-receta`
+encadenados (dos writes a dos tablas con dos UNIQUE → estado a medio aplicar):
+
+- **`vincular-receta-a-producto(productoId, recetaId)`** — transaccional. Valida que
+  la receta no sea de otro producto, de un adicional ni de una variación, y devuelve
+  un mensaje legible en vez del `UNIQUE constraint failed` crudo del driver.
+- **`desvincular-receta-de-producto(productoId)`** — pone `producto.receta_id` en
+  `null`. La receta NO se borra: queda libre.
+- **`get-recetas-asignables({productoId, search, activo, page, pageSize})`** — las
+  recetas ofrecibles en "Buscar Receta". Filtra en SQL por las cuatro FKs de arriba,
+  con búsqueda y paginación server-side. Excluye del chequeo al `productoId` actual
+  para que el producto pueda re-elegir su propia receta.
+
+Ambos mutadores llevan `ensurePermission('PRODUCTOS_GESTIONAR')`: es la tabla que
+escriben, y `/api/rpc` es default-allow.
+
+⚠️ **Desvincular es destructivo**: el producto resuelve su precio de venta
+(`productos.handler.ts`, `ventas.handler.ts`) y su descuento de stock por la receta
+vinculada. La UI lo advierte en el diálogo de confirmación.
 
 ### RecetaIngrediente
 

@@ -2427,6 +2427,21 @@ contextBridge.exposeInMainWorld('api', {
   }): Promise<{items: Receta[], total: number, page: number, pageSize: number}> => {
     return await ipcRenderer.invoke('get-recetas-with-filters', filters);
   },
+  getRecetasAsignables: async (params: {
+    productoId?: number | null;
+    search?: string;
+    activo?: boolean | null;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{items: Receta[], total: number, page: number, pageSize: number}> => {
+    return await ipcRenderer.invoke('get-recetas-asignables', params);
+  },
+  vincularRecetaAProducto: async (productoId: number, recetaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('vincular-receta-a-producto', productoId, recetaId);
+  },
+  desvincularRecetaDeProducto: async (productoId: number): Promise<any> => {
+    return await ipcRenderer.invoke('desvincular-receta-de-producto', productoId);
+  },
   getReceta: async (recetaId: number): Promise<Receta> => {
     return await ipcRenderer.invoke('get-receta', recetaId);
   },

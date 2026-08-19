@@ -84,7 +84,10 @@ Relaciones nuevas en `Producto`: `sabores` (OneToMany Sabor), `recetas` (OneToMa
 
 Tabla `precio_venta`. Vinculación **flexible** (cualquiera de estas FKs):
 - `presentacion_id` — para RETAIL / RETAIL_INGREDIENTE / BUFFET_POR_PESO.
-- `receta_id` — para ELABORADO_SIN_VARIACION.
+- `receta_id` — para ELABORADO_SIN_VARIACION. Es también la columna
+  `producto.receta_id` (UNIQUE) que define el vínculo producto↔receta: es la
+  **fuente de verdad**, no `receta.producto_id` (deprecada). Desvincular una receta
+  deja al producto **sin precio de venta ni descuento de stock**.
 - `producto_id` — para COMBO.
 - `receta_presentacion_id` — para ELABORADO_CON_VARIACION (cada variación con su precio).
 
@@ -221,7 +224,11 @@ Más usado: `MonedaCambio` en `financiero/` (que tiene `compraOficial / ventaOfi
   - `producto-presentaciones-precios` — CRUD presentaciones.
   - `producto-precios-venta` — gestión precios venta.
   - `producto-precios-costo` — gestión costos.
-  - `producto-receta` — asociación/creación de receta.
+  - `producto-receta` — asociación/creación de receta. Usa los handlers dedicados
+    `get-recetas-asignables` / `vincular-receta-a-producto` /
+    `desvincular-receta-de-producto`; **nunca** `update-producto` + `update-receta`
+    encadenados. Ver [recetas-sabores-variaciones.md](recetas-sabores-variaciones.md)
+    § "Las cuatro FKs de dueño de una Receta".
   - `producto-sabores` — gestión multi-sabor.
   - `producto-variaciones` — gestión de variaciones (RecetaPresentacion).
   - `producto-stock` — control stock.

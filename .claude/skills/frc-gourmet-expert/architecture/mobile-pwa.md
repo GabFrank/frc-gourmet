@@ -65,7 +65,14 @@ CRUD: RRHH (Cargos, Turnos, MotivosVale, Feriados, Personas, Usuarios+roles, Fun
 TipoCliente), Productos (Familias, Subfamilias, Adicionales), Compras (Cat. compra), Financiero (Cat. gasto).
 Read-only: Vales, Liquidaciones, Penalizaciones, Bonos, Aguinaldos, Asistencias, Horas extra, Permisos,
 Notificaciones, Cajas, CxC, Compras, Proveedores, Productos, Comisiones (reglas/equipos/liq).
-**Diferido:** Sabores/Recetas (variaciones), Monedas (sin handler create),
+**Recetas:** `pages/productos/recetas/` tiene listado + edición (datos, ingredientes,
+pasos) y **vincular/desvincular producto** (`vincular-receta-a-producto` /
+`desvincular-receta-de-producto`). El chip Completa/Pre-receta y el producto vinculado
+se leen de la virtual `receta.productoVinculado`, **nunca** de `receta.producto`
+(columna deprecada, siempre NULL — leerla marcaba TODAS las recetas como pre-receta).
+→ [../domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
+
+**Diferido:** Sabores y variaciones (sabor × tamaño), Monedas (sin handler create),
 Préstamos, Config RRHH.
 
 > ⚠️ **Diálogos con campos de texto en el celular: `autoFocus: false`.** `MatDialog`

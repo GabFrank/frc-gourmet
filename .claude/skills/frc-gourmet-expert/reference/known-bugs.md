@@ -12,6 +12,38 @@ Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo
 
 **Estado (2026-07):** la **capa de resumen/agregación** ya está arreglada (PR #198): `get-funcionario-resumen-financiero` y `dashboard-rrhh.totalNominaMes` convierten a PYG con `electron/utils/moneda.utils.ts` (`convertirAPrincipal`). El **cálculo interno de liquidación** sigue pendiente — requiere **migración** (agregar moneda + cotización a los items) + **decisión de política**: (a) convertir con la cotización al crear el item, o (b) bloquear/avisar si hay items en otra moneda que la liquidación. No se tocó porque afecta plata que se paga. Ver [../domains/rrhh-liquidaciones.md](../domains/rrhh-liquidaciones.md).
 
+## Productos / Recetas
+
+### Vínculo Producto↔Receta roto — RESUELTO (2026-08)
+
+**Síntoma:** en el tab Recetas del alta de producto, "Buscar Receta" siempre daba error al asignar una receta existente (sólo funcionaba "Crear Receta"), y al desvincular una receta ésta seguía vinculada al reabrir el producto.
+
+**Causa:** tres bugs encadenados sobre un 1:1 con **dos owning sides** (`producto.receta_id` y `receta.producto_id`, ambos UNIQUE), gemelos del mismo commit de 2026-03:
+1. `update-receta` asignaba `productoId`, propiedad que `Receta` nunca declaró → no-op silencioso.
+2. `update-producto` desvinculaba con `producto.receta = undefined`; TypeORM no emite UPDATE para `undefined` → `producto.receta_id` quedaba ocupado para siempre.
+3. El buscador filtraba por `receta.producto` (columna deprecada, siempre NULL) → ofrecía recetas ya ocupadas, y asignarlas explotaba con `UNIQUE constraint failed: producto.receta_id`.
+
+**Fix:** `producto.receta_id` como única fuente de verdad; `receta.producto_id` documentada como deprecada con virtual `productoVinculado` en su lugar; handlers atómicos `vincular-receta-a-producto` / `desvincular-receta-de-producto` y `get-recetas-asignables` (filtra las 4 FKs de dueño en SQL). Arrastró además: `ventas.handler` (atajos de PdV sin precio para pizzas), `calcular-costo-receta` (PrecioCosto sin producto), `delete-receta-for-adicional` (mismo bug del `undefined`), `gestion-recetas` (recetas de variación secuestrando `producto.receta_id`) y dos pantallas de la PWA mobile. Test: `npm run test:receta-vinculo`. Detalles → [../domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
+
+### Datos ya vinculados por error — pendiente (saneamiento)
+
+**Síntoma:** bases anteriores al fix de arriba pueden tener `producto.receta_id` apuntando a la receta de una **variación** o de un **adicional** (el buscador nunca filtró nada). Efecto colateral: `delete-sabor` / `delete-receta` fallan con `FOREIGN KEY constraint failed` sin explicar por qué.
+
+**Detección** (no automatizada todavía):
+```sql
+SELECT p.id, p.nombre, rp.id FROM producto p JOIN receta_presentacion rp ON rp.receta_id = p.receta_id;
+SELECT p.id, p.nombre, a.id  FROM producto p JOIN adicional a           ON a.receta_id  = p.receta_id;
+SELECT COUNT(*) FROM receta WHERE producto_id IS NOT NULL;  -- debe dar 0 siempre
+```
+
+**Por qué no hay migración automática:** desvincular a ciegas dejaría productos elaborados sin receta y rompería el descuento de stock. Requiere un handler de diagnóstico + decisión del usuario, al estilo de `reparar-recetas-compartidas`.
+
+### `update-producto` ignora `requiereComanda` — pendiente
+
+**Síntoma:** el campo se manda desde `gestionar-producto.service.ts` y desde `producto-edit.page.ts` (mobile) pero `update-producto` no lo procesa: se descarta en silencio y el campo es inedi­table.
+
+**Causa:** falta el `if (productoData.requiereComanda !== undefined)` en el handler. La columna existe (migración `1779100000000-AddRequiereComandaToProducto`).
+
 ## Frontend / UI
 
 ### `findPrecioCosto()` retorna 0 hardcodeado

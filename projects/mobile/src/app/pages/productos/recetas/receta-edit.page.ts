@@ -109,7 +109,13 @@ export class RecetaEditPage implements OnInit {
           activo: r.activo !== false,
         });
         this.costoTotalFmt = Number(r.costoCalculado || 0).toLocaleString('es-PY', { maximumFractionDigits: 0 });
-        this.productoVinculado = r.producto ? { id: r.producto.id, nombre: r.producto.nombre } : null;
+        // `productoVinculado` (virtual, resuelto por `producto.receta_id`), NO
+        // `r.producto`: esa columna esta deprecada y siempre es NULL, con lo que
+        // el boton "Desvincular" nunca aparecia y se ofrecia vincular recetas ya
+        // ocupadas.
+        this.productoVinculado = r.productoVinculado
+          ? { id: r.productoVinculado.id, nombre: r.productoVinculado.nombre }
+          : null;
       }
       await this.cargarItems();
       await this.cargarPasos();
@@ -344,7 +350,9 @@ export class RecetaEditPage implements OnInit {
     );
     if (!result) return;
     try {
-      await firstValueFrom(this.repo.updateProducto(result.productoId, { recetaId: this.id } as any));
+      // Handler atomico: valida que la receta siga libre y devuelve un mensaje
+      // legible en vez del "UNIQUE constraint failed" crudo del driver.
+      await firstValueFrom(this.repo.vincularRecetaAProducto(result.productoId, this.id));
       this.productoVinculado = { id: result.productoId, nombre: result.productoNombre };
       this.snack.open('Producto vinculado. Receta completa.', 'OK', { duration: 3000 });
     } catch (e: any) {
@@ -355,7 +363,7 @@ export class RecetaEditPage implements OnInit {
   async desvincularProducto(): Promise<void> {
     if (!this.productoVinculado) return;
     try {
-      await firstValueFrom(this.repo.updateProducto(this.productoVinculado.id, { recetaId: null } as any));
+      await firstValueFrom(this.repo.desvincularRecetaDeProducto(this.productoVinculado.id));
       this.productoVinculado = null;
       this.snack.open('Producto desvinculado', 'OK', { duration: 2500 });
     } catch (e: any) {

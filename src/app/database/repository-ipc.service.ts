@@ -523,6 +523,15 @@ interface ElectronAPI {
     receta: { id: number; nombre: string };
     productosVinculados: Array<{ id: number; nombre: string; tipo: string; activo: boolean }>;
   }>;
+  getRecetasAsignables: (params: {
+    productoId?: number | null;
+    search?: string;
+    activo?: boolean | null;
+    page?: number;
+    pageSize?: number;
+  }) => Promise<{items: Receta[], total: number, page: number, pageSize: number}>;
+  vincularRecetaAProducto: (productoId: number, recetaId: number) => Promise<any>;
+  desvincularRecetaDeProducto: (productoId: number) => Promise<any>;
   getReceta: (recetaId: number) => Promise<Receta>;
   createReceta: (recetaData: any) => Promise<Receta>;
   updateReceta: (recetaId: number, recetaData: any) => Promise<any>;
@@ -2688,6 +2697,24 @@ export class RepositoryIpcService extends RepositoryService {
     pageSize?: number;
   }): Observable<{items: Receta[], total: number, page: number, pageSize: number}> {
     return from(this.api.getRecetasWithFilters(filters));
+  }
+
+  getRecetasAsignables(params: {
+    productoId?: number | null;
+    search?: string;
+    activo?: boolean | null;
+    page?: number;
+    pageSize?: number;
+  }): Observable<{items: Receta[], total: number, page: number, pageSize: number}> {
+    return from(this.api.getRecetasAsignables(params));
+  }
+
+  vincularRecetaAProducto(productoId: number, recetaId: number): Observable<any> {
+    return from(this.api.vincularRecetaAProducto(productoId, recetaId));
+  }
+
+  desvincularRecetaDeProducto(productoId: number): Observable<any> {
+    return from(this.api.desvincularRecetaDeProducto(productoId));
   }
 
   getReceta(recetaId: number): Observable<Receta> {

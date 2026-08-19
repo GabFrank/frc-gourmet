@@ -24,7 +24,11 @@ export class RecetaPresentacion extends BaseModel {
   activo!: boolean;
 
   // Relationships
-  // ManyToOne: varias variaciones (una por presentación del sabor) comparten la misma receta base.
+  // Desde el refactor de sabores (2026-07-11) CADA variación tiene su PROPIA
+  // `Receta` — antes varias variaciones compartían una receta base, y editar
+  // "grande" cambiaba "mediano". Sigue siendo ManyToOne (la columna no es UNIQUE)
+  // por compatibilidad con datos viejos; `reparar-recetas-compartidas` desduplica
+  // los casos heredados.
   @ManyToOne(() => Receta, { nullable: false, eager: true })
   @JoinColumn({ name: 'receta_id' })
   receta!: Receta;

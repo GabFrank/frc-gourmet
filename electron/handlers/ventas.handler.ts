@@ -3090,7 +3090,13 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             .createQueryBuilder('pv')
             .leftJoinAndSelect('pv.moneda', 'moneda')
             .innerJoin('pv.receta', 'receta')
-            .where('receta.producto_id = :prodId', { prodId: p.id })
+            // `producto_variacion_id`, NO `producto_id`: para productos con
+            // variaciones cada receta cuelga del producto via
+            // `Receta.productoVariacion`. La columna `receta.producto_id` esta
+            // deprecada y siempre es NULL, con lo que esta query no devolvia
+            // ningun precio (atajos de PdV sin `precioDirecto` para pizzas).
+            // Alineado con productos.handler.ts:451 y :1852.
+            .where('receta.productoVariacion = :prodId', { prodId: p.id })
             .andWhere('pv.activo = :activo', { activo: true })
             .orderBy('pv.principal', 'DESC')
             .getMany();
