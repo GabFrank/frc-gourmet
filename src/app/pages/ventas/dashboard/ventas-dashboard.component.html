@@ -23,7 +23,7 @@
     </app-dash-stat-chip>
     <app-dash-stat-chip
       icon="payments"
-      [value]="formatPYG(totalHoyPYG) + ' Gs'"
+      [value]="totalHoyTexto"
       [label]="labelTotal"
       [loading]="loading"
       [clickable]="!!desgloseVentasHoy"
@@ -31,7 +31,7 @@
     </app-dash-stat-chip>
     <app-dash-stat-chip
       icon="confirmation_number"
-      [value]="formatPYG(ticketPromedio) + ' Gs'"
+      [value]="ticketPromedioTexto"
       label="Ticket promedio"
       [loading]="loading">
     </app-dash-stat-chip>
@@ -110,7 +110,7 @@
                 <mat-icon>trending_up</mat-icon>
                 <div class="caja-detail-text">
                   <span class="detail-label">Venta total</span>
-                  <span class="detail-value highlight">{{ formatPYG(caja.ventaTotal) }} Gs</span>
+                  <span class="detail-value highlight">{{ caja.ventaTotalTexto }}</span>
                 </div>
               </div>
               <div class="caja-detail-item">
@@ -141,7 +141,7 @@
     <!-- Col derecha -->
     <div class="dashboard-col-right">
       <app-dash-ranking
-        title="Top productos vendidos"
+        [title]="tituloTopProductos"
         icon="emoji_events"
         [items]="topProductos"
         emptyText="Sin datos del periodo">

@@ -21,6 +21,7 @@ import { ListMonedasComponent } from '../monedas/list-monedas/list-monedas.compo
 import { CreateEditFormaPagoComponent } from '../formas-pago/create-edit-forma-pago.component';
 // Operativa Caja Mayor (consolidada en este dashboard)
 import { ListCajasMayorComponent } from '../caja-mayor/list-cajas-mayor/list-cajas-mayor.component';
+import { CajaMayorDetalleComponent } from '../caja-mayor/caja-mayor-detalle/caja-mayor-detalle.component';
 import { ListGastosComponent } from '../caja-mayor/gastos/list-gastos/list-gastos.component';
 import { ListGastoCategoriasComponent } from '../caja-mayor/gastos/categorias/list-gasto-categorias.component';
 import { ListRetirosCajaComponent } from '../caja-mayor/retiros/list-retiros-caja/list-retiros-caja.component';
@@ -144,6 +145,8 @@ export class FinancieroDashboardComponent implements OnInit {
   cotizacionUSD = 0;
   cotizacionBRL = 0;
   cajasAbiertasResumen: any[] = [];
+  // Cajas Mayor abiertas, con su saldo en la moneda principal ya formateado.
+  cajasMayorActivas: any[] = [];
 
   shortcuts: any[] = [];
 
@@ -183,6 +186,10 @@ export class FinancieroDashboardComponent implements OnInit {
         this.cotizacionUSD = fin.cotizacionUSD || 0;
         this.cotizacionBRL = fin.cotizacionBRL || 0;
         this.cajasAbiertasResumen = fin.cajasAbiertasResumen || [];
+        this.cajasMayorActivas = (fin.cajasMayorActivas || []).map((c: any) => ({
+          ...c,
+          saldoTexto: `${(c.saldoPYG || 0).toLocaleString('es-PY', { maximumFractionDigits: 0 })} Gs`,
+        }));
 
         const hist = fin.cotizacionesHistorico || { labels: [], usd: [], brl: [] };
         this.cotChartData = {
@@ -224,6 +231,21 @@ export class FinancieroDashboardComponent implements OnInit {
       const list = await firstValueFrom(this.repositoryService.getDashboardShortcuts('FINANCIERO'));
       this.shortcuts = list || [];
     } catch (e) { console.error(e); }
+  }
+
+  /**
+   * Abre una Caja Mayor en su tab de detalle. El detalle acepta el id suelto
+   * via `cajaMayorIdShortcut` y hace el lookup el mismo (TabsService solo pasa
+   * datos serializables).
+   */
+  abrirCajaMayor(cm: any): void {
+    if (!cm?.id) return;
+    this.tabsService.openTab(
+      `Caja Mayor: ${cm.nombre}`,
+      CajaMayorDetalleComponent,
+      { cajaMayorIdShortcut: cm.id },
+      `caja-mayor-${cm.id}-tab`,
+    );
   }
 
   abrirShortcut(s: any): void {

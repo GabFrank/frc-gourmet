@@ -114,6 +114,11 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
 
 ## Refactor técnico
 
+- [ ] **Modo headless para el servidor (`--headless` en `main.ts`)**. Hoy el Fastify server vive dentro del proceso Electron (los handlers se registran con `ipcMain`), y `app.on('ready')` llama a `createWindow()` incondicionalmente. No hay forma de levantar sólo el server: para probar la web `/admin` en un navegador, o para correr un nodo `mode=server` en una máquina sin monitor, igual se abre una ventana ociosa. Un flag que saltee `createWindow()` cuando `mode === 'server'` es chico y desbloquea las dos cosas. Detectado el 2026-08-19 probando dashboards en Chrome.
+
+- [ ] **`--prefer-ts-exts` en el resto de los `npm run test:*`**. Sólo `test:dashboard-rangos` lo tiene. Sin el flag, ts-node resuelve el `.js` compilado antes que el `.ts` y el test corre la versión del último commit en vez del working tree — pasa en verde con el bug adentro. Ver el pitfall correspondiente en `conventions/pitfalls-typeorm-electron.md`.
+
+
 - [ ] **Sweep `appCurrencyInput` global**. Directiva nueva en `src/app/shared/directives/currency-input.directive.ts` formatea inputs monetarios con separador locale-aware (PYG sin decimales, USD/BRL con coma decimal). Aplicada SOLO en `compras/create-edit-compra/` (costoUnitario + subtotal). Falta escanear y aplicar al resto del proyecto. Patrón:
   ```html
   <input matInput type="text" inputmode="decimal"

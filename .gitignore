@@ -13,6 +13,10 @@
 *.js.map
 electron/**/*.js
 src/app/database/**/*.js
+# Los utils compartidos son TS puro; el .js de al lado lo emite tsc (hook de
+# pre-commit / electron:serve-tsc) y no va al repo. Ver el pitfall de los .js
+# que tapan a los .ts en ts-node.
+src/app/shared/utils/**/*.js
 main.js
 preload.js
 

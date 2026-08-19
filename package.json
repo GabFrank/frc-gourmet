@@ -77,7 +77,8 @@
     "test:observacion-libre": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-observacion-libre-e2e.ts",
     "test:variacion-mobile": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-variacion-mobile-e2e.ts",
     "test:variacion-config": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-variacion-config-e2e.ts",
-    "test:receta-vinculo": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-receta-vinculo-e2e.ts"
+    "test:receta-vinculo": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-receta-vinculo-e2e.ts",
+    "test:dashboard-rangos": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-dashboard-rangos.ts"
   },
   "private": true,
   "dependencies": {

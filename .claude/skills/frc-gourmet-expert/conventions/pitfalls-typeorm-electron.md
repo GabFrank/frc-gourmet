@@ -288,7 +288,7 @@ dataSource.query(`UPDATE ventas SET vendedor_id = created_by WHERE vendedor_id I
 
 Corre en cada arranque (en el `then` de `DataSource.initialize`). Es idempotente (la próxima vez el WHERE está vacío). Patrón aceptable para data fixes simples; para cambios de esquema, usar una migración formal.
 
-## Los `.js` compilados de `electron/` le ganan a los `.ts` en los tests ts-node
+## Los `.js` compilados le ganan a los `.ts` en los tests ts-node
 
 Los scripts `npm run test:*` corren con ts-node e importan los handlers por ruta
 sin extensión (`require('../electron/handlers/ventas.handler')`). Node resuelve
@@ -301,8 +301,25 @@ compilada vieja** — el test pasa (o falla) por motivos que no tienen nada que 
 con tu cambio. Pasó el 2026-08-17: un test nuevo "fallaba" contra el bug que
 acababa de arreglarse, porque corría el `.js` de otra rama.
 
-**Regla:** después de tocar cualquier cosa en `electron/`, correr
-`npm run electron:serve-tsc` antes de los `test:*`. En CI no aplica (clona
+**No es sólo `electron/`.** Pasó otra vez el 2026-08-19 con un util nuevo en
+`src/app/shared/utils/`: el hook de pre-commit emite el `.js` al lado de cada
+`.ts` que toca, así que el test corría **la versión del último commit** en vez
+de la del working tree. El síntoma es traicionero: el test pasa en verde con el
+bug adentro, porque valida código viejo que todavía no tenía el bug (o al revés,
+falla contra un fix que ya aplicaste). Un `.js` fechado más tarde que su `.ts`
+es la pista.
+
+**Regla:** agregá **`--prefer-ts-exts`** al script del test. Le dice a ts-node
+que resuelva `.ts` antes que `.js` y el problema desaparece de raíz, sin
+depender de acordarse de recompilar:
+
+```json
+"test:mi-cosa": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-mi-cosa.ts"
+```
+
+Los scripts viejos todavía no lo tienen. Si uno se comporta raro, esto primero.
+Alternativa manual: correr `npm run electron:serve-tsc` antes del test (sólo
+sirve para `electron/`), o borrar el `.js` que tapa. En CI no aplica (clona
 limpio, no hay `.js`) — pero eso significa que **CI y local pueden diferir**:
 si un test se comporta distinto en los dos, sospechá de esto primero.
 
