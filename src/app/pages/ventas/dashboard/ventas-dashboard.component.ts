@@ -40,6 +40,8 @@ interface CajaAbierta {
   valorAperturaPYG: number;
   valorAperturaUSD: number;
   ventaTotal: number;
+  /** Precomputado: el template no llama funciones. */
+  ventaTotalTexto: string;
   mesasAtendidas: number;
   cantidadVentas: number;
 }
@@ -102,6 +104,9 @@ export class VentasDashboardComponent implements OnInit {
   totalBasadoEnCajas = false;
   labelVentas = 'Ventas hoy';
   labelTotal = 'Total hoy';
+  /** Precomputados: el template no llama funciones. */
+  totalHoyTexto = '0 Gs';
+  ticketPromedioTexto = '0 Gs';
 
   // --- Rango ---
   // 'today' grafica por hora; el resto por dia/semana/mes (ver bucketsForRango).
@@ -152,10 +157,15 @@ export class VentasDashboardComponent implements OnInit {
         this.labelVentas = this.totalBasadoEnCajas ? 'Ventas en caja' : 'Ventas hoy';
         this.labelTotal = this.totalBasadoEnCajas ? 'Total en caja' : 'Total hoy';
         this.ticketPromedio = kpis.ticketPromedio || 0;
+        this.totalHoyTexto = `${this.formatPYG(this.totalHoyPYG)} Gs`;
+        this.ticketPromedioTexto = `${this.formatPYG(this.ticketPromedio)} Gs`;
         this.mesasOcupadas = kpis.mesasOcupadas || 0;
         this.mesasTotal = kpis.mesasTotal || 0;
         this.comandasPendientes = kpis.comandasPendientes || 0;
-        this.cajasAbiertas = kpis.cajasAbiertas || [];
+        this.cajasAbiertas = (kpis.cajasAbiertas || []).map((c: any) => ({
+          ...c,
+          ventaTotalTexto: `${this.formatPYG(c.ventaTotal)} Gs`,
+        }));
         this.topProductos = (kpis.topProductos || []).map((p: any) => ({
           nombre: p.nombre,
           valorPrincipal: `${p.cantidad} uds`,

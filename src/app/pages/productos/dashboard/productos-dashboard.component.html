@@ -6,6 +6,14 @@
       <span class="dashboard-subtitle">Panel de control</span>
     </div>
     <div class="dashboard-header-actions">
+      <div class="dashboard-chart-chips">
+        <button *ngFor="let chip of rangosChips"
+                class="dashboard-range-chip"
+                [class.range-chip-active]="chip.selected"
+                (click)="selectRango(chip)">
+          {{ chip.label }}
+        </button>
+      </div>
       <button mat-icon-button (click)="cargarKpis()" [disabled]="loading" matTooltip="Actualizar">
         <mat-icon>refresh</mat-icon>
       </button>
@@ -108,10 +116,10 @@
 
     <div class="dashboard-col-right">
       <app-dash-ranking
-        title="Mas vendidos del mes"
+        [title]="tituloTopVendidos"
         icon="emoji_events"
         [items]="topVendidos"
-        emptyText="Sin ventas este mes">
+        [emptyText]="vacioTopVendidos">
       </app-dash-ranking>
     </div>
   </div>

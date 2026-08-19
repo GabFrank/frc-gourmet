@@ -22,6 +22,7 @@ import { DashRankingListComponent, DashRankingItem } from 'src/app/shared/compon
 import { DashSectionHeaderComponent } from 'src/app/shared/components/dashboard/section-header/dash-section-header.component';
 import { DashChartCardComponent } from 'src/app/shared/components/dashboard/chart-card/dash-chart-card.component';
 import { getDashboardChartOptions, DASHBOARD_CHART_COLORS, buildLineDataset } from 'src/app/shared/utils/dashboard-chart-theme';
+import { Rango, RangoChip, RANGO_LABEL, buildRangoChips } from 'src/app/shared/utils/dashboard-rangos.util';
 
 interface VencimientoItem {
   proveedor: string;
@@ -29,6 +30,8 @@ interface VencimientoItem {
   fechaVencimiento: string;
   diasRestantes: number;
   urgencia: 'vencida' | 'urgente' | 'proxima';
+  /** Precomputado: el template no llama funciones. */
+  montoTexto: string;
 }
 
 @Component({
@@ -63,12 +66,23 @@ export class ComprasDashboardComponent implements OnInit {
     { title: 'Cuentas por Pagar', icon: 'request_quote', action: 'cpp', color: '#bf360c' },
   ];
 
+  // --- Rango ---
+  rangoSeleccionado: Rango = 'month';
+  rangosChips: RangoChip[] = buildRangoChips(['week', 'month', 'last-month', '3months', '6months'], 'month');
+
   // KPIs
   comprasMes = 0;
   totalMesPYG = 0;
   cppPorVencer = 0;
   totalCppVencidoPYG = 0;
   topProveedorNombre = '-';
+
+  // Precomputados para el template (nada de funciones ni getters en el HTML).
+  labelCompras = `Compras · ${RANGO_LABEL['month']}`;
+  labelTotal = `Total comprado · ${RANGO_LABEL['month']}`;
+  chartTitle = `Compras · ${RANGO_LABEL['month']}`;
+  totalMesTexto = '0 Gs';
+  totalCppVencidoTexto = '0 Gs';
 
   topProveedores: DashRankingItem[] = [];
   proximosVencimientos: VencimientoItem[] = [];
@@ -90,13 +104,15 @@ export class ComprasDashboardComponent implements OnInit {
   async cargarKpis(): Promise<void> {
     this.loading = true;
     try {
-      const k = await firstValueFrom(this.repository.getDashboardComprasKpis());
+      const k = await firstValueFrom(this.repository.getDashboardComprasKpis(this.rangoSeleccionado));
       if (k) {
         this.comprasMes = k.comprasMes || 0;
         this.totalMesPYG = k.totalMesPYG || 0;
         this.cppPorVencer = k.cppPorVencer || 0;
         this.totalCppVencidoPYG = k.totalCppVencidoPYG || 0;
         this.topProveedorNombre = k.topProveedores?.[0]?.nombre || '-';
+        this.totalMesTexto = `${this.formatPYG(this.totalMesPYG)} Gs`;
+        this.totalCppVencidoTexto = `${this.formatPYG(this.totalCppVencidoPYG)} Gs`;
 
         this.topProveedores = (k.topProveedores || []).map((p: any) => ({
           nombre: p.nombre,
@@ -105,7 +121,10 @@ export class ComprasDashboardComponent implements OnInit {
           porcentaje: p.porcentaje,
         }));
 
-        this.proximosVencimientos = k.proximosVencimientos || [];
+        this.proximosVencimientos = (k.proximosVencimientos || []).map((v: any) => ({
+          ...v,
+          montoTexto: `${this.formatPYG(v.monto)} Gs`,
+        }));
 
         const periodo = k.comprasPorPeriodo || { labels: [], compras: [], cantidades: [] };
         this.chartData = {
@@ -121,6 +140,18 @@ export class ComprasDashboardComponent implements OnInit {
     } finally {
       this.loading = false;
     }
+  }
+
+  selectRango(chip: RangoChip): void {
+    if (chip.selected) return;
+    this.rangosChips.forEach(c => c.selected = false);
+    chip.selected = true;
+    this.rangoSeleccionado = chip.value;
+    const label = RANGO_LABEL[chip.value];
+    this.labelCompras = `Compras · ${label}`;
+    this.labelTotal = `Total comprado · ${label}`;
+    this.chartTitle = `Compras · ${label}`;
+    this.cargarKpis();
   }
 
   formatPYG(v: number): string {

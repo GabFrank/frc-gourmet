@@ -17,6 +17,7 @@ import { DashStatChipComponent } from 'src/app/shared/components/dashboard/stat-
 import { DashQuickActionComponent } from 'src/app/shared/components/dashboard/quick-action/dash-quick-action.component';
 import { DashRankingListComponent, DashRankingItem } from 'src/app/shared/components/dashboard/ranking-list/dash-ranking-list.component';
 import { DashSectionHeaderComponent } from 'src/app/shared/components/dashboard/section-header/dash-section-header.component';
+import { Rango, RangoChip, RANGO_LABEL, buildRangoChips } from 'src/app/shared/utils/dashboard-rangos.util';
 
 @Component({
   selector: 'app-productos-dashboard',
@@ -47,6 +48,13 @@ export class ProductosDashboardComponent implements OnInit {
     { title: 'Sabores', icon: 'local_pizza', action: 'sabores', color: '#ffc107' },
   ];
 
+  // --- Rango --- (solo afecta al cruce con Ventas; los conteos de catalogo
+  // son de estado actual y no tienen periodo)
+  rangoSeleccionado: Rango = 'month';
+  rangosChips: RangoChip[] = buildRangoChips(['today', 'week', 'month', 'last-month', '3months'], 'month');
+  tituloTopVendidos = `Mas vendidos · ${RANGO_LABEL['month']}`;
+  vacioTopVendidos = `Sin ventas en el periodo`;
+
   productosActivos = 0;
   recetasActivas = 0;
   productosSinPrecio = 0;
@@ -70,7 +78,7 @@ export class ProductosDashboardComponent implements OnInit {
   async cargarKpis(): Promise<void> {
     this.loading = true;
     try {
-      const k = await firstValueFrom(this.repository.getDashboardProductosKpis());
+      const k = await firstValueFrom(this.repository.getDashboardProductosKpis(this.rangoSeleccionado));
       if (k) {
         this.productosActivos = k.productosActivos || 0;
         this.recetasActivas = k.recetasActivas || 0;
@@ -90,6 +98,15 @@ export class ProductosDashboardComponent implements OnInit {
     } finally {
       this.loading = false;
     }
+  }
+
+  selectRango(chip: RangoChip): void {
+    if (chip.selected) return;
+    this.rangosChips.forEach(c => c.selected = false);
+    chip.selected = true;
+    this.rangoSeleccionado = chip.value;
+    this.tituloTopVendidos = `Mas vendidos · ${RANGO_LABEL[chip.value]}`;
+    this.cargarKpis();
   }
 
   formatPYG(v: number): string {
