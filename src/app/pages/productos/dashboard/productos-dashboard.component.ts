@@ -13,6 +13,7 @@ import { ListFamiliasComponent } from '../familias/list-familias.component';
 import { ListProductosComponent } from '../list-productos/list-productos.component';
 import { ListRecetasComponent } from '../../gestion-recetas/list-recetas/list-recetas.component';
 import { ListSaboresComponent } from '../../gestion-sabores/list-sabores/list-sabores.component';
+import { GestionarProductoComponent } from '../gestionar-producto/gestionar-producto.component';
 import { DashStatChipComponent } from 'src/app/shared/components/dashboard/stat-chip/dash-stat-chip.component';
 import { DashQuickActionComponent } from 'src/app/shared/components/dashboard/quick-action/dash-quick-action.component';
 import { DashRankingListComponent, DashRankingItem } from 'src/app/shared/components/dashboard/ranking-list/dash-ranking-list.component';
@@ -61,8 +62,11 @@ export class ProductosDashboardComponent implements OnInit {
   productosParciales = 0;
 
   productosPrecioDesactualizado: any[] = [];
-  productosParcialesLista: any[] = [];
+  topCmv: DashRankingItem[] = [];
   topVendidos: DashRankingItem[] = [];
+  // Los parciales tambien se muestran como ranking (sin barra) para que las
+  // tres listas de productos abran el producto con el mismo gesto.
+  parciales: DashRankingItem[] = [];
 
   constructor(
     private tabsService: TabsService,
@@ -85,12 +89,24 @@ export class ProductosDashboardComponent implements OnInit {
         this.productosSinPrecio = k.productosSinPrecio || 0;
         this.productosParciales = k.productosParciales || 0;
         this.productosPrecioDesactualizado = k.productosPrecioDesactualizado || [];
-        this.productosParcialesLista = k.productosParcialesLista || [];
+        this.topCmv = (k.topCmv || []).map((p: any) => ({
+          nombre: p.nombre,
+          valorPrincipal: `${p.margen}%`,
+          valorSecundario: `${this.formatPYG(p.precioVenta)} Gs · costo ${this.formatPYG(p.precioCosto)} Gs`,
+          porcentaje: p.porcentaje,
+          payload: p.id,
+        }));
         this.topVendidos = (k.topVendidos || []).map((p: any) => ({
           nombre: p.nombre,
           valorPrincipal: `${p.cantidad} uds`,
           valorSecundario: `${this.formatPYG(p.total)} Gs`,
           porcentaje: p.porcentaje,
+          payload: p.id,
+        }));
+        this.parciales = (k.productosParcialesLista || []).map((p: any) => ({
+          nombre: p.nombre,
+          valorPrincipal: 'Falta completar',
+          payload: p.id,
         }));
       }
     } catch (e) {
@@ -130,7 +146,19 @@ export class ProductosDashboardComponent implements OnInit {
     }
   }
 
-  openProducto(_id: number): void {
-    this.tabsService.openTab('Productos', ListProductosComponent, { source: 'dashboard' }, 'productos-tab', true);
+  /**
+   * Abre el producto del item clickeado directo en su tab de edicion. Antes
+   * cualquier click caia en el listado completo de productos y habia que
+   * buscarlo de nuevo a mano.
+   */
+  abrirProducto(item: DashRankingItem): void {
+    const id = Number(item.payload);
+    if (!id) return;
+    this.tabsService.openTab(
+      `Editar Producto - ${item.nombre}`,
+      GestionarProductoComponent,
+      { mode: 'edit', productoId: id },
+      `editar-producto-${id}-tab`,
+    );
   }
 }
