@@ -82,7 +82,7 @@ TipoModificacionIngrediente: REMOVIDO | INTERCAMBIADO
   historialCambios: text JSON      // qué cambió al editar
   recetaPresentacion: RecetaPresentacion (opcional, para ELABORADO_CON_VARIACION)
   ensambladoDescripcion: string    // descripción legible de la composición
-  cantidadSabores: int             // 1, 2, 3 (max según PdvConfig.pizzaMaxSabores)
+  cantidadSabores: int             // 1, 2, 3 (max: Producto.maxVariacionesSimultaneas ?? PdvConfig.pizzaMaxSabores)
   saboresVenta: VentaItemSabor[]
   vendedor: Usuario (split de comisiones por item, opcional)
   // Buffet por peso (solo producto BUFFET_POR_PESO):
@@ -282,6 +282,8 @@ PdvAtajoGrupo (tab: "CENA", "DESAYUNO")
 - RETAIL: muestra presentaciones, agrega directo.
 - ELABORADO_SIN_VARIACION: precio via receta, abre `PersonalizarProductoDialog`.
 - ELABORADO_CON_VARIACION: abre `seleccionar-variacion-dialog` (tamaño → sabores → personalización).
+  En las listas se muestra el **rango de precios** de sus variaciones (no un precio único), y si el
+  tamaño tiene un solo sabor con precio se autoselecciona. → [recetas-sabores-variaciones.md](recetas-sabores-variaciones.md).
 - COMBO: precio directo en producto.
 
 ## Categorías PdV (legacy)
@@ -311,8 +313,8 @@ Una sola fila. Campos:
 | `ocuparMesaAlVincularComanda` | false | Si true, vincular comanda a mesa marca la mesa OCUPADA; al cerrar la comanda vuelve a DISPONIBLE si no quedan otras comandas/venta abierta |
 | `atajosGridSize` | 3 | Tamaño grid atajos (1=grande, 3=pequeño) |
 | `atajosProductosGridSize` | 3 | Tamaño grid productos en atajos |
-| `pizzaMaxSabores` | 2 | Máximo sabores por pizza |
-| `pizzaEstrategiaPrecio` | MAYOR_PRECIO | MAYOR_PRECIO o PROMEDIO |
+| `pizzaMaxSabores` | 2 | Máximo sabores por pizza. **Es el default**: cada producto puede sobreescribirlo con `Producto.maxVariacionesSimultaneas` |
+| `pizzaEstrategiaPrecio` | MAYOR_PRECIO | MAYOR_PRECIO o PROMEDIO. **Es el default**: se sobreescribe con `Producto.estrategiaPrecioVariacion` |
 | `autoImprimirComanda` | true | Al agregar items → imprimir comanda automáticamente a impresoras del sector |
 | `autoImprimirTicketVenta` | true | Al cobrar (CONCLUIDA) → imprimir ticket de venta automáticamente |
 | `imprimirPrecuentaAlSolicitar` | true | Botón "Pre-cuenta" imprime sin confirmación intermedia |
@@ -343,6 +345,9 @@ User busca (`searchForm`: `cantidad` + `searchTerm`) → dialog `producto-search
 Despacho por tipo en `addProduct()`:
 - **BUFFET_POR_PESO** → `addBuffetPorPesoItem()` (ver sección Buffet por peso). NO abre buscador si vino de escaneo de balanza.
 - **ELABORADO_CON_VARIACION** → `seleccionar-variacion-dialog` (3 pasos genéricos con labels configurables PIZZA/DEFAULT) → `addVariacionItem()` (crea VentaItem + un `VentaItemSabor` por sabor).
+  El máximo de sabores y la estrategia de precio salen **del producto** (`maxVariacionesSimultaneas` /
+  `estrategiaPrecioVariacion`) con fallback al `PdvConfig`; con máximo 1 el diálogo se comporta como
+  selección única. Sabor único disponible → se autoselecciona sin abrir la personalización.
 - Producto **con receta** (ELABORADO_SIN_VARIACION) → `PersonalizarProductoDialog` (750px, 2 columnas):
   - Izquierda: ingredientes opcionales (chips verde/rojo toggle), intercambiables (chip naranja + select alternativas), fijos (texto compacto).
   - Derecha: adicionales con precio (chips verde con +valor), observaciones predefinidas (chips celeste), observación libre.

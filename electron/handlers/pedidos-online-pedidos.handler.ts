@@ -98,7 +98,7 @@ async function resolveOpcion(
       : [];
 
     if (presentacionId && saborIds.length) {
-      const { maxSabores, estrategia } = await getPizzaConfig(dataSource);
+      const { maxSabores, estrategia } = await getPizzaConfig(dataSource, producto);
       const uniqueSabores = Array.from(new Set(saborIds));
       if (uniqueSabores.length > maxSabores) return { valor: 0, moneda: null, label: '', error: 'demasiados_sabores' };
 

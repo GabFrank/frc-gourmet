@@ -46,10 +46,17 @@
           <div class="crud-card-main">
             <span class="pedido-nombre">{{ p.nombre }}</span>
             <span class="pedido-precio">
-              {{ p.simboloMoneda }} {{ p.precio | number: ('1.0-' + (p.decimalesMoneda || 0)) }}
-              <span class="pedido-precio-unidad" *ngIf="p.esBuffet">/ kg</span>
+              <ng-container *ngIf="p.esRangoVariacion; else precioUnicoRes">
+                {{ p.simboloMoneda }} {{ p.precioDesde | number: ('1.0-' + (p.decimalesMoneda || 0)) }} –
+                {{ p.precioHasta | number: ('1.0-' + (p.decimalesMoneda || 0)) }}
+              </ng-container>
+              <ng-template #precioUnicoRes>
+                {{ p.simboloMoneda }} {{ p.precio | number: ('1.0-' + (p.decimalesMoneda || 0)) }}
+                <span class="pedido-precio-unidad" *ngIf="p.esBuffet">/ kg</span>
+              </ng-template>
             </span>
-            <span class="pedido-conv" *ngIf="p.conversiones.length">
+            <span class="pedido-variaciones" *ngIf="p.variacionesDetalle">{{ p.variacionesDetalle }}</span>
+            <span class="pedido-conv" *ngIf="p.conversiones.length && !p.esRangoVariacion">
               <span class="pedido-conv-item" *ngFor="let c of p.conversiones">
                 <img *ngIf="c.flag" class="mesa-flag" [src]="c.flag" alt="" />
                 {{ c.simbolo }} {{ c.valor | number: c.digits }}
@@ -86,10 +93,17 @@
               <div class="crud-card-main">
                 <span class="pedido-nombre">{{ p.nombre }}</span>
                 <span class="pedido-precio">
-                  {{ p.simboloMoneda }} {{ p.precio | number: ('1.0-' + (p.decimalesMoneda || 0)) }}
-                  <span class="pedido-precio-unidad" *ngIf="p.esBuffet">/ kg</span>
+                  <ng-container *ngIf="p.esRangoVariacion; else precioUnicoAtajo">
+                    {{ p.simboloMoneda }} {{ p.precioDesde | number: ('1.0-' + (p.decimalesMoneda || 0)) }} –
+                    {{ p.precioHasta | number: ('1.0-' + (p.decimalesMoneda || 0)) }}
+                  </ng-container>
+                  <ng-template #precioUnicoAtajo>
+                    {{ p.simboloMoneda }} {{ p.precio | number: ('1.0-' + (p.decimalesMoneda || 0)) }}
+                    <span class="pedido-precio-unidad" *ngIf="p.esBuffet">/ kg</span>
+                  </ng-template>
                 </span>
-                <span class="pedido-conv" *ngIf="p.conversiones.length">
+                <span class="pedido-variaciones" *ngIf="p.variacionesDetalle">{{ p.variacionesDetalle }}</span>
+                <span class="pedido-conv" *ngIf="p.conversiones.length && !p.esRangoVariacion">
                   <span class="pedido-conv-item" *ngFor="let c of p.conversiones">
                     <img *ngIf="c.flag" class="mesa-flag" [src]="c.flag" alt="" />
                     {{ c.simbolo }} {{ c.valor | number: c.digits }}

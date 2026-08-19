@@ -1,7 +1,8 @@
 import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { TiendaOnlineConfig } from '../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
-import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
+import { Producto } from '../../src/app/database/entities/productos/producto.entity';
+import { getVariacionConfig } from '../utils/variacion-config.utils';
 import { ensurePermission } from '../utils/auth.utils';
 import { registerPublicOperation } from '../server/public-routes';
 
@@ -47,20 +48,17 @@ export function estaAbierta(cfg: TiendaOnlineConfig, now: Date = new Date()): bo
 }
 
 /**
- * Config de pizza (multi-sabor) tomada del PdV, para que el storefront cotice
- * "mitad y mitad" igual que el mostrador. Defaults seguros si no hay fila.
+ * Config de multi-sabor para que el storefront cotice "mitad y mitad" igual que
+ * el mostrador. Si se pasa el producto, se respeta su override
+ * (`max_variaciones_simultaneas` / `estrategia_precio_variacion`); si no, rige
+ * el global del PdV. Defaults seguros si no hay fila.
  */
 export async function getPizzaConfig(
   dataSource: DataSource,
+  producto?: Producto | number | null,
 ): Promise<{ maxSabores: number; estrategia: 'MAYOR_PRECIO' | 'PROMEDIO' }> {
-  try {
-    const cfg = await dataSource.getRepository(PdvConfig).findOne({ where: {}, order: { id: 'ASC' } });
-    const max = Math.max(1, Number(cfg?.pizzaMaxSabores) || 2);
-    const estr = String(cfg?.pizzaEstrategiaPrecio || 'MAYOR_PRECIO').toUpperCase();
-    return { maxSabores: max, estrategia: estr === 'PROMEDIO' ? 'PROMEDIO' : 'MAYOR_PRECIO' };
-  } catch {
-    return { maxSabores: 2, estrategia: 'MAYOR_PRECIO' };
-  }
+  const cfg = await getVariacionConfig(dataSource, producto ?? null);
+  return { maxSabores: cfg.maxSabores, estrategia: cfg.estrategia };
 }
 
 function mapConfigPublic(cfg: TiendaOnlineConfig): any {

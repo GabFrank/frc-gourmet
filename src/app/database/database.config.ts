@@ -274,6 +274,7 @@ import { MusicaOpcionesAvanzadas1786383979096 } from './migrations/1786383979096
 import { MusicaCatalogoEstilos1786475808081 } from './migrations/1786475808081-MusicaCatalogoEstilos';
 import { MusicaClasificacionSemantica1786563231306 } from './migrations/1786563231306-MusicaClasificacionSemantica';
 import { MusicaPreferenciaEstilo1786804287491 } from './migrations/1786804287491-MusicaPreferenciaEstilo';
+import { ProductoConfigVariacion1787063450518 } from './migrations/1787063450518-ProductoConfigVariacion';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -680,6 +681,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     MusicaCatalogoEstilos1786475808081,
     MusicaClasificacionSemantica1786563231306,
     MusicaPreferenciaEstilo1786804287491,
+    ProductoConfigVariacion1787063450518,
     AddPagoCuotaCppDetalle1785320463398,
     AddEgresoCajaToPagoCuotaDetalle1785335253817,
   ];
