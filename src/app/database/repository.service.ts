@@ -956,10 +956,10 @@ export abstract class RepositoryService {
   abstract countNotificacionesNoLeidas(usuarioId?: number): Observable<any>;
   abstract getDashboardRrhhKpis(periodo: string): Observable<any>;
   abstract getDashboardVentasKpis(rango?: string): Observable<any>;
-  abstract getDashboardComprasKpis(): Observable<any>;
-  abstract getDashboardProductosKpis(): Observable<any>;
+  abstract getDashboardComprasKpis(rango?: string): Observable<any>;
+  abstract getDashboardProductosKpis(rango?: string): Observable<any>;
   abstract getDashboardFinancieroKpis(): Observable<any>;
-  abstract getDashboardCajaMayorKpis(): Observable<any>;
+  abstract getDashboardCajaMayorKpis(rango?: string): Observable<any>;
   abstract getReporteVentasCierre(params: any): Observable<any>;
   abstract getReporteFinanzasCierre(params: any): Observable<any>;
   abstract enviarReporteWhatsapp(params: { base64: string; caption?: string; fileName?: string; destino?: string }): Observable<any>;

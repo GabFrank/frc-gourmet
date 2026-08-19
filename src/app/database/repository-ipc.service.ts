@@ -1065,10 +1065,10 @@ interface ElectronAPI {
 
   // Dashboards por dominio
   getDashboardVentasKpis: (rango?: string) => Promise<any>;
-  getDashboardComprasKpis: () => Promise<any>;
-  getDashboardProductosKpis: () => Promise<any>;
+  getDashboardComprasKpis: (rango?: string) => Promise<any>;
+  getDashboardProductosKpis: (rango?: string) => Promise<any>;
   getDashboardFinancieroKpis: () => Promise<any>;
-  getDashboardCajaMayorKpis: () => Promise<any>;
+  getDashboardCajaMayorKpis: (rango?: string) => Promise<any>;
   getReporteVentasCierre: (params: any) => Promise<any>;
   getReporteFinanzasCierre: (params: any) => Promise<any>;
   enviarReporteWhatsapp: (params: { base64: string; caption?: string; fileName?: string; destino?: string }) => Promise<any>;
@@ -4131,17 +4131,17 @@ export class RepositoryIpcService extends RepositoryService {
   getDashboardVentasKpis(rango: string = 'week'): Observable<any> {
     return from(this.api.getDashboardVentasKpis(rango));
   }
-  getDashboardComprasKpis(): Observable<any> {
-    return from(this.api.getDashboardComprasKpis());
+  getDashboardComprasKpis(rango: string = 'month'): Observable<any> {
+    return from(this.api.getDashboardComprasKpis(rango));
   }
-  getDashboardProductosKpis(): Observable<any> {
-    return from(this.api.getDashboardProductosKpis());
+  getDashboardProductosKpis(rango: string = 'month'): Observable<any> {
+    return from(this.api.getDashboardProductosKpis(rango));
   }
   getDashboardFinancieroKpis(): Observable<any> {
     return from(this.api.getDashboardFinancieroKpis());
   }
-  getDashboardCajaMayorKpis(): Observable<any> {
-    return from(this.api.getDashboardCajaMayorKpis());
+  getDashboardCajaMayorKpis(rango: string = 'month'): Observable<any> {
+    return from(this.api.getDashboardCajaMayorKpis(rango));
   }
   getReporteVentasCierre(params: any): Observable<any> {
     return from(this.api.getReporteVentasCierre(params));

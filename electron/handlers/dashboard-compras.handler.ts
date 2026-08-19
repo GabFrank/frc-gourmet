@@ -4,27 +4,29 @@ import { CompraEstado } from '../../src/app/database/entities/compras/estado.enu
 import { CuotaEstado, CuentaPorPagarEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { dbQuery } from '../utils/db-query';
+import { Rango, rangoToFechas, bucketsForRango } from '../utils/dashboard-rangos.util';
 
 export function registerDashboardComprasHandlers(
   dataSource: DataSource,
   _getCurrentUser: () => Usuario | null,
 ): void {
 
-  ipcMain.handle('get-dashboard-compras-kpis', async () => {
+  ipcMain.handle('get-dashboard-compras-kpis', async (_event, rango: Rango = 'month') => {
     try {
       const now = new Date();
-      const inicioMes = new Date(now.getFullYear(), now.getMonth(), 1);
-      inicioMes.setHours(0, 0, 0, 0);
-      const finMes = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      // El periodo de las compras y del top de proveedores lo define el rango
+      // elegido en la UI; los vencimientos de CPP siguen siendo a futuro fijo
+      // (7 y 14 dias), porque son una alerta, no una serie historica.
+      const { desde, hasta } = rangoToFechas(rango, now);
       const en7dias = new Date(now); en7dias.setDate(en7dias.getDate() + 7);
 
-      // 1. Compras del mes
+      // 1. Compras del periodo
       const totalMesRows: any[] = await dbQuery(dataSource, `
         SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
         FROM compras
         WHERE estado IN (?, ?)
           AND created_at >= ? AND created_at <= ?
-      `, [CompraEstado.FINALIZADO, CompraEstado.ACTIVO, inicioMes.toISOString(), finMes.toISOString()]);
+      `, [CompraEstado.FINALIZADO, CompraEstado.ACTIVO, desde.toISOString(), hasta.toISOString()]);
       const comprasMes = Number(totalMesRows?.[0]?.cnt || 0);
       const totalMesPYG = Number(totalMesRows?.[0]?.suma || 0);
 
@@ -47,7 +49,7 @@ export function registerDashboardComprasHandlers(
       `, [CuotaEstado.PENDIENTE, CuotaEstado.PARCIAL, hoyStr]);
       const totalCppVencidoPYG = Number(cppVencidasRows?.[0]?.suma || 0);
 
-      // 4. Top proveedores del mes
+      // 4. Top proveedores del periodo
       const topRows: any[] = await dbQuery(dataSource, `
         SELECT pr.id, COALESCE(pr.razon_social, pr.nombre) as nombre,
                COUNT(c.id) as cnt,
@@ -59,7 +61,7 @@ export function registerDashboardComprasHandlers(
         GROUP BY pr.id, pr.razon_social, pr.nombre
         ORDER BY total DESC
         LIMIT 5
-      `, [CompraEstado.FINALIZADO, CompraEstado.ACTIVO, inicioMes.toISOString(), finMes.toISOString()]);
+      `, [CompraEstado.FINALIZADO, CompraEstado.ACTIVO, desde.toISOString(), hasta.toISOString()]);
       const maxTotal = topRows.reduce((m, r) => Math.max(m, Number(r.total || 0)), 0);
       const topProveedores = topRows.map(r => ({
         nombre: String(r.nombre || '').toUpperCase(),
@@ -82,10 +84,14 @@ export function registerDashboardComprasHandlers(
         ORDER BY c.fecha_vencimiento ASC
         LIMIT 10
       `, [CuotaEstado.PENDIENTE, CuotaEstado.PARCIAL, CuentaPorPagarEstado.ACTIVO, en14.toISOString().slice(0, 10)]);
+      // `now` NO se muta aca: se compara contra una copia a medianoche. El
+      // `now.setHours(0,0,0,0)` que habia adentro del map lo dejaba en 00:00 y
+      // corrompia cualquier uso posterior (los buckets del chart, mas abajo).
+      const hoyInicio = new Date(now); hoyInicio.setHours(0, 0, 0, 0);
       const proximosVencimientos = venRows.map(r => {
         const fv = new Date(r.fecha_vencimiento);
         fv.setHours(0, 0, 0, 0);
-        const dias = Math.floor((fv.getTime() - now.setHours(0, 0, 0, 0)) / (24 * 60 * 60 * 1000));
+        const dias = Math.floor((fv.getTime() - hoyInicio.getTime()) / (24 * 60 * 60 * 1000));
         let urgencia: 'vencida' | 'urgente' | 'proxima' = 'proxima';
         if (dias < 0) urgencia = 'vencida';
         else if (dias <= 3) urgencia = 'urgente';
@@ -98,22 +104,18 @@ export function registerDashboardComprasHandlers(
         };
       });
 
-      // 6. Compras por periodo (6 meses)
-      const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      // 6. Compras por periodo (granularidad segun el rango)
       const labels: string[] = [];
       const compras: number[] = [];
       const cantidades: number[] = [];
-      const refDate = new Date();
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date(refDate.getFullYear(), refDate.getMonth() - i, 1);
-        const f = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+      for (const bucket of bucketsForRango(rango, now)) {
         const rows: any[] = await dbQuery(dataSource, `
           SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
           FROM compras
           WHERE estado IN (?, ?)
             AND created_at >= ? AND created_at <= ?
-        `, [CompraEstado.FINALIZADO, CompraEstado.ACTIVO, d.toISOString(), f.toISOString()]);
-        labels.push(meses[d.getMonth()]);
+        `, [CompraEstado.FINALIZADO, CompraEstado.ACTIVO, bucket.desde.toISOString(), bucket.hasta.toISOString()]);
+        labels.push(bucket.label);
         compras.push(Number(rows?.[0]?.suma || 0));
         cantidades.push(Number(rows?.[0]?.cnt || 0));
       }

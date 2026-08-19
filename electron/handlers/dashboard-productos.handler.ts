@@ -6,14 +6,20 @@ import { VentaEstado } from '../../src/app/database/entities/ventas/venta.entity
 import { EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { dbQuery } from '../utils/db-query';
+import { Rango, rangoToFechas } from '../utils/dashboard-rangos.util';
 
 export function registerDashboardProductosHandlers(
   dataSource: DataSource,
   _getCurrentUser: () => Usuario | null,
 ): void {
 
-  ipcMain.handle('get-dashboard-productos-kpis', async () => {
+  ipcMain.handle('get-dashboard-productos-kpis', async (_event, rango: Rango = 'month') => {
     try {
+      const now = new Date();
+      // Solo el cruce con Ventas (top vendidos) depende del rango; los conteos
+      // de catalogo (activos, sin precio, parciales, recetas) son de estado
+      // actual y no tienen periodo.
+      const { desde, hasta } = rangoToFechas(rango, now);
       const productoRepo = dataSource.getRepository(Producto);
       const recetaRepo = dataSource.getRepository(Receta);
 
@@ -67,9 +73,7 @@ export function registerDashboardProductosHandlers(
         };
       });
 
-      // 6. Top vendidos del mes (cruce con Ventas)
-      const inicioMes = new Date(today.getFullYear(), today.getMonth(), 1);
-      const finMes = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+      // 6. Top vendidos del periodo (cruce con Ventas)
       const topRows: any[] = await dbQuery(dataSource, `
         SELECT p.id, p.nombre,
                SUM(vi.cantidad) as cantidad,
@@ -83,7 +87,7 @@ export function registerDashboardProductosHandlers(
         GROUP BY p.id, p.nombre
         ORDER BY total DESC
         LIMIT 8
-      `, [VentaEstado.CONCLUIDA, EstadoVentaItem.ACTIVO, inicioMes.toISOString(), finMes.toISOString()]);
+      `, [VentaEstado.CONCLUIDA, EstadoVentaItem.ACTIVO, desde.toISOString(), hasta.toISOString()]);
       const maxTopTotal = topRows.reduce((m, r) => Math.max(m, Number(r.total || 0)), 0);
       const topVendidos = topRows.map(r => ({
         nombre: String(r.nombre || '').toUpperCase(),

@@ -3810,17 +3810,17 @@ contextBridge.exposeInMainWorld('api', {
   getDashboardVentasKpis: async (rango: string = 'week'): Promise<any> => {
     return await ipcRenderer.invoke('get-dashboard-ventas-kpis', rango);
   },
-  getDashboardComprasKpis: async (): Promise<any> => {
-    return await ipcRenderer.invoke('get-dashboard-compras-kpis');
+  getDashboardComprasKpis: async (rango: string = 'month'): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-compras-kpis', rango);
   },
-  getDashboardProductosKpis: async (): Promise<any> => {
-    return await ipcRenderer.invoke('get-dashboard-productos-kpis');
+  getDashboardProductosKpis: async (rango: string = 'month'): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-productos-kpis', rango);
   },
   getDashboardFinancieroKpis: async (): Promise<any> => {
     return await ipcRenderer.invoke('get-dashboard-financiero-kpis');
   },
-  getDashboardCajaMayorKpis: async (): Promise<any> => {
-    return await ipcRenderer.invoke('get-dashboard-caja-mayor-kpis');
+  getDashboardCajaMayorKpis: async (rango: string = 'month'): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-caja-mayor-kpis', rango);
   },
 
   // === Hub de Reportes (cierre de mes) ===
