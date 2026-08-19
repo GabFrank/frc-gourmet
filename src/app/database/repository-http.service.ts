@@ -2417,16 +2417,16 @@ export class RepositoryHttpService extends RepositoryService {
   getDashboardVentasKpis(rango?: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardVentasKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  getDashboardComprasKpis(): Observable<any> {
+  getDashboardComprasKpis(_rango?: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardComprasKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  getDashboardProductosKpis(): Observable<any> {
+  getDashboardProductosKpis(_rango?: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardProductosKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getDashboardFinancieroKpis(): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardFinancieroKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  getDashboardCajaMayorKpis(): Observable<any> {
+  getDashboardCajaMayorKpis(_rango?: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardCajaMayorKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getReporteVentasCierre(_params: any): Observable<any> {
