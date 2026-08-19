@@ -4,6 +4,7 @@ import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caj
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { CajaMayorEstado } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { dbQuery } from '../utils/db-query';
 
 export function registerDashboardFinancieroHandlers(
@@ -81,6 +82,28 @@ export function registerDashboardFinancieroHandlers(
         };
       });
 
+      // 7. Cajas Mayor activas, con su saldo en la moneda principal. Hasta
+      // ahora la unica forma de entrar a una caja mayor desde un dashboard era
+      // un acceso directo que el usuario tenia que crear a mano, apuntando a
+      // una caja concreta; esto las lista todas.
+      const cajasMayorRows: any[] = principal ? await dbQuery(dataSource, `
+        SELECT cm.id, cm.nombre, cm.descripcion, cm.fecha_apertura,
+               COALESCE(SUM(s.saldo), 0) as saldo
+        FROM cajas_mayor cm
+        LEFT JOIN cajas_mayor_saldos s
+               ON s.caja_mayor_id = cm.id AND s.moneda_id = ?
+        WHERE cm.activo = true AND cm.estado = ?
+        GROUP BY cm.id, cm.nombre, cm.descripcion, cm.fecha_apertura
+        ORDER BY cm.nombre ASC
+      `, [principal.id, CajaMayorEstado.ABIERTA]) : [];
+      const cajasMayorActivas = cajasMayorRows.map(r => ({
+        id: Number(r.id),
+        nombre: String(r.nombre || '').toUpperCase(),
+        descripcion: String(r.descripcion || '').toUpperCase(),
+        saldoPYG: Number(r.saldo || 0),
+        apertura: r.fecha_apertura,
+      }));
+
       return {
         cajasActivas,
         monedasActivas,
@@ -89,6 +112,7 @@ export function registerDashboardFinancieroHandlers(
         cotizacionBRL,
         cotizacionesHistorico,
         cajasAbiertasResumen,
+        cajasMayorActivas,
       };
     } catch (error) {
       console.error('Error get-dashboard-financiero-kpis:', error);
