@@ -88,13 +88,23 @@ Header interno de card con icon + title + badge opcional.
 ```
 
 ### `<app-dash-ranking>`
-Top N con barras de progreso. Items: `{nombre, valorPrincipal, valorSecundario?, porcentaje?}`.
+Top N con barras de progreso. Items: `{nombre, valorPrincipal, valorSecundario?, porcentaje?, payload?}`.
+
+Con `[clickable]="true"` cada fila abre algo: el cursor cambia, el nombre se
+subraya al hover y `(itemClick)` emite el item completo. `payload` es el dato
+libre que viaja con el item (normalmente el id de la entidad) para que el
+dashboard sepa qué abrir sin buscar por nombre. **Sin `[clickable]` el
+componente se comporta exactamente como antes** — el hover de fondo existe
+siempre, porque es feedback de lectura, no de navegación.
+
 ```html
 <app-dash-ranking
   title="Top productos vendidos"
   icon="emoji_events"
   [items]="topProductos"
-  emptyText="Sin datos del periodo">
+  emptyText="Sin datos del periodo"
+  [clickable]="true"
+  (itemClick)="abrirProducto($event)">
 </app-dash-ranking>
 ```
 
@@ -125,6 +135,7 @@ Clases disponibles:
 - `.dashboard-stats-row`, `.dashboard-stat-chip` (+ variantes `.chip-success`, `.chip-warning`, etc.)
 - `.dashboard-quick-actions`, `.dashboard-quick-action`, `.dashboard-quick-action-icon`
 - `.dashboard-main-content`, `.dashboard-col-left`, `.dashboard-col-right`
+- `.dashboard-cards-row` — fila de cards de igual peso (3 columnas → 2 en <1024px → 1 en <600px), para dashboards sin chart que justifique la asimetría de `.dashboard-main-content`. La usa Productos para sus 3 rankings.
 - `.dashboard-card`
 - `.dashboard-section-header`, `.dashboard-section-title`, `.dashboard-section-badge` (+ variantes badge color)
 - `.dashboard-chart-header`, `.dashboard-chart-title`, `.dashboard-chart-chips`, `.dashboard-range-chip`, `.dashboard-chart-container`
@@ -162,11 +173,11 @@ Cada dashboard tiene un IPC único `get-dashboard-{dominio}-kpis(filtros?)` que 
 
 | Handler | IPC | Filtros |
 |---|---|---|
-| `electron/handlers/dashboard-ventas.handler.ts` | `get-dashboard-ventas-kpis` | `rango: 'today'\|'week'\|'month'\|'3months'\|'6months'` |
-| `electron/handlers/dashboard-compras.handler.ts` | `get-dashboard-compras-kpis` | — |
-| `electron/handlers/dashboard-productos.handler.ts` | `get-dashboard-productos-kpis` | — |
+| `electron/handlers/dashboard-ventas.handler.ts` | `get-dashboard-ventas-kpis` | `rango: Rango` (default `'week'`) |
+| `electron/handlers/dashboard-compras.handler.ts` | `get-dashboard-compras-kpis` | `rango: Rango` (default `'month'`) |
+| `electron/handlers/dashboard-productos.handler.ts` | `get-dashboard-productos-kpis` | `rango: Rango` (default `'month'`) |
 | `electron/handlers/dashboard-financiero.handler.ts` | `get-dashboard-financiero-kpis` | — |
-| `electron/handlers/dashboard-caja-mayor.handler.ts` | `get-dashboard-caja-mayor-kpis` | — |
+| `electron/handlers/dashboard-caja-mayor.handler.ts` | `get-dashboard-caja-mayor-kpis` | `rango: Rango` (default `'month'`) |
 | `electron/handlers/dashboard-rrhh.handler.ts` | `get-dashboard-rrhh-kpis` | `periodo: 'YYYY-MM'` |
 
 ### Registro en 3 capas
@@ -197,6 +208,79 @@ Seedeados en `electron/handlers/permissions.handler.ts`:
 
 **⚠️ Estado del chequeo:** los permisos están **creados en BD** y asignados al admin, pero **no se chequean en frontend** todavía. El sidenav y `openXxxTab` no llaman a `PermissionService.has(...)`. `PermissionService` existe (`src/app/services/permission.service.ts`) pero ningún componente lo inyecta. Aplicar el chequeo es trabajo de sesión separada.
 
+## 7.4. Dos cosas que no se deducen leyendo el código
+
+**Productos — "Mejor margen (CMV)".** El KPI `topCmv` cruza el precio de venta
+activo (directo del producto o vía su presentación, priorizando el `principal`)
+con el precio de costo activo más reciente. Descarta a propósito los productos
+sin ambos precios y los de margen ≤ 0: ahí el dato es carga incompleta, no un
+ranking, y meterlos ensucia la lista con ruido que nadie va a accionar. Las tres
+listas del dashboard (CMV, más vendidos, parciales) abren el producto en su tab
+de edición con el `payload` del item.
+
+**Financiero — "Cajas Mayor activas".** El saldo suma **solo las formas de pago
+con `movimenta_caja = true`**, que es el mismo criterio que usa
+`agruparSaldosPorFormaPago` en el detalle de la caja mayor para su "Saldo en
+caja". Sin ese filtro entra plata que no es efectivo (p. ej. un saldo en
+TRANSFERENCIA) y la card muestra un número distinto al de la pantalla que abre
+al clickearla — que fue exactamente el bug que apareció probando la UI. Ojo que
+el KPI `saldoPYG` del handler de caja mayor **no** aplica este filtro: son dos
+cifras con semánticas distintas.
+
+## 7.5. Rangos de tiempo (selector de período)
+
+Fuente única: **`src/app/shared/utils/dashboard-rangos.util.ts`** (TS puro), que
+`electron/utils/dashboard-rangos.util.ts` re-exporta. Backend y frontend usan el
+mismo tipo `Rango` y los mismos labels, así que agregar un rango no obliga a
+tocar los componentes.
+
+```ts
+type Rango = 'today' | 'week' | 'month' | 'last-month' | '3months' | '6months';
+
+rangoToFechas(rango, now?)   // { desde, hasta } para filtrar filas
+bucketsForRango(rango, now?) // tramos del eje X, con su label
+buildRangoChips(rangos, sel) // los chips de la UI
+RANGO_LABEL[rango]           // 'Hoy', 'Esta semana', …
+```
+
+**`rangoToFechas` se define como la unión de `bucketsForRango`, y eso no es un
+detalle de implementación: es la garantía de que el total de la card cierre con
+la suma de las barras del chart.** Antes cada una tenía su propia aritmética y
+no cerraban — en `3months` la card sumaba 92 días contra los 84 del chart, y en
+`6months` había medio mes de diferencia. Si alguna vez hace falta cambiar una,
+cambiar la de buckets; la otra la sigue sola. `scripts/test-dashboard-rangos.ts`
+verifica ese invariante para todo rango.
+
+Granularidad por rango: horaria (`today`), diaria (`week`, `month`,
+`last-month`), semanal (`3months`) y mensual (`6months`).
+
+**Ambos parámetros aceptan `now`, y el handler debe pasar el mismo a las dos.**
+Entre `await` y `await` de un request, dos `new Date()` distintos pueden caer en
+horas (o días) diferentes y volver a desincronizar card y chart.
+
+### Cómo se conecta un dashboard
+
+1. El handler recibe `rango: Rango = '<default>'` y resuelve fechas/buckets con
+   el util. Los KPIs que **no** son una serie —conteos de catálogo, alertas de
+   vencimiento a futuro— NO se filtran por rango; documentarlo con un comentario
+   para que no parezca un olvido.
+2. El componente arma sus chips con `buildRangoChips(...)`, y en `selectRango()`
+   actualiza **todos** los labels que nombran el período (título del chart,
+   labels de las stat chips, título del ranking) antes de recargar. Un título
+   que dice "del mes" con datos de 6 meses es el bug clásico de esta pantalla.
+3. Los chips van dentro de `<app-dash-chart-card>` (content projection). Si el
+   dashboard no tiene chart, van en `.dashboard-header-actions` dentro de un
+   `.dashboard-chart-chips` — es el "periodo selector si aplica" de la sección 2.
+
+Quién ofrece qué (cada dashboard elige el subset que le sirve):
+
+| Dashboard | Rangos | Default |
+|---|---|---|
+| Ventas | today, week, month, 3months, 6months | week |
+| Compras | week, month, last-month, 3months, 6months | month |
+| Productos | today, week, month, last-month, 3months | month |
+| Home | today, week, month, 3months | week |
+
 ## 8. Reglas duras del padrón
 
 1. **`width: 100%; box-sizing: border-box;`** en `.dashboard-container`. NUNCA `max-width: 1400px; margin: 0 auto` (eso centraba y limitaba en pantallas anchas — fallback ya corregido).
@@ -209,6 +293,8 @@ Seedeados en `electron/handlers/permissions.handler.ts`:
 8. **Loading state** en stat-chips vía `[loading]="loading"` (muestra spinner inline).
 9. **Empty state** consistente con `<div class="dashboard-empty-state"><mat-icon>info_outline</mat-icon><span>...</span></div>`.
 10. **No mocks** — siempre conectar a un handler real, mostrar empty state si no hay data.
+11. **Si el dashboard tiene selector de rango, todo texto que nombre el período lo sigue** — título del chart, labels de las stat chips y títulos de los rankings. Precomputados en el `.ts`, actualizados en `selectRango()`.
+12. **Una cifra que es un acceso a otra pantalla tiene que coincidir con lo que esa pantalla muestra.** Ver la card de Cajas Mayor en la sección 3.
 
 ## 9. Estilo del componente local
 
