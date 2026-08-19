@@ -107,10 +107,10 @@
 
     <div class="dashboard-col-right">
       <app-dash-ranking
-        title="Top proveedores del mes"
+        [title]="tituloTopProveedores"
         icon="emoji_events"
         [items]="topProveedores"
-        emptyText="Sin compras este mes">
+        [emptyText]="vacioTopProveedores">
       </app-dash-ranking>
     </div>
   </div>

@@ -4,11 +4,13 @@
  * Valida `rangoToFechas` y `bucketsForRango` de forma determinística — sin base
  * de datos. Cubre en particular:
  *  - que los bordes sean día completo (00:00:00.000 → 23:59:59.999);
- *  - que `3months` / `6months` NO desborden de mes (31/05 − 3 meses = 28/02, no
- *    el 03/03 que devuelve `setMonth` a secas);
  *  - que los buckets sean contiguos, sin huecos ni solapes;
  *  - que `last-month` cubra el mes calendario anterior completo, incluso cuando
- *    ese mes tiene más días que el actual.
+ *    ese mes tiene más días que el actual;
+ *  - que `rangoToFechas` sea EXACTAMENTE la unión de `bucketsForRango`, para
+ *    todo rango. Esto es lo que garantiza que el total de la card cierre con la
+ *    suma de las barras del chart; cuando cada función tenía su propia
+ *    aritmética, `3months` y `6months` discrepaban en días.
  *
  * Uso: npm run test:dashboard-rangos
  */
@@ -37,7 +39,9 @@ function main() {
     ok(ymd(desde) === '2026-07-15', 'desde = 15 Jul', ymd(desde));
     ok(ymd(hasta) === '2026-07-15', 'hasta = 15 Jul', ymd(hasta));
     ok(hms(desde) === '00:00:00.000', 'desde arranca a las 00:00:00.000', hms(desde));
-    ok(hms(hasta) === '23:59:59.999', 'hasta cierra a las 23:59:59.999', hms(hasta));
+    // 'today' grafica por hora, asi que la ventana llega hasta el final de la
+    // hora en curso, no hasta medianoche: es la union de sus buckets.
+    ok(hms(hasta) === '14:59:59.999', 'hasta cierra al final de la hora actual', hms(hasta));
   }
 
   // ── week / month · ventanas móviles ──
@@ -51,20 +55,23 @@ function main() {
     ok(ymd(m.desde) === '2026-06-16', 'month.desde = 16 Jun (30 días contando hoy)', ymd(m.desde));
   }
 
-  // ── 3months / 6months · sin desborde de mes ──
-  console.log('\n[C] 3months y 6months · el 31 de mayo NO debe desbordar a marzo');
+  // ── 3months / 6months · ventanas derivadas de los buckets ──
+  console.log('\n[C] 3months y 6months · la ventana es la de sus buckets');
   {
-    const now = new Date(2026, 4, 31, 10, 0, 0); // 31 May 2026
+    const now = new Date(2026, 6, 15, 14, 30, 0); // 15 Jul 2026
+    // 12 semanas terminando hoy = 84 días contando hoy.
     const t = rangoToFechas('3months', now);
-    // setMonth(mes-3) daría 2026-03-03 (febrero no tiene 31). Debe recortar a 28/02.
-    ok(ymd(t.desde) === '2026-02-28', '3months.desde = 28 Feb (recortado, no 3 Mar)', ymd(t.desde));
+    ok(ymd(t.desde) === '2026-04-23', '3months.desde = 23 Abr (12 semanas atrás)', ymd(t.desde));
+    ok(ymd(t.hasta) === '2026-07-15', '3months.hasta = 15 Jul (hoy)', ymd(t.hasta));
+    // 6 meses calendario, el actual incluido y completo.
     const s = rangoToFechas('6months', now);
-    ok(ymd(s.desde) === '2025-11-30', '6months.desde = 30 Nov (recortado, no 1 Dic)', ymd(s.desde));
+    ok(ymd(s.desde) === '2026-02-01', '6months.desde = 1 Feb (mes calendario)', ymd(s.desde));
+    ok(ymd(s.hasta) === '2026-07-31', '6months.hasta = 31 Jul (fin del mes actual)', ymd(s.hasta));
   }
   {
-    // Caso sin desborde: el día existe en el mes destino, se conserva.
-    const now = new Date(2026, 6, 15, 10, 0, 0);
-    ok(ymd(rangoToFechas('3months', now).desde) === '2026-04-15', '3months desde 15 Jul = 15 Abr', ymd(rangoToFechas('3months', now).desde));
+    // Fin de mes: al ser meses calendario, el día de hoy no desborda nada.
+    const now = new Date(2026, 4, 31, 10, 0, 0); // 31 May 2026
+    ok(ymd(rangoToFechas('6months', now).desde) === '2025-12-01', '6months desde 31 May = 1 Dic 2025', ymd(rangoToFechas('6months', now).desde));
   }
 
   // ── last-month · mes calendario anterior completo ──
@@ -153,8 +160,30 @@ function main() {
     ok(lm[lm.length - 1].hasta.getTime() < now.getTime(), 'last-month: el último bucket es anterior a hoy');
   }
 
+  // ── el invariante que ata card y chart ──
+  console.log('\n[H] rangoToFechas === union de bucketsForRango (para TODO rango)');
+  {
+    // Si esto se rompe, el total de la card deja de cerrar con la suma de las
+    // barras del chart: son la misma ventana consultada por dos caminos.
+    for (const now of [
+      new Date(2026, 6, 15, 14, 30, 0),  // mitad de mes
+      new Date(2026, 4, 31, 23, 59, 0),  // ultimo dia de un mes de 31
+      new Date(2026, 0, 1, 0, 30, 0),    // primer dia del año
+      new Date(2024, 1, 29, 12, 0, 0),   // 29 de febrero (bisiesto)
+    ]) {
+      for (const rango of RANGOS) {
+        const f = rangoToFechas(rango, now);
+        const bs = bucketsForRango(rango, now);
+        const igualDesde = f.desde.getTime() === bs[0].desde.getTime();
+        const igualHasta = f.hasta.getTime() === bs[bs.length - 1].hasta.getTime();
+        ok(igualDesde && igualHasta, `${ymd(now)} · ${rango}: la ventana coincide con sus buckets`,
+          { fechas: [ymd(f.desde), ymd(f.hasta)], buckets: [ymd(bs[0].desde), ymd(bs[bs.length - 1].hasta)] });
+      }
+    }
+  }
+
   // ── cobertura: todo rango tiene label de UI ──
-  console.log('\n[H] cada rango tiene su label de UI');
+  console.log('\n[I] cada rango tiene su label de UI');
   {
     for (const rango of RANGOS) {
       const label = RANGO_LABEL[rango as Rango];

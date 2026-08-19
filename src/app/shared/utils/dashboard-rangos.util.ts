@@ -51,46 +51,28 @@ function finDelDia(d: Date): Date {
 }
 
 /**
- * Resta `meses` meses sin desbordar de mes.
+ * Intervalo [desde, hasta] del rango: exactamente la union de sus buckets.
  *
- * `setMonth(getMonth() - 3)` sobre el 31 de mayo da el 3 de marzo (febrero no
- * tiene 31), corriendo el rango unos días. Acá el día se recorta al último del
- * mes destino: 31/05 − 3 meses = 28/02.
- */
-function restarMeses(d: Date, meses: number): Date {
-  const dia = d.getDate();
-  const r = new Date(d);
-  r.setDate(1);
-  r.setMonth(r.getMonth() - meses);
-  const ultimoDiaDelMes = new Date(r.getFullYear(), r.getMonth() + 1, 0).getDate();
-  r.setDate(Math.min(dia, ultimoDiaDelMes));
-  return r;
-}
-
-/**
- * Intervalo [desde, hasta] del rango, con bordes de día completo.
+ * Se deriva de `bucketsForRango` a proposito, y no con su propia aritmetica de
+ * fechas. Las dos funciones alimentan cosas que el usuario ve juntas — la card
+ * con el total del periodo y el chart que lo desglosa — asi que si cada una
+ * calcula su ventana por separado terminan discrepando: con reglas propias,
+ * "3 meses" daba 92 dias en la card contra 84 en el chart (12 semanas), y
+ * "6 meses" arrancaba a mitad de enero en la card pero el 1 de febrero en el
+ * chart. La suma de las barras no cerraba con el total. Derivandolo, cierran
+ * por construccion.
  *
- * `today` es el día de hoy; `week` los últimos 7 días (hoy incluido); `month`
- * los últimos 30; `last-month` el mes calendario anterior completo; `3months` /
- * `6months` van hacia atrás por mes calendario desde hoy.
+ * `today` es el dia de hoy hasta la hora actual; `week` los ultimos 7 dias
+ * (hoy incluido); `month` los ultimos 30; `last-month` el mes calendario
+ * anterior completo; `3months` las ultimas 12 semanas; `6months` los ultimos
+ * 6 meses calendario (el actual incluido, hasta fin de mes).
  */
 export function rangoToFechas(rango: Rango, now: Date = new Date()): { desde: Date; hasta: Date } {
-  if (rango === 'last-month') {
-    const desde = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const hasta = new Date(now.getFullYear(), now.getMonth(), 0);
-    return { desde: inicioDelDia(desde), hasta: finDelDia(hasta) };
-  }
-
-  const hasta = finDelDia(now);
-  let desde = inicioDelDia(now);
-  switch (rango) {
-    case 'today': break;
-    case 'week': desde.setDate(desde.getDate() - 6); break;
-    case 'month': desde.setDate(desde.getDate() - 29); break;
-    case '3months': desde = inicioDelDia(restarMeses(desde, 3)); break;
-    case '6months': desde = inicioDelDia(restarMeses(desde, 6)); break;
-  }
-  return { desde, hasta };
+  const buckets = bucketsForRango(rango, now);
+  return {
+    desde: buckets[0].desde,
+    hasta: buckets[buckets.length - 1].hasta,
+  };
 }
 
 /**

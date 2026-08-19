@@ -30,7 +30,7 @@ import { DashSectionHeaderComponent } from 'src/app/shared/components/dashboard/
 import { DashChartCardComponent } from 'src/app/shared/components/dashboard/chart-card/dash-chart-card.component';
 import { getDashboardChartOptions, DASHBOARD_CHART_COLORS, buildLineDataset } from 'src/app/shared/utils/dashboard-chart-theme';
 import { VentasDesgloseDialogComponent } from 'src/app/shared/components/ventas-desglose-dialog/ventas-desglose-dialog.component';
-import { Rango, RangoChip, buildRangoChips } from 'src/app/shared/utils/dashboard-rangos.util';
+import { Rango, RangoChip, RANGO_LABEL, buildRangoChips } from 'src/app/shared/utils/dashboard-rangos.util';
 
 interface CajaAbierta {
   id: number;
@@ -112,6 +112,7 @@ export class VentasDashboardComponent implements OnInit {
   // 'today' grafica por hora; el resto por dia/semana/mes (ver bucketsForRango).
   rangoSeleccionado: Rango = 'week';
   rangosChips: RangoChip[] = buildRangoChips(['today', 'week', 'month', '3months', '6months'], 'week');
+  tituloTopProductos = `Top productos · ${RANGO_LABEL['week']}`;
 
   // --- Chart ---
   chartData: ChartData<'line'> = { labels: [], datasets: [] };
@@ -190,9 +191,11 @@ export class VentasDashboardComponent implements OnInit {
   }
 
   selectRango(chip: RangoChip): void {
+    if (chip.selected) return;
     this.rangosChips.forEach(c => c.selected = false);
     chip.selected = true;
     this.rangoSeleccionado = chip.value;
+    this.tituloTopProductos = `Top productos · ${RANGO_LABEL[chip.value]}`;
     this.cargarKpis();
   }
 

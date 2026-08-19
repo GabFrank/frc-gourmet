@@ -81,6 +81,8 @@ export class ComprasDashboardComponent implements OnInit {
   labelCompras = `Compras · ${RANGO_LABEL['month']}`;
   labelTotal = `Total comprado · ${RANGO_LABEL['month']}`;
   chartTitle = `Compras · ${RANGO_LABEL['month']}`;
+  tituloTopProveedores = `Top proveedores · ${RANGO_LABEL['month']}`;
+  vacioTopProveedores = 'Sin compras en el periodo';
   totalMesTexto = '0 Gs';
   totalCppVencidoTexto = '0 Gs';
 
@@ -151,6 +153,7 @@ export class ComprasDashboardComponent implements OnInit {
     this.labelCompras = `Compras · ${label}`;
     this.labelTotal = `Total comprado · ${label}`;
     this.chartTitle = `Compras · ${label}`;
+    this.tituloTopProveedores = `Top proveedores · ${label}`;
     this.cargarKpis();
   }
 

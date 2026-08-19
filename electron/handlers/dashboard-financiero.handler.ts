@@ -86,12 +86,19 @@ export function registerDashboardFinancieroHandlers(
       // ahora la unica forma de entrar a una caja mayor desde un dashboard era
       // un acceso directo que el usuario tenia que crear a mano, apuntando a
       // una caja concreta; esto las lista todas.
+      // El saldo suma SOLO las formas de pago que movimentan caja: es el mismo
+      // criterio que usa el detalle de la caja mayor para su "Saldo en caja"
+      // (`agruparSaldosPorFormaPago` filtra por `formaPago.movimentaCaja`). Sin
+      // ese filtro entra plata que no es efectivo — p.ej. un saldo en
+      // TRANSFERENCIA — y la card muestra un numero distinto al de la pantalla
+      // que abre al hacerle click.
       const cajasMayorRows: any[] = principal ? await dbQuery(dataSource, `
         SELECT cm.id, cm.nombre, cm.descripcion, cm.fecha_apertura,
                COALESCE(SUM(s.saldo), 0) as saldo
         FROM cajas_mayor cm
+        LEFT JOIN formas_pago fp ON fp.movimenta_caja = true
         LEFT JOIN cajas_mayor_saldos s
-               ON s.caja_mayor_id = cm.id AND s.moneda_id = ?
+               ON s.caja_mayor_id = cm.id AND s.moneda_id = ? AND s.forma_pago_id = fp.id
         WHERE cm.activo = true AND cm.estado = ?
         GROUP BY cm.id, cm.nombre, cm.descripcion, cm.fecha_apertura
         ORDER BY cm.nombre ASC

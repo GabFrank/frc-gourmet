@@ -207,9 +207,13 @@ export function registerDashboardVentasHandlers(
 
   ipcMain.handle('get-dashboard-ventas-kpis', async (_event, rango: Rango = 'week') => {
     try {
-      const hoyInicio = new Date();
+      // Un unico `now` para todo el request: rangoToFechas y bucketsForRango
+      // tienen que mirar el mismo instante o la ventana de la card y la del
+      // chart pueden caer en horas (o dias) distintos entre await y await.
+      const now = new Date();
+      const hoyInicio = new Date(now);
       hoyInicio.setHours(0, 0, 0, 0);
-      const hoyFin = new Date();
+      const hoyFin = new Date(now);
       hoyFin.setHours(23, 59, 59, 999);
 
       const monedaPrincipalId = await getMonedaPrincipalId(dataSource);
@@ -300,7 +304,7 @@ export function registerDashboardVentasHandlers(
       }
 
       // 5. Top productos (en el rango)
-      const { desde, hasta } = rangoToFechas(rango);
+      const { desde, hasta } = rangoToFechas(rango, now);
       const topRows: any[] = await dbQuery(dataSource, `
         SELECT p.id, p.nombre, SUM(vi.cantidad) as cantidad,
                SUM(vi.cantidad * vi.precio_venta_unitario) as total
@@ -355,7 +359,7 @@ export function registerDashboardVentasHandlers(
         }));
 
       // 7. Ventas por periodo (chart)
-      const periodoData = await buildVentasPorPeriodo(dataSource, rango);
+      const periodoData = await buildVentasPorPeriodo(dataSource, rango, now);
 
       return {
         ventasHoy,
@@ -385,6 +389,7 @@ export function registerDashboardVentasHandlers(
 async function buildVentasPorPeriodo(
   dataSource: DataSource,
   rango: Rango,
+  now: Date,
 ): Promise<{ labels: string[]; ventas: number[]; cantidades: number[] }> {
   const labels: string[] = [];
   const ventas: number[] = [];
@@ -395,7 +400,7 @@ async function buildVentasPorPeriodo(
 
   // Los tramos del eje X (y su granularidad) los define `bucketsForRango`; acá
   // solo se agrega el total cobrado de cada uno.
-  for (const bucket of bucketsForRango(rango)) {
+  for (const bucket of bucketsForRango(rango, now)) {
     const r = await sumaVentasRango(
       dataSource,
       monedaPrincipalId,

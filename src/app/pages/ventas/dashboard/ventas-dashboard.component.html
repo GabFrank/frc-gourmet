@@ -141,7 +141,7 @@
     <!-- Col derecha -->
     <div class="dashboard-col-right">
       <app-dash-ranking
-        title="Top productos vendidos"
+        [title]="tituloTopProductos"
         icon="emoji_events"
         [items]="topProductos"
         emptyText="Sin datos del periodo">
