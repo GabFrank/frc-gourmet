@@ -153,6 +153,8 @@ import { CuentaPorCobrar } from './entities/financiero/cuenta-por-cobrar.entity'
 import { CuentaPorCobrarCuota } from './entities/financiero/cuenta-por-cobrar-cuota.entity';
 import { CobroConsolidado } from './entities/financiero/cobro-consolidado.entity';
 import { CobroConsolidadoDetalle } from './entities/financiero/cobro-consolidado-detalle.entity';
+import { PagoConsolidado } from './entities/financiero/pago-consolidado.entity';
+import { PagoConsolidadoDetalle } from './entities/financiero/pago-consolidado-detalle.entity';
 import { PagoCuotaCppDetalle } from './entities/financiero/pago-cuota-cpp-detalle.entity';
 import { MovimientoCliente } from './entities/financiero/movimiento-cliente.entity';
 
@@ -230,6 +232,7 @@ import { AddPrinterTicketToDispositivo1779200000000 } from './migrations/1779200
 import { AddDestinoToGasto1779300000000 } from './migrations/1779300000000-AddDestinoToGasto';
 import { AddCuentaBancariaToLiquidacionSueldo1779400000000 } from './migrations/1779400000000-AddCuentaBancariaToLiquidacionSueldo';
 import { AddConveniosCobroConsolidado1779500000000 } from './migrations/1779500000000-AddConveniosCobroConsolidado';
+import { AddPagoConsolidado1787169888415 } from './migrations/1787169888415-AddPagoConsolidado';
 import { AddPagoCuotaCppDetalle1785320463398 } from './migrations/1785320463398-AddPagoCuotaCppDetalle';
 import { AddEgresoCajaToPagoCuotaDetalle1785335253817 } from './migrations/1785335253817-AddEgresoCajaToPagoCuotaDetalle';
 import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVacacionVentas';
@@ -487,6 +490,8 @@ function getEntitiesList(): any[] {
       CuentaPorCobrarCuota,
       CobroConsolidado,
       CobroConsolidadoDetalle,
+      PagoConsolidado,
+      PagoConsolidadoDetalle,
       PagoCuotaCppDetalle,
       MovimientoCliente,
       // Entradas Varias + Operaciones Financieras + Chequeras + Cheques
@@ -682,6 +687,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     MusicaPreferenciaEstilo1786804287491,
     AddPagoCuotaCppDetalle1785320463398,
     AddEgresoCajaToPagoCuotaDetalle1785335253817,
+    AddPagoConsolidado1787169888415,
   ];
 }
 
