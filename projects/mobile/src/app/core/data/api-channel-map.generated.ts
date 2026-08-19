@@ -3,7 +3,7 @@
  * AUTO-GENERADO por scripts/generate-mobile-api-map.js — NO editar a mano.
  * Mapa método de window.api → canal IPC (extraído de preload.ts).
  * Regenerar tras tocar preload.ts: `node scripts/generate-mobile-api-map.js`.
- * Total: 830 métodos.
+ * Total: 834 métodos.
  */
 export const API_CHANNEL_MAP: Record<string, string> = {
   "abrirCajaDesdeConteo": "abrir-caja-desde-conteo",
@@ -64,6 +64,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "backupPickFolder": "backup-pick-folder",
   "backupPickRestoreFile": "backup-pick-restore-file",
   "backupRestore": "backup-restore",
+  "backupSendWhatsapp": "backup-send-whatsapp",
   "backupTriggerAutoNow": "backup-trigger-auto-now",
   "bulkUpdateVariaciones": "bulk-update-variaciones",
   "buscarClientePorTelefono": "buscar-cliente-por-telefono",
@@ -293,6 +294,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "deleteVentaItemSaboresByItem": "deleteVentaItemSaboresByItem",
   "desasignarFuncionarioRegla": "desasignar-funcionario-regla",
   "desasignarReglaEquipo": "desasignar-regla-equipo",
+  "desvincularRecetaDeProducto": "desvincular-receta-de-producto",
   "downloadFaceModels": "download-face-models",
   "editCajaMayorMovimiento": "edit-caja-mayor-movimiento",
   "editGasto": "edit-gasto",
@@ -573,6 +575,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getRecetaIngredientesIntercambiables": "get-receta-ingredientes-intercambiables",
   "getRecetaMateriales": "get-receta-materiales",
   "getRecetas": "get-recetas",
+  "getRecetasAsignables": "get-recetas-asignables",
   "getRecetasByEstado": "get-recetas-by-estado",
   "getRecetasIdsPorVariacionIds": "get-recetas-ids-por-variacion-ids",
   "getRecetasWithFilters": "get-recetas-with-filters",
@@ -829,6 +832,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "validateCredentials": "validate-credentials",
   "venderDiasVacacion": "vender-dias-vacacion",
   "verificarAcreditacionPos": "verificar-acreditacion-pos",
+  "vincularRecetaAProducto": "vincular-receta-a-producto",
   "vincularVentaPedidoOnline": "vincular-venta-pedido-online",
   "volverBorradorLiquidacionSueldo": "volver-borrador-liquidacion-sueldo",
   "windowClose": "window:close",

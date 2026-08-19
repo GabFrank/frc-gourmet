@@ -27,6 +27,26 @@ A partir de la receta, el sistema:
    - **Unidad de rendimiento**: UNIDADES, PORCIONES, KG, etc.
 3. Guardar.
 
+### Reutilizar una receta que ya existe
+
+En vez de "Crear receta", usá **"Buscar Receta"**. El buscador muestra sólo las
+recetas **libres**: no aparecen las que ya son de otro producto, las de un adicional
+ni las de una variación (sabor × tamaño). Si la que buscás no aparece, es porque ya
+tiene dueño — desvinculala primero desde ese otro producto.
+
+### Desvincular una receta
+
+Botón **"Desvincular"** en el tab Receta.
+
+⚠️ **Ojo:** el producto queda **sin precio de venta calculado por receta y sin
+descuento de stock por receta** hasta que le asignes otra. La receta **no se
+elimina**: queda libre para asignarse a otro producto.
+
+> Si venís de una versión anterior a 2026-08: había un bug por el cual desvincular
+> no tenía efecto real (al reabrir el producto la receta seguía ahí) y asignar una
+> receta existente siempre daba error. Si algún producto quedó con una receta que
+> creías desvinculada, desvinculala de nuevo y ahora sí se aplica.
+
 ### Agregar ingredientes
 
 Click "Agregar ingrediente":
