@@ -6,6 +6,30 @@ Sistema integral de gestión de empleados. ~40 entidades, 15 handlers. Implement
 
 ⚠️ Las entidades de RRHH y de **comisiones** viven todas en `src/app/database/entities/rrhh/` (no hay carpeta `entities/comisiones/`). Las **páginas** de comisiones, en cambio, están en `src/app/pages/comisiones/` (`reglas/`, `equipos/`, `liquidaciones/`), separadas de `src/app/pages/rrhh/`.
 
+## Pago de vales (desde 2026-08)
+
+El vale se **crea** en `SOLICITADO` (sin mover plata) y se **paga** desde Caja
+Mayor → **Pagar Vales**, el wizard único que también cubre gastos, compras y
+salarios. Ahí se pueden entregar **varios vales en un solo egreso**.
+
+- El hub de egresos ya no abre el alta en "modo confirmar": crea el vale y listo.
+- En la lista de vales, la acción de fila **"Confirmar" pasó a "Pagar"** y abre el
+  wizard con ese vale preseleccionado.
+- **Un vale pagado por un pago consolidado no se puede anular desde Vales**: su
+  `movimientoId` queda en `null` (el evento puede tener N movimientos), así que
+  `anular-vale` lo bloquea y manda a anular el pago. Sin ese bloqueo el vale
+  quedaría `ANULADO` sin devolver un guaraní.
+- Al anular el evento, el vale vuelve a **`SOLICITADO`** (no a `ANULADO`): la deuda
+  con el funcionario sigue viva, lo que se deshizo es la entrega de la plata.
+
+Los canales `crear-vale-confirmado` y `confirmar-vale` **siguen vivos**: los usa la
+PWA mobile, que no tiene pantalla de pago diferido. El `modoConfirmar` del diálogo
+de desktop quedó sin entrada (borrarlo está en el backlog).
+
+Detalle del subsistema → [financiero-caja-mayor.md](financiero-caja-mayor.md)
+§ Pago consolidado.
+
+
 ## Estructura general
 
 ```

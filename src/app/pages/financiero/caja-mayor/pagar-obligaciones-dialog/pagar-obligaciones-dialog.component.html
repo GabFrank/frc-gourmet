@@ -83,7 +83,7 @@
             <td mat-cell *matCellDef="let row" class="pago-num">
               <mat-form-field appearance="outline" class="pago-monto-input"
                               *ngIf="row.selected && permiteParcial">
-                <input matInput appCurrencyInput [decimales]="row.decimales"
+                <input matInput appCurrencyInput [decimals]="row.decimales"
                        [(ngModel)]="row.montoAPagar" (ngModelChange)="onMontoChange()">
               </mat-form-field>
               <span *ngIf="!row.selected || !permiteParcial">

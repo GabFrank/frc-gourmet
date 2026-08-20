@@ -1,5 +1,29 @@
 # Dominio: RRHH — Liquidaciones y Comisiones
 
+## Pago de la liquidación (desde 2026-08)
+
+El botón **Pagar** del detalle abre el wizard de Caja Mayor
+(`pagar-obligaciones-dialog`, concepto `LIQUIDACION_SUELDO`) con esa liquidación
+preseleccionada. **Una por vez**: su neteo tiene que quedar atado a un evento propio.
+
+El neteo (vales → `DESCONTADO`, cuotas CPP de préstamo, cuotas CPC de consumo con
+`Cliente.saldoActual` y `MovimientoCliente`, aguinaldo, comisiones, venta de
+vacaciones) se extrajo a **`aplicarEstadoPagoLiquidacion`** /
+**`revertirEstadoPagoLiquidacion`** (`liquidacion-sueldo.handler.ts`), sin cambios
+de comportamiento. El handler viejo `pagar-liquidacion-sueldo` sigue existiendo y
+llama a la función extraída — lo usa la PWA mobile.
+
+⚠️ **Una liquidación pagada por el pago consolidado deja `movimientoId` y
+`cuentaBancariaId` en `null` a propósito**: el evento puede haber generado N
+movimientos y la entidad sólo tiene lugar para uno. Por eso
+`anular-liquidacion-sueldo` la bloquea y la reversa la hace
+`anular-pago-consolidado`. La reversa de caja del handler viejo (que va por
+`liq.movimientoId`) **se quedó donde estaba**: moverla rompería la anulación de
+las liquidaciones que NO se pagaron por el evento.
+
+Detalle → [financiero-caja-mayor.md](financiero-caja-mayor.md) § Pago consolidado.
+
+
 ## Liquidación de Sueldo
 
 ```typescript

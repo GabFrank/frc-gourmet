@@ -275,3 +275,32 @@ Aprendidos en la auditoría de bugs de julio 2026 (rama `claude/desktop-forma-pa
 - **Handlers de RecetaPresentacion en `recetas.handler.ts`**, NO en `receta-presentacion.handler.ts` (existe pero NO se registra).
 - **Bono auto-generado por tardanza** no se recalcula si cambian los valores de config — solo aplica al siguiente registro de asistencia.
 - **`porcentajeAprovechamiento` en RecetaIngrediente NO afecta costo** (intencional, ver `recetas.handler.ts`). Solo se almacena para uso futuro.
+
+
+## Anotados durante el pago consolidado (2026-08)
+
+- **M-02 (carreras de saldo caja mayor) — avanza, no cierra.** Se eliminó la copia
+  sin lock de `descontarSaldoCajaMayor`/`sumarSaldoCajaMayor` que vivía en
+  `cuentas-por-pagar.handler.ts`: ahora todo pasa por `actualizarSaldoCajaMayor`,
+  que sí toma `pessimistic_write` en Postgres. **Sigue faltando** el lock sobre
+  `CuentaBancaria.saldo` y `Cliente.saldoActual`. El pago consolidado además
+  lockea la fila de la obligación (gasto/vale/cuota/liquidación) antes de pagarla,
+  cosa que los flujos viejos no hacen.
+
+- **`Gasto.monto` suma monedas distintas sin convertir.** `create-gasto` calcula
+  el total como `detalles.reduce((s, d) => s + d.monto)` — si el usuario carga
+  detalles en Gs y en USD, el monto guardado es una suma sin sentido. Preexistente;
+  el alta **diferida** lo evita (manda moneda y monto directos), pero la rama con
+  pago sigue igual.
+
+- **Gastos `PROGRAMADO` se cuentan en el reporte de Finanzas.** `gastosRango` /
+  `gastosPorCategoria` filtran por estado, y `PROGRAMADO` (gasto recurrente futuro,
+  no pagado) entra igual. Se excluyó `PENDIENTE` al introducirlo, pero `PROGRAMADO`
+  quedó como estaba para no cambiar números existentes.
+
+- **Dos convenciones de dirección de cotización conviven.**
+  `moneda.utils.getCotizacionCompraLocal` usa `origen → destino` con las filas
+  `extranjera → PYG` que carga el diálogo; `financiero.handler.ts`
+  (`get-moneda-cambio-by-moneda-principal`, `get-valor-en-moneda-principal`) usa la
+  convención **inversa**. No se cruzan hoy, pero es una trampa. El pago consolidado
+  usa `getCotizacionBidireccional`, que prueba las dos direcciones.
