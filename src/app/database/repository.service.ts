@@ -741,6 +741,12 @@ export abstract class RepositoryService {
   abstract anularPagoMixtoCuota(payload: any): Observable<any>;
   abstract getCuotasConPagoMixto(cuentaPorPagarId: number): Observable<any>;
   abstract pagarCuotasComprasLote(payload: any): Observable<any>;
+
+  // Pago consolidado de obligaciones desde Caja Mayor
+  abstract getObligacionesPendientes(concepto: string, filtros?: any): Observable<any>;
+  abstract registrarPagoConsolidado(payload: any): Observable<any>;
+  abstract getPagoConsolidadoDetalle(pagoId: number): Observable<any>;
+  abstract anularPagoConsolidado(pagoId: number, motivo?: string): Observable<any>;
   abstract getCuotasPendientesCompras(filtros?: any): Observable<any[]>;
   abstract cancelarCppCuota(payload: any): Observable<any>;
   abstract getDashboardShortcuts(dashboardKey?: string): Observable<any[]>;

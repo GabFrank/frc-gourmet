@@ -1781,6 +1781,18 @@ export class RepositoryHttpService extends RepositoryService {
   pagarCuotasComprasLote(payload: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.pagarCuotasComprasLote() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getObligacionesPendientes(concepto: string, filtros?: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getObligacionesPendientes() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  registrarPagoConsolidado(payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.registrarPagoConsolidado() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getPagoConsolidadoDetalle(pagoId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getPagoConsolidadoDetalle() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  anularPagoConsolidado(pagoId: number, motivo?: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.anularPagoConsolidado() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getCuotasPendientesCompras(filtros?: any): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getCuotasPendientesCompras() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

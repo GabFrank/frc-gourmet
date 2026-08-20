@@ -3062,6 +3062,20 @@ contextBridge.exposeInMainWorld('api', {
   pagarCuotasComprasLote: async (payload: any): Promise<any> => {
     return await ipcRenderer.invoke('pagar-cuotas-compras-lote', payload);
   },
+
+  // ── Pago consolidado de obligaciones (Caja Mayor) ──
+  getObligacionesPendientes: async (concepto: string, filtros?: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-obligaciones-pendientes', concepto, filtros);
+  },
+  registrarPagoConsolidado: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('registrar-pago-consolidado', payload);
+  },
+  getPagoConsolidadoDetalle: async (pagoId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-pago-consolidado-detalle', pagoId);
+  },
+  anularPagoConsolidado: async (pagoId: number, motivo?: string): Promise<any> => {
+    return await ipcRenderer.invoke('anular-pago-consolidado', pagoId, motivo);
+  },
   getCuotasPendientesCompras: async (filtros?: any): Promise<any[]> => {
     return await ipcRenderer.invoke('get-cuotas-pendientes-compras', filtros);
   },
