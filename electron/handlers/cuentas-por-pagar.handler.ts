@@ -10,7 +10,6 @@ import {
   CuentaPorPagarTipo,
 } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
-import { CajaMayorSaldo } from '../../src/app/database/entities/financiero/caja-mayor-saldo.entity';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
 import { MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
 import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
@@ -21,8 +20,17 @@ import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
+import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 
-// Helper: actualiza/crea saldo cajaMayor restando un monto (para egresos de cuotas)
+/**
+ * Saldo de Caja Mayor: se delega en el helper canonico de `caja-mayor-utils`.
+ *
+ * Antes este archivo tenia su propia copia de la logica, SIN el lock pesimista
+ * que el helper canonico toma en Postgres — un lost-update latente en modo
+ * server, justo en el camino de pago de cuotas. Se mantienen los dos nombres
+ * como envoltorios finos porque expresan el sentido del movimiento en el punto
+ * de uso (una cuota de prestamo a funcionario SUMA en vez de restar).
+ */
 async function descontarSaldoCajaMayor(
   queryRunner: any,
   cajaMayorId: number,
@@ -30,28 +38,12 @@ async function descontarSaldoCajaMayor(
   formaPagoId: number,
   monto: number,
 ): Promise<void> {
-  const saldoRepo = queryRunner.manager.getRepository(CajaMayorSaldo);
-  let saldo = await saldoRepo.findOne({
-    where: {
-      cajaMayor: { id: cajaMayorId },
-      moneda: { id: monedaId },
-      formaPago: { id: formaPagoId },
-    },
-    relations: ['cajaMayor', 'moneda', 'formaPago'],
-  });
-  if (!saldo) {
-    saldo = saldoRepo.create({
-      cajaMayor: { id: cajaMayorId } as any,
-      moneda: { id: monedaId } as any,
-      formaPago: { id: formaPagoId } as any,
-      saldo: 0,
-    });
-  }
-  saldo.saldo = Number(saldo.saldo) - Number(monto);
-  await queryRunner.manager.save(CajaMayorSaldo, saldo);
+  await actualizarSaldoCajaMayor(
+    queryRunner, cajaMayorId, monedaId, formaPagoId, Number(monto),
+    TipoMovimiento.EGRESO_CUOTA_COMPRA,
+  );
 }
 
-// Helper: actualiza/crea saldo cajaMayor sumando un monto (para ingresos)
 async function sumarSaldoCajaMayor(
   queryRunner: any,
   cajaMayorId: number,
@@ -59,25 +51,10 @@ async function sumarSaldoCajaMayor(
   formaPagoId: number,
   monto: number,
 ): Promise<void> {
-  const saldoRepo = queryRunner.manager.getRepository(CajaMayorSaldo);
-  let saldo = await saldoRepo.findOne({
-    where: {
-      cajaMayor: { id: cajaMayorId },
-      moneda: { id: monedaId },
-      formaPago: { id: formaPagoId },
-    },
-    relations: ['cajaMayor', 'moneda', 'formaPago'],
-  });
-  if (!saldo) {
-    saldo = saldoRepo.create({
-      cajaMayor: { id: cajaMayorId } as any,
-      moneda: { id: monedaId } as any,
-      formaPago: { id: formaPagoId } as any,
-      saldo: 0,
-    });
-  }
-  saldo.saldo = Number(saldo.saldo) + Number(monto);
-  await queryRunner.manager.save(CajaMayorSaldo, saldo);
+  await actualizarSaldoCajaMayor(
+    queryRunner, cajaMayorId, monedaId, formaPagoId, Number(monto),
+    TipoMovimiento.INGRESO_COBRO_CUOTA_PRESTAMO_FUNCIONARIO,
+  );
 }
 
 function calcularEstadoCuota(monto: number, montoPagado: number): CuotaEstado {

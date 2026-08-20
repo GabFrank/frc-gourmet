@@ -63,3 +63,31 @@ export async function convertirAPrincipal(
   if (tasa == null) return { montoPrincipal: null, tasa: null, esPrincipal: false };
   return { montoPrincipal: +(m * tasa).toFixed(2), tasa, esPrincipal: false };
 }
+
+/**
+ * Igual que `getCotizacionCompraLocal`, pero si no existe la fila directa
+ * `origen -> destino` prueba con la inversa y devuelve `1 / tasa`.
+ *
+ * Por qué hace falta: el diálogo de cotizaciones preselecciona la moneda
+ * principal como destino, así que en la práctica sólo se cargan filas
+ * `extranjera -> PYG`. Convertir una línea en USD para pagar una deuda en PYG
+ * funciona; convertir una línea en PYG para pagar una deuda en USD fallaba con
+ * "falta la cotización", aunque el dato estuviera cargado del otro lado.
+ *
+ * Se deja aparte de `getCotizacionCompraLocal` a propósito: sus consumidores
+ * actuales (RRHH, dashboards) esperan que la ausencia de cotización sea un
+ * `null` y no un valor derivado.
+ */
+export async function getCotizacionBidireccional(
+  dataSource: DataSource,
+  origenId: number,
+  destinoId: number,
+): Promise<{ tasa: number; invertida: boolean } | null> {
+  const directa = await getCotizacionCompraLocal(dataSource, origenId, destinoId);
+  if (directa != null) return { tasa: directa, invertida: false };
+
+  const inversa = await getCotizacionCompraLocal(dataSource, destinoId, origenId);
+  if (inversa != null && inversa > 0) return { tasa: 1 / inversa, invertida: true };
+
+  return null;
+}
