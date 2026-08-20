@@ -74,6 +74,11 @@ export class FacturarDialogComponent implements OnInit {
   clienteId?: number;
   /** Etiqueta del cliente seleccionado (para mostrar en el dialogo). */
   clienteLabel = '';
+  /** RUC que produjo el vínculo actual, para detectar si el usuario lo corrige. */
+  private rucVinculado = '';
+  buscandoCliente = false;
+  /** El usuario cortó el vínculo a mano: no re-enganchar hasta que cambie el RUC. */
+  private desvinculadoManual = false;
   /** Resultados del buscador de productos (autocomplete por item). */
   productoOptions: any[] = [];
 
@@ -187,13 +192,82 @@ export class FacturarDialogComponent implements OnInit {
     const nombre = `${per?.nombre || ''} ${per?.apellido || ''}`.trim() || cliente?.razon_social || '';
     this.clienteId = cliente?.id;
     this.clienteLabel = nombre;
+    // El RUC puede venir del cliente o de la persona: se conserva el que ya
+    // estaba tipeado si el cliente no lo trae, para no vaciar el campo.
+    const ruc = cliente?.ruc || per?.documento || this.form.get('ruc')?.value || '';
+    this.rucVinculado = this.normalizarRuc(ruc);
+    this.desvinculadoManual = false;
     this.form.patchValue({
       nombreCliente: nombre,
-      ruc: cliente?.ruc || '',
+      ruc,
       direccion: per?.direccion || '',
       telefono: per?.telefono || '',
       email: per?.email || '',
     });
+  }
+
+  /**
+   * Misma normalización que el backend (`cliente-ruc.utils.ts`): espacios, puntos
+   * **y guiones**. Sin el guion, agregarlo o sacarlo sobre un RUC ya vinculado
+   * contaba como "cambió" y desvinculaba el cliente en cada tecla.
+   */
+  private normalizarRuc(ruc: any): string {
+    return String(ruc ?? '').replace(/[\s.\-]/g, '').trim().toUpperCase();
+  }
+
+  /**
+   * Busca el cliente por RUC y autocompleta el resto del receptor.
+   *
+   * Se dispara al SALIR del campo, no mientras se tipea: autocompletar con el
+   * cursor todavía adentro es el filtrado en vivo que las convenciones del repo
+   * evitan, y encima se dispararía sobre un RUC a medio escribir.
+   */
+  async onRucBlur(): Promise<void> {
+    const ruc = this.normalizarRuc(this.form.get('ruc')?.value);
+    if (!ruc) {
+      this.desvincularSiCambioRuc();
+      return;
+    }
+    if (this.clienteId && ruc === this.rucVinculado) return;
+    // El usuario desvinculó a mano y no cambió el RUC: no volver a enganchar.
+    if (this.desvinculadoManual && ruc === this.rucVinculado) return;
+
+    this.buscandoCliente = true;
+    try {
+      const cliente = await firstValueFrom(this.repositoryService.getClientePorRuc(ruc));
+      if (cliente) {
+        this.aplicarCliente(cliente);
+      } else {
+        // Sin match: se emite igual y el cliente se crea al confirmar.
+        this.desvincularSiCambioRuc();
+      }
+    } catch (e) {
+      console.error('Error buscando cliente por RUC', e);
+    } finally {
+      this.buscandoCliente = false;
+    }
+  }
+
+  /**
+   * Si el RUC dejó de coincidir con el del cliente vinculado, se corta el vínculo.
+   * Sin esto, corregir un typo del RUC dejaría la factura pegada al cliente
+   * equivocado — y el backend ni intentaría resolver el nuevo, porque ve que la
+   * factura ya trae cliente.
+   */
+  onRucChange(): void {
+    const actual = this.normalizarRuc(this.form.get('ruc')?.value);
+    if (actual !== this.rucVinculado) {
+      // RUC distinto: vuelve a habilitarse el lookup automático.
+      this.desvinculadoManual = false;
+      if (this.clienteId) this.desvincularSiCambioRuc();
+    }
+  }
+
+  private desvincularSiCambioRuc(): void {
+    this.clienteId = undefined;
+    this.clienteLabel = '';
+    this.rucVinculado = '';
+    this.desvinculadoManual = false;
   }
 
   /** Abre el buscador de clientes y aplica el elegido. */
@@ -205,9 +279,18 @@ export class FacturarDialogComponent implements OnInit {
   }
 
   /** Quita el vinculo con el cliente (deja los datos editables manualmente). */
+  /**
+   * Corta el vínculo con el cliente a pedido del usuario.
+   *
+   * Marca `desvinculadoManual` para que el próximo blur sobre el RUC no lo vuelva
+   * a enganchar solo: sin eso, el botón no servía de nada — bastaba salir del
+   * campo para que el lookup encontrara el mismo RUC y re-vinculara.
+   */
   limpiarCliente(): void {
     this.clienteId = undefined;
     this.clienteLabel = '';
+    this.rucVinculado = this.normalizarRuc(this.form.get('ruc')?.value);
+    this.desvinculadoManual = true;
   }
 
   detalleLabel(d: TimbradoDetalle): string {

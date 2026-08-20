@@ -508,15 +508,11 @@ export class TomarPedidoPage implements OnInit {
       }
       const venta: any = await firstValueFrom(this.repo.createVenta(ventaData));
       this.ventaId = venta?.id ?? null;
-      // Mesa: marcarla OCUPADA (igual que el PdV) para que figure ocupada en
-      // ambas vistas. La comanda ya quedó OCUPADA al abrirla, no se toca acá.
-      if (this.ventaId && !this.esComanda) {
-        try {
-          await firstValueFrom(this.repo.updatePdvMesa(this.mesaId, { estado: 'OCUPADO' } as any));
-        } catch {
-          /* el estado se reconcilia igual por la venta ABIERTA vinculada */
-        }
-      }
+      // La mesa la marca OCUPADO el backend, dentro de la misma transacción que
+      // crea la venta. Antes se hacía con una segunda llamada desde acá que
+      // fallaba por permiso para todo el que no fuera gerente, y el catch la
+      // daba por perdida confiando en una reconciliación que no existía.
+      // La comanda ya quedó OCUPADA al abrirla, no se toca acá.
       return this.ventaId;
     } catch {
       this.snack.open('No se pudo abrir la cuenta', 'CERRAR', { duration: 4000 });

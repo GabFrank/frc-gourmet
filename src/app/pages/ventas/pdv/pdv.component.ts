@@ -866,7 +866,7 @@ export class PdvComponent implements OnInit, OnDestroy {
             comanda: null as any,
           }));
           // Ocupar mesa destino
-          await firstValueFrom(this.repositoryService.updatePdvMesa(mesaDestino.id!, { estado: PdvMesaEstado.OCUPADO } as any));
+          await firstValueFrom(this.repositoryService.setPdvMesaEstado(mesaDestino.id!, PdvMesaEstado.OCUPADO));
         }
 
         // Cerrar comanda (liberar tarjeta)
@@ -1803,8 +1803,10 @@ export class PdvComponent implements OnInit, OnDestroy {
             createdVenta.estado = VentaEstado.ABIERTA;
             if (this.selectedMesa) {
               this.selectedMesa.venta = createdVenta;
-              // Update mesa estado to OCUPADO
-              this.updateMesaEstado(this.selectedMesa, PdvMesaEstado.OCUPADO);
+              // La mesa la marca OCUPADO el backend, dentro de la misma
+              // transaccion que crea la venta. Antes se hacia con una segunda
+              // llamada desde aca, que fallaba para todo el que no fuera gerente.
+              this.selectedMesa.estado = PdvMesaEstado.OCUPADO;
             }
             return createdVenta;
           })
@@ -1818,16 +1820,30 @@ export class PdvComponent implements OnInit, OnDestroy {
   /**
    * Update the estado of a mesa
    */
-  private updateMesaEstado(mesa: PdvMesa, estado: PdvMesaEstado): void {
+  /**
+   * Cambia el estado de una mesa.
+   *
+   * Usa `setPdvMesaEstado` (permiso VENTAS_PDV) y no `updatePdvMesa`, que es el
+   * ABM y exige VENTAS_PDV_CONFIGURAR — permiso que sólo tiene gerente. Con el
+   * handler viejo, a un mozo o cajero le fallaba siempre.
+   *
+   * Y si falla, se avisa: antes el error moría en un console.error y la mesa
+   * quedaba con el estado equivocado sin que nadie se enterara.
+   */
+  private async updateMesaEstado(mesa: PdvMesa, estado: PdvMesaEstado): Promise<void> {
+    const anterior = mesa.estado;
     mesa.estado = estado;
-    this.repositoryService.updatePdvMesa(mesa.id!, mesa).subscribe(
-      updatedMesa => {
-        console.log(`Mesa ${updatedMesa.numero} updated to estado: ${updatedMesa.estado}`);
-      },
-      error => {
-        console.error('Error updating mesa estado:', error);
-      }
-    );
+    try {
+      await firstValueFrom(this.repositoryService.setPdvMesaEstado(mesa.id!, estado));
+    } catch (err: any) {
+      mesa.estado = anterior;
+      console.error('Error updating mesa estado:', err);
+      this.snackBar.open(
+        err?.message || `No se pudo cambiar el estado de la mesa ${mesa.numero}`,
+        'Cerrar',
+        { duration: 5000 },
+      );
+    }
   }
 
   async findPrecioCosto(producto: Producto): Promise<number> {
@@ -2090,7 +2106,7 @@ export class PdvComponent implements OnInit, OnDestroy {
       if (this.selectedMesa) {
         // Cerrar cualquier venta huérfana abierta en esta mesa
         await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CONCLUIDA));
-        await firstValueFrom(this.repositoryService.updatePdvMesa(this.selectedMesa.id!, { estado: PdvMesaEstado.DISPONIBLE } as any));
+        await firstValueFrom(this.repositoryService.setPdvMesaEstado(this.selectedMesa.id!, PdvMesaEstado.DISPONIBLE));
         this.selectedMesa.venta = null as any;
         this.selectedMesa = null;
         this.clienteNameForm.get('nombre')?.setValue('');
@@ -2291,10 +2307,14 @@ export class PdvComponent implements OnInit, OnDestroy {
           }
 
           // Liberar mesa origen
-          await firstValueFrom(this.repositoryService.updatePdvMesa(this.selectedMesa.id!, { estado: PdvMesaEstado.DISPONIBLE } as any));
+          // Cierra cualquier venta abierta residual antes de liberar: el handler
+          // se niega a liberar una mesa con trabajo vivo, y una venta huérfana de
+          // antes de este fix dejaría la operación a medias.
+          await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CANCELADA));
+          await firstValueFrom(this.repositoryService.setPdvMesaEstado(this.selectedMesa.id!, PdvMesaEstado.DISPONIBLE));
 
           // Ocupar mesa destino
-          await firstValueFrom(this.repositoryService.updatePdvMesa(mesaDestino.id!, { estado: PdvMesaEstado.OCUPADO } as any));
+          await firstValueFrom(this.repositoryService.setPdvMesaEstado(mesaDestino.id!, PdvMesaEstado.OCUPADO));
 
           // Limpiar UI
           this.selectedMesa = null;
@@ -2466,7 +2486,7 @@ export class PdvComponent implements OnInit, OnDestroy {
           } as any));
           nuevaVenta.estado = VentaEstado.ABIERTA;
           ventaDestinoId = nuevaVenta.id;
-          await firstValueFrom(this.repositoryService.updatePdvMesa(mesaDestino.id!, { estado: PdvMesaEstado.OCUPADO } as any));
+          await firstValueFrom(this.repositoryService.setPdvMesaEstado(mesaDestino.id!, PdvMesaEstado.OCUPADO));
         }
 
         // Mover items seleccionados
@@ -2487,7 +2507,11 @@ export class PdvComponent implements OnInit, OnDestroy {
           await firstValueFrom(this.repositoryService.updateVenta(this.selectedMesa.venta.id, {
             estado: VentaEstado.CANCELADA,
           }));
-          await firstValueFrom(this.repositoryService.updatePdvMesa(this.selectedMesa.id!, { estado: PdvMesaEstado.DISPONIBLE } as any));
+          // Cierra cualquier venta abierta residual antes de liberar: el handler
+          // se niega a liberar una mesa con trabajo vivo, y una venta huérfana de
+          // antes de este fix dejaría la operación a medias.
+          await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CANCELADA));
+          await firstValueFrom(this.repositoryService.setPdvMesaEstado(this.selectedMesa.id!, PdvMesaEstado.DISPONIBLE));
           this.selectedMesa = null;
           this.ventaItemsDataSource.data = [];
         } else {

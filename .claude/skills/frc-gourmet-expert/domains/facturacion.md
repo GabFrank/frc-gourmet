@@ -2,6 +2,33 @@
 
 > Subsistema de **emisión de facturas fiscales** disparado desde el cobro del PdV. Modelo tributario paraguayo (SET). Soporta tres modelos de facturación: **PRE_IMPRESO**, **AUTO_IMPRESO** (térmica u A4) y **ELECTRONICA** (SIFEN — estructura lista, emisión electrónica aún stub). Introducido 2026-06-28 (`274d458`, `1d43331`).
 
+## El cliente se guarda al facturar (2026-08)
+
+Antes el receptor se guardaba **desnormalizado** dentro de `Factura`
+(`nombreCliente`, `ruc`, `direccion`, `email`) y `create-factura` **nunca tocaba
+`Cliente`**: si el cajero no usaba "Buscar cliente", la factura quedaba anónima y
+el RUC se retipeaba en cada emisión. El teléfono ni siquiera se persistía —
+`Factura` no tiene esa columna.
+
+- El formulario pide el **RUC primero** y la razón social después. Al salir del
+  campo (`blur`) busca el cliente y autocompleta el resto. Es un lookup exacto, no
+  un autocomplete que filtra tecla a tecla.
+- Si se corrige el RUC después de un match, **se corta el vínculo**: si no, la
+  factura quedaría pegada al cliente equivocado y el backend ni intentaría
+  resolver el nuevo, porque ve que ya trae `cliente`.
+- **`create-factura` resuelve el cliente ANTES de abrir su transacción.** Adentro
+  va la numeración atómica del timbrado: un fallo del upsert ahí dentro haría
+  rollback de la factura entera, y en Postgres una excepción aborta el bloque
+  completo. Si el upsert falla, se loguea y **la factura se emite igual**.
+- Si el cliente ya existe, **sólo se completan los campos vacíos**. Un tipeo
+  apurado en el PdV no puede degradar un cliente curado desde Clientes.
+
+Helpers: `electron/utils/cliente-ruc.utils.ts`
+(`normalizarRuc`, `buscarClientePorRuc`, `resolverOCrearClientePorRuc`).
+Handler de lookup: `get-cliente-por-ruc` (lectura, sin permiso, como el resto de
+los `get-*`). Test: `npm run test:factura-cliente`.
+
+
 ## Modelo de datos (`src/app/database/entities/facturacion/`)
 
 | Entity | Tabla | Rol |
@@ -28,7 +55,7 @@
 
 **Numeración atómica** (`create-factura`): dentro de una **transacción** lee el `TimbradoDetalle`, acepta `numeroManual` (en pre-impreso la hoja física ya trae número), valida `rangoDesde ≤ n ≤ rangoHasta`, arma `numeroCompleto = establecimiento-puntoExpedicion-padStart(n,7)`, y avanza el contador con `Math.max(numeroActual, numero+1)` (nunca retrocede).
 
-> ⚠️ **Sin permisos dedicados.** No existe código de permiso de facturación; los ítems del menú Facturación no tienen `permiso` y el handler solo usa `getCurrentUser()?.id` para auditoría. RUC/razón social del emisor sí están bajo `EMPRESA_CONFIGURAR` (entidad Empresa). Pendiente: agregar `FACTURACION_*` y gatear. → [reference/known-bugs.md](../reference/known-bugs.md).
+> Permiso: `create-factura` exige **`FACTURACION_EMITIR`** (en `SEED_PERMISOS`).
 
 > ⚠️ **`create-factura` confía en los ítems del payload.** Persiste los `FacturaItem` tal como vienen: no valida que el ítem pertenezca a la venta, que su `estado` sea `ACTIVO`, ni que el total cuadre con la suma de los ítems. Hoy no se manifiesta porque el único emisor manda `activeItems` ya filtrados, pero `/api/rpc` es default-allow → cualquier JWT válido podría emitir un comprobante legal con un ítem cancelado. Issue [#240](https://github.com/GabFrank/frc-gourmet/issues/240).
 

@@ -2024,6 +2024,12 @@ contextBridge.exposeInMainWorld('api', {
   updatePdvMesa: async (id: number, data: Partial<PdvMesa>): Promise<PdvMesa> => {
     return await ipcRenderer.invoke('updatePdvMesa', id, data);
   },
+
+  // Cambia SOLO el estado de una mesa (ocupar/liberar). Va aparte de
+  // updatePdvMesa porque ese es el ABM y exige un permiso de configuracion.
+  setPdvMesaEstado: async (mesaId: number, estado: string): Promise<any> => {
+    return await ipcRenderer.invoke('set-pdv-mesa-estado', mesaId, estado);
+  },
   deletePdvMesa: async (id: number): Promise<boolean> => {
     return await ipcRenderer.invoke('deletePdvMesa', id);
   },
