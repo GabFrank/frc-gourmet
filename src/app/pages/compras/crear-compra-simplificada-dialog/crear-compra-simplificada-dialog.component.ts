@@ -53,10 +53,6 @@ export class CrearCompraSimplificadaDialogComponent implements OnInit {
   proveedores: any[] = [];
   monedas: any[] = [];
   categorias: any[] = [];
-  cajasMayor: any[] = [];
-  formasPago: any[] = [];
-  formasPagoEfectivo: any[] = [];
-  cuentasBancarias: any[] = [];
 
   cajaMayorId = 0;
   decimalesMoneda = 0;
@@ -92,8 +88,6 @@ export class CrearCompraSimplificadaDialogComponent implements OnInit {
       cantidadCuotas: [1, [Validators.min(1)]],
       fechaCreditoInicio: [new Date()],
       cajaMayorId: [this.cajaMayorId || null],
-      formaPagoId: [null],
-      cuentaBancariaId: [null],
     });
 
     this.form.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
@@ -125,23 +119,12 @@ export class CrearCompraSimplificadaDialogComponent implements OnInit {
   }
 
   private preseleccionar(): void {
+    // Ya no hay caja ni forma de pago que preseleccionar: el alta no paga.
     const monedaCtrl = this.form.get('monedaId')!;
     if (!monedaCtrl.value) {
       const m = preselectSingleOrPrincipal(this.monedas);
       if (m) monedaCtrl.setValue(m.id, { emitEvent: true });
     }
-    const cajaCtrl = this.form.get('cajaMayorId')!;
-    if (!cajaCtrl.value && this.cajasMayor.length === 1) {
-      cajaCtrl.setValue(this.cajasMayor[0].id, { emitEvent: false });
-    }
-    this.preseleccionarEfectivo();
-  }
-
-  private preseleccionarEfectivo(): void {
-    const fpCtrl = this.form.get('formaPagoId')!;
-    if (fpCtrl.value) return;
-    const fp = preselectSingleOrPrincipal(this.formasPagoEfectivo);
-    if (fp) fpCtrl.setValue(fp.id, { emitEvent: false });
   }
 
   private recalcDecimalesMoneda(): void {
@@ -154,21 +137,15 @@ export class CrearCompraSimplificadaDialogComponent implements OnInit {
   async loadData(): Promise<void> {
     this.loading = true;
     try {
-      const [proveedores, monedas, categorias, cajas, formasPago, cuentas] = await Promise.all([
+      // Cajas, formas de pago y cuentas ya no se piden: el alta no paga.
+      const [proveedores, monedas, categorias] = await Promise.all([
         firstValueFrom(this.repositoryService.getProveedores()),
         firstValueFrom(this.repositoryService.getMonedas()),
         firstValueFrom(this.repositoryService.getCompraCategorias()),
-        firstValueFrom(this.repositoryService.getCajasMayor()),
-        firstValueFrom(this.repositoryService.getFormasPago()),
-        firstValueFrom(this.repositoryService.getCuentasBancarias()),
       ]);
       this.proveedores = ((proveedores as any[]) || []).filter((p: any) => p.activo !== false);
       this.monedas = monedas || [];
       this.categorias = categorias || [];
-      this.cajasMayor = ((cajas as any[]) || []).filter((c: any) => c.estado === 'ABIERTA');
-      this.formasPago = formasPago || [];
-      this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
-      this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
       this.preseleccionar();
       this.aplicarValidadoresPago();
     } catch (error) {

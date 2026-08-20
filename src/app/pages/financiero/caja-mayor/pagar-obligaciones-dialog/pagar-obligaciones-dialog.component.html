@@ -152,12 +152,19 @@
           </mat-select>
         </mat-form-field>
 
-        <mat-form-field appearance="outline">
+        <!-- En una línea bancaria la moneda la fija la cuenta: el saldo bancario
+             es un escalar en una sola moneda, elegir otra lo corrompería. -->
+        <mat-form-field appearance="outline" *ngIf="!draftEsBanco">
           <mat-label>Moneda</mat-label>
           <mat-select formControlName="monedaId">
             <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
           </mat-select>
         </mat-form-field>
+
+        <div class="pago-moneda-fija" *ngIf="draftEsBanco && monedaCuentaTexto">
+          <span class="pago-moneda-fija-label">Moneda</span>
+          <span class="pago-moneda-fija-valor">{{ monedaCuentaTexto }}</span>
+        </div>
 
         <mat-form-field appearance="outline" *ngIf="draftNecesitaCotizacion">
           <mat-label>Cotización</mat-label>

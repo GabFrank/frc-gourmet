@@ -13,7 +13,6 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { DocumentoService } from 'src/app/services/documento.service';
 import { AgregarItemDialogComponent } from '../agregar-item-dialog/agregar-item-dialog.component';
-import { PagarLiquidacionDialogComponent } from '../pagar-dialog/pagar-liquidacion-dialog.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 

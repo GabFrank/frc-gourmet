@@ -30,7 +30,7 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 
 import { ensurePermission } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
-import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
+import { actualizarSaldoCajaMayor, esIngreso } from './caja-mayor-utils';
 import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { getCotizacionBidireccional } from '../utils/moneda.utils';
 import { getAdapter, AdapterCtx } from './pago-consolidado-adapters';
@@ -116,7 +116,11 @@ export function registerPagoConsolidadoHandlers(
       // pantalla y se confirmo el pago la deuda pudo saldarse por otro camino.
       const items: ItemAPagar[] = [];
       const meta: Array<{ descripcion: string; beneficiario: string | null }> = [];
-      for (const it of itemsPayload) {
+      // Se lockea SIEMPRE en orden de id: dos pagos concurrentes con obligaciones
+      // solapadas, tomadas en el orden en que las tildó cada usuario, pueden
+      // deadlockear en Postgres. Un orden total las serializa.
+      const itemsOrdenados = [...itemsPayload].sort((a, b) => Number(a.origenId) - Number(b.origenId));
+      for (const it of itemsOrdenados) {
         const real = await adapter.leerYBloquear(queryRunner, Number(it.origenId));
         items.push({
           origenTipo: adapter.origenTipo,
@@ -138,7 +142,9 @@ export function registerPagoConsolidadoHandlers(
 
       // El beneficiario sale de la relectura, no del cliente.
       for (let i = 0; i < items.length; i++) {
-        items[i].monto = redondear(Number(itemsPayload[i].monto), decDeuda);
+        // `itemsOrdenados`, no `itemsPayload`: el orden de lock ya no coincide
+        // con el que mandó el cliente.
+        items[i].monto = redondear(Number(itemsOrdenados[i].monto), decDeuda);
       }
       if (adapter.concepto === PagoConcepto.COMPRA) {
         // Para compras, el proveedor unico se valida contra lo releido.
@@ -250,8 +256,23 @@ export function registerPagoConsolidadoHandlers(
           );
         } else {
           if (!l.cuentaBancariaId) throw new Error('Una forma de pago bancaria necesita la cuenta.');
-          const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: Number(l.cuentaBancariaId) } });
+          const cb = await queryRunner.manager.findOne(CuentaBancaria, {
+            where: { id: Number(l.cuentaBancariaId) },
+            relations: ['moneda'],
+          });
           if (!cb) throw new Error('Cuenta bancaria no encontrada');
+          // `CuentaBancaria.saldo` es un escalar en UNA moneda fija. Si la linea
+          // viene denominada en otra, debitar ese monto corrompe el saldo sin que
+          // nadie se entere. El cliente manda la moneda de la linea, asi que hay
+          // que verificarla acá: el diálogo la hereda de la cuenta, pero un
+          // cliente crudo (o el select de moneda tocado después de elegir la
+          // cuenta) puede mandar cualquier cosa.
+          const monedaCuentaId = (cb.moneda as any)?.id;
+          if (monedaCuentaId && Number(l.monedaId) !== Number(monedaCuentaId)) {
+            throw new Error(
+              `La cuenta "${cb.nombre}" está en otra moneda: una forma de pago bancaria se debita en la moneda de la cuenta.`,
+            );
+          }
           cb.saldo = redondear(Number(cb.saldo) - g.monto, 2);
           await queryRunner.manager.save(CuentaBancaria, cb);
           const movBanco = await registrarMovimientoBancario(queryRunner.manager, dataSource, {
@@ -437,10 +458,16 @@ export function registerPagoConsolidadoHandlers(
         const monedaId = (original.moneda as any)?.id;
         const formaPagoId = (original.formaPago as any)?.id;
         if (!cajaMayorId || !monedaId || !formaPagoId) continue;
+        // La reversa se deriva del movimiento original en vez de asumir egreso:
+        // hoy los 4 conceptos son egresos, pero el día que entre uno de sentido
+        // invertido (una cuota de préstamo a funcionario es un INGRESO) un
+        // AJUSTE_POSITIVO a fuego duplicaría plata al anular.
+        const tipoReversa = esIngreso(original.tipoMovimiento)
+          ? TipoMovimiento.AJUSTE_NEGATIVO
+          : TipoMovimiento.AJUSTE_POSITIVO;
         const contra = queryRunner.manager.create(CajaMayorMovimiento, {
           cajaMayor: { id: cajaMayorId } as any,
-          // El pago consolidado sólo genera egresos, así que la reversa suma.
-          tipoMovimiento: TipoMovimiento.AJUSTE_POSITIVO,
+          tipoMovimiento: tipoReversa,
           moneda: { id: monedaId } as any,
           formaPago: { id: formaPagoId } as any,
           monto: original.monto,
@@ -454,7 +481,7 @@ export function registerPagoConsolidadoHandlers(
         await queryRunner.manager.save(CajaMayorMovimiento, contra);
         await actualizarSaldoCajaMayor(
           queryRunner, Number(cajaMayorId), Number(monedaId), Number(formaPagoId),
-          Number(original.monto), TipoMovimiento.AJUSTE_POSITIVO,
+          Number(original.monto), tipoReversa,
         );
       }
 

@@ -137,6 +137,8 @@ export class PagarObligacionesDialogComponent implements OnInit {
   draft!: FormGroup;
   draftNecesitaCotizacion = false;
   draftEsBanco = false;
+  /** Moneda de la cuenta elegida: en banco no se elige, se hereda. */
+  monedaCuentaTexto = '';
 
   // ── precomputados para el template ──
   seleccionadas: ObligacionRow[] = [];
@@ -360,6 +362,7 @@ export class PagarObligacionesDialogComponent implements OnInit {
     this.draftEsBanco = this.draft.get('fuente')!.value === 'CUENTA_BANCARIA';
     this.draft.patchValue({ monedaId: null, cotizacion: null }, { emitEvent: false });
     this.draftNecesitaCotizacion = false;
+    this.monedaCuentaTexto = '';
   }
 
   onDraftMonedaChange(): void {
@@ -370,10 +373,16 @@ export class PagarObligacionesDialogComponent implements OnInit {
 
   onCuentaChange(): void {
     // La moneda de una línea bancaria la fija la cuenta: no se elige aparte.
+    // `CuentaBancaria.saldo` es un escalar en una sola moneda; debitar un monto
+    // denominado en otra lo corrompe sin aviso. El backend lo rechaza igual.
     const id = this.draft.get('cuentaBancariaId')!.value;
     const cuenta = this.cuentasBancarias.find((c) => c.id === id);
     if (cuenta?.moneda?.id) {
       this.draft.patchValue({ monedaId: cuenta.moneda.id });
+      this.monedaCuentaTexto = cuenta.moneda.denominacion || cuenta.moneda.simbolo || '';
+      this.onDraftMonedaChange();
+    } else {
+      this.monedaCuentaTexto = '';
     }
   }
 

@@ -1206,6 +1206,11 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       // diferido. Por eso la rama nueva es opt-in con `diferido: true`, no el
       // default.
       if (diferido === true) {
+        // Un gasto pendiente no tiene "detalles de pago": si vienen, el payload
+        // se contradice y no está claro cuál gana. Mejor fallar que adivinar.
+        if (Array.isArray(detalles) && detalles.length > 0) {
+          throw new Error('Un gasto diferido no lleva detalles de pago: se paga después desde Caja Mayor.');
+        }
         const monedaId = gastoData.moneda?.id || gastoData.monedaId;
         const monto = Number(gastoData.monto);
         if (!monedaId) throw new Error('monedaId requerido');

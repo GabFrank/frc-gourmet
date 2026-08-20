@@ -224,8 +224,18 @@ export function repartirFifo(
 
   // El residuo (dentro de tolerancia, ya validado) se absorbe en la ultima linea:
   // el objetivo del reparto es exactamente la deuda, no un rango.
+  //
+  // En el camino real `validarCobertura` corre justo antes con los mismos
+  // decimales, asi que las dos sumas ya coinciden y este ajuste es 0. Se deja
+  // porque el util es reutilizable y no puede asumir que alguien valido antes —
+  // pero si el ajuste dejara la capacidad en negativo, el reparto quedaria mal y
+  // conviene enterarse en vez de repartir cualquier cosa.
   if (totalCapacidad !== totalItems && capacidad.length) {
-    capacidad[capacidad.length - 1] += totalItems - totalCapacidad;
+    const ultima = capacidad.length - 1;
+    capacidad[ultima] += totalItems - totalCapacidad;
+    if (capacidad[ultima] < 0) {
+      throw new Error('El reparto del pago no cierra: las formas de pago no cubren la deuda.');
+    }
   }
 
   const filas: FilaReparto[] = [];

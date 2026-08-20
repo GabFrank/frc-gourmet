@@ -265,3 +265,24 @@
   .pago-wizard { height: 88vh; }
   .pago-draft mat-form-field { min-width: 130px; flex: 1; }
 }
+
+// Moneda heredada de la cuenta bancaria: se muestra, no se elige.
+.pago-moneda-fija {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 8px;
+}
+
+.pago-moneda-fija-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.pago-moneda-fija-valor {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}

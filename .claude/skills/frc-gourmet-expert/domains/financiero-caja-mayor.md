@@ -524,7 +524,7 @@ Nunca ambas a la vez.
 - `create-edit-caja-mayor/` — CRUD.
 - `caja-mayor-detalle/` — vista operativa.
 - `registrar-ingreso-dialog/` — entrada varia o retiro caja.
-- `registrar-egreso-dialog/` — hub de EGRESOS (10 tarjetas desde 2026-08). Lanza sub-diálogos: `CreateEditGastoDialogComponent` (gasto), `CreateEditValeDialogComponent` (card "Registrar Vale" → handler atómico `crear-vale-confirmado` en `vales.handler.ts`), `CrearCompraSimplificadaDialogComponent` (compra simplificada), `PagarComprasDialogComponent` (pago multi-cuota CPP), `EmitirChequeDialogComponent` (emitir cheque), `CreateOperacionFinancieraDialogComponent`. Además crea mov directo (`create-caja-mayor-movimiento`) / movimiento bancario.
+- `registrar-egreso-dialog/` — hub de EGRESOS, en **grid** de tarjetas. Lanza: `CreateEditGastoDialogComponent` (alta diferida, gasto PENDIENTE), `CrearCompraSimplificadaDialogComponent` (sin pago), `CreateEditValeDialogComponent` (alta, vale SOLICITADO), `PagarObligacionesDialogComponent` (los 4 conceptos de pago), `EmitirChequeDialogComponent`, `CreateOperacionFinancieraDialogComponent`, `EgresoCajaInicialDialogComponent`, y el ajuste de saldo resuelto en el propio diálogo.
 - `edit-movimiento-dialog/` — editar/anular movimiento.
 - `configurar-caja-mayor-dialog/` — qué FPs y cuentas mostrar (M:M).
 - `pagar-obligaciones-dialog/` — **wizard único de pago** (compras/gastos/vales/salarios).

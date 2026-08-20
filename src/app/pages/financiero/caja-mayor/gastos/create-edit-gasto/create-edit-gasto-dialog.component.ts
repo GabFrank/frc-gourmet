@@ -440,8 +440,11 @@ export class CreateEditGastoDialogComponent implements OnInit {
     const esBanco = this.form.value.fuente === 'CUENTA_BANCARIA';
 
     // Saldos negativos: solo aplica a Caja Mayor (en banco se debita la cuenta).
+    // En alta diferida NO aplica: el gasto no toca la caja, y como la forma de
+    // pago queda en null el chequeo no encontraría el saldo y avisaría "saldo
+    // insuficiente" siempre.
     const cajaMayorId = this.form.value.cajaMayorId;
-    if (!esBanco && cajaMayorId) {
+    if (!this.diferido && !esBanco && cajaMayorId) {
       const ok = await this.confirmarSaldoSiNegativo(cajaMayorId);
       if (!ok) return;
     }

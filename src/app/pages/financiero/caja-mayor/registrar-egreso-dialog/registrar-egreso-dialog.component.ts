@@ -21,11 +21,19 @@ import { EmitirChequeDialogComponent } from '../cheques/emitir-cheque/emitir-che
 import { CreateEditValeDialogComponent } from 'src/app/pages/rrhh/vales/create-edit-vale-dialog.component';
 import { CrearCompraSimplificadaDialogComponent } from 'src/app/pages/compras/crear-compra-simplificada-dialog/crear-compra-simplificada-dialog.component';
 import { PagarObligacionesDialogComponent } from '../pagar-obligaciones-dialog/pagar-obligaciones-dialog.component';
+import { EgresoCajaInicialDialogComponent } from '../egreso-caja-inicial-dialog/egreso-caja-inicial-dialog.component';
 import { PagoConcepto } from 'src/app/database/entities/financiero/pago-consolidado-enums';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
 
-type EgresoTipo = 'GASTO' | 'AJUSTE' | 'OPERACION_FINANCIERA' | 'EMITIR_CHEQUE' | 'PAGAR_COMPRAS' | 'REGISTRAR_VALE' | 'COMPRA_SIMPLIFICADA' | null;
+type EgresoTipo =
+  // Altas: dejan la obligacion pendiente, no mueven plata
+  | 'GASTO' | 'COMPRA_SIMPLIFICADA' | 'REGISTRAR_VALE'
+  // Pagos: los 4 conceptos del wizard unico
+  | 'PAGAR_COMPRAS' | 'PAGAR_GASTOS' | 'PAGAR_VALES' | 'PAGAR_SALARIOS'
+  // Otros egresos
+  | 'OPERACION_FINANCIERA' | 'EMITIR_CHEQUE' | 'CAJA_INICIAL' | 'AJUSTE'
+  | null;
 
 @Component({
   selector: 'app-registrar-egreso-dialog',
@@ -124,6 +132,13 @@ export class RegistrarEgresoDialogComponent implements OnInit {
       descripcion: 'Pagar una liquidación de sueldo aprobada (una por vez)',
       icono: 'badge',
       color: '#00695c',
+    },
+    {
+      tipo: 'CAJA_INICIAL' as EgresoTipo,
+      titulo: 'Egreso de Caja Inicial',
+      descripcion: 'Retirar efectivo para sembrar la apertura de una caja de venta',
+      icono: 'output',
+      color: '#455a64',
     },
     {
       tipo: 'AJUSTE' as EgresoTipo,
@@ -245,6 +260,15 @@ export class RegistrarEgresoDialogComponent implements OnInit {
       this.dialogRef?.close(false);
       this.dialog.open(EmitirChequeDialogComponent, {
         width: '720px',
+        data: { cajaMayorId: this.cajaMayorId },
+      });
+      return;
+    }
+    if (tipo === 'CAJA_INICIAL') {
+      this.dialogRef?.close(false);
+      this.dialog.open(EgresoCajaInicialDialogComponent, {
+        width: '600px',
+        maxHeight: '90vh',
         data: { cajaMayorId: this.cajaMayorId },
       });
       return;

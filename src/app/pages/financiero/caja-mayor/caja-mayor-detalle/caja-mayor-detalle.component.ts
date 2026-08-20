@@ -557,7 +557,8 @@ export class CajaMayorDetalleComponent implements OnInit {
 
   registrarIngreso(): void {
     const dialogRef = this.dialog.open(RegistrarIngresoDialogComponent, {
-      width: '550px',
+      width: '860px',
+      maxWidth: '95vw',
       data: { cajaMayorId: this.cajaMayor?.id },
     });
 
@@ -568,6 +569,7 @@ export class CajaMayorDetalleComponent implements OnInit {
         this.detectarYEscucharSubdialog([
           CreateEditEntradaVariaDialogComponent,
           CreateOperacionFinancieraDialogComponent,
+          CobrarCpcRapidoDialogComponent,
         ]);
       }
     });
@@ -575,7 +577,8 @@ export class CajaMayorDetalleComponent implements OnInit {
 
   registrarEgreso(): void {
     const dialogRef = this.dialog.open(RegistrarEgresoDialogComponent, {
-      width: '550px',
+      width: '860px',
+      maxWidth: '95vw',
       data: { cajaMayorId: this.cajaMayor?.id },
     });
 
@@ -589,6 +592,7 @@ export class CajaMayorDetalleComponent implements OnInit {
           EmitirChequeDialogComponent,
           PagarObligacionesDialogComponent,
           CreateEditValeDialogComponent,
+          EgresoCajaInicialDialogComponent,
         ]);
       }
     });
