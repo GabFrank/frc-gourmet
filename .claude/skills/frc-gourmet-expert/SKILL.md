@@ -192,7 +192,7 @@ Detalles → [workflows/todos-pendientes.md](workflows/todos-pendientes.md).
 - Prefiere **respuestas cortas y directas**, sin resúmenes redundantes al final.
 - Le gusta probar **paso a paso** — una acción por turno, no listas largas de pasos para hacer todo de una.
 - Usa **dark theme** generalmente. Verificar siempre que los cambios visuales funcionen en ambos.
-- Trabaja en `userData/frc-gourmet.db`, que es una **BD de desarrollo** que el agente levanta: se puede escribir y probar sin miedo. La instalación productiva está en otra PC y sólo se toca vía PR a alpha (y luego master).
+- **Lo que distingue dev de producción es la MÁQUINA, no el nombre del archivo.** En el iMac de Gabriel, `userData/frc-gourmet.db` es una **BD de desarrollo**: se puede escribir, pagar, anular y romper sin miedo. La instalación productiva corre en **otra PC** y muy probablemente tenga ese mismo nombre de archivo, así que el nombre no sirve para distinguirlas. A producción sólo se llega vía PR a alpha (y luego master).
 
 ---
 
