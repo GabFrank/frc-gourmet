@@ -1,0 +1,267 @@
+// Wizard de pago de obligaciones. Híbrido tab/dialog: como diálogo ocupa alto
+// fijo con scroll interno, como tab se estira al alto disponible.
+.pago-wizard {
+  display: flex;
+  flex-direction: column;
+  height: 72vh;
+  min-height: 480px;
+  box-sizing: border-box;
+
+  &.pago-wizard-tab {
+    height: 100%;
+    padding: 16px;
+  }
+}
+
+.pago-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 16px 20px 4px;
+  flex-wrap: wrap;
+}
+
+.pago-titulo {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pago-subtitulo {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.pago-loading {
+  display: flex;
+  justify-content: center;
+  padding: 48px;
+}
+
+.pago-stepper {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: transparent;
+}
+
+.pago-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.pago-filtro {
+  min-width: 240px;
+}
+
+.pago-spacer {
+  flex: 1;
+}
+
+// Scroll local de la tabla: el wizard no crece, la lista sí.
+.pago-tabla-wrap {
+  max-height: 46vh;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.pago-tabla {
+  width: 100%;
+  background: transparent;
+}
+
+.pago-num {
+  text-align: right;
+}
+
+.pago-item-desc {
+  font-size: 0.85rem;
+}
+
+.pago-monto-input {
+  width: 140px;
+
+  ::ng-deep .mat-mdc-form-field-subscript-wrapper { display: none; }
+}
+
+// Una fila deshabilitada tiene que verse deshabilitada, pero seguir legible:
+// el usuario necesita entender POR QUÉ no puede elegirla.
+.pago-fila-bloqueada,
+.pago-fila-incompatible {
+  opacity: 0.45;
+}
+
+.pago-vacio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 20px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.pago-errores {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--error-color);
+  color: var(--error-color);
+  font-size: 0.85rem;
+}
+
+.pago-destinatario {
+  margin-bottom: 12px;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.pago-draft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+
+  mat-form-field { min-width: 150px; }
+}
+
+.pago-lineas {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  max-height: 30vh;
+  overflow: auto;
+}
+
+.pago-linea {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+
+  & + .pago-linea {
+    border-top: 1px solid var(--border-color);
+  }
+}
+
+.pago-linea-etiqueta {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.pago-linea-monto {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pago-linea-conv {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.pago-balance {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  flex-wrap: wrap;
+
+  &.pago-balance-ok {
+    border-color: var(--success-color);
+  }
+}
+
+.pago-balance-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pago-balance-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.pago-balance-valor {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pago-balance-check {
+  color: var(--success-color);
+}
+
+.pago-balance-dif {
+  font-size: 0.85rem;
+  color: var(--warning-color);
+}
+
+.pago-revision {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pago-bloque {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pago-bloque-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.pago-bloque-valor {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pago-resumen-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+
+.pago-resumen-total {
+  font-weight: 600;
+  padding-top: 6px;
+}
+
+.pago-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+@media (max-width: 700px) {
+  .pago-wizard { height: 88vh; }
+  .pago-draft mat-form-field { min-width: 130px; flex: 1; }
+}

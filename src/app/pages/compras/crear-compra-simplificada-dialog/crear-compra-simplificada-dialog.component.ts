@@ -91,9 +91,6 @@ export class CrearCompraSimplificadaDialogComponent implements OnInit {
       credito: [false],
       cantidadCuotas: [1, [Validators.min(1)]],
       fechaCreditoInicio: [new Date()],
-      pagarAhora: [true],
-      pagoMixto: [false],
-      fuente: ['CAJA_MAYOR'],
       cajaMayorId: [this.cajaMayorId || null],
       formaPagoId: [null],
       cuentaBancariaId: [null],
@@ -101,9 +98,6 @@ export class CrearCompraSimplificadaDialogComponent implements OnInit {
 
     this.form.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
     this.form.get('credito')!.valueChanges.subscribe(() => this.aplicarValidadoresPago());
-    this.form.get('pagarAhora')!.valueChanges.subscribe(() => this.aplicarValidadoresPago());
-    this.form.get('pagoMixto')!.valueChanges.subscribe(() => this.aplicarValidadoresPago());
-    this.form.get('fuente')!.valueChanges.subscribe(() => this.aplicarValidadoresPago());
 
     this.loadData();
   }
@@ -112,43 +106,22 @@ export class CrearCompraSimplificadaDialogComponent implements OnInit {
     return !!this.form?.get('credito')?.value;
   }
 
-  get esMixto(): boolean {
-    return !this.esCredito && !!this.form?.get('pagoMixto')?.value;
-  }
-
-  get pagaAhora(): boolean {
-    return !this.esCredito && !this.esMixto && !!this.form?.get('pagarAhora')?.value;
-  }
-
-  get esBanco(): boolean {
-    return this.form?.get('fuente')?.value === 'CUENTA_BANCARIA';
-  }
-
-  /** Ajusta validadores según crédito / pagar ahora / fuente. */
+  /**
+   * Ajusta validadores segun credito. El alta ya no paga: la fuente y la forma
+   * de pago se eligen recien al saldar la cuota desde Caja Mayor.
+   */
   private aplicarValidadoresPago(): void {
     const cuotas = this.form.get('cantidadCuotas')!;
     const fechaCred = this.form.get('fechaCreditoInicio')!;
-    const caja = this.form.get('cajaMayorId')!;
-    const fp = this.form.get('formaPagoId')!;
-    const cb = this.form.get('cuentaBancariaId')!;
 
-    // Reset
-    [cuotas, fechaCred, caja, fp, cb].forEach(c => c.clearValidators());
+    [cuotas, fechaCred].forEach(c => c.clearValidators());
 
     if (this.esCredito) {
       cuotas.setValidators([Validators.required, Validators.min(1)]);
       fechaCred.setValidators([Validators.required]);
-    } else if (this.pagaAhora) {
-      if (this.esBanco) {
-        cb.setValidators([Validators.required]);
-      } else {
-        caja.setValidators([Validators.required]);
-        fp.setValidators([Validators.required]);
-        this.preseleccionarEfectivo();
-      }
     }
 
-    [cuotas, fechaCred, caja, fp, cb].forEach(c => c.updateValueAndValidity({ emitEvent: false }));
+    [cuotas, fechaCred].forEach(c => c.updateValueAndValidity({ emitEvent: false }));
   }
 
   private preseleccionar(): void {
@@ -229,30 +202,17 @@ export class CrearCompraSimplificadaDialogComponent implements OnInit {
     if (f.credito) {
       payload.cantidadCuotas = Number(f.cantidadCuotas) || 1;
       payload.fechaCreditoInicio = f.fechaCreditoInicio;
-    } else if (f.pagoMixto) {
-      // Pago mixto: se crea la compra SIN pagar y luego se abre el diálogo de
-      // pago mixto para su cuota (mismo patrón que el "pagar ahora" del complejo).
-      payload.pagarAhora = false;
     } else {
-      payload.pagarAhora = !!f.pagarAhora;
-      if (f.pagarAhora) {
-        payload.fuente = f.fuente;
-        if (f.fuente === 'CUENTA_BANCARIA') {
-          payload.cuentaBancariaId = f.cuentaBancariaId;
-        } else {
-          payload.cajaMayorId = f.cajaMayorId;
-          payload.formaPagoId = f.formaPagoId;
-        }
-      }
+      // El alta ya no paga: la compra deja su cuota pendiente y se salda desde
+      // Caja Mayor -> Pagar compras, que ademas permite juntarla con otras del
+      // mismo proveedor en un solo egreso.
+      payload.pagarAhora = false;
     }
 
     this.saving = true;
     try {
-      const compra: any = await firstValueFrom(this.repositoryService.crearCompraSimplificada(payload));
-      if (!f.credito && f.pagoMixto) {
-        await this.abrirPagoMixto(compra, proveedor?.nombre);
-      }
-      this.snackBar.open('Compra simplificada registrada correctamente', 'Cerrar', { duration: 3000 });
+      await firstValueFrom(this.repositoryService.crearCompraSimplificada(payload));
+      this.snackBar.open('Compra registrada. La cuota queda pendiente: se paga desde Caja Mayor.', 'Cerrar', { duration: 4000 });
       this.dialogRef?.close(true);
     } catch (error: any) {
       console.error('Error registrando compra simplificada:', error);
@@ -260,37 +220,6 @@ export class CrearCompraSimplificadaDialogComponent implements OnInit {
     } finally {
       this.saving = false;
     }
-  }
-
-  // Abre el diálogo de pago mixto para la (única) cuota de la compra recién creada.
-  private async abrirPagoMixto(compra: any, proveedorNombre?: string): Promise<void> {
-    const cppId = compra?.cuentaPorPagar?.id;
-    if (!cppId) return;
-    const cuotas: any[] = await firstValueFrom(this.repositoryService.getCuentaPorPagarCuotas(cppId));
-    const cuota = (cuotas || [])[0];
-    if (!cuota) return;
-    const saldo = +(Number(cuota.monto || 0) - Number(cuota.montoPagado || 0)).toFixed(2);
-    const { PagoMixtoCuotaDialogComponent } = await import(
-      'src/app/pages/financiero/caja-mayor/pago-mixto-cuota-dialog/pago-mixto-cuota-dialog.component'
-    );
-    const ref = this.dialog.open(PagoMixtoCuotaDialogComponent, {
-      width: '720px',
-      maxWidth: '95vw',
-      data: {
-        cuota: {
-          id: cuota.id,
-          numero: cuota.numero,
-          saldoPendiente: saldo,
-          monedaId: compra?.moneda?.id,
-          monedaSimbolo: compra?.moneda?.simbolo,
-          monedaDenominacion: compra?.moneda?.denominacion,
-          cppId,
-          proveedorNombre: proveedorNombre,
-          compraNumeroNota: compra?.numeroNota,
-        },
-      },
-    });
-    await firstValueFrom(ref.afterClosed());
   }
 
   cancel(): void {

@@ -64,11 +64,20 @@ async function ingresoEgresoRango(ds: DataSource, ctx: Ctx, r: RangoFechas): Pro
   return { ingresos, egresos };
 }
 
+/**
+ * Gastos del rango. Excluye PENDIENTE: desde el pago consolidado un gasto puede
+ * quedar registrado sin haber salido de la caja, y este numero se reconcilia
+ * contra el flujo de caja (que es movimiento-based). Contarlo aca abriria una
+ * brecha entre "gastos reportados" y "egresos reales".
+ *
+ * PROGRAMADO se sigue contando, como siempre — es una rareza preexistente
+ * anotada en known-bugs, no se cambia en este PR.
+ */
 async function gastosRango(ds: DataSource, ctx: Ctx, r: RangoFechas): Promise<number> {
   const rows: any[] = await dbQuery(ds, `
     SELECT g.moneda_id as moneda_id, m.principal as principal, SUM(g.monto) as total
     FROM gastos g LEFT JOIN monedas m ON m.id = g.moneda_id
-    WHERE g.estado != 'CANCELADO' AND g.fecha >= ? AND g.fecha <= ?
+    WHERE g.estado NOT IN ('CANCELADO', 'PENDIENTE') AND g.fecha >= ? AND g.fecha <= ?
     GROUP BY g.moneda_id, m.principal
   `, [r.desde.toISOString(), r.hasta.toISOString()]);
   return rows.reduce((s, row) => s + convertir(row.total, row.moneda_id, row.principal, ctx), 0);
@@ -150,7 +159,7 @@ async function gastosPorCategoria(ds: DataSource, ctx: Ctx, r: RangoFechas) {
     FROM gastos g
     JOIN gastos_categorias gc ON gc.id = g.gasto_categoria_id
     LEFT JOIN monedas m ON m.id = g.moneda_id
-    WHERE g.estado != 'CANCELADO' AND g.fecha >= ? AND g.fecha <= ?
+    WHERE g.estado NOT IN ('CANCELADO', 'PENDIENTE') AND g.fecha >= ? AND g.fecha <= ?
     GROUP BY gc.nombre, g.moneda_id, m.principal
   `, [r.desde.toISOString(), r.hasta.toISOString()]);
   const map: { [k: string]: number } = {};

@@ -532,13 +532,14 @@ export class CreateEditCompraComponent implements OnInit {
       // Si el usuario eligio "Pagar ahora" en contado, abrir el dialog de pago con la cuota preseleccionada.
       const cuotaIdParaPagar: number | null = resp?.cuotaIdParaPagar ?? null;
       if (cuotaIdParaPagar) {
-        const { PagarComprasDialogComponent } = await import(
-          'src/app/pages/financiero/caja-mayor/pagar-compras-dialog/pagar-compras-dialog.component'
+        const { PagarObligacionesDialogComponent } = await import(
+          'src/app/pages/financiero/caja-mayor/pagar-obligaciones-dialog/pagar-obligaciones-dialog.component'
         );
-        const payRef = this.dialog.open(PagarComprasDialogComponent, {
-          width: '900px',
-          maxWidth: '95vw',
-          data: { cuotaIdsPreseleccionadas: [cuotaIdParaPagar] },
+        const { PagoConcepto } = await import('src/app/database/entities/financiero/pago-consolidado-enums');
+        const payRef = this.dialog.open(PagarObligacionesDialogComponent, {
+          width: '1000px',
+          maxWidth: '96vw',
+          data: { concepto: PagoConcepto.COMPRA, origenIdsPreseleccionados: [cuotaIdParaPagar] },
         });
         await firstValueFrom(payRef.afterClosed());
       }

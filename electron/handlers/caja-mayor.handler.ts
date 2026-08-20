@@ -1191,10 +1191,37 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      const { detalles, fuente, cuentaBancariaId, montoCuentaBancaria, cotizacion, ...gastoData } = data;
+      const { detalles, fuente, cuentaBancariaId, montoCuentaBancaria, cotizacion, diferido, ...gastoData } = data;
       const cajaMayorId = gastoData.cajaMayor?.id || gastoData.cajaMayor;
       const destinoTipo = (gastoData.destinoTipo as GastoDestinoTipo) || GastoDestinoTipo.CAJA_MAYOR;
       const esBanco = fuente === 'CUENTA_BANCARIA';
+
+      // ===== Rama DIFERIDA: el gasto nace PENDIENTE y no asienta nada =====
+      // El pago se hace despues desde Caja Mayor (pago consolidado), que permite
+      // saldar varios gastos con un solo egreso.
+      //
+      // El contrato del handler NO cambia para quien manda datos de pago: la app
+      // mobile llama a este mismo canal con `detalles[]` y forma de pago
+      // esperando que el egreso se asiente al toque, y no tiene pantalla de pago
+      // diferido. Por eso la rama nueva es opt-in con `diferido: true`, no el
+      // default.
+      if (diferido === true) {
+        const monedaId = gastoData.moneda?.id || gastoData.monedaId;
+        const monto = Number(gastoData.monto);
+        if (!monedaId) throw new Error('monedaId requerido');
+        if (!(monto > 0)) throw new Error('monto debe ser mayor a 0');
+        const gastoPendiente = queryRunner.manager.create(Gasto, {
+          ...gastoData,
+          monto,
+          moneda: { id: monedaId },
+          formaPago: null,
+          estado: GastoEstado.PENDIENTE,
+        });
+        await setEntityUserTracking(dataSource, gastoPendiente, getCurrentUser()?.id, false);
+        const savedPendiente = await queryRunner.manager.save(Gasto, gastoPendiente);
+        await queryRunner.commitTransaction();
+        return savedPendiente;
+      }
 
       // ===== Rama CUENTA_BANCARIA: debita cuenta_bancaria.saldo, sin caja mayor =====
       if (destinoTipo === GastoDestinoTipo.CUENTA_BANCARIA) {

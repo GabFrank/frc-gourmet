@@ -45,8 +45,10 @@
       <mat-error>La caja mayor es requerida</mat-error>
     </mat-form-field>
 
-    <!-- Fuente del egreso: efectivo en caja mayor o débito a cuenta bancaria -->
-    <mat-button-toggle-group formControlName="fuente" class="full-width fuente-toggle">
+    <!-- Fuente del egreso: efectivo en caja mayor o débito a cuenta bancaria.
+         En alta diferida no se elige acá: el gasto queda pendiente y la fuente
+         se define recién al pagarlo desde Caja Mayor. -->
+    <mat-button-toggle-group formControlName="fuente" class="full-width fuente-toggle" *ngIf="!diferido">
       <mat-button-toggle value="CAJA_MAYOR">
         <mat-icon>point_of_sale</mat-icon> Caja Mayor
       </mat-button-toggle>
@@ -55,7 +57,7 @@
       </mat-button-toggle>
     </mat-button-toggle-group>
 
-    <mat-form-field appearance="outline" class="full-width" *ngIf="form.get('fuente')?.value === 'CUENTA_BANCARIA'">
+    <mat-form-field appearance="outline" class="full-width" *ngIf="!diferido && form.get('fuente')?.value === 'CUENTA_BANCARIA'">
       <mat-label>Cuenta Bancaria</mat-label>
       <mat-select formControlName="cuentaBancariaId">
         <mat-option *ngFor="let cb of cuentasBancarias" [value]="cb.id">
@@ -109,7 +111,11 @@
     <mat-divider></mat-divider>
 
     <!-- Seccion de pagos / detalles -->
-    <h3 class="section-title">Detalle de Pago</h3>
+    <h3 class="section-title">{{ diferido ? 'Importe' : 'Detalle de Pago' }}</h3>
+    <p class="hint-diferido" *ngIf="diferido">
+      El gasto queda <strong>pendiente</strong>. Se paga desde Caja Mayor, donde se
+      puede saldar junto con otros en un solo egreso.
+    </p>
 
     <div class="detalle-form-row" [formGroup]="detalleForm">
       <mat-form-field appearance="outline" class="det-field">
@@ -119,7 +125,7 @@
         </mat-select>
       </mat-form-field>
 
-      <mat-form-field appearance="outline" class="det-field">
+      <mat-form-field appearance="outline" class="det-field" *ngIf="!diferido">
         <mat-label>Forma de Pago</mat-label>
         <mat-select formControlName="formaPagoId">
           <mat-option *ngFor="let fp of formasPagoEfectivo" [value]="fp.id">{{fp.nombre}}</mat-option>

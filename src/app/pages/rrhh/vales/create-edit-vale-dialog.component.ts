@@ -150,6 +150,18 @@ export class CreateEditValeDialogComponent implements OnInit {
   formasPago: any[] = [];
   formasPagoEfectivo: any[] = [];
   cuentasBancarias: any[] = [];
+  /**
+   * Modo "registrar egreso por vale": crea el vale ya CONFIRMADO y asienta el
+   * egreso en el acto.
+   *
+   * DESDE EL PAGO CONSOLIDADO NO TIENE ENTRADA EN DESKTOP: el hub de egresos de
+   * Caja Mayor abre este diálogo en modo alta (vale SOLICITADO) y el pago se
+   * hace en "Pagar vales", que permite entregar varios en un solo egreso.
+   *
+   * El código queda porque el canal `crear-vale-confirmado` sigue vivo para la
+   * app mobile (`projects/mobile/.../ops/vale-nuevo`), que no tiene pantalla de
+   * pago diferido. Borrar esta rama del desktop está anotado en el backlog.
+   */
   modoConfirmar = false;
 
   requiereCotiz = false;

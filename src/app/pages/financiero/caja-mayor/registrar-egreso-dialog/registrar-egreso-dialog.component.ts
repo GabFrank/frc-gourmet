@@ -18,9 +18,10 @@ import { RepositoryService } from 'src/app/database/repository.service';
 import { CreateEditGastoDialogComponent } from '../gastos/create-edit-gasto/create-edit-gasto-dialog.component';
 import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financieras/create-operacion-financiera/create-operacion-financiera-dialog.component';
 import { EmitirChequeDialogComponent } from '../cheques/emitir-cheque/emitir-cheque-dialog.component';
-import { PagarComprasDialogComponent } from '../pagar-compras-dialog/pagar-compras-dialog.component';
 import { CreateEditValeDialogComponent } from 'src/app/pages/rrhh/vales/create-edit-vale-dialog.component';
 import { CrearCompraSimplificadaDialogComponent } from 'src/app/pages/compras/crear-compra-simplificada-dialog/crear-compra-simplificada-dialog.component';
+import { PagarObligacionesDialogComponent } from '../pagar-obligaciones-dialog/pagar-obligaciones-dialog.component';
+import { PagoConcepto } from 'src/app/database/entities/financiero/pago-consolidado-enums';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
 
@@ -71,14 +72,14 @@ export class RegistrarEgresoDialogComponent implements OnInit {
     {
       tipo: 'COMPRA_SIMPLIFICADA' as EgresoTipo,
       titulo: 'Compra Simplificada',
-      descripcion: 'Compra sin ítems: genera la deuda al proveedor y el pago (no mueve stock)',
+      descripcion: 'Compra sin ítems: genera la deuda al proveedor (el pago se hace en Pagar compras)',
       icono: 'shopping_bag',
       color: '#00838f',
     },
     {
       tipo: 'GASTO' as EgresoTipo,
       titulo: 'Gasto',
-      descripcion: 'Registrar un gasto categorizado (servicios, operativo, etc.)',
+      descripcion: 'Registrar un gasto categorizado. Queda pendiente hasta que se pague',
       icono: 'receipt_long',
       color: '#e65100',
     },
@@ -99,9 +100,30 @@ export class RegistrarEgresoDialogComponent implements OnInit {
     {
       tipo: 'REGISTRAR_VALE' as EgresoTipo,
       titulo: 'Registrar Vale',
-      descripcion: 'Vale / adelanto a funcionario (confirma y egresa de Caja Mayor al toque)',
+      descripcion: 'Vale / adelanto a funcionario. Queda pendiente hasta que se pague',
       icono: 'receipt_long',
       color: '#2e7d32',
+    },
+    {
+      tipo: 'PAGAR_GASTOS' as EgresoTipo,
+      titulo: 'Pagar Gastos',
+      descripcion: 'Pagar uno o varios gastos pendientes en un solo egreso',
+      icono: 'payments',
+      color: '#ef6c00',
+    },
+    {
+      tipo: 'PAGAR_VALES' as EgresoTipo,
+      titulo: 'Pagar Vales',
+      descripcion: 'Entregar uno o varios vales pendientes en un solo egreso',
+      icono: 'account_balance_wallet',
+      color: '#2e7d32',
+    },
+    {
+      tipo: 'PAGAR_SALARIOS' as EgresoTipo,
+      titulo: 'Pagar Salarios',
+      descripcion: 'Pagar una liquidación de sueldo aprobada (una por vez)',
+      icono: 'badge',
+      color: '#00695c',
     },
     {
       tipo: 'AJUSTE' as EgresoTipo,
@@ -206,7 +228,7 @@ export class RegistrarEgresoDialogComponent implements OnInit {
       this.dialogRef?.close(false);
       this.dialog.open(CreateEditGastoDialogComponent, {
         width: '700px',
-        data: { cajaMayorId: this.cajaMayorId },
+        data: { cajaMayorId: this.cajaMayorId, diferido: true },
       });
       return;
     }
@@ -227,12 +249,19 @@ export class RegistrarEgresoDialogComponent implements OnInit {
       });
       return;
     }
-    if (tipo === 'PAGAR_COMPRAS') {
+    // Los cuatro conceptos usan el MISMO wizard: sólo cambia qué lista.
+    const conceptoPorTipo: Record<string, PagoConcepto> = {
+      PAGAR_COMPRAS: PagoConcepto.COMPRA,
+      PAGAR_GASTOS: PagoConcepto.GASTO,
+      PAGAR_VALES: PagoConcepto.VALE,
+      PAGAR_SALARIOS: PagoConcepto.LIQUIDACION_SUELDO,
+    };
+    if (tipo && conceptoPorTipo[tipo]) {
       this.dialogRef?.close(false);
-      this.dialog.open(PagarComprasDialogComponent, {
-        width: '900px',
-        maxWidth: '95vw',
-        data: { cajaMayorId: this.cajaMayorId },
+      this.dialog.open(PagarObligacionesDialogComponent, {
+        width: '1000px',
+        maxWidth: '96vw',
+        data: { concepto: conceptoPorTipo[tipo], cajaMayorId: this.cajaMayorId },
       });
       return;
     }
@@ -250,7 +279,7 @@ export class RegistrarEgresoDialogComponent implements OnInit {
       this.dialog.open(CreateEditValeDialogComponent, {
         width: '760px',
         maxWidth: '95vw',
-        data: { cajaMayorId: this.cajaMayorId, modoConfirmar: true },
+        data: { cajaMayorId: this.cajaMayorId },
       });
       return;
     }

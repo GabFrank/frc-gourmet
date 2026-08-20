@@ -293,14 +293,30 @@ export class LiquidacionSueldoDetalleComponent implements OnInit {
     } catch (e) { console.error(e); }
   }
 
-  pagar(): void {
+  /**
+   * El pago se hace en Caja Mayor, igual que gastos, vales y compras: ahí la
+   * liquidación se puede cubrir con varias formas de pago y el evento queda
+   * anulable como unidad. Se abre con esta liquidación preseleccionada.
+   *
+   * Una liquidación por vez: su neteo (vales, cuotas CPP/CPC, aguinaldo,
+   * comisiones) tiene que quedar atado a un evento propio.
+   */
+  async pagar(): Promise<void> {
     if (!this.liquidacion) return;
-    const ref = this.dialog.open(PagarLiquidacionDialogComponent, {
-      width: '900px',
-      maxWidth: '95vw',
-      data: { liquidacion: this.liquidacion },
+    const { PagarObligacionesDialogComponent } = await import(
+      'src/app/pages/financiero/caja-mayor/pagar-obligaciones-dialog/pagar-obligaciones-dialog.component'
+    );
+    const { PagoConcepto } = await import('src/app/database/entities/financiero/pago-consolidado-enums');
+    const ref = this.dialog.open(PagarObligacionesDialogComponent, {
+      width: '1000px',
+      maxWidth: '96vw',
+      data: {
+        concepto: PagoConcepto.LIQUIDACION_SUELDO,
+        origenIdsPreseleccionados: [this.liquidacion.id],
+      },
     });
-    ref.afterClosed().subscribe((res) => { if (res?.saved) this.load(); });
+    const res = await firstValueFrom(ref.afterClosed());
+    if (res) this.load();
   }
 
   async imprimirRecibo(): Promise<void> {
