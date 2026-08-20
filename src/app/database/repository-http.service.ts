@@ -852,6 +852,9 @@ export class RepositoryHttpService extends RepositoryService {
   updatePdvMesa(id: number, data: Partial<PdvMesa>): Observable<PdvMesa> {
     return throwError(() => new Error(`RepositoryHttpService.updatePdvMesa() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  setPdvMesaEstado(mesaId: number, estado: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.setPdvMesaEstado() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   deletePdvMesa(id: number): Observable<boolean> {
     return throwError(() => new Error(`RepositoryHttpService.deletePdvMesa() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

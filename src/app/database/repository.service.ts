@@ -377,6 +377,7 @@ export abstract class RepositoryService {
   abstract createPdvMesa(data: Partial<PdvMesa>): Observable<PdvMesa>;
   abstract createBatchPdvMesas(batchData: Partial<PdvMesa>[]): Observable<PdvMesa[]>;
   abstract updatePdvMesa(id: number, data: Partial<PdvMesa>): Observable<PdvMesa>;
+  abstract setPdvMesaEstado(mesaId: number, estado: string): Observable<any>;
   abstract deletePdvMesa(id: number): Observable<boolean>;
   abstract getSectores(tipo?: string): Observable<Sector[]>;
   abstract getSectoresActivos(tipo?: string): Observable<Sector[]>;

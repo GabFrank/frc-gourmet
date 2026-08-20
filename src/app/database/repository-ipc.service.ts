@@ -372,6 +372,7 @@ interface ElectronAPI {
   createPdvMesa: (data: Partial<PdvMesa>) => Promise<PdvMesa>;
   createBatchPdvMesas: (batchData: Partial<PdvMesa>[]) => Promise<PdvMesa[]>;
   updatePdvMesa: (id: number, data: Partial<PdvMesa>) => Promise<PdvMesa>;
+  setPdvMesaEstado: (mesaId: number, estado: string) => Promise<any>;
   deletePdvMesa: (id: number) => Promise<boolean>;
 
   // Sector methods
@@ -2268,6 +2269,10 @@ export class RepositoryIpcService extends RepositoryService {
 
   updatePdvMesa(id: number, data: Partial<PdvMesa>): Observable<PdvMesa> {
     return from(this.api.updatePdvMesa(id, data));
+  }
+
+  setPdvMesaEstado(mesaId: number, estado: string): Observable<any> {
+    return from(this.api.setPdvMesaEstado(mesaId, estado));
   }
 
   deletePdvMesa(id: number): Observable<boolean> {
