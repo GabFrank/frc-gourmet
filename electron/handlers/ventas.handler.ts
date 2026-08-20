@@ -13,6 +13,8 @@ import { PdvCategoria } from '../../src/app/database/entities/ventas/pdv-categor
 import { PdvCategoriaItem } from '../../src/app/database/entities/ventas/pdv-categoria-item.entity';
 import { PdvItemProducto } from '../../src/app/database/entities/ventas/pdv-item-producto.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { getRangosPrecioVariacion } from '../utils/variacion-precio.utils';
+import { getVariacionConfig, getVariacionConfigGlobal } from '../utils/variacion-config.utils';
 import { ensureObservacionNotaLibreId } from '../utils/observacion-libre.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
@@ -3071,6 +3073,20 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         || precios?.[0]
         || null;
 
+      // Productos con variación: rango de precios y config de multi-sabor
+      // resueltos en batch (el atajo puede tener varios y todos consultarían lo
+      // mismo).
+      const idsVariacion = items
+        .map((item: any) => item.producto)
+        .filter((p: any) => p?.tipo === 'ELABORADO_CON_VARIACION')
+        .map((p: any) => p.id);
+      const rangosVariacion = idsVariacion.length
+        ? await getRangosPrecioVariacion(dataSource, idsVariacion)
+        : new Map();
+      const configGlobalVariacion = idsVariacion.length
+        ? await getVariacionConfigGlobal(dataSource)
+        : undefined;
+
       for (const item of items) {
         const p = item.producto as any;
         if (!p) continue;
@@ -3086,21 +3102,22 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             p.precioDirecto = pickPrecio(precios);
           }
         } else if (p.tipo === 'ELABORADO_CON_VARIACION') {
-          const precios = await pvRepo
-            .createQueryBuilder('pv')
-            .leftJoinAndSelect('pv.moneda', 'moneda')
-            .innerJoin('pv.receta', 'receta')
-            // `producto_variacion_id`, NO `producto_id`: para productos con
-            // variaciones cada receta cuelga del producto via
-            // `Receta.productoVariacion`. La columna `receta.producto_id` esta
-            // deprecada y siempre es NULL, con lo que esta query no devolvia
-            // ningun precio (atajos de PdV sin `precioDirecto` para pizzas).
-            // Alineado con productos.handler.ts:451 y :1852.
-            .where('receta.productoVariacion = :prodId', { prodId: p.id })
-            .andWhere('pv.activo = :activo', { activo: true })
-            .orderBy('pv.principal', 'DESC')
-            .getMany();
-          p.precioDirecto = pickPrecio(precios);
+          // El precio de una variación cuelga de `receta_presentacion_id`, no de
+          // la receta (y menos del 1:1 legacy `receta.producto_id`, que dejaba el
+          // atajo en 0). Se muestra el rango "desde / hasta" de sus variaciones.
+          const cfgVariacion = await getVariacionConfig(dataSource, p, configGlobalVariacion);
+          p.variacionConfig = { maxSabores: cfgVariacion.maxSabores, estrategia: cfgVariacion.estrategia };
+          const rango = rangosVariacion.get(p.id);
+          if (rango && rango.variacionesCount > 0) {
+            p.precioDirecto = rango.precioReferencia;
+            p.variacionResumen = {
+              precioDesde: rango.precioDesde,
+              precioHasta: rango.precioHasta,
+              variacionesCount: rango.variacionesCount,
+              saboresCount: rango.saboresCount,
+              presentacionesCount: rango.presentacionesCount,
+            };
+          }
         } else if (p.tipo === 'COMBO') {
           const precios = await pvRepo.find({
             where: { producto: { id: p.id }, activo: true },

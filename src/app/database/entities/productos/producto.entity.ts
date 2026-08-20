@@ -72,6 +72,19 @@ export class Producto extends BaseModel {
   @Column({ type: 'boolean', default: false, name: 'descuenta_por_receta', comment: 'Buffet: descontar stock por receta en vez del propio producto' })
   descuentaPorReceta!: boolean;
 
+  // --- Configuración de variaciones (solo ELABORADO_CON_VARIACION) ---
+  // Cuántas variaciones (sabores) se pueden combinar en un mismo ítem: 1 = un
+  // solo sabor (sin mitad y mitad), 2 = mitad y mitad, etc. null = heredar el
+  // valor global de `PdvConfig.pizzaMaxSabores` (una pizza y una milanesa no
+  // tienen por qué compartir la regla).
+  @Column({ type: 'int', nullable: true, name: 'max_variaciones_simultaneas', comment: 'Máximo de sabores combinables por ítem. null = usar el global de PdvConfig.' })
+  maxVariacionesSimultaneas?: number | null;
+
+  // Cómo se cotiza un ítem con varios sabores: MAYOR_PRECIO | PROMEDIO.
+  // null = heredar `PdvConfig.pizzaEstrategiaPrecio`.
+  @Column({ type: 'varchar', length: 20, nullable: true, name: 'estrategia_precio_variacion', comment: 'MAYOR_PRECIO | PROMEDIO. null = usar el global de PdvConfig.' })
+  estrategiaPrecioVariacion?: string | null;
+
   // Indica si el registro está completo (precios, recetas, clasificación final).
   // Productos creados desde importación OCR/IA arrancan en false hasta que el usuario completa.
   @Column({ type: 'boolean', default: true, name: 'registro_completo' })

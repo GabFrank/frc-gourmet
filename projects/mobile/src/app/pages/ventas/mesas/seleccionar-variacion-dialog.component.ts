@@ -19,6 +19,11 @@ import {
 export interface SeleccionarVariacionData {
   productoId: number;
   nombre: string;
+  /**
+   * Config de multi-sabor del producto ya resuelta por el backend (override del
+   * producto o global del PdV). Si no viene, se cae al global de `PdvConfig`.
+   */
+  variacionConfig?: { maxSabores?: number; estrategia?: string } | null;
 }
 
 export interface VariacionSaborResult {
@@ -122,7 +127,7 @@ interface VariacionLabels {
       <ng-container *ngIf="presentacionSel">
         <h3 class="sec">
           {{ labels.variations }}
-          <span class="hint">(hasta {{ maxSabores }})</span>
+          <span class="hint" *ngIf="permiteMultiple">(hasta {{ maxSabores }})</span>
         </h3>
         <div class="opt" *ngFor="let s of sabores">
           <mat-checkbox [checked]="s.sel" (change)="toggleSabor(s)">{{ s.nombre }}</mat-checkbox>
@@ -313,6 +318,8 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
 
   cargando = true;
   maxSabores = 2;
+  /** false si el producto acepta un solo sabor por ítem (sin mitad y mitad). */
+  permiteMultiple = true;
   estrategia = 'MAYOR_PRECIO';
   labels: VariacionLabels = { size: 'Presentación', variation: 'Variación', variations: 'Variaciones' };
   labelPorVariacion = 'Por variación';
@@ -337,13 +344,23 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.repo.getPdvConfig().subscribe({
-      next: (cfg: any) => {
-        this.maxSabores = Number(cfg?.pizzaMaxSabores) || 2;
-        this.estrategia = cfg?.pizzaEstrategiaPrecio || 'MAYOR_PRECIO';
-      },
-      error: () => {},
-    });
+    const configProducto = this.data.variacionConfig;
+    const maxProducto = Number(configProducto?.maxSabores);
+    if (Number.isFinite(maxProducto) && maxProducto >= 1) {
+      this.maxSabores = Math.floor(maxProducto);
+      this.permiteMultiple = this.maxSabores > 1;
+      this.estrategia = String(configProducto?.estrategia || 'MAYOR_PRECIO').toUpperCase();
+    } else {
+      // Producto sin config propia: rige el global del PdV.
+      this.repo.getPdvConfig().subscribe({
+        next: (cfg: any) => {
+          this.maxSabores = Number(cfg?.pizzaMaxSabores) || 2;
+          this.permiteMultiple = this.maxSabores > 1;
+          this.estrategia = cfg?.pizzaEstrategiaPrecio || 'MAYOR_PRECIO';
+        },
+        error: () => {},
+      });
+    }
 
     this.repo.getPresentacionesByProducto(this.data.productoId, 0, 100, 'activos').subscribe({
       next: (resp: any) => {
@@ -391,12 +408,18 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
         });
         // El desktop no deja elegir un sabor sin precio vigente.
         this.sabores = this.sabores.filter((s) => s.precio > 0);
+        // Autoselección: con un solo sabor disponible no hay nada que elegir.
+        // Se marca solo, sin abrir la personalización (el botón queda igual).
+        if (this.sabores.length === 1) {
+          this.sabores[0].sel = true;
+        }
         // Labels según la categoría del sabor, igual que el desktop.
         const categoria = String((vars || [])[0]?.sabor?.categoria || '').toUpperCase();
         if (categoria === 'PIZZA') {
           this.labels = { size: 'Tamaño', variation: 'Sabor', variations: 'Sabores' };
         }
         this.labelPorVariacion = `Por ${this.labels.variation.toLowerCase()}`;
+        this.recalcular();
         this.cargando = false;
       },
       error: () => {
@@ -407,27 +430,36 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
   }
 
   toggleSabor(s: SaborVM): void {
+    // Producto de un solo sabor: tocar otro reemplaza al elegido.
+    if (!s.sel && !this.permiteMultiple) {
+      this.sabores.forEach((x) => {
+        if (x !== s && x.sel) this.limpiarSabor(x);
+      });
+    }
     if (!s.sel && this.seleccionados.length >= this.maxSabores) {
       this.snack.open(`Máximo ${this.maxSabores} ${this.labels.variations.toLowerCase()}`, undefined, { duration: 1500 });
       return;
     }
     s.sel = !s.sel;
-    if (!s.sel) {
-      // Al deseleccionar, limpiar su personalización.
-      s.adicionales = [];
-      s.observaciones = [];
-      s.observacionLibre = undefined;
-      s.ingredientesRemovidos = [];
-      s.ingredientesIntercambiados = [];
-      s.adicTotal = 0;
-      s.personalizado = false;
-    }
+    if (!s.sel) this.limpiarSabor(s);
     // Cambiar la cantidad de sabores vuelve a partes iguales, como el desktop.
     this.proporcionesManuales = false;
     this.recalcular();
     // Abrir la personalización del sabor recién elegido sin que el usuario
     // tenga que buscar el botón (mismo comportamiento que el PdV desktop).
     if (s.sel) void this.personalizarSabor(s);
+  }
+
+  /** Deselecciona un sabor y descarta su personalización. */
+  private limpiarSabor(s: SaborVM): void {
+    s.sel = false;
+    s.adicionales = [];
+    s.observaciones = [];
+    s.observacionLibre = undefined;
+    s.ingredientesRemovidos = [];
+    s.ingredientesIntercambiados = [];
+    s.adicTotal = 0;
+    s.personalizado = false;
   }
 
   async personalizarSabor(s: SaborVM): Promise<void> {

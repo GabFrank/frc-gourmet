@@ -53,6 +53,14 @@ interface ProductoVM {
   pesoMinimoGramos?: number | null;
   precioMinimo?: number | null;
   precioMaximo?: number | null;
+  // ELABORADO_CON_VARIACION: no hay un precio único sino un rango (sabor × tamaño).
+  // `precio` queda con el más barato; la lista muestra "desde – hasta".
+  esRangoVariacion?: boolean;
+  // Config de multi-sabor resuelta por el backend (override del producto o global).
+  variacionConfig?: { maxSabores?: number; estrategia?: string } | null;
+  precioDesde?: number;
+  precioHasta?: number;
+  variacionesDetalle?: string;
   decimalesMoneda?: number;
   simboloMoneda?: string;
   // Conversión del precio a las otras monedas configuradas (para mostrar en la lista).
@@ -305,6 +313,7 @@ export class TomarPedidoPage implements OnInit {
       presObj = (prod.presentaciones || [])[0] || null;
     }
     const precio = Number(precioObj?.valor) || 0;
+    const rango = this.resumenVariacion(esVariacion ? prod.variacionResumen : null);
     return {
       id: prod.id,
       nombre: ap.nombre_alternativo || prod.nombre,
@@ -322,6 +331,11 @@ export class TomarPedidoPage implements OnInit {
       pesoMinimoGramos: prod.pesoMinimoGramos ?? null,
       precioMinimo: precioObj?.precioMinimo ?? null,
       precioMaximo: precioObj?.precioMaximo ?? null,
+      esRangoVariacion: rango.esRango,
+      variacionConfig: esVariacion ? (prod.variacionConfig ?? null) : null,
+      precioDesde: rango.precioDesde,
+      precioHasta: rango.precioHasta,
+      variacionesDetalle: rango.detalle,
       decimalesMoneda: precioObj?.moneda?.decimales ?? 0,
       simboloMoneda: precioObj?.moneda?.simbolo || '',
       conversiones: this.convertir(precio),
@@ -412,6 +426,30 @@ export class TomarPedidoPage implements OnInit {
     });
   }
 
+  /**
+   * Resumen de precios de un ELABORADO_CON_VARIACION para la lista: el precio
+   * depende del tamaño y del sabor elegidos, así que se muestra el rango
+   * "desde – hasta" en vez de un valor único (antes mostraba 0).
+   */
+  private resumenVariacion(resumen: any): {
+    esRango: boolean;
+    precioDesde: number;
+    precioHasta: number;
+    detalle: string;
+  } {
+    const desde = Number(resumen?.precioDesde) || 0;
+    const hasta = Number(resumen?.precioHasta) || 0;
+    if (!resumen || desde <= 0) {
+      return { esRango: false, precioDesde: 0, precioHasta: 0, detalle: '' };
+    }
+    const partes: string[] = [];
+    const presentaciones = Number(resumen.presentacionesCount) || 0;
+    const sabores = Number(resumen.saboresCount) || 0;
+    if (presentaciones > 0) partes.push(`${presentaciones} ${presentaciones === 1 ? 'tamaño' : 'tamaños'}`);
+    if (sabores > 0) partes.push(`${sabores} ${sabores === 1 ? 'sabor' : 'sabores'}`);
+    return { esRango: hasta > desde, precioDesde: desde, precioHasta: hasta, detalle: partes.join(' · ') };
+  }
+
   private toProductoVM(p: any): ProductoVM {
     const tipo = p.tipo;
     const esVariacion = tipo === 'ELABORADO_CON_VARIACION';
@@ -423,6 +461,7 @@ export class TomarPedidoPage implements OnInit {
       tipo === 'COMBO';
     const precioObj = p.principalPrecio;
     const precio = Number(precioObj?.valor) || 0;
+    const rango = this.resumenVariacion(esVariacion ? p.variacionResumen : null);
     return {
       id: p.id,
       nombre: p.nombre,
@@ -440,6 +479,11 @@ export class TomarPedidoPage implements OnInit {
       pesoMinimoGramos: p.pesoMinimoGramos ?? null,
       precioMinimo: precioObj?.precioMinimo ?? null,
       precioMaximo: precioObj?.precioMaximo ?? null,
+      esRangoVariacion: rango.esRango,
+      variacionConfig: esVariacion ? (p.variacionConfig ?? null) : null,
+      precioDesde: rango.precioDesde,
+      precioHasta: rango.precioHasta,
+      variacionesDetalle: rango.detalle,
       decimalesMoneda: precioObj?.moneda?.decimales ?? 0,
       simboloMoneda: precioObj?.moneda?.simbolo || '',
       conversiones: this.convertir(precio),
@@ -696,7 +740,7 @@ export class TomarPedidoPage implements OnInit {
     const sel = (await firstValueFrom(
       this.dialog
         .open(SeleccionarVariacionDialogComponent, {
-          data: { productoId: p.id, nombre: p.nombre },
+          data: { productoId: p.id, nombre: p.nombre, variacionConfig: p.variacionConfig ?? null },
           width: '360px',
           maxHeight: '85vh',
         })
