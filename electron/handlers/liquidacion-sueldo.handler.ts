@@ -40,6 +40,8 @@ import { parseLocalDate } from '../utils/date.utils';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { getConfigNumber } from './configuracion-rrhh.handler';
 import { ensurePermission } from '../utils/auth.utils';
+import { bloquearSiPagoConsolidado } from './pago-consolidado-guard';
+import { PagoOrigenTipo } from '../../src/app/database/entities/financiero/pago-consolidado-enums';
 
 const SEED_CONCEPTOS: Array<{ codigo: string; descripcion: string; esHaber: boolean; esCalculadoAuto: boolean }> = [
   { codigo: 'SALARIO_BASE', descripcion: 'Salario base', esHaber: true, esCalculadoAuto: true },
@@ -1030,6 +1032,9 @@ export function registerLiquidacionSueldoHandlers(
 
   ipcMain.handle('anular-liquidacion-sueldo', async (_e, id: number, motivo: string) => {
     await ensurePermission(dataSource, getCurrentUser, 'RRHH_LIQUIDACION_PAGAR');
+    // La reversa de caja de este handler va por `liq.movimientoId`, que queda en
+    // null cuando el pago fue consolidado (puede haber N movimientos).
+    await bloquearSiPagoConsolidado(dataSource, PagoOrigenTipo.LIQUIDACION_SUELDO, id, `La liquidación #${id}`);
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();

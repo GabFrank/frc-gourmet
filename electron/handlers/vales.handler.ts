@@ -18,6 +18,8 @@ import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { ensurePermission } from '../utils/auth.utils';
+import { bloquearSiPagoConsolidado } from './pago-consolidado-guard';
+import { PagoOrigenTipo } from '../../src/app/database/entities/financiero/pago-consolidado-enums';
 
 export function registerValesHandlers(
   dataSource: DataSource,
@@ -353,6 +355,10 @@ export function registerValesHandlers(
 
   ipcMain.handle('anular-vale', async (_e, id: number, motivo: string) => {
     await ensurePermission(dataSource, getCurrentUser, 'RRHH_VALE_CONFIRMAR');
+    // Primero de todo: un vale pagado por un pago consolidado tiene
+    // `movimientoId` en null, asi que la reversa de mas abajo no revertiria
+    // nada y lo dejaria ANULADO con la plata ya entregada.
+    await bloquearSiPagoConsolidado(dataSource, PagoOrigenTipo.VALE, id, `El vale #${id}`);
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
