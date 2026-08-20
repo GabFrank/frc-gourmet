@@ -500,6 +500,19 @@ export abstract class RepositoryService {
     page?: number;
     pageSize?: number;
   }): Observable<{items: Receta[], total: number, page: number, pageSize: number}>;
+  /**
+   * Recetas libres, asignables a un producto simple. Excluye las que ya son de
+   * otro producto, de un adicional o de una variacion sabor x tamano.
+   */
+  abstract getRecetasAsignables(params: {
+    productoId?: number | null;
+    search?: string;
+    activo?: boolean | null;
+    page?: number;
+    pageSize?: number;
+  }): Observable<{items: Receta[], total: number, page: number, pageSize: number}>;
+  abstract vincularRecetaAProducto(productoId: number, recetaId: number): Observable<any>;
+  abstract desvincularRecetaDeProducto(productoId: number): Observable<any>;
   abstract getReceta(recetaId: number): Observable<Receta>;
   abstract createReceta(recetaData: Partial<Receta>): Observable<Receta>;
   abstract updateReceta(recetaId: number, recetaData: Partial<Receta>): Observable<any>;
@@ -943,10 +956,10 @@ export abstract class RepositoryService {
   abstract countNotificacionesNoLeidas(usuarioId?: number): Observable<any>;
   abstract getDashboardRrhhKpis(periodo: string): Observable<any>;
   abstract getDashboardVentasKpis(rango?: string): Observable<any>;
-  abstract getDashboardComprasKpis(): Observable<any>;
-  abstract getDashboardProductosKpis(): Observable<any>;
+  abstract getDashboardComprasKpis(rango?: string): Observable<any>;
+  abstract getDashboardProductosKpis(rango?: string): Observable<any>;
   abstract getDashboardFinancieroKpis(): Observable<any>;
-  abstract getDashboardCajaMayorKpis(): Observable<any>;
+  abstract getDashboardCajaMayorKpis(rango?: string): Observable<any>;
   abstract getReporteVentasCierre(params: any): Observable<any>;
   abstract getReporteFinanzasCierre(params: any): Observable<any>;
   abstract enviarReporteWhatsapp(params: { base64: string; caption?: string; fileName?: string; destino?: string }): Observable<any>;

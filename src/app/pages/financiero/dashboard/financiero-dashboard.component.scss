@@ -134,3 +134,18 @@
     text-overflow: ellipsis;
   }
 }
+
+// Cajas Mayor activas: la fila entera es un acceso al detalle.
+.caja-mayor-item {
+  cursor: pointer;
+
+  .caja-mayor-chevron {
+    margin-left: auto;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+  }
+
+  &:hover .caja-mayor-chevron {
+    opacity: 1;
+  }
+}

@@ -13,6 +13,9 @@ import { PdvCategoria } from '../../src/app/database/entities/ventas/pdv-categor
 import { PdvCategoriaItem } from '../../src/app/database/entities/ventas/pdv-categoria-item.entity';
 import { PdvItemProducto } from '../../src/app/database/entities/ventas/pdv-item-producto.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { getRangosPrecioVariacion } from '../utils/variacion-precio.utils';
+import { getVariacionConfig, getVariacionConfigGlobal } from '../utils/variacion-config.utils';
+import { ensureObservacionNotaLibreId } from '../utils/observacion-libre.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
@@ -174,18 +177,10 @@ export async function materializarPedidoOnlineEnVenta(
     // FK obligatoria; la nota va en observacionLibre colgada de esta observación).
     // Se asegura vía dataSource (fuera de la transacción) tolerando la colisión de
     // unique, para no abortar la materialización si dos mesas lo crean a la vez.
+    // Se memoiza por llamada: la materialización puede tener varios ítems con nota.
     let sentinelObsId: number | null = null;
     const getSentinelObs = async (): Promise<number> => {
-      if (sentinelObsId != null) return sentinelObsId;
-      const desc = 'NOTA DEL CLIENTE';
-      const repoObs = dataSource.getRepository(Observacion);
-      let obs = await repoObs.findOne({ where: { descripcion: desc } });
-      if (!obs) {
-        try { obs = await repoObs.save(repoObs.create({ descripcion: desc, activo: true })); }
-        catch { obs = await repoObs.findOne({ where: { descripcion: desc } }); }
-      }
-      if (!obs) throw new Error('no_se_pudo_asegurar_observacion_sentinel');
-      sentinelObsId = obs.id;
+      if (sentinelObsId == null) sentinelObsId = await ensureObservacionNotaLibreId(dataSource);
       return sentinelObsId;
     };
 
@@ -320,7 +315,8 @@ export async function materializarPedidoOnlineEnVenta(
           libres.push(desc);
         }
       }
-      const notaLibre = pers.notaLibre ? String(pers.notaLibre).trim() : '';
+      // UPPERCASE como todo string que va a BD (las de catálogo ya se normalizan arriba).
+      const notaLibre = pers.notaLibre ? String(pers.notaLibre).trim().toUpperCase() : '';
       if (notaLibre) libres.push(notaLibre);
       if (libres.length) {
         const vo = obsItemRepo.create({
@@ -1192,12 +1188,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   });
 
   // --- VentaItemObservacion Handlers ---
+  // Sólo las activas: `activo = false` es una observación dada de baja y no debe
+  // reaparecer al re-personalizar el ítem (la comanda y el KDS ya filtran así).
   ipcMain.handle('getObservacionesByVentaItem', async (_event: any, ventaItemId: number) => {
     try {
       const repo = dataSource.getRepository(VentaItemObservacion);
       return await repo.find({
-        where: { ventaItem: { id: ventaItemId } },
-        relations: ['observacion'],
+        where: { ventaItem: { id: ventaItemId }, activo: true },
+        // `ventaItemSabor` viaja para poder distinguir las observaciones de una
+        // mitad concreta (pizza) de las del ítem entero.
+        relations: ['observacion', 'ventaItemSabor'],
       });
     } catch (error) {
       console.error(`Error getting observaciones for venta item ${ventaItemId}:`, error);
@@ -1205,11 +1205,34 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     }
   });
 
+  /**
+   * Crea una `VentaItemObservacion`. Dos usos:
+   *
+   * 1. Observación del catálogo → mandar `observacion: { id }`.
+   * 2. **Nota libre** → mandar `observacionLibre` y **omitir** `observacion`: acá
+   *    se resuelve el sentinel `NOTA DEL CLIENTE`, porque la FK es NOT NULL.
+   *    Antes cada caller improvisaba: colgar la nota de la primera observación
+   *    seleccionada (la duplicaba en pantalla y en la comanda) o mandar
+   *    `observacion: null` (rompía el NOT NULL y la nota se perdía callada).
+   */
   ipcMain.handle('createVentaItemObservacion', async (_event: any, data: any) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemObservacion);
-      const entity = repo.create(data);
+      const payload: any = { ...(data || {}) };
+      const nota = typeof payload.observacionLibre === 'string' ? payload.observacionLibre.trim() : '';
+      // Excluyentes: una fila es o una observación del catálogo, o la nota libre.
+      // Mandar las dos juntas es justamente el bug viejo — al renderizar gana la
+      // nota y la observación elegida queda tapada.
+      if (payload.observacion?.id && nota) {
+        throw new Error('venta_item_observacion_no_combina_observacion_y_nota');
+      }
+      if (!payload.observacion?.id) {
+        if (!nota) throw new Error('venta_item_observacion_sin_observacion_ni_nota');
+        payload.observacion = { id: await ensureObservacionNotaLibreId(dataSource) };
+      }
+      payload.observacionLibre = nota ? nota.toUpperCase().slice(0, 500) : null;
+      const entity = repo.create(payload);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating venta item observacion:', error);
@@ -3053,6 +3076,20 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         || precios?.[0]
         || null;
 
+      // Productos con variación: rango de precios y config de multi-sabor
+      // resueltos en batch (el atajo puede tener varios y todos consultarían lo
+      // mismo).
+      const idsVariacion = items
+        .map((item: any) => item.producto)
+        .filter((p: any) => p?.tipo === 'ELABORADO_CON_VARIACION')
+        .map((p: any) => p.id);
+      const rangosVariacion = idsVariacion.length
+        ? await getRangosPrecioVariacion(dataSource, idsVariacion)
+        : new Map();
+      const configGlobalVariacion = idsVariacion.length
+        ? await getVariacionConfigGlobal(dataSource)
+        : undefined;
+
       for (const item of items) {
         const p = item.producto as any;
         if (!p) continue;
@@ -3068,15 +3105,22 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             p.precioDirecto = pickPrecio(precios);
           }
         } else if (p.tipo === 'ELABORADO_CON_VARIACION') {
-          const precios = await pvRepo
-            .createQueryBuilder('pv')
-            .leftJoinAndSelect('pv.moneda', 'moneda')
-            .innerJoin('pv.receta', 'receta')
-            .where('receta.producto_id = :prodId', { prodId: p.id })
-            .andWhere('pv.activo = :activo', { activo: true })
-            .orderBy('pv.principal', 'DESC')
-            .getMany();
-          p.precioDirecto = pickPrecio(precios);
+          // El precio de una variación cuelga de `receta_presentacion_id`, no de
+          // la receta (y menos del 1:1 legacy `receta.producto_id`, que dejaba el
+          // atajo en 0). Se muestra el rango "desde / hasta" de sus variaciones.
+          const cfgVariacion = await getVariacionConfig(dataSource, p, configGlobalVariacion);
+          p.variacionConfig = { maxSabores: cfgVariacion.maxSabores, estrategia: cfgVariacion.estrategia };
+          const rango = rangosVariacion.get(p.id);
+          if (rango && rango.variacionesCount > 0) {
+            p.precioDirecto = rango.precioReferencia;
+            p.variacionResumen = {
+              precioDesde: rango.precioDesde,
+              precioHasta: rango.precioHasta,
+              variacionesCount: rango.variacionesCount,
+              saboresCount: rango.saboresCount,
+              presentacionesCount: rango.presentacionesCount,
+            };
+          }
         } else if (p.tipo === 'COMBO') {
           const precios = await pvRepo.find({
             where: { producto: { id: p.id }, activo: true },

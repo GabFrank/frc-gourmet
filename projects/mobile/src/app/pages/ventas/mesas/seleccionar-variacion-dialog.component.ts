@@ -9,10 +9,21 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '@frc/shared-core';
 import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
+import {
+  ajustarProporcion,
+  calcularTotalesVariacion,
+  etiquetaProporcion,
+  proporcionesIguales,
+} from './variacion-precio.util';
 
 export interface SeleccionarVariacionData {
   productoId: number;
   nombre: string;
+  /**
+   * Config de multi-sabor del producto ya resuelta por el backend (override del
+   * producto o global del PdV). Si no viene, se cae al global de `PdvConfig`.
+   */
+  variacionConfig?: { maxSabores?: number; estrategia?: string } | null;
 }
 
 export interface VariacionSaborResult {
@@ -24,6 +35,8 @@ export interface VariacionSaborResult {
   adicionales: { id: number; precio: number }[];
   observaciones: number[];
   observacionLibre?: string;
+  ingredientesRemovidos: number[];
+  ingredientesIntercambiados: { recetaIngredienteId: number; reemplazoProductoId: number }[];
 }
 
 export interface SeleccionarVariacionResult {
@@ -51,11 +64,26 @@ interface SaborVM {
   precioId: number | null;
   costo: number;
   sel: boolean;
-  // Personalización por-sabor (adicionales/observaciones con FK ventaItemSabor).
+  /** proporción de la pizza que ocupa este sabor (0.5 = mitad) */
+  proporcion: number;
+  // Personalización por-sabor (todo se persiste con FK ventaItemSabor).
   adicionales: { id: number; precio: number }[];
   observaciones: number[];
   observacionLibre?: string;
+  ingredientesRemovidos: number[];
+  ingredientesIntercambiados: { recetaIngredienteId: number; reemplazoProductoId: number }[];
   adicTotal: number;
+  /** true si tiene alguna personalización cargada (muestra el ✓) */
+  personalizado: boolean;
+  /** etiqueta de porción pre-computada: `1/2`, `60%`, o vacío si es único */
+  etiqueta: string;
+}
+
+/** Nombres visibles según el tipo de variación (pizza usa TAMAÑO/SABOR/MITAD). */
+interface VariacionLabels {
+  size: string;
+  variation: string;
+  variations: string;
 }
 
 /**
@@ -83,7 +111,7 @@ interface SaborVM {
     <mat-progress-bar *ngIf="cargando" mode="indeterminate"></mat-progress-bar>
     <mat-dialog-content>
       <ng-container *ngIf="presentaciones.length > 1">
-        <h3 class="sec">Tamaño</h3>
+        <h3 class="sec">{{ labels.size }}</h3>
         <div class="chips">
           <button
             *ngFor="let p of presentaciones"
@@ -98,8 +126,8 @@ interface SaborVM {
 
       <ng-container *ngIf="presentacionSel">
         <h3 class="sec">
-          Sabores
-          <span class="hint">(hasta {{ maxSabores }})</span>
+          {{ labels.variations }}
+          <span class="hint" *ngIf="permiteMultiple">(hasta {{ maxSabores }})</span>
         </h3>
         <div class="opt" *ngFor="let s of sabores">
           <mat-checkbox [checked]="s.sel" (change)="toggleSabor(s)">{{ s.nombre }}</mat-checkbox>
@@ -121,15 +149,34 @@ interface SaborVM {
             <mat-icon>add_circle</mat-icon>
           </button>
         </div>
-        <h3 class="sec">Por sabor</h3>
-        <div class="opt" *ngFor="let s of seleccionados">
-          <span>
-            {{ s.nombre }}
-            <mat-icon class="badge" *ngIf="s.adicTotal > 0 || s.observaciones.length || s.observacionLibre">
-              check_circle
-            </mat-icon>
-          </span>
-          <button mat-button color="primary" (click)="personalizarSabor(s)">Personalizar</button>
+        <h3 class="sec">
+          {{ labelPorVariacion }}
+          <button
+            *ngIf="seleccionados.length > 1 && proporcionesManuales"
+            mat-button
+            class="reset-prop"
+            (click)="restablecerProporciones()"
+          >
+            Partes iguales
+          </button>
+        </h3>
+        <div class="sabor-row" *ngFor="let s of seleccionados">
+          <div class="sabor-head">
+            <span class="sabor-nombre">
+              {{ s.nombre }}
+              <mat-icon class="badge" *ngIf="s.personalizado">check_circle</mat-icon>
+            </span>
+            <button mat-button color="primary" (click)="personalizarSabor(s)">Personalizar</button>
+          </div>
+          <div class="prop-row" *ngIf="seleccionados.length > 1">
+            <button mat-icon-button (click)="ajustarProporcion(s, -10)" aria-label="Menos porción">
+              <mat-icon>remove</mat-icon>
+            </button>
+            <span class="prop-val">{{ s.etiqueta }}</span>
+            <button mat-icon-button (click)="ajustarProporcion(s, 10)" aria-label="Más porción">
+              <mat-icon>add</mat-icon>
+            </button>
+          </div>
         </div>
 
         <div class="ensamblado">{{ ensamblado }}</div>
@@ -229,6 +276,38 @@ interface SaborVM {
         vertical-align: middle;
         color: var(--success-color, #2e7d32);
       }
+      .sabor-row {
+        border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+        padding: 4px 0;
+      }
+      .sabor-row:last-of-type {
+        border-bottom: none;
+      }
+      .sabor-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .sabor-nombre {
+        font-size: 0.95rem;
+      }
+      .prop-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      .prop-val {
+        min-width: 48px;
+        text-align: center;
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+      .reset-prop {
+        float: right;
+        line-height: 24px;
+        font-size: 0.75rem;
+      }
     `,
   ],
 })
@@ -239,7 +318,13 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
 
   cargando = true;
   maxSabores = 2;
+  /** false si el producto acepta un solo sabor por ítem (sin mitad y mitad). */
+  permiteMultiple = true;
   estrategia = 'MAYOR_PRECIO';
+  labels: VariacionLabels = { size: 'Presentación', variation: 'Variación', variations: 'Variaciones' };
+  labelPorVariacion = 'Por variación';
+  /** true si el usuario tocó los porcentajes (deja de repartir en partes iguales) */
+  proporcionesManuales = false;
 
   presentaciones: PresentacionVM[] = [];
   presentacionSel: PresentacionVM | null = null;
@@ -259,13 +344,23 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.repo.getPdvConfig().subscribe({
-      next: (cfg: any) => {
-        this.maxSabores = Number(cfg?.pizzaMaxSabores) || 2;
-        this.estrategia = cfg?.pizzaEstrategiaPrecio || 'MAYOR_PRECIO';
-      },
-      error: () => {},
-    });
+    const configProducto = this.data.variacionConfig;
+    const maxProducto = Number(configProducto?.maxSabores);
+    if (Number.isFinite(maxProducto) && maxProducto >= 1) {
+      this.maxSabores = Math.floor(maxProducto);
+      this.permiteMultiple = this.maxSabores > 1;
+      this.estrategia = String(configProducto?.estrategia || 'MAYOR_PRECIO').toUpperCase();
+    } else {
+      // Producto sin config propia: rige el global del PdV.
+      this.repo.getPdvConfig().subscribe({
+        next: (cfg: any) => {
+          this.maxSabores = Number(cfg?.pizzaMaxSabores) || 2;
+          this.permiteMultiple = this.maxSabores > 1;
+          this.estrategia = cfg?.pizzaEstrategiaPrecio || 'MAYOR_PRECIO';
+        },
+        error: () => {},
+      });
+    }
 
     this.repo.getPresentacionesByProducto(this.data.productoId, 0, 100, 'activos').subscribe({
       next: (resp: any) => {
@@ -300,12 +395,31 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
             precioId: precio?.id ?? null,
             costo: Number(v.costo_calculado) || 0,
             sel: false,
+            proporcion: 1,
             adicionales: [],
             observaciones: [],
             observacionLibre: undefined,
+            ingredientesRemovidos: [],
+            ingredientesIntercambiados: [],
             adicTotal: 0,
+            personalizado: false,
+            etiqueta: '',
           };
         });
+        // El desktop no deja elegir un sabor sin precio vigente.
+        this.sabores = this.sabores.filter((s) => s.precio > 0);
+        // Autoselección: con un solo sabor disponible no hay nada que elegir.
+        // Se marca solo, sin abrir la personalización (el botón queda igual).
+        if (this.sabores.length === 1) {
+          this.sabores[0].sel = true;
+        }
+        // Labels según la categoría del sabor, igual que el desktop.
+        const categoria = String((vars || [])[0]?.sabor?.categoria || '').toUpperCase();
+        if (categoria === 'PIZZA') {
+          this.labels = { size: 'Tamaño', variation: 'Sabor', variations: 'Sabores' };
+        }
+        this.labelPorVariacion = `Por ${this.labels.variation.toLowerCase()}`;
+        this.recalcular();
         this.cargando = false;
       },
       error: () => {
@@ -316,19 +430,36 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
   }
 
   toggleSabor(s: SaborVM): void {
+    // Producto de un solo sabor: tocar otro reemplaza al elegido.
+    if (!s.sel && !this.permiteMultiple) {
+      this.sabores.forEach((x) => {
+        if (x !== s && x.sel) this.limpiarSabor(x);
+      });
+    }
     if (!s.sel && this.seleccionados.length >= this.maxSabores) {
-      this.snack.open(`Máximo ${this.maxSabores} sabores`, undefined, { duration: 1500 });
+      this.snack.open(`Máximo ${this.maxSabores} ${this.labels.variations.toLowerCase()}`, undefined, { duration: 1500 });
       return;
     }
     s.sel = !s.sel;
-    if (!s.sel) {
-      // Al deseleccionar, limpiar su personalización.
-      s.adicionales = [];
-      s.observaciones = [];
-      s.observacionLibre = undefined;
-      s.adicTotal = 0;
-    }
+    if (!s.sel) this.limpiarSabor(s);
+    // Cambiar la cantidad de sabores vuelve a partes iguales, como el desktop.
+    this.proporcionesManuales = false;
     this.recalcular();
+    // Abrir la personalización del sabor recién elegido sin que el usuario
+    // tenga que buscar el botón (mismo comportamiento que el PdV desktop).
+    if (s.sel) void this.personalizarSabor(s);
+  }
+
+  /** Deselecciona un sabor y descarta su personalización. */
+  private limpiarSabor(s: SaborVM): void {
+    s.sel = false;
+    s.adicionales = [];
+    s.observaciones = [];
+    s.observacionLibre = undefined;
+    s.ingredientesRemovidos = [];
+    s.ingredientesIntercambiados = [];
+    s.adicTotal = 0;
+    s.personalizado = false;
   }
 
   async personalizarSabor(s: SaborVM): Promise<void> {
@@ -341,9 +472,18 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
             precioUnitario: 0,
             recetaId: s.recetaId,
             soloPersonalizacion: true,
+            modoEdicion: false,
+            adicionalesPreSel: s.adicionales.map((a) => a.id),
+            observacionesPreSel: s.observaciones,
+            observacionLibreInicial: s.observacionLibre,
+            ingredientesRemovidosPreSel: s.ingredientesRemovidos,
+            ingredientesIntercambiadosPreSel: s.ingredientesIntercambiados,
           },
           width: '340px',
           maxHeight: '85vh',
+          // Sin autofocus: en el celular, enfocar un campo de texto abre el
+          // teclado del sistema y tapa media pantalla apenas se abre el diálogo.
+          autoFocus: false,
         })
         .afterClosed(),
     )) as AgregarItemResult | undefined;
@@ -351,7 +491,39 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
     s.adicionales = res.adicionales;
     s.observaciones = res.observaciones;
     s.observacionLibre = res.observacionLibre;
+    s.ingredientesRemovidos = res.ingredientesRemovidos || [];
+    s.ingredientesIntercambiados = res.ingredientesIntercambiados || [];
     s.adicTotal = res.precioAdicionalTotal;
+    s.personalizado =
+      s.adicionales.length > 0 ||
+      s.observaciones.length > 0 ||
+      !!s.observacionLibre ||
+      s.ingredientesRemovidos.length > 0 ||
+      s.ingredientesIntercambiados.length > 0;
+    this.recalcular();
+  }
+
+  // ===== Proporciones (mitad y mitad, 60/40, …) =====
+
+  /**
+   * Ajusta el % de un sabor compensando en el resto para que siga sumando 100.
+   * La matemática vive en `variacion-precio.util` (compartida con sus tests).
+   */
+  ajustarProporcion(s: SaborVM, deltaPct: number): void {
+    const idx = this.seleccionados.indexOf(s);
+    if (idx < 0) return;
+    const nuevas = ajustarProporcion(
+      this.seleccionados.map((x) => x.proporcion),
+      idx,
+      deltaPct,
+    );
+    this.seleccionados.forEach((x, i) => (x.proporcion = nuevas[i]));
+    this.proporcionesManuales = true;
+    this.recalcular();
+  }
+
+  restablecerProporciones(): void {
+    this.proporcionesManuales = false;
     this.recalcular();
   }
 
@@ -378,40 +550,47 @@ export class SeleccionarVariacionDialogComponent implements OnInit {
       this.ensamblado = '';
       return;
     }
-    const proporcion = 1 / n;
-    const precios = this.seleccionados.map((s) => s.precio);
-    this.precioCalculado =
-      this.estrategia === 'PROMEDIO'
-        ? precios.reduce((a, b) => a + b, 0) / n
-        : Math.max(...precios);
-    this.totalAdicionales = this.seleccionados.reduce((sum, s) => sum + s.adicTotal, 0);
-    this.costoCalculado = this.seleccionados.reduce((sum, s) => sum + s.costo * proporcion, 0);
+    // Partes iguales salvo que el usuario haya ajustado los porcentajes.
+    if (!this.proporcionesManuales) {
+      const iguales = proporcionesIguales(n);
+      this.seleccionados.forEach((s, i) => (s.proporcion = iguales[i]));
+    }
+    // Etiqueta de porción pre-computada (el template no llama funciones).
+    const props = this.seleccionados.map((s) => s.proporcion);
+    this.seleccionados.forEach((s, i) => (s.etiqueta = etiquetaProporcion(props, i)));
+
+    const totales = calcularTotalesVariacion(this.seleccionados, this.estrategia);
+    this.precioCalculado = totales.precioCalculado;
+    this.totalAdicionales = totales.totalAdicionales;
+    this.costoCalculado = totales.costoCalculado;
     this.totalLinea = (this.precioCalculado + this.totalAdicionales) * this.cantidad;
-    const fraccion = n > 1 ? `1/${n} ` : '';
     const tam = this.presentacionSel?.nombre ? `${this.presentacionSel.nombre} ` : '';
     this.ensamblado = `${this.data.nombre} ${tam}${this.seleccionados
-      .map((s) => `${fraccion}${s.nombre}`)
+      .map((s) => `${s.etiqueta} ${s.nombre}`.trim())
       .join(' + ')}`.toUpperCase();
   }
 
   confirmar(): void {
     const n = this.seleccionados.length;
     if (n === 0 || !this.presentacionSel) return;
-    const proporcion = 1 / n;
-    const principal = this.seleccionados[0];
+    // Sabor principal = el de mayor precio, como el desktop (define la
+    // RecetaPresentacion y el PrecioVenta que se guardan en el VentaItem).
+    const principal = this.seleccionados.reduce((max, s) => (s.precio > max.precio ? s : max), this.seleccionados[0]);
     const result: SeleccionarVariacionResult = {
       presentacionId: this.presentacionSel.id,
       recetaPresentacionPrincipalId: principal.recetaPresentacionId,
       precioVentaPresentacionId: principal.precioId,
       sabores: this.seleccionados.map((s) => ({
         recetaPresentacionId: s.recetaPresentacionId,
-        proporcion,
+        proporcion: s.proporcion,
         precioReferencia: s.precio,
         costoReferencia: s.costo,
         nombre: s.nombre,
         adicionales: s.adicionales,
         observaciones: s.observaciones,
         observacionLibre: s.observacionLibre,
+        ingredientesRemovidos: s.ingredientesRemovidos,
+        ingredientesIntercambiados: s.ingredientesIntercambiados,
       })),
       precioCalculado: this.precioCalculado,
       precioAdicionalTotal: this.totalAdicionales,

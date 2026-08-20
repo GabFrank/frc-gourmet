@@ -12,6 +12,38 @@ Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo
 
 **Estado (2026-07):** la **capa de resumen/agregación** ya está arreglada (PR #198): `get-funcionario-resumen-financiero` y `dashboard-rrhh.totalNominaMes` convierten a PYG con `electron/utils/moneda.utils.ts` (`convertirAPrincipal`). El **cálculo interno de liquidación** sigue pendiente — requiere **migración** (agregar moneda + cotización a los items) + **decisión de política**: (a) convertir con la cotización al crear el item, o (b) bloquear/avisar si hay items en otra moneda que la liquidación. No se tocó porque afecta plata que se paga. Ver [../domains/rrhh-liquidaciones.md](../domains/rrhh-liquidaciones.md).
 
+## Productos / Recetas
+
+### Vínculo Producto↔Receta roto — RESUELTO (2026-08)
+
+**Síntoma:** en el tab Recetas del alta de producto, "Buscar Receta" siempre daba error al asignar una receta existente (sólo funcionaba "Crear Receta"), y al desvincular una receta ésta seguía vinculada al reabrir el producto.
+
+**Causa:** tres bugs encadenados sobre un 1:1 con **dos owning sides** (`producto.receta_id` y `receta.producto_id`, ambos UNIQUE), gemelos del mismo commit de 2026-03:
+1. `update-receta` asignaba `productoId`, propiedad que `Receta` nunca declaró → no-op silencioso.
+2. `update-producto` desvinculaba con `producto.receta = undefined`; TypeORM no emite UPDATE para `undefined` → `producto.receta_id` quedaba ocupado para siempre.
+3. El buscador filtraba por `receta.producto` (columna deprecada, siempre NULL) → ofrecía recetas ya ocupadas, y asignarlas explotaba con `UNIQUE constraint failed: producto.receta_id`.
+
+**Fix:** `producto.receta_id` como única fuente de verdad; `receta.producto_id` documentada como deprecada con virtual `productoVinculado` en su lugar; handlers atómicos `vincular-receta-a-producto` / `desvincular-receta-de-producto` y `get-recetas-asignables` (filtra las 4 FKs de dueño en SQL). Arrastró además: `ventas.handler` (atajos de PdV sin precio para pizzas), `calcular-costo-receta` (PrecioCosto sin producto), `delete-receta-for-adicional` (mismo bug del `undefined`), `gestion-recetas` (recetas de variación secuestrando `producto.receta_id`) y dos pantallas de la PWA mobile. Test: `npm run test:receta-vinculo`. Detalles → [../domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
+
+### Datos ya vinculados por error — pendiente (saneamiento)
+
+**Síntoma:** bases anteriores al fix de arriba pueden tener `producto.receta_id` apuntando a la receta de una **variación** o de un **adicional** (el buscador nunca filtró nada). Efecto colateral: `delete-sabor` / `delete-receta` fallan con `FOREIGN KEY constraint failed` sin explicar por qué.
+
+**Detección** (no automatizada todavía):
+```sql
+SELECT p.id, p.nombre, rp.id FROM producto p JOIN receta_presentacion rp ON rp.receta_id = p.receta_id;
+SELECT p.id, p.nombre, a.id  FROM producto p JOIN adicional a           ON a.receta_id  = p.receta_id;
+SELECT COUNT(*) FROM receta WHERE producto_id IS NOT NULL;  -- debe dar 0 siempre
+```
+
+**Por qué no hay migración automática:** desvincular a ciegas dejaría productos elaborados sin receta y rompería el descuento de stock. Requiere un handler de diagnóstico + decisión del usuario, al estilo de `reparar-recetas-compartidas`.
+
+### `update-producto` ignora `requiereComanda` — pendiente
+
+**Síntoma:** el campo se manda desde `gestionar-producto.service.ts` y desde `producto-edit.page.ts` (mobile) pero `update-producto` no lo procesa: se descarta en silencio y el campo es inedi­table.
+
+**Causa:** falta el `if (productoData.requiereComanda !== undefined)` en el handler. La columna existe (migración `1779100000000-AddRequiereComandaToProducto`).
+
 ## Frontend / UI
 
 ### `findPrecioCosto()` retorna 0 hardcodeado
@@ -51,6 +83,62 @@ Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo
 **Impact:** no afecta funcionalidad. Solo warning.
 
 **Fix:** subir el budget a 15-20 KB en `angular.json`, o partir SCSS grandes en sub-archivos.
+
+### ✅ RESUELTO — Elaborados con variación mostraban precio `0` en las listas (2026-08-18)
+
+**Síntoma:** en el buscador del PdV, en el grid de atajos y en la búsqueda /
+atajos de la PWA, una pizza o una milanesa con variación aparecía con precio
+`0`, aunque sus variaciones tuvieran precio cargado.
+
+**Causa:** `search-productos-by-nombre` resolvía el precio con
+`innerJoin pv.receta … receta.productoVariacion`, y `getPdvAtajoItemProductos`
+con el 1:1 legacy `receta.producto_id`. Desde el refactor de julio el precio de
+una variación cuelga de **`PrecioVenta.receta_presentacion_id`**, así que ninguna
+de las dos consultas devolvía filas.
+
+**Fix:** helper único `electron/utils/variacion-precio.utils.ts`
+(`getRangosPrecioVariacion`, batch + fallback legacy); ambos handlers devuelven
+`variacionResumen` con el rango y `principalPrecio` pasa a ser la variación más
+barata. Las listas muestran `desde – hasta`.
+
+**Gotcha:** un producto con variación **no tiene un precio**; cualquier vista
+nueva que necesite mostrarlo debe usar ese helper, nunca `pv.receta_id`.
+→ [../domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
+
+### ✅ RESUELTO — Ingrediente opcional sin nombre en el PdV (2026-08-17)
+
+**Síntoma:** en el diálogo de personalización, el chip de un ingrediente
+OPCIONAL salía vacío (sólo el tilde), y el chip del detalle del ítem decía `SIN`
+sin el nombre. La comanda impresa, en cambio, decía `SIN ACEITUNAS`.
+
+**Causa:** `RecetaIngrediente.ingrediente` es nullable — el ingrediente puede
+estar cargado sólo con `descripcion`. La comanda y el KDS ya hacían
+`ingrediente?.nombre || recetaIngrediente?.descripcion`; al frontend le faltaba
+en 6 lugares (2 chips del diálogo, texto de ingredientes fijos, 2 chips del PdV,
+mobile — que además mostraba el literal `"ingrediente"`).
+
+**Gotcha:** cualquier vista nueva que muestre ingredientes necesita ese fallback.
+→ [../domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
+
+### ✅ RESUELTO — La nota libre del ítem se duplicaba o se perdía (2026-08-17)
+
+**Síntoma:** marcando una observación del catálogo (ej. `BUSCAR`) **y**
+escribiendo una nota libre, el ítem mostraba dos chips `BUSCAR` y la nota no
+aparecía; la comanda imprimía `>> BUSCAR` dos veces. Escribiendo **sólo** la
+nota, no se guardaba nada.
+
+**Causa:** `venta_item_observaciones.observacion_id` es NOT NULL. Los tres sitios
+del PdV que persistían observaciones colgaban la nota de `observacionIds[0]`
+(duplicando esa observación) o mandaban `observacion: null` (violaba el NOT NULL
+y el error moría en el `catch`). Encima el render priorizaba
+`observacion.descripcion` sobre `observacionLibre`, y la comanda leía
+`o.descripcion` — campo que no existe en la entidad — así que la nota nunca se
+imprimía.
+
+**Fix:** sentinel `NOTA DEL CLIENTE` resuelto en el backend
+(`electron/utils/observacion-libre.utils.ts`), una sola fila por nota, y
+`observacionLibre` primero al renderizar. Test: `npm run test:observacion-libre`.
+Detalle y reglas → [../domains/ventas-pdv.md](../domains/ventas-pdv.md).
 
 ## Backend / Datos
 
@@ -251,6 +339,7 @@ Aprendidos en la auditoría de bugs de julio 2026 (rama `claude/desktop-forma-pa
 
 - **Los handlers NO quedan como listeners de `ipcMain`.** `electron/utils/handler-registry.ts` hace **monkey-patch de `ipcMain.handle`** y guarda cada canal en un registro propio. Por eso `ipcMain.listeners('canal')` devuelve `[]`. Llamar `ipcMain.listeners('canal')[0]?.(...)` es un **no-op silencioso** (patrón que dejó a `generar-liquidaciones-comision-mes` sin hacer nada). Para invocar otro handler desde dentro de un handler, **usar `invokeHandler(canal, ...args)`** de `../utils/handler-registry`.
 - **`/api/rpc` es default-allow.** En `mode=server` expone **todos** los handlers con sólo un JWT válido; `BLOCKED_CHANNELS` (`electron/server/rpc-router.ts`) bloquea sólo canales de infraestructura — **ampliado de 3 a ~30 canales** en 2026-07-15 (C-05: backups, db-config, app-mode, auto-update, `set-notif-secret`, `ia-config-set`, seeds, `set-current-user`, `remote-tunnel-*`, etc.). Pero para los ~830 handlers de negocio sigue siendo default-allow (el default-deny estructural sigue pendiente). La capa de transporte **no** protege nada: cada handler sensible debe traer su propio `ensurePermission(dataSource, getCurrentUser, 'CODIGO')`. No asumir que estar detrás de `/api/rpc` = protegido.
+- **El payload de `/api/auth/login` es una lista blanca a mano** (`electron/server/auth-routes.ts`), no el `Usuario` completo: sólo `id`, `nickname`, `persona` y `mustChangePassword`. Cualquier bandera que el frontend necesite del usuario hay que **agregarla explícitamente ahí**, o los clientes HTTP (PWA mobile, web `/admin`, desktop `mode=client`) la ven como `undefined` mientras el backend opera con el valor real de la BD (el `rpc-router` hace `findOne` del usuario del JWT). Así se coló el bug de agosto 2026: sin `mustChangePassword` en el payload, un usuario con contraseña temporal entraba sin que nadie lo forzara a cambiarla y después **todo** handler con `ensurePermission` le devolvía FORBIDDEN.
 - **Payload de cuenta bancaria va anidado**: los handlers esperan `{ cuentaBancaria: { id } }`, **no** un `cuentaBancariaId` plano (lo descartan al desestructurar). (Ojo: esto es lo contrario de `create-presentacion`/`create-codigo-barra`, que sí toleran ambas formas — no generalizar.)
 - **Anulaciones deben ser multi-detalle.** Documentos como gasto/retiro generan **N** movimientos de caja mayor. Anular debe recorrer **todos** con `find(...)` + contra-balancear cada uno (`actualizarSaldo`), nunca `findOne(...)` (dejaba movimientos sin revertir).
 - **Regla fuente Caja Mayor ⇒ EFECTIVO.** En todo formulario con selector de fuente de pago: si la fuente es Caja Mayor, la forma de pago debe ser EFECTIVO (filtrar `formasPago` a las que contienen `"EFECTIVO"`). Si la fuente es una cuenta bancaria, **no** se pide forma de pago (siempre es transferencia; la moneda la define el banco).

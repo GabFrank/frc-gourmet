@@ -14,6 +14,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { mensajeDeError } from 'src/app/shared/utils/error-message.util';
 import { FormControl, FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { Observable, of, firstValueFrom, async } from 'rxjs';
 import { debounceTime, distinctUntilChanged, map, startWith, switchMap } from 'rxjs/operators';
@@ -1135,8 +1136,11 @@ export class PdvComponent implements OnInit, OnDestroy {
         reemplazoProductoId: m.ingredienteReemplazo?.id,
       }));
     const adicionalesSeleccionados = (existingAdicionales || []).map((a: any) => a.adicional?.id);
+    // La fila de la nota libre cuelga del sentinel NOTA DEL CLIENTE, así que se
+    // excluye de los chips seleccionados: si no, el sentinel volvería marcado
+    // como si fuera una observación del catálogo elegida por el cajero.
     const observacionIds = (existingObs || [])
-      .filter((o: any) => o.observacion?.id)
+      .filter((o: any) => o.observacion?.id && !o.observacionLibre)
       .map((o: any) => o.observacion.id);
     const observacionLibre = (existingObs || []).find((o: any) => o.observacionLibre)?.observacionLibre || '';
 
@@ -1242,21 +1246,30 @@ export class PdvComponent implements OnInit, OnDestroy {
           item.modificado = true;
           item.historialCambios = JSON.stringify(historial);
 
-          // Guardar observaciones
-          if (result.observacionIds?.length > 0 || result.observacionLibre) {
-            for (const obsId of (result.observacionIds || [])) {
-              await firstValueFrom(this.repositoryService.createVentaItemObservacion({
-                ventaItem: { id: item.id },
-                observacion: { id: obsId },
-                observacionLibre: result.observacionLibre,
-              }));
-            }
-            if (result.observacionIds?.length === 0 && result.observacionLibre) {
-              await firstValueFrom(this.repositoryService.createVentaItemObservacion({
-                ventaItem: { id: item.id },
-                observacionLibre: result.observacionLibre,
-              }));
-            }
+          // Guardar observaciones. El diálogo precarga lo que el ítem ya tenía y
+          // devuelve la selección COMPLETA, así que hay que reconciliar: borrar
+          // las actuales y recrear. Sin esto, cada "Editar" (aunque sólo cambies
+          // la cantidad) volvía a insertar todo y las observaciones se
+          // multiplicaban en pantalla y en la comanda. Mismo criterio que
+          // `personalizarItem()` y que el flujo de mobile.
+          const obsActuales = await firstValueFrom(this.repositoryService.getObservacionesByVentaItem(item.id));
+          for (const o of (obsActuales || [])) {
+            await firstValueFrom(this.repositoryService.deleteVentaItemObservacion(o.id));
+          }
+          // Una fila por observación del catálogo (sin la nota adentro — antes se
+          // repetía en todas) + una sola fila para la nota libre, que el handler
+          // cuelga del sentinel NOTA DEL CLIENTE.
+          for (const obsId of (result.observacionIds || [])) {
+            await firstValueFrom(this.repositoryService.createVentaItemObservacion({
+              ventaItem: { id: item.id },
+              observacion: { id: obsId },
+            }));
+          }
+          if (result.observacionLibre) {
+            await firstValueFrom(this.repositoryService.createVentaItemObservacion({
+              ventaItem: { id: item.id },
+              observacionLibre: result.observacionLibre,
+            }));
           }
 
           // Recargar personalizaciones del item
@@ -1382,6 +1395,7 @@ export class PdvComponent implements OnInit, OnDestroy {
         this.ventaItemsDataSource.data = auxList;
       } catch (error) {
         console.error('Error al guardar el item de venta:', error);
+        this.mostrarErrorItem(error, 'NO SE PUDO AGREGAR EL ITEM');
       }
 
       // Recalculate totals after adding item
@@ -1578,7 +1592,21 @@ export class PdvComponent implements OnInit, OnDestroy {
       this.calculateTotals();
     } catch (error) {
       console.error('Error al guardar item de variación:', error);
+      this.mostrarErrorItem(error, 'NO SE PUDO AGREGAR EL ITEM');
     }
+  }
+
+  /**
+   * Muestra el motivo real por el que el backend rechazó el ítem. Antes estos
+   * catch sólo hacían `console.error`, así que un rechazo de permisos (o el
+   * 'DEBE CAMBIAR SU CONTRASEÑA ANTES DE CONTINUAR' de un usuario con
+   * contraseña temporal) se veía como si no hubiera pasado nada.
+   */
+  private mostrarErrorItem(error: any, fallback: string): void {
+    this.snackBar.open(mensajeDeError(error, fallback), 'CERRAR', {
+      duration: 6000,
+      panelClass: 'error-snackbar',
+    });
   }
 
   private async persistirPersonalizacionConSabor(ventaItemId: number, result: PersonalizarProductoDialogResult, ventaItemSaborId: number): Promise<void> {
@@ -1625,21 +1653,16 @@ export class PdvComponent implements OnInit, OnDestroy {
       })));
     }
 
-    // Observación libre
+    // Nota libre: UNA sola fila, sin `observacion` — el handler la cuelga del
+    // sentinel NOTA DEL CLIENTE. Antes se colgaba de `observacionIds[0]`, lo que
+    // duplicaba esa observación en pantalla y en la comanda; y si no había
+    // ninguna seleccionada, la nota se descartaba.
     if (result.observacionLibre) {
-      const firstObs = result.observacionIds.length > 0 ? result.observacionIds[0] : null;
-      if (firstObs) {
-        // Ya se guardó arriba, agregar observación libre en una entry separada
-        promises.push(firstValueFrom(this.repositoryService.createVentaItemObservacion({
-          ventaItem: { id: ventaItemId },
-          observacion: { id: firstObs },
-          observacionLibre: result.observacionLibre,
-          ventaItemSabor: { id: ventaItemSaborId },
-        })));
-      } else {
-        // Solo observación libre sin observación predefinida — necesitamos al menos una observación
-        // Por ahora guardar como observación libre sin relación a observación predefinida
-      }
+      promises.push(firstValueFrom(this.repositoryService.createVentaItemObservacion({
+        ventaItem: { id: ventaItemId },
+        observacionLibre: result.observacionLibre,
+        ventaItemSabor: { id: ventaItemSaborId },
+      })));
     }
 
     await Promise.all(promises);
@@ -1684,10 +1707,12 @@ export class PdvComponent implements OnInit, OnDestroy {
         observacion: { id: obsId },
       })));
     }
+    // Nota libre: UNA sola fila, sin `observacion` (el handler resuelve el
+    // sentinel NOTA DEL CLIENTE). Antes duplicaba `observacionIds[0]`, o mandaba
+    // `observacion: null` y la fila moría contra el NOT NULL de la columna.
     if (result.observacionLibre) {
       promises.push(firstValueFrom(this.repositoryService.createVentaItemObservacion({
         ventaItem: { id: ventaItemId },
-        observacion: result.observacionIds.length > 0 ? { id: result.observacionIds[0] } : null,
         observacionLibre: result.observacionLibre,
       })));
     }

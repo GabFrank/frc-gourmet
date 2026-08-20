@@ -82,7 +82,7 @@ TipoModificacionIngrediente: REMOVIDO | INTERCAMBIADO
   historialCambios: text JSON      // qué cambió al editar
   recetaPresentacion: RecetaPresentacion (opcional, para ELABORADO_CON_VARIACION)
   ensambladoDescripcion: string    // descripción legible de la composición
-  cantidadSabores: int             // 1, 2, 3 (max según PdvConfig.pizzaMaxSabores)
+  cantidadSabores: int             // 1, 2, 3 (max: Producto.maxVariacionesSimultaneas ?? PdvConfig.pizzaMaxSabores)
   saboresVenta: VentaItemSabor[]
   vendedor: Usuario (split de comisiones por item, opcional)
   // Buffet por peso (solo producto BUFFET_POR_PESO):
@@ -150,11 +150,49 @@ REMOVIDO: "sin tomate". INTERCAMBIADO: "Mozzarella → Queso de Cabra" (ingredie
 ```typescript
 {
   ventaItem_id (CASCADE)
-  observacion_id: Observacion    // predefinida (catálogo)
+  observacion_id: Observacion    // predefinida (catálogo) — NOT NULL
   observacionLibre: varchar       // texto libre
   ventaItemSabor_id nullable
 }
 ```
+
+### Nota libre: el sentinel `NOTA DEL CLIENTE` (2026-08)
+
+`observacion_id` es **NOT NULL** en las dos baselines, así que una nota escrita a
+mano no puede guardarse "sin observación". La única forma soportada:
+
+- El caller manda `createVentaItemObservacion({ ventaItem, observacionLibre })`
+  **sin** `observacion`, y el handler cuelga la fila de la `Observacion` sentinel
+  `NOTA DEL CLIENTE` (`electron/utils/observacion-libre.utils.ts` →
+  `ensureObservacionNotaLibreId`, que la crea si no existe). También normaliza a
+  UPPERCASE y corta a 500. Una llamada sin observación **y** sin nota se rechaza.
+- **Una sola fila por nota.** Una observación del catálogo y la nota son filas
+  distintas: nunca meter la nota dentro de la fila de una observación elegida.
+- **Al renderizar gana `observacionLibre`**: `observacionLibre || observacion?.descripcion`.
+  Si se muestra la descripción primero, la nota queda invisible y el usuario ve
+  "NOTA DEL CLIENTE" en vez del texto.
+- **Al reabrir el diálogo de personalización**, las filas con `observacionLibre`
+  se excluyen de los chips seleccionados (si no, el sentinel vuelve marcado como
+  si el cajero lo hubiera elegido) y son las que precargan el textarea.
+- El handler las trata como **excluyentes**: mandar `observacion` del catálogo
+  **y** `observacionLibre` en la misma fila se rechaza, porque al renderizar la
+  nota tapa a la observación (era el bug viejo).
+- El sentinel está **excluido del catálogo** (`getObservaciones` /
+  `searchObservaciones` en `productos.handler.ts`): si se lo pudiera vincular a
+  un producto, aparecería como chip elegible y el cajero vería el texto interno
+  "NOTA DEL CLIENTE".
+- **Guardar observaciones desde un diálogo que las precarga = reconciliar**
+  (borrar las actuales y recrear la selección), nunca sólo insertar.
+  `personalizarItem()` y el flujo de mobile ya lo hacían; `editItem()` no, y
+  duplicaba todas las observaciones **en cada edición**, aunque sólo cambiaras la
+  cantidad (2×, 3×, …). Arreglado el 2026-08-17.
+
+Bug histórico (arreglado 2026-08-17): los tres sitios del PdV que persistían
+observaciones colgaban la nota de `observacionIds[0]` — duplicando esa
+observación en pantalla y en la comanda — o mandaban `observacion: null`, que
+reventaba contra el NOT NULL y perdía la nota en silencio. Además la comanda leía
+`o.descripcion`, campo inexistente en la entidad, así que la nota nunca se
+imprimía. Test: `npm run test:observacion-libre`.
 
 ## Mesas y sectores
 
@@ -244,6 +282,8 @@ PdvAtajoGrupo (tab: "CENA", "DESAYUNO")
 - RETAIL: muestra presentaciones, agrega directo.
 - ELABORADO_SIN_VARIACION: precio via receta, abre `PersonalizarProductoDialog`.
 - ELABORADO_CON_VARIACION: abre `seleccionar-variacion-dialog` (tamaño → sabores → personalización).
+  En las listas se muestra el **rango de precios** de sus variaciones (no un precio único), y si el
+  tamaño tiene un solo sabor con precio se autoselecciona. → [recetas-sabores-variaciones.md](recetas-sabores-variaciones.md).
 - COMBO: precio directo en producto.
 
 ## Categorías PdV (legacy)
@@ -273,8 +313,8 @@ Una sola fila. Campos:
 | `ocuparMesaAlVincularComanda` | false | Si true, vincular comanda a mesa marca la mesa OCUPADA; al cerrar la comanda vuelve a DISPONIBLE si no quedan otras comandas/venta abierta |
 | `atajosGridSize` | 3 | Tamaño grid atajos (1=grande, 3=pequeño) |
 | `atajosProductosGridSize` | 3 | Tamaño grid productos en atajos |
-| `pizzaMaxSabores` | 2 | Máximo sabores por pizza |
-| `pizzaEstrategiaPrecio` | MAYOR_PRECIO | MAYOR_PRECIO o PROMEDIO |
+| `pizzaMaxSabores` | 2 | Máximo sabores por pizza. **Es el default**: cada producto puede sobreescribirlo con `Producto.maxVariacionesSimultaneas` |
+| `pizzaEstrategiaPrecio` | MAYOR_PRECIO | MAYOR_PRECIO o PROMEDIO. **Es el default**: se sobreescribe con `Producto.estrategiaPrecioVariacion` |
 | `autoImprimirComanda` | true | Al agregar items → imprimir comanda automáticamente a impresoras del sector |
 | `autoImprimirTicketVenta` | true | Al cobrar (CONCLUIDA) → imprimir ticket de venta automáticamente |
 | `imprimirPrecuentaAlSolicitar` | true | Botón "Pre-cuenta" imprime sin confirmación intermedia |
@@ -305,6 +345,9 @@ User busca (`searchForm`: `cantidad` + `searchTerm`) → dialog `producto-search
 Despacho por tipo en `addProduct()`:
 - **BUFFET_POR_PESO** → `addBuffetPorPesoItem()` (ver sección Buffet por peso). NO abre buscador si vino de escaneo de balanza.
 - **ELABORADO_CON_VARIACION** → `seleccionar-variacion-dialog` (3 pasos genéricos con labels configurables PIZZA/DEFAULT) → `addVariacionItem()` (crea VentaItem + un `VentaItemSabor` por sabor).
+  El máximo de sabores y la estrategia de precio salen **del producto** (`maxVariacionesSimultaneas` /
+  `estrategiaPrecioVariacion`) con fallback al `PdvConfig`; con máximo 1 el diálogo se comporta como
+  selección única. Sabor único disponible → se autoselecciona sin abrir la personalización.
 - Producto **con receta** (ELABORADO_SIN_VARIACION) → `PersonalizarProductoDialog` (750px, 2 columnas):
   - Izquierda: ingredientes opcionales (chips verde/rojo toggle), intercambiables (chip naranja + select alternativas), fijos (texto compacto).
   - Derecha: adicionales con precio (chips verde con +valor), observaciones predefinidas (chips celeste), observación libre.
@@ -324,6 +367,15 @@ Producto tipo **`BUFFET_POR_PESO`** (Fases 1-4, merged 2026). Flujo `addBuffetPo
 - En la tabla se ve como un item normal (cantidad = kg); no hay columnas de peso propias.
 
 **Escaneo de etiqueta EAN-13 de balanza** (`tryHandleBalanzaScan` → `parseEtiquetaBalanza`): usa config de `PdvConfig` (`balanzaPrefijo` def '2', `balanzaModo` PESO/PRECIO, `balanzaFactorPeso`). Si el código resuelve a un producto buffet, agrega el item con el peso de la etiqueta sin abrir el buscador.
+
+> **Foco del diálogo cuando el peso vino escaneado (2026-08).** El lector cierra el
+> escaneo con un **Enter**, que es justo lo que abre el diálogo. Por eso el foco NO
+> arranca en AGREGAR: se queda en el campo de peso (donde un Enter suelto no hace
+> nada, porque el diálogo no tiene `<form>`) y recién a los `FOCO_AGREGAR_DELAY_MS`
+> (400 ms) pasa a AGREGAR, para que el cajero confirme con Enter. Sólo pasa cuando
+> `pesoInicialGramos > 0`; abierto a mano, el foco se queda donde hay que escribir.
+> **Si algún día se agrega un botón antes del campo de peso, o un `<form>`, revisá
+> esto**: el Enter del lector volvería a disparar la acción sola.
 
 **Backend**: descuento de stock por `processBuffetPorPeso` (híbrido: por receta si `descuentaPorReceta`, si no por kg neto del propio producto; stock se carga vía Producción). Métricas en `get-buffet-metricas` → dashboard buffet. Detalle → `docs/buffet-por-kilo.md`.
 

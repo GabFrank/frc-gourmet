@@ -16,13 +16,13 @@
     <app-dash-stat-chip
       icon="shopping_cart"
       [value]="comprasMes"
-      label="Compras del mes"
+      [label]="labelCompras"
       [loading]="loading">
     </app-dash-stat-chip>
     <app-dash-stat-chip
       icon="payments"
-      [value]="formatPYG(totalMesPYG) + ' Gs'"
-      label="Total comprado"
+      [value]="totalMesTexto"
+      [label]="labelTotal"
       [loading]="loading">
     </app-dash-stat-chip>
     <app-dash-stat-chip
@@ -35,7 +35,7 @@
     <app-dash-stat-chip
       icon="warning"
       color="error"
-      [value]="formatPYG(totalCppVencidoPYG) + ' Gs'"
+      [value]="totalCppVencidoTexto"
       label="CPP vencidas"
       [loading]="loading">
     </app-dash-stat-chip>
@@ -55,11 +55,17 @@
     <div class="dashboard-col-left">
 
       <app-dash-chart-card
-        title="Compras por mes"
+        [title]="chartTitle"
         icon="trending_up"
         [chartData]="chartData"
         [chartOptions]="chartOptions"
         chartType="line">
+        <button *ngFor="let chip of rangosChips"
+                class="dashboard-range-chip"
+                [class.range-chip-active]="chip.selected"
+                (click)="selectRango(chip)">
+          {{ chip.label }}
+        </button>
       </app-dash-chart-card>
 
       <div class="dashboard-card">
@@ -88,7 +94,7 @@
             <div class="dashboard-alert-info">
               <span class="dashboard-alert-title">{{ v.proveedor }}</span>
               <span class="dashboard-alert-detail">
-                {{ formatPYG(v.monto) }} Gs ·
+                {{ v.montoTexto }} ·
                 <ng-container *ngIf="v.diasRestantes < 0">vencida hace {{ -v.diasRestantes }} dia(s)</ng-container>
                 <ng-container *ngIf="v.diasRestantes === 0">vence hoy</ng-container>
                 <ng-container *ngIf="v.diasRestantes > 0">vence en {{ v.diasRestantes }} dia(s)</ng-container>
@@ -101,10 +107,10 @@
 
     <div class="dashboard-col-right">
       <app-dash-ranking
-        title="Top proveedores del mes"
+        [title]="tituloTopProveedores"
         icon="emoji_events"
         [items]="topProveedores"
-        emptyText="Sin compras este mes">
+        [emptyText]="vacioTopProveedores">
       </app-dash-ranking>
     </div>
   </div>

@@ -18,6 +18,7 @@ Confirmado contra código en la reauditoría integral. Estos ya NO son pendiente
 - [x] **Retiros de Efectivo desde PdV** — tarjeta "Retiro de Caja" en el cajón + integrados en el esperado del cierre.
 - [x] **Gastos desde PdV** — entidad `GastoCaja` + `gastos-caja.handler.ts` + `gasto-caja-dialog`.
 - [x] **Vales y Compras desde el PdV** — entidad `EgresoCaja` + `pdv-egresos.handler.ts` (permisos `PDV_PAGAR_VALE`/`PDV_PAGAR_COMPRA`/`PDV_ANULAR_EGRESO`).
+- [x] **Variaciones en el PdV/PWA (2026-08-18)** — precio `0` en las listas corregido (rango `desde – hasta` vía `variacion-precio.utils.ts`), autoselección del sabor único, y **config por producto** del máximo de sabores combinables y de la estrategia de precio (`Producto.maxVariacionesSimultaneas` / `estrategiaPrecioVariacion`, `null` = global del PdV). Tests: `test:variacion-precios`, `test:variacion-config`. → [domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
 - [x] **Refactor sabores: cada variación su propia receta** — `create-sabor`/`generarVariacionesParaProducto` crean una `Receta` por variación (ya no compartida). Módulo Gestión de Sabores + `reparar-recetas-compartidas`.
 - [x] **Batch de seguridad/correctness 2026-07-15** — ~20 bugs C/M/A cerrados (ver [reference/known-bugs.md](../reference/known-bugs.md)). Incluye permisos en handlers de precio/stock (C-03) y 23 handlers RRHH (M-05).
 - [x] **Transferencia bancaria (banco→banco) + UI config Caja Mayor 2026-07-27** — nuevo tipo `TipoOperacionFinanciera.TRANSFERENCIA_BANCARIA` (transferencia interna entre dos cuentas bancarias, posible multi-moneda con cotización; no toca Caja Mayor). Migración `DropCheckTipoOperacionFinanciera` (suelta el CHECK de SQLite). **UI Caja Mayor:** el diálogo de configuración quitó la sección "Formas de pago" (inútil, solo hay EFECTIVO) y agregó **drag & drop** para ordenar las cuentas bancarias (persistido en `CajaMayorConfiguracion.cuentasBancariasOrden`, reflejado en el sidebar desktop + mobile). Tests: `test:transferencia-bancaria`, `test:config-caja-mayor`, `test:operacion-financiera`. → [domains/financiero-caja-mayor.md](../domains/financiero-caja-mayor.md).
@@ -112,6 +113,11 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
 - [ ] **Inferidor de presentación** (regex en `producto-inference.util.ts`) no detecta unidad cuando la descripción no incluye número/unidad explícita (ej "MANDIOCA" sin tamaño). Mejora futura: que el OCR sugiera unidad y cantidad por separado en el JSON.
 
 ## Refactor técnico
+
+- [ ] **Modo headless para el servidor (`--headless` en `main.ts`)**. Hoy el Fastify server vive dentro del proceso Electron (los handlers se registran con `ipcMain`), y `app.on('ready')` llama a `createWindow()` incondicionalmente. No hay forma de levantar sólo el server: para probar la web `/admin` en un navegador, o para correr un nodo `mode=server` en una máquina sin monitor, igual se abre una ventana ociosa. Un flag que saltee `createWindow()` cuando `mode === 'server'` es chico y desbloquea las dos cosas. Detectado el 2026-08-19 probando dashboards en Chrome.
+
+- [ ] **`--prefer-ts-exts` en el resto de los `npm run test:*`**. Sólo `test:dashboard-rangos` lo tiene. Sin el flag, ts-node resuelve el `.js` compilado antes que el `.ts` y el test corre la versión del último commit en vez del working tree — pasa en verde con el bug adentro. Ver el pitfall correspondiente en `conventions/pitfalls-typeorm-electron.md`.
+
 
 - [ ] **Sweep `appCurrencyInput` global**. Directiva nueva en `src/app/shared/directives/currency-input.directive.ts` formatea inputs monetarios con separador locale-aware (PYG sin decimales, USD/BRL con coma decimal). Aplicada SOLO en `compras/create-edit-compra/` (costoUnitario + subtotal). Falta escanear y aplicar al resto del proyecto. Patrón:
   ```html

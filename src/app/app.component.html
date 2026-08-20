@@ -116,6 +116,10 @@
         <mat-icon>account_circle</mat-icon>
         <span>Mi Perfil</span>
       </button>
+      <button mat-menu-item (click)="openCambiarPassword()">
+        <mat-icon>password</mat-icon>
+        <span>Cambiar mi contraseña</span>
+      </button>
       <button mat-menu-item (click)="toggleTheme()">
         <mat-icon>{{ isDarkTheme ? 'light_mode' : 'dark_mode' }}</mat-icon>
         <span>{{ isDarkTheme ? 'Tema claro' : 'Tema oscuro' }}</span>

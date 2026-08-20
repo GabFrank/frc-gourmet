@@ -523,6 +523,15 @@ interface ElectronAPI {
     receta: { id: number; nombre: string };
     productosVinculados: Array<{ id: number; nombre: string; tipo: string; activo: boolean }>;
   }>;
+  getRecetasAsignables: (params: {
+    productoId?: number | null;
+    search?: string;
+    activo?: boolean | null;
+    page?: number;
+    pageSize?: number;
+  }) => Promise<{items: Receta[], total: number, page: number, pageSize: number}>;
+  vincularRecetaAProducto: (productoId: number, recetaId: number) => Promise<any>;
+  desvincularRecetaDeProducto: (productoId: number) => Promise<any>;
   getReceta: (recetaId: number) => Promise<Receta>;
   createReceta: (recetaData: any) => Promise<Receta>;
   updateReceta: (recetaId: number, recetaData: any) => Promise<any>;
@@ -1056,10 +1065,10 @@ interface ElectronAPI {
 
   // Dashboards por dominio
   getDashboardVentasKpis: (rango?: string) => Promise<any>;
-  getDashboardComprasKpis: () => Promise<any>;
-  getDashboardProductosKpis: () => Promise<any>;
+  getDashboardComprasKpis: (rango?: string) => Promise<any>;
+  getDashboardProductosKpis: (rango?: string) => Promise<any>;
   getDashboardFinancieroKpis: () => Promise<any>;
-  getDashboardCajaMayorKpis: () => Promise<any>;
+  getDashboardCajaMayorKpis: (rango?: string) => Promise<any>;
   getReporteVentasCierre: (params: any) => Promise<any>;
   getReporteFinanzasCierre: (params: any) => Promise<any>;
   enviarReporteWhatsapp: (params: { base64: string; caption?: string; fileName?: string; destino?: string }) => Promise<any>;
@@ -2690,6 +2699,24 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.getRecetasWithFilters(filters));
   }
 
+  getRecetasAsignables(params: {
+    productoId?: number | null;
+    search?: string;
+    activo?: boolean | null;
+    page?: number;
+    pageSize?: number;
+  }): Observable<{items: Receta[], total: number, page: number, pageSize: number}> {
+    return from(this.api.getRecetasAsignables(params));
+  }
+
+  vincularRecetaAProducto(productoId: number, recetaId: number): Observable<any> {
+    return from(this.api.vincularRecetaAProducto(productoId, recetaId));
+  }
+
+  desvincularRecetaDeProducto(productoId: number): Observable<any> {
+    return from(this.api.desvincularRecetaDeProducto(productoId));
+  }
+
   getReceta(recetaId: number): Observable<Receta> {
     return from(this.api.getReceta(recetaId));
   }
@@ -4104,17 +4131,17 @@ export class RepositoryIpcService extends RepositoryService {
   getDashboardVentasKpis(rango: string = 'week'): Observable<any> {
     return from(this.api.getDashboardVentasKpis(rango));
   }
-  getDashboardComprasKpis(): Observable<any> {
-    return from(this.api.getDashboardComprasKpis());
+  getDashboardComprasKpis(rango: string = 'month'): Observable<any> {
+    return from(this.api.getDashboardComprasKpis(rango));
   }
-  getDashboardProductosKpis(): Observable<any> {
-    return from(this.api.getDashboardProductosKpis());
+  getDashboardProductosKpis(rango: string = 'month'): Observable<any> {
+    return from(this.api.getDashboardProductosKpis(rango));
   }
   getDashboardFinancieroKpis(): Observable<any> {
     return from(this.api.getDashboardFinancieroKpis());
   }
-  getDashboardCajaMayorKpis(): Observable<any> {
-    return from(this.api.getDashboardCajaMayorKpis());
+  getDashboardCajaMayorKpis(rango: string = 'month'): Observable<any> {
+    return from(this.api.getDashboardCajaMayorKpis(rango));
   }
   getReporteVentasCierre(params: any): Observable<any> {
     return from(this.api.getReporteVentasCierre(params));

@@ -164,7 +164,8 @@ export function registerPedidosOnlineHandlers(
               .filter((pr: any) => pricedPres.has(pr.id))
               .sort((a: any, b: any) => Number(a.cantidad) - Number(b.cantidad))
               .map((pr: any, i: number) => ({ presentacionId: pr.id, nombre: pr.nombre, orden: i }));
-            const pizzaCfg = await getPizzaConfig(dataSource);
+            // Config del producto (mitad y mitad, estrategia) con fallback al global.
+            const pizzaCfg = await getPizzaConfig(dataSource, p);
             pizza = {
               tamanos,
               sabores: saboresOut,

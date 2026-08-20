@@ -33,8 +33,13 @@ también se maneja en el escritorio. Ver [Módulo Ventas — meseros](04-modulo-
 
 La gestión de recetas, sabores y variaciones (como las pizzas multi-sabor) involucra
 varias pantallas relacionadas y queda en el escritorio. En mobile aparecen como **"pronto"**
-dentro de Productos. (Sí podés **vender** un producto con variaciones/sabores al tomar un
-pedido; lo que no está en mobile es **gestionar** las recetas y los sabores.)
+dentro de Productos. Lo que no está en mobile es **gestionar** las recetas y los sabores.
+
+**Vender sí se puede, y completo** (desde 2026-08): al tomar el pedido armás la pizza
+igual que en la caja — tamaño, sabores, cuánto ocupa cada uno (mitad y mitad, 60/40),
+y por cada sabor podés quitar ingredientes opcionales, cambiar ingredientes,
+y cargar adicionales, observaciones y nota. Ver
+[Módulo Ventas — meseros](04-modulo-ventas-meseros.md).
 
 ### Monedas
 

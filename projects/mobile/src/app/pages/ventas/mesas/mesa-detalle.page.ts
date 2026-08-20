@@ -20,6 +20,7 @@ import { ItemInfoDialogComponent } from './item-info-dialog.component';
 import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
 import { AbrirComandaDialogComponent, AbrirComandaResult } from './abrir-comanda-dialog.component';
 import { flagFor } from './moneda-flag.util';
+import { etiquetaProporcion } from './variacion-precio.util';
 
 interface ItemVM {
   id: number;
@@ -39,6 +40,13 @@ interface ItemVM {
   observaciones: { id: number; texto: string }[];
   ingredientes: { id: number; texto: string }[];
   sabores: string[];
+  /**
+   * Cantidad de sabores según la columna del propio `VentaItem`. Es el dato
+   * confiable para saber si el ítem es una variación: `sabores` viene de una
+   * llamada aparte que ante un error de red cae a `[]` en silencio, y tratar una
+   * pizza como producto simple hace que "Editar" borre personalizaciones.
+   */
+  cantidadSabores: number;
 }
 
 /**
@@ -276,15 +284,18 @@ export class MesaDetallePage implements OnInit {
         .filter((o) => o.activo !== false)
         .map((o) => ({
           id: o.id,
-          texto: [o.observacion?.descripcion || o.observacion?.nombre, o.observacionLibre]
-            .filter(Boolean)
-            .join(' — '),
+          // La nota libre cuelga del sentinel NOTA DEL CLIENTE, así que se muestra
+          // el texto y no la descripción del sentinel.
+          texto: o.observacionLibre || o.observacion?.descripcion || o.observacion?.nombre || '',
         }))
         .filter((o) => !!o.texto),
       ingredientes: (p.ing || [])
         .filter((m) => m.activo !== false)
         .map((m) => {
-          const nom = m.recetaIngrediente?.ingrediente?.nombre || 'ingrediente';
+          // `RecetaIngrediente.ingrediente` es opcional: puede venir sólo con
+          // `descripcion`. Sin el fallback salía el literal "ingrediente".
+          const nom =
+            m.recetaIngrediente?.ingrediente?.nombre || m.recetaIngrediente?.descripcion || 'ingrediente';
           return {
             id: m.id,
             texto:
@@ -293,11 +304,18 @@ export class MesaDetallePage implements OnInit {
                 : `Sin ${nom}`,
           };
         }),
-      sabores: (p.sab || []).map((s) => {
-        const prop = Number(s.proporcion) || 1;
-        const frac = prop < 1 ? `1/${Math.round(1 / prop)} ` : '';
-        return `${frac}${s.recetaPresentacion?.sabor?.nombre || 'Sabor'}`;
-      }),
+      cantidadSabores: Number(i.cantidadSabores) || 0,
+      // La porción se etiqueta con el mismo criterio que el diálogo: fracción si
+      // el reparto es parejo, porcentaje si el mozo lo ajustó (60/40). Con
+      // `1/round(1/prop)` un 60% se mostraba como "1/2", contradiciendo lo cobrado.
+      sabores: ((): string[] => {
+        const props = (p.sab || []).map((s) => Number(s.proporcion) || 1);
+        return (p.sab || []).map((s, idx) => {
+          const etiqueta = etiquetaProporcion(props, idx);
+          const nombre = s.recetaPresentacion?.sabor?.nombre || 'Sabor';
+          return etiqueta ? `${etiqueta} ${nombre}` : nombre;
+        });
+      })(),
     };
   }
 
@@ -341,29 +359,55 @@ export class MesaDetallePage implements OnInit {
     if (item.cancelado || this.quitando) return;
     // Variaciones (pizza): edición acotada a cantidad + observaciones (los sabores
     // y el precio de adicionales por-sabor no se tocan acá).
-    const esVariacion = item.sabores.length > 0;
+    // Se mira PRIMERO la columna del ítem: si `getVentaItemSabores` falló al
+    // cargar la mesa, `sabores` queda vacío y una pizza pasaría por producto
+    // simple — y abajo se borrarían sus adicionales/ingredientes sin recrearlos.
+    const esVariacion = item.cantidadSabores > 0 || item.sabores.length > 0;
     this.quitando = true;
     let adicRows: any[] = [];
     let obsRows: any[] = [];
+    let ingRows: any[] = [];
     try {
-      const [adic, obs, prod] = await Promise.all([
+      const [adic, obs, ing, prod] = await Promise.all([
         firstValueFrom(this.repo.getVentaItemAdicionales(item.id).pipe(catchError(() => of([] as any[])))),
         firstValueFrom(this.repo.getObservacionesByVentaItem(item.id).pipe(catchError(() => of([] as any[])))),
+        firstValueFrom(
+          this.repo.getVentaItemIngredienteModificaciones(item.id).pipe(catchError(() => of([] as any[]))),
+        ),
         item.productoId
           ? firstValueFrom(this.repo.getProducto(item.productoId).pipe(catchError(() => of(null as any))))
           : Promise.resolve(null),
       ]);
       adicRows = (adic as any[]) || [];
       obsRows = (obs as any[]) || [];
+      ingRows = (ing as any[]) || [];
       const recetaId = esVariacion ? null : ((prod as any)?.receta?.id ?? null);
       const adicionalesPreSel = esVariacion
         ? []
         : adicRows.filter((a) => a.activo !== false && a.adicional).map((a) => a.adicional.id);
-      const observacionesPreSel = obsRows
-        .filter((o) => o.activo !== false && o.observacion)
+      // Ingredientes: igual que adicionales, en variación son por-sabor y no se
+      // tocan desde acá (el diálogo tampoco los carga porque no hay recetaId).
+      const ingActivos = esVariacion ? [] : ingRows.filter((m) => m.activo !== false && m.recetaIngrediente);
+      const ingredientesRemovidosPreSel = ingActivos
+        .filter((m) => m.tipoModificacion === 'REMOVIDO')
+        .map((m) => m.recetaIngrediente.id);
+      const ingredientesIntercambiadosPreSel = ingActivos
+        .filter((m) => m.tipoModificacion === 'INTERCAMBIADO' && m.ingredienteReemplazo)
+        .map((m) => ({
+          recetaIngredienteId: m.recetaIngrediente.id,
+          reemplazoProductoId: m.ingredienteReemplazo.id,
+        }));
+      // Las observaciones de una mitad (FK `ventaItemSabor`) NO se editan desde
+      // acá: este diálogo es del ítem entero y no sabe de sabores. Se dejan
+      // intactas — antes se borraban todas y se recreaban sin sabor, mezclando
+      // las mitades y perdiendo una de las notas.
+      const obsDelItem = obsRows.filter((o) => o.activo !== false && !o.ventaItemSabor);
+      // La fila de la nota libre cuelga del sentinel NOTA DEL CLIENTE: se excluye
+      // de los chips seleccionados y es la que precarga el textarea de la nota.
+      const observacionesPreSel = obsDelItem
+        .filter((o) => o.observacion && !o.observacionLibre)
         .map((o) => o.observacion.id);
-      const observacionLibreInicial =
-        obsRows.find((o) => o.observacionLibre && !o.observacion)?.observacionLibre || '';
+      const observacionLibreInicial = obsDelItem.find((o) => o.observacionLibre)?.observacionLibre || '';
       this.quitando = false;
 
       const res = (await firstValueFrom(
@@ -379,9 +423,14 @@ export class MesaDetallePage implements OnInit {
               adicionalesPreSel,
               observacionesPreSel,
               observacionLibreInicial,
+              ingredientesRemovidosPreSel,
+              ingredientesIntercambiadosPreSel,
             },
             width: '340px',
             maxHeight: '85vh',
+            // Sin autofocus: enfocar un campo de texto abre el teclado del
+            // sistema y tapa los ítems del diálogo apenas se abre.
+            autoFocus: false,
           })
           .afterClosed(),
       )) as AgregarItemResult | 'QUITAR' | undefined;
@@ -393,8 +442,9 @@ export class MesaDetallePage implements OnInit {
       }
 
       this.quitando = true;
-      // Observaciones: reconciliar siempre (borrar actuales + recrear selección).
-      for (const o of obsRows) await firstValueFrom(this.repo.deleteVentaItemObservacion(o.id));
+      // Observaciones del ítem: reconciliar (borrar actuales + recrear selección).
+      // Las de un sabor concreto quedan intactas — ver `obsDelItem`.
+      for (const o of obsDelItem) await firstValueFrom(this.repo.deleteVentaItemObservacion(o.id));
       for (const oid of res.observaciones) {
         await firstValueFrom(
           this.repo.createVentaItemObservacion({ ventaItem: { id: item.id }, observacion: { id: oid } }),
@@ -407,7 +457,8 @@ export class MesaDetallePage implements OnInit {
       }
       const cambios: any = { cantidad: res.cantidad, modificado: true, horaModificacion: new Date() };
       if (!esVariacion) {
-        // Adicionales: solo para no-variación (en variación son por-sabor y no se tocan acá).
+        // Adicionales e ingredientes: solo para no-variación (en variación son
+        // por-sabor y no se tocan acá). Se reconcilian: borrar + recrear.
         for (const a of adicRows) await firstValueFrom(this.repo.deleteVentaItemAdicional(a.id));
         for (const a of res.adicionales) {
           await firstValueFrom(
@@ -416,6 +467,28 @@ export class MesaDetallePage implements OnInit {
               adicional: { id: a.id },
               precioCobrado: a.precio,
               cantidad: 1,
+            }),
+          );
+        }
+        for (const m of ingRows) {
+          await firstValueFrom(this.repo.deleteVentaItemIngredienteModificacion(m.id));
+        }
+        for (const recetaIngredienteId of res.ingredientesRemovidos || []) {
+          await firstValueFrom(
+            this.repo.createVentaItemIngredienteModificacion({
+              ventaItem: { id: item.id },
+              recetaIngrediente: { id: recetaIngredienteId },
+              tipoModificacion: 'REMOVIDO',
+            }),
+          );
+        }
+        for (const swap of res.ingredientesIntercambiados || []) {
+          await firstValueFrom(
+            this.repo.createVentaItemIngredienteModificacion({
+              ventaItem: { id: item.id },
+              recetaIngrediente: { id: swap.recetaIngredienteId },
+              tipoModificacion: 'INTERCAMBIADO',
+              ingredienteReemplazo: { id: swap.reemplazoProductoId },
             }),
           );
         }

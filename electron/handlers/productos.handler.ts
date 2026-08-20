@@ -33,9 +33,26 @@ import { ProductoObservacion } from '../../src/app/database/entities/productos/p
 import { RecetaIngredienteIntercambiable } from '../../src/app/database/entities/productos/receta-ingrediente-intercambiable.entity';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { TipoPrecio } from '../../src/app/database/entities/financiero/tipo-precio.entity';
-import { Not, Like, In } from 'typeorm';
+import { Not, Like, In, And } from 'typeorm';
+import { OBSERVACION_NOTA_LIBRE_DESC } from '../utils/observacion-libre.utils';
 import { Sabor } from '../../src/app/database/entities/productos/sabor.entity';
 import { RecetaPresentacion } from '../../src/app/database/entities/productos/receta-presentacion.entity';
+import { getRangosPrecioVariacion } from '../utils/variacion-precio.utils';
+import { getVariacionConfig, getVariacionConfigGlobal } from '../utils/variacion-config.utils';
+
+/**
+ * Config de variaciones por producto (ELABORADO_CON_VARIACION). `null` = el
+ * producto hereda el global del PdV, que es el default de todo el catálogo.
+ */
+function normalizarMaxVariaciones(valor: any): number | null {
+  const max = Number(valor);
+  return Number.isFinite(max) && max >= 1 ? Math.floor(max) : null;
+}
+
+function normalizarEstrategiaVariacion(valor: any): string | null {
+  const estrategia = String(valor || '').toUpperCase();
+  return estrategia === 'PROMEDIO' || estrategia === 'MAYOR_PRECIO' ? estrategia : null;
+}
 
 export function registerProductosHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
 
@@ -552,6 +569,9 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         taraGramos: productoData.taraGramos ?? null,
         pesoMinimoGramos: productoData.pesoMinimoGramos ?? null,
         descuentaPorReceta: productoData.descuentaPorReceta !== undefined ? productoData.descuentaPorReceta : false,
+        // Variaciones (ELABORADO_CON_VARIACION): null = heredar la config global del PdV.
+        maxVariacionesSimultaneas: normalizarMaxVariaciones(productoData.maxVariacionesSimultaneas),
+        estrategiaPrecioVariacion: normalizarEstrategiaVariacion(productoData.estrategiaPrecioVariacion),
         registroCompleto: productoData.registroCompleto !== undefined ? productoData.registroCompleto : true,
         imageUrl: productoData.imageUrl || undefined,
       });
@@ -609,6 +629,13 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       if (productoData.descuentaPorReceta !== undefined)
         producto.descuentaPorReceta = productoData.descuentaPorReceta;
 
+      // Variaciones: null explícito = volver a heredar la config global del PdV
+      // (TypeORM sólo genera el UPDATE con null, nunca con undefined).
+      if (productoData.maxVariacionesSimultaneas !== undefined)
+        (producto as any).maxVariacionesSimultaneas = normalizarMaxVariaciones(productoData.maxVariacionesSimultaneas);
+      if (productoData.estrategiaPrecioVariacion !== undefined)
+        (producto as any).estrategiaPrecioVariacion = normalizarEstrategiaVariacion(productoData.estrategiaPrecioVariacion);
+
       // IVA con validacion
       if (productoData.iva !== undefined) {
         const ivaNum = Number(productoData.iva);
@@ -640,10 +667,14 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         }
       }
 
-      // Actualizar receta si se proporciona
+      // Actualizar receta si se proporciona.
+      // OJO: para DESVINCULAR hay que asignar `null`, no `undefined` — TypeORM
+      // ignora `undefined` y no emite el UPDATE, con lo que `producto.receta_id`
+      // quedaba intacto y la receta seguia vinculada (y ocupando el UNIQUE de
+      // la columna, rompiendo cualquier reasignacion posterior).
       if (productoData.recetaId !== undefined) {
         if (productoData.recetaId === null) {
-          producto.receta = undefined;
+          (producto as any).receta = null;
         } else {
           const recetaRepository = dataSource.getRepository(Receta);
           const receta = await recetaRepository.findOneBy({ id: productoData.recetaId });
@@ -1172,10 +1203,17 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   });
 
   // --- Observacion Handlers ---
+  // El sentinel NOTA DEL CLIENTE se excluye del catálogo: es un detalle interno
+  // (soporta la nota libre, que la FK NOT NULL de VentaItemObservacion obliga a
+  // colgar de alguna Observacion). Si se lo pudiera vincular a un producto,
+  // aparecería como chip elegible en el PdV y el cajero vería ese texto.
   ipcMain.handle('getObservaciones', async () => {
     try {
       const observacionRepository = dataSource.getRepository(Observacion);
-      return await observacionRepository.find({ where: { activo: true }, order: { descripcion: 'ASC' } });
+      return await observacionRepository.find({
+        where: { activo: true, descripcion: Not(OBSERVACION_NOTA_LIBRE_DESC) },
+        order: { descripcion: 'ASC' },
+      });
     } catch (error) {
       console.error('Error getting observaciones:', error);
       throw error;
@@ -1185,9 +1223,9 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
   ipcMain.handle('searchObservaciones', async (_event: any, search: string) => {
     try {
       const observacionRepository = dataSource.getRepository(Observacion);
-      const where: any = { activo: true };
+      const where: any = { activo: true, descripcion: Not(OBSERVACION_NOTA_LIBRE_DESC) };
       if (search) {
-        where.descripcion = Like(`%${search.toUpperCase()}%`);
+        where.descripcion = And(Not(OBSERVACION_NOTA_LIBRE_DESC), Like(`%${search.toUpperCase()}%`));
       }
       return await observacionRepository.find({ where, order: { descripcion: 'ASC' }, take: 50 });
     } catch (error) {
@@ -1809,9 +1847,24 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         principal: pres.principal, activo: pres.activo,
       } : null;
 
+      // Productos con variación: el precio vive en `PrecioVenta.receta_presentacion_id`
+      // (una fila por sabor × tamaño), así que no hay "un" precio sino un rango.
+      // Se resuelve en batch para no hacer N+1 sobre la lista de resultados.
+      const rangosVariacion = await getRangosPrecioVariacion(
+        dataSource,
+        filtered.filter(p => p.tipo === 'ELABORADO_CON_VARIACION').map(p => p.id)
+      );
+      // Config de multi-sabor ya resuelta (override del producto o global), para
+      // que el PdV y la PWA no tengan que consultarla aparte.
+      const configGlobalVariacion = filtered.some(p => p.tipo === 'ELABORADO_CON_VARIACION')
+        ? await getVariacionConfigGlobal(dataSource)
+        : null;
+
       return await Promise.all(filtered.map(async p => {
         let principalPresentacion: any = null;
         let principalPrecio: any = null;
+        let variacionResumen: any = null;
+        let variacionConfig: any = null;
 
         if (p.tipo === 'RETAIL' || p.tipo === 'RETAIL_INGREDIENTE' || p.tipo === 'BUFFET_POR_PESO') {
           const pres = (p.presentaciones as any[])?.find((pr: any) => pr.principal)
@@ -1832,16 +1885,22 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
             principalPrecio = mapPrecio(precios?.[0] || null);
           }
         } else if (p.tipo === 'ELABORADO_CON_VARIACION') {
-          // Query prices linked to any receta of this product
-          const precios = await pvRepo
-            .createQueryBuilder('pv')
-            .leftJoinAndSelect('pv.moneda', 'moneda')
-            .innerJoin('pv.receta', 'receta')
-            .where('receta.productoVariacion = :prodId', { prodId: p.id })
-            .andWhere('pv.activo = :activo', { activo: true })
-            .orderBy('pv.principal', 'DESC')
-            .getMany();
-          principalPrecio = mapPrecio(precios?.[0] || null);
+          // Rango "desde / hasta" sobre las variaciones (sabor × tamaño) con
+          // precio vigente. `principalPrecio` = la variación más barata, para
+          // los consumidores que esperan un precio único.
+          const cfgVariacion = await getVariacionConfig(dataSource, p, configGlobalVariacion || undefined);
+          variacionConfig = { maxSabores: cfgVariacion.maxSabores, estrategia: cfgVariacion.estrategia };
+          const rango = rangosVariacion.get(p.id);
+          if (rango && rango.variacionesCount > 0) {
+            principalPrecio = mapPrecio(rango.precioReferencia);
+            variacionResumen = {
+              precioDesde: rango.precioDesde,
+              precioHasta: rango.precioHasta,
+              variacionesCount: rango.variacionesCount,
+              saboresCount: rango.saboresCount,
+              presentacionesCount: rango.presentacionesCount,
+            };
+          }
         } else if (p.tipo === 'COMBO') {
           const precios = await pvRepo.find({
             where: { producto: { id: p.id }, activo: true },
@@ -1862,6 +1921,10 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
           recetas: (p as any).recetas?.map((r: any) => ({ id: r.id, costoCalculado: r.costoCalculado })) || [],
           principalPresentacion,
           principalPrecio,
+          // Solo ELABORADO_CON_VARIACION: rango de precios de sus variaciones y
+          // config de multi-sabor resuelta (producto > global).
+          variacionResumen,
+          variacionConfig,
           // true si el término de búsqueda matcheó EXACTAMENTE un código de
           // barra de este producto. El PdV/buscador lo usa para auto-seleccionar
           // (como un click en la fila) cuando hay un único match exacto.

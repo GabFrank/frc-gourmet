@@ -764,10 +764,10 @@ export class GestionRecetasComponent implements OnInit {
           costoCalculado: this.costoTotalReceta
         };
 
-        // ✅ NUEVO: Asociar con el producto plantilla si es una variación
-        if (this.tabData && this.tabData.productoId) {
-          newReceta.producto = { id: this.tabData.productoId } as Producto;
-        }
+        // NOTA: aca antes se hacia `newReceta.producto = { id: productoId }`.
+        // Era un no-op (create-receta nunca mapeo esa relacion) y apuntaba a
+        // `receta.producto_id`, columna deprecada. El vinculo real se hace mas
+        // abajo con `vincularRecetaAProducto`.
 
         this.repositoryService.createReceta(newReceta).subscribe({
           next: (recetaCreada: Receta) => {
@@ -776,14 +776,20 @@ export class GestionRecetasComponent implements OnInit {
             this.mode = 'edit';
             this.recetaId = recetaCreada.id;
 
-            // Vincular receta al producto si viene desde un producto
-            if (this.tabData?.productoId && recetaCreada.id) {
-              this.repositoryService.updateProducto(this.tabData.productoId, { recetaId: recetaCreada.id } as any).subscribe({
+            // Vincular la receta al producto SOLO si es la receta propia de un
+            // producto simple. Las recetas de variacion tambien traen
+            // `productoId` en tabData, pero cuelgan de la variacion
+            // (`receta_presentacion`), NO de `producto.receta_id`: escribirlas
+            // ahi secuestraba la receta de la variacion y hacia explotar la
+            // creacion de la siguiente variacion con UNIQUE(receta_id).
+            if (this.tabData?.productoId && recetaCreada.id && !this.esRecetaDeVariacion) {
+              this.repositoryService.vincularRecetaAProducto(this.tabData.productoId, recetaCreada.id).subscribe({
                 next: () => {
                   console.log(`Receta ${recetaCreada.id} vinculada al producto ${this.tabData.productoId}`);
                 },
                 error: (err: any) => {
                   console.error('Error vinculando receta al producto:', err);
+                  this.snackBar.open(err?.message || 'La receta se creó pero no se pudo vincular al producto', 'Cerrar', { duration: 4000 });
                 }
               });
             }

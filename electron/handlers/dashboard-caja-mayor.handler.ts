@@ -6,6 +6,7 @@ import { CuotaEstado, CuentaPorPagarEstado } from '../../src/app/database/entiti
 import { ChequeEstado } from '../../src/app/database/entities/financiero/cheques-enums';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { dbQuery } from '../utils/db-query';
+import { Rango, bucketsForRango } from '../utils/dashboard-rangos.util';
 
 const TIPOS_INGRESO: TipoMovimiento[] = [
   TipoMovimiento.INGRESO_RETIRO_CAJA,
@@ -39,7 +40,7 @@ export function registerDashboardCajaMayorHandlers(
   _getCurrentUser: () => Usuario | null,
 ): void {
 
-  ipcMain.handle('get-dashboard-caja-mayor-kpis', async () => {
+  ipcMain.handle('get-dashboard-caja-mayor-kpis', async (_event, rango: Rango = 'month') => {
     try {
       // 1. Saldos por moneda principal/USD/BRL
       const monedaRepo = dataSource.getRepository(Moneda);
@@ -86,8 +87,10 @@ export function registerDashboardCajaMayorHandlers(
       `, [ChequeEstado.DIFERIDO, today.toISOString(), en7.toISOString()]);
       const chequesPorVencer = Number(chequesRows?.[0]?.cnt || 0);
 
-      // 4. Movimientos ultimos 30 dias (entradas vs salidas)
-      const movimientos30d = await buildMovimientos30d(dataSource);
+      // 4. Movimientos del rango (entradas vs salidas). La clave del retorno
+      // sigue siendo `movimientos30d` por compatibilidad con los consumidores
+      // (dashboard Financiero, Home): lo que cambia es la ventana, no la forma.
+      const movimientos30d = await buildMovimientosPorRango(dataSource, rango);
 
       // 5. Proximos vencimientos (CPP + cheques) ordenado por fecha
       const cppListRows: any[] = await dbQuery(dataSource, `
@@ -144,8 +147,9 @@ export function registerDashboardCajaMayorHandlers(
   });
 }
 
-async function buildMovimientos30d(
+async function buildMovimientosPorRango(
   dataSource: DataSource,
+  rango: Rango,
 ): Promise<{ labels: string[]; entradas: number[]; salidas: number[] }> {
   const labels: string[] = [];
   const entradas: number[] = [];
@@ -157,11 +161,10 @@ async function buildMovimientos30d(
     return { labels, entradas, salidas };
   }
 
-  const today = new Date();
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(today); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0);
-    const f = new Date(d); f.setHours(23, 59, 59, 999);
-    labels.push(`${d.getDate()}/${d.getMonth() + 1}`);
+  for (const bucket of bucketsForRango(rango)) {
+    labels.push(bucket.label);
+    const desde = bucket.desde.toISOString();
+    const hasta = bucket.hasta.toISOString();
 
     const ingRows: any[] = await dbQuery(dataSource, `
       SELECT COALESCE(SUM(monto), 0) as suma
@@ -169,7 +172,7 @@ async function buildMovimientos30d(
       WHERE moneda_id = ?
         AND fecha BETWEEN ? AND ?
         AND tipo_movimiento IN (${TIPOS_INGRESO.map(() => '?').join(',')})
-    `, [principal.id, d.toISOString(), f.toISOString(), ...TIPOS_INGRESO]);
+    `, [principal.id, desde, hasta, ...TIPOS_INGRESO]);
     entradas.push(Number(ingRows?.[0]?.suma || 0));
 
     const egRows: any[] = await dbQuery(dataSource, `
@@ -178,7 +181,7 @@ async function buildMovimientos30d(
       WHERE moneda_id = ?
         AND fecha BETWEEN ? AND ?
         AND tipo_movimiento IN (${TIPOS_EGRESO.map(() => '?').join(',')})
-    `, [principal.id, d.toISOString(), f.toISOString(), ...TIPOS_EGRESO]);
+    `, [principal.id, desde, hasta, ...TIPOS_EGRESO]);
     salidas.push(Number(egRows?.[0]?.suma || 0));
   }
 

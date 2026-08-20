@@ -7,23 +7,7 @@ import { PdvMesa } from '../../src/app/database/entities/ventas/pdv-mesa.entity'
 import { ComandaItem, ComandaItemEstado } from '../../src/app/database/entities/ventas/comanda-item.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { dbQuery } from '../utils/db-query';
-
-type Rango = 'today' | 'week' | 'month' | '3months' | '6months';
-
-function rangoToFechas(rango: Rango): { desde: Date; hasta: Date } {
-  const hasta = new Date();
-  hasta.setHours(23, 59, 59, 999);
-  const desde = new Date();
-  desde.setHours(0, 0, 0, 0);
-  switch (rango) {
-    case 'today': break;
-    case 'week': desde.setDate(desde.getDate() - 6); break;
-    case 'month': desde.setDate(desde.getDate() - 29); break;
-    case '3months': desde.setMonth(desde.getMonth() - 3); break;
-    case '6months': desde.setMonth(desde.getMonth() - 6); break;
-  }
-  return { desde, hasta };
-}
+import { Rango, rangoToFechas, bucketsForRango } from '../utils/dashboard-rangos.util';
 
 // El "total" real de una venta NO vive en la columna ventas.total (no poblada),
 // sino en pagos_detalles (PAGO - VUELTO). Estos helpers calculan el monto cobrado
@@ -223,9 +207,13 @@ export function registerDashboardVentasHandlers(
 
   ipcMain.handle('get-dashboard-ventas-kpis', async (_event, rango: Rango = 'week') => {
     try {
-      const hoyInicio = new Date();
+      // Un unico `now` para todo el request: rangoToFechas y bucketsForRango
+      // tienen que mirar el mismo instante o la ventana de la card y la del
+      // chart pueden caer en horas (o dias) distintos entre await y await.
+      const now = new Date();
+      const hoyInicio = new Date(now);
       hoyInicio.setHours(0, 0, 0, 0);
-      const hoyFin = new Date();
+      const hoyFin = new Date(now);
       hoyFin.setHours(23, 59, 59, 999);
 
       const monedaPrincipalId = await getMonedaPrincipalId(dataSource);
@@ -316,7 +304,7 @@ export function registerDashboardVentasHandlers(
       }
 
       // 5. Top productos (en el rango)
-      const { desde, hasta } = rangoToFechas(rango);
+      const { desde, hasta } = rangoToFechas(rango, now);
       const topRows: any[] = await dbQuery(dataSource, `
         SELECT p.id, p.nombre, SUM(vi.cantidad) as cantidad,
                SUM(vi.cantidad * vi.precio_venta_unitario) as total
@@ -371,7 +359,7 @@ export function registerDashboardVentasHandlers(
         }));
 
       // 7. Ventas por periodo (chart)
-      const periodoData = await buildVentasPorPeriodo(dataSource, rango);
+      const periodoData = await buildVentasPorPeriodo(dataSource, rango, now);
 
       return {
         ventasHoy,
@@ -401,6 +389,7 @@ export function registerDashboardVentasHandlers(
 async function buildVentasPorPeriodo(
   dataSource: DataSource,
   rango: Rango,
+  now: Date,
 ): Promise<{ labels: string[]; ventas: number[]; cantidades: number[] }> {
   const labels: string[] = [];
   const ventas: number[] = [];
@@ -408,51 +397,19 @@ async function buildVentasPorPeriodo(
 
   const monedaPrincipalId = await getMonedaPrincipalId(dataSource);
   const cotizacionMap = await getCotizacionMap(dataSource, monedaPrincipalId);
-  const now = new Date();
-  if (rango === 'today' || rango === 'week') {
-    const diasNombre = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-      const f = new Date(d); f.setHours(23, 59, 59, 999);
-      const r = await sumaVentasRango(dataSource, monedaPrincipalId, filtroRango(d.toISOString(), f.toISOString()), cotizacionMap);
-      labels.push(diasNombre[d.getDay()]);
-      ventas.push(r.suma);
-      cantidades.push(r.cnt);
-    }
-  } else if (rango === 'month') {
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-      const f = new Date(d); f.setHours(23, 59, 59, 999);
-      const r = await sumaVentasRango(dataSource, monedaPrincipalId, filtroRango(d.toISOString(), f.toISOString()), cotizacionMap);
-      labels.push(`${d.getDate()}`);
-      ventas.push(r.suma);
-      cantidades.push(r.cnt);
-    }
-  } else if (rango === '3months') {
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - (i * 7) - 6);
-      d.setHours(0, 0, 0, 0);
-      const f = new Date(d); f.setDate(f.getDate() + 6); f.setHours(23, 59, 59, 999);
-      const r = await sumaVentasRango(dataSource, monedaPrincipalId, filtroRango(d.toISOString(), f.toISOString()), cotizacionMap);
-      labels.push(`S${12 - i}`);
-      ventas.push(r.suma);
-      cantidades.push(r.cnt);
-    }
-  } else { // 6months
-    const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const f = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
-      const r = await sumaVentasRango(dataSource, monedaPrincipalId, filtroRango(d.toISOString(), f.toISOString()), cotizacionMap);
-      labels.push(meses[d.getMonth()]);
-      ventas.push(r.suma);
-      cantidades.push(r.cnt);
-    }
+
+  // Los tramos del eje X (y su granularidad) los define `bucketsForRango`; acá
+  // solo se agrega el total cobrado de cada uno.
+  for (const bucket of bucketsForRango(rango, now)) {
+    const r = await sumaVentasRango(
+      dataSource,
+      monedaPrincipalId,
+      filtroRango(bucket.desde.toISOString(), bucket.hasta.toISOString()),
+      cotizacionMap,
+    );
+    labels.push(bucket.label);
+    ventas.push(r.suma);
+    cantidades.push(r.cnt);
   }
 
   return { labels, ventas, cantidades };

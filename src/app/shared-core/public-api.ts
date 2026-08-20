@@ -77,6 +77,8 @@ export type { Moneda } from '../database/entities/financiero/moneda.entity';
 export type { Persona } from '../database/entities/personas/persona.entity';
 
 // --- Utilidades de dominio (datos puros, sin Angular/Electron) ---
+// Mensaje legible de un error del backend (desenvuelve el prefijo de IPC).
+export { mensajeDeError } from '../shared/utils/error-message.util';
 // Reglas de validación de Operación Financiera (fuente única desktop + mobile).
 export {
   CAMPOS_REQUERIDOS,

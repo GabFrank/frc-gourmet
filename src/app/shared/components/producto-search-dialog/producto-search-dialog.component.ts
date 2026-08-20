@@ -136,6 +136,18 @@ export class ProductoSearchDialogComponent implements OnInit {
         this.repositoryService.searchProductosByNombre(searchTerm, mode)
       );
       this.searchResults = results || [];
+      // Los ELABORADO_CON_VARIACION no tienen un precio único: el backend
+      // devuelve el rango de sus variaciones (sabor × tamaño) y la columna
+      // PRECIO muestra "desde – hasta". Se pre-computa acá (sin funciones en el
+      // template).
+      for (const p of this.searchResults as any[]) {
+        const resumen = p?.variacionResumen;
+        const desde = Number(resumen?.precioDesde) || 0;
+        const hasta = Number(resumen?.precioHasta) || 0;
+        p.precioLista = desde > 0 ? desde : Number(p?.principalPrecio?.valor) || 0;
+        p.precioListaHasta = hasta;
+        p.esRangoVariacion = desde > 0 && hasta > desde;
+      }
       this.totalItems = this.searchResults.length;
 
       // Auto-selección por código de barra: si el término matcheó EXACTAMENTE

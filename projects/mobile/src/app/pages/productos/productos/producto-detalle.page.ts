@@ -109,6 +109,21 @@ export class ProductoDetallePage implements OnInit {
       if (p.taraGramos != null) datos.push({ label: 'Tara', valor: `${p.taraGramos} g` });
       if (p.pesoMinimoGramos != null) datos.push({ label: 'Peso mínimo', valor: `${p.pesoMinimoGramos} g` });
     }
+    if (p.tipo === 'ELABORADO_CON_VARIACION') {
+      // null en cualquiera de las dos = hereda la configuración global del PdV.
+      datos.push({
+        label: 'Máx. sabores por ítem',
+        valor: p.maxVariacionesSimultaneas != null ? String(p.maxVariacionesSimultaneas) : 'Global del PdV',
+      });
+      datos.push({
+        label: 'Precio con varios sabores',
+        valor: p.estrategiaPrecioVariacion === 'PROMEDIO'
+          ? 'Promedio'
+          : p.estrategiaPrecioVariacion === 'MAYOR_PRECIO'
+            ? 'El más caro'
+            : 'Global del PdV',
+      });
+    }
     this.datos = datos;
 
     // --- Precios ---

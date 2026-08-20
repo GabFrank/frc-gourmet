@@ -62,7 +62,8 @@ class Receta extends BaseModel {
   imageUrl?: string;                 // app://producto-images/<file>
   activo: boolean;
 
-  @OneToOne 'Producto' producto;     // legacy 1:1 (pre-refactor) — deprecated, FK producto_id
+  @OneToOne 'Producto' producto;     // ⚠️ DEPRECADO — FK producto_id, SIEMPRE NULL. Ver abajo.
+  productoVinculado?: {id,nombre}|null; // VIRTUAL — el producto real, por producto.receta_id
   @OneToOne 'Adicional' adicional;   // si la receta es de un Adicional complejo
   @OneToMany RecetaIngrediente[] ingredientes;
   @OneToMany 'RecetaFase' fases;     // fases del modo de preparo (ordenadas)
@@ -77,6 +78,51 @@ class Receta extends BaseModel {
 ```
 
 (Entidades nuevas relacionadas: `RecetaFase` / `RecetaFaseIngrediente` para el modo de preparo por pasos, y `RecetaMaterial` para utensilios — ver archivos homónimos en `entities/productos/`.)
+
+### ⚠️ Las cuatro FKs de "dueño" de una Receta (leer antes de tocar el vínculo)
+
+Una `Receta` puede pertenecer a cuatro cosas distintas. Confundirlas fue la causa
+de un bug de larga data (arreglado 2026-08, ver más abajo):
+
+| Dueño | Columna | UNIQUE | ¿La escribe la app? |
+|---|---|---|---|
+| **Producto simple** (`ELABORADO_SIN_VARIACION`) | `producto.receta_id` | **sí** | **SÍ — fuente de verdad** |
+| Adicional complejo | `adicional.receta_id` | sí | sí |
+| Variación sabor × tamaño | `receta_presentacion.receta_id` | no | sí (una receta por variación) |
+| Producto con variaciones | `receta.producto_variacion_id` | no | sólo lectura en handlers |
+| ~~Legacy 1:1~~ | ~~`receta.producto_id`~~ | sí | **NO — DEPRECADA, siempre NULL** |
+
+**`receta.producto_id` está DEPRECADA.** Nació en el refactor de 2026-03 junto con
+`producto.receta_id`: quedó un 1:1 con **dos owning sides**, cada uno con su propia
+columna, y sólo prosperó `producto.receta_id`. Ningún handler la escribe.
+
+- Para "el producto de esta receta" usar la **virtual `receta.productoVinculado`**,
+  que resuelven `get-receta` y `get-recetas-with-filters` por `producto.receta_id`
+  (una query por lote, sin N+1). **Nunca** leer `receta.producto`.
+- Para las recetas de un producto **con** variaciones, usar `productoVariacion`.
+- La columna no se borra: las migraciones del proyecto son aditivas.
+
+### Vincular / desvincular una receta a un producto simple
+
+Se hace **sólo** con estos handlers, nunca con `update-producto` + `update-receta`
+encadenados (dos writes a dos tablas con dos UNIQUE → estado a medio aplicar):
+
+- **`vincular-receta-a-producto(productoId, recetaId)`** — transaccional. Valida que
+  la receta no sea de otro producto, de un adicional ni de una variación, y devuelve
+  un mensaje legible en vez del `UNIQUE constraint failed` crudo del driver.
+- **`desvincular-receta-de-producto(productoId)`** — pone `producto.receta_id` en
+  `null`. La receta NO se borra: queda libre.
+- **`get-recetas-asignables({productoId, search, activo, page, pageSize})`** — las
+  recetas ofrecibles en "Buscar Receta". Filtra en SQL por las cuatro FKs de arriba,
+  con búsqueda y paginación server-side. Excluye del chequeo al `productoId` actual
+  para que el producto pueda re-elegir su propia receta.
+
+Ambos mutadores llevan `ensurePermission('PRODUCTOS_GESTIONAR')`: es la tabla que
+escriben, y `/api/rpc` es default-allow.
+
+⚠️ **Desvincular es destructivo**: el producto resuelve su precio de venta
+(`productos.handler.ts`, `ventas.handler.ts`) y su descuento de stock por la receta
+vinculada. La UI lo advierte en el diálogo de confirmación.
 
 ### RecetaIngrediente
 
@@ -99,6 +145,15 @@ class Receta extends BaseModel {
 | `receta_id` | FK | |
 | `ingrediente_id` | FK, **nullable** | Producto (RETAIL_INGREDIENTE o ELABORADO_SIN_VARIACION). Nullable: puede ser un ítem solo-descripción |
 | `reemplazoDefault_id` | FK, nullable (col `reemplazo_default_id`) | Sustituto por defecto |
+
+> ⚠️ **Para mostrar el nombre de un ingrediente SIEMPRE hay que hacer
+> `ingrediente?.nombre || descripcion`.** `ingrediente_id` es nullable a
+> propósito (ítem solo-descripción), así que leer sólo `ingrediente.nombre` deja
+> el nombre en blanco. El backend ya lo hace bien en la comanda
+> (`documentos-tickets.handler.ts`) y en el KDS (`kds.handler.ts`); al frontend
+> le faltaba en 6 lugares y se arregló el 2026-08-17 — el síntoma era un chip
+> "OPCIONALES" sin texto en el diálogo de personalización y un chip `SIN` sin
+> nombre en el PdV, mientras la comanda impresa sí decía `SIN ACEITUNAS`.
 
 ### RecetaIngredienteIntercambiable
 
@@ -361,6 +416,65 @@ El precio de una variación vive en **`PrecioVenta.receta_presentacion_id`** (4�
 - **Lectura**: `get-variaciones-by-producto` y `get-variaciones-by-producto-and-presentacion` consultan `pv.receta_presentacion_id = :rpId AND pv.activo`, ordenan `principal DESC`, exponen `preciosVenta` + `precioPrincipal` por variación.
 - **Escritura**: `create-precio-venta`/`update-precio-venta` aceptan `recetaPresentacionId` como 4ª rama; el flag `principal` se acota a esa `RecetaPresentacion`.
 - **Frontend**: `precio-venta-dialog`, `producto-sabores`, `variacion-dialog` y `variaciones-sabor-dialog` usan `relationField: 'recetaPresentacionId'`. Alinea gestión + PdV + storefront.
+
+## Config de variaciones POR PRODUCTO (2026-08)
+
+Antes, el máximo de sabores combinables y la estrategia de precio salían **sólo**
+de `PdvConfig` (`pizza_max_sabores` / `pizza_estrategia_precio`): una regla única
+para todo el local, con lo que una milanesa con variación heredaba el "mitad y
+mitad" de la pizza.
+
+Ahora `Producto` tiene dos columnas **nullable** (`null` = heredar el global, que
+es el estado de todo el catálogo ya cargado):
+
+| Columna | Entidad | Significado |
+|---|---|---|
+| `max_variaciones_simultaneas` | `Producto.maxVariacionesSimultaneas` | Sabores combinables por ítem. `1` = un solo sabor (sin mitad y mitad). |
+| `estrategia_precio_variacion` | `Producto.estrategiaPrecioVariacion` | `MAYOR_PRECIO` \| `PROMEDIO`. |
+
+- **Fuente única de resolución:** `electron/utils/variacion-config.utils.ts` →
+  `getVariacionConfig(dataSource, producto | id, global?)` y
+  `getVariacionConfigGlobal(dataSource)`. Valores inválidos (max < 1, estrategia
+  desconocida) se descartan y se hereda el global.
+- **`getPizzaConfig(dataSource, producto?)`** (`pedidos-online-config.handler.ts`)
+  ahora delega en ese helper: la carta online y la **validación server-side del
+  pedido** (`demasiados_sabores`) respetan el límite del producto.
+- **Payloads:** `search-productos-by-nombre` y `getPdvAtajoItemProductos`
+  devuelven `variacionConfig: { maxSabores, estrategia }` ya resuelta, para que
+  la PWA no tenga que consultarla aparte. El PdV desktop recarga el producto
+  completo antes de abrir el diálogo, así que lee las columnas directamente.
+- **UI:** campos en *Gestionar producto → Información general* (visibles sólo
+  para `ELABORADO_CON_VARIACION`); el detalle read-only del mobile los muestra.
+- Test: `npm run test:variacion-config`.
+
+## Precio de un producto con variación en las LISTAS (rango desde/hasta)
+
+Un `ELABORADO_CON_VARIACION` **no tiene un precio**: tiene uno por cada
+combinación sabor × tamaño. Las listas (buscador del PdV, grid de atajos,
+búsqueda y atajos de la PWA) mostraban `0` porque resolvían el precio por
+`PrecioVenta.receta_id` — o peor, por el 1:1 legacy `receta.producto_id` — y
+desde el refactor de julio el precio cuelga de `receta_presentacion_id`.
+
+- **Helper único:** `electron/utils/variacion-precio.utils.ts` →
+  `getRangosPrecioVariacion(dataSource, ids[])` (batch, evita N+1) y
+  `getRangoPrecioVariacion(dataSource, id)`. Considera sólo variaciones,
+  sabores y presentaciones activos, y **cae al esquema viejo** (precio en la
+  receta) para datos pre-refactor, marcando `legacy: true`.
+- Los handlers devuelven `variacionResumen: { precioDesde, precioHasta,
+  variacionesCount, saboresCount, presentacionesCount }` y `principalPrecio`
+  pasa a ser **la variación más barata**.
+- La UI muestra `50.000 – 65.000` (y en mobile un detalle `2 tamaños · 1 sabor`);
+  con un solo precio muestra el valor único.
+- Test: `npm run test:variacion-precios` (incluye el caso legacy).
+
+## Autoselección del sabor único (PdV + PWA)
+
+Si el tamaño elegido tiene **una sola variación con precio**, ambos diálogos la
+marcan solos y el desktop salta al paso de confirmar (con una sola presentación,
+el diálogo abre directo ahí). La personalización **no** se abre automáticamente
+en ese caso — sí cuando el usuario tilda un sabor a mano, que es el
+comportamiento de siempre. Con `maxSabores = 1` se oculta el "(max N)" y tocar
+otro sabor **reemplaza** al elegido.
 
 ## Reparación de recetas compartidas (`d9cbba3`)
 

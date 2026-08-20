@@ -1173,6 +1173,21 @@ export class RepositoryHttpService extends RepositoryService {
   }): Observable<{items: Receta[], total: number, page: number, pageSize: number}> {
     return throwError(() => new Error(`RepositoryHttpService.getRecetasWithFilters() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getRecetasAsignables(params: {
+    productoId?: number | null;
+    search?: string;
+    activo?: boolean | null;
+    page?: number;
+    pageSize?: number;
+  }): Observable<{items: Receta[], total: number, page: number, pageSize: number}> {
+    return throwError(() => new Error(`RepositoryHttpService.getRecetasAsignables() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  vincularRecetaAProducto(productoId: number, recetaId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.vincularRecetaAProducto() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  desvincularRecetaDeProducto(productoId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.desvincularRecetaDeProducto() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getReceta(recetaId: number): Observable<Receta> {
     return throwError(() => new Error(`RepositoryHttpService.getReceta() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
@@ -2402,16 +2417,16 @@ export class RepositoryHttpService extends RepositoryService {
   getDashboardVentasKpis(rango?: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardVentasKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  getDashboardComprasKpis(): Observable<any> {
+  getDashboardComprasKpis(_rango?: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardComprasKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  getDashboardProductosKpis(): Observable<any> {
+  getDashboardProductosKpis(_rango?: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardProductosKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getDashboardFinancieroKpis(): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardFinancieroKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  getDashboardCajaMayorKpis(): Observable<any> {
+  getDashboardCajaMayorKpis(_rango?: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardCajaMayorKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getReporteVentasCierre(_params: any): Observable<any> {

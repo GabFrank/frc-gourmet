@@ -65,8 +65,66 @@ CRUD: RRHH (Cargos, Turnos, MotivosVale, Feriados, Personas, Usuarios+roles, Fun
 TipoCliente), Productos (Familias, Subfamilias, Adicionales), Compras (Cat. compra), Financiero (Cat. gasto).
 Read-only: Vales, Liquidaciones, Penalizaciones, Bonos, Aguinaldos, Asistencias, Horas extra, Permisos,
 Notificaciones, Cajas, CxC, Compras, Proveedores, Productos, Comisiones (reglas/equipos/liq).
-**Diferido:** Sabores/Recetas (variaciones), Monedas (sin handler create),
+**Recetas:** `pages/productos/recetas/` tiene listado + edición (datos, ingredientes,
+pasos) y **vincular/desvincular producto** (`vincular-receta-a-producto` /
+`desvincular-receta-de-producto`). El chip Completa/Pre-receta y el producto vinculado
+se leen de la virtual `receta.productoVinculado`, **nunca** de `receta.producto`
+(columna deprecada, siempre NULL — leerla marcaba TODAS las recetas como pre-receta).
+→ [../domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
+
+**Diferido:** Sabores y variaciones (sabor × tamaño), Monedas (sin handler create),
 Préstamos, Config RRHH.
+
+> ⚠️ **Diálogos con campos de texto en el celular: `autoFocus: false`.** `MatDialog`
+> enfoca por defecto el primer elemento tabbable al abrir. En un celular eso abre el
+> teclado del sistema, que tapa media pantalla — y si el diálogo carga sus datos
+> async, el único campo presente al abrir suele ser justamente el input de texto, así
+> que el teclado salta y tapa los ítems que aparecen un instante después. Regla:
+> `autoFocus: false` en el `open()` (ya lo hacían `home.page` y `qr-upload.page`), y
+> los campos de texto **al final** del template y detrás de `*ngIf="!cargando"`.
+> Excepción: un diálogo cuyo único propósito es escribir algo (peso del buffet,
+> observación de la comanda) puede querer el foco desde el arranque.
+
+## Ventas mobile: el flow de pizza está completo (2026-08-17)
+
+`projects/mobile/src/app/pages/ventas/mesas/` replica el flow del PdV desktop para
+`ELABORADO_CON_VARIACION`. Piezas y su equivalente desktop:
+
+| Mobile | Desktop |
+|---|---|
+| `seleccionar-variacion-dialog.component.ts` | `shared/components/seleccionar-variacion-dialog/` |
+| `agregar-item-dialog.component.ts` (personalización) | `shared/components/personalizar-producto-dialog/` |
+| `tomar-pedido.page.ts` → `persistirPersonalizacion()` | `pdv.component.ts` → `persistirPersonalizacion` / `…ConSabor` |
+| `variacion-precio.util.ts` (+ spec) | cálculo inline en el diálogo + `addVariacionItem` |
+
+Cubre: tamaño → sabores (tope `Producto.maxVariacionesSimultaneas ?? pizzaMaxSabores`,
+que llega ya resuelto en `variacionConfig` del payload de búsqueda/atajos; con tope 1
+la selección es única y se oculta el "(hasta N)"; **si queda un solo sabor con precio
+se autoselecciona** sin abrir la personalización; los sabores sin precio no se listan) →
+personalización por sabor (**ingredientes opcionales quitados, cambiables
+intercambiados**, adicionales, observaciones, nota libre) → proporciones ajustables
+(±10% compensado, tope 10–90%) → cantidad. Persiste `VentaItem` + un `VentaItemSabor`
+por sabor, con adicionales / observaciones / `VentaItemIngredienteModificacion`
+colgados del ítem y **con FK `ventaItemSabor`** para saber a qué mitad pertenecen.
+
+**Reglas de plata (idénticas al desktop, testeadas en `variacion-precio.util.spec.ts`):**
+el precio base **no** se pondera (la pizza es del mismo tamaño se divida como se
+divida) y sale de `pizzaEstrategiaPrecio`; **adicionales y costo sí se ponderan por
+proporción** — un extra en media pizza cuesta la mitad. Hasta 2026-08 mobile los
+cobraba enteros, o sea cobraba de más que el desktop.
+
+**Limitación compartida con el desktop:** una pizza ya agregada no se puede
+re-personalizar (el producto con variación no tiene receta propia; las recetas viven
+por `RecetaPresentacion`). Desde el detalle de la mesa sólo se edita cantidad y
+observaciones. No es un gap de mobile.
+
+En la lista de productos, un `ELABORADO_CON_VARIACION` muestra el **rango**
+`desde – hasta` (campo `variacionResumen` del payload) más un detalle
+`N tamaños · N sabores`, y no muestra conversiones de moneda (serían ambiguas).
+
+Tests: `npm run test:variacion-mobile` (estructura persistida) y el spec del util
+dentro de `npm run test:mobile`. Checklist manual:
+`docs/testing/TESTING-CHECKLIST-MOBILE-VARIACION.md`.
 
 ## Cobertura Caja Mayor mobile (actualizado 2026-07-28)
 
