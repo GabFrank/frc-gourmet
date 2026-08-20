@@ -369,3 +369,19 @@ Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `proje
 - [ ] **Cheque como fuente de pago** — frc-comercial lo tiene (emite el cheque
   desde el propio pago, con chequera y hojas). Acá el cheque sigue por
   `emitir-cheque`. Se dejó fuera del alcance a propósito.
+## PdV: mesa y cliente (2026-08)
+
+- [x] **La mesa se ocupa y se libera con permiso de mozo** — el estado viaja con
+  la venta, más un handler operativo. Cierra el bug "Mesas colgadas en OCUPADO",
+  cuya causa real era de permisos, no una race condition.
+- [x] **El cliente se guarda al facturar** y se autocompleta por RUC.
+
+- [ ] **Unificar RUCs duplicados y recién ahí poner UNIQUE.** Hoy el índice es
+  simple: un UNIQUE fallaría al arrancar si alguna instalación ya tiene
+  duplicados. Hace falta un reporte de duplicados y una herramienta de fusión
+  antes de endurecerlo.
+- [ ] **`get-cliente-por-ruc` sin permiso**: sigue el precedente de los `get-*`,
+  pero expone datos de contacto a cualquier llamador autenticado de `/api/rpc`.
+  Revisar junto con el resto de las lecturas si alguna vez se endurece.
+- [ ] **`repository-http`**: los 2 canales nuevos quedaron como stubs, igual que
+  el resto del archivo.

@@ -157,13 +157,21 @@ WHERE compra_id IS NOT NULL
   AND compra_id NOT IN (SELECT id FROM compras);
 ```
 
-### Mesas colgadas en OCUPADO
+### Mesas colgadas en OCUPADO — RESUELTO (2026-08)
 
 **Síntoma:** una mesa muestra estado=OCUPADO en el PdV pero no hay venta abierta vinculada.
+Y su reverso: una mesa con consumo que **no** se marca como ocupada.
 
-**Causa:** posible race condition o bug en flujo de cancelación que no liberó la mesa.
+**Causa real (no era una race condition):** marcar y liberar mesas pasaba por
+`updatePdvMesa`, que exige `VENTAS_PDV_CONFIGURAR` — permiso que en el seed tiene
+**sólo GERENTE**. A un MOZO y también a un CAJERO le fallaba con FORBIDDEN, el
+frontend se lo tragaba en un `console.error`, y quedaba el estado equivocado. Sólo
+un gerente o el admin no lo sufrían, que es con quien se solía probar.
 
-**Fix manual:** ver [workflows/verificacion-bd-sqlite.md](../workflows/verificacion-bd-sqlite.md) para query.
+**Fix:** `createVenta` marca la mesa en su propia transacción y el handler
+operativo `set-pdv-mesa-estado` (permiso `VENTAS_PDV`) la ocupa y libera; el
+frontend avisa si falla. La migración `IndicesRucYReconciliarMesas` libera las
+mesas que ya habían quedado colgadas. Detalle → [domains/ventas-pdv.md](../domains/ventas-pdv.md).
 
 ### Stock no se descuenta en algunos casos
 

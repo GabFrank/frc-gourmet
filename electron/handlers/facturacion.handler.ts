@@ -9,6 +9,7 @@ import { FacturacionConfig } from '../../src/app/database/entities/facturacion/f
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
+import { buscarClientePorRuc, resolverOCrearClientePorRuc } from '../utils/cliente-ruc.utils';
 
 /**
  * Handlers IPC del modulo de facturacion.
@@ -268,10 +269,50 @@ export function registerFacturacionHandlers(
    * Crea una factura asignando numeracion atomica desde el TimbradoDetalle.
    * `data` = { factura: Partial<Factura> & { timbradoDetalleId? }, items: Partial<FacturaItem>[] }
    */
+  /**
+   * Cliente cuyo RUC coincide exactamente. Lo usa el diálogo de facturar para
+   * autocompletar el receptor con sólo tipear el RUC.
+   *
+   * Sin `ensurePermission`, igual que el resto de los `get-*` del repo (ver
+   * `get-clientes`). Expone datos de contacto del cliente a cualquier llamador
+   * autenticado de /api/rpc, como ya ocurre hoy con el listado.
+   */
+  ipcMain.handle('get-cliente-por-ruc', async (_e: any, ruc: string) => {
+    try {
+      return await buscarClientePorRuc(dataSource, ruc);
+    } catch (error) {
+      console.error('Error buscando cliente por RUC:', error);
+      throw error;
+    }
+  });
+
   ipcMain.handle('create-factura', async (_e: any, data: any) => {
     const { factura, items } = data || {};
     try {
       await ensurePermission(dataSource, getCurrentUser, 'FACTURACION_EMITIR');
+
+      // El cliente se resuelve ANTES de abrir la transacción, a propósito.
+      //
+      // Adentro va la numeración atómica del timbrado: si el upsert del cliente
+      // fallara ahí dentro, el rollback se llevaría puesta la factura entera. Y en
+      // Postgres una excepción aborta el bloque completo, así que ni siquiera
+      // alcanzaría con un try/catch. Una factura es un documento legal con
+      // numeración: no se pierde porque no se pudo guardar un cliente.
+      if (!factura?.cliente && !factura?.cliente_id) {
+        try {
+          const cliente = await resolverOCrearClientePorRuc(dataSource, {
+            ruc: factura?.ruc,
+            nombre: factura?.nombreCliente,
+            direccion: factura?.direccion,
+            telefono: (data || {}).telefono ?? factura?.telefono,
+            email: factura?.email,
+          }, getCurrentUser()?.id);
+          if (cliente) factura.cliente = { id: cliente.id } as any;
+        } catch (e) {
+          console.error('No se pudo guardar el cliente de la factura (la factura se emite igual):', e);
+        }
+      }
+
       return await dataSource.transaction(async (manager) => {
         const facturaRepo = manager.getRepository(Factura);
         const itemRepo = manager.getRepository(FacturaItem);

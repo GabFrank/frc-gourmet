@@ -2,6 +2,53 @@
 
 El módulo más visible y operativamente más usado. Ventas, mesas, comandas, delivery, atajos, multi-sabor, descuento de stock automático.
 
+## Estado de la mesa: quién la ocupa y quién la libera (2026-08)
+
+**El estado de la mesa lo maneja el backend, junto con la venta.** Antes el
+frontend hacía una segunda llamada a `updatePdvMesa`, y ahí estaba el bug.
+
+### El bug que se arregló
+
+| Llamada | Permiso |
+|---|---|
+| `createVenta`, `createVentaItem` | `VENTAS_PDV` |
+| `updatePdvMesa` (marcaba la mesa) | **`VENTAS_PDV_CONFIGURAR`** |
+
+`VENTAS_PDV_CONFIGURAR` lo tiene **sólo GERENTE** en el seed de roles
+(`seed-system.ts:480`). A un MOZO **y también a un CAJERO** la llamada le fallaba
+con FORBIDDEN, el frontend se lo tragaba en un `console.error`, y el polling de 1
+segundo pisaba el cambio optimista con el estado real. Síntoma: *"la mesa no se
+marca como ocupada"*, sin ningún error visible.
+
+El mismo permiso bloqueaba **liberar** la mesa al cobrar. Eso era la causa real
+del bug que figuraba como *"Mesas colgadas en OCUPADO — posible race condition"*.
+
+### Cómo funciona ahora
+
+- **`createVenta` marca la mesa `OCUPADO` en su propia transacción**, bajo
+  `withMesaLock` (el lock por mesa que ya usaba pedidos online para evitar dos
+  ventas ABIERTAS sobre la misma mesa). Sólo para la venta de mesa **directa**:
+  si la venta cuelga de una comanda, ocupar la mesa física lo decide
+  `PdvConfig.ocuparMesaAlVincularComanda` (default `false`) y lo resuelve
+  `abrirComanda`.
+- **`set-pdv-mesa-estado(mesaId, estado)`** — handler operativo con `VENTAS_PDV`
+  para ocupar y liberar. Al liberar valida que no queden ventas `ABIERTA` ni
+  comandas `OCUPADO` (mismo criterio que `cerrarComanda`): liberar una mesa con
+  trabajo vivo deja una mesa fantasma que otro cajero puede volver a ocupar.
+- **`updatePdvMesa` no cambió**: sigue siendo el ABM (renombrar, cambiar de
+  sector) con `VENTAS_PDV_CONFIGURAR`.
+- El frontend (desktop y PWA) usa `setPdvMesaEstado` y **avisa con snackbar** si
+  falla. La llamada que seguía a `createVenta` se eliminó: el backend ya lo hace.
+- La migración `IndicesRucYReconciliarMesas` **libera las mesas que ya quedaron
+  colgadas** en instalaciones existentes. Antes había que correr un `UPDATE` a
+  mano, restaurante por restaurante.
+
+> ⚠️ **Probarlo con un usuario MOZO, no con admin.** El bug sólo se manifiesta si
+> el usuario NO tiene `VENTAS_PDV_CONFIGURAR`. Manual:
+> `docs/testing/TESTING-CHECKLIST-PDV-MESA-CLIENTE.md`. Test:
+> `npm run test:mesa-ocupacion`.
+
+
 ## Entidades clave (24 archivos `*.entity.ts` en `entities/ventas/`)
 
 ```

@@ -317,7 +317,7 @@ depender de acordarse de recompilar:
 "test:mi-cosa": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-mi-cosa.ts"
 ```
 
-Los scripts viejos todavía no lo tienen. Si uno se comporta raro, esto primero.
+**Desde 2026-08 lo tienen los 28 scripts `test:*`.** Costó caro descubrirlo: `test:variacion-config` y `test:variacion-precios` daban rojo validando un `productos.handler.js` compilado una hora antes, sin la feature que decían probar, y se dieron por "fallos preexistentes" durante un día entero. Si agregás un script de test nuevo, la bandera va sí o sí.
 Alternativa manual: correr `npm run electron:serve-tsc` antes del test (sólo
 sirve para `electron/`), o borrar el `.js` que tapa. En CI no aplica (clona
 limpio, no hay `.js`) — pero eso significa que **CI y local pueden diferir**:

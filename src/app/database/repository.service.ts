@@ -377,6 +377,7 @@ export abstract class RepositoryService {
   abstract createPdvMesa(data: Partial<PdvMesa>): Observable<PdvMesa>;
   abstract createBatchPdvMesas(batchData: Partial<PdvMesa>[]): Observable<PdvMesa[]>;
   abstract updatePdvMesa(id: number, data: Partial<PdvMesa>): Observable<PdvMesa>;
+  abstract setPdvMesaEstado(mesaId: number, estado: string): Observable<any>;
   abstract deletePdvMesa(id: number): Observable<boolean>;
   abstract getSectores(tipo?: string): Observable<Sector[]>;
   abstract getSectoresActivos(tipo?: string): Observable<Sector[]>;
@@ -1005,6 +1006,7 @@ export abstract class RepositoryService {
   abstract getFacturas(filtros?: any): Observable<Factura[]>;
   abstract getFactura(id: number): Observable<Factura>;
   abstract createFactura(payload: { factura: Partial<Factura> & { timbradoDetalleId?: number; numeroManual?: number }; items: any[] }): Observable<Factura>;
+  abstract getClientePorRuc(ruc: string): Observable<any>;
   abstract anularFactura(id: number, motivo: string): Observable<any>;
   abstract getFacturacionConfig(): Observable<FacturacionConfig>;
   abstract saveFacturacionConfig(data: any): Observable<FacturacionConfig>;
