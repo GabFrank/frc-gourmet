@@ -77,6 +77,8 @@ export class FacturarDialogComponent implements OnInit {
   /** RUC que produjo el vínculo actual, para detectar si el usuario lo corrige. */
   private rucVinculado = '';
   buscandoCliente = false;
+  /** El usuario cortó el vínculo a mano: no re-enganchar hasta que cambie el RUC. */
+  private desvinculadoManual = false;
   /** Resultados del buscador de productos (autocomplete por item). */
   productoOptions: any[] = [];
 
@@ -194,6 +196,7 @@ export class FacturarDialogComponent implements OnInit {
     // estaba tipeado si el cliente no lo trae, para no vaciar el campo.
     const ruc = cliente?.ruc || per?.documento || this.form.get('ruc')?.value || '';
     this.rucVinculado = this.normalizarRuc(ruc);
+    this.desvinculadoManual = false;
     this.form.patchValue({
       nombreCliente: nombre,
       ruc,
@@ -203,9 +206,13 @@ export class FacturarDialogComponent implements OnInit {
     });
   }
 
-  /** Misma normalización que el backend, para comparar RUCs sin falsos negativos. */
+  /**
+   * Misma normalización que el backend (`cliente-ruc.utils.ts`): espacios, puntos
+   * **y guiones**. Sin el guion, agregarlo o sacarlo sobre un RUC ya vinculado
+   * contaba como "cambió" y desvinculaba el cliente en cada tecla.
+   */
   private normalizarRuc(ruc: any): string {
-    return String(ruc ?? '').replace(/[\s.]/g, '').trim().toUpperCase();
+    return String(ruc ?? '').replace(/[\s.\-]/g, '').trim().toUpperCase();
   }
 
   /**
@@ -222,6 +229,8 @@ export class FacturarDialogComponent implements OnInit {
       return;
     }
     if (this.clienteId && ruc === this.rucVinculado) return;
+    // El usuario desvinculó a mano y no cambió el RUC: no volver a enganchar.
+    if (this.desvinculadoManual && ruc === this.rucVinculado) return;
 
     this.buscandoCliente = true;
     try {
@@ -246,9 +255,11 @@ export class FacturarDialogComponent implements OnInit {
    * factura ya trae cliente.
    */
   onRucChange(): void {
-    if (!this.clienteId) return;
-    if (this.normalizarRuc(this.form.get('ruc')?.value) !== this.rucVinculado) {
-      this.desvincularSiCambioRuc();
+    const actual = this.normalizarRuc(this.form.get('ruc')?.value);
+    if (actual !== this.rucVinculado) {
+      // RUC distinto: vuelve a habilitarse el lookup automático.
+      this.desvinculadoManual = false;
+      if (this.clienteId) this.desvincularSiCambioRuc();
     }
   }
 
@@ -256,6 +267,7 @@ export class FacturarDialogComponent implements OnInit {
     this.clienteId = undefined;
     this.clienteLabel = '';
     this.rucVinculado = '';
+    this.desvinculadoManual = false;
   }
 
   /** Abre el buscador de clientes y aplica el elegido. */
@@ -267,9 +279,18 @@ export class FacturarDialogComponent implements OnInit {
   }
 
   /** Quita el vinculo con el cliente (deja los datos editables manualmente). */
+  /**
+   * Corta el vínculo con el cliente a pedido del usuario.
+   *
+   * Marca `desvinculadoManual` para que el próximo blur sobre el RUC no lo vuelva
+   * a enganchar solo: sin eso, el botón no servía de nada — bastaba salir del
+   * campo para que el lookup encontrara el mismo RUC y re-vinculara.
+   */
   limpiarCliente(): void {
     this.clienteId = undefined;
     this.clienteLabel = '';
+    this.rucVinculado = this.normalizarRuc(this.form.get('ruc')?.value);
+    this.desvinculadoManual = true;
   }
 
   detalleLabel(d: TimbradoDetalle): string {

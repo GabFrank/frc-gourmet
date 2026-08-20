@@ -98,7 +98,9 @@ export async function resolverOCrearClientePorRuc(
       const completar = (campo: string, valor?: string | null) => {
         const v = String(valor ?? '').trim();
         if (v && !String(persona[campo] ?? '').trim()) {
-          persona[campo] = campo === 'email' ? v : v.toUpperCase();
+          // Email y teléfono se guardan tal cual: pasarlos a mayúsculas no aporta
+          // y en el alta tampoco se hace.
+          persona[campo] = (campo === 'email' || campo === 'telefono') ? v : v.toUpperCase();
           tocado = true;
         }
       };

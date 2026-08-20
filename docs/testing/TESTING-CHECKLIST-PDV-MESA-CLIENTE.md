@@ -99,5 +99,7 @@ Con la misma sesión de MOZO, desde el celular (`http://<ip>:<puerto>`):
 | 8.6 | Tipear el mismo RUC **sin el guion** | Encuentra el mismo cliente. Tampoco duplica. |
 | 8.7 | Con un cliente que ya tiene dirección cargada, facturar con **otra** dirección | La dirección del cliente **no se pisa**. Un dato que estaba vacío (teléfono) **sí** se completa. |
 | 8.8 | Tipear un RUC, esperar el match, y después **corregir** el RUC a otro distinto | El vínculo se corta: deja de mostrar "Cliente encontrado". La factura no queda pegada al cliente anterior. |
+| 8.8b | Con un cliente vinculado, **agregar o sacar el guion** del RUC (mismo RUC) | El vínculo **se mantiene**: `80012345-6` y `800123456` son el mismo RUC. |
+| 8.8c | Con un cliente vinculado, tocar **"Quitar vínculo"** y salir del campo sin cambiar el RUC | El vínculo **no se vuelve a enganchar solo**. |
 | 8.9 | Facturar con un RUC nuevo pero **sin** razón social | La factura se emite igual, con su número. No se crea cliente. |
 | 8.10 | Revisar la numeración de las facturas emitidas | Correlativa y sin repetidos. |

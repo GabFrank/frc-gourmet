@@ -724,8 +724,12 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // Solo aplica a la venta de mesa DIRECTA: si la venta cuelga de una comanda,
       // ocupar la mesa fisica es decision de `PdvConfig.ocuparMesaAlVincularComanda`
       // (default false) y lo resuelve `abrirComanda`.
-      const mesaId = data?.mesa?.id ?? data?.mesa_id ?? null;
-      const tieneComanda = !!(data?.comanda?.id ?? data?.comanda_id);
+      // Sólo la forma `{ mesa: { id } }`: un `mesa_id` suelto no lo traduce
+      // `repo.create()` a la relación, así que la venta quedaría sin mesa y
+      // marcaríamos ocupada una mesa sin venta vinculada — justo el estado que
+      // este fix elimina.
+      const mesaId = data?.mesa?.id ?? null;
+      const tieneComanda = !!data?.comanda?.id;
       const ocupaMesa = !!mesaId && !tieneComanda;
 
       const crear = async (): Promise<any> => dataSource.transaction(async (manager) => {
