@@ -1,5 +1,32 @@
 # Dominio: Personas, Usuarios, Clientes
 
+## El RUC vive en dos lugares (y por qué importa)
+
+`clientes.ruc` y `personas.documento` (con `personas.tipoDocumento`) pueden
+contener el RUC, según por dónde se haya cargado el cliente. Nunca se unificaron y
+**no hay UNIQUE sobre ninguna** — no se puede agregar sin saber qué datos hay en
+producción, porque las migraciones corren al arrancar la app y un duplicado
+existente la dejaría sin arrancar.
+
+Reglas que sigue el código desde 2026-08 (`electron/utils/cliente-ruc.utils.ts`):
+
+- **Se busca en los dos** lugares, como ya hacía el buscador de clientes.
+- **Se escribe en los dos** al crear desde la factura (`tipoDocumento = RUC`).
+- La comparación **ignora espacios, puntos y guiones**: `80012345-6` y `800123456`
+  son el mismo RUC. Con el guion literal, cada variante creaba su propio cliente.
+- Lo que se **guarda** es el formato que tipeó el usuario: normalizar el
+  almacenamiento mostraría `800123456` en Clientes, que no es como se escribe.
+- Ante duplicados, gana el **activo**, no el de `id` menor: uno dado de baja a
+  propósito no debe resucitar por tener el id más chico.
+
+> Consecuencia asumida: `create-edit-cliente-dialog` exige `persona.documento` no
+> vacío para habilitar **crédito**, sin mirar el tipo. Una persona creada desde la
+> factura pasa esa validación con su RUC. Es correcto (un RUC identifica a una
+> empresa), pero conviene saberlo.
+
+Índices no únicos sobre ambas columnas desde `IndicesRucYReconciliarMesas`.
+
+
 ## Persona — entidad raíz
 
 `src/app/database/entities/personas/persona.entity.ts`. Es la entidad raíz para Usuario, Cliente y Funcionario (RRHH).

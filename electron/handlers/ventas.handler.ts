@@ -87,22 +87,23 @@ async function withVentaStockLock<T>(ventaId: number, fn: () => Promise<T>): Pro
   }
 }
 
-// Serializa la materialización de pedidos online por mesa (proceso Node único).
-// Evita dos ventas ABIERTAS para la misma mesa y la doble materialización de un
-// pedido cuando la auto-materialización y un click manual del cajero coinciden.
-const mesaMaterializeTails = new Map<number, Promise<void>>();
-async function withMesaMaterializeLock<T>(mesaId: number, fn: () => Promise<T>): Promise<T> {
-  const prev = mesaMaterializeTails.get(mesaId) ?? Promise.resolve();
+// Serializa por mesa las operaciones que abren una venta sobre ella (proceso Node
+// único). Evita dos ventas ABIERTAS para la misma mesa y la doble materialización
+// de un pedido online cuando la auto-materialización y un click manual del cajero
+// coinciden. Lo usan `materializarPedidoOnlineEnVenta` y `createVenta`.
+const mesaTails = new Map<number, Promise<void>>();
+async function withMesaLock<T>(mesaId: number, fn: () => Promise<T>): Promise<T> {
+  const prev = mesaTails.get(mesaId) ?? Promise.resolve();
   let release!: () => void;
   const myTurn = new Promise<void>((res) => (release = res));
   const composed = prev.then(() => myTurn);
-  mesaMaterializeTails.set(mesaId, composed);
+  mesaTails.set(mesaId, composed);
   await prev.catch(() => {});
   try {
     return await fn();
   } finally {
     release();
-    if (mesaMaterializeTails.get(mesaId) === composed) mesaMaterializeTails.delete(mesaId);
+    if (mesaTails.get(mesaId) === composed) mesaTails.delete(mesaId);
   }
 }
 
@@ -136,7 +137,7 @@ export async function materializarPedidoOnlineEnVenta(
     return { ventaId: pedidoPre.ventaId, yaMaterializado: true, itemsCreados: 0, observacionesNoMapeadas: [] };
   }
 
-  return withMesaMaterializeLock(pedidoPre.mesaId, async () => {
+  return withMesaLock(pedidoPre.mesaId, async () => {
     const pedido = await dataSource.getRepository(PedidoOnline).findOne({
       where: { id: pedidoId },
       relations: ['items'],
@@ -706,16 +707,53 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('createVenta', async (_event: any, data: any) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
-      const repo = dataSource.getRepository(Venta);
-      const entity: any = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
+      const userId = getCurrentUser()?.id;
       // F5 paso 3: si el caller no especifico dispositivo, resolverlo del
       // request context (JWT en cliente HTTP, current-device en IPC local).
-      if (!data?.dispositivo && !data?.dispositivo_id) {
-        const deviceId = resolveRequestDeviceId(_event);
+      const deviceId = (!data?.dispositivo && !data?.dispositivo_id)
+        ? resolveRequestDeviceId(_event)
+        : null;
+
+      // La mesa se ocupa ACA, en la misma transaccion que crea la venta.
+      //
+      // Antes el frontend hacia una segunda llamada a `updatePdvMesa`, que exige
+      // VENTAS_PDV_CONFIGURAR — un permiso que solo tiene GERENTE. A un mozo o
+      // cajero le fallaba, el error se tragaba en un console.error y la mesa
+      // quedaba sin marcar. Es el mismo patron que ya usa `abrirComanda`.
+      //
+      // Solo aplica a la venta de mesa DIRECTA: si la venta cuelga de una comanda,
+      // ocupar la mesa fisica es decision de `PdvConfig.ocuparMesaAlVincularComanda`
+      // (default false) y lo resuelve `abrirComanda`.
+      // Sólo la forma `{ mesa: { id } }`: un `mesa_id` suelto no lo traduce
+      // `repo.create()` a la relación, así que la venta quedaría sin mesa y
+      // marcaríamos ocupada una mesa sin venta vinculada — justo el estado que
+      // este fix elimina.
+      const mesaId = data?.mesa?.id ?? null;
+      const tieneComanda = !!data?.comanda?.id;
+      const ocupaMesa = !!mesaId && !tieneComanda;
+
+      const crear = async (): Promise<any> => dataSource.transaction(async (manager) => {
+        const repo = manager.getRepository(Venta);
+        const entity: any = repo.create(data);
+        await setEntityUserTracking(dataSource, entity, userId, false);
         if (deviceId != null) entity.dispositivo = { id: deviceId };
-      }
-      return await repo.save(entity);
+        const saved = await repo.save(entity);
+
+        if (ocupaMesa) {
+          const mesaRepo = manager.getRepository(PdvMesa);
+          const mesa = await mesaRepo.findOneBy({ id: Number(mesaId) });
+          // Nunca degrada una mesa ya ocupada por otra venta.
+          if (mesa && mesa.estado !== PdvMesaEstado.OCUPADO) {
+            mesa.estado = PdvMesaEstado.OCUPADO;
+            await mesaRepo.save(mesa);
+          }
+        }
+        return saved;
+      });
+
+      // El lock por mesa evita dos ventas ABIERTAS sobre la misma mesa cuando dos
+      // dispositivos la abren a la vez (mismo criterio que pedidos online).
+      return ocupaMesa ? await withMesaLock(Number(mesaId), crear) : await crear();
     } catch (error) {
       console.error('Error creating venta:', error);
       throw error;
@@ -1963,6 +2001,55 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       return savedEntities;
     } catch (error) {
       console.error('Error creating batch PDV Mesas:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Cambia SOLO el estado de una mesa (ocupar / liberar).
+   *
+   * Existe aparte de `updatePdvMesa` por una razon de permisos: `updatePdvMesa` es
+   * el ABM real de mesas (renombrar, cambiar de sector) y exige
+   * VENTAS_PDV_CONFIGURAR, que solo tiene GERENTE. Pero ocupar y liberar mesas es
+   * la operacion mas cotidiana de un mozo. Usar el mismo handler para las dos
+   * cosas hacia que a un mozo o cajero le fallara siempre — en silencio, porque el
+   * frontend se tragaba el error — y la mesa quedaba con el estado equivocado.
+   *
+   * Este handler no puede tocar nada estructural: solo `estado`.
+   */
+  ipcMain.handle('set-pdv-mesa-estado', async (_event: any, mesaId: number, estado: string) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+      if (estado !== PdvMesaEstado.OCUPADO && estado !== PdvMesaEstado.DISPONIBLE) {
+        throw new Error(`Estado de mesa invalido: ${estado}`);
+      }
+      const mesaRepo = dataSource.getRepository(PdvMesa);
+      const mesa = await mesaRepo.findOneBy({ id: mesaId });
+      if (!mesa) throw new Error(`Mesa ${mesaId} no encontrada`);
+      if (mesa.estado === estado) return mesa;
+
+      if (estado === PdvMesaEstado.DISPONIBLE) {
+        // No liberar una mesa que sigue teniendo trabajo vivo: quedaria una mesa
+        // fantasma que otro cajero puede volver a ocupar, con dos ventas abiertas
+        // sobre la misma mesa fisica. Mismo criterio que `cerrarComanda`.
+        const comandasVivas = await dataSource.getRepository(Comanda).count({
+          where: { pdv_mesa: { id: mesaId }, estado: ComandaEstado.OCUPADO, activo: true },
+        });
+        const ventasVivas = await dataSource.getRepository(Venta).count({
+          where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
+        });
+        if (comandasVivas > 0 || ventasVivas > 0) {
+          throw new Error(
+            `La mesa ${mesa.numero} todavia tiene ${ventasVivas} venta(s) abierta(s) y ${comandasVivas} comanda(s) activa(s).`,
+          );
+        }
+      }
+
+      mesa.estado = estado as PdvMesaEstado;
+      await setEntityUserTracking(dataSource, mesa, getCurrentUser()?.id, true);
+      return await mesaRepo.save(mesa);
+    } catch (error) {
+      console.error(`Error cambiando estado de la mesa ${mesaId}:`, error);
       throw error;
     }
   });

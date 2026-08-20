@@ -630,7 +630,7 @@ export class MesaDetallePage implements OnInit {
         );
       }
       await firstValueFrom(this.repo.cerrarComanda(this.mesaId));
-      await firstValueFrom(this.repo.updatePdvMesa(destino.id, { estado: 'OCUPADO' } as any));
+      await firstValueFrom(this.repo.setPdvMesaEstado(destino.id, 'OCUPADO'));
       this.snack.open(`Cuenta transferida a Mesa ${destino.numero}`, undefined, { duration: 2000 });
       this.location.back();
     } catch {
@@ -703,8 +703,8 @@ export class MesaDetallePage implements OnInit {
         await firstValueFrom(this.repo.updateVenta(ventaOrigenId, { mesa: { id: destino.id } } as any));
       }
       // Liberar mesa origen y ocupar destino.
-      await firstValueFrom(this.repo.updatePdvMesa(this.mesaId, { estado: 'DISPONIBLE' } as any));
-      await firstValueFrom(this.repo.updatePdvMesa(destino.id, { estado: 'OCUPADO' } as any));
+      await firstValueFrom(this.repo.setPdvMesaEstado(this.mesaId, 'DISPONIBLE'));
+      await firstValueFrom(this.repo.setPdvMesaEstado(destino.id, 'OCUPADO'));
 
       this.snack.open(`Cuenta transferida a Mesa ${destino.numero}`, undefined, { duration: 2000 });
       this.location.back();
