@@ -372,3 +372,28 @@ if (tabla && !tabla.columns.find((c) => c.name === 'pago_consolidado_id')) {
 `BaseModel` **no** trae `activo`: cada entidad la agrega si la necesita. `Gasto` y
 `Vale`, por ejemplo, **no la tienen** — filtrar por `g.activo = true` revienta con
 `no such column`. Su ciclo de vida se expresa en `estado`, no en un booleano.
+
+
+## `matStepperNext` / `matStepperPrevious` sólo funcionan DENTRO del `<mat-stepper>`
+
+Un footer fijo fuera del stepper (patrón común para que los botones no scrolleen
+con el contenido) **no puede** usar esas directivas: inyectan el `CdkStepper` de
+un ancestro, no lo encuentran, y los botones **no llegan a crearse** — sin error
+visible en consola, simplemente no están en el DOM.
+
+Fuera del stepper hay que navegar a mano:
+
+```ts
+@ViewChild('stepper') stepper?: MatStepper;
+paso = 0;                                  // la vista lee esto, no stepper.selectedIndex
+siguientePaso() { this.stepper?.next(); this.paso = this.stepper!.selectedIndex; }
+```
+
+Y en el template, `(selectionChange)="onPasoChange($event.selectedIndex)"` sobre
+el `<mat-stepper>` para no perder el sincronismo si el usuario navega por los
+encabezados.
+
+> Relacionado: una variable de template (`#stepper`) declarada **dentro** de un
+> `*ngIf` no es visible fuera de esa vista embebida. Si además existe una
+> propiedad del componente con el mismo nombre, la vista resuelve a la propiedad
+> y el bug queda camuflado.

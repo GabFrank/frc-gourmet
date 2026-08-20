@@ -108,6 +108,17 @@ const TITULOS: Record<PagoConcepto, { titulo: string; nuevo: string | null; colu
 export class PagarObligacionesDialogComponent implements OnInit {
   @ViewChild('stepper') stepper?: MatStepper;
 
+  /**
+   * Paso actual, en una propiedad del componente.
+   *
+   * El footer vive FUERA del `<mat-stepper>` (es una barra fija), así que no
+   * puede usar `matStepperNext`/`matStepperPrevious`: esas directivas inyectan
+   * el `CdkStepper` de un ancestro y no lo encuentran, y los botones no llegan a
+   * crearse. Se navega a mano con `stepper.next()/previous()` y la vista lee
+   * este número en vez de `stepper.selectedIndex`.
+   */
+  paso = 0;
+
   readonly columnas = ['select', 'beneficiario', 'item', 'fecha', 'saldo', 'monto'];
   readonly columnasLineas = ['fuente', 'moneda', 'forma', 'monto', 'convertido', 'acciones'];
 
@@ -533,6 +544,22 @@ export class PagarObligacionesDialogComponent implements OnInit {
     } finally {
       this.saving = false;
     }
+  }
+
+  onPasoChange(index: number): void {
+    this.paso = index;
+  }
+
+  siguientePaso(): void {
+    if (!this.stepper) return;
+    this.stepper.next();
+    this.paso = this.stepper.selectedIndex;
+  }
+
+  pasoAnterior(): void {
+    if (!this.stepper) return;
+    this.stepper.previous();
+    this.paso = this.stepper.selectedIndex;
   }
 
   cancelar(): void {

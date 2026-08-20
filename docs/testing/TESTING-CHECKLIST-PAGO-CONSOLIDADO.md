@@ -21,6 +21,15 @@ cuenta bancaria activa, y una cotización cargada para probar multi-moneda
 | 1.3 | Caja Mayor → Egreso → **Compra Simplificada**. Cargar proveedor, monto, contado. Guardar. | No hay checkbox "Pagar ahora" ni "Pago mixto". Avisa que la cuota queda pendiente. |
 | 1.4 | Caja Mayor → Egreso → **Registrar Vale** | Crea el vale en **SOLICITADO**, sin mover la caja. |
 
+## 1b. El hub y el encabezado
+
+| # | Paso | Esperado |
+|---|---|---|
+| 1b.1 | Abrir el detalle de una caja mayor | El encabezado tiene **4 botones**: Registrar Ingreso, Registrar Egreso, Configurar, Cerrar Caja Mayor. |
+| 1b.2 | Egreso → mirar el hub | Tarjetas en **grid**, todas visibles sin scrollear. Incluye **Egreso de Caja Inicial**. |
+| 1b.3 | Ingreso → mirar el hub | Grid, e incluye **Cobrar a Cliente**. |
+| 1b.4 | Achicar la ventana | El grid pasa a 2 columnas y luego a 1. |
+
 ## 2. Pago de varios gastos en un solo egreso
 
 | # | Paso | Esperado |

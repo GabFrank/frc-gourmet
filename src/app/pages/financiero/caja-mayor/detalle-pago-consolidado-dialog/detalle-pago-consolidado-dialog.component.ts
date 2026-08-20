@@ -77,7 +77,7 @@ export class DetallePagoConsolidadoDialogComponent implements OnInit {
         convertidoTexto: Number(l.cotizacion) === 1
           ? ''
           : `${res.monedaSimbolo || ''} ${this.fmt(l.montoImputado, res.decimales)}`.trim(),
-        montoTexto: `${l.monedaSimbolo || ''} ${this.fmt(l.montoOrigen, 2)}`.trim(),
+        montoTexto: `${l.monedaSimbolo || ''} ${this.fmt(l.montoOrigen, l.decimales ?? 2)}`.trim(),
       }));
       this.totalTexto = `${res?.monedaSimbolo || ''} ${this.fmt(res?.montoTotal, res?.decimales ?? 0)}`.trim();
       this.estaAnulado = res?.estado === 'ANULADO';

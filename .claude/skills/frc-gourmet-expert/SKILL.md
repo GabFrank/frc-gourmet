@@ -192,7 +192,7 @@ Detalles → [workflows/todos-pendientes.md](workflows/todos-pendientes.md).
 - Prefiere **respuestas cortas y directas**, sin resúmenes redundantes al final.
 - Le gusta probar **paso a paso** — una acción por turno, no listas largas de pasos para hacer todo de una.
 - Usa **dark theme** generalmente. Verificar siempre que los cambios visuales funcionen en ambos.
-- Trabaja en `userData/frc-gourmet.db` (la BD de prod local). **Hacer backup antes de cambios destructivos** (entidades, columnas, deletes masivos).
+- Trabaja en `userData/frc-gourmet.db`, que es una **BD de desarrollo** que el agente levanta: se puede escribir y probar sin miedo. La instalación productiva está en otra PC y sólo se toca vía PR a alpha (y luego master).
 
 ---
 

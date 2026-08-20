@@ -11,7 +11,8 @@
     <mat-spinner diameter="36"></mat-spinner>
   </div>
 
-  <mat-stepper #stepper linear class="pago-stepper" *ngIf="!loading">
+  <mat-stepper #stepper linear class="pago-stepper" *ngIf="!loading"
+               (selectionChange)="onPasoChange($event.selectedIndex)">
 
     <!-- ───────────── Paso 1: seleccionar ───────────── -->
     <mat-step [completed]="puedeAvanzarSeleccion">
@@ -250,22 +251,22 @@
     </mat-step>
   </mat-stepper>
 
-  <div class="pago-footer" *ngIf="!loading && stepper">
-    <button mat-button (click)="cancelar()" *ngIf="stepper.selectedIndex === 0 && !esTab">Cancelar</button>
-    <button mat-button matStepperPrevious *ngIf="stepper.selectedIndex > 0">
+  <div class="pago-footer" *ngIf="!loading">
+    <button mat-button (click)="cancelar()" *ngIf="paso === 0 && !esTab">Cancelar</button>
+    <button mat-button (click)="pasoAnterior()" *ngIf="paso > 0">
       <mat-icon>arrow_back</mat-icon> Atrás
     </button>
     <span class="pago-spacer"></span>
-    <button mat-flat-button color="primary" matStepperNext
-            *ngIf="stepper.selectedIndex === 0" [disabled]="!puedeAvanzarSeleccion">
+    <button mat-flat-button color="primary" (click)="siguientePaso()"
+            *ngIf="paso === 0" [disabled]="!puedeAvanzarSeleccion">
       Siguiente <mat-icon>arrow_forward</mat-icon>
     </button>
-    <button mat-flat-button color="primary" matStepperNext
-            *ngIf="stepper.selectedIndex === 1" [disabled]="!cuadra">
+    <button mat-flat-button color="primary" (click)="siguientePaso()"
+            *ngIf="paso === 1" [disabled]="!cuadra">
       Revisar <mat-icon>arrow_forward</mat-icon>
     </button>
     <button mat-flat-button color="primary"
-            *ngIf="stepper.selectedIndex === 2" [disabled]="saving || !cuadra" (click)="confirmar()">
+            *ngIf="paso === 2" [disabled]="saving || !cuadra" (click)="confirmar()">
       <mat-icon>payments</mat-icon> Confirmar pago
     </button>
   </div>

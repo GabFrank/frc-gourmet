@@ -371,6 +371,9 @@ export function registerPagoConsolidadoHandlers(
           fuente: d.fuente,
           monedaSimbolo: (d.moneda as any)?.simbolo || null,
           monedaDenominacion: (d.moneda as any)?.denominacion || null,
+          // Decimales de la moneda de LA LINEA (no de la deuda): el guaraní no
+          // lleva decimales y mostrarlos como "200.000,00" queda mal.
+          decimales: (d.moneda as any)?.decimales == null ? 2 : Number((d.moneda as any).decimales),
           formaPago: (d.formaPago as any)?.nombre || null,
           cajaMayorId: d.cajaMayorId ?? null,
           cuentaBancariaId: d.cuentaBancariaId ?? null,
