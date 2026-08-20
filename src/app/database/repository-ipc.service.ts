@@ -4263,6 +4263,10 @@ export class RepositoryIpcService extends RepositoryService {
   createFactura(payload: { factura: Partial<Factura> & { timbradoDetalleId?: number; numeroManual?: number }; items: any[] }): Observable<Factura> {
     return from(this.api.callIpc('create-factura', payload));
   }
+
+  getClientePorRuc(ruc: string): Observable<any> {
+    return from(this.api.callIpc('get-cliente-por-ruc', ruc));
+  }
   anularFactura(id: number, motivo: string): Observable<any> {
     return from(this.api.callIpc('anular-factura', id, motivo));
   }

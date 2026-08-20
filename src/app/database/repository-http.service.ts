@@ -2545,6 +2545,9 @@ export class RepositoryHttpService extends RepositoryService {
   createFactura(payload: { factura: Partial<Factura> & { timbradoDetalleId?: number; numeroManual?: number }; items: any[] }): Observable<Factura> {
     return throwError(() => new Error('RepositoryHttpService.createFactura() no esta implementado en modo cliente.')) as any;
   }
+  getClientePorRuc(ruc: string): Observable<any> {
+    return throwError(() => new Error('RepositoryHttpService.getClientePorRuc() no esta implementado en modo cliente.')) as any;
+  }
   anularFactura(id: number, motivo: string): Observable<any> {
     return throwError(() => new Error('RepositoryHttpService.anularFactura() no esta implementado en modo cliente.')) as any;
   }

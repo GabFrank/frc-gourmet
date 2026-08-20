@@ -74,6 +74,9 @@ export class FacturarDialogComponent implements OnInit {
   clienteId?: number;
   /** Etiqueta del cliente seleccionado (para mostrar en el dialogo). */
   clienteLabel = '';
+  /** RUC que produjo el vínculo actual, para detectar si el usuario lo corrige. */
+  private rucVinculado = '';
+  buscandoCliente = false;
   /** Resultados del buscador de productos (autocomplete por item). */
   productoOptions: any[] = [];
 
@@ -187,13 +190,72 @@ export class FacturarDialogComponent implements OnInit {
     const nombre = `${per?.nombre || ''} ${per?.apellido || ''}`.trim() || cliente?.razon_social || '';
     this.clienteId = cliente?.id;
     this.clienteLabel = nombre;
+    // El RUC puede venir del cliente o de la persona: se conserva el que ya
+    // estaba tipeado si el cliente no lo trae, para no vaciar el campo.
+    const ruc = cliente?.ruc || per?.documento || this.form.get('ruc')?.value || '';
+    this.rucVinculado = this.normalizarRuc(ruc);
     this.form.patchValue({
       nombreCliente: nombre,
-      ruc: cliente?.ruc || '',
+      ruc,
       direccion: per?.direccion || '',
       telefono: per?.telefono || '',
       email: per?.email || '',
     });
+  }
+
+  /** Misma normalización que el backend, para comparar RUCs sin falsos negativos. */
+  private normalizarRuc(ruc: any): string {
+    return String(ruc ?? '').replace(/[\s.]/g, '').trim().toUpperCase();
+  }
+
+  /**
+   * Busca el cliente por RUC y autocompleta el resto del receptor.
+   *
+   * Se dispara al SALIR del campo, no mientras se tipea: autocompletar con el
+   * cursor todavía adentro es el filtrado en vivo que las convenciones del repo
+   * evitan, y encima se dispararía sobre un RUC a medio escribir.
+   */
+  async onRucBlur(): Promise<void> {
+    const ruc = this.normalizarRuc(this.form.get('ruc')?.value);
+    if (!ruc) {
+      this.desvincularSiCambioRuc();
+      return;
+    }
+    if (this.clienteId && ruc === this.rucVinculado) return;
+
+    this.buscandoCliente = true;
+    try {
+      const cliente = await firstValueFrom(this.repositoryService.getClientePorRuc(ruc));
+      if (cliente) {
+        this.aplicarCliente(cliente);
+      } else {
+        // Sin match: se emite igual y el cliente se crea al confirmar.
+        this.desvincularSiCambioRuc();
+      }
+    } catch (e) {
+      console.error('Error buscando cliente por RUC', e);
+    } finally {
+      this.buscandoCliente = false;
+    }
+  }
+
+  /**
+   * Si el RUC dejó de coincidir con el del cliente vinculado, se corta el vínculo.
+   * Sin esto, corregir un typo del RUC dejaría la factura pegada al cliente
+   * equivocado — y el backend ni intentaría resolver el nuevo, porque ve que la
+   * factura ya trae cliente.
+   */
+  onRucChange(): void {
+    if (!this.clienteId) return;
+    if (this.normalizarRuc(this.form.get('ruc')?.value) !== this.rucVinculado) {
+      this.desvincularSiCambioRuc();
+    }
+  }
+
+  private desvincularSiCambioRuc(): void {
+    this.clienteId = undefined;
+    this.clienteLabel = '';
+    this.rucVinculado = '';
   }
 
   /** Abre el buscador de clientes y aplica el elegido. */

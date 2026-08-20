@@ -1000,6 +1000,7 @@ export abstract class RepositoryService {
   abstract getFacturas(filtros?: any): Observable<Factura[]>;
   abstract getFactura(id: number): Observable<Factura>;
   abstract createFactura(payload: { factura: Partial<Factura> & { timbradoDetalleId?: number; numeroManual?: number }; items: any[] }): Observable<Factura>;
+  abstract getClientePorRuc(ruc: string): Observable<any>;
   abstract anularFactura(id: number, motivo: string): Observable<any>;
   abstract getFacturacionConfig(): Observable<FacturacionConfig>;
   abstract saveFacturacionConfig(data: any): Observable<FacturacionConfig>;

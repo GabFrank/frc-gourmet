@@ -48,16 +48,21 @@
       <span class="cliente-link" *ngIf="clienteId">Vinculado: {{ clienteLabel }}</span>
     </div>
 
+    <!-- RUC primero: es el dato con el que se resuelve el cliente. Al salir del
+         campo se busca y se autocompleta el resto. -->
     <div class="row">
+      <mat-form-field appearance="outline">
+        <mat-label>RUC / CI</mat-label>
+        <input matInput formControlName="ruc" required
+               (blur)="onRucBlur()" (input)="onRucChange()" />
+        <mat-spinner matSuffix diameter="16" *ngIf="buscandoCliente"></mat-spinner>
+        <mat-hint *ngIf="clienteId">Cliente encontrado: {{ clienteLabel }}</mat-hint>
+        <mat-error *ngIf="form.get('ruc')?.hasError('required')">Requerido</mat-error>
+      </mat-form-field>
       <mat-form-field appearance="outline" class="grow">
         <mat-label>Cliente / Razón social</mat-label>
         <input matInput formControlName="nombreCliente" required />
         <mat-error *ngIf="form.get('nombreCliente')?.hasError('required')">Requerido</mat-error>
-      </mat-form-field>
-      <mat-form-field appearance="outline">
-        <mat-label>RUC / CI</mat-label>
-        <input matInput formControlName="ruc" required />
-        <mat-error *ngIf="form.get('ruc')?.hasError('required')">Requerido</mat-error>
       </mat-form-field>
     </div>
     <div class="row">
