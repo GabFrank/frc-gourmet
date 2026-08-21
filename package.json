@@ -84,6 +84,8 @@
     "test:ticket-venta": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-ticket-venta-e2e.ts",
     "test:mesa-ocupacion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-mesa-ocupacion-e2e.ts",
     "test:transferencia-pdv": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-transferencia-pdv-e2e.ts",
+    "test:roles-pdv": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-roles-pdv-e2e.ts",
+    "seed:dev-roles": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/seed-dev-roles.ts",
     "test:dashboard-rangos": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-dashboard-rangos.ts"
   },
   "private": true,
