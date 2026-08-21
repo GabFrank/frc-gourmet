@@ -83,9 +83,27 @@ export { mensajeDeError } from '../shared/utils/error-message.util';
 export {
   CAMPOS_REQUERIDOS,
   CAMPOS_MONEDA,
+  CAMPOS_FORMA_PAGO,
   MONEDAS_EN_UI,
+  LADOS_CAJA_MAYOR,
+  CAJAS_EN_UI,
+  CUENTAS_EN_UI,
+  COTIZACION_EN_UI,
+  TIPOS_OPERACION,
+  ETIQUETAS_CAMPOS,
   usaCuentaBancaria,
   usaDosCuentasBancarias,
   monedasDesdeCuentaBancaria,
+  formaPagoEsEfectivoFijo,
+  monedaSeHeredaDeCuenta,
+  fuenteDelCampo,
+  etiquetaDe,
+  camposFaltantes,
+  validarCoherencia,
 } from '../pages/financiero/caja-mayor/operaciones-financieras/create-operacion-financiera/operacion-financiera-validacion.util';
-export type { TipoOperacionFinanciera } from '../pages/financiero/caja-mayor/operaciones-financieras/create-operacion-financiera/operacion-financiera-validacion.util';
+export type {
+  TipoOperacionFinanciera,
+  LadoOperacion,
+  PorLado,
+  FuenteCampo,
+} from '../pages/financiero/caja-mayor/operaciones-financieras/create-operacion-financiera/operacion-financiera-validacion.util';
