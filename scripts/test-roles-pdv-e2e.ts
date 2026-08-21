@@ -24,6 +24,8 @@ import { registerVentasHandlers } from '../electron/handlers/ventas.handler';
 import { registerFinancieroHandlers } from '../electron/handlers/financiero.handler';
 import { registerFacturacionHandlers } from '../electron/handlers/facturacion.handler';
 import { registerPdvEgresosHandlers } from '../electron/handlers/pdv-egresos.handler';
+import { registerComprasHandlers } from '../electron/handlers/compras.handler';
+import { registerBankingHandlers } from '../electron/handlers/banking.handler';
 import { seedPermissions } from '../electron/handlers/permissions.handler';
 import { seedSystemData } from '../electron/utils/seed-system';
 
@@ -62,6 +64,18 @@ const MATRIZ: Array<{ operacion: string; canal: string; args: any[]; roles: Rol[
   { operacion: 'Borrar un conteo', canal: 'delete-conteo', args: [1], roles: ['GERENTE'] },
   { operacion: 'Configurar las monedas habilitadas para el conteo', canal: 'save-cajas-monedas', args: [[]], roles: ['GERENTE'] },
   { operacion: 'Ajustar una caja ya cerrada', canal: 'finalizar-ajuste-caja', args: [1, 'MOTIVO'], roles: ['GERENTE'] },
+
+  // ── Cobro de una venta. El mozo toma pedidos; la plata la toca el cajero.
+  // `Pago`/`PagoDetalle` son legacy de compras pero son el libro de pagos del
+  // cobro, por eso los handlers aceptan VENTAS_COBRAR o COMPRAS_GESTIONAR.
+  { operacion: 'Abrir el pago de una venta', canal: 'createPago', args: [{}], roles: ['GERENTE', 'CAJERO'] },
+  { operacion: 'Agregar una linea de cobro', canal: 'createPagoDetalle', args: [{ valor: 1000 }], roles: ['GERENTE', 'CAJERO'] },
+  { operacion: 'Editar una linea de cobro', canal: 'updatePagoDetalle', args: [1, { valor: 2000 }], roles: ['GERENTE', 'CAJERO'] },
+  { operacion: 'Quitar una linea de cobro', canal: 'deletePagoDetalle', args: [1], roles: ['GERENTE', 'CAJERO'] },
+  { operacion: 'Cerrar el pago', canal: 'updatePago', args: [1, {}], roles: ['GERENTE', 'CAJERO'] },
+  { operacion: 'Cobrar con tarjeta (acreditacion POS)', canal: 'create-acreditacion-pos', args: [{}], roles: ['GERENTE', 'CAJERO'] },
+  { operacion: 'Cobrar por transferencia', canal: 'acreditar-transferencia-bancaria', args: [{}], roles: ['GERENTE', 'CAJERO'] },
+  { operacion: 'Registrar un cobro parcial', canal: 'registrarCobroParcial', args: [1, {}], roles: ['GERENTE', 'CAJERO'] },
 
   // ── Cajon del PdV ──
   { operacion: 'Pagar un vale desde el cajon', canal: 'pagar-vale-caja', args: [{}], roles: ['GERENTE', 'CAJERO'] },
@@ -115,6 +129,8 @@ async function main() {
   registerFinancieroHandlers(ds, () => usuarioActual);
   registerFacturacionHandlers(ds, () => usuarioActual);
   registerPdvEgresosHandlers(ds, () => usuarioActual);
+  registerComprasHandlers(ds, () => usuarioActual);
+  registerBankingHandlers(ds, () => usuarioActual);
 
   /** true = el rol pasa el guard de permisos (aunque despues falle por datos). */
   const permitido = async (canal: string, args: any[]): Promise<boolean> => {

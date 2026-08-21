@@ -481,6 +481,7 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       // Cajon del PdV: el gerente hace todo lo del cajero, y ademas anula.
       // PDV_ANULAR_EGRESO se le niega al cajero por separacion de funciones
       // (ver rol CAJERO), asi que tiene que vivir aca o no lo tiene nadie.
+      'VENTAS_COBRAR',
       'PDV_PAGAR_VALE', 'PDV_PAGAR_COMPRA', 'PDV_ANULAR_EGRESO',
       // Facturación legal
       'FACTURACION_VER', 'FACTURACION_EMITIR', 'FACTURACION_ANULAR',
@@ -520,7 +521,7 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
     descripcion: 'CAJERO',
     permisos: [
       'HOME_DASHBOARD_VER', 'VENTAS_DASHBOARD_VER', 'CAJA_MAYOR_DASHBOARD_VER',
-      'VENTAS_PDV', 'VENTAS_HISTORICO_VER',
+      'VENTAS_PDV', 'VENTAS_COBRAR', 'VENTAS_HISTORICO_VER',
       // Facturación: el cajero factura al cobrar en el PdV
       'FACTURACION_VER', 'FACTURACION_EMITIR',
       // Vales/compras pagados desde el cajón del PdV (Utilitarios).

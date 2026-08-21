@@ -847,3 +847,21 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "windowMinimize": "window:minimize",
   "windowPlatform": "window:platform",
 };
+
+/**
+ * Metodos donde preload empaqueta sus parametros posicionales en UN objeto
+ * antes de invocar el canal. El shim HTTP tiene que hacer lo mismo o el handler
+ * recibe el primer argumento suelto. Total: 10.
+ */
+export const API_ARG_SHAPE: Record<string, string[]> = {
+  "changePassword": ["usuarioId","currentPassword","newPassword"],
+  "deleteFile": ["url"],
+  "openBase64File": ["base64","fileName"],
+  "openFileWithSystem": ["url"],
+  "qrUploadClose": ["sessionId"],
+  "qrUploadEnableRemote": ["sessionId"],
+  "qrUploadPoll": ["sessionId"],
+  "readFileBase64": ["url"],
+  "restoreSession": ["sessionId","token"],
+  "saveProfileImage": ["base64Data","fileName"],
+};

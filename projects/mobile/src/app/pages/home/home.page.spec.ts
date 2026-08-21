@@ -10,7 +10,7 @@ import { PwaInstallService } from '../../core/services/pwa-install.service';
 
 /**
  * Verifica el acceso directo a cajas mayores abiertas del home:
- * filtra por estado ABIERTA y respeta el permiso FINANCIERO_CAJA_VER.
+ * filtra por estado ABIERTA y respeta el permiso CAJA_MAYOR_OPERAR.
  */
 describe('HomePage — cajasMayorAbiertas$', () => {
   const CAJAS = [
@@ -38,8 +38,8 @@ describe('HomePage — cajasMayorAbiertas$', () => {
     return TestBed.createComponent(HomePage).componentInstance;
   }
 
-  it('con FINANCIERO_CAJA_VER: solo cajas ABIERTAS, con fallback de nombre', async () => {
-    const comp = crear(['FINANCIERO_CAJA_VER']);
+  it('con CAJA_MAYOR_OPERAR: solo cajas ABIERTAS, con fallback de nombre', async () => {
+    const comp = crear(['CAJA_MAYOR_OPERAR']);
     const cajas = await firstValueFrom(comp.cajasMayorAbiertas$);
     expect(cajas.length).toBe(2);
     expect(cajas.map((c) => c.id)).toEqual([1, 3]);
@@ -48,6 +48,14 @@ describe('HomePage — cajasMayorAbiertas$', () => {
 
   it('sin permiso: no muestra cajas', async () => {
     const comp = crear([]);
+    const cajas = await firstValueFrom(comp.cajasMayorAbiertas$);
+    expect(cajas.length).toBe(0);
+  });
+
+  // El bug que protege: FINANCIERO_CAJA_VER es el permiso de la caja del turno.
+  // Un cajero lo tiene, y con el veia las cards de Caja Mayor en el home.
+  it('con FINANCIERO_CAJA_VER solo (perfil cajero): no muestra cajas mayores', async () => {
+    const comp = crear(['FINANCIERO_CAJA_VER']);
     const cajas = await firstValueFrom(comp.cajasMayorAbiertas$);
     expect(cajas.length).toBe(0);
   });

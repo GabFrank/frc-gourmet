@@ -3658,7 +3658,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   // `VentaItem.montoCubierto`. Transaccional + anti-doble-cobro (valida topes
   // contra la cobertura ya persistida, incluso desde otro dispositivo).
   ipcMain.handle('registrarCobroParcial', async (_event: any, ventaId: number, payload: any) => {
-    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_COBRAR');
     const imputaciones: Array<{ ventaItemId: number; brutoCubierto: number; cantidad?: number }> =
       Array.isArray(payload?.imputaciones) ? payload.imputaciones : [];
     const pagoDetalleIds: number[] = Array.isArray(payload?.pagoDetalleIds) ? payload.pagoDetalleIds : [];

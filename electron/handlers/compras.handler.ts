@@ -1337,8 +1337,12 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     return await repo.findOne({ where: { id }, relations: ['caja', 'detalles', 'compras', 'createdBy', 'updatedBy'] });
   });
 
+  // `Pago`/`PagoDetalle` estan marcadas @deprecated para compras, pero son el
+  // libro de pagos del COBRO DE VENTA. El guard quedo en COMPRAS_GESTIONAR, que
+  // el rol CAJERO no tiene: no podia agregar una linea de cobro en el PdV. Van
+  // con los dos permisos porque los dos flujos siguen vivos.
   ipcMain.handle('createPago', async (_event: any, data: any) => {
-    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
+    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR']);
     // Cobro de venta: solo el dispositivo donde se abrio la caja puede cobrar.
     // El flag `validarDispositivoCaja` lo envia unicamente el flujo de cobro de
     // venta (cobrar-venta-dialog). Los pagos de compra no lo mandan, asi que no
@@ -1367,7 +1371,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('updatePago', async (_event: any, id: number, data: any) => {
-    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
+    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR']);
     const repo = dataSource.getRepository(Pago);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`Pago ID ${id} not found`);
@@ -1377,7 +1381,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('deletePago', async (_event: any, id: number) => {
-    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
+    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR']);
     const repo = dataSource.getRepository(Pago);
     const entity = await repo.findOne({ where: { id }, relations: ['detalles'] });
     if (!entity) throw new Error(`Pago ID ${id} not found`);
@@ -1394,13 +1398,13 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('createPagoDetalle', async (_event: any, data: any) => {
-    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
+    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR']);
     const repo = dataSource.getRepository(PagoDetalle);
     return await repo.save(repo.create(data));
   });
 
   ipcMain.handle('updatePagoDetalle', async (_event: any, id: number, data: any) => {
-    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
+    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR']);
     const repo = dataSource.getRepository(PagoDetalle);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`PagoDetalle ID ${id} not found`);
@@ -1409,7 +1413,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('deletePagoDetalle', async (_event: any, id: number) => {
-    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
+    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR']);
     const repo = dataSource.getRepository(PagoDetalle);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`PagoDetalle ID ${id} not found`);

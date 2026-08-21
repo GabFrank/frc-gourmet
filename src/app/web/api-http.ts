@@ -18,7 +18,7 @@
  * Instalar con `installApiHttp()` ANTES de `bootstrapApplication` (main.web.ts),
  * porque `RepositoryIpcService` lee `window.api` en su constructor.
  */
-import { API_CHANNEL_MAP } from './api-channel-map.generated';
+import { API_CHANNEL_MAP, API_ARG_SHAPE } from './api-channel-map.generated';
 
 const ACCESS_KEY = 'frc_admin_access_token';
 const REFRESH_KEY = 'frc_admin_refresh_token';
@@ -187,6 +187,23 @@ function kebab(name: string): string {
   return name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
 }
 
+/**
+ * Reproduce el empaquetado de argumentos que hace el preload de Electron.
+ *
+ * Unos pocos metodos de `window.api` reciben parametros posicionales y los
+ * mandan al canal como UN objeto (`invoke('change-password', { usuarioId, ... })`).
+ * El transporte HTTP manda `params: [...args]` tal cual, asi que sin esto el
+ * handler recibia `usuarioId` suelto como payload y devolvia PAYLOAD INVALIDO.
+ * La lista sale de `API_ARG_SHAPE`, generado del propio preload.
+ */
+function conformarArgs(method: string, args: any[]): any[] {
+  const shape = API_ARG_SHAPE[method];
+  if (!shape) return args;
+  const payload: Record<string, unknown> = {};
+  shape.forEach((clave, i) => { payload[clave] = args[i]; });
+  return [payload];
+}
+
 function channelFor(method: string): string {
   const mapped = API_CHANNEL_MAP[method];
   if (mapped) return mapped;
@@ -258,7 +275,7 @@ export function installApiHttp(): void {
       if (typeof prop !== 'string') return undefined;
       if (prop in target) return (target as Record<string, unknown>)[prop];
       const channel = channelFor(prop);
-      return (...args: any[]): Promise<any> => invokeRouter(channel, ...args);
+      return (...args: any[]): Promise<any> => invokeRouter(channel, ...conformarArgs(prop, args));
     },
   });
 
