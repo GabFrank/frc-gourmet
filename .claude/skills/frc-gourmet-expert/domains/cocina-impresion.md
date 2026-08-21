@@ -165,9 +165,46 @@ async function printPosReceipt(printer, content): Promise<boolean> {
 | Resumen completo de cierre de caja | ❌ TODO | — |
 | Recibo de liquidación RRHH | ❌ TODO (existe `comprobante_url` en LiquidacionSueldo) | — |
 
+## Qué ítems entran al ticket de venta / pre-cuenta
+
+**Sólo los `VentaItem` con `estado = ACTIVO`.** El contenido lo arma
+`buildVentaTicketLines(dataSource, ventaId, { width, isPrecuenta })` — separada de
+`printVentaTicketInternal` justamente para poder testearla sin impresora; devuelve
+`{ lines, bruto, descItems, descuentoTotal, totalPrincipal, itemsImpresos }`.
+`printVentaTicketInternal` sólo resuelve la impresora y manda a imprimir.
+
+Hasta 2026-08 el ticket cargaba **todos** los ítems sin filtrar por estado: un ítem
+cancelado en el PdV salía impreso y, peor, sumaba a los totales → **total inflado**, y
+el mozo le mostraba al cliente más de lo que debía pagar. Fix: filtro
+`estado: EstadoVentaItem.ACTIVO`, mismo criterio que ya usaban la comanda, el cobro, el
+descuento de stock y los reportes.
+
+> **Gotcha importante: `Venta.total` NO se persiste nunca.** Ningún flujo del repo lo
+> escribe — al cobrar, `cobrar-venta-dialog` manda `estado`/`formaPago`/`pago`/
+> `fechaCierre` y nada más; la venta a crédito (`cuentas-por-cobrar.handler.ts`) tampoco.
+> Por eso el TOTAL del ticket **siempre** sale del recálculo local
+> `bruto - descItems - descPago + aumPago` (la rama `venta.total > 0` de
+> `buildVentaTicketLines` es defensiva y hoy no se ejecuta), y por eso el ítem cancelado
+> inflaba también el comprobante post-cobro, no sólo la pre-cuenta. Ojo al leer otros
+> módulos: hay consumidores de `Venta.total` que por esto reciben 0 — ver
+> [reference/known-bugs.md](../reference/known-bugs.md).
+
+**Adicionales/extras:** se listan como sub-líneas indentadas bajo su producto
+(`+ EXTRA QUESO`, `+ 2x TOCINO`), sólo los `activo = true` y sólo de ítems no
+cancelados. **Sin monto por adicional**: en pizzas `VentaItem.precioAdicionales` está
+ponderado por la proporción de cada sabor (`pdv.component.ts` → `addVariacionItem`), así
+que la suma de los `precioCobrado` de las filas `VentaItemAdicional` NO coincide con lo
+que se cobra. La plata siempre sale de `precioAdicionales`, nunca de recalcular las filas.
+
+`getVentaItemAdicionales` también filtra `activo = true`.
+
+Test: `npm run test:ticket-venta` (`scripts/test-ticket-venta-e2e.ts`) — arma el ticket
+contra SQLite y lo asserta sobre `renderTicketToPlainText`. Pruebas manuales:
+`docs/testing/TESTING-CHECKLIST-TICKET-CANCELADOS.md`.
+
 ## Estructura de un ticket de venta (ilustrativo)
 
-> Layout de referencia. La salida real la arma `printVentaTicketInternal` con `ticketHeaderEmpresa` (datos de empresa/timbrado desde BD) y columnas CANT/DESCRIPCION/TOTAL via `ticketColumns`. El título real es "COMPROBANTE DE VENTA" (o "PRE-CUENTA").
+> Layout de referencia. La salida real la arma `buildVentaTicketLines` con `ticketHeaderEmpresa` (datos de empresa/timbrado desde BD) y columnas CANT/DESCRIPCION/TOTAL via `ticketColumns`. El título real es "COMPROBANTE DE VENTA" (la pre-cuenta no lleva título; cierra con `*** NO ES COMPROBANTE FISCAL ***`).
 
 ```
 ==============================
