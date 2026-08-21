@@ -14,9 +14,13 @@ Crea (idempotente) tres usuarios sobre la base de **este** equipo:
 
 | Usuario | Roles | Password |
 |---|---|---|
-| `MOZO1` | MOZO | `123` |
-| `CAJERO1` | CAJERO + MOZO | `123` |
-| `GERENTE1` | GERENTE + CAJERO + MOZO | `123` |
+| `TEST_MOZO` | MOZO | `123` |
+| `TEST_CAJERO` | CAJERO + MOZO | `123` |
+| `TEST_GERENTE` | GERENTE + CAJERO + MOZO | `123` |
+
+El prefijo `TEST_` no es cosmético: el script **resetea la password** del usuario
+que encuentra con ese nickname. Si ya existiera uno que no creó él, aborta en vez
+de pisarlo.
 
 Además verifica monedas y billetes, se asegura de que haya un dispositivo de caja
 y deja una caja ABIERTA si no hay ninguna.
@@ -38,7 +42,7 @@ los caminos distintos; las demás son simétricas.
 
 ### ▶ A1. Mesa completa → mesa libre (re-apunte)
 
-1. Con `MOZO1`, abrí una mesa y cargale 2 ítems.
+1. Con `TEST_MOZO`, abrí una mesa y cargale 2 ítems.
 2. **TRANSFERIR** → chip **MESAS** → elegí una mesa verde (libre) → confirmar.
 
 **Esperado:** snackbar "2 item(s) transferidos a MESA N". La mesa origen queda
@@ -118,19 +122,19 @@ habilitado y no hacía nada al tocarlo.
 
 ## B. Permisos por rol
 
-### B1. `CAJERO1` abre y cierra su caja
+### B1. `TEST_CAJERO` abre y cierra su caja
 
-1. Entrá como `CAJERO1` → *Financiero → Cajas* → **ABRIR CAJA**.
+1. Entrá como `TEST_CAJERO` → *Financiero → Cajas* → **ABRIR CAJA**.
 2. Cargá el conteo de apertura y guardá.
 3. Cerrala con el conteo de cierre.
 
 **Esperado:** las dos operaciones funcionan. Hasta 2026-08 el cajero no podía ni
 abrir la caja — el turno no arrancaba.
 
-**Y el reverso:** `CAJERO1` **no** debe poder borrar una caja ni editar las
+**Y el reverso:** `TEST_CAJERO` **no** debe poder borrar una caja ni editar las
 monedas habilitadas para el conteo (eso es del gerente).
 
-### B2. `CAJERO1` cobra una venta
+### B2. `TEST_CAJERO` cobra una venta
 
 Con la caja abierta, cargá una venta y cobrala:
 
@@ -141,15 +145,15 @@ Con la caja abierta, cargá una venta y cobrala:
 **Esperado:** las tres se agregan. El bug reportado era que el botón ✓ de
 "Agregar" fallaba: el cajero no tenía el permiso de compras que pedía el handler.
 
-### B3. `MOZO1` **no** cobra
+### B3. `TEST_MOZO` **no** cobra
 
-Con `MOZO1`, abrí una mesa, cargá ítems y tocá **COBRAR** → intentá agregar una
+Con `TEST_MOZO`, abrí una mesa, cargá ítems y tocá **COBRAR** → intentá agregar una
 línea de pago.
 
 **Esperado:** falla con un error de permisos. El mozo toma pedidos y transfiere
 mesas; la plata es del cajero.
 
-### B4. `GERENTE1` en el cajón del PdV
+### B4. `TEST_GERENTE` en el cajón del PdV
 
 *Utilitarios* → pagar un vale, pagar una compra, y **anular** un egreso.
 
@@ -175,9 +179,9 @@ También el login tiene ojo en su campo de contraseña.
 
 ### ▶ C2. Caja Mayor no le figura al cajero
 
-Entrá con `CAJERO1` a la PWA y mirá el Home.
+Entrá con `TEST_CAJERO` a la PWA y mirá el Home.
 
-**Esperado:** **no** aparecen las tarjetas de Caja Mayor. Con `GERENTE1` sí.
+**Esperado:** **no** aparecen las tarjetas de Caja Mayor. Con `TEST_GERENTE` sí.
 
 ### C3. Foto de perfil y adjuntos
 

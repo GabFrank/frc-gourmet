@@ -160,6 +160,48 @@ async function main() {
     }
   }
 
+  // ═══════ Alcance por recurso, no solo por canal ═══════
+  // La matriz de arriba responde "¿el canal deja pasar a este rol?". Falta la
+  // otra pregunta: sobre QUE registro. `Pago`/`PagoDetalle` son la misma tabla
+  // para el cobro de venta y para los pagos a proveedores legacy, asi que
+  // aceptar VENTAS_COBRAR a secas le daba al CAJERO editar y borrar el historial
+  // de pagos a proveedores pasando un id cualquiera.
+  console.log('\n[Alcance] Un Pago de venta no es un Pago a proveedor');
+  {
+    const P = (x: string) => require(`../src/app/database/entities/${x}`);
+    const { Pago } = P('compras/pago.entity');
+    const { PagoDetalle } = P('compras/pago-detalle.entity');
+    const { Compra } = P('compras/compra.entity');
+    const { Proveedor } = P('compras/proveedor.entity');
+
+    const pagoVenta: any = await save(Pago, { estado: 'ABIERTO', activo: true });
+    const pagoCompra: any = await save(Pago, { estado: 'ABIERTO', activo: true });
+    const proveedor: any = await save(Proveedor, { nombre: 'PROVEEDOR TEST', activo: true });
+    await save(Compra, { proveedor, pago: pagoCompra, activo: true });
+    const detalleVenta: any = await save(PagoDetalle, { valor: 1000, descripcion: 'COBRO', pago: pagoVenta, activo: true });
+    const detalleCompra: any = await save(PagoDetalle, { valor: 1000, descripcion: 'PAGO PROV', pago: pagoCompra, activo: true });
+
+    usuarioActual = usuarios.CAJERO;
+    console.error = () => { /* silenciar el log del handler */ };
+    const cajeroPagoVenta = await permitido('updatePago', [pagoVenta.id, { estado: 'ABIERTO' }]);
+    const cajeroPagoCompra = await permitido('updatePago', [pagoCompra.id, { estado: 'ABIERTO' }]);
+    const cajeroDetalleVenta = await permitido('updatePagoDetalle', [detalleVenta.id, { valor: 2000 }]);
+    const cajeroDetalleCompra = await permitido('updatePagoDetalle', [detalleCompra.id, { valor: 2000 }]);
+    const cajeroBorraPagoCompra = await permitido('deletePago', [pagoCompra.id]);
+    usuarioActual = usuarios.GERENTE;
+    const gerentePagoCompra = await permitido('updatePago', [pagoCompra.id, { estado: 'ABIERTO' }]);
+    console.error = silenciarErrores;
+
+    ok(cajeroPagoVenta, 'CAJERO edita el pago de una venta');
+    ok(!cajeroPagoCompra, 'CAJERO NO edita un pago a proveedor', cajeroPagoCompra);
+    ok(!cajeroBorraPagoCompra, 'CAJERO NO borra un pago a proveedor', cajeroBorraPagoCompra);
+    ok(cajeroDetalleVenta, 'CAJERO edita una linea de cobro de venta');
+    ok(!cajeroDetalleCompra, 'CAJERO NO edita una linea de un pago a proveedor', cajeroDetalleCompra);
+    ok(gerentePagoCompra, 'GERENTE si edita un pago a proveedor (tiene COMPRAS_GESTIONAR)');
+
+    if (!cajeroPagoCompra) { /* ok */ } else { sobrantes.push('CAJERO PUEDE de mas: editar pagos a proveedor'); }
+  }
+
   if (faltantes.length || sobrantes.length) {
     console.log('\n─── Hallazgos ───');
     faltantes.forEach((f) => console.log(`  ⛔ ${f}`));

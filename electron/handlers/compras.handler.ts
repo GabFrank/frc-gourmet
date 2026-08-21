@@ -1339,8 +1339,41 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
 
   // `Pago`/`PagoDetalle` estan marcadas @deprecated para compras, pero son el
   // libro de pagos del COBRO DE VENTA. El guard quedo en COMPRAS_GESTIONAR, que
-  // el rol CAJERO no tiene: no podia agregar una linea de cobro en el PdV. Van
-  // con los dos permisos porque los dos flujos siguen vivos.
+  // el rol CAJERO no tiene: no podia agregar una linea de cobro en el PdV.
+  //
+  // Aceptan los dos permisos porque los dos flujos siguen vivos, PERO sobre un
+  // registro que YA existe hay que mirar de que dominio es: un Pago vinculado a
+  // una Compra es un pago a proveedor, y editarlo o borrarlo sigue siendo
+  // COMPRAS_GESTIONAR. Sin esto, quien solo tiene VENTAS_COBRAR podia editar y
+  // borrar el historial de pagos a proveedores pasando un id cualquiera.
+  const PERMISOS_PAGO = ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR'];
+
+  /** Un Pago vinculado a alguna Compra pertenece al dominio de compras. */
+  const esPagoDeCompra = async (pagoId: number): Promise<boolean> => {
+    if (!pagoId) return false;
+    const n = await dataSource
+      .getRepository(Compra)
+      .count({ where: { pago: { id: pagoId } } as any });
+    return n > 0;
+  };
+
+  /**
+   * Permiso para operar sobre un Pago existente: el debil si es de venta, el de
+   * compras si el Pago cuelga de una Compra.
+   */
+  const ensurePermisoPagoExistente = async (pagoId: number): Promise<void> => {
+    const permisos = (await esPagoDeCompra(pagoId)) ? ['COMPRAS_GESTIONAR'] : PERMISOS_PAGO;
+    await ensurePermission(dataSource, getCurrentUser, permisos);
+  };
+
+  /** Idem, resolviendo antes a que Pago pertenece la linea. */
+  const ensurePermisoPagoDetalle = async (detalleId: number): Promise<void> => {
+    const detalle = await dataSource
+      .getRepository(PagoDetalle)
+      .findOne({ where: { id: detalleId }, relations: ['pago'] });
+    await ensurePermisoPagoExistente((detalle?.pago as any)?.id ?? 0);
+  };
+
   ipcMain.handle('createPago', async (_event: any, data: any) => {
     await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR']);
     // Cobro de venta: solo el dispositivo donde se abrio la caja puede cobrar.
@@ -1371,7 +1404,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('updatePago', async (_event: any, id: number, data: any) => {
-    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR']);
+    await ensurePermisoPagoExistente(id);
     const repo = dataSource.getRepository(Pago);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`Pago ID ${id} not found`);
@@ -1381,7 +1414,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('deletePago', async (_event: any, id: number) => {
-    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR']);
+    await ensurePermisoPagoExistente(id);
     const repo = dataSource.getRepository(Pago);
     const entity = await repo.findOne({ where: { id }, relations: ['detalles'] });
     if (!entity) throw new Error(`Pago ID ${id} not found`);
@@ -1404,7 +1437,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('updatePagoDetalle', async (_event: any, id: number, data: any) => {
-    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR']);
+    await ensurePermisoPagoDetalle(id);
     const repo = dataSource.getRepository(PagoDetalle);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`PagoDetalle ID ${id} not found`);
@@ -1413,7 +1446,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('deletePagoDetalle', async (_event: any, id: number) => {
-    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR']);
+    await ensurePermisoPagoDetalle(id);
     const repo = dataSource.getRepository(PagoDetalle);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`PagoDetalle ID ${id} not found`);

@@ -79,7 +79,17 @@ Canal único: **`transferir-venta-pdv`** en `ventas.handler.ts`. Una transacció
 
 **UI:** `transferir-destino-dialog` (era `transferir-mesa-dialog`) con dos chips arriba, MESAS y COMANDAS. Devuelve `{ tipo, id, etiqueta }`. Los destinos ocupados se marcan con borde y un icono de persona — transferir ahí **une** las dos cuentas. Las comandas ganaron botones TRANSFERIR y MOVER ITEMS, que antes no tenían.
 
-**Test:** `npm run test:transferencia-pdv` (54 asserts, las 8 celdas + las reglas de dinero + permisos).
+### Concurrencia: se lockean los DOS tipos de contenedor
+
+`withMesaLock` **y** `withComandaLock`, tomados en orden ascendente de id dentro de cada tipo, y las comandas siempre después de las mesas. El candado de mesa solo no alcanza: una transferencia entre dos comandas no toca ninguna mesa, así que corría sin serializar y dos cajeros podían dejar **dos ventas ABIERTA colgando de la misma comanda** — `buscarVentaAbiertaDe` devuelve una sola, y la otra queda viva en la base con sus ítems ya en cocina, inalcanzable desde el cobro.
+
+`cerrarComanda` delega en el mismo helper transaccional (`cerrarComandaEnTx`) en vez de tener su copia. La copia ya había divergido en dos puntos: limpiaba `pdv_mesa`/`sector`/`observacion` con **`undefined`** — y TypeORM **no emite UPDATE para propiedades undefined**, así que el FK conservaba la mesa vieja (regla 15 de esta skill) — y contaba el trabajo vivo de la mesa fuera de toda transacción, pudiendo liberar una mesa que una transferencia en curso acababa de ocupar.
+
+⚠️ `getPdvMesa` ahora filtra `comanda: IsNull()` al buscar la venta de la mesa, igual que `queryMesasWithVentaAbierta` y `set-pdv-mesa-estado`. Sin ese filtro devolvía la cuenta de una comanda vinculada como si fuera la cuenta de la mesa — lo usa el detalle de mesa de la PWA.
+
+**Una venta con `CuentaPorCobrar` ACTIVO no se transfiere.** El flujo normal (`cobrar-venta-credito`) concluye la venta al crear la CPC, así que no debería aparecer como origen; pero `create-cuenta-por-cobrar` deja vincular una a mano a una venta abierta, y cancelar esa venta acá se saltearía la reversión de saldo que hace `updateVenta`.
+
+**Test:** `npm run test:transferencia-pdv` (65 asserts: las 8 celdas, las reglas de dinero, la mesa fantasma de la cadena mesa→comanda→mesa, el FK de la comanda al cerrarse, la CPC y los permisos).
 
 ## Entidades clave (24 archivos `*.entity.ts` en `entities/ventas/`)
 

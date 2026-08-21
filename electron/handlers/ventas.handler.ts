@@ -107,6 +107,26 @@ async function withMesaLock<T>(mesaId: number, fn: () => Promise<T>): Promise<T>
   }
 }
 
+// Lo mismo por comanda. El candado de mesa no las cubre: una transferencia
+// entre dos comandas no toca ninguna mesa, asi que corria sin serializar y dos
+// cajeros podian dejar dos ventas ABIERTA colgando de la misma comanda — una de
+// ellas inalcanzable desde el cobro, con sus items ya en cocina.
+const comandaTails = new Map<number, Promise<void>>();
+async function withComandaLock<T>(comandaId: number, fn: () => Promise<T>): Promise<T> {
+  const prev = comandaTails.get(comandaId) ?? Promise.resolve();
+  let release!: () => void;
+  const myTurn = new Promise<void>((res) => (release = res));
+  const composed = prev.then(() => myTurn);
+  comandaTails.set(comandaId, composed);
+  await prev.catch(() => {});
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (comandaTails.get(comandaId) === composed) comandaTails.delete(comandaId);
+  }
+}
+
 /**
  * Materializa un PedidoOnline en la Venta ABIERTA de su mesa (canal MESA_QR).
  * Resuelve/abre la venta de la mesa y vuelca los items como VentaItem (+ sabores
@@ -1964,9 +1984,15 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // OneToOne `mesa.venta` no filtra por estado y puede devolver una venta
       // CANCELADA/CONCLUIDA que conserva `mesa_id` (al cancelar no se desvincula),
       // lo que hacía que el detalle en mobile siguiera mostrando ítems cancelados.
+      //
+      // `comanda: IsNull()` es la cuenta DE LA MESA: una venta que cuelga de una
+      // comanda vinculada a esta mesa es la cuenta de esa tarjeta, no de la mesa.
+      // Sin el filtro, el detalle en mobile mostraba la cuenta de una comanda —
+      // mismo criterio que ya usaban `queryMesasWithVentaAbierta` y
+      // `set-pdv-mesa-estado`.
       const ventaRepo = dataSource.getRepository(Venta);
       const ventaAbierta = await ventaRepo.findOne({
-        where: { mesa: { id }, estado: VentaEstado.ABIERTA },
+        where: { mesa: { id }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
         order: { id: 'DESC' },
       });
       (mesa as any).venta = ventaAbierta || null;
@@ -2219,8 +2245,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const destinoYaTeniaVenta = !!ventaDestino;
 
       // Items a mover.
+      //
+      // Lock pesimista en Postgres: `registrarCobroParcial` corre en su propia
+      // transaccion y puede cubrir un item justo entre que aca lo leemos como
+      // "sin cobro" y el save que lo re-apunta. El item terminaria en la cuenta
+      // destino marcado como cubierto, con su `CobroParcialItem` atado a la venta
+      // origen ya cancelada: plata adjudicada a una cuenta cerrada. En SQLite no
+      // aplica (un solo escritor) y `pessimistic_write` no esta soportado.
+      const esPostgres = dataSource.options.type === 'postgres';
       const itemsActivos = await manager.find(VentaItem, {
         where: { venta: { id: ventaOrigen.id }, estado: EstadoVentaItem.ACTIVO },
+        ...(esPostgres ? { lock: { mode: 'pessimistic_write' as const } } : {}),
       });
       let itemsAMover: VentaItem[];
       if (alcance === 'COMPLETA') {
@@ -2240,6 +2275,21 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
       const origenTieneCobros = !!ventaOrigen.pago?.id
         || (await manager.count(CobroParcial, { where: { venta: { id: ventaOrigen.id }, activo: true } })) > 0;
+
+      // Una venta con cuenta por cobrar viva no se transfiere. El flujo normal
+      // (`cobrar-venta-credito`) concluye la venta al crear la CPC, asi que no
+      // deberia aparecer como origen — pero `create-cuenta-por-cobrar` permite
+      // vincular una CPC a mano a una venta abierta, y por ahi la cancelacion de
+      // esta transaccion se saltearia la reversion de saldo que hace `updateVenta`.
+      const cpcViva = await manager.count(CuentaPorCobrar, {
+        where: { ventaId: ventaOrigen.id, estado: CuentaPorCobrarEstado.ACTIVO } as any,
+      });
+      if (cpcViva > 0) {
+        throw new Error(
+          'La cuenta de origen tiene una cuenta por cobrar vinculada. '
+          + 'Anula o cobra esa cuenta por cobrar antes de transferir.',
+        );
+      }
 
       // Re-apunte: la venta entera cambia de contenedor. Es el unico camino que
       // conserva cobros y pago sin tocarlos.
@@ -2353,19 +2403,28 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const userId = getCurrentUser()?.id;
-      // Lock por mesa. El reduce anida de adentro hacia afuera, asi que la lista
-      // va descendente para que el candado MAS EXTERNO sea el del id menor:
-      // dos transferencias cruzadas entre las mismas dos mesas los toman en el
-      // mismo orden y no se abrazan.
-      const mesaIds = Array.from(new Set([
-        payload?.origen?.tipo === 'MESA' ? Number(payload.origen.id) : null,
-        payload?.destino?.tipo === 'MESA' ? Number(payload.destino.id) : null,
+      // Candados por contenedor. Van los DOS tipos: una transferencia entre dos
+      // comandas no toca ninguna mesa, y sin candado dos cajeros podian dejar dos
+      // ventas ABIERTA colgando de la misma comanda destino.
+      //
+      // El reduce anida de adentro hacia afuera, asi que cada lista va descendente
+      // para que el candado MAS EXTERNO de cada tipo sea el del id menor: dos
+      // transferencias cruzadas los toman en el mismo orden y no se abrazan. Y las
+      // comandas se toman SIEMPRE despues de las mesas, para que el orden entre
+      // tipos tambien sea unico.
+      const idsDe = (tipo: 'MESA' | 'COMANDA'): number[] => Array.from(new Set([
+        payload?.origen?.tipo === tipo ? Number(payload.origen.id) : null,
+        payload?.destino?.tipo === tipo ? Number(payload.destino.id) : null,
       ].filter((n): n is number => typeof n === 'number' && !Number.isNaN(n)))).sort((a, b) => b - a);
 
       const ejecutar = () => transferirVentaPdvInternal(payload, userId);
-      return await mesaIds.reduce<() => Promise<any>>(
-        (fn, mesaId) => () => withMesaLock(mesaId, fn),
+      const conComandas = idsDe('COMANDA').reduce<() => Promise<any>>(
+        (fn, comandaId) => () => withComandaLock(comandaId, fn),
         ejecutar,
+      );
+      return await idsDe('MESA').reduce<() => Promise<any>>(
+        (fn, mesaId) => () => withMesaLock(mesaId, fn),
+        conComandas,
       )();
     } catch (error) {
       console.error('Error transfiriendo cuenta del PdV:', error);
@@ -2620,45 +2679,24 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('cerrarComanda', async (_event: any, comandaId: number) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
-      const repo = dataSource.getRepository(Comanda);
-      const entity = await repo.findOne({ where: { id: comandaId }, relations: ['pdv_mesa'] });
-      if (!entity) throw new Error(`Comanda ID ${comandaId} not found`);
-
-      const mesaId = entity.pdv_mesa?.id;
-      entity.estado = ComandaEstado.DISPONIBLE;
-      entity.pdv_mesa = undefined as any;
-      entity.sector = undefined as any;
-      entity.observacion = undefined as any;
-      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      const saved = await repo.save(entity);
-
-      // Al liberar la comanda, liberar tambien su mesa si ya no le queda trabajo
-      // vivo: ni otra comanda OCUPADO ni una venta de mesa ABIERTA.
+      const userId = getCurrentUser()?.id;
+      // Delega en el mismo helper que usa la transferencia, dentro de una
+      // transaccion y con el candado de la comanda. Antes tenia su propia copia
+      // de la logica, que ya habia divergido en dos puntos:
       //
-      // Antes esto corria solo si `ocuparMesaAlVincularComanda` estaba en true,
-      // con el razonamiento de que si la config no ocupa la mesa tampoco tiene
-      // que liberarla. Pero la mesa puede quedar OCUPADO por otro camino — p.ej.
-      // transferirle la cuenta entera a una comanda sobre esa misma mesa — y ahi
-      // nadie la liberaba nunca: mesa fantasma que otro cajero vuelve a ocupar.
-      // El chequeo de abajo ya se niega si hay trabajo vivo, asi que intentarlo
-      // siempre es seguro.
-      if (mesaId) {
-        const otrasComandas = await repo.count({
-          where: { pdv_mesa: { id: mesaId }, estado: ComandaEstado.OCUPADO, activo: true },
-        });
-        const ventaMesa = await dataSource.getRepository(Venta).count({
-          where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
-        });
-        if (otrasComandas === 0 && ventaMesa === 0) {
-          const mesaRepo = dataSource.getRepository(PdvMesa);
-          const mesa = await mesaRepo.findOneBy({ id: mesaId });
-          if (mesa && mesa.estado !== 'DISPONIBLE') {
-            mesa.estado = 'DISPONIBLE' as any;
-            await mesaRepo.save(mesa);
-          }
-        }
-      }
-      return saved;
+      //  - limpiaba `pdv_mesa`/`sector`/`observacion` con `undefined`, y TypeORM
+      //    NO emite UPDATE para propiedades undefined: el FK quedaba con el valor
+      //    viejo. Una comanda DISPONIBLE conservaba su mesa, y al reabrirse por
+      //    transferencia esa mesa stale se propagaba a la venta.
+      //  - contaba el trabajo vivo de la mesa FUERA de cualquier transaccion o
+      //    candado, asi que podia liberar una mesa que una transferencia en curso
+      //    acababa de ocupar.
+      return await withComandaLock(comandaId, async () => dataSource.transaction(async (manager) => {
+        const existe = await manager.findOneBy(Comanda, { id: comandaId });
+        if (!existe) throw new Error(`Comanda ID ${comandaId} not found`);
+        await cerrarComandaEnTx(manager, comandaId, userId);
+        return await manager.findOneBy(Comanda, { id: comandaId });
+      }));
     } catch (error) {
       console.error(`Error cerrando Comanda ID ${comandaId}:`, error);
       throw error;

@@ -757,11 +757,15 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   // lógica que el envío automático al cerrar. Sin `cajaId`, usa la última caja
   // CERRADA. `forzar` ignora el flag de PdvConfig (útil para probar); `destino`
   // permite mandar a otro número/grupo sin tocar la config.
+  // Sigue en FINANCIERO_CAJA_GESTIONAR (gerente), no en el permiso operativo del
+  // turno: acepta CUALQUIER `cajaId` y un `destino` de WhatsApp arbitrario, asi
+  // que con el permiso del cajero seria una via para mandar el cierre de una caja
+  // ajena a un numero elegido por quien llama.
   ipcMain.handle('enviar-resumen-cierre-whatsapp', async (
     _event: IpcMainInvokeEvent,
     params?: { cajaId?: number; forzar?: boolean; destino?: string },
   ) => {
-    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_OPERAR');
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
     const repo = dataSource.getRepository(Caja);
     let cajaId = params?.cajaId ?? null;
     if (!cajaId) {

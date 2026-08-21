@@ -13,7 +13,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-import { execFileSync } from 'child_process';
+import { spawnSync } from 'child_process';
 
 let passed = 0, failed = 0;
 function ok(cond: boolean, name: string, extra?: any) {
@@ -31,9 +31,13 @@ function main() {
   const antes = SALIDAS.map((rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8'));
 
   // Regenerar y comparar. El generador es determinista (ordena las claves).
-  const salida = execFileSync('node', [path.join(ROOT, 'scripts/generate-mobile-api-map.js')], {
-    cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  // Se junta stdout Y stderr: el aviso de "no traducible" sale por `console.warn`,
+  // o sea stderr, y mirando solo stdout este chequeo nunca podia fallar.
+  const proc = spawnSync('node', [path.join(ROOT, 'scripts/generate-mobile-api-map.js')], {
+    cwd: ROOT, encoding: 'utf8',
   });
+  const salida = `${proc.stdout || ''}\n${proc.stderr || ''}`;
+  ok(proc.status === 0, 'el generador corre sin error', proc.status === 0 ? undefined : salida);
 
   const despues = SALIDAS.map((rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8'));
 

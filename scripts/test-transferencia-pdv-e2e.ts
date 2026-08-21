@@ -326,6 +326,48 @@ async function main() {
     ok(r.reapunte === true, '10: a una mesa libre si transfiere, con cobros y todo');
   }
 
+  // ═══════ [10b] la venta con cuenta por cobrar viva no se transfiere ═══════
+  console.log('\n[10b] Venta con cuenta por cobrar vinculada');
+  {
+    const origen = await nuevaMesa(); const destino = await nuevaMesa();
+    const venta = await abrirVentaMesa(origen.id);
+    await agregarItem(venta.id);
+    // El flujo normal concluye la venta al crear la CPC, pero
+    // `create-cuenta-por-cobrar` deja vincularla a mano a una venta abierta. Por
+    // ahi, cancelar la venta aca se saltearia la reversion de saldo de updateVenta.
+    const { Cliente } = E('personas/cliente.entity');
+    const { Moneda } = E('financiero/moneda.entity');
+    const cliente: any = await save(Cliente, { activo: true });
+    const moneda: any = await save(Moneda, { denominacion: 'GUARANI', simbolo: 'PYG', principal: true, activo: true });
+    await ds.query(
+      `INSERT INTO cuentas_por_cobrar (cliente_id, moneda_id, monto_total, monto_cobrado, cantidad_cuotas, fecha_inicio, estado, venta_id)`
+      + ` VALUES (${cliente.id}, ${moneda.id}, 10000, 0, 1, '2026-08-21', 'ACTIVO', ${venta.id})`,
+    );
+    let err = '';
+    try {
+      await transferir({
+        origen: { tipo: 'MESA', id: origen.id }, destino: { tipo: 'MESA', id: destino.id }, alcance: 'COMPLETA',
+      });
+    } catch (e: any) { err = e.message; }
+    ok(/cuenta por cobrar/i.test(err), '10b: rechaza transferir una venta con CPC viva', err);
+    ok(await estadoVenta(venta.id) === 'ABIERTA', '10b: la venta origen no se cancelo');
+  }
+
+  // ═══════ [10c] cerrar una comanda limpia de verdad su mesa ═══════
+  console.log('\n[10c] cerrarComanda limpia el FK de la mesa');
+  {
+    const mesa = await nuevaMesa(); const comanda = await nuevaComanda(mesa.id);
+    await abrirVentaComanda(comanda.id, mesa.id);
+    await invokeHandler('cerrarComanda', comanda.id);
+    // TypeORM NO emite UPDATE para propiedades puestas en `undefined`. El handler
+    // viejo limpiaba `pdv_mesa` asi, y el FK quedaba con la mesa vieja: al
+    // reabrirse la comanda por transferencia, esa mesa stale viajaba a la venta.
+    const fk = (await ds.query(`SELECT pdv_mesa_id AS m, sector_id AS s FROM comandas WHERE id = ${comanda.id}`))[0];
+    ok(fk.m === null, '10c: pdv_mesa_id quedo en NULL, no con la mesa vieja', fk.m);
+    ok(fk.s === null, '10c: sector_id quedo en NULL', fk.s);
+    ok(await estadoComanda(comanda.id) === 'DISPONIBLE', '10c: la comanda quedo disponible');
+  }
+
   // ═══════ [11] validaciones de payload ═══════
   console.log('\n[11] Validaciones');
   {

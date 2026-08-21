@@ -5,9 +5,12 @@
  * existan monedas, billetes y un dispositivo de caja, y deja una caja ABIERTA
  * lista para operar. Todo idempotente: correrlo dos veces no duplica nada.
  *
- *   MOZO1     -> MOZO
- *   CAJERO1   -> CAJERO + MOZO
- *   GERENTE1  -> GERENTE + CAJERO + MOZO
+ *   TEST_MOZO     -> MOZO
+ *   TEST_CAJERO   -> CAJERO + MOZO
+ *   TEST_GERENTE  -> GERENTE + CAJERO + MOZO
+ *
+ * Si ya existe un usuario con esos nicknames que NO haya creado este script,
+ * aborta en vez de pisarle la password.
  *
  * Password de los tres: 123 (sin obligacion de cambiarla).
  *
@@ -79,6 +82,9 @@ async function main() {
 
   // ── Dispositivo de caja ──────────────────────────────────────────────────
   const dispRepo = ds.getRepository(Dispositivo);
+  // Se reusa un dispositivo de caja existente porque en el entorno dev ya suele
+  // haber uno y crear otro confunde el `dispositivo_id` de las cajas. Se avisa
+  // cual se adopto, para que no pase inadvertido si es uno "real".
   let dispositivo: any = await dispRepo.findOne({ where: { isCaja: true, activo: true } as any });
   if (!dispositivo) {
     dispositivo = await dispRepo.save(dispRepo.create({
@@ -95,10 +101,13 @@ async function main() {
   const personaRepo = ds.getRepository(Persona);
   const usuarioRoleRepo = ds.getRepository(UsuarioRole);
 
+  // Los nicknames llevan prefijo para no chocar con usuarios reales: `MOZO1` a
+  // secas es perfectamente plausible en un local con turnos rotativos, y este
+  // script resetea la password del usuario que encuentra.
   const perfiles: Array<{ nickname: string; nombre: string; roles: string[] }> = [
-    { nickname: 'MOZO1', nombre: 'MOZO DE PRUEBA', roles: ['MOZO'] },
-    { nickname: 'CAJERO1', nombre: 'CAJERO DE PRUEBA', roles: ['CAJERO', 'MOZO'] },
-    { nickname: 'GERENTE1', nombre: 'GERENTE DE PRUEBA', roles: ['GERENTE', 'CAJERO', 'MOZO'] },
+    { nickname: 'TEST_MOZO', nombre: 'MOZO DE PRUEBA', roles: ['MOZO'] },
+    { nickname: 'TEST_CAJERO', nombre: 'CAJERO DE PRUEBA', roles: ['CAJERO', 'MOZO'] },
+    { nickname: 'TEST_GERENTE', nombre: 'GERENTE DE PRUEBA', roles: ['GERENTE', 'CAJERO', 'MOZO'] },
   ];
 
   const hash = await hashPassword(PASSWORD_DEV);
@@ -114,11 +123,27 @@ async function main() {
       } as any) as any);
       console.log(`[seed-dev-roles] Usuario creado: ${perfil.nickname}.`);
     } else {
+      // Resetear una password y apagar `mustChangePassword` es debilitar un
+      // control de seguridad. Solo se hace sobre un usuario que este script haya
+      // creado — identificado por el nombre de su persona. Si el nickname existe
+      // pero es otra persona, se aborta: es un usuario real.
+      const persona: any = (usuario as any).persona
+        ?? (await usuarioRepo.findOne({ where: { id: usuario.id } as any, relations: ['persona'] }))?.persona;
+      const nombrePersona = String(persona?.nombre || '').toUpperCase();
+      if (nombrePersona !== perfil.nombre) {
+        console.error(
+          `\n❌ Ya existe un usuario "${perfil.nickname}" que NO fue creado por este script`
+          + ` (persona: "${persona?.nombre ?? 'sin persona'}", se esperaba "${perfil.nombre}").`
+          + `\n   No se toca: resetearle la password apagaria su cambio de contrasenha obligatorio.`
+          + `\n   Renombra ese usuario o borra el perfil de la lista antes de seguir.\n`,
+        );
+        process.exit(1);
+      }
       usuario.password = hash;
       usuario.activo = true;
       (usuario as any).mustChangePassword = false;
       await usuarioRepo.save(usuario);
-      console.log(`[seed-dev-roles] Usuario existente: ${perfil.nickname} (password reseteada).`);
+      console.log(`[seed-dev-roles] Usuario de prueba existente: ${perfil.nickname} (password reseteada).`);
     }
 
     for (const descripcion of perfil.roles) {
@@ -146,9 +171,9 @@ async function main() {
   if (abierta) {
     console.log(`[seed-dev-roles] Ya hay una caja ABIERTA (id ${abierta.id}), abierta por usuario ${abierta.createdBy?.id ?? '?'}.`);
   } else {
-    // La caja la abre CAJERO1: asi se puede probar que solo quien la abrio la
+    // La caja la abre TEST_CAJERO: asi se puede probar que solo quien la abrio la
     // cierra, que es el guard que tiene `update-caja`.
-    const cajero: any = await usuarioRepo.findOne({ where: { nickname: 'CAJERO1' } as any });
+    const cajero: any = await usuarioRepo.findOne({ where: { nickname: 'TEST_CAJERO' } as any });
     const conteoRepo = ds.getRepository(Conteo);
     const conteo: any = await conteoRepo.save(conteoRepo.create({
       activo: true, tipo: 'APERTURA', fecha: new Date(),
@@ -160,11 +185,11 @@ async function main() {
       dispositivo, conteoApertura: conteo,
       ...(cajero ? { createdBy: cajero } : {}),
     } as any) as any);
-    console.log(`[seed-dev-roles] Caja ABIERTA creada (id ${caja.id}) por CAJERO1 en ${dispositivo.nombre}.`);
+    console.log(`[seed-dev-roles] Caja ABIERTA creada (id ${caja.id}) por TEST_CAJERO en ${dispositivo.nombre}.`);
   }
 
   await ds.destroy();
-  console.log(`\n✅ Entorno dev listo. Usuarios MOZO1 / CAJERO1 / GERENTE1, password ${PASSWORD_DEV}.\n`);
+  console.log(`\n✅ Entorno dev listo. Usuarios TEST_MOZO / TEST_CAJERO / TEST_GERENTE, password ${PASSWORD_DEV}.\n`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

@@ -613,6 +613,7 @@
     <!-- Bottom buttons: modo normal -->
     <div class="action-buttons" *ngIf="!moverItemsMode">
       <button
+        *appHasPermission="'VENTAS_COBRAR'"
         mat-raised-button
         color="primary"
         class="action-button"
@@ -625,6 +626,7 @@
         <span>COBRAR</span>
       </button>
       <button
+        *appHasPermission="'VENTAS_COBRAR'"
         mat-raised-button
         color="primary"
         class="action-button"
