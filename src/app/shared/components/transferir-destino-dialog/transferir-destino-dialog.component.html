@@ -1,0 +1,57 @@
+<h2 mat-dialog-title>
+  <mat-icon>swap_horiz</mat-icon>
+  {{ titulo }}
+</h2>
+
+<mat-dialog-content>
+  <mat-button-toggle-group
+    class="tipo-destino"
+    [value]="tipoDestino"
+    aria-label="Tipo de destino"
+  >
+    <mat-button-toggle value="MESA" (click)="cambiarTipo('MESA')" data-testid="chip-destino-mesas">
+      <mat-icon>table_restaurant</mat-icon>
+      MESAS
+    </mat-button-toggle>
+    <mat-button-toggle value="COMANDA" (click)="cambiarTipo('COMANDA')" data-testid="chip-destino-comandas">
+      <mat-icon>receipt_long</mat-icon>
+      COMANDAS
+    </mat-button-toggle>
+  </mat-button-toggle-group>
+
+  <p class="ayuda">Seleccione el destino:</p>
+
+  <div *ngIf="loading" class="estado-vacio">Cargando destinos...</div>
+
+  <div *ngIf="!loading && destinos.length === 0" class="estado-vacio">{{ vacioMensaje }}</div>
+
+  <div class="destinos-grid" *ngIf="!loading && destinos.length > 0">
+    <button
+      mat-raised-button
+      *ngFor="let destino of destinos"
+      [color]="seleccionado?.id === destino.id ? 'accent' : 'primary'"
+      class="destino-button"
+      [class.ocupado]="destino.ocupado"
+      (click)="seleccionar(destino)"
+      [matTooltip]="destino.detalle"
+      [attr.data-testid]="'destino-' + tipoDestino + '-' + destino.numero"
+    >
+      {{ destino.numero }}
+      <mat-icon class="marca-ocupado" *ngIf="destino.ocupado">person</mat-icon>
+    </button>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancelar()">CANCELAR</button>
+  <button
+    mat-raised-button
+    color="primary"
+    [disabled]="!seleccionado"
+    (click)="confirmar()"
+    data-testid="btn-confirmar-transferencia"
+  >
+    <mat-icon>swap_horiz</mat-icon>
+    {{ textoConfirmar }}
+  </button>
+</mat-dialog-actions>
