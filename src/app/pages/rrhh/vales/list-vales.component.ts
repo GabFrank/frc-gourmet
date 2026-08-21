@@ -15,7 +15,6 @@ import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CreateEditValeDialogComponent } from './create-edit-vale-dialog.component';
-import { ConfirmarValeDialogComponent } from './confirmar-vale-dialog.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
@@ -112,8 +111,8 @@ const ESTADOS = ['SOLICITADO', 'CONFIRMADO', 'DESCONTADO', 'ANULADO'];
               <td mat-cell *matCellDef="let v">
                 <button mat-icon-button [matMenuTriggerFor]="menu"><mat-icon>more_vert</mat-icon></button>
                 <mat-menu #menu="matMenu">
-                  <button *appHasPermission="'RRHH_VALE_CONFIRMAR'" mat-menu-item (click)="confirmar(v)" [disabled]="v.estado !== 'SOLICITADO'">
-                    <mat-icon>check_circle</mat-icon><span>Confirmar</span>
+                  <button *appHasPermission="'RRHH_VALE_CONFIRMAR'" mat-menu-item (click)="pagarDesdeCajaMayor(v)" [disabled]="v.estado !== 'SOLICITADO'">
+                    <mat-icon>payments</mat-icon><span>Pagar</span>
                   </button>
                   <button *appHasPermission="'RRHH_VALE_ANULAR'" mat-menu-item (click)="anular(v)" [disabled]="v.estado === 'ANULADO' || v.estado === 'DESCONTADO'">
                     <mat-icon>cancel</mat-icon><span>Anular</span>
@@ -194,9 +193,23 @@ export class ListValesComponent implements OnInit {
     ref.afterClosed().subscribe((res) => { if (res?.saved) this.load(); });
   }
 
-  confirmar(v: any): void {
-    const ref = this.dialog.open(ConfirmarValeDialogComponent, { width: '700px', data: { vale: v } });
-    ref.afterClosed().subscribe((res) => { if (res?.saved) this.load(); });
+  /**
+   * El pago del vale ya no vive acá: se hace en Caja Mayor, que permite
+   * entregar varios vales en un solo egreso y deja el evento anulable como
+   * unidad. Este atajo abre ese wizard con el vale preseleccionado.
+   */
+  async pagarDesdeCajaMayor(v: any): Promise<void> {
+    const { PagarObligacionesDialogComponent } = await import(
+      'src/app/pages/financiero/caja-mayor/pagar-obligaciones-dialog/pagar-obligaciones-dialog.component'
+    );
+    const { PagoConcepto } = await import('src/app/database/entities/financiero/pago-consolidado-enums');
+    const ref = this.dialog.open(PagarObligacionesDialogComponent, {
+      width: '1000px',
+      maxWidth: '96vw',
+      data: { concepto: PagoConcepto.VALE, origenIdsPreseleccionados: [v.id] },
+    });
+    const res = await firstValueFrom(ref.afterClosed());
+    if (res) this.load();
   }
 
   async anular(v: any): Promise<void> {

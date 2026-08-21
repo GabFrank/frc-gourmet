@@ -66,7 +66,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | **Importación de facturas con OCR + IA** (GPT-4o vision, aliases, revisor en tab) | [domains/importacion-facturas-ocr.md](domains/importacion-facturas-ocr.md) |
 | **KDS (Kitchen Display Screen)** (componente compartido desktop/PWA `/kds`, SSE, modo TV, bump bar) | [domains/cocina-impresion.md](domains/cocina-impresion.md) |
 | **Música ambiental** (Spotify Connect, descubrimiento con IA, playlists por bloque, runtime, control en PWA) | [domains/musica-ambiental.md](domains/musica-ambiental.md) |
-| **Caja Mayor** (movimientos, anulaciones, configuración) | [domains/financiero-caja-mayor.md](domains/financiero-caja-mayor.md) |
+| **Caja Mayor** (movimientos, anulaciones, configuración, **pago consolidado de obligaciones**) | [domains/financiero-caja-mayor.md](domains/financiero-caja-mayor.md) |
 | **Bancos, cheques, POS** (cuentas bancarias, acreditaciones) | [domains/financiero-bancos-pos.md](domains/financiero-bancos-pos.md) |
 | **CPP / CPC** (dirección de flujo, préstamos a funcionarios, **cobro consolidado por convenio**) | [domains/financiero-cpp-cpc.md](domains/financiero-cpp-cpc.md) |
 | **RRHH** (funcionarios, asistencias, vales, vacaciones) | [domains/rrhh.md](domains/rrhh.md) |
@@ -193,7 +193,7 @@ Detalles → [workflows/todos-pendientes.md](workflows/todos-pendientes.md).
 - Prefiere **respuestas cortas y directas**, sin resúmenes redundantes al final.
 - Le gusta probar **paso a paso** — una acción por turno, no listas largas de pasos para hacer todo de una.
 - Usa **dark theme** generalmente. Verificar siempre que los cambios visuales funcionen en ambos.
-- Trabaja en `userData/frc-gourmet.db` (la BD de prod local). **Hacer backup antes de cambios destructivos** (entidades, columnas, deletes masivos).
+- **Lo que distingue dev de producción es la MÁQUINA, no el nombre del archivo.** En el iMac de Gabriel, `userData/frc-gourmet.db` es una **BD de desarrollo**: se puede escribir, pagar, anular y romper sin miedo. La instalación productiva corre en **otra PC** y muy probablemente tenga ese mismo nombre de archivo, así que el nombre no sirve para distinguirlas. A producción sólo se llega vía PR a alpha (y luego master).
 
 ---
 

@@ -15,11 +15,12 @@ import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CreateEditEntradaVariaDialogComponent } from '../entradas-varias/create-edit-entrada-varia/create-edit-entrada-varia-dialog.component';
+import { CobrarCpcRapidoDialogComponent } from '../cuentas-por-cobrar/cobrar-cpc-rapido-dialog/cobrar-cpc-rapido-dialog.component';
 import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financieras/create-operacion-financiera/create-operacion-financiera-dialog.component';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
 
-type IngresoTipo = 'AJUSTE' | 'RETIRO_CAJA' | 'ENTRADA_VARIA' | 'OPERACION_FINANCIERA' | null;
+type IngresoTipo = 'AJUSTE' | 'RETIRO_CAJA' | 'ENTRADA_VARIA' | 'OPERACION_FINANCIERA' | 'COBRO_CLIENTE' | null;
 
 @Component({
   selector: 'app-registrar-ingreso-dialog',
@@ -79,6 +80,13 @@ export class RegistrarIngresoDialogComponent implements OnInit {
       descripcion: 'Cambio de divisa, retiro bancario, transferencia entre cajas',
       icono: 'swap_horiz',
       color: '#6a1b9a',
+    },
+    {
+      tipo: 'COBRO_CLIENTE' as IngresoTipo,
+      titulo: 'Cobrar a Cliente',
+      descripcion: 'Cobrar una cuota pendiente de un cliente (cuentas por cobrar)',
+      icono: 'payments',
+      color: '#00695c',
     },
     {
       tipo: 'AJUSTE' as IngresoTipo,
@@ -187,6 +195,16 @@ export class RegistrarIngresoDialogComponent implements OnInit {
   }
 
   seleccionarTipo(tipo: IngresoTipo): void {
+    if (tipo === 'COBRO_CLIENTE') {
+      this.dialogRef?.close(false);
+      this.dialog.open(CobrarCpcRapidoDialogComponent, {
+        width: '720px',
+        maxHeight: '90vh',
+        data: { cajaMayorId: this.cajaMayorId },
+        disableClose: true,
+      });
+      return;
+    }
     if (tipo === 'ENTRADA_VARIA') {
       this.dialogRef?.close(false);
       this.dialog.open(CreateEditEntradaVariaDialogComponent, {

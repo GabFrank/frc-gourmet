@@ -3,7 +3,7 @@
  * AUTO-GENERADO por scripts/generate-mobile-api-map.js — NO editar a mano.
  * Mapa método de window.api → canal IPC (extraído de preload.ts).
  * Regenerar tras tocar preload.ts: `node scripts/generate-mobile-api-map.js`.
- * Total: 835 métodos.
+ * Total: 839 métodos.
  */
 export const API_CHANNEL_MAP: Record<string, string> = {
   "abrirCajaDesdeConteo": "abrir-caja-desde-conteo",
@@ -30,6 +30,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "anularLiquidacionComision": "anular-liquidacion-comision",
   "anularLiquidacionSueldo": "anular-liquidacion-sueldo",
   "anularOperacionFinanciera": "anular-operacion-financiera",
+  "anularPagoConsolidado": "anular-pago-consolidado",
   "anularPagoMixtoCuota": "anular-pago-mixto-cuota",
   "anularPenalizacion": "anular-penalizacion",
   "anularVale": "anular-vale",
@@ -499,6 +500,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getMovimientosClienteStats": "get-movimientos-cliente-stats",
   "getMovimientosCuentaBancaria": "get-movimientos-cuenta-bancaria",
   "getNotificacionesRrhh": "get-notificaciones-rrhh",
+  "getObligacionesPendientes": "get-obligaciones-pendientes",
   "getObservacion": "getObservacion",
   "getObservaciones": "getObservaciones",
   "getObservacionesByProducto": "get-observaciones-by-producto",
@@ -511,6 +513,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getOrderDetails": "get-order-details",
   "getOrders": "get-orders",
   "getPago": "getPago",
+  "getPagoConsolidadoDetalle": "get-pago-consolidado-detalle",
   "getPagoDetalles": "getPagoDetalles",
   "getPagos": "getPagos",
   "getPdvAtajoGrupo": "getPdvAtajoGrupo",
@@ -701,6 +704,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "rechazarPedidoOnline": "rechazar-pedido-online",
   "registrarCobroConsolidado": "registrar-cobro-consolidado",
   "registrarCobroParcial": "registrarCobroParcial",
+  "registrarPagoConsolidado": "registrar-pago-consolidado",
   "removeAtajoItemFromGrupo": "removeAtajoItemFromGrupo",
   "removeProductoFromAtajoItem": "removeProductoFromAtajoItem",
   "removeRoleFromUsuario": "remove-role-from-usuario",

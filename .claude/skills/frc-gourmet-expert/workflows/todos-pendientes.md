@@ -346,6 +346,29 @@ Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `proje
 - En desarrollo las playlists `FRC · …` se crean en la **cuenta personal** conectada, no en la del local.
 
 
+## Pago consolidado — seguimiento (2026-08)
+
+- [x] **Wizard único de pago desde Caja Mayor** — compras, gastos, vales y
+  salarios en un solo componente; N obligaciones × M formas de pago; movimiento
+  consolidado con detalle y anulación del evento entero. Retirado el pago inline
+  de los diálogos de alta y eliminado `pagar-compras-dialog`.
+  → [domains/financiero-caja-mayor.md](../domains/financiero-caja-mayor.md).
+
+- [ ] **Borrar `modoConfirmar` de `create-edit-vale-dialog` (desktop).** Quedó sin
+  entrada: el hub de egresos ya abre el alta simple. El código sigue porque
+  `crear-vale-confirmado` está vivo para la PWA mobile, que no tiene pago
+  diferido. Borrarlo cuando el mobile tenga su propia pantalla de pago.
+
+- [ ] **Pago consolidado en la PWA mobile.** Hoy el mobile sigue con los flujos
+  viejos (gasto que paga al instante, confirmar vale, pagar cuota). No está roto,
+  pero no puede saldar varias obligaciones de una ni anular un evento.
+
+- [ ] **`RepositoryHttpService`**: los 4 canales nuevos quedaron como stubs, igual
+  que el resto del archivo (el bundle web usa el shim de `window.api`).
+
+- [ ] **Cheque como fuente de pago** — frc-comercial lo tiene (emite el cheque
+  desde el propio pago, con chequera y hojas). Acá el cheque sigue por
+  `emitir-cheque`. Se dejó fuera del alcance a propósito.
 ## PdV: mesa y cliente (2026-08)
 
 - [x] **La mesa se ocupa y se libera con permiso de mozo** — el estado viaja con

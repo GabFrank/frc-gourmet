@@ -195,20 +195,28 @@ CuentaPorPagarCuota {
 4. **Stock**: por cada detalle con `controlaStock=true`, crear `StockMovimiento.AJUSTE_NEGATIVO` para revertir el ingreso.
 5. **PrecioCosto NO se revierte automáticamente** — el nuevo PrecioCosto activo queda. Si se quiere ajustar manualmente, intervención humana.
 
-## Flujo: pagar-compras-dialog
+## Flujo: pagar compras (desde 2026-08, wizard único)
 
-Componente: `src/app/pages/financiero/caja-mayor/pagar-compras-dialog/`.
+> **`pagar-compras-dialog` fue eliminado.** El pago de cuotas de compra pasó al
+> wizard único de Caja Mayor (`pagar-obligaciones-dialog`, concepto `COMPRA`),
+> junto con gastos, vales y salarios. Detalle del subsistema →
+> [financiero-caja-mayor.md](financiero-caja-mayor.md) § Pago consolidado.
 
-1. Carga inicial: canal IPC `get-cuotas-pendientes-compras` (cuentas-por-pagar.handler.ts:701-771).
-   - Filtra: cpp.tipo=COMPRA, estado IN (PENDIENTE, PARCIAL), cpp.estado=ACTIVO.
-   - Enriquece: cppId, compraId, compraNumeroNota, compraFechaCompra, compraCredito, proveedorId, proveedorNombre, moneda, saldoPendiente.
-   - Orden: proveedor ASC, fechaVencimiento ASC.
-2. UI: tabla con checkboxes, filtro proveedor, "marcar todo", monto editable por cuota, sticky subtotal.
-3. Selector fuente: `CAJA_MAYOR | CUENTA_BANCARIA`.
-   - Si CAJA_MAYOR: caja mayor abierta + moneda + forma pago (movimentaCaja=true).
-   - Si CUENTA_BANCARIA: cuenta bancaria.
-4. Defaults sensatos: si solo 1 caja abierta, preselecciona; preselecciona moneda principal y forma de pago "EFECTIVO" o la primera con `movimentaCaja=true`.
-5. Confirmar → canal IPC `pagar-cuotas-compras-lote` (payload: `{ pagos: [{cuotaId, monto, observacion?}], fuente, cajaMayorId?, monedaId?, formaPagoId?, cuentaBancariaId? }`).
+Lo que cambia para compras:
+
+- **La compra simplificada ya no paga**: no hay "Pagar ahora" ni "Pago mixto" en
+  el alta. Deja su cuota pendiente y se salda desde Caja Mayor → Pagar compras.
+- El **"pagar ahora"** al finalizar una compra compleja abre el wizard genérico
+  con la cuota preseleccionada.
+- El wizard permite **varias cuotas del mismo proveedor** en un solo egreso, con
+  varias monedas y formas de pago, y pago **parcial** por cuota (compras es el
+  único concepto que lo admite).
+- Estado de la cuota/CPP: lo aplica `aplicarEstadoPagoCuota` /
+  `revertirEstadoPagoCuota`, los mismos helpers de siempre — el pago consolidado
+  no reimplementa la lógica de deuda.
+
+El canal `pagar-cuotas-compras-lote` **sigue vivo** (lo consume la PWA mobile con
+su propia pantalla), igual que `pagar-cpp-cuota` y `pagar-cpp-cuota-mixto`.
 
 ### Handler: pagar-cuotas-compras-lote
 

@@ -332,3 +332,68 @@ que los tape.
 `createdBy: Usuario` con `@ManyToOne('Usuario', { nullable: true })`. Si se borra el usuario, las FKs **no se nulean automáticamente**. Si bien las entidades quedan con `created_by_id` apuntando a un usuario inexistente, las queries con `relations: ['createdBy']` pueden fallar o devolver `null`.
 
 Solución actual: usuarios no se borran, se hacen `activo = false`. Soft delete preserva integridad referencial.
+
+
+## `date +%s%3N` no funciona en macOS (timestamp de migraciones)
+
+La convención dice que el prefijo de una migración es epoch en milisegundos reales.
+`date +%s%3N` es sintaxis **GNU**: en macOS, BSD `date` no conoce `%3N` y devuelve
+la `N` literal pegada al final —
+
+```
+$ date +%s%3N
+17871698783N          # <- la N es parte de la salida
+```
+
+…lo que produce un archivo `17871698783N-Migracion.ts` y una clase
+`Migracion17871698783N`, que ni siquiera es un identificador coherente.
+
+En macOS:
+
+```bash
+python3 -c "import time;print(int(time.time()*1000))"
+```
+
+## `ADD COLUMN ... IF NOT EXISTS` es inválido en SQLite
+
+`CREATE TABLE IF NOT EXISTS` funciona en los dos motores. `ALTER TABLE ... ADD
+COLUMN IF NOT EXISTS` **no**: SQLite lo rechaza. El patrón del repo es consultar el
+esquema antes:
+
+```ts
+const tabla = await queryRunner.getTable('cajas_mayor_movimientos');
+if (tabla && !tabla.columns.find((c) => c.name === 'pago_consolidado_id')) {
+  await queryRunner.query(`ALTER TABLE "cajas_mayor_movimientos" ADD COLUMN "pago_consolidado_id" integer NULL`);
+}
+```
+
+## Entidades sin columna `activo`
+
+`BaseModel` **no** trae `activo`: cada entidad la agrega si la necesita. `Gasto` y
+`Vale`, por ejemplo, **no la tienen** — filtrar por `g.activo = true` revienta con
+`no such column`. Su ciclo de vida se expresa en `estado`, no en un booleano.
+
+
+## `matStepperNext` / `matStepperPrevious` sólo funcionan DENTRO del `<mat-stepper>`
+
+Un footer fijo fuera del stepper (patrón común para que los botones no scrolleen
+con el contenido) **no puede** usar esas directivas: inyectan el `CdkStepper` de
+un ancestro, no lo encuentran, y los botones **no llegan a crearse** — sin error
+visible en consola, simplemente no están en el DOM.
+
+Fuera del stepper hay que navegar a mano:
+
+```ts
+@ViewChild('stepper') stepper?: MatStepper;
+paso = 0;                                  // la vista lee esto, no stepper.selectedIndex
+siguientePaso() { this.stepper?.next(); this.paso = this.stepper!.selectedIndex; }
+```
+
+Y en el template, `(selectionChange)="onPasoChange($event.selectedIndex)"` sobre
+el `<mat-stepper>` para no perder el sincronismo si el usuario navega por los
+encabezados.
+
+> Relacionado: una variable de template (`#stepper`) declarada **dentro** de un
+> `*ngIf` no es visible fuera de esa vista embebida. Si además existe una
+> propiedad del componente con el mismo nombre, la vista resuelve a la propiedad
+> y el bug queda camuflado.

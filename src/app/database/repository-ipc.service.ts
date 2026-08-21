@@ -787,6 +787,10 @@ interface ElectronAPI {
   anularPagoMixtoCuota: (payload: any) => Promise<any>;
   getCuotasConPagoMixto: (cuentaPorPagarId: number) => Promise<any>;
   pagarCuotasComprasLote: (payload: any) => Promise<any>;
+  getObligacionesPendientes: (concepto: string, filtros?: any) => Promise<any>;
+  registrarPagoConsolidado: (payload: any) => Promise<any>;
+  getPagoConsolidadoDetalle: (pagoId: number) => Promise<any>;
+  anularPagoConsolidado: (pagoId: number, motivo?: string) => Promise<any>;
   getCuotasPendientesCompras: (filtros?: any) => Promise<any[]>;
   cancelarCppCuota: (payload: any) => Promise<any>;
 
@@ -3433,6 +3437,22 @@ export class RepositoryIpcService extends RepositoryService {
   }
   pagarCuotasComprasLote(payload: any): Observable<any> {
     return from(this.api.pagarCuotasComprasLote(payload));
+  }
+
+  getObligacionesPendientes(concepto: string, filtros?: any): Observable<any> {
+    return from(this.api.getObligacionesPendientes(concepto, filtros));
+  }
+
+  registrarPagoConsolidado(payload: any): Observable<any> {
+    return from(this.api.registrarPagoConsolidado(payload));
+  }
+
+  getPagoConsolidadoDetalle(pagoId: number): Observable<any> {
+    return from(this.api.getPagoConsolidadoDetalle(pagoId));
+  }
+
+  anularPagoConsolidado(pagoId: number, motivo?: string): Observable<any> {
+    return from(this.api.anularPagoConsolidado(pagoId, motivo));
   }
   getCuotasPendientesCompras(filtros?: any): Observable<any[]> {
     return from(this.api.getCuotasPendientesCompras(filtros));

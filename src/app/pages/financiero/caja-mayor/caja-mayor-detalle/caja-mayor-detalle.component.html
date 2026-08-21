@@ -19,14 +19,6 @@
         <mat-icon>remove_circle</mat-icon>
         Registrar Egreso
       </button>
-      <button mat-stroked-button (click)="egresoCajaInicial()" matTooltip="Retirar efectivo para abrir una caja" *appHasPermission="'CAJA_MAYOR_OPERAR'">
-        <mat-icon>output</mat-icon>
-        Egreso de caja inicial
-      </button>
-      <button mat-raised-button color="primary" (click)="cobrarCpcRapido()" matTooltip="Cobrar cuota de un cliente" *appHasPermission="'CPC_COBRAR'">
-        <mat-icon>payments</mat-icon>
-        Cobrar a cliente
-      </button>
       <button mat-stroked-button (click)="abrirConfiguracion()" matTooltip="Configurar cards visibles">
         <mat-icon>tune</mat-icon>
         Configurar
@@ -361,18 +353,26 @@
           <ng-container matColumnDef="actions">
             <th mat-header-cell *matHeaderCellDef></th>
             <td mat-cell *matCellDef="let row">
-              <button mat-icon-button [matMenuTriggerFor]="movMenu" *ngIf="row.fuente === 'CAJA' && !row.esAnulacion && !row.anulacion && !row.contraDeId && cajaMayor?.estado === 'ABIERTA'">
+              <button mat-icon-button [matMenuTriggerFor]="movMenu" *ngIf="row.fuente === 'CAJA' && !row.esAnulacion && !row.anulacion && !row.contraDeId && (cajaMayor?.estado === 'ABIERTA' || row.pagoConsolidadoId)">
                 <mat-icon>more_vert</mat-icon>
               </button>
               <mat-menu #movMenu="matMenu">
-                <button mat-menu-item (click)="editarMovimiento(row)" *appHasPermission="'CAJA_MAYOR_OPERAR'">
-                  <mat-icon>edit</mat-icon>
-                  <span>Editar</span>
+                <button mat-menu-item *ngIf="row.pagoConsolidadoId" (click)="verDetallePagoConsolidado(row)">
+                  <mat-icon>receipt_long</mat-icon>
+                  <span>Ver detalle del pago</span>
                 </button>
-                <button mat-menu-item (click)="anularMovimiento(row)" *appHasPermission="'CAJA_MAYOR_OPERAR'">
-                  <mat-icon color="warn">block</mat-icon>
-                  <span>Anular</span>
-                </button>
+                <!-- Editar y anular exigen la caja abierta; "ver detalle" no,
+                     porque es solo lectura y una caja cerrada igual se consulta. -->
+                <ng-container *ngIf="cajaMayor?.estado === 'ABIERTA'">
+                  <button mat-menu-item (click)="editarMovimiento(row)" *appHasPermission="'CAJA_MAYOR_OPERAR'">
+                    <mat-icon>edit</mat-icon>
+                    <span>Editar</span>
+                  </button>
+                  <button mat-menu-item (click)="anularMovimiento(row)" *appHasPermission="'CAJA_MAYOR_OPERAR'">
+                    <mat-icon color="warn">block</mat-icon>
+                    <span>Anular</span>
+                  </button>
+                </ng-container>
                 <ng-container *appHasPermission="'FINANCIERO_CAJA_GESTIONAR'">
                   <button
                     mat-menu-item

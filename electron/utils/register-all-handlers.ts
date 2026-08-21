@@ -47,6 +47,7 @@ import { registerMenuConfigHandlers } from '../handlers/menu-config.handler';
 import { registerPdvEgresosHandlers } from '../handlers/pdv-egresos.handler';
 import { registerBankingHandlers } from '../handlers/banking.handler';
 import { registerCuentasPorPagarHandlers } from '../handlers/cuentas-por-pagar.handler';
+import { registerPagoConsolidadoHandlers } from '../handlers/pago-consolidado.handler';
 import { registerDashboardShortcutsHandlers } from '../handlers/dashboard-shortcuts.handler';
 import { registerOnboardingHandlers } from '../handlers/onboarding.handler';
 import { registerEmpresaHandlers } from '../handlers/empresa.handler';
@@ -132,6 +133,7 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerPdvEgresosHandlers(dataSource, getCurrentUser); // Vales/compras pagados desde el cajon (PdV)
   registerBankingHandlers(dataSource, getCurrentUser); // CuentasBancarias + MaquinasPos + Acreditaciones
   registerCuentasPorPagarHandlers(dataSource, getCurrentUser); // CompraCategoria + CompraCuota + CuentaPorPagar
+  registerPagoConsolidadoHandlers(dataSource, getCurrentUser); // Pago consolidado de obligaciones desde Caja Mayor
   registerDashboardShortcutsHandlers(dataSource, getCurrentUser); // Dashboard Shortcuts personalizables
   registerOnboardingHandlers(dataSource, getCurrentUser); // Onboarding tasks (lista guiada en Home)
   registerEmpresaHandlers(dataSource, getCurrentUser); // Empresa singleton (datos + branding + fiscal)

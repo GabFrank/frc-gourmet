@@ -269,7 +269,17 @@ GastoDetalle {
 
 ### Crear gasto (transacción atómica)
 
-`create-gasto` (`caja-mayor.handler.ts`). El estado del gasto queda en `PAGADO`. Bifurca por `destinoTipo`:
+`create-gasto` (`caja-mayor.handler.ts`). Bifurca por `diferido` y luego por `destinoTipo`:
+
+**Rama DIFERIDA (`diferido: true`, la que usa el desktop desde 2026-08):** el gasto
+nace `PENDIENTE`, con `monedaId`/`monto` **directos** (no derivados de `detalles[]`),
+y **no asienta nada**. Se paga después con el pago consolidado.
+
+> El contrato **no cambió** para quien manda datos de pago: la app mobile llama a
+> este mismo canal con `detalles[]` y forma de pago esperando asiento inmediato, y
+> no tiene pantalla de pago diferido. Por eso la rama nueva es **opt-in**.
+
+Con datos de pago (sin `diferido`), el estado queda en `PAGADO` y bifurca por `destinoTipo`:
 
 **Rama CAJA_MAYOR (default):**
 1. Crear Gasto (monto = suma de detalles).
@@ -286,6 +296,123 @@ GastoDetalle {
 ### Anular gasto
 
 `anular-gasto`: por cada detalle, crear contra-mov AJUSTE_POSITIVO. Estado del Gasto → CANCELADO. (Para gastos con destino CUENTA_BANCARIA, la reversión es sobre el saldo de la cuenta.)
+
+## Pago consolidado de obligaciones (2026-08)
+
+**Todo pago de una obligación se hace desde Caja Mayor**, en un único wizard, y ya
+no dentro del diálogo de alta de cada cosa. Un evento salda N obligaciones del
+mismo concepto cobrando con M líneas de pago.
+
+### Por qué existe
+
+El asiento "si CAJA_MAYOR {mov + saldo} si no {debitar banco + mov bancario}"
+estaba escrito **cinco** veces (`create-gasto`, `crear-vale-confirmado`,
+`confirmar-vale`, `pagar-liquidacion-sueldo`, `aplicarPagoCpoCuota`), cada una con
+su propia UI de "elegir fuente". Y no se podían pagar 3 gastos con un solo egreso:
+eran 3 movimientos sueltos.
+
+### Entidades
+
+- **`PagoConsolidado`** (`pagos_consolidados`): cabecera — `concepto`
+  (`COMPRA|GASTO|VALE|LIQUIDACION_SUELDO`), `descripcion` compuesta,
+  `monedaDeuda`, `montoTotal`, `cantidadItems`, `estado` (`ACTIVO|ANULADO`).
+- **`PagoConsolidadoDetalle`** (`pagos_consolidados_detalles`): **una fila por
+  (obligación × línea de pago)** — producto cartesiano. Es lo que permite
+  responder a la vez *cuánto recibió cada obligación* (`SUM(montoImputado)
+  GROUP BY origenId`) y *de dónde salió cada guaraní* (`SUM(montoOrigen)` por
+  línea). Guarda `cotizacion` y `montoImputado` del momento del pago, para que la
+  anulación sea determinística.
+- **`cajas_mayor_movimientos.pago_consolidado_id`**: ancla del movimiento al evento.
+- Migración `AddPagoConsolidado` (aditiva; el `ADD COLUMN` usa `getTable`, no
+  `IF NOT EXISTS`, que es inválido en SQLite).
+
+### Reglas de negocio
+
+| Regla | Por qué |
+|---|---|
+| **Un pago = un concepto** | El movimiento conserva el `TipoMovimiento` real (`EGRESO_GASTO`, `EGRESO_VALE`, `EGRESO_SALARIO`, `EGRESO_CUOTA_COMPRA`), así los reportes por tipo siguen cuadrando |
+| **Una sola moneda de deuda** por evento | Para que "total a pagar" sea un número |
+| **Un solo proveedor** en compras | Igual que la referencia de frc-comercial |
+| **Sólo compras admite pago parcial** | Un gasto/vale/liquidación se paga entero |
+| **Una liquidación por vez** | Su neteo tiene que quedar atado a un evento propio |
+| Fuentes: `CAJA_MAYOR` y `CUENTA_BANCARIA` | Cheque sigue por `emitir-cheque` |
+
+### Handler y adaptadores
+
+`electron/handlers/pago-consolidado.handler.ts` — 4 canales
+(`get-obligaciones-pendientes`, `registrar-pago-consolidado`,
+`get-pago-consolidado-detalle`, `anular-pago-consolidado`). **Permiso por
+concepto**: `COMPRAS_GESTIONAR` / `CAJA_MAYOR_OPERAR` / `RRHH_VALE_CONFIRMAR` /
+`RRHH_LIQUIDACION_PAGAR`, también en los `get-*` (el listado de liquidaciones
+expone la nómina).
+
+`pago-consolidado-adapters.ts` — un adaptador por concepto con `listarPendientes`,
+`leerYBloquear`, `aplicar`, `revertir` y `columnaReferencia`. **Ninguno toca
+caja**: el asiento vive sólo en el handler.
+
+Orden del `registrar`, todo en una transacción:
+1. Releer cada obligación **con lock pesimista** (Postgres) y validar contra el
+   saldo real — nunca contra el que mandó el cliente.
+2. Resolver cotizaciones faltantes (bidireccional); si no hay, error.
+3. Validar que las líneas cubran la deuda (tolerancia por moneda).
+4. Crear la cabecera.
+5. **Un asiento por grupo** `(fuente, caja|cuenta, moneda, formaPago)`.
+6. Reparto FIFO → filas de detalle.
+7. `aplicar` de cada adaptador con lo **realmente imputado**.
+
+> Si el evento cubre **una sola** obligación, el movimiento además setea la
+> columna de referencia clásica (`gasto`, `valeId`, `cuentaPorPagarCuotaId`,
+> `liquidacionSueldoId`), porque `get-movimientos-caja-mayor-consolidados` filtra
+> por proveedor vía `gasto.proveedor_id` y compone la observación rica con
+> `m.gasto`.
+
+### Aritmética: `shared/utils/pago-consolidado.util.ts`
+
+TS puro (re-exportado en `electron/utils/`), lo comparten handler y componente.
+`repartirFifo` garantiza **por construcción**, no por tolerancia:
+
+1. lo imputado a cada obligación suma exactamente su monto;
+2. lo que sale por cada línea suma exactamente lo que el usuario escribió.
+
+El residuo entre "líneas convertidas" y "obligaciones" se absorbe **antes** de
+repartir, ajustando la capacidad de la última línea. Sin eso, pagar 99,99 USD con
+una línea de 250.000 Gs deja una obligación PARCIAL por un centavo. Trabaja en
+unidades mínimas enteras. Test: `npm run test:pago-consolidado` (64 asserts).
+
+### Anulación
+
+`anular-pago-consolidado` revierte **el evento entero**: contra-movimiento
+`AJUSTE_POSITIVO` por cada movimiento distinto (un `Set`: un movimiento cubre
+varias filas), acredita las cuentas bancarias, y llama al `revertir` de cada
+adaptador.
+
+⚠️ **Bloqueos cruzados** — sin esto la misma plata vuelve dos veces:
+
+| Handler | Bloqueo |
+|---|---|
+| `anular-caja-mayor-movimiento` | si el movimiento tiene `pagoConsolidadoId`. **El chequeo va ANTES** que las ramas por columna de referencia (con 1 item también las setea, y la rama del vale revierte directo en vez de bloquear) |
+| `anular-vale` | primera sentencia. Un vale pagado por el evento tiene `movimientoId` en **null**: sin el bloqueo quedaría ANULADO sin devolver un guaraní |
+| `anular-gasto` | ídem |
+| `anular-liquidacion-sueldo` | ídem: su reversa de caja va por `liq.movimientoId`, que queda null |
+
+Los bloqueos **se liberan** al anular el evento.
+
+### UI
+
+- `pagar-obligaciones-dialog/` — wizard de 3 pasos (seleccionar / formas de pago /
+  revisar), híbrido tab-dialog, parametrizado por `concepto`.
+- `detalle-pago-consolidado-dialog/` — qué obligaciones cubrió y con qué líneas;
+  desde ahí se anula. Se abre desde el menú ⋮ del movimiento.
+- `registrar-egreso-dialog` — tarjetas nuevas **Pagar Gastos**, **Pagar Vales**,
+  **Pagar Salarios**; **Pagar Compras** ahora abre el genérico.
+- `pagar-compras-dialog/` **fue eliminado**.
+
+Ninguno necesita hoja en `MENU_TREE`: son diálogos contextuales.
+
+Tests: `npm run test:pago-consolidado` (aritmética) y
+`npm run test:pago-consolidado-e2e` (42 asserts sobre SQLite: multi-moneda,
+parcial, banco, bloqueos, anulación, cotización invertida).
+Manual: `docs/testing/TESTING-CHECKLIST-PAGO-CONSOLIDADO.md`.
 
 ## Retiros de Caja
 
@@ -397,10 +524,11 @@ Nunca ambas a la vez.
 - `create-edit-caja-mayor/` — CRUD.
 - `caja-mayor-detalle/` — vista operativa.
 - `registrar-ingreso-dialog/` — entrada varia o retiro caja.
-- `registrar-egreso-dialog/` — hub de EGRESOS. Lanza 6 sub-diálogos: `CreateEditGastoDialogComponent` (gasto), `CreateEditValeDialogComponent` (card "Registrar Vale" → handler atómico `crear-vale-confirmado` en `vales.handler.ts`), `CrearCompraSimplificadaDialogComponent` (compra simplificada), `PagarComprasDialogComponent` (pago multi-cuota CPP), `EmitirChequeDialogComponent` (emitir cheque), `CreateOperacionFinancieraDialogComponent`. Además crea mov directo (`create-caja-mayor-movimiento`) / movimiento bancario.
+- `registrar-egreso-dialog/` — hub de EGRESOS, en **grid** de tarjetas. Lanza: `CreateEditGastoDialogComponent` (alta diferida, gasto PENDIENTE), `CrearCompraSimplificadaDialogComponent` (sin pago), `CreateEditValeDialogComponent` (alta, vale SOLICITADO), `PagarObligacionesDialogComponent` (los 4 conceptos de pago), `EmitirChequeDialogComponent`, `CreateOperacionFinancieraDialogComponent`, `EgresoCajaInicialDialogComponent`, y el ajuste de saldo resuelto en el propio diálogo.
 - `edit-movimiento-dialog/` — editar/anular movimiento.
 - `configurar-caja-mayor-dialog/` — qué FPs y cuentas mostrar (M:M).
-- `pagar-compras-dialog/` — pago multi-cuota CPP.
+- `pagar-obligaciones-dialog/` — **wizard único de pago** (compras/gastos/vales/salarios).
+- `detalle-pago-consolidado-dialog/` — desglose de un pago consolidado.
 - `egreso-caja-inicial-dialog/` — sembrar efectivo a la apertura de una caja PdV (EGRESO_CAJA_INICIAL).
 - `abrir-caja-desde-conteo-dialog/` — abrir caja reutilizando el conteo del egreso inicial.
 - Sub-carpetas: `gastos/`, `entradas-varias/`, `retiros/`, `operaciones-financieras/`, `bancos/`, `cheques/`, `pos/`, `cuentas-por-pagar/`, `cuentas-por-cobrar/`.

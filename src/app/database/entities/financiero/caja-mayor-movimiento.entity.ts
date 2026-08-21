@@ -95,6 +95,19 @@ export class CajaMayorMovimiento extends BaseModel {
   @Column({ name: 'compra_id', type: 'int', nullable: true })
   compraId?: number;
 
+  /**
+   * Evento de pago consolidado que genero este movimiento. Un solo movimiento
+   * puede cubrir N obligaciones, por eso el desglose vive en
+   * `pagos_consolidados_detalles` y no en las columnas de referencia de arriba.
+   *
+   * Un movimiento con este campo NO se anula por separado: hay que anular el
+   * evento entero (`anular-pago-consolidado`), porque la reversa tiene que
+   * reabrir todas las deudas que salda. `anular-caja-mayor-movimiento` lo
+   * bloquea, y ese chequeo va ANTES que las ramas por columna de referencia.
+   */
+  @Column({ name: 'pago_consolidado_id', type: 'int', nullable: true })
+  pagoConsolidadoId?: number;
+
   // Contra-movimiento para anulaciones
   @ManyToOne('CajaMayorMovimiento', { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'referencia_anulacion_id' })

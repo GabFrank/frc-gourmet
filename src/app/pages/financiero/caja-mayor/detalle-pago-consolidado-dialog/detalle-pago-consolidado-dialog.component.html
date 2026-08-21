@@ -1,0 +1,68 @@
+<div class="detalle-pago">
+  <div class="detalle-loading" *ngIf="loading">
+    <mat-spinner diameter="36"></mat-spinner>
+  </div>
+
+  <ng-container *ngIf="!loading && pago">
+    <div class="detalle-header">
+      <div>
+        <h2 class="detalle-titulo">{{ pago.descripcion }}</h2>
+        <span class="detalle-sub">
+          {{ pago.fecha | date:'dd/MM/yyyy HH:mm' }}
+          <ng-container *ngIf="pago.responsable"> · {{ pago.responsable }}</ng-container>
+        </span>
+      </div>
+      <span class="detalle-chip-anulado" *ngIf="estaAnulado">{{ tituloEstado }}</span>
+    </div>
+
+    <div class="detalle-motivo" *ngIf="estaAnulado && pago.motivoAnulacion">
+      <mat-icon>block</mat-icon>
+      <span>{{ pago.motivoAnulacion }}</span>
+    </div>
+
+    <div class="detalle-bloque">
+      <span class="detalle-label">Obligaciones pagadas ({{ pago.cantidadItems }})</span>
+      <table mat-table [dataSource]="items" class="detalle-tabla">
+        <ng-container matColumnDef="descripcion">
+          <th mat-header-cell *matHeaderCellDef>Detalle</th>
+          <td mat-cell *matCellDef="let it">{{ it.descripcion }}</td>
+        </ng-container>
+        <ng-container matColumnDef="beneficiario">
+          <th mat-header-cell *matHeaderCellDef>Beneficiario</th>
+          <td mat-cell *matCellDef="let it">{{ it.beneficiario || '—' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="imputado">
+          <th mat-header-cell *matHeaderCellDef class="detalle-num">Imputado</th>
+          <td mat-cell *matCellDef="let it" class="detalle-num">
+            {{ pago.monedaSimbolo }} {{ it.montoImputado | number:'1.0-2' }}
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="columnasItems"></tr>
+        <tr mat-row *matRowDef="let row; columns: columnasItems"></tr>
+      </table>
+      <mat-divider></mat-divider>
+      <div class="detalle-total">
+        <span>Total</span>
+        <span class="detalle-num">{{ totalTexto }}</span>
+      </div>
+    </div>
+
+    <div class="detalle-bloque">
+      <span class="detalle-label">Formas de pago</span>
+      <div class="detalle-linea" *ngFor="let l of lineas">
+        <mat-icon>{{ l.fuente === 'CAJA_MAYOR' ? 'payments' : 'account_balance' }}</mat-icon>
+        <span class="detalle-linea-etiqueta">{{ l.etiqueta }}</span>
+        <span class="detalle-linea-monto">{{ l.montoTexto }}</span>
+        <span class="detalle-linea-conv" *ngIf="l.convertidoTexto">= {{ l.convertidoTexto }}</span>
+      </div>
+    </div>
+  </ng-container>
+
+  <div class="detalle-footer" *ngIf="!loading">
+    <button mat-button (click)="cerrar()">Cerrar</button>
+    <span class="detalle-spacer"></span>
+    <button mat-flat-button color="warn" *ngIf="!estaAnulado" [disabled]="anulando" (click)="anular()">
+      <mat-icon>undo</mat-icon> Anular pago
+    </button>
+  </div>
+</div>

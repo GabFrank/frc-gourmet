@@ -33,7 +33,7 @@ import { EditMovimientoDialogComponent } from '../edit-movimiento-dialog/edit-mo
 import { CreateEditEntradaVariaDialogComponent } from '../entradas-varias/create-edit-entrada-varia/create-edit-entrada-varia-dialog.component';
 import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financieras/create-operacion-financiera/create-operacion-financiera-dialog.component';
 import { EmitirChequeDialogComponent } from '../cheques/emitir-cheque/emitir-cheque-dialog.component';
-import { PagarComprasDialogComponent } from '../pagar-compras-dialog/pagar-compras-dialog.component';
+import { PagarObligacionesDialogComponent } from '../pagar-obligaciones-dialog/pagar-obligaciones-dialog.component';
 import { MovimientosCuentaBancariaDialogComponent } from '../bancos/movimientos-cuenta-bancaria-dialog/movimientos-cuenta-bancaria-dialog.component';
 import { EgresoCajaInicialDialogComponent } from '../egreso-caja-inicial-dialog/egreso-caja-inicial-dialog.component';
 import { AbrirCajaDesdeConteoDialogComponent } from '../abrir-caja-desde-conteo-dialog/abrir-caja-desde-conteo-dialog.component';
@@ -57,6 +57,8 @@ interface MovimientoConsolidado {
   gastoId?: number;
   retiroCajaId?: number;
   conteoId?: number;
+  /** Evento de pago consolidado: habilita la accion "ver detalle del pago". */
+  pagoConsolidadoId?: number | null;
   movimientoIds: number[];
   esAnulacion: boolean; // este grupo es un contra-movimiento (toggle "Ver anulaciones")
   anulacion?: {
@@ -555,7 +557,8 @@ export class CajaMayorDetalleComponent implements OnInit {
 
   registrarIngreso(): void {
     const dialogRef = this.dialog.open(RegistrarIngresoDialogComponent, {
-      width: '550px',
+      width: '860px',
+      maxWidth: '95vw',
       data: { cajaMayorId: this.cajaMayor?.id },
     });
 
@@ -566,6 +569,7 @@ export class CajaMayorDetalleComponent implements OnInit {
         this.detectarYEscucharSubdialog([
           CreateEditEntradaVariaDialogComponent,
           CreateOperacionFinancieraDialogComponent,
+          CobrarCpcRapidoDialogComponent,
         ]);
       }
     });
@@ -573,7 +577,8 @@ export class CajaMayorDetalleComponent implements OnInit {
 
   registrarEgreso(): void {
     const dialogRef = this.dialog.open(RegistrarEgresoDialogComponent, {
-      width: '550px',
+      width: '860px',
+      maxWidth: '95vw',
       data: { cajaMayorId: this.cajaMayor?.id },
     });
 
@@ -585,8 +590,9 @@ export class CajaMayorDetalleComponent implements OnInit {
           CreateEditGastoDialogComponent,
           CreateOperacionFinancieraDialogComponent,
           EmitirChequeDialogComponent,
-          PagarComprasDialogComponent,
+          PagarObligacionesDialogComponent,
           CreateEditValeDialogComponent,
+          EgresoCajaInicialDialogComponent,
         ]);
       }
     });
@@ -680,6 +686,24 @@ export class CajaMayorDetalleComponent implements OnInit {
 
   private findFormaPagoByNombre(nombre: string): any {
     return null; // Se resuelve en el diálogo cargando lookups
+  }
+
+  /**
+   * Detalle de un pago consolidado. El movimiento dice "PAGO CONSOLIDADO DE N
+   * GASTOS" y no puede nombrar a los N: el desglose se lee acá.
+   */
+  async verDetallePagoConsolidado(row: any): Promise<void> {
+    if (!row?.pagoConsolidadoId) return;
+    const { DetallePagoConsolidadoDialogComponent } = await import(
+      '../detalle-pago-consolidado-dialog/detalle-pago-consolidado-dialog.component'
+    );
+    const ref = this.dialog.open(DetallePagoConsolidadoDialogComponent, {
+      width: '760px',
+      maxWidth: '95vw',
+      data: { pagoId: row.pagoConsolidadoId },
+    });
+    const anulado = await firstValueFrom(ref.afterClosed());
+    if (anulado) this.loadData();
   }
 
   async anularMovimiento(mov: MovimientoConsolidado): Promise<void> {
