@@ -2138,7 +2138,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     (comanda as any).observacion = null;
     await setEntityUserTracking(dataSource, comanda, userId, true);
     await manager.save(Comanda, comanda);
-    if (mesaId && (await ocuparMesaAlVincularComanda())) {
+    // Se intenta liberar la mesa SIEMPRE, no solo cuando
+    // `ocuparMesaAlVincularComanda` esta en true. Una mesa puede haber quedado
+    // OCUPADO por otro camino — p.ej. transferir la mesa entera a una comanda
+    // sobre esa misma mesa: ahi la mesa no se libera porque la comanda vive
+    // encima, y al cerrarse la comanda no quedaba nadie que la liberara. Mesa
+    // fantasma. `liberarMesaSiVaciaEnTx` ya se niega si queda trabajo vivo, asi
+    // que intentarlo siempre es seguro.
+    if (mesaId) {
       await liberarMesaSiVaciaEnTx(manager, mesaId);
     }
   };
@@ -2625,9 +2632,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
 
-      // Si la config ocupa la mesa al vincular comanda, al liberar la comanda
-      // liberar la mesa solo si no quedan otras comandas OCUPADO ni venta de mesa ABIERTA.
-      if (mesaId && (await ocuparMesaAlVincularComanda())) {
+      // Al liberar la comanda, liberar tambien su mesa si ya no le queda trabajo
+      // vivo: ni otra comanda OCUPADO ni una venta de mesa ABIERTA.
+      //
+      // Antes esto corria solo si `ocuparMesaAlVincularComanda` estaba en true,
+      // con el razonamiento de que si la config no ocupa la mesa tampoco tiene
+      // que liberarla. Pero la mesa puede quedar OCUPADO por otro camino — p.ej.
+      // transferirle la cuenta entera a una comanda sobre esa misma mesa — y ahi
+      // nadie la liberaba nunca: mesa fantasma que otro cajero vuelve a ocupar.
+      // El chequeo de abajo ya se niega si hay trabajo vivo, asi que intentarlo
+      // siempre es seguro.
+      if (mesaId) {
         const otrasComandas = await repo.count({
           where: { pdv_mesa: { id: mesaId }, estado: ComandaEstado.OCUPADO, activo: true },
         });

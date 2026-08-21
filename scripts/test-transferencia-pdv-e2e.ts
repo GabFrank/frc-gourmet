@@ -234,6 +234,48 @@ async function main() {
     ok(await estadoMesa(destino.id) === 'OCUPADO', '8: la mesa destino se ocupo');
   }
 
+  // ═══════ [8b] la mesa no queda fantasma tras la cadena mesa→comanda→mesa ═══════
+  console.log('\n[8b] Mesa completa a una comanda sobre esa misma mesa, y de ahi a otra mesa');
+  {
+    const mesaA = await nuevaMesa(); const comanda = await nuevaComanda(); const mesaB = await nuevaMesa();
+    const venta = await abrirVentaMesa(mesaA.id);
+    await agregarItem(venta.id);
+
+    // Paso 1: la cuenta pasa a tarjeta. La mesa sigue ocupada — la gente esta ahi.
+    await transferir({
+      origen: { tipo: 'MESA', id: mesaA.id }, destino: { tipo: 'COMANDA', id: comanda.id }, alcance: 'COMPLETA',
+    });
+    ok(await estadoMesa(mesaA.id) === 'OCUPADO', '8b: la mesa sigue ocupada con la comanda encima');
+
+    // Paso 2: la tarjeta se muda a otra mesa. Al cerrarse la comanda, la mesa
+    // original queda sin nada — y tiene que liberarse. Antes no lo hacia salvo
+    // que `ocuparMesaAlVincularComanda` estuviera en true (default: false), y
+    // quedaba OCUPADO para siempre.
+    await transferir({
+      origen: { tipo: 'COMANDA', id: comanda.id }, destino: { tipo: 'MESA', id: mesaB.id }, alcance: 'COMPLETA',
+    });
+    ok(await estadoComanda(comanda.id) === 'DISPONIBLE', '8b: la comanda quedo libre');
+    ok(await estadoMesa(mesaB.id) === 'OCUPADO', '8b: la mesa nueva se ocupo');
+    ok(await estadoMesa(mesaA.id) === 'DISPONIBLE', '8b: la mesa original NO queda fantasma', await estadoMesa(mesaA.id));
+  }
+
+  // ═══════ [8c] pero no libera una mesa que sigue teniendo trabajo ═══════
+  console.log('\n[8c] Cerrar una comanda no pisa la cuenta de su mesa');
+  {
+    const mesa = await nuevaMesa(); const comanda = await nuevaComanda(); const destino = await nuevaMesa();
+    // La mesa tiene su propia cuenta ademas de la comanda encima.
+    const ventaMesa = await abrirVentaMesa(mesa.id);
+    await agregarItem(ventaMesa.id);
+    const ventaComanda = await abrirVentaComanda(comanda.id, mesa.id);
+    await agregarItem(ventaComanda.id);
+
+    await transferir({
+      origen: { tipo: 'COMANDA', id: comanda.id }, destino: { tipo: 'MESA', id: destino.id }, alcance: 'COMPLETA',
+    });
+    ok(await estadoMesa(mesa.id) === 'OCUPADO', '8c: la mesa sigue ocupada, su propia cuenta sigue abierta', await estadoMesa(mesa.id));
+    ok(await estadoVenta(ventaMesa.id) === 'ABIERTA', '8c: la cuenta de la mesa no se toco');
+  }
+
   // ═══════ [9] no se mueve un item ya cobrado ═══════
   console.log('\n[9] Items con cobro parcial');
   {
