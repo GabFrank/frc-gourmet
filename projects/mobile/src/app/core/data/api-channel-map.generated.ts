@@ -3,7 +3,7 @@
  * AUTO-GENERADO por scripts/generate-mobile-api-map.js — NO editar a mano.
  * Mapa método de window.api → canal IPC (extraído de preload.ts).
  * Regenerar tras tocar preload.ts: `node scripts/generate-mobile-api-map.js`.
- * Total: 839 métodos.
+ * Total: 840 métodos.
  */
 export const API_CHANNEL_MAP: Record<string, string> = {
   "abrirCajaDesdeConteo": "abrir-caja-desde-conteo",
@@ -738,6 +738,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "setRolePermissions": "set-role-permissions",
   "testPrinterConnection": "test-printer-connection",
   "togglePresentacionActivo": "toggle-presentacion-activo",
+  "transferirVentaPdv": "transferir-venta-pdv",
   "updateAdicional": "update-adicional",
   "updateAdjunto": "update-adjunto",
   "updateAsistencia": "update-asistencia",

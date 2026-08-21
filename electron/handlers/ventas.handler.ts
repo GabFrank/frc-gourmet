@@ -19,7 +19,7 @@ import { ensureObservacionNotaLibreId } from '../utils/observacion-libre.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
-import { Not, IsNull, In } from 'typeorm';
+import { Not, IsNull, In, EntityManager } from 'typeorm';
 import { DeepPartial } from 'typeorm';
 import { Reserva } from '../../src/app/database/entities/ventas/reserva.entity';
 import { ensurePermission } from '../utils/auth.utils';
@@ -2053,6 +2053,315 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       return await mesaRepo.save(mesa);
     } catch (error) {
       console.error(`Error cambiando estado de la mesa ${mesaId}:`, error);
+      throw error;
+    }
+  });
+
+  // ─── Transferencia de cuentas entre mesas y comandas ─────────────────────
+  /**
+   * Mueve una cuenta del salon — entera o solo algunos items — de un contenedor
+   * a otro. Cubre las 4 combinaciones: mesa->mesa, mesa->comanda,
+   * comanda->mesa y comanda->comanda.
+   *
+   * Antes esto vivia en el frontend como 5 a 8 llamadas IPC sueltas repartidas en
+   * tres metodos del PdV (`transferirMesa`, `transferirComandaAMesa`,
+   * `ejecutarMoverItems`). Si una fallaba a mitad de camino los items quedaban
+   * movidos y la mesa origen ocupada, sin forma de saberlo. Aca es una sola
+   * transaccion, con un unico `ensurePermission` y el lock por mesa que ya usan
+   * `createVenta` y la materializacion de pedidos online.
+   *
+   * Reglas de dinero:
+   * - Solo items: nunca se mueve un item con cobertura de cobro parcial. El
+   *   cobro y el cliente se quedan en la cuenta origen.
+   * - Completa a un contenedor SIN venta abierta: se re-apunta la venta entera,
+   *   asi que cobros, pago y cliente viajan intactos con ella.
+   * - Completa a un contenedor que YA tiene venta abierta: se fusionan los items
+   *   en la venta destino. Si la cuenta origen tiene cobros parciales se rechaza:
+   *   `Venta.pago` es un ManyToOne simple y las rondas de `CobroParcial` llevan un
+   *   `factorAplicado` atado al descuento global de SU venta. Fusionarlas pisaba
+   *   el pago del destino y dejaba plata cobrada huerfana.
+   */
+  type TransferenciaContenedor = { tipo: 'MESA' | 'COMANDA'; id: number };
+  interface TransferenciaPayload {
+    origen: TransferenciaContenedor;
+    destino: TransferenciaContenedor;
+    alcance: 'COMPLETA' | 'ITEMS';
+    itemIds?: number[];
+  }
+
+  const buscarVentaAbiertaDe = async (
+    manager: EntityManager,
+    contenedor: TransferenciaContenedor,
+  ): Promise<Venta | null> => {
+    const where = contenedor.tipo === 'MESA'
+      ? { mesa: { id: contenedor.id }, estado: VentaEstado.ABIERTA, comanda: IsNull() }
+      : { comanda: { id: contenedor.id }, estado: VentaEstado.ABIERTA };
+    return await manager.findOne(Venta, { where: where as any, relations: ['pago', 'mesa', 'comanda', 'caja', 'cliente'] });
+  };
+
+  const ocuparMesaEnTx = async (manager: EntityManager, mesaId: number): Promise<void> => {
+    const mesa = await manager.findOneBy(PdvMesa, { id: mesaId });
+    if (mesa && mesa.estado !== PdvMesaEstado.OCUPADO) {
+      mesa.estado = PdvMesaEstado.OCUPADO;
+      await manager.save(PdvMesa, mesa);
+    }
+  };
+
+  /**
+   * Libera la mesa solo si ya no le queda trabajo vivo. Mismo criterio que
+   * `set-pdv-mesa-estado` y `cerrarComanda`: una mesa liberada con una comanda
+   * OCUPADO encima es una mesa fantasma que otro cajero vuelve a ocupar.
+   */
+  const liberarMesaSiVaciaEnTx = async (manager: EntityManager, mesaId: number): Promise<boolean> => {
+    const comandasVivas = await manager.count(Comanda, {
+      where: { pdv_mesa: { id: mesaId }, estado: ComandaEstado.OCUPADO, activo: true },
+    });
+    const ventasVivas = await manager.count(Venta, {
+      where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
+    });
+    if (comandasVivas > 0 || ventasVivas > 0) return false;
+    const mesa = await manager.findOneBy(PdvMesa, { id: mesaId });
+    if (mesa && mesa.estado !== PdvMesaEstado.DISPONIBLE) {
+      mesa.estado = PdvMesaEstado.DISPONIBLE;
+      await manager.save(PdvMesa, mesa);
+    }
+    return true;
+  };
+
+  const cerrarComandaEnTx = async (manager: EntityManager, comandaId: number, userId?: number): Promise<void> => {
+    const comanda = await manager.findOne(Comanda, { where: { id: comandaId }, relations: ['pdv_mesa'] });
+    if (!comanda) return;
+    const mesaId = comanda.pdv_mesa?.id ?? null;
+    comanda.estado = ComandaEstado.DISPONIBLE;
+    (comanda as any).pdv_mesa = null;
+    (comanda as any).sector = null;
+    (comanda as any).observacion = null;
+    await setEntityUserTracking(dataSource, comanda, userId, true);
+    await manager.save(Comanda, comanda);
+    if (mesaId && (await ocuparMesaAlVincularComanda())) {
+      await liberarMesaSiVaciaEnTx(manager, mesaId);
+    }
+  };
+
+  const abrirComandaEnTx = async (
+    manager: EntityManager,
+    comanda: Comanda,
+    mesaVinculada: PdvMesa | null,
+    userId?: number,
+  ): Promise<void> => {
+    comanda.estado = ComandaEstado.OCUPADO;
+    if (mesaVinculada) {
+      comanda.pdv_mesa = mesaVinculada;
+      (comanda as any).sector = (mesaVinculada as any).sector ?? null;
+    }
+    await setEntityUserTracking(dataSource, comanda, userId, true);
+    await manager.save(Comanda, comanda);
+    if (mesaVinculada && (await ocuparMesaAlVincularComanda())) {
+      await ocuparMesaEnTx(manager, mesaVinculada.id!);
+    }
+  };
+
+  const transferirVentaPdvInternal = async (payload: TransferenciaPayload, userId?: number): Promise<any> => {
+    const origen = payload?.origen;
+    const destino = payload?.destino;
+    const alcance = payload?.alcance;
+
+    if (!origen?.tipo || !origen?.id) throw new Error('Origen de transferencia invalido.');
+    if (!destino?.tipo || !destino?.id) throw new Error('Destino de transferencia invalido.');
+    if (alcance !== 'COMPLETA' && alcance !== 'ITEMS') throw new Error('Alcance de transferencia invalido.');
+    if (origen.tipo === destino.tipo && Number(origen.id) === Number(destino.id)) {
+      throw new Error('El origen y el destino son el mismo.');
+    }
+    if (alcance === 'ITEMS' && (!Array.isArray(payload.itemIds) || payload.itemIds.length === 0)) {
+      throw new Error('No se seleccionaron items para transferir.');
+    }
+
+    return await dataSource.transaction(async (manager) => {
+      const ventaOrigen = await buscarVentaAbiertaDe(manager, origen);
+      if (!ventaOrigen) throw new Error('La cuenta de origen no tiene una venta abierta.');
+
+      // Mesa fisica del origen: es a la que se vincula una comanda destino nueva
+      // (misma mesa, cuenta separada).
+      let mesaOrigenFisica: PdvMesa | null = null;
+      let comandaOrigen: Comanda | null = null;
+      if (origen.tipo === 'MESA') {
+        mesaOrigenFisica = await manager.findOne(PdvMesa, { where: { id: origen.id }, relations: ['sector'] });
+        if (!mesaOrigenFisica) throw new Error(`Mesa de origen ${origen.id} no encontrada.`);
+      } else {
+        comandaOrigen = await manager.findOne(Comanda, { where: { id: origen.id }, relations: ['pdv_mesa'] });
+        if (!comandaOrigen) throw new Error(`Comanda de origen ${origen.id} no encontrada.`);
+        if (comandaOrigen.pdv_mesa?.id) {
+          mesaOrigenFisica = await manager.findOne(PdvMesa, { where: { id: comandaOrigen.pdv_mesa.id }, relations: ['sector'] });
+        }
+      }
+
+      let mesaDestino: PdvMesa | null = null;
+      let comandaDestino: Comanda | null = null;
+      if (destino.tipo === 'MESA') {
+        mesaDestino = await manager.findOne(PdvMesa, { where: { id: destino.id }, relations: ['sector'] });
+        if (!mesaDestino || !mesaDestino.activo) throw new Error(`Mesa de destino ${destino.id} no disponible.`);
+      } else {
+        comandaDestino = await manager.findOne(Comanda, { where: { id: destino.id }, relations: ['pdv_mesa'] });
+        if (!comandaDestino || !comandaDestino.activo) throw new Error(`Comanda de destino ${destino.id} no disponible.`);
+      }
+
+      let ventaDestino = await buscarVentaAbiertaDe(manager, destino);
+      if (ventaDestino && ventaDestino.id === ventaOrigen.id) {
+        throw new Error('El origen y el destino son la misma cuenta.');
+      }
+      const destinoYaTeniaVenta = !!ventaDestino;
+
+      // Items a mover.
+      const itemsActivos = await manager.find(VentaItem, {
+        where: { venta: { id: ventaOrigen.id }, estado: EstadoVentaItem.ACTIVO },
+      });
+      let itemsAMover: VentaItem[];
+      if (alcance === 'COMPLETA') {
+        itemsAMover = itemsActivos;
+      } else {
+        const pedidos = new Set((payload.itemIds || []).map((n) => Number(n)));
+        itemsAMover = itemsActivos.filter((i) => pedidos.has(Number(i.id)));
+        if (itemsAMover.length !== pedidos.size) {
+          throw new Error('Alguno de los items seleccionados ya no esta activo en la cuenta de origen.');
+        }
+        const cobrados = itemsAMover.filter((i) => Number((i as any).montoCubierto || 0) > 0.5);
+        if (cobrados.length > 0) {
+          throw new Error(`No se pueden mover ${cobrados.length} item(s) que ya tienen cobro parcial.`);
+        }
+      }
+      if (itemsAMover.length === 0) throw new Error('La cuenta de origen no tiene items activos para transferir.');
+
+      const origenTieneCobros = !!ventaOrigen.pago?.id
+        || (await manager.count(CobroParcial, { where: { venta: { id: ventaOrigen.id }, activo: true } })) > 0;
+
+      // Re-apunte: la venta entera cambia de contenedor. Es el unico camino que
+      // conserva cobros y pago sin tocarlos.
+      const esReapunte = alcance === 'COMPLETA' && !destinoYaTeniaVenta;
+
+      if (alcance === 'COMPLETA' && destinoYaTeniaVenta && origenTieneCobros) {
+        throw new Error(
+          'La cuenta de origen tiene cobros parciales y el destino ya tiene una cuenta abierta. '
+          + 'Termina de cobrar o anula el cobro parcial antes de unir las dos cuentas.',
+        );
+      }
+
+      // Abrir la comanda destino si estaba libre, vinculada a la mesa del origen.
+      if (comandaDestino && comandaDestino.estado === ComandaEstado.DISPONIBLE) {
+        await abrirComandaEnTx(manager, comandaDestino, mesaOrigenFisica, userId);
+      }
+
+      let ventaDestinoId: number;
+      let itemsMovidos = 0;
+
+      if (esReapunte) {
+        if (destino.tipo === 'MESA') {
+          (ventaOrigen as any).mesa = mesaDestino;
+          (ventaOrigen as any).comanda = null;
+        } else {
+          (ventaOrigen as any).comanda = comandaDestino;
+          (ventaOrigen as any).mesa = comandaDestino!.pdv_mesa ?? null;
+        }
+        await setEntityUserTracking(dataSource, ventaOrigen as any, userId, true);
+        await manager.save(Venta, ventaOrigen);
+        ventaDestinoId = ventaOrigen.id;
+        itemsMovidos = itemsAMover.length;
+      } else {
+        if (!ventaDestino) {
+          const nueva: any = manager.create(Venta, {
+            estado: VentaEstado.ABIERTA,
+            caja: ventaOrigen.caja,
+            ...(destino.tipo === 'MESA'
+              ? { mesa: mesaDestino }
+              : { comanda: comandaDestino, mesa: comandaDestino!.pdv_mesa ?? null }),
+          });
+          await setEntityUserTracking(dataSource, nueva, userId, false);
+          ventaDestino = await manager.save(Venta, nueva);
+        }
+        ventaDestinoId = ventaDestino!.id;
+
+        for (const item of itemsAMover) {
+          (item as any).venta = { id: ventaDestinoId };
+          await setEntityUserTracking(dataSource, item as any, userId, true);
+        }
+        await manager.save(VentaItem, itemsAMover);
+        itemsMovidos = itemsAMover.length;
+
+        // El nombre y el cliente solo viajan en una transferencia completa, y
+        // solo si el destino no tiene los suyos.
+        if (alcance === 'COMPLETA') {
+          const cambios: any = {};
+          if (ventaOrigen.nombreCliente && !ventaDestino!.nombreCliente) cambios.nombreCliente = ventaOrigen.nombreCliente;
+          if ((ventaOrigen as any).cliente?.id && !(ventaDestino as any).cliente?.id) cambios.cliente = (ventaOrigen as any).cliente;
+          if (Object.keys(cambios).length > 0) {
+            Object.assign(ventaDestino as any, cambios);
+            await setEntityUserTracking(dataSource, ventaDestino as any, userId, true);
+            await manager.save(Venta, ventaDestino as any);
+          }
+        }
+      }
+
+      // Cierre de la cuenta origen: completa siempre, por items solo si quedo vacia.
+      let origenCerrado = false;
+      if (!esReapunte) {
+        const quedanActivos = await manager.count(VentaItem, {
+          where: { venta: { id: ventaOrigen.id }, estado: EstadoVentaItem.ACTIVO },
+        });
+        if (alcance === 'COMPLETA' || quedanActivos === 0) {
+          (ventaOrigen as any).estado = VentaEstado.CANCELADA;
+          await setEntityUserTracking(dataSource, ventaOrigen as any, userId, true);
+          await manager.save(Venta, ventaOrigen);
+          origenCerrado = true;
+        }
+      } else {
+        origenCerrado = true;
+      }
+
+      let origenLiberado = false;
+      if (origenCerrado) {
+        if (origen.tipo === 'MESA') {
+          origenLiberado = await liberarMesaSiVaciaEnTx(manager, origen.id);
+        } else {
+          await cerrarComandaEnTx(manager, origen.id, userId);
+          origenLiberado = true;
+        }
+      }
+
+      // Ocupar el destino: si es mesa, ahora tiene una venta abierta encima.
+      if (destino.tipo === 'MESA') {
+        await ocuparMesaEnTx(manager, destino.id);
+      }
+
+      return {
+        ventaOrigenId: ventaOrigen.id,
+        ventaDestinoId,
+        itemsMovidos,
+        origenCerrado,
+        origenLiberado,
+        reapunte: esReapunte,
+      };
+    });
+  };
+
+  ipcMain.handle('transferir-venta-pdv', async (_event: any, payload: TransferenciaPayload) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+      const userId = getCurrentUser()?.id;
+      // Lock por mesa. El reduce anida de adentro hacia afuera, asi que la lista
+      // va descendente para que el candado MAS EXTERNO sea el del id menor:
+      // dos transferencias cruzadas entre las mismas dos mesas los toman en el
+      // mismo orden y no se abrazan.
+      const mesaIds = Array.from(new Set([
+        payload?.origen?.tipo === 'MESA' ? Number(payload.origen.id) : null,
+        payload?.destino?.tipo === 'MESA' ? Number(payload.destino.id) : null,
+      ].filter((n): n is number => typeof n === 'number' && !Number.isNaN(n)))).sort((a, b) => b - a);
+
+      const ejecutar = () => transferirVentaPdvInternal(payload, userId);
+      return await mesaIds.reduce<() => Promise<any>>(
+        (fn, mesaId) => () => withMesaLock(mesaId, fn),
+        ejecutar,
+      )();
+    } catch (error) {
+      console.error('Error transfiriendo cuenta del PdV:', error);
       throw error;
     }
   });

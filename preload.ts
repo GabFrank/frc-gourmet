@@ -2030,6 +2030,9 @@ contextBridge.exposeInMainWorld('api', {
   setPdvMesaEstado: async (mesaId: number, estado: string): Promise<any> => {
     return await ipcRenderer.invoke('set-pdv-mesa-estado', mesaId, estado);
   },
+  transferirVentaPdv: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('transferir-venta-pdv', payload);
+  },
   deletePdvMesa: async (id: number): Promise<boolean> => {
     return await ipcRenderer.invoke('deletePdvMesa', id);
   },

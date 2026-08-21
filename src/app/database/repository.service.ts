@@ -62,6 +62,27 @@ import { Adicional } from './entities/productos/adicional.entity';
 import { RecetaAdicionalVinculacion } from './entities/productos/receta-adicional-vinculacion.entity';
 import { RecetaIngredienteIntercambiable } from './entities/productos/receta-ingrediente-intercambiable.entity';
 
+/**
+ * Transferencia de una cuenta del PdV entre contenedores del salon.
+ * `alcance: 'ITEMS'` exige `itemIds`; `'COMPLETA'` los ignora.
+ */
+export interface TransferirVentaPdvPayload {
+  origen: { tipo: 'MESA' | 'COMANDA'; id: number };
+  destino: { tipo: 'MESA' | 'COMANDA'; id: number };
+  alcance: 'COMPLETA' | 'ITEMS';
+  itemIds?: number[];
+}
+
+export interface TransferirVentaPdvResult {
+  ventaOrigenId: number;
+  ventaDestinoId: number;
+  itemsMovidos: number;
+  origenCerrado: boolean;
+  origenLiberado: boolean;
+  /** true = la venta cambio de contenedor sin fusionarse con otra cuenta. */
+  reapunte: boolean;
+}
+
 export interface LoginResult {
   success: boolean;
   usuario?: Usuario;
@@ -378,6 +399,7 @@ export abstract class RepositoryService {
   abstract createBatchPdvMesas(batchData: Partial<PdvMesa>[]): Observable<PdvMesa[]>;
   abstract updatePdvMesa(id: number, data: Partial<PdvMesa>): Observable<PdvMesa>;
   abstract setPdvMesaEstado(mesaId: number, estado: string): Observable<any>;
+  abstract transferirVentaPdv(payload: TransferirVentaPdvPayload): Observable<TransferirVentaPdvResult>;
   abstract deletePdvMesa(id: number): Observable<boolean>;
   abstract getSectores(tipo?: string): Observable<Sector[]>;
   abstract getSectoresActivos(tipo?: string): Observable<Sector[]>;
