@@ -245,6 +245,19 @@ operativo `set-pdv-mesa-estado` (permiso `VENTAS_PDV`) la ocupa y libera; el
 frontend avisa si falla. La migración `IndicesRucYReconciliarMesas` libera las
 mesas que ya habían quedado colgadas. Detalle → [domains/ventas-pdv.md](../domains/ventas-pdv.md).
 
+**Segunda causa, encontrada probando en el navegador (2026-08-21):** la cadena
+mesa → comanda **sobre esa misma mesa** → otra mesa. Transferirle la cuenta de una
+mesa a una comanda vinculada a ella deja la mesa ocupada, que es correcto — la
+gente sigue sentada. Pero al mudar después esa comanda a otra mesa, `cerrarComanda`
+sólo intentaba liberar la mesa si `PdvConfig.ocuparMesaAlVincularComanda` estaba en
+**true**, y el default es **false**. La mesa quedaba OCUPADO sin venta ni comanda.
+Ahora se intenta siempre; el chequeo de trabajo vivo (otra comanda OCUPADO o venta
+de mesa ABIERTA) ya estaba y sigue protegiendo el caso contrario. Cubierto por los
+casos 8b y 8c de `npm run test:transferencia-pdv`.
+
+⚠️ Ninguna de las dos causas se ve probando como admin: la primera porque el admin
+tiene todos los permisos, la segunda porque hay que encadenar dos transferencias.
+
 ### Stock no se descuenta en algunos casos
 
 **Síntoma:** vendiste un producto y el stock no bajó.

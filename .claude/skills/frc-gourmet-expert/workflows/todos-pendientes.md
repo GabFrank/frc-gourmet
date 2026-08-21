@@ -237,6 +237,18 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
 - [x] **Hash de contraseñas con bcrypt** (HECHO, verificado 2026-06-28): `electron/utils/password.utils.ts` (`hashPassword`/`verifyPassword` con `bcryptjs`, 10 rounds) + migración one-shot `migrate-passwords.ts` que hashea los plaintext legacy al arranque. `verifyPassword` solo cae a comparación plaintext como fallback si el valor aún no fue hasheado.
 - [x] **JWT secret fuera del código** (HECHO, verificado 2026-06-28): `electron/utils/jwt-secret.utils.ts` (`getJwtSecret`) lee el secret de keytar (fallback a archivo local en userData) y lo genera si no existe. Ya NO está hardcodeado.
 - [x] **Validación de permisos en backend** (HECHO, auditado 2026-06-08): sweep `ensurePermission` en ~178 handlers IPC (memoria `project_todo_sweep_handlers_auth`).
+- [ ] 🔴 **Escaneo completo de roles y permisos, y granularización.** Pedido explícito de Gabriel (2026-08-21) tras encontrar, en una sola sesión, ocho operaciones cotidianas bloqueadas para el rol que las hace. El barrido de 2026-07 se preguntó *"¿este handler tiene guard?"*; falta la otra pregunta: *"¿el rol que hace esta operación tiene el permiso que el handler pide?"*.
+
+  **El patrón que hay que buscar es el permiso equivocado por proximidad**: se eligió el que estaba a mano en el archivo, no el que describe la operación (cobrar una venta pedía `COMPRAS_GESTIONAR`; ver Caja Mayor en la PWA pedía el permiso de la caja del turno). Ninguno se nota probando como admin.
+
+  Dos pasadas:
+  1. **Inventario mecánico** — un script que cruce cada `ipcMain.handle` con el permiso que exige (o si no exige ninguno), cada `*appHasPermission` del desktop y cada `permiso`/`permisos` de la PWA, contra `SEED_PERMISOS` y los roles plantilla. Saca sin criterio humano: handlers que mutan sin guard, permisos huérfanos (como estaba `FINANCIERO_CAJA_AJUSTAR`), gates de frontend que piden un permiso distinto al del backend, y códigos que no existen en el catálogo.
+  2. **Matriz por perfil, ejecutada** — extender `scripts/test-roles-pdv-e2e.ts` de las ~30 operaciones de hoy a compras, RRHH, caja mayor, facturación, música y reportes. Queda como test de regresión, no como informe que envejece.
+
+  **Granularizar**: `VENTAS_PDV` es enorme — atender mesas, transferir cuentas, cancelar ítems, aplicar descuentos y concluir ventas van todos juntos. Un mozo hoy puede cancelar ítems ya cargados sin que eso esté separado de tomar el pedido. Ídem `updateVenta`, que sigue dejando a un mozo marcar una venta CONCLUIDA (ver [architecture/auth-permissions.md](../architecture/auth-permissions.md)).
+
+  ⚠️ **Diseñar la migración de roles, no improvisarla**: `seedRolesPlantilla` sólo **agrega** permisos, nunca quita. Partir `VENTAS_PDV` en varios deja a los roles existentes — y sobre todo a los **roles custom** creados a mano — con el permiso viejo hasta que alguien los revise a mano.
+
 - [ ] **Idle timeout server-side**: hoy solo `last_activity_time` se actualiza, sin auto-logout.
 - [ ] **Refresh tokens** + invalidación.
 - [ ] **Recuperación de contraseña**.

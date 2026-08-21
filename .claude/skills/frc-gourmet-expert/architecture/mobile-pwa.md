@@ -15,6 +15,26 @@ Código compartido vía **path-alias** `@frc/shared-core` → `src/app/shared-co
 `RepositoryIpcService`, `AuthService`, `PermissionService`, `ThemeService`, `AppModeService` como token).
 Migración incremental: el desktop sigue importando por rutas relativas; el mobile SIEMPRE por el alias.
 
+## El shim HTTP y la forma de los argumentos (`API_ARG_SHAPE`)
+
+`scripts/generate-mobile-api-map.js` parsea `preload.ts` y emite **dos** mapas, no uno:
+
+- `API_CHANNEL_MAP` — método de `window.api` → canal IPC.
+- `API_ARG_SHAPE` — los métodos donde preload **no pasa sus parámetros tal cual** sino que los empaqueta en un objeto.
+
+El segundo existe por un bug que costó encontrar. Preload hace:
+
+```ts
+changePassword: async (usuarioId, currentPassword, newPassword) =>
+  ipcRenderer.invoke('change-password', { usuarioId, currentPassword, newPassword })
+```
+
+pero el shim manda `params: [...args]` literalmente, así que el handler recibía `usuarioId` **suelto** como payload y devolvía `PAYLOAD INVALIDO`. **El cambio de contraseña obligatorio de la PWA estaba roto**, y con él otros 9 métodos de la misma forma: `saveProfileImage`, `deleteFile`, `readFileBase64`, `openFileWithSystem`, `openBase64File` y las tres llamadas del upload por QR.
+
+Los dos shims (`src/app/web/api-http.ts` y `projects/mobile/src/app/core/data/api-http.ts`) reconstruyen el objeto con `conformarArgs()` antes de invocar.
+
+⚠️ **Si agregás un método a `preload.ts` que transforme sus argumentos de una forma que no sea el objeto shorthand `{ a, b }`** — un spread, un literal, un `.map()` — el generador **avisa por consola** y NO lo traduce. Ignorar ese aviso deja el método roto sobre HTTP y funcionando en Electron, que es la combinación más difícil de diagnosticar. Regenerar siempre con `node scripts/generate-mobile-api-map.js` tras tocar el preload.
+
 ## Capa de datos (lo importante)
 
 - **`repository-http.service.ts` quedó como skeleton y NO se usa.** El `mode=client` del desktop usa el

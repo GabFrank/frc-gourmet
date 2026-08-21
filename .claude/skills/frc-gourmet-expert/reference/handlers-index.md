@@ -62,7 +62,7 @@
 | **system.handler.ts** | 68 | OS info / MAC address. No necesita DB |
 | **vacaciones.handler.ts** | 380 | Vacacion, VacacionPeriodo + auto-Asistencia VACACION al marcar GOZADA |
 | **vales.handler.ts** | 417 | Vale, MotivoVale + `confirmar-vale` (EGRESO_VALE), `anular-vale` (contra-mov) |
-| **ventas.handler.ts** | 3032 | Venta*, Comanda*, PdvMesa, Sector, Reserva, Delivery, PdvAtajo*, PdvConfig. Incluye `procesarStockVenta`/`revertirStockVenta`. El más grande. |
+| **ventas.handler.ts** | ~3300 | Venta*, Comanda*, PdvMesa, Sector, Reserva, Delivery, PdvAtajo*, PdvConfig. Incluye `procesarStockVenta`/`revertirStockVenta`, `set-pdv-mesa-estado` (ocupar/liberar, permiso operativo) y `transferir-venta-pdv` (mover una cuenta entre mesas y comandas, transaccional). El más grande. |
 
 > **Nota:** `receta-presentacion.handler.ts` y `caja-mayor-utils.ts` NO se registran como handlers en `main.ts` — exportan helpers usados por otros handlers.
 
