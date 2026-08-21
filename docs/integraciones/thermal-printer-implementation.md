@@ -383,6 +383,12 @@ La guía de arriba es un patrón de referencia. En el código del proyecto:
   `print-acreditacion-pos-ticket`, entre otros.
 - **Ruteo por sector:** entidad `SectorImpresora` (`sectores-impresoras.handler.ts`) decide a qué
   impresora va cada documento según el sector.
+- **Contenido del ticket de venta / pre-cuenta:** lo arma `buildVentaTicketLines()` (mismo handler),
+  separada de `printVentaTicketInternal()` para poder testear la salida sin hardware — devuelve las
+  líneas y los totales, y `printVentaTicketInternal` sólo resuelve la impresora e imprime. Sólo entran
+  los `VentaItem` con `estado = ACTIVO` (un ítem cancelado en el PdV no se imprime ni suma a los
+  totales) y los adicionales `activo = true` se listan como sub-líneas bajo su producto, sin monto
+  propio. Test: `npm run test:ticket-venta`.
 - **Cocina en tiempo real (KDS):** `kds.handler.ts` + eventos SSE (`electron/server/kds-sse-routes.ts`)
   para pantallas de cocina, además/o en lugar de impresión física.
 - **Acceso desde Angular:** vía `window.api.callIpc('<channel>', params)` (el preload expone

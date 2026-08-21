@@ -57,6 +57,8 @@ los `get-*`). Test: `npm run test:factura-cliente`.
 
 > Permiso: `create-factura` exige **`FACTURACION_EMITIR`** (en `SEED_PERMISOS`).
 
+> ⚠️ **`create-factura` confía en los ítems del payload.** Persiste los `FacturaItem` tal como vienen: no valida que el ítem pertenezca a la venta, que su `estado` sea `ACTIVO`, ni que el total cuadre con la suma de los ítems. Hoy no se manifiesta porque el único emisor manda `activeItems` ya filtrados, pero `/api/rpc` es default-allow → cualquier JWT válido podría emitir un comprobante legal con un ítem cancelado. Issue [#240](https://github.com/GabFrank/frc-gourmet/issues/240).
+
 ## Flujo de emisión desde el PdV
 
 1. `cobrar-venta-dialog` → botón **"Factura"** abre `FacturarDialogComponent` (`facturas/facturar-dialog/`) con `{venta, items, cliente, total}`.

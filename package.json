@@ -81,6 +81,7 @@
     "test:factura-cliente": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-factura-cliente-e2e.ts",
     "test:pago-consolidado-e2e": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pago-consolidado-e2e.ts",
     "test:pago-consolidado": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pago-consolidado.ts",
+    "test:ticket-venta": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-ticket-venta-e2e.ts",
     "test:mesa-ocupacion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-mesa-ocupacion-e2e.ts",
     "test:dashboard-rangos": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-dashboard-rangos.ts"
   },
