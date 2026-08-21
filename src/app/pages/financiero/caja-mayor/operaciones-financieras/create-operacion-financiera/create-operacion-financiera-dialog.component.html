@@ -16,6 +16,11 @@
     <mat-divider></mat-divider>
 
     <!-- Datos generales -->
+    <p class="alerta-sin-efectivo" *ngIf="sinFormaPagoEfectivo">
+      No hay una forma de pago que mueva caja configurada. Los tramos contra Caja Mayor no se
+      pueden registrar hasta crearla en Configuración → Formas de pago.
+    </p>
+
     <div class="form-grid section">
       <mat-form-field appearance="outline">
         <mat-label>Categoria</mat-label>

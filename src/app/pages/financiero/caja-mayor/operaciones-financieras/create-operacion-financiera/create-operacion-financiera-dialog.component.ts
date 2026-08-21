@@ -18,7 +18,12 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { confirmarSaldosNegativos, SaldoNegativoCheck } from 'src/app/shared/utils/saldo-negativo-confirm';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
-import { CAMPOS_REQUERIDOS, monedasDesdeCuentaBancaria, TipoOperacionFinanciera } from './operacion-financiera-validacion.util';
+import {
+  CAMPOS_REQUERIDOS, CAJAS_EN_UI, CUENTAS_EN_UI, LADOS_CAJA_MAYOR,
+  COTIZACION_EN_UI, monedasDesdeCuentaBancaria, camposFaltantes, validarCoherencia,
+  etiquetaDe, TipoOperacionFinanciera,
+} from './operacion-financiera-validacion.util';
+import { formaPagoEfectivo, formasPagoDeCaja } from 'src/app/shared/utils/forma-pago-efectivo.util';
 
 @Component({
   selector: 'app-create-operacion-financiera-dialog',
@@ -54,6 +59,10 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
   formasPago: any[] = [];
   // Tramos contra Caja Mayor = siempre efectivo (regla de negocio).
   formasPagoEfectivo: any[] = [];
+  /** Forma de pago preseleccionada en los tramos contra Caja Mayor. */
+  formaPagoEfectivoId: number | null = null;
+  /** No hay ninguna forma de pago usable para mover caja (bloquea esos tramos). */
+  sinFormaPagoEfectivo = false;
   cajasMayor: any[] = [];
   cuentasBancarias: any[] = [];
 
@@ -120,31 +129,40 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
     this.form.get('montoOrigen')?.valueChanges.subscribe(() => this.recalcularMontoDestino());
     this.form.get('cotizacion')?.valueChanges.subscribe(() => this.recalcularMontoDestino());
 
-    // Cuando se selecciona una cuenta bancaria, fijar la moneda del lado que
-    // corresponde:
-    //  - DEPOSITO/RETIRO (una sola cuenta, efectivo): misma divisa a AMBOS lados
-    //    (setear solo un lado dejaba la moneda requerida del otro en null → form
-    //    inválido, botón Registrar deshabilitado).
-    //  - TRANSFERENCIA_BANCARIA (dos cuentas, posible multi-moneda): cada cuenta
-    //    setea SOLO su lado; los lados NO se pisan entre sí.
-    const setMonedaLado = (id: number, lado: 'origen' | 'destino') => {
-      const cb = this.cuentasBancarias.find(c => c.id === id);
-      if (!cb?.moneda?.id) return;
-      if (this.tipoOperacion === 'TRANSFERENCIA_BANCARIA') {
-        const ctrl = lado === 'origen' ? 'monedaOrigenId' : 'monedaDestinoId';
-        this.form.get(ctrl)?.setValue(cb.moneda.id, { emitEvent: false });
-      } else {
-        const { monedaOrigenId, monedaDestinoId } = monedasDesdeCuentaBancaria(cb.moneda.id);
-        this.form.get('monedaOrigenId')?.setValue(monedaOrigenId, { emitEvent: false });
-        this.form.get('monedaDestinoId')?.setValue(monedaDestinoId, { emitEvent: false });
-      }
+    // Al elegir una cuenta bancaria se hereda la moneda (ver setMonedaDeCuenta).
+    this.form.get('cuentaBancariaOrigenId')?.valueChanges.subscribe((id: number) => {
+      this.setMonedaDeCuenta(id, 'origen');
       this.recalcDecimales();
       this.recalcularMontoDestino();
-    };
-    this.form.get('cuentaBancariaOrigenId')?.valueChanges.subscribe((id: number) => setMonedaLado(id, 'origen'));
-    this.form.get('cuentaBancariaDestinoId')?.valueChanges.subscribe((id: number) => setMonedaLado(id, 'destino'));
+    });
+    this.form.get('cuentaBancariaDestinoId')?.valueChanges.subscribe((id: number) => {
+      this.setMonedaDeCuenta(id, 'destino');
+      this.recalcDecimales();
+      this.recalcularMontoDestino();
+    });
     this.form.get('monedaOrigenId')?.valueChanges.subscribe(() => { this.recalcDecimales(); this.recalcularMontoDestino(); });
     this.form.get('monedaDestinoId')?.valueChanges.subscribe(() => { this.recalcDecimales(); this.recalcularMontoDestino(); });
+  }
+
+  /**
+   * Fija la moneda del lado que corresponde a partir de la cuenta bancaria:
+   *  - DEPOSITO/RETIRO (una sola cuenta, efectivo): misma divisa a AMBOS lados
+   *    (setear solo un lado dejaba la moneda requerida del otro en null → form
+   *    inválido, botón Registrar deshabilitado).
+   *  - TRANSFERENCIA_BANCARIA (dos cuentas, posible multi-moneda): cada cuenta
+   *    setea SOLO su lado; los lados NO se pisan entre sí.
+   */
+  private setMonedaDeCuenta(id: number | null, lado: 'origen' | 'destino'): void {
+    const cb = this.cuentasBancarias.find(c => c.id === id);
+    if (!cb?.moneda?.id) return;
+    if (this.tipoOperacion === 'TRANSFERENCIA_BANCARIA') {
+      const ctrl = lado === 'origen' ? 'monedaOrigenId' : 'monedaDestinoId';
+      this.form.get(ctrl)?.setValue(cb.moneda.id, { emitEvent: false });
+    } else {
+      const { monedaOrigenId, monedaDestinoId } = monedasDesdeCuentaBancaria(cb.moneda.id);
+      this.form.get('monedaOrigenId')?.setValue(monedaOrigenId, { emitEvent: false });
+      this.form.get('monedaDestinoId')?.setValue(monedaDestinoId, { emitEvent: false });
+    }
   }
 
   private recalcDecimales(): void {
@@ -239,9 +257,68 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
     'cotizacion',
   ];
 
+  /**
+   * Limpia el VALOR de los controles que el tipo elegido no usa y repuebla los
+   * que se derivan solos.
+   *
+   * `applyValidators` sólo cambiaba validadores: los valores viejos quedaban en
+   * `form.value` y el handler los persistía como relaciones bogus (ej. la cuenta
+   * bancaria elegida en un depósito seguía adjunta a un cambio de divisa), y las
+   * monedas heredadas de una cuenta se arrastraban a un tipo donde el usuario
+   * debe elegirlas — un "cambio de divisa" con la misma moneda a ambos lados.
+   */
+  private limpiarCamposDelTipo(tipo: string): void {
+    const t = tipo as TipoOperacionFinanciera;
+    if (!CAJAS_EN_UI[t]) return;
+    const clr = (n: string) => this.form.get(n)?.setValue(null, { emitEvent: false });
+
+    if (!CAJAS_EN_UI[t].origen) clr('cajaMayorOrigenId');
+    if (!CAJAS_EN_UI[t].destino) clr('cajaMayorDestinoId');
+    if (!CUENTAS_EN_UI[t].origen) clr('cuentaBancariaOrigenId');
+    if (!CUENTAS_EN_UI[t].destino) clr('cuentaBancariaDestinoId');
+    if (COTIZACION_EN_UI[t] === 'NUNCA') clr('cotizacion');
+
+    // Las monedas se re-eligen o se heredan de la cuenta; reset + re-derivación
+    // desde las cuentas que sobrevivieron al cambio de tipo (reelegir la misma
+    // opción en un mat-select no emite `valueChanges`, así que no alcanza con
+    // esperar al usuario).
+    clr('monedaOrigenId');
+    clr('monedaDestinoId');
+    if (CUENTAS_EN_UI[t].origen) this.setMonedaDeCuenta(this.form.get('cuentaBancariaOrigenId')?.value, 'origen');
+    if (CUENTAS_EN_UI[t].destino) this.setMonedaDeCuenta(this.form.get('cuentaBancariaDestinoId')?.value, 'destino');
+
+    // Forma de pago sólo en los lados que mueven caja mayor, con el efectivo
+    // preseleccionado (el usuario puede cambiarlo dentro del pool de caja).
+    if (LADOS_CAJA_MAYOR[t].origen) {
+      if (!this.form.get('formaPagoOrigenId')?.value) this.form.get('formaPagoOrigenId')?.setValue(this.formaPagoEfectivoId, { emitEvent: false });
+    } else {
+      clr('formaPagoOrigenId');
+    }
+    if (LADOS_CAJA_MAYOR[t].destino) {
+      if (!this.form.get('formaPagoDestinoId')?.value) this.form.get('formaPagoDestinoId')?.setValue(this.formaPagoEfectivoId, { emitEvent: false });
+    } else {
+      clr('formaPagoDestinoId');
+    }
+
+    // La caja de contexto vuelve a preseleccionarse si el tipo la usa.
+    if (CAJAS_EN_UI[t].origen && !this.form.get('cajaMayorOrigenId')?.value && this.data?.cajaMayorId) {
+      this.form.get('cajaMayorOrigenId')?.setValue(this.data.cajaMayorId, { emitEvent: false });
+    }
+
+    // Sin caja mayor no hay dónde imputar la diferencia: el backend la descarta.
+    if (!LADOS_CAJA_MAYOR[t].origen && !LADOS_CAJA_MAYOR[t].destino) {
+      this.form.get('diferencia')?.setValue(0, { emitEvent: false });
+      this.form.get('diferenciaDestinoTipo')?.setValue('IGNORAR', { emitEvent: false });
+      this.form.get('diferenciaObservacion')?.setValue('', { emitEvent: false });
+    }
+
+    this.recalcDecimales();
+  }
+
   applyValidators(tipo: string): void {
     const ctrl = (n: string) => this.form.get(n);
     const requeridos = CAMPOS_REQUERIDOS[tipo as TipoOperacionFinanciera] || [];
+    this.limpiarCamposDelTipo(tipo);
 
     // Los campos requeridos se toman de una única fuente de verdad
     // (operacion-financiera-validacion.util) para que la UI, el validador y el
@@ -268,8 +345,14 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
       this.categorias = (categorias || []).filter((c: any) => c.activo);
       this.monedas = monedas || [];
       this.formasPago = formasPago || [];
-      // Los selects de forma de pago (tramos de Caja Mayor) solo ofrecen efectivo.
-      this.formasPagoEfectivo = this.formasPago.filter((f: any) => (f.nombre || '').toUpperCase().includes('EFECTIVO'));
+      // Los selects de forma de pago (tramos de Caja Mayor) solo ofrecen las
+      // formas que mueven caja; se preselecciona la de efectivo. Misma regla que
+      // la PWA (fuente única `forma-pago-efectivo.util`): el filtro viejo era
+      // `nombre.includes('EFECTIVO')` y dejaba el select vacío si la forma no se
+      // llamaba así, o ignoraba que estuviera inactiva.
+      this.formasPagoEfectivo = formasPagoDeCaja(this.formasPago);
+      this.formaPagoEfectivoId = formaPagoEfectivo(this.formasPago)?.id ?? null;
+      this.sinFormaPagoEfectivo = !this.formaPagoEfectivoId;
       this.cajasMayor = (cajasMayor || []).filter((cm: any) => cm.estado === 'ABIERTA');
       this.cuentasBancarias = (cuentasBancarias || []).filter((cb: any) => cb.activo);
       this.recalcDecimales();
@@ -367,8 +450,26 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
   }
 
   async save(): Promise<void> {
+    const valores = this.form.getRawValue() as Record<string, unknown>;
+
+    // Errores semánticos que ningún `required` detecta.
+    const incoherencias = validarCoherencia(this.tipoOperacion as TipoOperacionFinanciera, valores);
+    if (incoherencias.length) {
+      this.snackBar.open(incoherencias[0], 'Cerrar', { duration: 5000 });
+      return;
+    }
+
     if (this.form.invalid) {
       this.form.markAllAsTouched();
+      // Nombrar lo que falta: varios requeridos (moneda heredada de la cuenta,
+      // forma de pago del tramo de caja) no siempre se renderizan, y entonces
+      // `markAllAsTouched` no mostraba ningún error en ningún lado.
+      const faltantes = camposFaltantes(this.tipoOperacion as TipoOperacionFinanciera, valores).map(etiquetaDe);
+      this.snackBar.open(
+        faltantes.length ? `Faltan completar: ${faltantes.join(', ')}` : 'Revisá los datos cargados',
+        'Cerrar',
+        { duration: 5000 },
+      );
       return;
     }
 

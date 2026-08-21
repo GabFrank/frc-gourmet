@@ -258,7 +258,10 @@ export function camposFaltantes(
   tipo: TipoOperacionFinanciera,
   valores: Record<string, unknown>,
 ): string[] {
-  const requeridos = ['descripcion', ...(CAMPOS_REQUERIDOS[tipo] || [])];
+  // `fecha` sólo existe en el formulario de escritorio; el mobile la resuelve
+  // sola, así que se incluye únicamente si el control está presente.
+  const base = 'fecha' in valores ? ['descripcion', 'fecha'] : ['descripcion'];
+  const requeridos = [...base, ...(CAMPOS_REQUERIDOS[tipo] || [])];
   return requeridos.filter((campo) => {
     const v = valores[campo];
     if (v === null || v === undefined || v === '') return true;
