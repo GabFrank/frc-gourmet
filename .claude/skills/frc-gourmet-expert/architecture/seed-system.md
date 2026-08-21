@@ -59,7 +59,7 @@ Idempotente por `codigo`.
 |---|---|---|
 | `seedAdminUserAndRole` | Persona "ADMINISTRADOR SISTEMA" + Usuario `admin/admin` + Rol ADMINISTRADOR con TODOS los permisos | Solo si tabla `usuarios` vacía |
 | `syncAdminPermissions` | Asegura que ADMINISTRADOR tenga TODOS los permisos seedeados (corre cada arranque, idempotente) | Clave cuando se agregan permisos nuevos |
-| `seedRolesPlantilla` | Roles `GERENTE` (operativo full salvo sistema), `CAJERO` (dashboards + cobro CPC + asistencias), `MOZO` (mínimo) con permisos curados | Idempotente por `descripcion`; no toca roles ya existentes |
+| `seedRolesPlantilla` | Roles `GERENTE` (operativo full salvo sistema), `CAJERO` (PdV + **cobrar** + **operar su caja del turno** + facturar + cajón), `MOZO` (atender mesas y transferir cuentas; **no toca plata**) con permisos curados. Sólo **agrega** los faltantes, nunca quita: los roles custom no se autocorrigen. Auditado con `npm run test:roles-pdv` → [auth-permissions.md](auth-permissions.md) | Idempotente por `descripcion`; no toca roles ya existentes |
 | `seedTipoCliente` | Solo `CONSUMIDOR FINAL` | Reducido 2026-05-11 (antes FRECUENTE 5% / CORPORATIVO 10% con descuentos hardcoded) |
 | `seedTipoPrecio` | Solo `PRECIO NORMAL` | Reducido 2026-05-11 (antes DELIVERY + MAYORISTA) |
 | `seedMonedasBilletes` | PYG (500-100k), USD (1-100), BRL (2-200) | Universal PY |
