@@ -855,6 +855,9 @@ export class RepositoryHttpService extends RepositoryService {
   setPdvMesaEstado(mesaId: number, estado: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.setPdvMesaEstado() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  transferirVentaPdv(payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.transferirVentaPdv() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   deletePdvMesa(id: number): Observable<boolean> {
     return throwError(() => new Error(`RepositoryHttpService.deletePdvMesa() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

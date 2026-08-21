@@ -47,7 +47,8 @@ import { PdvAtajoGrupo } from 'src/app/database/entities/ventas/pdv-atajo-grupo.
 import { CobrarVentaDialogComponent, CobrarVentaDialogData } from 'src/app/shared/components/cobrar-venta-dialog/cobrar-venta-dialog.component';
 import { CancelarVentaDialogComponent } from 'src/app/shared/components/cancelar-venta-dialog/cancelar-venta-dialog.component';
 import { EditVentaItemDialogComponent } from 'src/app/shared/components/edit-venta-item-dialog/edit-venta-item-dialog.component';
-import { TransferirMesaDialogComponent } from 'src/app/shared/components/transferir-mesa-dialog/transferir-mesa-dialog.component';
+import { TransferirDestinoDialogComponent, TransferirDestinoDialogData, TransferirDestinoResult }
+  from 'src/app/shared/components/transferir-destino-dialog/transferir-destino-dialog.component';
 import { BuscarClienteDialogComponent } from 'src/app/shared/components/buscar-cliente-dialog/buscar-cliente-dialog.component';
 import { DescuentoDialogComponent } from 'src/app/shared/components/descuento-dialog/descuento-dialog.component';
 import { DividirCuentaDialogComponent } from 'src/app/shared/components/dividir-cuenta-dialog/dividir-cuenta-dialog.component';
@@ -820,66 +821,6 @@ export class PdvComponent implements OnInit, OnDestroy {
         }
       } catch (error) {
         console.error('Error al mover comanda:', error);
-      }
-    });
-  }
-
-  /**
-   * Transferir venta de comanda a una mesa (libera la comanda)
-   */
-  transferirComandaAMesa(): void {
-    if (!this.selectedComanda?.venta) return;
-
-    const dialogRef = this.dialog.open(TransferirMesaDialogComponent, {
-      width: '500px',
-      data: { mesaActual: this.selectedComanda.pdv_mesa || { numero: `Comanda #${this.selectedComanda.numero}` } },
-    });
-
-    dialogRef.afterClosed().subscribe(async (mesaDestino: PdvMesa | null) => {
-      if (!mesaDestino || !this.selectedComanda?.venta) return;
-      try {
-        const ventaId = this.selectedComanda.venta.id;
-
-        if (mesaDestino.venta?.id) {
-          // Mesa destino tiene venta: mover items a esa venta
-          const items = this.ventaItemsDataSource.data.filter(i => i.estado === EstadoVentaItem.ACTIVO);
-          for (const item of items) {
-            await firstValueFrom(this.repositoryService.updateVentaItem(item.id, {
-              venta: { id: mesaDestino.venta.id } as any,
-            }));
-          }
-          // Transferir nombre cliente si destino no tiene
-          const ventaOrigen = await firstValueFrom(this.repositoryService.getVenta(ventaId));
-          if (ventaOrigen?.nombreCliente && !mesaDestino.venta.nombreCliente) {
-            await firstValueFrom(this.repositoryService.updateVenta(mesaDestino.venta.id, {
-              nombreCliente: ventaOrigen.nombreCliente,
-            }));
-          }
-          // Cancelar la venta de la comanda
-          await firstValueFrom(this.repositoryService.updateVenta(ventaId, {
-            estado: VentaEstado.CANCELADA,
-          }));
-        } else {
-          // Mesa destino libre: mover la venta completa
-          await firstValueFrom(this.repositoryService.updateVenta(ventaId, {
-            mesa: { id: mesaDestino.id } as any,
-            comanda: null as any,
-          }));
-          // Ocupar mesa destino
-          await firstValueFrom(this.repositoryService.setPdvMesaEstado(mesaDestino.id!, PdvMesaEstado.OCUPADO));
-        }
-
-        // Cerrar comanda (liberar tarjeta)
-        await this.cerrarComandaActual();
-
-        // Limpiar UI
-        this.ventaItemsDataSource.data = [];
-        this.calculateTotals();
-        this.clienteNameForm.get('nombre')?.setValue('');
-
-        await this.loadMesas();
-      } catch (error) {
-        console.error('Error al transferir comanda a mesa:', error);
       }
     });
   }
@@ -2262,72 +2203,84 @@ export class PdvComponent implements OnInit, OnDestroy {
     });
   }
 
-  transferirMesa(): void {
-    if (!this.selectedMesa || !this.selectedMesa.venta) return;
+  /**
+   * Contenedor del que sale la cuenta activa. Null cuando no hay nada que
+   * transferir (venta rápida y delivery quedan fuera: el mostrador no es un
+   * contenedor del salón).
+   */
+  private resolverOrigenTransferencia(): { tipo: 'MESA' | 'COMANDA'; id: number; etiqueta: string } | null {
+    if (this.selectedComanda?.id && this.selectedComanda?.venta) {
+      return { tipo: 'COMANDA', id: this.selectedComanda.id, etiqueta: `COMANDA ${this.selectedComanda.numero}` };
+    }
+    if (this.selectedMesa?.id && this.selectedMesa?.venta) {
+      return { tipo: 'MESA', id: this.selectedMesa.id, etiqueta: `MESA ${this.selectedMesa.numero}` };
+    }
+    return null;
+  }
 
-    const dialogRef = this.dialog.open(TransferirMesaDialogComponent, {
-      width: '500px',
-      data: { mesaActual: this.selectedMesa },
+  /** Transfiere la cuenta entera a otra mesa o comanda. */
+  transferirCuenta(): void {
+    const origen = this.resolverOrigenTransferencia();
+    if (!origen) return;
+
+    const dialogRef = this.dialog.open(TransferirDestinoDialogComponent, {
+      width: '520px',
+      data: { origen, alcance: 'COMPLETA' } as TransferirDestinoDialogData,
     });
 
-    dialogRef.afterClosed().subscribe(async (mesaDestino: PdvMesa | null) => {
-      if (mesaDestino && this.selectedMesa?.venta) {
-        try {
-          const ventaOrigenId = this.selectedMesa.venta.id;
+    dialogRef.afterClosed().subscribe(async (destino: TransferirDestinoResult | null) => {
+      if (!destino) return;
+      await this.ejecutarTransferencia(origen, destino, 'COMPLETA');
+    });
+  }
 
-          if (mesaDestino.venta?.id) {
-            // Mesa destino tiene venta abierta: mover items + pago a la venta destino
-            const items = this.ventaItemsDataSource.data.filter(i => i.estado === EstadoVentaItem.ACTIVO);
-            for (const item of items) {
-              await firstValueFrom(this.repositoryService.updateVentaItem(item.id, {
-                venta: { id: mesaDestino.venta.id } as any,
-              }));
-            }
-            // Transferir pago y nombre de cliente si la venta destino no tiene
-            const ventaOrigen = await firstValueFrom(this.repositoryService.getVenta(ventaOrigenId));
-            const updateData: any = {};
-            if (ventaOrigen?.pago?.id) {
-              updateData.pago = ventaOrigen.pago;
-            }
-            if (ventaOrigen?.nombreCliente && !mesaDestino.venta.nombreCliente) {
-              updateData.nombreCliente = ventaOrigen.nombreCliente;
-            }
-            if (Object.keys(updateData).length > 0) {
-              await firstValueFrom(this.repositoryService.updateVenta(mesaDestino.venta.id, updateData));
-            }
-            // Cancelar la venta origen
-            await firstValueFrom(this.repositoryService.updateVenta(ventaOrigenId, {
-              estado: VentaEstado.CANCELADA,
-            }));
-          } else {
-            // Mesa destino libre: mover la venta completa (pago va con la venta)
-            await firstValueFrom(this.repositoryService.updateVenta(ventaOrigenId, {
-              mesa: { id: mesaDestino.id } as any,
-            }));
-          }
+  /**
+   * Una sola llamada al backend por transferencia. Antes esto eran 5 a 8 IPC
+   * encadenados desde acá, y una falla a mitad dejaba los ítems movidos con la
+   * mesa origen todavía ocupada.
+   */
+  private async ejecutarTransferencia(
+    origen: { tipo: 'MESA' | 'COMANDA'; id: number; etiqueta: string },
+    destino: TransferirDestinoResult,
+    alcance: 'COMPLETA' | 'ITEMS',
+    itemIds?: number[],
+  ): Promise<void> {
+    try {
+      const resultado = await firstValueFrom(this.repositoryService.transferirVentaPdv({
+        origen: { tipo: origen.tipo, id: origen.id },
+        destino: { tipo: destino.tipo, id: destino.id },
+        alcance,
+        ...(itemIds ? { itemIds } : {}),
+      }));
 
-          // Liberar mesa origen
-          // Cierra cualquier venta abierta residual antes de liberar: el handler
-          // se niega a liberar una mesa con trabajo vivo, y una venta huérfana de
-          // antes de este fix dejaría la operación a medias.
-          await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CANCELADA));
-          await firstValueFrom(this.repositoryService.setPdvMesaEstado(this.selectedMesa.id!, PdvMesaEstado.DISPONIBLE));
+      this.cancelarMoverItems();
 
-          // Ocupar mesa destino
-          await firstValueFrom(this.repositoryService.setPdvMesaEstado(mesaDestino.id!, PdvMesaEstado.OCUPADO));
-
-          // Limpiar UI
-          this.selectedMesa = null;
-          this.ventaItemsDataSource.data = [];
-          this.calculateTotals();
-
-          // Recargar mesas
-          await this.loadMesas();
-        } catch (error) {
-          console.error('Error al transferir mesa:', error);
-        }
+      if (resultado.origenCerrado) {
+        this.selectedMesa = null;
+        this.selectedComanda = null;
+        this.ventaItemsDataSource.data = [];
+        this.clienteNameForm.get('nombre')?.setValue('');
+      } else {
+        await this.loadVentaItemsForVenta(resultado.ventaOrigenId);
       }
-    });
+
+      this.calculateTotals();
+      await this.loadMesas();
+      await this.loadComandas();
+
+      this.snackBar.open(
+        `${resultado.itemsMovidos} item(s) transferidos a ${destino.etiqueta}`,
+        'CERRAR',
+        { duration: 3000 },
+      );
+    } catch (error: any) {
+      console.error('Error al transferir la cuenta:', error);
+      this.snackBar.open(
+        error?.message || 'No se pudo transferir la cuenta',
+        'CERRAR',
+        { duration: 6000, panelClass: ['error-snackbar'] },
+      );
+    }
   }
 
   imprimirPreCuenta(): void {
@@ -2399,13 +2352,16 @@ export class PdvComponent implements OnInit, OnDestroy {
     const allSelected = activeItems.every(i => this.selectedItemIds.has(i.id));
 
     if (allSelected) {
-      // Todos seleccionados — preguntar si transferir mesa completa
+      // Todos seleccionados — preguntar si transferir la cuenta completa. No es lo
+      // mismo: la completa arrastra cobros y datos del cliente, la de ítems no.
+      const origen = this.resolverOrigenTransferencia();
+      const etiqueta = origen ? origen.etiqueta : 'LA CUENTA';
       const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
         width: '400px',
         data: {
-          title: 'TRANSFERIR MESA COMPLETA',
-          message: 'Todos los items están seleccionados. ¿Desea transferir la mesa completa (incluyendo cobros y datos del cliente)?',
-          confirmText: 'TRANSFERIR MESA',
+          title: `TRANSFERIR ${etiqueta} COMPLETA`,
+          message: `Todos los items están seleccionados. ¿Desea transferir ${etiqueta.toLowerCase()} completa (incluyendo cobros y datos del cliente)?`,
+          confirmText: 'TRANSFERIR COMPLETA',
           cancelText: 'SOLO ITEMS',
         },
       });
@@ -2413,7 +2369,7 @@ export class PdvComponent implements OnInit, OnDestroy {
       dialogRef.afterClosed().subscribe((transferirCompleta: boolean) => {
         if (transferirCompleta === true) {
           this.cancelarMoverItems();
-          this.transferirMesa();
+          this.transferirCuenta();
         } else if (transferirCompleta === false) {
           this.ejecutarMoverItems();
         }
@@ -2461,70 +2417,20 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   private ejecutarMoverItems(): void {
-    if (!this.selectedMesa) return;
+    const origen = this.resolverOrigenTransferencia();
+    if (!origen) return;
 
-    const dialogRef = this.dialog.open(TransferirMesaDialogComponent, {
-      width: '500px',
-      data: { mesaActual: this.selectedMesa },
+    const itemIds = Array.from(this.selectedItemIds);
+    if (itemIds.length === 0) return;
+
+    const dialogRef = this.dialog.open(TransferirDestinoDialogComponent, {
+      width: '520px',
+      data: { origen, alcance: 'ITEMS', cantidadItems: itemIds.length } as TransferirDestinoDialogData,
     });
 
-    dialogRef.afterClosed().subscribe(async (mesaDestino: PdvMesa | null) => {
-      if (!mesaDestino || !this.selectedMesa?.venta) {
-        return;
-      }
-
-      try {
-        // Obtener o crear venta en mesa destino
-        let ventaDestinoId: number;
-        if (mesaDestino.venta?.id) {
-          ventaDestinoId = mesaDestino.venta.id;
-        } else {
-          const nuevaVenta = await firstValueFrom(this.repositoryService.createVenta({
-            estado: VentaEstado.ABIERTA,
-            caja: this.caja!,
-            mesa: { id: mesaDestino.id } as any,
-          } as any));
-          nuevaVenta.estado = VentaEstado.ABIERTA;
-          ventaDestinoId = nuevaVenta.id;
-          await firstValueFrom(this.repositoryService.setPdvMesaEstado(mesaDestino.id!, PdvMesaEstado.OCUPADO));
-        }
-
-        // Mover items seleccionados
-        const itemsToMove = this.ventaItemsDataSource.data.filter(i => this.selectedItemIds.has(i.id));
-        for (const item of itemsToMove) {
-          await firstValueFrom(this.repositoryService.updateVentaItem(item.id, {
-            venta: { id: ventaDestinoId } as any,
-          }));
-        }
-
-        // Verificar si quedan items activos en la mesa origen
-        const itemsRestantes = this.ventaItemsDataSource.data.filter(
-          i => i.estado === EstadoVentaItem.ACTIVO && !this.selectedItemIds.has(i.id)
-        );
-
-        if (itemsRestantes.length === 0) {
-          // No quedan items — desocupar mesa origen
-          await firstValueFrom(this.repositoryService.updateVenta(this.selectedMesa.venta.id, {
-            estado: VentaEstado.CANCELADA,
-          }));
-          // Cierra cualquier venta abierta residual antes de liberar: el handler
-          // se niega a liberar una mesa con trabajo vivo, y una venta huérfana de
-          // antes de este fix dejaría la operación a medias.
-          await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CANCELADA));
-          await firstValueFrom(this.repositoryService.setPdvMesaEstado(this.selectedMesa.id!, PdvMesaEstado.DISPONIBLE));
-          this.selectedMesa = null;
-          this.ventaItemsDataSource.data = [];
-        } else {
-          // Quedan items — recargar la mesa
-          this.ventaItemsDataSource.data = itemsRestantes;
-        }
-
-        this.cancelarMoverItems();
-        this.calculateTotals();
-        await this.loadMesas();
-      } catch (error) {
-        console.error('Error al mover items:', error);
-      }
+    dialogRef.afterClosed().subscribe(async (destino: TransferirDestinoResult | null) => {
+      if (!destino) return;
+      await this.ejecutarTransferencia(origen, destino, 'ITEMS', itemIds);
     });
   }
 

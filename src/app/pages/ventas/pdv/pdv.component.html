@@ -613,6 +613,7 @@
     <!-- Bottom buttons: modo normal -->
     <div class="action-buttons" *ngIf="!moverItemsMode">
       <button
+        *appHasPermission="'VENTAS_COBRAR'"
         mat-raised-button
         color="primary"
         class="action-button"
@@ -625,6 +626,7 @@
         <span>COBRAR</span>
       </button>
       <button
+        *appHasPermission="'VENTAS_COBRAR'"
         mat-raised-button
         color="primary"
         class="action-button"
@@ -923,14 +925,16 @@
 
     <!-- Bottom action buttons -->
     <div class="bottom-buttons" *ngIf="!moverItemsMode">
-      <!-- Botones para MESA seleccionada -->
-      <ng-container *ngIf="!selectedComanda">
+      <!-- Botones para MESA seleccionada. La venta rápida y el delivery quedan
+           fuera: el mostrador no es un contenedor del salón, y antes el botón
+           TRANSFERIR se renderizaba igual pero no hacía nada. -->
+      <ng-container *ngIf="!selectedComanda && !ventaRapidaActual">
         <button
           mat-raised-button
           color="primary"
           class="bottom-button"
-          [disabled]="!hasActiveVenta || deliveryActual"
-          (click)="transferirMesa()"
+          [disabled]="!hasActiveVenta"
+          (click)="transferirCuenta()"
           data-testid="pdv-btn-transferir"
         >
           <mat-icon>swap_horiz</mat-icon>
@@ -940,7 +944,7 @@
           mat-raised-button
           color="primary"
           class="bottom-button"
-          [disabled]="!hasActiveVenta || !hasActiveItems || deliveryActual"
+          [disabled]="!hasActiveVenta || !hasActiveItems"
           (click)="moverItems()"
           data-testid="pdv-btn-mover"
         >
@@ -966,10 +970,22 @@
           color="primary"
           class="bottom-button"
           [disabled]="!selectedComanda?.venta"
-          (click)="transferirComandaAMesa()"
+          (click)="transferirCuenta()"
+          data-testid="pdv-btn-transferir-comanda"
         >
-          <mat-icon>table_restaurant</mat-icon>
-          <span>A MESA</span>
+          <mat-icon>swap_horiz</mat-icon>
+          <span>TRANSFERIR</span>
+        </button>
+        <button
+          mat-raised-button
+          color="primary"
+          class="bottom-button"
+          [disabled]="!selectedComanda?.venta || !hasActiveItems"
+          (click)="moverItems()"
+          data-testid="pdv-btn-mover-comanda"
+        >
+          <mat-icon>drive_file_move</mat-icon>
+          <span>MOVER ITEMS</span>
         </button>
       </ng-container>
 

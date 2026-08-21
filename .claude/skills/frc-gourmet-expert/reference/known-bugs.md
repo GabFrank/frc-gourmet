@@ -245,6 +245,19 @@ operativo `set-pdv-mesa-estado` (permiso `VENTAS_PDV`) la ocupa y libera; el
 frontend avisa si falla. La migración `IndicesRucYReconciliarMesas` libera las
 mesas que ya habían quedado colgadas. Detalle → [domains/ventas-pdv.md](../domains/ventas-pdv.md).
 
+**Segunda causa, encontrada probando en el navegador (2026-08-21):** la cadena
+mesa → comanda **sobre esa misma mesa** → otra mesa. Transferirle la cuenta de una
+mesa a una comanda vinculada a ella deja la mesa ocupada, que es correcto — la
+gente sigue sentada. Pero al mudar después esa comanda a otra mesa, `cerrarComanda`
+sólo intentaba liberar la mesa si `PdvConfig.ocuparMesaAlVincularComanda` estaba en
+**true**, y el default es **false**. La mesa quedaba OCUPADO sin venta ni comanda.
+Ahora se intenta siempre; el chequeo de trabajo vivo (otra comanda OCUPADO o venta
+de mesa ABIERTA) ya estaba y sigue protegiendo el caso contrario. Cubierto por los
+casos 8b y 8c de `npm run test:transferencia-pdv`.
+
+⚠️ Ninguna de las dos causas se ve probando como admin: la primera porque el admin
+tiene todos los permisos, la segunda porque hay que encadenar dos transferencias.
+
 ### Stock no se descuenta en algunos casos
 
 **Síntoma:** vendiste un producto y el stock no bajó.
@@ -340,6 +353,36 @@ PdV refresca el estado de las mesas cada 1 segundo. Con 50 mesas, son ~50 querie
 ## Bugs en docs/testing/ERRORES-PDV.md
 
 → Archivo con registro de errores históricos del PdV. Mayoría resueltos, pero algunos pueden seguir pendientes. Chequear antes de "redescubrir" un bug.
+
+## ✅ RESUELTOS — Reportados por el usuario y corregidos (2026-08-21)
+
+Los cuatro tenían la misma raíz: **el permiso equivocado por proximidad**, o su gemelo en el transporte. Ninguno se veía probando como ADMIN.
+
+### El cajero no podía agregar una línea de cobro — RESUELTO
+
+`createPago`/`createPagoDetalle` pedían `COMPRAS_GESTIONAR`. `Pago`/`PagoDetalle` están marcadas `@deprecated` para compras pero son el libro de pagos de las **ventas**; el guard quedó en el dominio viejo. Igual `create-acreditacion-pos` y `acreditar-transferencia-bancaria` con `BANCOS_GESTIONAR`: tampoco podía cobrar con tarjeta ni transferencia.
+
+Fix: permiso nuevo `VENTAS_COBRAR`. Los handlers aceptan `[VENTAS_COBRAR, COMPRAS_GESTIONAR]` (o `BANCOS_GESTIONAR`), **pero sobre un registro que ya existe se resuelve el dominio primero**: un `Pago` colgado de una `Compra` sigue exigiendo `COMPRAS_GESTIONAR`. Sin eso, quien sólo tiene `VENTAS_COBRAR` podía editar y borrar el historial de pagos a proveedores pasando un id cualquiera.
+
+### El cajero no podía abrir ni cerrar su caja — RESUELTO
+
+Abrir una caja son tres llamadas (`create-conteo`, `create-conteo-detalle`, `create-caja`) y las tres pedían `FINANCIERO_CAJA_GESTIONAR`. Fix: `FINANCIERO_CAJA_OPERAR`. Detalle → [architecture/auth-permissions.md](../architecture/auth-permissions.md).
+
+### El cambio de contraseña fallaba en la PWA — RESUELTO
+
+Preload empaqueta sus parámetros posicionales en un objeto antes de invocar el canal (`invoke('change-password', { usuarioId, ... })`), pero el shim HTTP manda `params: [...args]` tal cual: el handler recibía `usuarioId` suelto como payload y devolvía `PAYLOAD INVALIDO`.
+
+⚠️ **Había 9 métodos más con la misma forma**, todos rotos sobre HTTP y funcionando en Electron — la combinación más difícil de diagnosticar: `saveProfileImage`, `deleteFile`, `readFileBase64`, `openFileWithSystem`, `openBase64File` y las tres del upload por QR. Fix: `API_ARG_SHAPE` generado del propio preload → [architecture/mobile-pwa.md](../architecture/mobile-pwa.md). Cubierto por `npm run test:api-map`.
+
+De paso, los campos de contraseña ganaron botón de ojo (SVG inline: el icon font de Google no carga en LAN sin internet).
+
+### Caja Mayor le figuraba a cualquier cajero en el home de la PWA — RESUELTO
+
+Gateaba con `FINANCIERO_CAJA_VER`, que es el permiso de la caja del **turno**, no de Caja Mayor. Pasa a `CAJA_MAYOR_OPERAR`, el mismo que exige la ruta destino. Su gemelo en el desktop tenía el mismo error: las hojas Gastos / Entradas Varias / Operaciones Financieras / Retiros de `MENU_TREE` también gateaban con `FINANCIERO_CAJA_VER`.
+
+### `ConfirmationDialogComponent` ignoraba `confirmText`/`cancelText` — RESUELTO
+
+Rotulaba todo "No" / "Sí" pese a que los llamadores mandan esos campos desde siempre: **~65 confirmaciones de la app** mostraban etiquetas genéricas. Peor, cancelar cerraba con `undefined` en vez de `false`, así que cualquier llamador que distinga las tres ramas (confirmar / rechazar / descartar) tenía la del medio muerta — le pasaba al "SOLO ITEMS" del PdV.
 
 ## Gotchas de handlers / arquitectura (auditoría 2026-07)
 

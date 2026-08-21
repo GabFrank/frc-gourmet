@@ -56,11 +56,15 @@ async function main() {
   const { PagoDetalle } = require('../src/app/database/entities/compras/pago-detalle.entity');
   const { CobroParcial } = require('../src/app/database/entities/ventas/cobro-parcial.entity');
 
-  // Seed: usuario admin con permiso VENTAS_PDV
+  // Seed: usuario admin con VENTAS_PDV (atender) + VENTAS_COBRAR (registrar plata).
+  // `registrarCobroParcial` pide VENTAS_COBRAR desde 2026-08: registrar un cobro
+  // es del cajero, no de quien atiende la mesa.
   const admin = await ds.getRepository(Usuario).save(ds.getRepository(Usuario).create({ nickname: 'admin', password: 'x', activo: true } as any));
   const perm = await ds.getRepository(Permission).save(ds.getRepository(Permission).create({ codigo: 'VENTAS_PDV', descripcion: 'PDV', activo: true } as any));
+  const permCobrar = await ds.getRepository(Permission).save(ds.getRepository(Permission).create({ codigo: 'VENTAS_COBRAR', descripcion: 'COBRAR', activo: true } as any));
   const role = await ds.getRepository(Role).save(ds.getRepository(Role).create({ descripcion: 'ADMIN', activo: true } as any));
   await ds.getRepository(RolePermission).save(ds.getRepository(RolePermission).create({ role, permission: perm } as any));
+  await ds.getRepository(RolePermission).save(ds.getRepository(RolePermission).create({ role, permission: permCobrar } as any));
   await ds.getRepository(UsuarioRole).save(ds.getRepository(UsuarioRole).create({ usuario: admin, role } as any));
 
   // Venta ABIERTA con 3 ítems: A=10000, B=20000, C=30000 (deudaBruta=60000)

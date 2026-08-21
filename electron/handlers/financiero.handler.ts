@@ -367,7 +367,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('create-conteo', async (_event: IpcMainInvokeEvent, data: any) => {
     try {
-      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_OPERAR');
       const repo = dataSource.getRepository(Conteo);
       const entity: any = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -385,7 +385,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-conteo', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
-      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_OPERAR');
       const repo = dataSource.getRepository(Conteo);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Conteo ID ${id} not found`);
@@ -441,7 +441,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('create-conteo-detalle', async (_event: IpcMainInvokeEvent, data: any) => {
     try {
-      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_OPERAR');
       const repo = dataSource.getRepository(ConteoDetalle);
       const entity = repo.create(data);
       // No user tracking needed usually for details
@@ -454,7 +454,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-conteo-detalle', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
-      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_OPERAR');
       const repo = dataSource.getRepository(ConteoDetalle);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`ConteoDetalle ID ${id} not found`);
@@ -599,7 +599,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   });
 
   ipcMain.handle('create-caja', async (_event: IpcMainInvokeEvent, data: any) => {
-    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_OPERAR');
     try {
       const repo = dataSource.getRepository(Caja);
       // Guard: una sola caja ABIERTA por dispositivo (terminal). Antes solo lo
@@ -625,7 +625,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-caja', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
-      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_OPERAR');
       const repo = dataSource.getRepository(Caja);
       const entity = await repo.findOne({ where: { id }, relations: ['createdBy'] });
       if (!entity) throw new Error(`Caja ID ${id} not found`);
@@ -757,6 +757,10 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   // lógica que el envío automático al cerrar. Sin `cajaId`, usa la última caja
   // CERRADA. `forzar` ignora el flag de PdvConfig (útil para probar); `destino`
   // permite mandar a otro número/grupo sin tocar la config.
+  // Sigue en FINANCIERO_CAJA_GESTIONAR (gerente), no en el permiso operativo del
+  // turno: acepta CUALQUIER `cajaId` y un `destino` de WhatsApp arbitrario, asi
+  // que con el permiso del cajero seria una via para mandar el cierre de una caja
+  // ajena a un numero elegido por quien llama.
   ipcMain.handle('enviar-resumen-cierre-whatsapp', async (
     _event: IpcMainInvokeEvent,
     params?: { cajaId?: number; forzar?: boolean; destino?: string },

@@ -3,7 +3,7 @@
  * AUTO-GENERADO por scripts/generate-mobile-api-map.js — NO editar a mano.
  * Mapa método de window.api → canal IPC (extraído de preload.ts).
  * Regenerar tras tocar preload.ts: `node scripts/generate-mobile-api-map.js`.
- * Total: 839 métodos.
+ * Total: 840 métodos.
  */
 export const API_CHANNEL_MAP: Record<string, string> = {
   "abrirCajaDesdeConteo": "abrir-caja-desde-conteo",
@@ -738,6 +738,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "setRolePermissions": "set-role-permissions",
   "testPrinterConnection": "test-printer-connection",
   "togglePresentacionActivo": "toggle-presentacion-activo",
+  "transferirVentaPdv": "transferir-venta-pdv",
   "updateAdicional": "update-adicional",
   "updateAdjunto": "update-adjunto",
   "updateAsistencia": "update-asistencia",
@@ -845,4 +846,22 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "windowMaximizeToggle": "window:maximize-toggle",
   "windowMinimize": "window:minimize",
   "windowPlatform": "window:platform",
+};
+
+/**
+ * Metodos donde preload empaqueta sus parametros posicionales en UN objeto
+ * antes de invocar el canal. El shim HTTP tiene que hacer lo mismo o el handler
+ * recibe el primer argumento suelto. Total: 10.
+ */
+export const API_ARG_SHAPE: Record<string, string[]> = {
+  "changePassword": ["usuarioId","currentPassword","newPassword"],
+  "deleteFile": ["url"],
+  "openBase64File": ["base64","fileName"],
+  "openFileWithSystem": ["url"],
+  "qrUploadClose": ["sessionId"],
+  "qrUploadEnableRemote": ["sessionId"],
+  "qrUploadPoll": ["sessionId"],
+  "readFileBase64": ["url"],
+  "restoreSession": ["sessionId","token"],
+  "saveProfileImage": ["base64Data","fileName"],
 };

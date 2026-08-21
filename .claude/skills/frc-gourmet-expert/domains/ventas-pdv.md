@@ -49,6 +49,48 @@ del bug que figuraba como *"Mesas colgadas en OCUPADO — posible race condition
 > `npm run test:mesa-ocupacion`.
 
 
+## Transferir una cuenta entre mesas y comandas (2026-08)
+
+Canal único: **`transferir-venta-pdv`** en `ventas.handler.ts`. Una transacción, un `ensurePermission('VENTAS_PDV')`, y `withMesaLock` sobre las mesas involucradas (tomadas en orden ascendente de id, para que dos transferencias cruzadas no se abracen).
+
+```ts
+{ origen:  { tipo: 'MESA' | 'COMANDA', id },
+  destino: { tipo: 'MESA' | 'COMANDA', id },
+  alcance: 'COMPLETA' | 'ITEMS',
+  itemIds?: number[] }        // obligatorio si alcance = 'ITEMS'
+```
+
+**Las 8 combinaciones** (mesa y comanda como origen y como destino, completa y por ítems) están cubiertas. Antes existían sólo mesa→mesa (completa y por ítems) y comanda→mesa completa, cada una como una secuencia de 5 a 8 llamadas IPC sueltas desde `pdv.component.ts`: si una fallaba a mitad, los ítems quedaban movidos y la mesa origen ocupada, sin forma de saberlo ni de deshacerlo.
+
+**La venta rápida (mostrador) y el delivery quedan fuera** a propósito: no son contenedores del salón. El botón TRANSFERIR se renderizaba con una venta rápida activa pero `transferirMesa()` salía en el primer `if` sin avisar; ahora directamente no se renderiza (`*ngIf="!selectedComanda && !ventaRapidaActual"`).
+
+### Reglas de dinero (son la parte delicada)
+
+- **Sólo ítems**: nunca se mueve un ítem con `montoCubierto > 0.5`. El cobro parcial y el cliente se quedan en el origen. El frontend ya lo filtraba; ahora también lo valida el backend.
+- **Completa a un contenedor SIN venta abierta** → *re-apunte*: la venta entera cambia de `mesa_id`/`comanda_id`. Cobros, `pago` y cliente viajan intactos porque nada se copia.
+- **Completa a un contenedor que YA tiene cuenta abierta** → fusión de ítems, y **se rechaza si el origen tiene cobros parciales**. `Venta.pago` es un `ManyToOne` simple y el código viejo hacía `updateData.pago = ventaOrigen.pago` sin condición: **pisaba el pago del destino y dejaba la plata cobrada huérfana**. Las rondas de `CobroParcial` además llevan un `factorAplicado` atado al descuento global de SU venta, así que fusionarlas cruza dos contabilidades.
+
+### Comportamiento de los contenedores
+
+- Comanda destino **DISPONIBLE** → se abre vinculada a la **mesa física del origen** (misma mesa, cuenta separada). Si `PdvConfig.ocuparMesaAlVincularComanda` está en true, además ocupa esa mesa.
+- Mesa origen → se libera sólo si no le queda trabajo vivo, con el mismo criterio que `set-pdv-mesa-estado` y `cerrarComanda` (cuenta comandas OCUPADO + ventas ABIERTA con `comanda IS NULL`). Por eso mesa completa → comanda nueva sobre esa misma mesa **deja la mesa ocupada**: la gente sigue sentada, ahora con tarjeta.
+- Comanda origen → vuelve a DISPONIBLE con `pdv_mesa`, `sector` y `observacion` en null.
+- Por ítems: el origen se cierra sólo si quedó sin ítems activos.
+
+**UI:** `transferir-destino-dialog` (era `transferir-mesa-dialog`) con dos chips arriba, MESAS y COMANDAS. Devuelve `{ tipo, id, etiqueta }`. Los destinos ocupados se marcan con borde y un icono de persona — transferir ahí **une** las dos cuentas. Las comandas ganaron botones TRANSFERIR y MOVER ITEMS, que antes no tenían.
+
+### Concurrencia: se lockean los DOS tipos de contenedor
+
+`withMesaLock` **y** `withComandaLock`, tomados en orden ascendente de id dentro de cada tipo, y las comandas siempre después de las mesas. El candado de mesa solo no alcanza: una transferencia entre dos comandas no toca ninguna mesa, así que corría sin serializar y dos cajeros podían dejar **dos ventas ABIERTA colgando de la misma comanda** — `buscarVentaAbiertaDe` devuelve una sola, y la otra queda viva en la base con sus ítems ya en cocina, inalcanzable desde el cobro.
+
+`cerrarComanda` delega en el mismo helper transaccional (`cerrarComandaEnTx`) en vez de tener su copia. La copia ya había divergido en dos puntos: limpiaba `pdv_mesa`/`sector`/`observacion` con **`undefined`** — y TypeORM **no emite UPDATE para propiedades undefined**, así que el FK conservaba la mesa vieja (regla 15 de esta skill) — y contaba el trabajo vivo de la mesa fuera de toda transacción, pudiendo liberar una mesa que una transferencia en curso acababa de ocupar.
+
+⚠️ `getPdvMesa` ahora filtra `comanda: IsNull()` al buscar la venta de la mesa, igual que `queryMesasWithVentaAbierta` y `set-pdv-mesa-estado`. Sin ese filtro devolvía la cuenta de una comanda vinculada como si fuera la cuenta de la mesa — lo usa el detalle de mesa de la PWA.
+
+**Una venta con `CuentaPorCobrar` ACTIVO no se transfiere.** El flujo normal (`cobrar-venta-credito`) concluye la venta al crear la CPC, así que no debería aparecer como origen; pero `create-cuenta-por-cobrar` deja vincular una a mano a una venta abierta, y cancelar esa venta acá se saltearía la reversión de saldo que hace `updateVenta`.
+
+**Test:** `npm run test:transferencia-pdv` (65 asserts: las 8 celdas, las reglas de dinero, la mesa fantasma de la cadena mesa→comanda→mesa, el FK de la comanda al cerrarse, la CPC y los permisos).
+
 ## Entidades clave (24 archivos `*.entity.ts` en `entities/ventas/`)
 
 ```
@@ -456,7 +498,7 @@ Soporta:
 - División de cuenta (1-20 personas): **solo informativa** — autocompleta el input con valor/persona; sugiere registrar cada pago con nombre en observación. No divide realmente ni crea múltiples pagos.
 - **Ver costo** (protegido por credenciales vía `edit-detalle-dialog` modo password + `validateCredentials`).
 
-**Máquina POS / Cuenta bancaria por forma de pago** (`FormasPago.maquinasPos` / `.cuentasBancarias`): el selector se muestra si hay ≥1 y es **obligatorio** si hay ≥2 (con 1 se auto-selecciona). Elegir POS/cuenta **ajusta la moneda** del pago a la de la cuenta bancaria asociada. Al finalizar: cada línea PAGO con POS → `createAcreditacionPos`; con cuenta bancaria → `acreditarTransferenciaBancaria` (ambos no bloqueantes).
+**Máquina POS / Cuenta bancaria por forma de pago** (`FormasPago.maquinasPos` / `.cuentasBancarias`): el selector se muestra si hay ≥1 y es **obligatorio** si hay ≥2 (con 1 se auto-selecciona). Elegir POS/cuenta **ajusta la moneda** del pago a la de la cuenta bancaria asociada. Al finalizar: cada línea PAGO con POS → `createAcreditacionPos`; con cuenta bancaria → `acreditarTransferenciaBancaria` (ambos no bloqueantes). Ambos piden `[VENTAS_COBRAR, BANCOS_GESTIONAR]` — con `BANCOS_GESTIONAR` solo, el cajero no cobraba ni con tarjeta ni con transferencia.
 
 **Ajuste global (`ajuste-cobrar-dialog`, F9)**: descuento|aumento, modo %|monto (chips 5/10/15/20/25/50%), **redondeo a múltiplos de 500 Gs** (arriba/abajo/exacto), **alerta si el nuevo total < costo** (venta a pérdida). Devuelve `{valor, motivo}` (valor POSITIVO = descuento, NEGATIVO = aumento). Se persiste como `PagoDetalle` tipo DESCUENTO/AUMENTO. **No pide password** (la única autorización por credenciales del flujo es "Ver costo").
 
@@ -591,7 +633,7 @@ Patrón: master con 2 paneles. Izq: totales/saldos por moneda → tarjeta de con
 - PdvAtajoGrupo / PdvAtajoItem / PdvAtajoItemProducto
 - VentaItemSabor
 
-**El cobro NO vive en `ventas.handler.ts`.** `createPago`/`createPagoDetalle`/`updatePago` están en **`compras.handler.ts`** (compartidos compras+ventas; `createPago` con flag `validarDispositivoCaja` para el gate por dispositivo). El cobro a crédito (`cobrarVentaCredito`, `cobrar-cpc-cuota`, `get-cpc-by-venta`) en **`cuentas-por-cobrar.handler.ts`**. Gastos de caja en **`gastos-caja.handler.ts`**. Convenios/cobro consolidado en **`convenios.handler.ts`**. Acreditaciones POS y transferencias bancarias en **`banking.handler.ts`**. `ventas.handler.ts` cierra la venta con `updateVenta(CONCLUIDA)`.
+**El cobro NO vive en `ventas.handler.ts`.** `createPago`/`createPagoDetalle`/`updatePago` están en **`compras.handler.ts`** (compartidos compras+ventas; `createPago` con flag `validarDispositivoCaja` para el gate por dispositivo). Piden `[VENTAS_COBRAR, COMPRAS_GESTIONAR]`: hasta 2026-08 pedían sólo `COMPRAS_GESTIONAR` y **el cajero no podía agregar una línea de cobro**. El cobro a crédito (`cobrarVentaCredito`, `cobrar-cpc-cuota`, `get-cpc-by-venta`) en **`cuentas-por-cobrar.handler.ts`**. Gastos de caja en **`gastos-caja.handler.ts`**. Convenios/cobro consolidado en **`convenios.handler.ts`**. Acreditaciones POS y transferencias bancarias en **`banking.handler.ts`**. `ventas.handler.ts` cierra la venta con `updateVenta(CONCLUIDA)`.
 
 **Permisos**: `ensurePermission(..., 'VENTAS_PDV')` es **selectivo** — solo en `cerrarVentasAbiertasMesa`, `updateVenta`, `deleteVenta`. El resto de handlers de este archivo NO chequea permiso explícito (confía en el gating del frontend).
 

@@ -27,6 +27,9 @@ export class LoginPage {
   });
 
   loading = false;
+
+  /** Ver la contrasenha en claro: en teclado tactil el tipeo a ciegas falla seguido. */
+  verPassword = false;
   error: string | null = null;
 
   async submit(): Promise<void> {

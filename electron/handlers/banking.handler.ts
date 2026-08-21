@@ -337,7 +337,7 @@ export function registerBankingHandlers(
   // No actualiza saldo bancario hasta que sea acreditada (auto o verificada)
   ipcMain.handle('create-acreditacion-pos', async (_event, data: any) => {
     try {
-      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
+      await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'BANCOS_GESTIONAR']);
       const repo = dataSource.getRepository(AcreditacionPos);
       const maquinaRepo = dataSource.getRepository(MaquinaPos);
 
@@ -480,7 +480,7 @@ export function registerBankingHandlers(
   // No tiene comision, no genera AcreditacionPos.
   ipcMain.handle('acreditar-transferencia-bancaria', async (_event, payload: any) => {
     try {
-      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
+      await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'BANCOS_GESTIONAR']);
       const cuentaBancariaId = payload.cuentaBancariaId;
       const monto = Number(payload.monto);
       if (!cuentaBancariaId || monto <= 0) {
