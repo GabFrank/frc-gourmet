@@ -370,9 +370,12 @@ export class OperacionFinancieraNuevoPage implements OnInit {
   async guardar(): Promise<void> {
     if (this.saving) return;
     const valores = this.form.getRawValue() as unknown as Record<string, unknown>;
+    // El tipo sale del form (única fuente de verdad de lo que se va a guardar),
+    // no del campo espejo `tipoOperacion` que sólo usan los flags de la vista.
+    const tipo = (valores['tipoOperacion'] || 'CAMBIO_DIVISA') as TipoOperacionFinanciera;
 
     // Errores semánticos primero: son los que el `required` no ve.
-    const incoherencias = validarCoherencia(this.tipoOperacion, valores);
+    const incoherencias = validarCoherencia(tipo, valores);
     if (incoherencias.length) {
       this.snack.open(incoherencias[0], 'OK', { duration: 5000 });
       return;
@@ -383,7 +386,7 @@ export class OperacionFinancieraNuevoPage implements OnInit {
       // Nombrar los campos que faltan: varios de ellos (forma de pago, moneda
       // heredada de la cuenta) no se renderizan, así que un mensaje genérico no
       // le decía al usuario qué corregir.
-      const faltantes = camposFaltantes(this.tipoOperacion, valores).map(etiquetaDe);
+      const faltantes = camposFaltantes(tipo, valores).map(etiquetaDe);
       this.snack.open(
         faltantes.length ? `Faltan completar: ${faltantes.join(', ')}` : 'Revisá los datos cargados',
         'OK',
