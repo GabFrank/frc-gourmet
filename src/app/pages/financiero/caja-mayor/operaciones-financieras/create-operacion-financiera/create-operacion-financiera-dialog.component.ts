@@ -23,7 +23,7 @@ import {
   COTIZACION_EN_UI, monedasDesdeCuentaBancaria, camposFaltantes, validarCoherencia,
   etiquetaDe, TipoOperacionFinanciera,
 } from './operacion-financiera-validacion.util';
-import { formaPagoEfectivo, formasPagoDeCaja } from 'src/app/shared/utils/forma-pago-efectivo.util';
+import { formaPagoEfectivo, formasPagoEfectivoDeCaja } from 'src/app/shared/utils/forma-pago-efectivo.util';
 
 @Component({
   selector: 'app-create-operacion-financiera-dialog',
@@ -345,12 +345,13 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
       this.categorias = (categorias || []).filter((c: any) => c.activo);
       this.monedas = monedas || [];
       this.formasPago = formasPago || [];
-      // Los selects de forma de pago (tramos de Caja Mayor) solo ofrecen las
-      // formas que mueven caja; se preselecciona la de efectivo. Misma regla que
-      // la PWA (fuente única `forma-pago-efectivo.util`): el filtro viejo era
-      // `nombre.includes('EFECTIVO')` y dejaba el select vacío si la forma no se
-      // llamaba así, o ignoraba que estuviera inactiva.
-      this.formasPagoEfectivo = formasPagoDeCaja(this.formasPago);
+      // Los selects de forma de pago (tramos de Caja Mayor) solo ofrecen
+      // efectivo, y se preselecciona el que corresponde. Misma fuente única que
+      // la PWA (`forma-pago-efectivo.util`): el filtro viejo era
+      // `nombre.includes('EFECTIVO')` a secas, que ignoraba `activo` y
+      // `movimentaCaja` y dejaba el select vacío si no había ninguna con ese
+      // nombre exacto.
+      this.formasPagoEfectivo = formasPagoEfectivoDeCaja(this.formasPago);
       this.formaPagoEfectivoId = formaPagoEfectivo(this.formasPago)?.id ?? null;
       this.sinFormaPagoEfectivo = !this.formaPagoEfectivoId;
       this.cajasMayor = (cajasMayor || []).filter((cm: any) => cm.estado === 'ABIERTA');

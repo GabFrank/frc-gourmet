@@ -80,7 +80,7 @@ export type { Persona } from '../database/entities/personas/persona.entity';
 // Mensaje legible de un error del backend (desenvuelve el prefijo de IPC).
 export { mensajeDeError } from '../shared/utils/error-message.util';
 // Forma de pago EFECTIVO (fuente única desktop + mobile).
-export { formaPagoEfectivo, formasPagoDeCaja } from '../shared/utils/forma-pago-efectivo.util';
+export { formaPagoEfectivo, formasPagoDeCaja, formasPagoEfectivoDeCaja } from '../shared/utils/forma-pago-efectivo.util';
 // Reglas de validación de Operación Financiera (fuente única desktop + mobile).
 export {
   CAMPOS_REQUERIDOS,

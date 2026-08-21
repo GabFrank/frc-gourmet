@@ -4,6 +4,48 @@ Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo
 
 ## RRHH / Financiero
 
+### Operación Financiera: campos requeridos que la UI no poblaba — RESUELTO (2026-08)
+
+**Síntoma:** en la PWA, *Gestión de Caja Mayor → Operaciones financieras*, el
+**cambio de divisa nunca se podía guardar**: "Completá los campos requeridos" sin
+ningún campo marcado en rojo. Y después de alternar entre tipos de operación,
+otros tipos también quedaban trabados.
+
+**Causas (5, de la misma familia):**
+1. `formaPagoDestinoId` es requerido en `CAMBIO_DIVISA` (el handler lo usa para el
+   movimiento de INGRESO y `actualizarSaldo`; la columna es `nullable: false`),
+   pero la PWA lo seteaba sólo si había select de **caja destino**. En un cambio
+   de divisa el ingreso vuelve a la MISMA caja ⇒ no hay tal select ⇒ `null`.
+   La pregunta correcta es "¿este lado mueve caja mayor?" (`LADOS_CAJA_MAYOR`),
+   no "¿se muestra un select de caja?" (`CAJAS_EN_UI`).
+2. Al cambiar de tipo se limpiaban las monedas pero se re-derivaban sólo desde
+   `cuentaBancaria*Id.valueChanges`; con el select de cuenta sobreviviendo al
+   cambio (RETIRO↔TRANSF. BANCARIA, DEPOSITO↔TRANSF. BANCARIA) la moneda quedaba
+   `null` e **irrecuperable** — reelegir la misma opción en un `mat-select` no
+   emite `valueChanges`.
+3. Con las monedas nulas, `recalcularMontoDestino()` perdía el flag `principal` y
+   multiplicaba en vez de dividir ⇒ monto convertido incorrecto.
+4. Escritorio: `applyValidators()` cambiaba validadores pero nunca los VALORES ⇒
+   relaciones bogus persistidas (la cuenta de un depósito adjunta a un cambio de
+   divisa).
+5. El mensaje era genérico y no nombraba nada, justo cuando el campo culpable no
+   se renderiza.
+
+**Fix:** la fuente única `operacion-financiera-validacion.util.ts` ahora declara
+`LADOS_CAJA_MAYOR`/`CAJAS_EN_UI`/`CUENTAS_EN_UI`/`COTIZACION_EN_UI` y el invariante
+`fuenteDelCampo()`; ambas superficies derivan de ahí su visibilidad y su
+auto-completado, y `camposFaltantes()`/`validarCoherencia()` dan mensajes
+concretos. El test `npm run test:operacion-financiera` pasó de auditar sólo las
+monedas (20 asserts, pasaba **con el bug presente**) a auditar todos los campos
+requeridos (122). Detalles → [../domains/financiero-caja-mayor.md](../domains/financiero-caja-mayor.md).
+
+### `test:pedidos-online` — 1 assert rojo en develop (pendiente)
+
+`✗ pedido.crear sin token → 401` falla en `develop` limpio (70 passed, 1 failed),
+sin relación con caja mayor. Verificado en worktree sobre `origin/develop` el
+2026-08-21. Si vas a tocar pedidos online, arrancá sabiendo que ese assert ya
+está rojo.
+
 ### Liquidaciones mezclan monedas (multimoneda) — pendiente
 
 **Síntoma:** en el cálculo de liquidación de sueldo y final, un vale/cuota en USD/BRL se netea/suma contra haberes en PYG como si fuera la misma moneda (ej. un vale de 100 USD "cancela" 100 Gs de haberes).
