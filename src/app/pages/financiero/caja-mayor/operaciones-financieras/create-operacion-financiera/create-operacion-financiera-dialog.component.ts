@@ -152,10 +152,10 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
    *  - TRANSFERENCIA_BANCARIA (dos cuentas, posible multi-moneda): cada cuenta
    *    setea SOLO su lado; los lados NO se pisan entre sí.
    */
-  private setMonedaDeCuenta(id: number | null, lado: 'origen' | 'destino'): void {
+  private setMonedaDeCuenta(id: number | null, lado: 'origen' | 'destino', tipo = this.tipoOperacion): void {
     const cb = this.cuentasBancarias.find(c => c.id === id);
     if (!cb?.moneda?.id) return;
-    if (this.tipoOperacion === 'TRANSFERENCIA_BANCARIA') {
+    if (tipo === 'TRANSFERENCIA_BANCARIA') {
       const ctrl = lado === 'origen' ? 'monedaOrigenId' : 'monedaDestinoId';
       this.form.get(ctrl)?.setValue(cb.moneda.id, { emitEvent: false });
     } else {
@@ -213,6 +213,9 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
     // TRANSFERENCIA_BANCARIA con monedas distintas: se comporta como cambio de
     // divisa (aplica cotización). Con la misma moneda: destino = origen.
     if (this.tipoOperacion === 'TRANSFERENCIA_BANCARIA' && !this.monedasTransferenciaDistintas()) {
+      // Misma moneda a ambos lados: no hay conversión y el campo de cotización no
+      // se muestra, así que tampoco puede viajar una cotización vieja.
+      if (this.form.get('cotizacion')?.value !== null) this.form.get('cotizacion')?.setValue(null, { emitEvent: false });
       if (monto > 0) this.form.get('montoDestino')?.setValue(monto, { emitEvent: false });
       return;
     }
@@ -284,8 +287,10 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
     // esperar al usuario).
     clr('monedaOrigenId');
     clr('monedaDestinoId');
-    if (CUENTAS_EN_UI[t].origen) this.setMonedaDeCuenta(this.form.get('cuentaBancariaOrigenId')?.value, 'origen');
-    if (CUENTAS_EN_UI[t].destino) this.setMonedaDeCuenta(this.form.get('cuentaBancariaDestinoId')?.value, 'destino');
+    // Se pasa `t` explícito: `limpiarCamposDelTipo` puede correr antes de que
+    // `this.tipoOperacion` refleje el tipo nuevo.
+    if (CUENTAS_EN_UI[t].origen) this.setMonedaDeCuenta(this.form.get('cuentaBancariaOrigenId')?.value, 'origen', t);
+    if (CUENTAS_EN_UI[t].destino) this.setMonedaDeCuenta(this.form.get('cuentaBancariaDestinoId')?.value, 'destino', t);
 
     // Forma de pago sólo en los lados que mueven caja mayor, con el efectivo
     // preseleccionado (el usuario puede cambiarlo dentro del pool de caja).
@@ -300,9 +305,18 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
       clr('formaPagoDestinoId');
     }
 
-    // La caja de contexto vuelve a preseleccionarse si el tipo la usa.
-    if (CAJAS_EN_UI[t].origen && !this.form.get('cajaMayorOrigenId')?.value && this.data?.cajaMayorId) {
-      this.form.get('cajaMayorOrigenId')?.setValue(this.data.cajaMayorId, { emitEvent: false });
+    // La caja de contexto (desde la que se abrió el diálogo) se preselecciona en
+    // el lado que el tipo use. En RETIRO_BANCARIO la caja está del lado DESTINO,
+    // que antes nunca se prepoblaba: había que elegirla a mano incluso abriendo
+    // el diálogo desde el detalle de esa misma caja.
+    const ctxId = this.data?.cajaMayorId;
+    if (ctxId) {
+      if (CAJAS_EN_UI[t].origen && !this.form.get('cajaMayorOrigenId')?.value) {
+        this.form.get('cajaMayorOrigenId')?.setValue(ctxId, { emitEvent: false });
+      }
+      if (CAJAS_EN_UI[t].destino && !CAJAS_EN_UI[t].origen && !this.form.get('cajaMayorDestinoId')?.value) {
+        this.form.get('cajaMayorDestinoId')?.setValue(ctxId, { emitEvent: false });
+      }
     }
 
     // Sin caja mayor no hay dónde imputar la diferencia: el backend la descarta.
@@ -364,6 +378,12 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
   }
 
   setTipo(tipo: string): void {
+    // El selector son botones y `FormControl.setValue()` emite `valueChanges`
+    // aunque el valor no cambie, así que volver a clickear el tipo YA elegido
+    // dispararía `limpiarCamposDelTipo()` y borraría la moneda y la forma de pago
+    // que el usuario ya había elegido. (Un `mat-select` no tiene este problema:
+    // Material sólo propaga si la selección cambió — por eso la PWA no lo sufre.)
+    if (this.form.get('tipoOperacion')?.value === tipo) return;
     this.form.get('tipoOperacion')?.setValue(tipo);
   }
 
@@ -465,7 +485,7 @@ export class CreateOperacionFinancieraDialogComponent implements OnInit {
       // Nombrar lo que falta: varios requeridos (moneda heredada de la cuenta,
       // forma de pago del tramo de caja) no siempre se renderizan, y entonces
       // `markAllAsTouched` no mostraba ningún error en ningún lado.
-      const faltantes = camposFaltantes(this.tipoOperacion as TipoOperacionFinanciera, valores).map(etiquetaDe);
+      const faltantes = camposFaltantes(this.tipoOperacion as TipoOperacionFinanciera, valores, ['descripcion', 'fecha']).map(etiquetaDe);
       this.snackBar.open(
         faltantes.length ? `Faltan completar: ${faltantes.join(', ')}` : 'Revisá los datos cargados',
         'Cerrar',

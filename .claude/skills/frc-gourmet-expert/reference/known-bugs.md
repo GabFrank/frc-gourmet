@@ -39,6 +39,28 @@ concretos. El test `npm run test:operacion-financiera` pasó de auditar sólo la
 monedas (20 asserts, pasaba **con el bug presente**) a auditar todos los campos
 requeridos (122). Detalles → [../domains/financiero-caja-mayor.md](../domains/financiero-caja-mayor.md).
 
+### `npm test` (unit tests del desktop) no corre: import circular — pendiente
+
+**Síntoma:** `ng test` del proyecto desktop aborta con
+`Uncaught ReferenceError: Cannot access 'TabsService' before initialization`
+(desde `list-monedas.component.ts`), y ningún spec del desktop llega a ejecutarse.
+
+**Estado (2026-08):** antes fallaba todavía antes, con
+`Cannot find module 'karma-coverage'` — el target `test` de `angular.json` no
+declaraba `karmaConfig` y el builder por defecto exige ese plugin, que no está en
+`devDependencies`. Eso **ya se arregló**: hay un `karma.conf.js` en la raíz
+(espejo del de `projects/mobile`) y el target lo usa, así que los specs del
+desktop se pueden correr de a uno:
+
+```bash
+npm run test:operacion-financiera-dialog   # ng test --include='**/<spec>.ts'
+```
+
+Lo que queda es el **ciclo de imports** (`TabsService` → `HomeComponent` → … →
+`TabsService`), que revienta al cargar todo el bundle de tests junto. Arreglarlo
+requiere romper el ciclo (probablemente con `forwardRef` o moviendo el registro de
+componentes de tab fuera del service). Mientras tanto, correr specs de a uno.
+
 ### `test:pedidos-online` — 1 assert rojo en develop (pendiente)
 
 `✗ pedido.crear sin token → 401` falla en `develop` limpio (70 passed, 1 failed),

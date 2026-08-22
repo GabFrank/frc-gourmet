@@ -175,11 +175,17 @@ function main() {
     ok(!camposFaltantes('TRANSFERENCIA_BANCARIA', v).includes('cotizacion'), 'la cotización opcional no se reclama');
   }
   {
-    // `fecha` sólo existe en el formulario de escritorio.
-    ok(camposFaltantes('CAMBIO_DIVISA', { ...valoresCompletos('CAMBIO_DIVISA'), fecha: null }).includes('fecha'),
+    // `fecha` sólo existe en el formulario de escritorio, que la declara como
+    // campo base explícito (el mobile no la pasa).
+    const conFecha = ['descripcion', 'fecha'];
+    ok(camposFaltantes('CAMBIO_DIVISA', { ...valoresCompletos('CAMBIO_DIVISA'), fecha: null }, conFecha).includes('fecha'),
       'escritorio: reclama la fecha vacía');
+    ok(!camposFaltantes('CAMBIO_DIVISA', { ...valoresCompletos('CAMBIO_DIVISA'), fecha: new Date() }, conFecha).includes('fecha'),
+      'escritorio: con fecha cargada no la reclama');
     ok(!camposFaltantes('CAMBIO_DIVISA', valoresCompletos('CAMBIO_DIVISA')).includes('fecha'),
-      'mobile: sin control de fecha, no la reclama');
+      'mobile: sin campo base "fecha", no la reclama aunque el objeto la traiga');
+    ok(!camposFaltantes('CAMBIO_DIVISA', { ...valoresCompletos('CAMBIO_DIVISA'), fecha: null }).includes('fecha'),
+      'mobile: una clave `fecha` suelta ya no cambia el resultado');
   }
   ok(etiquetaDe('formaPagoDestinoId') === 'Forma de pago destino', 'las etiquetas son legibles');
   ok(etiquetaDe('campoInventado') === 'campoInventado', 'etiqueta desconocida cae al nombre crudo');
