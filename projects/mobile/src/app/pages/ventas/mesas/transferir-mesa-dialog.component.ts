@@ -122,7 +122,9 @@ export class TransferirMesaDialogComponent implements OnInit {
             id: m.id,
             numero: m.numero,
             sector: m.sector?.nombre,
-            ocupada: !!m.venta?.id || m.estado === 'OCUPADO',
+            // Ocupada = tiene CUENTA PROPIA. El `|| m.estado === 'OCUPADO'` solo
+            // podia convertir un falso en verdadero: la columna es un cache.
+            ocupada: !!m.venta?.id,
             ventaId: m.venta?.id ?? null,
           }));
         this.cargando = false;

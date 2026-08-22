@@ -19,31 +19,12 @@ function ok(cond: boolean, name: string, extra?: any) {
   else { failed++; console.error(`  ✗ ${name}`, extra !== undefined ? JSON.stringify(extra) : ''); }
 }
 
-/** Espejo exacto de `PdvComponent.estamparMesa`. */
+// Se IMPORTA la función real; antes el test replicaba la matriz de decisión y
+// cualquier cambio en el componente lo dejaba verde con lógica vieja.
+import { derivarEstadoVisualMesa } from '../src/app/shared/utils/mesa-estado.util';
+
 function estampar(mesa: any): { clase: string; tooltip: string } {
-  const tieneCuenta = !!mesa.venta;
-  const comandas = mesa.comandas?.length || 0;
-
-  const clase = mesa.reservado
-    ? 'table-reserved'
-    : tieneCuenta
-    ? 'table-inactive'
-    : comandas > 0
-    ? 'table-solo-comandas'
-    : 'table-active';
-
-  const plural = comandas === 1 ? 'comanda' : 'comandas';
-  const tooltip = mesa.reservado
-    ? 'Mesa reservada'
-    : tieneCuenta && comandas > 0
-    ? `Cuenta de mesa + ${comandas} ${plural} — hay ${comandas + 1} cuentas`
-    : tieneCuenta
-    ? 'Cuenta de mesa abierta'
-    : comandas > 0
-    ? `Sin cuenta de mesa · ${comandas} ${plural} sentada(s) acá`
-    : 'Mesa libre';
-
-  return { clase, tooltip };
+  return derivarEstadoVisualMesa(mesa);
 }
 
 function main() {
@@ -79,10 +60,10 @@ function main() {
     'array de comandas vacío no es lo mismo que tener comandas');
   ok(estampar({ venta: null, comandas: [{ id: 1 }] }).clase === 'table-solo-comandas',
     'venta null explícita cuenta como sin cuenta');
-  ok(/1 comanda /.test(estampar({ comandas: [{ id: 1 }] }).tooltip),
-    'singular con una comanda', estampar({ comandas: [{ id: 1 }] }).tooltip);
-  ok(/2 comandas /.test(estampar({ comandas: [{ id: 1 }, { id: 2 }] }).tooltip),
-    'plural con dos');
+  ok(/1 comanda sentada acá/.test(estampar({ comandas: [{ id: 1 }] }).tooltip),
+    'singular sin "(s)" pegoteado', estampar({ comandas: [{ id: 1 }] }).tooltip);
+  ok(/2 comandas sentadas acá/.test(estampar({ comandas: [{ id: 1 }, { id: 2 }] }).tooltip),
+    'plural con dos', estampar({ comandas: [{ id: 1 }, { id: 2 }] }).tooltip);
 
   console.log('\n[regla] El color NO mira las comandas');
   // Es el corazón de la decisión: si el color derivara también de las comandas,

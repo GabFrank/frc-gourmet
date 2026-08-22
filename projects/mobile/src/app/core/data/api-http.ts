@@ -133,8 +133,19 @@ async function httpFetch(path: string, body: unknown, withAuth = true): Promise<
   // Hubo respuesta del server (aunque sea 4xx/5xx) → estamos online.
   setOnline(true);
   if (!res.ok) {
+    // El body de error es JSON (`{ error }` de los handlers, `{ message }` de
+    // Fastify). Sin desenvolverlo, el mensaje del backend llegaba a la pantalla
+    // como `HTTP 400: {"error":"..."}` — visto en produccion con un 429 del rate
+    // limiter. El motivo real queda sepultado en el JSON crudo.
     const txt = await res.text().catch(() => '');
-    const err: HttpError = new Error(`HTTP ${res.status}: ${txt}`);
+    let mensaje = txt;
+    try {
+      const body = JSON.parse(txt);
+      mensaje = body?.error || body?.message || txt;
+    } catch {
+      /* no era JSON: se usa el texto tal cual */
+    }
+    const err: HttpError = new Error(mensaje || `HTTP ${res.status}`);
     err.status = res.status;
     throw err;
   }

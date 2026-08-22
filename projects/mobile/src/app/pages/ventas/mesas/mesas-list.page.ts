@@ -141,7 +141,11 @@ export class MesasListPage implements OnInit {
   }
 
   private toMesaVM(m: any): MesaVM {
-    const ocupada = !!m.venta || m.estado === 'OCUPADO';
+    // Ocupada = tiene CUENTA PROPIA. El `|| m.estado === 'OCUPADO'` que habia
+      // aca solo podia convertir un falso en verdadero: `m.venta` ya captura los
+      // verdaderos positivos, y la columna es un cache que puede venir vieja —
+      // justo el bug de "mesa colgada" que este modelo elimina.
+      const ocupada = !!m.venta;
     return {
       id: m.id,
       numero: m.numero,

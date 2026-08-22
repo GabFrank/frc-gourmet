@@ -612,29 +612,20 @@ export class MesaDetallePage implements OnInit {
     )) as MesaDestino | undefined;
     if (!destino) return;
 
-    const ventaOrigenId = this.ventaId;
     this.loading = true;
     try {
-      if (destino.ventaId) {
-        // Mesa destino con cuenta: mover items activos y cancelar la venta de la comanda.
-        const items = await firstValueFrom(this.repo.getVentaItems(ventaOrigenId));
-        const activos = (items || []).filter((i: any) => i.estado === 'ACTIVO');
-        for (const it of activos) {
-          await firstValueFrom(this.repo.updateVentaItem(it.id, { venta: { id: destino.ventaId } } as any));
-        }
-        await firstValueFrom(this.repo.updateVenta(ventaOrigenId, { estado: 'CANCELADA' } as any));
-      } else {
-        // Mesa destino libre: re-vincular la venta a la mesa (desvinculando la comanda).
-        await firstValueFrom(
-          this.repo.updateVenta(ventaOrigenId, { mesa: { id: destino.id }, comanda: null } as any),
-        );
-      }
-      await firstValueFrom(this.repo.cerrarComanda(this.mesaId));
-      await firstValueFrom(this.repo.setPdvMesaEstado(destino.id, 'OCUPADO'));
+      // Mismo canal transaccional que el desktop (ver `transferir()`).
+      await firstValueFrom(
+        this.repo.transferirVentaPdv({
+          origen: { tipo: 'COMANDA', id: this.mesaId },
+          destino: { tipo: 'MESA', id: destino.id },
+          alcance: 'COMPLETA',
+        } as any),
+      );
       this.snack.open(`Cuenta transferida a Mesa ${destino.numero}`, undefined, { duration: 2000 });
       this.location.back();
-    } catch {
-      this.snack.open('No se pudo transferir la comanda', 'CERRAR', { duration: 4000 });
+    } catch (e: any) {
+      this.snack.open(e?.message || 'No se pudo transferir la comanda', 'CERRAR', { duration: 5000 });
       this.loading = false;
     }
   }
@@ -685,31 +676,28 @@ export class MesaDetallePage implements OnInit {
     )) as MesaDestino | undefined;
     if (!destino) return;
 
-    const ventaOrigenId = this.ventaId;
     this.loading = true;
     try {
-      if (destino.ventaId) {
-        // Destino ya tiene cuenta abierta: mover items activos y cancelar la origen.
-        const items = await firstValueFrom(this.repo.getVentaItems(ventaOrigenId));
-        const activos = (items || []).filter((i: any) => i.estado === 'ACTIVO');
-        for (const it of activos) {
-          await firstValueFrom(
-            this.repo.updateVentaItem(it.id, { venta: { id: destino.ventaId } } as any),
-          );
-        }
-        await firstValueFrom(this.repo.updateVenta(ventaOrigenId, { estado: 'CANCELADA' } as any));
-      } else {
-        // Destino libre: mover la venta completa.
-        await firstValueFrom(this.repo.updateVenta(ventaOrigenId, { mesa: { id: destino.id } } as any));
-      }
-      // Liberar mesa origen y ocupar destino.
-      await firstValueFrom(this.repo.setPdvMesaEstado(this.mesaId, 'DISPONIBLE'));
-      await firstValueFrom(this.repo.setPdvMesaEstado(destino.id, 'OCUPADO'));
-
+      // Un solo canal transaccional, el mismo que usa el desktop.
+      //
+      // Antes esto eran 4 a 6 llamadas sueltas desde acá — mover ítems uno por
+      // uno, cancelar la venta origen y dos `setPdvMesaEstado` — sin transacción
+      // ni candado. Si una fallaba a mitad (wifi de salón), los ítems quedaban
+      // movidos y la mesa origen ocupada, sin forma de deshacerlo. Además se
+      // salteaba la validación de cobro parcial y de cuenta por cobrar viva.
+      await firstValueFrom(
+        this.repo.transferirVentaPdv({
+          origen: { tipo: this.esComanda ? 'COMANDA' : 'MESA', id: this.mesaId },
+          destino: { tipo: 'MESA', id: destino.id },
+          alcance: 'COMPLETA',
+        } as any),
+      );
       this.snack.open(`Cuenta transferida a Mesa ${destino.numero}`, undefined, { duration: 2000 });
       this.location.back();
-    } catch {
-      this.snack.open('No se pudo transferir la cuenta', 'CERRAR', { duration: 4000 });
+    } catch (e: any) {
+      // El backend devuelve motivos legibles (cobro parcial, CPC viva); mostrarlos
+      // en vez de un mensaje genérico.
+      this.snack.open(e?.message || 'No se pudo transferir la cuenta', 'CERRAR', { duration: 5000 });
       this.loading = false;
     }
   }

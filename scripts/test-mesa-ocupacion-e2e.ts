@@ -204,6 +204,47 @@ async function main() {
     ok((m?.comandas || []).length === 1, 'K: pero el badge tiene 1 comanda', (m?.comandas || []).length);
   }
 
+  // ═══════ [L] Cobrar/cancelar deja el CACHE al dia ═══════
+  // Hallazgo de auditoria: la columna `pdv_mesas.estado` es un cache, y el
+  // evento que mas veces la cambia — cerrar la cuenta — no la estaba
+  // resincronizando. La grilla se veia bien porque deriva, pero cualquier lector
+  // de la columna cruda (p.ej. el servicio de musica ambiental, que decide el
+  // tempo por mesas ocupadas) sobre-contaba para siempre.
+  console.log('\n[L] El cache sigue al cierre de la cuenta');
+  {
+    const mesa: any = await nuevaMesa(12);
+    const venta: any = await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } });
+    ok(await estadoDe(mesa.id) === 'OCUPADO', 'L: al abrir la cuenta, la columna dice OCUPADO');
+
+    await invokeHandler('updateVenta', venta.id, { estado: 'CONCLUIDA' });
+    ok(await estadoDe(mesa.id) === 'DISPONIBLE',
+      'L: al COBRAR, la columna vuelve a DISPONIBLE sola', await estadoDe(mesa.id));
+  }
+  {
+    const mesa: any = await nuevaMesa(13);
+    const venta: any = await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } });
+    await invokeHandler('updateVenta', venta.id, { estado: 'CANCELADA' });
+    ok(await estadoDe(mesa.id) === 'DISPONIBLE',
+      'L: al CANCELAR tambien', await estadoDe(mesa.id));
+  }
+  {
+    // Y con una comanda encima: la comanda no sostiene la ocupacion.
+    const mesa: any = await nuevaMesa(14);
+    const venta: any = await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } });
+    await save(Comanda, { codigo: 'C-14', numero: 14, estado: 'OCUPADO', activo: true, pdv_mesa: { id: mesa.id } });
+    await invokeHandler('updateVenta', venta.id, { estado: 'CONCLUIDA' });
+    ok(await estadoDe(mesa.id) === 'DISPONIBLE',
+      'L: una comanda encima no mantiene la mesa ocupada', await estadoDe(mesa.id));
+  }
+  {
+    // cerrarVentasAbiertasMesa tambien.
+    const mesa: any = await nuevaMesa(15);
+    await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } });
+    await invokeHandler('cerrarVentasAbiertasMesa', mesa.id, 'CONCLUIDA');
+    ok(await estadoDe(mesa.id) === 'DISPONIBLE',
+      'L: cerrarVentasAbiertasMesa deja el cache al dia', await estadoDe(mesa.id));
+  }
+
   await ds.destroy();
   console.log(`\n${failed === 0 ? '✅' : '❌'} mesa-ocupacion: ${passed} pasaron, ${failed} fallaron\n`);
   process.exit(failed === 0 ? 0 : 1);

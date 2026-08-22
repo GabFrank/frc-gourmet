@@ -646,6 +646,8 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         v.estado = estado as VentaEstado;
         await repo.save(v);
       }
+      // Cerrar las cuentas de la mesa cambia su ocupacion: el cache la sigue.
+      if (ventasAbiertas.length > 0) await sincronizarEstadoMesa(mesaId);
       return ventasAbiertas.length;
     } catch (error) {
       console.error(`Error cerrando ventas abiertas de mesa ${mesaId}:`, error);
@@ -965,6 +967,12 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
       const estadoAnterior = entity.estado;
 
+      // `findOneBy` no trae la relacion `mesa`: se lee la FK cruda ANTES del
+      // merge, para poder resincronizar el cache de esa mesa si la venta cierra.
+      const mesaDeLaVenta: number | null = (
+        await dataSource.query(`SELECT mesa_id AS m FROM ventas WHERE id = $1`.replace('$1', String(Number(id))))
+      )?.[0]?.m ?? null;
+
       // A-01: al cancelar una venta a crédito hay que revertir la Cuenta Por
       // Cobrar y el saldoActual del cliente; antes quedaban vivos (cobros
       // fantasma). Pre-chequeo ANTES de guardar el estado para poder rechazar
@@ -987,6 +995,21 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
+
+      // Cobrar o cancelar una venta de mesa CIERRA la cuenta propia de esa mesa,
+      // asi que el cache `pdv_mesas.estado` tiene que seguirla. Es el evento mas
+      // frecuente de todos y no lo estaba haciendo: la grilla se veia bien porque
+      // deriva, pero cualquier lector de la columna cruda (p.ej. el servicio de
+      // musica ambiental, que decide el tempo por mesas ocupadas) sobre-contaba
+      // para siempre. El desktop lo compensaba con una segunda llamada manual
+      // desde el frontend; eso no cubre `cobrar-venta-credito` ni a ningun otro
+      // consumidor del handler.
+      const cerroLaCuenta =
+        (data?.estado === VentaEstado.CONCLUIDA || data?.estado === VentaEstado.CANCELADA)
+        && estadoAnterior === VentaEstado.ABIERTA;
+      if (cerroLaCuenta) {
+        await sincronizarEstadoMesa(mesaDeLaVenta);
+      }
 
       // A-01: revertir la CPC (sin cobros, garantizado por el pre-chequeo) y el
       // saldo del cliente en una transacción atómica.
@@ -1943,9 +1966,9 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('getPdvMesasActivas', async () => {
     try {
       const repo = dataSource.getRepository(PdvMesa);
-      return await queryMesasWithVentaAbierta(repo)
+      return derivarEstadoMesas(await queryMesasWithVentaAbierta(repo)
         .where('mesa.activo = :activo', { activo: true })
-        .getMany();
+        .getMany());
     } catch (error) {
       console.error('Error getting PDV Mesas activas:', error);
       throw error;
@@ -2172,6 +2195,21 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
    * una mesa. Es idempotente y auto-reparadora: si la columna venia mal, la
    * corrige sola.
    */
+  /**
+   * Version sin transaccion, para los handlers que ya guardaron y solo necesitan
+   * dejar el cache al dia. Nunca lanza: el cache desincronizado degrada, no
+   * rompe (las consultas derivan igual), asi que no debe voltear la operacion
+   * que la llamo.
+   */
+  const sincronizarEstadoMesa = async (mesaId: number | null | undefined): Promise<void> => {
+    if (!mesaId) return;
+    try {
+      await sincronizarEstadoMesaEnTx(dataSource.manager, Number(mesaId));
+    } catch (e) {
+      console.warn(`[sincronizarEstadoMesa] no se pudo resincronizar la mesa ${mesaId}:`, e);
+    }
+  };
+
   const sincronizarEstadoMesaEnTx = async (manager: EntityManager, mesaId: number): Promise<PdvMesaEstado> => {
     const derivado = (await mesaTieneCuentaPropia(manager, mesaId))
       ? PdvMesaEstado.OCUPADO
@@ -2603,7 +2641,6 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      const guardada = await repo.save(entity);
 
       // `venta.mesa_id` de la cuenta de una comanda es una COPIA que se hace al
       // crearla, no una derivacion. Al mover la comanda quedaba apuntando a la
@@ -2614,14 +2651,21 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // Solo cuando efectivamente cambia la mesa: este handler tambien lo usa el
       // ABM administrativo de comandas, que no esta moviendo una cuenta en
       // servicio.
+      //
+      // Las dos escrituras van en UNA transaccion: si fallaba entre medio, la
+      // comanda quedaba en la mesa nueva y su venta apuntando a la vieja — el
+      // mismo desfasaje que este arreglo elimina, por otra ventana.
       const mesaNueva = data?.pdv_mesa?.id ?? null;
-      if (cambiaMesa && mesaNueva !== mesaAnterior) {
-        await dataSource.getRepository(Venta).update(
-          { comanda: { id }, estado: VentaEstado.ABIERTA } as any,
-          { mesa: mesaNueva ? ({ id: mesaNueva } as any) : null } as any,
-        );
-      }
-      return guardada;
+      return await dataSource.transaction(async (manager) => {
+        const guardada = await manager.save(Comanda, entity);
+        if (cambiaMesa && mesaNueva !== mesaAnterior) {
+          await manager.getRepository(Venta).update(
+            { comanda: { id }, estado: VentaEstado.ABIERTA } as any,
+            { mesa: mesaNueva ? ({ id: mesaNueva } as any) : null } as any,
+          );
+        }
+        return guardada;
+      });
     } catch (error) {
       console.error(`Error updating Comanda ID ${id}:`, error);
       throw error;

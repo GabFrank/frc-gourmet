@@ -47,6 +47,7 @@ import { PdvAtajoGrupo } from 'src/app/database/entities/ventas/pdv-atajo-grupo.
 import { CobrarVentaDialogComponent, CobrarVentaDialogData } from 'src/app/shared/components/cobrar-venta-dialog/cobrar-venta-dialog.component';
 import { CancelarVentaDialogComponent } from 'src/app/shared/components/cancelar-venta-dialog/cancelar-venta-dialog.component';
 import { EditVentaItemDialogComponent } from 'src/app/shared/components/edit-venta-item-dialog/edit-venta-item-dialog.component';
+import { derivarEstadoVisualMesa, derivarEstadoDetalleMesa } from 'src/app/shared/utils/mesa-estado.util';
 import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 import { TransferirDestinoDialogComponent, TransferirDestinoDialogData, TransferirDestinoResult }
   from 'src/app/shared/components/transferir-destino-dialog/transferir-destino-dialog.component';
@@ -520,33 +521,12 @@ export class PdvComponent implements OnInit, OnDestroy {
    */
   private estamparMesa(mesa: any): void {
     if (!mesa) return;
-
-    // Se deriva de `venta`, no de `estado`: es la MISMA regla que aplica el
-    // backend (venta ABIERTA con comanda_id IS NULL) y además es la que los
-    // caminos optimistas del PdV mantienen al día. `estado` es sólo un cache y
-    // varios caminos lo dejan viejo — cobrar, por ejemplo, pone `venta = null`
-    // sin tocar `estado`.
-    const tieneCuenta = !!mesa.venta;
-    const comandas = mesa.comandas?.length || 0;
-
-    mesa._claseEstado = mesa.reservado
-      ? 'table-reserved'
-      : tieneCuenta
-      ? 'table-inactive'
-      : comandas > 0
-      ? 'table-solo-comandas'
-      : 'table-active';
-
-    const plural = comandas === 1 ? 'comanda' : 'comandas';
-    mesa._tooltip = mesa.reservado
-      ? 'Mesa reservada'
-      : tieneCuenta && comandas > 0
-      ? `Cuenta de mesa + ${comandas} ${plural} — hay ${comandas + 1} cuentas`
-      : tieneCuenta
-      ? 'Cuenta de mesa abierta'
-      : comandas > 0
-      ? `Sin cuenta de mesa · ${comandas} ${plural} sentada(s) acá`
-      : 'Mesa libre';
+    // La matriz de decisión vive en `mesa-estado.util.ts`, fuera del componente,
+    // para que el test la importe en vez de replicarla: una copia se queda vieja
+    // en silencio el día que alguien cambia la regla acá.
+    const { clase, tooltip } = derivarEstadoVisualMesa(mesa);
+    mesa._claseEstado = clase;
+    mesa._tooltip = tooltip;
 
     // La card de detalle muestra la misma verdad que la tarjeta del plano.
     if (this.selectedMesa && mesa.id === this.selectedMesa.id) this.estamparDetalleMesa();
@@ -559,22 +539,9 @@ export class PdvComponent implements OnInit, OnDestroy {
   mesaDetalleTexto = '';
 
   private estamparDetalleMesa(): void {
-    const mesa: any = this.selectedMesa;
-    if (!mesa) { this.mesaDetalleClase = ''; this.mesaDetalleTexto = ''; return; }
-    const comandas = mesa.comandas?.length || 0;
-    if (mesa.reservado) {
-      this.mesaDetalleClase = 'status-reserved';
-      this.mesaDetalleTexto = 'Reservada';
-    } else if (mesa.venta) {
-      this.mesaDetalleClase = 'status-occupied';
-      this.mesaDetalleTexto = comandas > 0 ? 'Con cuenta + comandas' : 'Con cuenta';
-    } else if (comandas > 0) {
-      this.mesaDetalleClase = 'status-solo-comandas';
-      this.mesaDetalleTexto = 'Sin cuenta de mesa';
-    } else {
-      this.mesaDetalleClase = 'status-available';
-      this.mesaDetalleTexto = 'Libre';
-    }
+    const { clase, texto } = derivarEstadoDetalleMesa(this.selectedMesa as any);
+    this.mesaDetalleClase = clase;
+    this.mesaDetalleTexto = texto;
   }
 
   /**
@@ -587,9 +554,14 @@ export class PdvComponent implements OnInit, OnDestroy {
    */
   async abrirComandaDeMesa(comandaDeLaMesa: any): Promise<void> {
     if (!comandaDeLaMesa?.id) return;
+    // Se revalida el ESTADO, no sólo la existencia: `getComandasActivas` devuelve
+    // también las DISPONIBLE, y si otro cajero liberó la comanda entre el render
+    // del chip y el click, `selectComanda` abriría el diálogo de asignar
+    // mesa/sector — otra cosa completamente distinta a lo que se pidió.
     const viva = this.comandas.find((c: any) => c.id === comandaDeLaMesa.id);
-    if (!viva) {
-      this.snackBar.open('Esa comanda ya no está activa', 'CERRAR', { duration: 3000 });
+    if (!viva || viva.estado !== 'OCUPADO') {
+      this.snackBar.open('Esa comanda ya no está abierta', 'CERRAR', { duration: 3000 });
+      await this.loadMesas();
       return;
     }
     this.activeTab = 'COMANDAS';
