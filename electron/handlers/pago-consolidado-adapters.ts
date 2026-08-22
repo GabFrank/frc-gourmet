@@ -94,14 +94,27 @@ const round2 = (v: number) => +Number(v).toFixed(2);
  * clicks) pueden leer la misma deuda como pendiente y pagarla dos veces: el lock
  * del saldo de caja protege el saldo agregado, no impide el egreso duplicado.
  * SQLite serializa las escrituras por si mismo y no soporta SELECT ... FOR UPDATE.
+ *
+ * ⚠️ El lock y las `relations` NO pueden ir en la misma consulta. TypeORM resuelve
+ * las relaciones con LEFT JOIN y Postgres rechaza el FOR UPDATE:
+ *
+ *   FOR UPDATE no puede ser aplicado al lado nulable de un outer join
+ *
+ * Son dos consultas: primero el lock sobre la fila desnuda, despues la carga con
+ * relaciones. El FOR UPDATE se mantiene hasta el fin de la transaccion, asi que
+ * la segunda lectura ya esta protegida. SQLite nunca lo hizo notar — su driver
+ * ignora los locks — y el error salia recien en el local del cliente, con el pago
+ * a medio registrar (issue #258).
  */
 async function findConLock<T>(queryRunner: any, entidad: any, id: number, relations?: string[]): Promise<T | null> {
   const esPg = queryRunner.connection?.options?.type === 'postgres';
-  return queryRunner.manager.findOne(entidad, {
-    where: { id },
-    relations,
-    ...(esPg ? { lock: { mode: 'pessimistic_write' } } : {}),
-  });
+  if (esPg) {
+    await queryRunner.manager.findOne(entidad, {
+      where: { id },
+      lock: { mode: 'pessimistic_write' },
+    });
+  }
+  return queryRunner.manager.findOne(entidad, { where: { id }, relations });
 }
 
 // ───────────────────────────── COMPRA (cuotas CPP) ─────────────────────────────
