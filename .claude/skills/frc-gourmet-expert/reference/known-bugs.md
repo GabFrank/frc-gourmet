@@ -418,6 +418,27 @@ PdV refresca el estado de las mesas cada 1 segundo. Con 50 mesas, son ~50 querie
 
 → Archivo con registro de errores históricos del PdV. Mayoría resueltos, pero algunos pueden seguir pendientes. Chequear antes de "redescubrir" un bug.
 
+## ✅ RESUELTO — La transferencia completa de una mesa a una comanda dejaba la mesa colgada (2026-08-22)
+
+**Síntoma reportado:** al transferir una mesa completa a una comanda, los ítems se movían pero **la comanda quedaba vinculada a la mesa de origen**. La mesa quedaba OCUPADO, sin cuenta propia y sin forma de atenderla ni de liberarla — al tocarla no mostraba nada, porque todas las consultas filtran `comanda_id IS NULL`.
+
+**Causa:** el call site que abre la comanda destino pasaba la mesa del origen **sin mirar el alcance**. Para una transferencia por ítems vincular es correcto (dividir la cuenta en la misma mesa); para una completa es lo contrario de lo que se pidió: la cuenta *se va* de la mesa.
+
+Perseguir esto destapó que el modelo mesa↔comanda entero estaba mal definido. Ver [domains/ventas-pdv.md](../domains/ventas-pdv.md) § *El modelo mesa ↔ comanda* — es lectura obligatoria antes de tocar nada de mesas.
+
+⚠️ **Dato huérfano preexistente:** las comandas que ya quedaron mal vinculadas por este bug conservan una ubicación falsa. No se pueden distinguir de una vinculación legítima, así que **no se corrigen automáticamente** — hay que moverlas a mano desde el PdV (EDITAR en la comanda).
+
+## ✅ RESUELTOS junto con el modelo mesa↔comanda (2026-08-22)
+
+Salieron de auditar el propio arreglo. Todos comparten la raíz: `pdv_mesas.estado` era un flag manual y nadie tenía la lista completa de quién lo escribía.
+
+- **Cobrar una mesa con una comanda encima rompía la pantalla.** `setPdvMesaEstado(DISPONIBLE)` se negaba si había comandas vivas; la excepción salía del bloque del cobro y **la limpieza de la UI nunca corría**. La venta quedaba cobrada y el PdV seguía mostrando los ítems. Ahora sólo la cuenta propia bloquea.
+- **El cache no seguía al cobro.** Cerrar una venta dejaba la columna en OCUPADO para siempre. La grilla se veía bien porque deriva, pero los lectores de la columna cruda sobre-contaban — entre ellos `musica-salon.service`, que decide el tempo de la música ambiental por mesas ocupadas.
+- **`moverComanda` no actualizaba nada.** Con el flag viejo en ON dejaba la mesa origen ocupada y la destino libre. Y `venta.mesa_id` quedaba apuntando a la mesa vieja para siempre: invisible en el PdV, equivocado en cualquier reporte que agrupe por mesa.
+- **`db-migrations-bootstrap` reaplicaba el criterio viejo en cada arranque**, y su subconsulta ni siquiera filtraba `comanda_id IS NULL`: la cuenta de una comanda contaba como cuenta de la mesa. Una migración de una sola vez no habría alcanzado.
+- **La PWA tenía su propia transferencia**, no atómica, sin candados, salteándose las validaciones de cobro parcial y de cuenta por cobrar viva. Ahora usa el mismo canal transaccional que el desktop.
+- **El mensaje de error del backend llegaba crudo** a la pantalla (`HTTP 429: {"statusCode":...}`). Los dos shims HTTP desenvuelven el JSON.
+
 ## ✅ RESUELTOS — 2026-08-22
 
 ### El botón COBRAR del PdV desapareció para todos, admin incluido — RESUELTO
