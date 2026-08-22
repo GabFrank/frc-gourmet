@@ -81,6 +81,15 @@ interface CurrencyDisplay {
   flag: string;
 }
 
+/**
+ * Mesa con el color y el tooltip ya resueltos.
+ *
+ * La regla 4 del proyecto prohíbe funciones y getters en templates, así que el
+ * estado visual se calcula una vez y se estampa acá. No son columnas: viven sólo
+ * en el objeto que consume la grilla.
+ */
+type MesaVm = PdvMesa & { _claseEstado?: string; _tooltip?: string };
+
 @Component({
   selector: 'app-pdv',
   templateUrl: './pdv.component.html',
@@ -153,7 +162,7 @@ export class PdvComponent implements OnInit, OnDestroy {
   productos: Producto[] = [];
 
   // Tables (mesas)
-  mesas: PdvMesa[] = [];
+  mesas: MesaVm[] = [];
   loadingMesas = false;
   selectedMesa: PdvMesa | null = null;
 
@@ -489,6 +498,114 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Estampa en la mesa el color y el tooltip que le corresponden.
+   *
+   * El color responde UNA pregunta: ¿la mesa tiene cuenta propia? El badge, que
+   * ya existía, carga la otra dimensión: ¿hay comandas sentadas acá? Son dos
+   * señales ortogonales, y colapsarlas destruye la distinción que necesita el
+   * cajero — "no hay nada que cobrarle a la mesa" vs "hay cuenta de mesa Y
+   * además comandas".
+   *
+   *   verde            vacía
+   *   amarillo + badge sin cuenta de mesa, N comandas sentadas
+   *   naranja          cuenta de mesa
+   *   naranja + badge  cuenta de mesa + comandas → ⚠️ 2 cuentas o más
+   *   azul             reservada (pisa a las demás)
+   *
+   * Se estampa en vez de calcularse en el template porque la regla 4 del
+   * proyecto prohíbe funciones y getters en templates. ⚠️ Hay SIETE caminos que
+   * escriben `mesas`; si alguno no llama a esto, el color se congela — y el más
+   * traicionero es el de la mesa SELECCIONADA, que `refreshMesasSilent` saltea a
+   * propósito para no pisar datos en edición.
+   */
+  private estamparMesa(mesa: any): void {
+    if (!mesa) return;
+
+    // Se deriva de `venta`, no de `estado`: es la MISMA regla que aplica el
+    // backend (venta ABIERTA con comanda_id IS NULL) y además es la que los
+    // caminos optimistas del PdV mantienen al día. `estado` es sólo un cache y
+    // varios caminos lo dejan viejo — cobrar, por ejemplo, pone `venta = null`
+    // sin tocar `estado`.
+    const tieneCuenta = !!mesa.venta;
+    const comandas = mesa.comandas?.length || 0;
+
+    mesa._claseEstado = mesa.reservado
+      ? 'table-reserved'
+      : tieneCuenta
+      ? 'table-inactive'
+      : comandas > 0
+      ? 'table-solo-comandas'
+      : 'table-active';
+
+    const plural = comandas === 1 ? 'comanda' : 'comandas';
+    mesa._tooltip = mesa.reservado
+      ? 'Mesa reservada'
+      : tieneCuenta && comandas > 0
+      ? `Cuenta de mesa + ${comandas} ${plural} — hay ${comandas + 1} cuentas`
+      : tieneCuenta
+      ? 'Cuenta de mesa abierta'
+      : comandas > 0
+      ? `Sin cuenta de mesa · ${comandas} ${plural} sentada(s) acá`
+      : 'Mesa libre';
+
+    // La card de detalle muestra la misma verdad que la tarjeta del plano.
+    if (this.selectedMesa && mesa.id === this.selectedMesa.id) this.estamparDetalleMesa();
+  }
+
+  /** Estado de la mesa seleccionada, para la card de detalle (regla 4: sin
+   *  funciones ni getters en el template). Se recalcula al seleccionar y al
+   *  estampar. */
+  mesaDetalleClase = '';
+  mesaDetalleTexto = '';
+
+  private estamparDetalleMesa(): void {
+    const mesa: any = this.selectedMesa;
+    if (!mesa) { this.mesaDetalleClase = ''; this.mesaDetalleTexto = ''; return; }
+    const comandas = mesa.comandas?.length || 0;
+    if (mesa.reservado) {
+      this.mesaDetalleClase = 'status-reserved';
+      this.mesaDetalleTexto = 'Reservada';
+    } else if (mesa.venta) {
+      this.mesaDetalleClase = 'status-occupied';
+      this.mesaDetalleTexto = comandas > 0 ? 'Con cuenta + comandas' : 'Con cuenta';
+    } else if (comandas > 0) {
+      this.mesaDetalleClase = 'status-solo-comandas';
+      this.mesaDetalleTexto = 'Sin cuenta de mesa';
+    } else {
+      this.mesaDetalleClase = 'status-available';
+      this.mesaDetalleTexto = 'Libre';
+    }
+  }
+
+  /**
+   * Abre una comanda sentada en la mesa seleccionada.
+   *
+   * ⚠️ Se busca por id dentro de `this.comandas`, NO se reusa el objeto que
+   * viene en `mesa.comandas`: son grafos distintos y `refreshComandasSilent`
+   * sólo actualiza los de `this.comandas`. Reusar la referencia de la mesa deja
+   * la comanda seleccionada congelada.
+   */
+  async abrirComandaDeMesa(comandaDeLaMesa: any): Promise<void> {
+    if (!comandaDeLaMesa?.id) return;
+    const viva = this.comandas.find((c: any) => c.id === comandaDeLaMesa.id);
+    if (!viva) {
+      this.snackBar.open('Esa comanda ya no está activa', 'CERRAR', { duration: 3000 });
+      return;
+    }
+    this.activeTab = 'COMANDAS';
+    await this.selectComanda(viva);
+  }
+
+  /** Estampa todas y recalcula el contador del tab, que también deriva. */
+  private estamparMesas(): void {
+    for (const mesa of this.mesas) this.estamparMesa(mesa);
+    this.estamparDetalleMesa();  // por si la seleccionada no está en el array
+    // El badge del tab cuenta lo mismo que pinta de naranja: cuentas de mesa.
+    // Antes contaba por la columna cruda y quedaba desalineado con los colores.
+    this.mesasOcupadasCount = this.mesas.filter(m => !!(m as any).venta).length;
+  }
+
+  /**
    * Refresh mesas sin afectar la selección actual
    */
   private async refreshMesasSilent(): Promise<void> {
@@ -519,7 +636,7 @@ export class PdvComponent implements OnInit, OnDestroy {
       }
 
       this.mesas = [...this.mesas];
-      this.mesasOcupadasCount = this.mesas.filter(m => m.estado === PdvMesaEstado.OCUPADO).length;
+      this.estamparMesas();
     } catch (error) {
       // Silencioso — no interrumpir al usuario
     } finally {
@@ -534,14 +651,14 @@ export class PdvComponent implements OnInit, OnDestroy {
     this.loadingMesas = true;
     try {
       // Get all active tables
-      this.mesas = await firstValueFrom(this.repositoryService.getPdvMesas());
+      this.mesas = await firstValueFrom(this.repositoryService.getPdvMesas()) as MesaVm[];
 
       // Filter for active tables
       this.mesas = this.mesas.filter(mesa => mesa.activo);
 
       // Sort tables by number
       this.mesas.sort((a, b) => a.numero - b.numero);
-      this.mesasOcupadasCount = this.mesas.filter(m => m.estado === PdvMesaEstado.OCUPADO).length;
+      this.estamparMesas();
 
       console.log(`Loaded ${this.mesas.length} tables`);
     } catch (error) {
@@ -561,13 +678,14 @@ export class PdvComponent implements OnInit, OnDestroy {
     try {
       this.selectedSectorId = sectorId;
       // Get tables by sector
-      this.mesas = await firstValueFrom(this.repositoryService.getPdvMesasBySector(sectorId));
+      this.mesas = await firstValueFrom(this.repositoryService.getPdvMesasBySector(sectorId)) as MesaVm[];
 
       // Filter for active tables
       this.mesas = this.mesas.filter(mesa => mesa.activo);
 
       // Sort tables by number
       this.mesas.sort((a, b) => a.numero - b.numero);
+      this.estamparMesas();
 
       console.log(`Loaded ${this.mesas.length} tables for sector ${sectorId}`);
     } catch (error) {
@@ -1748,6 +1866,7 @@ export class PdvComponent implements OnInit, OnDestroy {
             createdVenta.estado = VentaEstado.ABIERTA;
             if (this.selectedMesa) {
               this.selectedMesa.venta = createdVenta;
+            this.estamparMesa(this.selectedMesa as any);
               // La mesa la marca OCUPADO el backend, dentro de la misma
               // transaccion que crea la venta. Antes se hacia con una segunda
               // llamada desde aca, que fallaba para todo el que no fuera gerente.
@@ -1778,10 +1897,12 @@ export class PdvComponent implements OnInit, OnDestroy {
   private async updateMesaEstado(mesa: PdvMesa, estado: PdvMesaEstado): Promise<void> {
     const anterior = mesa.estado;
     mesa.estado = estado;
+    this.estamparMesa(mesa as any);
     try {
       await firstValueFrom(this.repositoryService.setPdvMesaEstado(mesa.id!, estado));
     } catch (err: any) {
       mesa.estado = anterior;
+      this.estamparMesa(mesa as any);
       console.error('Error updating mesa estado:', err);
       this.snackBar.open(
         err?.message || `No se pudo cambiar el estado de la mesa ${mesa.numero}`,
@@ -1899,6 +2020,7 @@ export class PdvComponent implements OnInit, OnDestroy {
           await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CONCLUIDA));
           this.updateMesaEstado(this.selectedMesa, PdvMesaEstado.DISPONIBLE);
           this.selectedMesa.venta = null as any;
+        this.estamparMesa(this.selectedMesa as any);
           this.selectedMesa = null;
           this.clienteNameForm.get('nombre')?.setValue('');
         }
@@ -1960,6 +2082,7 @@ export class PdvComponent implements OnInit, OnDestroy {
             await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CANCELADA));
             await this.updateMesaEstado(this.selectedMesa, PdvMesaEstado.DISPONIBLE);
             this.selectedMesa.venta = null as any;
+            this.estamparMesa(this.selectedMesa as any);
             this.selectedMesa = null;
             this.clienteNameForm.get('nombre')?.setValue('');
           }
@@ -2053,6 +2176,7 @@ export class PdvComponent implements OnInit, OnDestroy {
         await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CONCLUIDA));
         await firstValueFrom(this.repositoryService.setPdvMesaEstado(this.selectedMesa.id!, PdvMesaEstado.DISPONIBLE));
         this.selectedMesa.venta = null as any;
+        this.estamparMesa(this.selectedMesa as any);
         this.selectedMesa = null;
         this.clienteNameForm.get('nombre')?.setValue('');
       }
@@ -2632,6 +2756,7 @@ export class PdvComponent implements OnInit, OnDestroy {
   selectMesa(mesa: PdvMesa): void {
     this.selectedMesa = mesa;
     this.selectedComanda = null;
+    this.estamparDetalleMesa();
 
     // Reset cliente name form when selecting a new mesa
     this.isEditingClienteName = false;

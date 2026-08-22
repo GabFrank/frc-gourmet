@@ -293,6 +293,26 @@ async function main() {
     ok(await ventaDelItem(item.id) === ventaMesa.id, '8d: el item viajo con su venta');
   }
 
+  // ═══════ [8e] mover una comanda arrastra su venta ═══════
+  console.log('\n[8e] Mover la comanda actualiza la mesa de su venta');
+  {
+    const mesaA = await nuevaMesa(); const mesaB = await nuevaMesa();
+    const comanda = await nuevaComanda(mesaA.id);
+    const venta = await abrirVentaComanda(comanda.id, mesaA.id);
+    await agregarItem(venta.id);
+
+    await invokeHandler('updateComanda', comanda.id, { pdv_mesa: { id: mesaB.id } });
+
+    const vm = (await ds.query(`SELECT mesa_id AS m FROM ventas WHERE id = ${venta.id}`))[0].m;
+    ok(Number(vm) === Number(mesaB.id),
+      '8e: la venta de la comanda quedo apuntando a la mesa nueva', vm);
+
+    // Y sacarle la mesa la deja sin mesa, no con la vieja.
+    await invokeHandler('updateComanda', comanda.id, { pdv_mesa: null });
+    const vm2 = (await ds.query(`SELECT mesa_id AS m FROM ventas WHERE id = ${venta.id}`))[0].m;
+    ok(vm2 === null, '8e: sin mesa, la venta tampoco conserva la vieja', vm2);
+  }
+
   // ═══════ [9] no se mueve un item ya cobrado ═══════
   console.log('\n[9] Items con cobro parcial');
   {

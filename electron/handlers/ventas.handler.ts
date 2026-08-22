@@ -2580,11 +2580,15 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Comanda);
-      const entity = await repo.findOneBy({ id });
+      // Con `pdv_mesa`: hace falta la mesa ANTERIOR para saber si realmente
+      // cambia y arrastrar la venta.
+      const entity = await repo.findOne({ where: { id }, relations: ['pdv_mesa'] });
       if (!entity) throw new Error(`Comanda ID ${id} not found`);
 
       // Si se cambia la mesa, sincronizar sector con el de la mesa
-      if ('pdv_mesa' in data) {
+      const mesaAnterior = (entity as any).pdv_mesa?.id ?? null;
+      const cambiaMesa = 'pdv_mesa' in data;
+      if (cambiaMesa) {
         if (data.pdv_mesa?.id) {
           const mesaRepo = dataSource.getRepository(PdvMesa);
           const mesa = await mesaRepo.findOne({ where: { id: data.pdv_mesa.id }, relations: ['sector'] });
@@ -2599,7 +2603,25 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      const guardada = await repo.save(entity);
+
+      // `venta.mesa_id` de la cuenta de una comanda es una COPIA que se hace al
+      // crearla, no una derivacion. Al mover la comanda quedaba apuntando a la
+      // mesa vieja para siempre: en el PdV no se nota (todo filtra por
+      // `comanda_id IS NULL`) pero cualquier reporte que agrupe por mesa la
+      // atribuye a la mesa equivocada.
+      //
+      // Solo cuando efectivamente cambia la mesa: este handler tambien lo usa el
+      // ABM administrativo de comandas, que no esta moviendo una cuenta en
+      // servicio.
+      const mesaNueva = data?.pdv_mesa?.id ?? null;
+      if (cambiaMesa && mesaNueva !== mesaAnterior) {
+        await dataSource.getRepository(Venta).update(
+          { comanda: { id }, estado: VentaEstado.ABIERTA } as any,
+          { mesa: mesaNueva ? ({ id: mesaNueva } as any) : null } as any,
+        );
+      }
+      return guardada;
     } catch (error) {
       console.error(`Error updating Comanda ID ${id}:`, error);
       throw error;

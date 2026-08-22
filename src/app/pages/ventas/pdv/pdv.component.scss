@@ -987,9 +987,20 @@ tr.example-element-row:not(.example-expanded-row):active {
   color: white;
 }
 
+// Sin cuenta de mesa, pero con comandas sentadas ahí. Intermedio entre "vacía"
+// y "tiene cuenta": el cajero no le cobra a la mesa, le cobra a cada comanda.
+// El badge dice cuántas.
+.table-solo-comandas {
+  background-color: #ffc107;
+  color: rgba(0, 0, 0, 0.87); // amarillo claro: el texto blanco no se lee
+}
+
+// Borde BLANCO, no amarillo: el amarillo pasó a ser un estado
+// (.table-solo-comandas) y una mesa amarilla con borde y glow amarillos no se
+// distinguía de una sin seleccionar.
 .table-selected {
-  border: 3px solid #ffea07;
-  box-shadow: 0 0 10px rgba(255, 193, 7, 0.6);
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.75);
   transform: scale(1.05);
   z-index: 1;
 }
@@ -1135,6 +1146,28 @@ tr.example-element-row:not(.example-expanded-row):active {
 
 .status-reserved {
   color: #07a4ff;
+}
+
+// Sin cuenta de mesa pero con comandas sentadas: el cajero no le cobra a la mesa.
+.status-solo-comandas {
+  color: #ffc107;
+}
+
+// Acceso directo a una comanda sentada en la mesa seleccionada.
+.mesa-comanda-chip {
+  min-width: 0 !important;
+  padding: 0 8px !important;
+  line-height: 26px !important;
+  border-color: #ffc107 !important;
+  color: var(--text-primary);
+
+  mat-icon {
+    font-size: 15px;
+    width: 15px;
+    height: 15px;
+    margin-right: 2px;
+    vertical-align: middle;
+  }
 }
 
 /* ─── Estado de cobro por ítem (cobro parcial) ───────────────────────────── */

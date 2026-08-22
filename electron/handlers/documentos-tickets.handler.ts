@@ -152,6 +152,45 @@ async function registrarImpresion(
 }
 
 /**
+ * Encabezado de identificacion de un ticket: MESA y/o COMANDA.
+ *
+ * Antes era un `if (mesa) / else if (comanda) / else PARA LLEVAR`, asi que una
+ * comanda CON mesa nunca imprimia su numero: dos cuentas en la misma mesa
+ * producian dos tickets identicos y el mozo no sabia cual era cual. Ahora salen
+ * las dos referencias cuando existen las dos.
+ *
+ * Funcion pura para poder testearla sin hardware, igual que
+ * `buildVentaTicketLines`.
+ */
+export function buildEncabezadoUbicacion(
+  mesaNumero: number | null | undefined,
+  comandaRef: string | null | undefined,
+  ticketText: (t: string, o?: any) => any,
+): any[] {
+  const lines: any[] = [];
+  const hayMesa = mesaNumero !== null && mesaNumero !== undefined && `${mesaNumero}` !== '';
+  const hayComanda = !!comandaRef;
+
+  if (!hayMesa && !hayComanda) {
+    lines.push(ticketText('PARA LLEVAR', { align: 'C', bold: true, size: 'tall' }));
+    return lines;
+  }
+  if (hayMesa) {
+    lines.push(ticketText('MESA', { align: 'C' }));
+    lines.push(ticketText(String(mesaNumero), { align: 'C', bold: true, size: 'big' }));
+  }
+  if (hayComanda) {
+    // Con mesa, la comanda va en tamano normal: la mesa es la referencia de
+    // ubicacion y la comanda desempata entre cuentas de esa misma mesa.
+    lines.push(ticketText('COMANDA', { align: 'C' }));
+    lines.push(ticketText(String(comandaRef), {
+      align: 'C', bold: true, size: hayMesa ? 'tall' : 'big',
+    }));
+  }
+  return lines;
+}
+
+/**
  * Texto de una `VentaItemObservacion` para la comanda de cocina.
  *
  * `observacionLibre` gana: la fila de la nota libre cuelga del sentinel
@@ -474,15 +513,7 @@ export async function printComandaInternal(
       ticketText(ticketFmtFechaHora(new Date()), { align: 'C' }),
       ticketSeparador('='),
     ];
-    if (mesa?.numero) {
-      lines.push(ticketText('MESA', { align: 'C' }));
-      lines.push(ticketText(String(mesa.numero), { align: 'C', bold: true, size: 'big' }));
-    } else if (refComanda) {
-      lines.push(ticketText('COMANDA', { align: 'C' }));
-      lines.push(ticketText(String(refComanda), { align: 'C', bold: true, size: 'big' }));
-    } else {
-      lines.push(ticketText('PARA LLEVAR', { align: 'C', bold: true, size: 'tall' }));
-    }
+    lines.push(...buildEncabezadoUbicacion(mesa?.numero, refComanda, ticketText));
     lines.push(ticketText(`TICKET #${ventaId}`, { align: 'C', bold: true, size: 'tall' }));
     lines.push(ticketSeparador('='));
 
@@ -685,7 +716,7 @@ export async function buildVentaTicketLines(
 ): Promise<VentaTicketBuild | null> {
   const venta = await dataSource.getRepository(Venta).findOne({
     where: { id: ventaId },
-    relations: ['cliente', 'cliente.persona', 'mesa', 'formaPago', 'pago'],
+    relations: ['cliente', 'cliente.persona', 'mesa', 'comanda', 'formaPago', 'pago'],
   });
   if (!venta) return null;
 
@@ -755,13 +786,15 @@ export async function buildVentaTicketLines(
 
   const lines: TicketLine[] = [...headerLines];
 
-  // MESA en grande — identifica el pedido de un vistazo (reemplaza el título
-  // "PRE-CUENTA", que era redundante).
-  const mesaNro = (venta.mesa as any)?.numero;
-  if (mesaNro) {
+  // MESA y/o COMANDA en grande — identifica el pedido de un vistazo (reemplaza el
+  // título "PRE-CUENTA", que era redundante). La comanda no aparecia NUNCA en
+  // este ticket: dos cuentas de la misma mesa salian identicas.
+  const mesaNro = (venta.mesa as any)?.numero ?? null;
+  const comandaObj: any = (venta as any).comanda;
+  const comandaRef = comandaObj?.codigo || (comandaObj?.numero ? `#${comandaObj.numero}` : null);
+  if (mesaNro || comandaRef) {
     lines.push(ticketSeparador('='));
-    lines.push(ticketText('MESA', { align: 'C' }));
-    lines.push(ticketText(String(mesaNro), { align: 'C', bold: true, size: 'big' }));
+    lines.push(...buildEncabezadoUbicacion(mesaNro, comandaRef, ticketText));
   }
 
   lines.push(ticketSeparador('='));
