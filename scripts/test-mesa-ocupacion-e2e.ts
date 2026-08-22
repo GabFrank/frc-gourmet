@@ -141,15 +141,108 @@ async function main() {
     ok(/invalido/i.test(err), 'G: rechaza un estado que no existe', err);
   }
 
-  // ═══════ [H] Comanda viva bloquea liberar ═══════
-  console.log('\n[H] Mesa con comanda viva');
+  // ═══════ [H] Una comanda encima NO bloquea liberar la mesa ═══════
+  // Cambio de semantica 2026-08-22: el vinculo comanda->mesa es de UBICACION, no
+  // de ocupacion. Una mesa sin cuenta propia con comandas encima queda
+  // DISPONIBLE (verde) y el badge avisa que hay comandas sentadas ahi.
+  //
+  // Antes esto bloqueaba, y por eso cobrar la cuenta de una mesa con una comanda
+  // encima tiraba error: la excepcion salia del bloque del cobro y la limpieza
+  // de la pantalla nunca corria.
+  console.log('\n[H] Mesa con comanda viva pero sin cuenta propia');
   {
     const mesa: any = await nuevaMesa(8);
     await ds.query(`UPDATE pdv_mesas SET estado = 'OCUPADO' WHERE id = ${mesa.id}`);
     await save(Comanda, { codigo: 'C-8', numero: 8, estado: 'OCUPADO', activo: true, pdv_mesa: { id: mesa.id } });
     let err = '';
     try { await invokeHandler('set-pdv-mesa-estado', mesa.id, 'DISPONIBLE'); } catch (e: any) { err = e.message; }
-    ok(/1 comanda/.test(err), 'H: no libera una mesa con comanda activa', err);
+    ok(err === '', 'H: una comanda encima ya NO impide liberar la mesa', err);
+    ok(await estadoDe(mesa.id) === 'DISPONIBLE', 'H: la mesa quedo disponible', await estadoDe(mesa.id));
+  }
+
+  // ═══════ [I] La cuenta PROPIA si bloquea ═══════
+  console.log('\n[I] Mesa con cuenta propia');
+  {
+    const mesa: any = await nuevaMesa(9);
+    await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } });
+    let err = '';
+    try { await invokeHandler('set-pdv-mesa-estado', mesa.id, 'DISPONIBLE'); } catch (e: any) { err = e.message; }
+    ok(/venta\(s\) abierta\(s\) propia/.test(err), 'I: la cuenta propia sigue impidiendo liberar', err);
+  }
+
+  // ═══════ [J] El estado que devuelven las consultas es DERIVADO ═══════
+  console.log('\n[J] Estado derivado, no la columna cache');
+  {
+    const mesa: any = await nuevaMesa(10);
+    // Columna mentirosa a proposito: OCUPADO sin ninguna cuenta.
+    await ds.query(`UPDATE pdv_mesas SET estado = 'OCUPADO' WHERE id = ${mesa.id}`);
+    const mesas: any[] = await invokeHandler('getPdvMesas');
+    const encontrada = mesas.find((m: any) => m.id === mesa.id);
+    ok(encontrada?.estado === 'DISPONIBLE',
+      'J: la grilla deriva DISPONIBLE aunque la columna diga OCUPADO', encontrada?.estado);
+    const detalle: any = await invokeHandler('getPdvMesa', mesa.id);
+    ok(detalle?.estado === 'DISPONIBLE', 'J: el detalle tambien lo deriva', detalle?.estado);
+
+    // Y con cuenta propia deriva OCUPADO aunque la columna diga lo contrario.
+    await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } });
+    await ds.query(`UPDATE pdv_mesas SET estado = 'DISPONIBLE' WHERE id = ${mesa.id}`);
+    const mesas2: any[] = await invokeHandler('getPdvMesas');
+    ok(mesas2.find((m: any) => m.id === mesa.id)?.estado === 'OCUPADO',
+      'J: con cuenta propia deriva OCUPADO aunque la columna diga DISPONIBLE');
+  }
+
+  // ═══════ [K] Abrir una comanda no ocupa su mesa ═══════
+  console.log('\n[K] abrirComanda no toca la mesa');
+  {
+    const mesa: any = await nuevaMesa(11);
+    const comanda: any = await save(Comanda, { codigo: 'C-11', numero: 11, estado: 'DISPONIBLE', activo: true });
+    await invokeHandler('abrirComanda', comanda.id, { mesaId: mesa.id });
+    ok(await estadoDe(mesa.id) === 'DISPONIBLE', 'K: la mesa sigue disponible', await estadoDe(mesa.id));
+    const mesas: any[] = await invokeHandler('getPdvMesas');
+    const m = mesas.find((x: any) => x.id === mesa.id);
+    ok(m?.estado === 'DISPONIBLE', 'K: la grilla la muestra disponible');
+    ok((m?.comandas || []).length === 1, 'K: pero el badge tiene 1 comanda', (m?.comandas || []).length);
+  }
+
+  // ═══════ [L] Cobrar/cancelar deja el CACHE al dia ═══════
+  // Hallazgo de auditoria: la columna `pdv_mesas.estado` es un cache, y el
+  // evento que mas veces la cambia — cerrar la cuenta — no la estaba
+  // resincronizando. La grilla se veia bien porque deriva, pero cualquier lector
+  // de la columna cruda (p.ej. el servicio de musica ambiental, que decide el
+  // tempo por mesas ocupadas) sobre-contaba para siempre.
+  console.log('\n[L] El cache sigue al cierre de la cuenta');
+  {
+    const mesa: any = await nuevaMesa(12);
+    const venta: any = await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } });
+    ok(await estadoDe(mesa.id) === 'OCUPADO', 'L: al abrir la cuenta, la columna dice OCUPADO');
+
+    await invokeHandler('updateVenta', venta.id, { estado: 'CONCLUIDA' });
+    ok(await estadoDe(mesa.id) === 'DISPONIBLE',
+      'L: al COBRAR, la columna vuelve a DISPONIBLE sola', await estadoDe(mesa.id));
+  }
+  {
+    const mesa: any = await nuevaMesa(13);
+    const venta: any = await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } });
+    await invokeHandler('updateVenta', venta.id, { estado: 'CANCELADA' });
+    ok(await estadoDe(mesa.id) === 'DISPONIBLE',
+      'L: al CANCELAR tambien', await estadoDe(mesa.id));
+  }
+  {
+    // Y con una comanda encima: la comanda no sostiene la ocupacion.
+    const mesa: any = await nuevaMesa(14);
+    const venta: any = await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } });
+    await save(Comanda, { codigo: 'C-14', numero: 14, estado: 'OCUPADO', activo: true, pdv_mesa: { id: mesa.id } });
+    await invokeHandler('updateVenta', venta.id, { estado: 'CONCLUIDA' });
+    ok(await estadoDe(mesa.id) === 'DISPONIBLE',
+      'L: una comanda encima no mantiene la mesa ocupada', await estadoDe(mesa.id));
+  }
+  {
+    // cerrarVentasAbiertasMesa tambien.
+    const mesa: any = await nuevaMesa(15);
+    await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } });
+    await invokeHandler('cerrarVentasAbiertasMesa', mesa.id, 'CONCLUIDA');
+    ok(await estadoDe(mesa.id) === 'DISPONIBLE',
+      'L: cerrarVentasAbiertasMesa deja el cache al dia', await estadoDe(mesa.id));
   }
 
   await ds.destroy();

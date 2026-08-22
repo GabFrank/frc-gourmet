@@ -204,6 +204,30 @@ async function main() {
   const nula = await buildVentaTicketLines(ds, 999999, { width: WIDTH });
   ok(nula === null, 'venta inexistente → null');
 
+  // ═══════ Encabezado de ubicacion: MESA y COMANDA ═══════
+  // El bug: era un if/else, asi que una comanda CON mesa nunca imprimia su
+  // numero. Dos cuentas en la misma mesa salian con tickets identicos.
+  console.log('\n[ubicacion] Encabezado MESA / COMANDA');
+  {
+    const { buildEncabezadoUbicacion } = require('../electron/handlers/documentos-tickets.handler');
+    const tt = (t: string, o?: any) => ({ t, o });
+    const textos = (ls: any[]) => ls.map((l: any) => l.t).join('|');
+
+    ok(textos(buildEncabezadoUbicacion(5, null, tt)) === 'MESA|5', 'ubicacion: solo mesa');
+    ok(textos(buildEncabezadoUbicacion(null, '#3', tt)) === 'COMANDA|#3', 'ubicacion: solo comanda');
+    ok(textos(buildEncabezadoUbicacion(5, '#3', tt)) === 'MESA|5|COMANDA|#3',
+      'ubicacion: mesa Y comanda juntas (el bug reportado)',
+      textos(buildEncabezadoUbicacion(5, '#3', tt)));
+    ok(textos(buildEncabezadoUbicacion(null, null, tt)) === 'PARA LLEVAR',
+      'ubicacion: sin nada -> PARA LLEVAR');
+    ok(textos(buildEncabezadoUbicacion(0, null, tt)) === 'MESA|0',
+      'ubicacion: mesa 0 no se confunde con ausente');
+    const conAmbas = buildEncabezadoUbicacion(5, '#3', tt);
+    ok(conAmbas[3].o.size === 'tall', 'ubicacion: con mesa, la comanda no compite en tamano');
+    ok(buildEncabezadoUbicacion(null, '#3', tt)[1].o.size === 'big',
+      'ubicacion: sola, la comanda va en grande');
+  }
+
   await ds.destroy();
   console.log(`\n[ticket-venta] ${passed} OK, ${failed} FALLARON`);
   process.exit(failed > 0 ? 1 : 0);

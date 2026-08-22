@@ -49,6 +49,58 @@ del bug que figuraba como *"Mesas colgadas en OCUPADO — posible race condition
 > `npm run test:mesa-ocupacion`.
 
 
+## El modelo mesa ↔ comanda (2026-08-22) — leer ANTES de tocar nada de mesas
+
+### Una sola regla
+
+```
+mesa ocupada  ⟺  existe Venta ABIERTA con mesa_id = X y comanda_id IS NULL
+```
+
+**Las comandas quedan FUERA de la fórmula, a propósito.** El color de la mesa responde una sola pregunta — *¿tiene cuenta propia?* — y la dimensión *"¿hay comandas sentadas acá?"* la carga el **badge**, que ya existía.
+
+| Color | Badge | Significa | Qué hace el cajero |
+|---|---|---|---|
+| 🟢 verde | — | vacía | — |
+| 🟡 amarillo | N | sin cuenta de mesa, N comandas | **no le cobra a la mesa**; cobra por comanda |
+| 🟠 naranja | — | cuenta de mesa | cobra la mesa |
+| 🟠 naranja | N | cuenta de mesa **+** comandas | ⚠️ 2 cuentas o más |
+| 🔵 azul | cualquiera | reservada — pisa a las demás | — |
+
+⚠️ **No colapsar amarillo y naranja en "ocupada".** Derivar la ocupación incluyendo comandas destruye la distinción que necesita el cajero. Fue considerado y descartado explícitamente.
+
+⚠️ El amarillo es **`#ffeb3b`, no `#ffc107`**: el ámbar se confunde con el naranja `#f4a536` a la distancia a la que se mira un plano de mesas. Verificado en pantalla. Y `.table-selected` usa borde y glow **blancos**, porque el amarillo pasó a ser un estado.
+
+### Qué significa `Comanda.pdv_mesa`
+
+**Ubicación, no ocupación.** Dice dónde está sentada la cuenta, para saber a dónde llevar la comida y por qué sector imprimir. No cambia el estado de la mesa.
+
+Una comanda de barra o "para llevar" simplemente **no tiene mesa**. Si no hay nadie en la mesa, no se le pone mesa — ese es el caso que antes se resolvía mal con el flag.
+
+⚠️ **`PdvConfig.ocuparMesaAlVincularComanda` está DEPRECADO** y ya no se lee. Producía el estado que ahora es una mentira: naranja sin cuenta de mesa. La columna no se dropeó.
+
+### `pdv_mesas.estado` es un CACHE, no la verdad
+
+Las consultas (`getPdvMesas`, `getPdvMesasBySector`, `getPdvMesa`, `getPdvMesasDisponibles`) devuelven el estado **derivado** vía `derivarEstadoMesas`. La columna se resincroniza con `sincronizarEstadoMesaEnTx` y en el arranque (`db-migrations-bootstrap`, las **dos** direcciones).
+
+**Por qué:** era un flag manual que seis caminos mantenían a mano y un séptimo ignoraba. Cada bug de "mesa colgada en OCUPADO" fue un camino que se olvidó de actualizarlo — van tres. Si agregás un camino que abre o cierra la cuenta de una mesa, **no escribas `estado` a mano**: llamá a `sincronizarEstadoMesaEnTx`.
+
+⚠️ El guard que impide liberar una mesa estaba **duplicado**: `set-pdv-mesa-estado` (manual) y `liberarMesaSiVaciaEnTx` (automático, el que corre casi siempre). Hoy hay una sola función. Sólo la **cuenta propia** bloquea; las comandas ya no.
+
+### En el frontend, el color se ESTAMPA
+
+La regla 4 prohíbe funciones y getters en templates, así que `estamparMesa()` calcula clase y tooltip y los deja en el objeto.
+
+⚠️ **Hay SIETE caminos que escriben `mesas`** y todos tienen que estampar. El más traicionero: `refreshMesasSilent` saltea `.venta` de la mesa **seleccionada** a propósito, para no pisar datos en edición — sin estampar en los caminos optimistas, el color se congela justo en la mesa que el cajero está mirando.
+
+Y se estampa desde **`mesa.venta`**, no desde `mesa.estado`: es la misma regla del backend, y además es lo que los caminos optimistas mantienen al día (cobrar pone `venta = null` sin tocar `estado`).
+
+**Test:** `npm run test:mesa-estado` fija la matriz de 4 combinaciones × color × tooltip.
+
+### Los tickets identifican mesa Y comanda
+
+`buildEncabezadoUbicacion` (función pura, testeable sin hardware) imprime las dos referencias cuando existen las dos. Antes era un `if (mesa) / else if (comanda)`: **una comanda con mesa nunca imprimía su número**, así que dos cuentas en la misma mesa producían tickets idénticos. Y la pre-cuenta no imprimía la comanda nunca — `buildVentaTicketLines` ni siquiera cargaba la relación.
+
 ## Transferir una cuenta entre mesas y comandas (2026-08)
 
 Canal único: **`transferir-venta-pdv`** en `ventas.handler.ts`. Una transacción, un `ensurePermission('VENTAS_PDV')`, y `withMesaLock` sobre las mesas involucradas (tomadas en orden ascendente de id, para que dos transferencias cruzadas no se abracen).
@@ -72,7 +124,7 @@ Canal único: **`transferir-venta-pdv`** en `ventas.handler.ts`. Una transacció
 
 ### Comportamiento de los contenedores
 
-- Comanda destino **DISPONIBLE** → se abre vinculada a la **mesa física del origen** (misma mesa, cuenta separada). Si `PdvConfig.ocuparMesaAlVincularComanda` está en true, además ocupa esa mesa.
+- Comanda destino **DISPONIBLE** → hereda la mesa del origen **sólo si el alcance es ITEMS** (dividir la cuenta en la misma mesa: la gente sigue sentada ahí). En **COMPLETA** no hereda: la cuenta *se va* de la mesa. Vincularla dejaba la mesa ocupada, sin cuenta propia y sin forma de atenderla ni liberarla — era el bug reportado.
 - Mesa origen → se libera sólo si no le queda trabajo vivo, con el mismo criterio que `set-pdv-mesa-estado` y `cerrarComanda` (cuenta comandas OCUPADO + ventas ABIERTA con `comanda IS NULL`). Por eso mesa completa → comanda nueva sobre esa misma mesa **deja la mesa ocupada**: la gente sigue sentada, ahora con tarjeta.
 - Comanda origen → vuelve a DISPONIBLE con `pdv_mesa`, `sector` y `observacion` en null.
 - Por ítems: el origen se cierra sólo si quedó sin ítems activos.

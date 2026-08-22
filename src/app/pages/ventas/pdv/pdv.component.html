@@ -189,9 +189,19 @@
             <mat-icon>place</mat-icon>
             {{ selectedMesa.sector?.nombre || 'Sin sector' }}
           </span>
-          <span class="mesa-status" [ngClass]="selectedMesa.reservado ? 'status-reserved' : selectedMesa.estado === 'DISPONIBLE' ? 'status-available' : 'status-occupied'">
-            {{ selectedMesa.reservado ? 'Reservada' : selectedMesa.estado === 'DISPONIBLE' ? 'Disponible' : 'Ocupada' }}
-          </span>
+          <span class="mesa-status" [ngClass]="mesaDetalleClase">{{ mesaDetalleTexto }}</span>
+          <!-- Comandas sentadas en esta mesa: se abren desde acá, sin ir a
+               buscarlas por número a la otra pestaña. -->
+          <button
+            mat-stroked-button
+            class="mesa-comanda-chip"
+            *ngFor="let c of selectedMesa.comandas"
+            (click)="abrirComandaDeMesa(c)"
+            [matTooltip]="'Abrir la comanda ' + c.numero"
+          >
+            <mat-icon>receipt_long</mat-icon>
+            {{ c.numero }}
+          </button>
         </div>
 
         <!-- Fila 2: Cliente + extras -->
@@ -860,17 +870,9 @@
                 style="height: 60px !important; width: 60px !important"
                 *ngFor="let mesa of mesas"
                 (click)="selectMesa(mesa)"
-                [class.table-active]="mesa.estado === 'DISPONIBLE'"
-                [class.table-inactive]="mesa.estado !== 'DISPONIBLE'"
-                [class.table-reserved]="mesa.reservado"
+                [ngClass]="mesa._claseEstado"
                 [class.table-selected]="selectedMesa?.id === mesa.id"
-                [matTooltip]="
-                  mesa.reservado
-                    ? 'Mesa reservada'
-                    : mesa.estado === 'DISPONIBLE'
-                    ? 'Mesa disponible'
-                    : 'Mesa ocupada'
-                "
+                [matTooltip]="mesa._tooltip || ''"
                 [matBadge]="mesa.comandas?.length"
                 [matBadgeHidden]="!mesa.comandas?.length"
                 matBadgeColor="accent"

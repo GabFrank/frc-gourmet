@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { DataSource } from 'typeorm';
+import { DataSource, IsNull } from 'typeorm';
 import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
 import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
 import { MovimientoCliente } from '../../src/app/database/entities/financiero/movimiento-cliente.entity';
@@ -16,6 +16,7 @@ import { MovimientoBancarioTipo } from '../../src/app/database/entities/financie
 import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
+import { PdvMesa } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
@@ -745,6 +746,25 @@ export function registerCuentasPorCobrarHandlers(
       venta.fechaCierre = new Date();
       await setEntityUserTracking(dataSource, venta, cu?.id, true);
       await queryRunner.manager.save(Venta, venta);
+
+      // Cerrar la cuenta de una mesa cambia su ocupacion. Este handler NO pasa
+      // por `updateVenta`, asi que tiene que resincronizar el cache
+      // `pdv_mesas.estado` por su cuenta — si no, la mesa queda marcada ocupada
+      // para siempre en todo lector de la columna cruda. Va en la MISMA
+      // transaccion; el criterio es el mismo de `mesaTieneCuentaPropia`:
+      // ocupada <=> venta ABIERTA con comanda_id IS NULL.
+      const mesaIdVenta = (venta as any)?.mesa?.id ?? null;
+      if (mesaIdVenta) {
+        const abiertas = await queryRunner.manager.count(Venta, {
+          where: { mesa: { id: mesaIdVenta }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
+        });
+        const mesaRow = await queryRunner.manager.findOneBy(PdvMesa, { id: mesaIdVenta } as any);
+        const derivado = abiertas > 0 ? 'OCUPADO' : 'DISPONIBLE';
+        if (mesaRow && (mesaRow as any).estado !== derivado) {
+          (mesaRow as any).estado = derivado;
+          await queryRunner.manager.save(PdvMesa, mesaRow);
+        }
+      }
 
       // Crear CPC + cuotas (replicando la lógica de create-cuenta-por-cobrar)
       const cantidadCuotas = Math.max(1, Number(data.cantidadCuotas) || 1);
