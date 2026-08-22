@@ -46,19 +46,32 @@ async function cancelarVentasHuerfanasYLiberarMesas(dataSource: DataSource): Pro
       );
     }
 
-    // Liberar mesas que quedaron OCUPADO sin ninguna cuenta activa (venta
-    // ABIERTA o comanda OCUPADO). Idempotente: si todas tienen cuenta activa,
-    // no afecta filas.
+    // Resincronizar el cache `pdv_mesas.estado` con la regla derivada:
+    //
+    //     ocupada  <=>  existe venta ABIERTA con mesa_id = X y comanda_id IS NULL
+    //
+    // Antes esto contaba tambien las comandas y, peor, la subconsulta de ventas
+    // no filtraba `comanda_id IS NULL`: la cuenta de una comanda contaba como
+    // cuenta de la mesa. Corria en CADA arranque, asi que reaplicaba el criterio
+    // viejo para siempre — una migracion de una sola vez no alcanzaba.
+    //
+    // Se corrigen las DOS direcciones. Idempotente.
     await dataSource.query(
       `UPDATE pdv_mesas
           SET estado = 'DISPONIBLE'
         WHERE estado = 'OCUPADO'
           AND id NOT IN (
-            SELECT mesa_id FROM ventas WHERE estado = 'ABIERTA' AND mesa_id IS NOT NULL
-          )
-          AND id NOT IN (
-            SELECT pdv_mesa_id FROM comandas
-             WHERE estado = 'OCUPADO' AND activo = true AND pdv_mesa_id IS NOT NULL
+            SELECT mesa_id FROM ventas
+             WHERE estado = 'ABIERTA' AND mesa_id IS NOT NULL AND comanda_id IS NULL
+          )`
+    );
+    await dataSource.query(
+      `UPDATE pdv_mesas
+          SET estado = 'OCUPADO'
+        WHERE estado = 'DISPONIBLE'
+          AND id IN (
+            SELECT mesa_id FROM ventas
+             WHERE estado = 'ABIERTA' AND mesa_id IS NOT NULL AND comanda_id IS NULL
           )`
     );
   } catch (e) {

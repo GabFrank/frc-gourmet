@@ -234,46 +234,63 @@ async function main() {
     ok(await estadoMesa(destino.id) === 'OCUPADO', '8: la mesa destino se ocupo');
   }
 
-  // ═══════ [8b] la mesa no queda fantasma tras la cadena mesa→comanda→mesa ═══════
-  console.log('\n[8b] Mesa completa a una comanda sobre esa misma mesa, y de ahi a otra mesa');
+  // ═══════ [8b] COMPLETA a comanda: la cuenta SE VA de la mesa ═══════
+  // Cambio de semantica 2026-08-22. Antes la comanda destino heredaba la mesa de
+  // origen siempre, tambien en COMPLETA: la mesa quedaba OCUPADO, sin cuenta
+  // propia y sin forma de atenderla ni liberarla.
+  console.log('\n[8b] Mesa completa a una comanda libre');
   {
-    const mesaA = await nuevaMesa(); const comanda = await nuevaComanda(); const mesaB = await nuevaMesa();
-    const venta = await abrirVentaMesa(mesaA.id);
+    const mesa = await nuevaMesa(); const comanda = await nuevaComanda();
+    const venta = await abrirVentaMesa(mesa.id);
     await agregarItem(venta.id);
 
-    // Paso 1: la cuenta pasa a tarjeta. La mesa sigue ocupada — la gente esta ahi.
     await transferir({
-      origen: { tipo: 'MESA', id: mesaA.id }, destino: { tipo: 'COMANDA', id: comanda.id }, alcance: 'COMPLETA',
+      origen: { tipo: 'MESA', id: mesa.id }, destino: { tipo: 'COMANDA', id: comanda.id }, alcance: 'COMPLETA',
     });
-    ok(await estadoMesa(mesaA.id) === 'OCUPADO', '8b: la mesa sigue ocupada con la comanda encima');
 
-    // Paso 2: la tarjeta se muda a otra mesa. Al cerrarse la comanda, la mesa
-    // original queda sin nada — y tiene que liberarse. Antes no lo hacia salvo
-    // que `ocuparMesaAlVincularComanda` estuviera en true (default: false), y
-    // quedaba OCUPADO para siempre.
-    await transferir({
-      origen: { tipo: 'COMANDA', id: comanda.id }, destino: { tipo: 'MESA', id: mesaB.id }, alcance: 'COMPLETA',
-    });
-    ok(await estadoComanda(comanda.id) === 'DISPONIBLE', '8b: la comanda quedo libre');
-    ok(await estadoMesa(mesaB.id) === 'OCUPADO', '8b: la mesa nueva se ocupo');
-    ok(await estadoMesa(mesaA.id) === 'DISPONIBLE', '8b: la mesa original NO queda fantasma', await estadoMesa(mesaA.id));
+    const cm = (await ds.query(`SELECT pdv_mesa_id AS m FROM comandas WHERE id = ${comanda.id}`))[0].m;
+    ok(cm === null, '8b: la comanda NO hereda la mesa en una transferencia completa', cm);
+    ok(await estadoComanda(comanda.id) === 'OCUPADO', '8b: la comanda se abrio igual');
+    ok(await estadoMesa(mesa.id) === 'DISPONIBLE', '8b: la mesa origen quedo libre', await estadoMesa(mesa.id));
+    const vm = (await ds.query(`SELECT mesa_id AS m FROM ventas WHERE id = ${venta.id}`))[0].m;
+    ok(vm === null, '8b: la venta tampoco conserva la mesa', vm);
   }
 
-  // ═══════ [8c] pero no libera una mesa que sigue teniendo trabajo ═══════
-  console.log('\n[8c] Cerrar una comanda no pisa la cuenta de su mesa');
+  // ═══════ [8c] ITEMS a comanda: es dividir la cuenta EN la mesa ═══════
+  console.log('\n[8c] Solo items de mesa a una comanda libre');
   {
-    const mesa = await nuevaMesa(); const comanda = await nuevaComanda(); const destino = await nuevaMesa();
-    // La mesa tiene su propia cuenta ademas de la comanda encima.
-    const ventaMesa = await abrirVentaMesa(mesa.id);
-    await agregarItem(ventaMesa.id);
-    const ventaComanda = await abrirVentaComanda(comanda.id, mesa.id);
-    await agregarItem(ventaComanda.id);
+    const mesa = await nuevaMesa(); const comanda = await nuevaComanda();
+    const venta = await abrirVentaMesa(mesa.id);
+    const mover = await agregarItem(venta.id);
+    await agregarItem(venta.id);
 
     await transferir({
-      origen: { tipo: 'COMANDA', id: comanda.id }, destino: { tipo: 'MESA', id: destino.id }, alcance: 'COMPLETA',
+      origen: { tipo: 'MESA', id: mesa.id }, destino: { tipo: 'COMANDA', id: comanda.id },
+      alcance: 'ITEMS', itemIds: [mover.id],
     });
-    ok(await estadoMesa(mesa.id) === 'OCUPADO', '8c: la mesa sigue ocupada, su propia cuenta sigue abierta', await estadoMesa(mesa.id));
-    ok(await estadoVenta(ventaMesa.id) === 'ABIERTA', '8c: la cuenta de la mesa no se toco');
+
+    const cm = (await ds.query(`SELECT pdv_mesa_id AS m FROM comandas WHERE id = ${comanda.id}`))[0].m;
+    ok(Number(cm) === Number(mesa.id), '8c: la comanda SI hereda la mesa cuando es por items', cm);
+    ok(await estadoMesa(mesa.id) === 'OCUPADO', '8c: la mesa sigue ocupada, le queda su cuenta');
+  }
+
+  // ═══════ [8d] Una comanda encima no mantiene ocupada a la mesa ═══════
+  console.log('\n[8d] La mesa se libera aunque le quede una comanda');
+  {
+    const mesa = await nuevaMesa(); const comanda = await nuevaComanda(mesa.id);
+    await abrirVentaComanda(comanda.id, mesa.id);
+    const ventaMesa = await abrirVentaMesa(mesa.id);
+    const item = await agregarItem(ventaMesa.id);
+    const destino = await nuevaMesa();
+
+    ok(await estadoMesa(mesa.id) === 'OCUPADO', '8d: arranca ocupada por su cuenta propia');
+    await transferir({
+      origen: { tipo: 'MESA', id: mesa.id }, destino: { tipo: 'MESA', id: destino.id }, alcance: 'COMPLETA',
+    });
+    ok(await estadoMesa(mesa.id) === 'DISPONIBLE',
+      '8d: al irse su cuenta queda libre, aunque la comanda siga sentada ahi', await estadoMesa(mesa.id));
+    ok(await estadoComanda(comanda.id) === 'OCUPADO', '8d: la comanda no se toco');
+    ok(await ventaDelItem(item.id) === ventaMesa.id, '8d: el item viajo con su venta');
   }
 
   // ═══════ [9] no se mueve un item ya cobrado ═══════

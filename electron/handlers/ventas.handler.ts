@@ -378,15 +378,6 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   // Remove this line - get the current user in each handler instead
   // const currentUser = getCurrentUser(); // Get user for tracking
 
-  // Flag de config: ¿vincular una comanda a una mesa debe ocupar la mesa?
-  const ocuparMesaAlVincularComanda = async (): Promise<boolean> => {
-    try {
-      const cfg = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
-      return !!cfg?.ocuparMesaAlVincularComanda;
-    } catch {
-      return false;
-    }
-  };
 
   // Arrancar worker de retry de comandas (cada 5s reintenta items con
   // `impreso=false` y al menos un intento previo, en ventas ABIERTAS).
@@ -741,9 +732,9 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // cajero le fallaba, el error se tragaba en un console.error y la mesa
       // quedaba sin marcar. Es el mismo patron que ya usa `abrirComanda`.
       //
-      // Solo aplica a la venta de mesa DIRECTA: si la venta cuelga de una comanda,
-      // ocupar la mesa fisica es decision de `PdvConfig.ocuparMesaAlVincularComanda`
-      // (default false) y lo resuelve `abrirComanda`.
+      // Solo aplica a la venta de mesa DIRECTA. Si la venta cuelga de una
+      // comanda NO ocupa la mesa: el vinculo comanda->mesa es de ubicacion, no
+      // de ocupacion (ver `mesaTieneCuentaPropia`).
       // Sólo la forma `{ mesa: { id } }`: un `mesa_id` suelto no lo traduce
       // `repo.create()` a la relación, así que la venta quedaría sin mesa y
       // marcaríamos ocupada una mesa sin venta vinculada — justo el estado que
@@ -1911,6 +1902,21 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   // --- PdvMesa Handlers ---
   // Helper: query mesas with only the ABIERTA venta joined + comandas OCUPADO vinculadas
+  /**
+   * Estampa el estado DERIVADO sobre las mesas que devuelve una consulta.
+   *
+   * `mesa.venta` viene del join que ya filtra `comanda_id IS NULL`, o sea que es
+   * exactamente la cuenta propia de la mesa. La columna `pdv_mesas.estado` es
+   * solo un cache: si difiere, gana lo derivado. Asi el plano nunca muestra una
+   * mesa colgada aunque la columna haya quedado mal por un camino viejo.
+   */
+  const derivarEstadoMesas = (mesas: any[]): any[] => {
+    for (const mesa of mesas || []) {
+      mesa.estado = mesa?.venta ? PdvMesaEstado.OCUPADO : PdvMesaEstado.DISPONIBLE;
+    }
+    return mesas;
+  };
+
   const queryMesasWithVentaAbierta = (repo: any) => {
     return repo.createQueryBuilder('mesa')
       .leftJoinAndSelect('mesa.reserva', 'reserva')
@@ -1927,7 +1933,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('getPdvMesas', async () => {
     try {
       const repo = dataSource.getRepository(PdvMesa);
-      return await queryMesasWithVentaAbierta(repo).getMany();
+      return derivarEstadoMesas(await queryMesasWithVentaAbierta(repo).getMany());
     } catch (error) {
       console.error('Error getting PDV Mesas:', error);
       throw error;
@@ -1948,12 +1954,13 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('getPdvMesasDisponibles', async () => {
     try {
+      // "Disponible" = sin cuenta propia. Se filtra por la venta del join, no por
+      // la columna cache `mesa.estado`, que puede venir desincronizada.
       const repo = dataSource.getRepository(PdvMesa);
-      return await queryMesasWithVentaAbierta(repo)
-        .where('mesa.activo = :activo AND mesa.reservado = :reservado AND mesa.estado = :estado', {
-          activo: true, reservado: false, estado: PdvMesaEstado.DISPONIBLE
-        })
-        .getMany();
+      const mesas = derivarEstadoMesas(await queryMesasWithVentaAbierta(repo)
+        .where('mesa.activo = :activo AND mesa.reservado = :reservado', { activo: true, reservado: false })
+        .getMany());
+      return mesas.filter((m: any) => m.estado === PdvMesaEstado.DISPONIBLE);
     } catch (error) {
       console.error('Error getting PDV Mesas disponibles:', error);
       throw error;
@@ -1963,9 +1970,9 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('getPdvMesasBySector', async (_event: any, sectorId: number) => {
     try {
       const repo = dataSource.getRepository(PdvMesa);
-      return await queryMesasWithVentaAbierta(repo)
+      return derivarEstadoMesas(await queryMesasWithVentaAbierta(repo)
         .where('mesa.sector_id = :sectorId', { sectorId })
-        .getMany();
+        .getMany());
     } catch (error) {
       console.error(`Error getting PDV Mesas for Sector ID ${sectorId}:`, error);
       throw error;
@@ -1996,6 +2003,8 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         order: { id: 'DESC' },
       });
       (mesa as any).venta = ventaAbierta || null;
+      // Mismo criterio derivado que la grilla: la columna es solo cache.
+      (mesa as any).estado = ventaAbierta ? PdvMesaEstado.OCUPADO : PdvMesaEstado.DISPONIBLE;
       return mesa;
     } catch (error) {
       console.error(`Error getting PDV Mesa ID ${id}:`, error);
@@ -2058,18 +2067,19 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       if (mesa.estado === estado) return mesa;
 
       if (estado === PdvMesaEstado.DISPONIBLE) {
-        // No liberar una mesa que sigue teniendo trabajo vivo: quedaria una mesa
-        // fantasma que otro cajero puede volver a ocupar, con dos ventas abiertas
-        // sobre la misma mesa fisica. Mismo criterio que `cerrarComanda`.
-        const comandasVivas = await dataSource.getRepository(Comanda).count({
-          where: { pdv_mesa: { id: mesaId }, estado: ComandaEstado.OCUPADO, activo: true },
-        });
+        // Solo la CUENTA PROPIA de la mesa impide liberarla. Las comandas ya no
+        // cuentan: una mesa sin cuenta propia con comandas encima queda
+        // DISPONIBLE (verde) y el badge avisa que hay comandas sentadas ahi.
+        //
+        // Antes esto contaba tambien las comandas, y por eso cobrar la cuenta de
+        // una mesa con una comanda encima tiraba error: la excepcion salia del
+        // bloque del cobro y la limpieza de la pantalla nunca corria.
         const ventasVivas = await dataSource.getRepository(Venta).count({
           where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
         });
-        if (comandasVivas > 0 || ventasVivas > 0) {
+        if (ventasVivas > 0) {
           throw new Error(
-            `La mesa ${mesa.numero} todavia tiene ${ventasVivas} venta(s) abierta(s) y ${comandasVivas} comanda(s) activa(s).`,
+            `La mesa ${mesa.numero} todavia tiene ${ventasVivas} venta(s) abierta(s) propia(s).`,
           );
         }
       }
@@ -2134,24 +2144,44 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   };
 
   /**
-   * Libera la mesa solo si ya no le queda trabajo vivo. Mismo criterio que
-   * `set-pdv-mesa-estado` y `cerrarComanda`: una mesa liberada con una comanda
-   * OCUPADO encima es una mesa fantasma que otro cajero vuelve a ocupar.
+   * FUENTE UNICA de la ocupacion de una mesa:
+   *
+   *     ocupada  <=>  existe Venta ABIERTA con mesa_id = X y comanda_id IS NULL
+   *
+   * Las comandas quedan FUERA de la formula a proposito. El color de la mesa
+   * responde una sola pregunta — "¿tiene cuenta propia?" — y la dimension "hay
+   * comandas sentadas aca" la carga el badge. Colapsar las dos en un solo bit
+   * destruye la distincion que necesita el cajero: "no hay nada que cobrarle a
+   * la mesa" (verde + badge) vs "hay cuenta de mesa Y ademas comandas"
+   * (naranja + badge).
+   *
+   * Antes esto era un flag manual que seis caminos distintos mantenian a mano y
+   * un septimo ignoraba. Cada bug de "mesa colgada en OCUPADO" fue un camino que
+   * se olvido de actualizarlo.
    */
-  const liberarMesaSiVaciaEnTx = async (manager: EntityManager, mesaId: number): Promise<boolean> => {
-    const comandasVivas = await manager.count(Comanda, {
-      where: { pdv_mesa: { id: mesaId }, estado: ComandaEstado.OCUPADO, activo: true },
-    });
-    const ventasVivas = await manager.count(Venta, {
+  const mesaTieneCuentaPropia = async (manager: EntityManager, mesaId: number): Promise<boolean> => {
+    const n = await manager.count(Venta, {
       where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
     });
-    if (comandasVivas > 0 || ventasVivas > 0) return false;
+    return n > 0;
+  };
+
+  /**
+   * Deja la columna cache `pdv_mesas.estado` igual al valor derivado. Se llama
+   * despues de cualquier cambio que pueda haber abierto o cerrado la cuenta de
+   * una mesa. Es idempotente y auto-reparadora: si la columna venia mal, la
+   * corrige sola.
+   */
+  const sincronizarEstadoMesaEnTx = async (manager: EntityManager, mesaId: number): Promise<PdvMesaEstado> => {
+    const derivado = (await mesaTieneCuentaPropia(manager, mesaId))
+      ? PdvMesaEstado.OCUPADO
+      : PdvMesaEstado.DISPONIBLE;
     const mesa = await manager.findOneBy(PdvMesa, { id: mesaId });
-    if (mesa && mesa.estado !== PdvMesaEstado.DISPONIBLE) {
-      mesa.estado = PdvMesaEstado.DISPONIBLE;
+    if (mesa && mesa.estado !== derivado) {
+      mesa.estado = derivado;
       await manager.save(PdvMesa, mesa);
     }
-    return true;
+    return derivado;
   };
 
   const cerrarComandaEnTx = async (manager: EntityManager, comandaId: number, userId?: number): Promise<void> => {
@@ -2164,15 +2194,11 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     (comanda as any).observacion = null;
     await setEntityUserTracking(dataSource, comanda, userId, true);
     await manager.save(Comanda, comanda);
-    // Se intenta liberar la mesa SIEMPRE, no solo cuando
-    // `ocuparMesaAlVincularComanda` esta en true. Una mesa puede haber quedado
-    // OCUPADO por otro camino — p.ej. transferir la mesa entera a una comanda
-    // sobre esa misma mesa: ahi la mesa no se libera porque la comanda vive
-    // encima, y al cerrarse la comanda no quedaba nadie que la liberara. Mesa
-    // fantasma. `liberarMesaSiVaciaEnTx` ya se niega si queda trabajo vivo, asi
-    // que intentarlo siempre es seguro.
+    // Cerrar una comanda ya no cambia la ocupacion de su mesa — la comanda
+    // nunca la ocupaba. Se resincroniza igual porque es barato y auto-repara una
+    // columna que haya quedado mal por un camino viejo.
     if (mesaId) {
-      await liberarMesaSiVaciaEnTx(manager, mesaId);
+      await sincronizarEstadoMesaEnTx(manager, mesaId);
     }
   };
 
@@ -2189,9 +2215,8 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     }
     await setEntityUserTracking(dataSource, comanda, userId, true);
     await manager.save(Comanda, comanda);
-    if (mesaVinculada && (await ocuparMesaAlVincularComanda())) {
-      await ocuparMesaEnTx(manager, mesaVinculada.id!);
-    }
+    // No se ocupa la mesa: el vinculo comanda->mesa es de ubicacion, no de
+    // ocupacion (ver `mesaTieneCuentaPropia`).
   };
 
   const transferirVentaPdvInternal = async (payload: TransferenciaPayload, userId?: number): Promise<any> => {
@@ -2302,9 +2327,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         );
       }
 
-      // Abrir la comanda destino si estaba libre, vinculada a la mesa del origen.
+      // Abrir la comanda destino si estaba libre.
+      //
+      // Hereda la mesa del origen SOLO en una transferencia por ITEMS: eso es
+      // dividir la cuenta en la misma mesa, la gente sigue sentada ahi. En una
+      // transferencia COMPLETA la cuenta SE VA de la mesa, asi que vincularla
+      // seria lo contrario de lo que se pidio — y dejaba la mesa ocupada, sin
+      // cuenta propia y sin forma de atenderla ni liberarla.
       if (comandaDestino && comandaDestino.estado === ComandaEstado.DISPONIBLE) {
-        await abrirComandaEnTx(manager, comandaDestino, mesaOrigenFisica, userId);
+        const mesaHeredada = alcance === 'ITEMS' ? mesaOrigenFisica : null;
+        await abrirComandaEnTx(manager, comandaDestino, mesaHeredada, userId);
       }
 
       let ventaDestinoId: number;
@@ -2376,7 +2408,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       let origenLiberado = false;
       if (origenCerrado) {
         if (origen.tipo === 'MESA') {
-          origenLiberado = await liberarMesaSiVaciaEnTx(manager, origen.id);
+          origenLiberado = (await sincronizarEstadoMesaEnTx(manager, origen.id)) === PdvMesaEstado.DISPONIBLE;
         } else {
           await cerrarComandaEnTx(manager, origen.id, userId);
           origenLiberado = true;
@@ -2660,15 +2692,10 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
 
-      // Si la config lo pide, vincular comanda a mesa también ocupa la mesa.
-      if (data.mesaId && (await ocuparMesaAlVincularComanda())) {
-        const mesaRepo = dataSource.getRepository(PdvMesa);
-        const mesa = await mesaRepo.findOneBy({ id: data.mesaId });
-        if (mesa && mesa.estado !== 'OCUPADO') {
-          mesa.estado = 'OCUPADO' as any;
-          await mesaRepo.save(mesa);
-        }
-      }
+      // Vincular una comanda a una mesa NO la ocupa: el vinculo es de UBICACION
+      // (donde esta sentada la cuenta, para saber a donde llevar la comida), no
+      // de ocupacion. La mesa se pinta por su cuenta propia; las comandas las
+      // muestra el badge.
       return saved;
     } catch (error) {
       console.error(`Error abriendo Comanda ID ${comandaId}:`, error);

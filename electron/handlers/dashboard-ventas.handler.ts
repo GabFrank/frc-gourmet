@@ -245,11 +245,21 @@ export function registerDashboardVentasHandlers(
       // 2. Mesas
       const mesaRepo = dataSource.getRepository(PdvMesa);
       const mesasTotal = await mesaRepo.count({ where: { activo: true } as any });
+      // Ocupada = tiene CUENTA PROPIA abierta (venta con comanda_id IS NULL).
+      // Se cuenta por la venta y no por la columna cache `m.estado`, que puede
+      // venir desincronizada. Las comandas no cuentan: una mesa sin cuenta
+      // propia con comandas encima no tiene nada que cobrarle.
       const mesasOcupadas = await mesaRepo
         .createQueryBuilder('m')
+        .innerJoin(
+          'ventas', 'v',
+          'v.mesa_id = m.id AND v.estado = :ve AND v.comanda_id IS NULL',
+          { ve: 'ABIERTA' },
+        )
         .where('m.activo = :a', { a: true })
-        .andWhere('m.estado = :e', { e: 'OCUPADO' })
-        .getCount();
+        .select('COUNT(DISTINCT m.id)', 'n')
+        .getRawOne()
+        .then((r: any) => Number(r?.n ?? 0));
 
       // 3. Comandas pendientes en cocina
       let comandasPendientes = 0;
