@@ -71,6 +71,8 @@
     "test:config-caja-mayor": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-config-caja-mayor-e2e.ts",
     "test:reportes-periodo": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-reportes-periodo.ts",
     "test:pg-backup": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pg-backup-e2e.ts",
+    "test:locks-pg": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-locks-postgres-e2e.ts",
+    "test:gating-ui": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-gating-ui.ts",
     "test:musica-estilos": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-musica-estilos-e2e.ts",
     "test:musica-cuotas": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-musica-cuotas-e2e.ts",
     "test:musica-descubrimiento": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-musica-descubrimiento-e2e.ts",

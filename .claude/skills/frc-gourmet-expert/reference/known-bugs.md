@@ -418,6 +418,24 @@ PdV refresca el estado de las mesas cada 1 segundo. Con 50 mesas, son ~50 querie
 
 → Archivo con registro de errores históricos del PdV. Mayoría resueltos, pero algunos pueden seguir pendientes. Chequear antes de "redescubrir" un bug.
 
+## ✅ RESUELTOS — 2026-08-22
+
+### El botón COBRAR del PdV desapareció para todos, admin incluido — RESUELTO
+
+Al gatear COBRAR y COBRO RÁPIDO con `*appHasPermission="'VENTAS_COBRAR'"` no se agregó `HasPermissionDirective` a los `imports` de `PdvComponent`, que es standalone. Sin la directiva, el `<ng-template>` que genera el desazucarado no lo instancia nadie: **el botón no se renderiza para ningún usuario**.
+
+⚠️ **Se diagnostica mal**: parece un problema de permisos y no lo es. No hay error de AOT, ni de consola, ni test que falle — y como el resto del PdV no tiene gates, es el único botón que se nota faltar.
+
+`PdvComponent` era el único de los 59 componentes standalone con gates que no importaba la directiva. Cubierto por `npm run test:gating-ui`.
+
+### `registrar-pago-consolidado` fallaba en Postgres (issue #258) — RESUELTO
+
+`FOR UPDATE no puede ser aplicado al lado nulable de un outer join`. El helper `findConLock` de `pago-consolidado-adapters.ts` pedía `lock` y `relations` en la misma consulta; TypeORM resuelve las relaciones con LEFT JOIN y Postgres rechaza el `FOR UPDATE`.
+
+⚠️ **Invisible en desarrollo**: SQLite ignora los locks, así que el pago consolidado se probó entero sin encontrarlo. El CI corre Postgres **sólo para las migraciones**, no para la lógica de los handlers — por eso tampoco lo atajó. Salió recién en el local del cliente, con el pago a medio registrar.
+
+Fix: dos consultas, el lock sobre la fila desnuda y las relaciones aparte. Detalle → [conventions/pitfalls-typeorm-electron.md](../conventions/pitfalls-typeorm-electron.md). Cubierto por `npm run test:locks-pg`, que corre contra un Postgres real (se saltea si no hay) y además barre el backend buscando la forma prohibida.
+
 ## ✅ RESUELTOS — Reportados por el usuario y corregidos (2026-08-21)
 
 Los cuatro tenían la misma raíz: **el permiso equivocado por proximidad**, o su gemelo en el transporte. Ninguno se veía probando como ADMIN.

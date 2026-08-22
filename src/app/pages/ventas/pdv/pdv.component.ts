@@ -47,6 +47,7 @@ import { PdvAtajoGrupo } from 'src/app/database/entities/ventas/pdv-atajo-grupo.
 import { CobrarVentaDialogComponent, CobrarVentaDialogData } from 'src/app/shared/components/cobrar-venta-dialog/cobrar-venta-dialog.component';
 import { CancelarVentaDialogComponent } from 'src/app/shared/components/cancelar-venta-dialog/cancelar-venta-dialog.component';
 import { EditVentaItemDialogComponent } from 'src/app/shared/components/edit-venta-item-dialog/edit-venta-item-dialog.component';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 import { TransferirDestinoDialogComponent, TransferirDestinoDialogData, TransferirDestinoResult }
   from 'src/app/shared/components/transferir-destino-dialog/transferir-destino-dialog.component';
 import { BuscarClienteDialogComponent } from 'src/app/shared/components/buscar-cliente-dialog/buscar-cliente-dialog.component';
@@ -101,7 +102,10 @@ interface CurrencyDisplay {
     MatTooltipModule,
     MatDialogModule,
     MatMenuModule,
-    MatCheckboxModule
+    MatCheckboxModule,
+    // Sin esto, `*appHasPermission` desazucara a un <ng-template> que nadie
+    // instancia: el boton desaparece en silencio, sin error de AOT ni de consola.
+    HasPermissionDirective
   ],
   animations: [
     trigger('detailExpand', [

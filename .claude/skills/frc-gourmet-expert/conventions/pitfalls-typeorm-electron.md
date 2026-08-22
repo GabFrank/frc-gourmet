@@ -83,6 +83,46 @@ Los campos que ya usaban `| null` (`maxPorArtista?: number | null`, `factorDurac
 
 **Bug original**: PR #234 (música, clasificación semántica). Tres revisores y toda la batería local en SQLite lo dejaron pasar; lo atajó el CI.
 
+## TypeORM + Postgres: un lock pesimista NO puede llevar `relations`
+
+```ts
+// ✗ Explota en Postgres. En SQLite pasa sin chistar.
+await qr.manager.findOne(Vale, {
+  where: { id },
+  relations: ['moneda', 'funcionario', 'funcionario.persona'],
+  lock: { mode: 'pessimistic_write' },
+});
+// → FOR UPDATE no puede ser aplicado al lado nulable de un outer join
+```
+
+TypeORM resuelve las `relations` con **LEFT JOIN**, y Postgres rechaza `FOR UPDATE` sobre el lado nulable de un outer join. **SQLite ni se entera**: su driver ignora los locks, así que en desarrollo no pasa nada y el error aparece recién en el local del cliente — en el caso del issue #258, con el pago a medio registrar.
+
+```ts
+// ✓ Dos consultas. El FOR UPDATE se sostiene hasta el fin de la transacción,
+//   así que la segunda lectura ya está protegida.
+if (esPostgres) {
+  await qr.manager.findOne(Vale, { where: { id }, lock: { mode: 'pessimistic_write' } });
+}
+return qr.manager.findOne(Vale, { where: { id }, relations: [...] });
+```
+
+Filtrar por la FK de una relación (`where: { venta: { id } }`) **sí** es compatible con el lock — verificado contra Postgres real en `npm run test:locks-pg`, que además barre el backend buscando la forma prohibida.
+
+## Angular standalone: `*appHasPermission` sin importar la directiva esconde el elemento, en silencio
+
+`*appHasPermission="'X'"` desazucara a `<ng-template appHasPermission [appHasPermission]="'X'">`. Si el componente **standalone** no tiene `HasPermissionDirective` en sus `imports`, **nadie instancia ese template**: el elemento no se renderiza nunca, para ningún usuario.
+
+No hay error de AOT, ni warning de consola, ni test que falle. El botón simplemente no está. Le pasó al **COBRAR del PdV**, que quedó invisible incluso para el ADMIN — y se diagnostica mal, porque parece un problema de permisos.
+
+```ts
+@Component({
+  standalone: true,
+  imports: [..., HasPermissionDirective],   // ← sin esto, el gate esconde todo
+})
+```
+
+Los componentes declarados en un `NgModule` heredan la directiva del módulo, así que el riesgo es exclusivo de los standalone. `npm run test:gating-ui` cruza cada template que usa la directiva con el array `imports` del decorador que declara ese template.
+
 ## TypeORM: leftJoin a tabla sin relación @ManyToOne
 
 Si una entidad tiene **columna plana** (`compraId: int`) pero no `@ManyToOne compra`, no se puede hacer `leftJoinAndSelect('cpp.compra', ...)`. Hay que joinear con la tabla raw:
