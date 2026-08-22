@@ -79,13 +79,33 @@ export type { Persona } from '../database/entities/personas/persona.entity';
 // --- Utilidades de dominio (datos puros, sin Angular/Electron) ---
 // Mensaje legible de un error del backend (desenvuelve el prefijo de IPC).
 export { mensajeDeError } from '../shared/utils/error-message.util';
+// Forma de pago EFECTIVO (fuente única desktop + mobile).
+export { formaPagoEfectivo, formasPagoDeCaja, formasPagoEfectivoDeCaja } from '../shared/utils/forma-pago-efectivo.util';
 // Reglas de validación de Operación Financiera (fuente única desktop + mobile).
 export {
   CAMPOS_REQUERIDOS,
   CAMPOS_MONEDA,
+  CAMPOS_FORMA_PAGO,
   MONEDAS_EN_UI,
+  LADOS_CAJA_MAYOR,
+  CAJAS_EN_UI,
+  CUENTAS_EN_UI,
+  COTIZACION_EN_UI,
+  TIPOS_OPERACION,
+  ETIQUETAS_CAMPOS,
   usaCuentaBancaria,
   usaDosCuentasBancarias,
   monedasDesdeCuentaBancaria,
+  formaPagoEsEfectivoFijo,
+  monedaSeHeredaDeCuenta,
+  fuenteDelCampo,
+  etiquetaDe,
+  camposFaltantes,
+  validarCoherencia,
 } from '../pages/financiero/caja-mayor/operaciones-financieras/create-operacion-financiera/operacion-financiera-validacion.util';
-export type { TipoOperacionFinanciera } from '../pages/financiero/caja-mayor/operaciones-financieras/create-operacion-financiera/operacion-financiera-validacion.util';
+export type {
+  TipoOperacionFinanciera,
+  LadoOperacion,
+  PorLado,
+  FuenteCampo,
+} from '../pages/financiero/caja-mayor/operaciones-financieras/create-operacion-financiera/operacion-financiera-validacion.util';

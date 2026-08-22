@@ -506,7 +506,79 @@ Nunca ambas a la vez.
 
 > **TRANSFERENCIA_BANCARIA (transferencia interna banco→banco, 2026-07):** transferencia entre dos cuentas bancarias, opcionalmente de monedas distintas (con cotización). Reutiliza `OperacionFinanciera` (los campos `cuentaBancariaOrigen`/`Destino` + `cotizacion` ya existían). Solo mueve saldo bancario — no genera `CajaMayorMovimiento`, así que el **bloque de diferencia se omite** (no hay caja donde imputarla; guardado con `if (cajaMayorDiferenciaId && ...)`). Anulación: revierte AMBAS cuentas (AJUSTE_POSITIVO en origen, AJUSTE_NEGATIVO en destino). Guardas: origen ≠ destino, ambas cuentas deben existir. Permiso `CAJA_MAYOR_OPERAR` (reusa el handler `create-operacion-financiera`). ⚠️ **SQLite tenía un CHECK** en `tipo_operacion` que rechazaba valores nuevos: la migración `DropCheckTipoOperacionFinanciera` recrea la tabla soltando ese CHECK (Postgres ya era `varchar` libre). Tests: `npm run test:transferencia-bancaria` (flujo + saldos + anulación), `npm run test:operacion-financiera` (validador). En el diálogo la moneda de cada lado se hereda de su cuenta (no se pisan entre sí, a diferencia de depósito/retiro); la cotización solo aparece cuando las monedas difieren.
 
-**Diálogo `create-operacion-financiera-dialog` (form único con validators por tipo).** En DEPOSITO/RETIRO la moneda **se hereda de la cuenta bancaria** (no se elige en la UI). Reglas de campos requeridos por tipo en `operacion-financiera-validacion.util.ts` (fuente única para validador + test). **Fix 2026-07 (PR #199):** el botón "Registrar" quedaba deshabilitado en Retiro/Depósito porque solo se seteaba UNA de las dos monedas (la requerida del otro lado quedaba `null`). Ahora al elegir la cuenta bancaria se setean **ambas** monedas (origen y destino) — misma divisa a los dos lados en efectivo. Test: `npm run test:operacion-financiera`.
+### Validación de campos por tipo (fuente única)
+
+**Dos superficies, una sola regla:** el diálogo de escritorio
+`create-operacion-financiera-dialog` y la pantalla PWA
+`operacion-financiera-nuevo.page.ts` derivan TODO de
+`operacion-financiera-validacion.util.ts` (re-exportado por `@frc/shared-core`
+para el mobile). Estructuras:
+
+| Constante | Responde |
+|---|---|
+| `CAMPOS_REQUERIDOS[tipo]` | qué controles llevan `Validators.required` |
+| `LADOS_CAJA_MAYOR[tipo]` | **qué lado MUEVE caja mayor** ⇒ su forma de pago es EFECTIVO fija |
+| `CAJAS_EN_UI[tipo]` | qué selects de caja mayor se muestran |
+| `CUENTAS_EN_UI[tipo]` | qué selects de cuenta bancaria se muestran |
+| `MONEDAS_EN_UI[tipo]` | qué monedas elige el usuario (el resto se heredan de la cuenta) |
+| `COTIZACION_EN_UI[tipo]` | `SIEMPRE` / `SI_MONEDAS_DISTINTAS` / `NUNCA` |
+| `fuenteDelCampo(tipo, campo)` | **el invariante**: `UI`, `CUENTA_BANCARIA`, `EFECTIVO` o `null` |
+| `camposFaltantes()` / `validarCoherencia()` / `etiquetaDe()` | mensajes concretos al guardar |
+
+⚠️ **`LADOS_CAJA_MAYOR` NO es `CAJAS_EN_UI`.** En `CAMBIO_DIVISA` los DOS lados
+mueven caja mayor (egreso en una moneda + ingreso en otra) pero es la MISMA caja,
+así que la UI muestra **un solo select** (el de origen). Confundirlos es el bug
+de abajo.
+
+**Invariante que hay que respetar siempre:** todo campo requerido debe tener una
+fuente que lo pueble. Si `fuenteDelCampo()` devuelve `null` para un campo
+requerido, el formulario queda inválido para siempre y el botón "Registrar" no se
+habilita nunca — **sin ningún campo marcado en rojo**, porque el control ni se
+renderiza para ese tipo. `npm run test:operacion-financiera` (122 asserts)
+recorre el invariante campo por campo y tipo por tipo; falla si se rompe.
+
+**Fixes históricos (no repetir):**
+- **PR #199 (2026-07):** "Registrar" deshabilitado en Retiro/Depósito porque al
+  elegir la cuenta bancaria se seteaba UNA sola moneda y la requerida del otro
+  lado quedaba `null`. → `monedasDesdeCuentaBancaria()` setea **ambas**.
+- **2026-08 (PWA):** `CAMBIO_DIVISA` era **imposible de guardar** en la PWA:
+  `formaPagoDestinoId` es requerido (el handler lo usa para el movimiento de
+  INGRESO y para `actualizarSaldo`; la columna es `nullable: false`) pero la
+  pantalla lo seteaba sólo si había select de caja destino. → usar
+  `LADOS_CAJA_MAYOR`, no la visibilidad del select.
+- **2026-08 (ambas):** al cambiar de tipo se limpiaban las monedas pero sólo se
+  re-derivaban desde `cuentaBancaria*Id.valueChanges`. Si el select de cuenta
+  sobrevivía al cambio (RETIRO↔TRANSF. BANCARIA comparten cuenta origen;
+  DEPOSITO↔TRANSF. BANCARIA comparten cuenta destino) la moneda quedaba `null` y
+  era **irrecuperable**: reelegir la misma opción en un `mat-select` **no emite
+  `valueChanges`** (Material sólo propaga si cambió la selección). → resincronizar
+  las monedas heredadas después de cambiar de tipo.
+- **2026-08 (escritorio):** `applyValidators()` cambiaba validadores pero nunca
+  los VALORES, así que la cuenta bancaria de un depósito seguía en `form.value`
+  al pasar a un cambio de divisa y el handler la persistía como relación bogus.
+  → `limpiarCamposDelTipo()`.
+- **2026-08 (PWA):** el bloque *Diferencia* se mostraba en `TRANSFERENCIA_BANCARIA`,
+  donde el backend lo descarta en silencio (`cajaMayorDiferenciaId` es null porque
+  no hay caja). → se oculta y se neutraliza al cambiar de tipo.
+
+**Forma de pago de los tramos de caja:** siempre EFECTIVO. La regla vive en
+`src/app/shared/utils/forma-pago-efectivo.util.ts` (fuente única desktop + PWA,
+exportada por `@frc/shared-core`):
+
+- `formasPagoDeCaja(formas)` — pool: activas que **mueven caja** (fallback: todas
+  las activas si ninguna declara el flag).
+- `formasPagoEfectivoDeCaja(formas)` — las **ofrecibles en un select**: del pool,
+  las de nombre EFECTIVO. `movimentaCaja` solo no alcanza (deja pasar formas que
+  no son efectivo) y el nombre solo tampoco (ignora `activo`). Nunca devuelve
+  vacío si hay alguna usable.
+- `formaPagoEfectivo(formas)` — la que se preselecciona / usa la PWA.
+
+Si no hay ninguna, ambas superficies muestran un aviso en vez de dejar el
+formulario muerto. La lista de pantallas que todavía no aplican esta regla está
+en [`docs/TODO-forma-pago-efectivo-desktop.md`](../../../../docs/TODO-forma-pago-efectivo-desktop.md)
+(el ítem 3, este diálogo, quedó hecho).
+
+Manual de pruebas: [`docs/testing/TESTING-CHECKLIST-OPERACIONES-FINANCIERAS.md`](../../../../docs/testing/TESTING-CHECKLIST-OPERACIONES-FINANCIERAS.md).
 
 ## Cuentas Por Pagar / Cobrar
 

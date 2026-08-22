@@ -22,6 +22,13 @@ pago derivando la moneda de la cuenta en modo banco.
 
 > Ojo: filtrar por `movimentaCaja === true` **no** alcanza — deja pasar formas no
 > efectivo que muevan caja. Filtrar por nombre "EFECTIVO" (como los que respetan).
+>
+> **Desde 2026-08 no hace falta reimplementarlo:** usar
+> `formasPagoEfectivoDeCaja()` / `formaPagoEfectivo()` de
+> `src/app/shared/utils/forma-pago-efectivo.util.ts` (fuente única desktop +
+> PWA, exportada también por `@frc/shared-core`). Aplica las dos condiciones
+> (pool de caja + nombre EFECTIVO), respeta `activo` y nunca deja el select
+> vacío si hay alguna forma usable.
 
 ---
 
@@ -44,13 +51,16 @@ pago derivando la moneda de la cuenta en modo banco.
   - Lado banco OK (moneda heredada de la cuenta).
   - Fix: usar `formasPagoEfectivo` para fuente caja mayor.
 
-- [ ] **3. create-operacion-financiera-dialog**
+- [x] **3. create-operacion-financiera-dialog** — HECHO (2026-08)
   `src/app/pages/financiero/caja-mayor/operaciones-financieras/create-operacion-financiera/create-operacion-financiera-dialog.component.ts`
-  - Todos los tramos contra caja mayor (`formaPagoOrigenId` / `formaPagoDestinoId`)
-    iteran `formasPago` COMPLETO: `.html:62-63, 87-88, 122-123, 180-181, 217-218,
-    243-244`; sin filtro efectivo (`.ts:267`).
+  - Los seis selects de tramo de caja mayor iteran `formasPagoEfectivo`, que ahora
+    se arma con **`formasPagoEfectivoDeCaja()`** de la fuente única
+    `src/app/shared/utils/forma-pago-efectivo.util.ts` (nombre EFECTIVO **dentro**
+    del pool de formas activas que mueven caja; el filtro por nombre a secas
+    ignoraba `activo`/`movimentaCaja` y podía dejar el select vacío).
+  - Además se preselecciona la forma correcta con `formaPagoEfectivo()` y se avisa
+    en pantalla si no hay ninguna configurada.
   - Lado banco OK (moneda de la cuenta).
-  - Fix: efectivo en cada tramo de caja mayor.
 
 - [ ] **4. pagar-compras-dialog**
   `src/app/pages/financiero/caja-mayor/pagar-compras-dialog/pagar-compras-dialog.component.ts`

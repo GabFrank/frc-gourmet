@@ -80,3 +80,13 @@ mat-divider {
     color: #7986cb;
   }
 }
+
+// Aviso de configuración faltante (sin forma de pago para mover caja).
+.alerta-sin-efectivo {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--warning-color);
+  border: 1px solid var(--warning-color);
+}

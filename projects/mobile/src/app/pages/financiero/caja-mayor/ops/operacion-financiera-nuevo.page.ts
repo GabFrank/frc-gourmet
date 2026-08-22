@@ -14,7 +14,15 @@ import { firstValueFrom } from 'rxjs';
 import {
   RepositoryService,
   CAMPOS_REQUERIDOS,
+  CAJAS_EN_UI,
+  CUENTAS_EN_UI,
+  MONEDAS_EN_UI,
+  LADOS_CAJA_MAYOR,
+  COTIZACION_EN_UI,
   monedasDesdeCuentaBancaria,
+  camposFaltantes,
+  validarCoherencia,
+  etiquetaDe,
   TipoOperacionFinanciera,
 } from '@frc/shared-core';
 import { formaPagoEfectivo } from '../../forma-pago-efectivo.util';
@@ -57,6 +65,11 @@ const EXTRA_VALIDATORS: Record<string, any[]> = {
         padding-bottom: 4px;
       }
       .op-hint { margin: 0 4px 10px; font-size: 0.8rem; color: var(--text-secondary); }
+      .op-alerta {
+        margin: 8px 4px 14px; padding: 10px 12px; border-radius: 6px;
+        font-size: 0.85rem; color: var(--warning-color);
+        border: 1px solid var(--warning-color);
+      }
     `,
   ],
 })
@@ -78,6 +91,8 @@ export class OperacionFinancieraNuevoPage implements OnInit {
 
   loading = true;
   saving = false;
+  /** No existe una forma de pago EFECTIVO configurada (bloquea los tramos de caja). */
+  sinFormaPagoEfectivo = false;
 
   tipos = [
     { value: 'CAMBIO_DIVISA', label: 'Cambio de divisa' },
@@ -102,6 +117,8 @@ export class OperacionFinancieraNuevoPage implements OnInit {
   showCuentaDestino = false;
   showMonedaDestinoSelect = false;
   showCotizacion = false;
+  /** La diferencia sólo aplica si hay una caja mayor donde imputarla. */
+  showDiferencia = true;
   monedaOrigenLabel = '';
   monedaDestinoLabel = '';
 
@@ -159,6 +176,10 @@ export class OperacionFinancieraNuevoPage implements OnInit {
         const efectivo = formaPagoEfectivo(formas || []);
         this.efectivoId = efectivo?.id ?? null;
         this.efectivoLabel = efectivo?.nombre || 'Efectivo';
+        // Sin forma de pago efectivo no hay manera de completar el tramo contra
+        // caja mayor y el formulario quedaría inválido sin explicación. Se avisa
+        // en vez de dejar el botón muerto.
+        this.sinFormaPagoEfectivo = !this.efectivoId;
         this.cajas = (cajas || [])
           .filter((c) => (c.estado || '').toUpperCase().includes('ABIERT'))
           .map((c) => ({ id: c.id, label: c.nombre || `Caja Mayor #${c.id}` }));
@@ -180,13 +201,17 @@ export class OperacionFinancieraNuevoPage implements OnInit {
 
   private aplicarTipo(): void {
     const t = this.tipoOperacion;
-    this.showCajaOrigen = t === 'CAMBIO_DIVISA' || t === 'DEPOSITO_BANCARIO' || t === 'TRANSFERENCIA_ENTRE_CAJAS';
-    this.showCuentaOrigen = t === 'RETIRO_BANCARIO' || t === 'TRANSFERENCIA_BANCARIA';
-    this.showMonedaOrigenSelect = t === 'CAMBIO_DIVISA' || t === 'TRANSFERENCIA_ENTRE_CAJAS';
-    this.showCajaDestino = t === 'RETIRO_BANCARIO' || t === 'TRANSFERENCIA_ENTRE_CAJAS';
-    this.showCuentaDestino = t === 'DEPOSITO_BANCARIO' || t === 'TRANSFERENCIA_BANCARIA';
-    this.showMonedaDestinoSelect = t === 'CAMBIO_DIVISA' || t === 'TRANSFERENCIA_ENTRE_CAJAS';
-    this.recomputarCotizacion();
+    // Visibilidad derivada de la fuente única (@frc/shared-core), no hardcodeada:
+    // así el validador, la UI y el test no pueden desincronizarse.
+    this.showCajaOrigen = CAJAS_EN_UI[t].origen;
+    this.showCajaDestino = CAJAS_EN_UI[t].destino;
+    this.showCuentaOrigen = CUENTAS_EN_UI[t].origen;
+    this.showCuentaDestino = CUENTAS_EN_UI[t].destino;
+    this.showMonedaOrigenSelect = MONEDAS_EN_UI[t].includes('monedaOrigenId');
+    this.showMonedaDestinoSelect = MONEDAS_EN_UI[t].includes('monedaDestinoId');
+    // El backend imputa la diferencia a la caja destino u origen; una
+    // transferencia banco→banco no tiene ninguna y la descarta en silencio.
+    this.showDiferencia = LADOS_CAJA_MAYOR[t].origen || LADOS_CAJA_MAYOR[t].destino;
 
     // Limpiar los controles del lado/moneda que NO aplican al tipo elegido, para
     // no persistir relaciones obsoletas (ej. cuentaBancariaDestinoId arrastrado
@@ -197,12 +222,16 @@ export class OperacionFinancieraNuevoPage implements OnInit {
     if (!this.showCuentaOrigen) clr('cuentaBancariaOrigenId');
     if (!this.showCajaDestino) clr('cajaMayorDestinoId');
     if (!this.showCuentaDestino) clr('cuentaBancariaDestinoId');
-    if (!this.showCotizacion) clr('cotizacion');
     // Las monedas se re-eligen (select) o se heredan de la cuenta; reset evita arrastre.
     clr('monedaOrigenId');
     clr('monedaDestinoId');
     clr('formaPagoOrigenId');
     clr('formaPagoDestinoId');
+    if (!this.showDiferencia) {
+      this.form.controls.diferencia.setValue(0, { emitEvent: false });
+      this.form.controls.diferenciaDestinoTipo.setValue('IGNORAR', { emitEvent: false });
+      this.form.controls.diferenciaObservacion.setValue('', { emitEvent: false });
+    }
 
     // Re-preseleccionar la caja de contexto como origen si el tipo la usa.
     if (this.showCajaOrigen && !this.form.controls.cajaMayorOrigenId.value && this.cajas.some((c) => c.id === this.cajaMayorId)) {
@@ -210,24 +239,58 @@ export class OperacionFinancieraNuevoPage implements OnInit {
     }
 
     // Forma de pago de los tramos contra caja = efectivo (fijo).
+    //
+    // La condición es "¿este LADO mueve caja mayor?" (LADOS_CAJA_MAYOR) y NO
+    // "¿se muestra un select de caja de este lado?" (CAJAS_EN_UI). En
+    // CAMBIO_DIVISA los dos lados mueven caja pero es la MISMA caja, así que hay
+    // un solo select: con la condición vieja `formaPagoDestinoId` quedaba null,
+    // era requerido y el formulario nunca se podía guardar.
     if (this.efectivoId) {
-      if (this.showCajaOrigen) this.form.controls.formaPagoOrigenId.setValue(this.efectivoId, { emitEvent: false });
-      if (this.showCajaDestino || t === 'RETIRO_BANCARIO') this.form.controls.formaPagoDestinoId.setValue(this.efectivoId, { emitEvent: false });
+      if (LADOS_CAJA_MAYOR[t].origen) this.form.controls.formaPagoOrigenId.setValue(this.efectivoId, { emitEvent: false });
+      if (LADOS_CAJA_MAYOR[t].destino) this.form.controls.formaPagoDestinoId.setValue(this.efectivoId, { emitEvent: false });
     }
+
+    // Re-derivar las monedas heredadas de las cuentas que SOBREVIVIERON al
+    // cambio de tipo (arriba se limpian todas). Sin esto, al pasar de
+    // RETIRO_BANCARIO a TRANSFERENCIA_BANCARIA y volver, la cuenta seguía
+    // elegida pero su moneda quedaba en null y era irrecuperable: re-elegir la
+    // misma opción en un mat-select no emite `valueChanges`.
+    this.resincronizarMonedasDesdeCuentas();
+
+    // Después de resincronizar: en TRANSFERENCIA_BANCARIA la cotización sólo se
+    // muestra si las monedas de las dos cuentas difieren.
+    this.recomputarCotizacion();
     this.aplicarValidadores();
     this.refrescarLabelsMoneda();
   }
 
+  /** Vuelve a aplicar la moneda de cada cuenta bancaria todavía seleccionada. */
+  private resincronizarMonedasDesdeCuentas(): void {
+    if (this.showCuentaOrigen) {
+      this.aplicarMonedaDeCuenta(this.form.controls.cuentaBancariaOrigenId.value, 'origen');
+    }
+    if (this.showCuentaDestino) {
+      this.aplicarMonedaDeCuenta(this.form.controls.cuentaBancariaDestinoId.value, 'destino');
+    }
+  }
+
   private recomputarCotizacion(): void {
-    const t = this.tipoOperacion;
-    if (t === 'CAMBIO_DIVISA') { this.showCotizacion = true; return; }
-    if (t === 'TRANSFERENCIA_BANCARIA') {
+    const modo = COTIZACION_EN_UI[this.tipoOperacion];
+    if (modo === 'SIEMPRE') {
+      this.showCotizacion = true;
+      return;
+    }
+    if (modo === 'SI_MONEDAS_DISTINTAS') {
       const mo = this.cuentaMoneda('origen');
       const md = this.cuentaMoneda('destino');
       this.showCotizacion = !!(mo && md && mo !== md);
-      return;
+    } else {
+      this.showCotizacion = false;
     }
-    this.showCotizacion = false;
+    // Sin campo visible no puede quedar una cotización vieja en el payload.
+    if (!this.showCotizacion && this.form.controls.cotizacion.value !== null) {
+      this.form.controls.cotizacion.setValue(null, { emitEvent: false });
+    }
   }
 
   private aplicarValidadores(): void {
@@ -246,18 +309,28 @@ export class OperacionFinancieraNuevoPage implements OnInit {
     return this.cuentas.find((c) => c.id === id)?.monedaId ?? null;
   }
 
-  private onCuentaSeleccionada(id: number | null, lado: 'origen' | 'destino'): void {
+  /**
+   * Aplica la moneda de una cuenta bancaria a los controles de moneda.
+   *  - TRANSFERENCIA_BANCARIA (dos cuentas, posible multi-moneda): cada cuenta
+   *    setea SOLO su lado, los lados no se pisan.
+   *  - DEPOSITO/RETIRO (una sola cuenta, efectivo): la misma divisa a AMBOS
+   *    lados (si no, la moneda requerida del lado sin UI queda en null).
+   */
+  private aplicarMonedaDeCuenta(id: number | null, lado: 'origen' | 'destino'): void {
     const cb = this.cuentas.find((c) => c.id === id);
-    if (cb?.monedaId) {
-      if (this.tipoOperacion === 'TRANSFERENCIA_BANCARIA') {
-        const ctrl = lado === 'origen' ? 'monedaOrigenId' : 'monedaDestinoId';
-        this.form.get(ctrl)?.setValue(cb.monedaId, { emitEvent: false });
-      } else {
-        const { monedaOrigenId, monedaDestinoId } = monedasDesdeCuentaBancaria(cb.monedaId);
-        this.form.controls.monedaOrigenId.setValue(monedaOrigenId, { emitEvent: false });
-        this.form.controls.monedaDestinoId.setValue(monedaDestinoId, { emitEvent: false });
-      }
+    if (!cb?.monedaId) return;
+    if (this.tipoOperacion === 'TRANSFERENCIA_BANCARIA') {
+      const ctrl = lado === 'origen' ? 'monedaOrigenId' : 'monedaDestinoId';
+      this.form.get(ctrl)?.setValue(cb.monedaId, { emitEvent: false });
+    } else {
+      const { monedaOrigenId, monedaDestinoId } = monedasDesdeCuentaBancaria(cb.monedaId);
+      this.form.controls.monedaOrigenId.setValue(monedaOrigenId, { emitEvent: false });
+      this.form.controls.monedaDestinoId.setValue(monedaDestinoId, { emitEvent: false });
     }
+  }
+
+  private onCuentaSeleccionada(id: number | null, lado: 'origen' | 'destino'): void {
+    this.aplicarMonedaDeCuenta(id, lado);
     this.recomputarCotizacion();
     this.refrescarLabelsMoneda();
     this.recalcularMontoDestino();
@@ -295,9 +368,30 @@ export class OperacionFinancieraNuevoPage implements OnInit {
   }
 
   async guardar(): Promise<void> {
-    if (this.form.invalid || this.saving) {
+    if (this.saving) return;
+    const valores = this.form.getRawValue() as unknown as Record<string, unknown>;
+    // El tipo sale del form (única fuente de verdad de lo que se va a guardar),
+    // no del campo espejo `tipoOperacion` que sólo usan los flags de la vista.
+    const tipo = (valores['tipoOperacion'] || 'CAMBIO_DIVISA') as TipoOperacionFinanciera;
+
+    // Errores semánticos primero: son los que el `required` no ve.
+    const incoherencias = validarCoherencia(tipo, valores);
+    if (incoherencias.length) {
+      this.snack.open(incoherencias[0], 'OK', { duration: 5000 });
+      return;
+    }
+
+    if (this.form.invalid) {
       this.form.markAllAsTouched();
-      this.snack.open('Completá los campos requeridos', 'OK', { duration: 3000 });
+      // Nombrar los campos que faltan: varios de ellos (forma de pago, moneda
+      // heredada de la cuenta) no se renderizan, así que un mensaje genérico no
+      // le decía al usuario qué corregir.
+      const faltantes = camposFaltantes(tipo, valores).map(etiquetaDe);
+      this.snack.open(
+        faltantes.length ? `Faltan completar: ${faltantes.join(', ')}` : 'Revisá los datos cargados',
+        'OK',
+        { duration: 5000 },
+      );
       return;
     }
     this.saving = true;

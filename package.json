@@ -51,6 +51,7 @@
     "test:menu-tree": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-menu-tree.ts",
     "test:permisos": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-permissions-e2e.ts",
     "test:mobile": "ng test mobile --watch=false",
+    "test:operacion-financiera-dialog": "ng test frc-gourmet --watch=false --include='**/create-operacion-financiera-dialog.component.spec.ts'",
     "build:storefront": "ng build storefront --base-href /tienda/",
     "lint": "ng lint",
     "release": "semantic-release",

@@ -9,6 +9,11 @@
   <mat-progress-bar *ngIf="loading || saving" mode="indeterminate"></mat-progress-bar>
 
   <form class="crud-form" [formGroup]="form" (ngSubmit)="guardar()" *ngIf="!loading">
+    <p class="op-alerta" *ngIf="sinFormaPagoEfectivo">
+      No hay una forma de pago EFECTIVO configurada. Los tramos contra caja mayor no se pueden
+      registrar hasta crearla en Configuración → Formas de pago.
+    </p>
+
     <mat-form-field appearance="outline">
       <mat-label>Tipo de operación</mat-label>
       <mat-select formControlName="tipoOperacion">
@@ -114,22 +119,26 @@
       <mat-error *ngIf="form.controls.montoDestino.hasError('min')">Debe ser mayor a 0</mat-error>
     </mat-form-field>
 
-    <!-- DIFERENCIA (opcional) -->
-    <h3 class="op-section">Diferencia (opcional)</h3>
-    <mat-form-field appearance="outline">
-      <mat-label>Monto de diferencia</mat-label>
-      <input matInput type="number" inputmode="decimal" formControlName="diferencia" step="any" />
-    </mat-form-field>
-    <mat-form-field appearance="outline">
-      <mat-label>Destino de la diferencia</mat-label>
-      <mat-select formControlName="diferenciaDestinoTipo">
-        <mat-option *ngFor="let d of diferenciaOpciones" [value]="d.value">{{ d.label }}</mat-option>
-      </mat-select>
-    </mat-form-field>
-    <mat-form-field appearance="outline">
-      <mat-label>Observación de diferencia (opcional)</mat-label>
-      <input matInput formControlName="diferenciaObservacion" autocapitalize="characters" />
-    </mat-form-field>
+    <!-- DIFERENCIA (opcional) — sólo para operaciones que mueven caja mayor.
+         Una transferencia banco→banco no tiene caja donde imputarla y el
+         backend la descarta: mostrarla hacía perder el dato en silencio. -->
+    <ng-container *ngIf="showDiferencia">
+      <h3 class="op-section">Diferencia (opcional)</h3>
+      <mat-form-field appearance="outline">
+        <mat-label>Monto de diferencia</mat-label>
+        <input matInput type="number" inputmode="decimal" formControlName="diferencia" step="any" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Destino de la diferencia</mat-label>
+        <mat-select formControlName="diferenciaDestinoTipo">
+          <mat-option *ngFor="let d of diferenciaOpciones" [value]="d.value">{{ d.label }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Observación de diferencia (opcional)</mat-label>
+        <input matInput formControlName="diferenciaObservacion" autocapitalize="characters" />
+      </mat-form-field>
+    </ng-container>
 
     <mat-form-field appearance="outline">
       <mat-label>Observación (opcional)</mat-label>
