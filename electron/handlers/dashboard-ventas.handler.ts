@@ -12,6 +12,36 @@ import { Rango, rangoToFechas, bucketsForRango } from '../utils/dashboard-rangos
 // El "total" real de una venta NO vive en la columna ventas.total (no poblada),
 // sino en pagos_detalles (PAGO - VUELTO). Estos helpers calculan el monto cobrado
 // en la moneda principal, igual que getVentasTotalByCaja / getResumenCaja.
+/**
+ * Hora de arranque de la jornada comercial (`PdvConfig.inicioJornadaHora`).
+ *
+ * Cacheada: cuatro dashboards leyendo la config en cada request es una query de
+ * mas por request, y este valor cambia una vez cada mucho.
+ *
+ * Fallback a 7 si no hay fila de `pdv_config` — en una instalacion nueva la
+ * config no existe hasta terminar el onboarding, y los dashboards se pueden
+ * abrir antes.
+ */
+let cacheInicioJornada: { valor: number; expira: number } | null = null;
+
+export function invalidarCacheJornada(): void {
+  cacheInicioJornada = null;
+}
+
+export async function getInicioJornada(dataSource: DataSource): Promise<number> {
+  if (cacheInicioJornada && Date.now() < cacheInicioJornada.expira) return cacheInicioJornada.valor;
+  let valor = 7;
+  try {
+    const rows: any[] = await dbQuery(dataSource, `SELECT inicio_jornada_hora FROM pdv_config LIMIT 1`, []);
+    const h = Number(rows?.[0]?.inicio_jornada_hora);
+    if (Number.isFinite(h) && h >= 0 && h <= 23) valor = h;
+  } catch {
+    /* tabla o columna todavia no migrada: se usa el default */
+  }
+  cacheInicioJornada = { valor, expira: Date.now() + 60_000 };
+  return valor;
+}
+
 export async function getMonedaPrincipalId(dataSource: DataSource): Promise<number> {
   const rows: any[] = await dbQuery(
     dataSource,
@@ -30,7 +60,36 @@ export function filtroRango(desdeISO: string, hastaISO: string): VentaFiltro {
   return { sql: 'v.created_at >= ? AND v.created_at <= ?', params: [desdeISO, hastaISO] };
 }
 
-function filtroCajas(cajaIds: number[]): VentaFiltro {
+/**
+ * Filtro combinado del pedido: qué ventas entran en los KPIs.
+ *
+ * `rango` sigue aceptando el string suelto (`'week'`) porque asi lo mandan hoy
+ * el dashboard del desktop, el home y la PWA. Los campos nuevos son opcionales.
+ *
+ * ⚠️ Un filtro cuenta como EXPLICITO por sus CAMPOS (`desde`/`hasta`/`cajaIds`),
+ * no por su forma: `{ rango: 'today' }` sin esos campos se comporta igual que el
+ * string `'today'` y sigue cayendo en la Opcion B. Definirlo por "es un objeto"
+ * rompia justo el default que se quiere preservar (el boton "volver a hoy").
+ */
+export interface KpisFiltro {
+  rango?: Rango;
+  /** ISO. Si viene, pisa al rango. */
+  desde?: string;
+  hasta?: string;
+  /** Varias cajas; se combina con el periodo, no lo reemplaza. */
+  cajaIds?: number[];
+}
+
+export type KpisParam = Rango | KpisFiltro | undefined;
+
+/** AND de dos filtros. Seguro en los dos drivers: `dbQuery` reescribe `?`→`$N`
+ *  secuencialmente y ninguno de los fragmentos usa `OR`. */
+export function filtroY(a: VentaFiltro, b: VentaFiltro | null): VentaFiltro {
+  if (!b) return a;
+  return { sql: `${a.sql} AND ${b.sql}`, params: [...a.params, ...b.params] };
+}
+
+export function filtroCajas(cajaIds: number[]): VentaFiltro {
   const placeholders = cajaIds.map(() => '?').join(',');
   return { sql: `v.caja_id IN (${placeholders})`, params: [...cajaIds] };
 }
@@ -205,16 +264,41 @@ export function registerDashboardVentasHandlers(
   _getCurrentUser: () => Usuario | null,
 ): void {
 
-  ipcMain.handle('get-dashboard-ventas-kpis', async (_event, rango: Rango = 'week') => {
+  ipcMain.handle('get-dashboard-ventas-kpis', async (_event, param: KpisParam = 'week') => {
     try {
+      // Compat: el string suelto sigue siendo valido (desktop, home y PWA).
+      const filtro: KpisFiltro = typeof param === 'string' ? { rango: param } : (param || {});
+      const rango: Rango = filtro.rango || 'week';
+      const cajaIds = (filtro.cajaIds || []).map(Number).filter((n) => Number.isFinite(n));
+      // "Explicito" = el usuario eligio periodo o cajas. Con eso, la Opcion B
+      // (el total sigue a la caja abierta) NO aplica: manda lo que pidio.
+      const periodoExplicito = !!(filtro.desde || filtro.hasta);
+      const filtroExplicito = periodoExplicito || cajaIds.length > 0;
       // Un unico `now` para todo el request: rangoToFechas y bucketsForRango
       // tienen que mirar el mismo instante o la ventana de la card y la del
       // chart pueden caer en horas (o dias) distintos entre await y await.
       const now = new Date();
-      const hoyInicio = new Date(now);
-      hoyInicio.setHours(0, 0, 0, 0);
-      const hoyFin = new Date(now);
-      hoyFin.setHours(23, 59, 59, 999);
+      const inicioJornada = await getInicioJornada(dataSource);
+      // Los limites de "hoy" salen del MISMO util que los buckets del chart.
+      // Antes se calculaban aca con `setHours(0,...)`, saltandose el util: con la
+      // jornada encendida, la card habria cortado a medianoche mientras el top de
+      // productos cortaba a las 07:00 — el mismo desfase card/chart que el
+      // invariante de `rangoToFechas` existe para evitar, dentro de una pantalla.
+      const { desde: hoyInicio, hasta: hoyFin } = rangoToFechas('today', now, inicioJornada);
+
+      // Ventana del periodo pedido: fechas explicitas si vinieron, si no el rango.
+      const ventana = periodoExplicito
+        ? {
+            desde: filtro.desde ? new Date(filtro.desde) : rangoToFechas(rango, now, inicioJornada).desde,
+            hasta: filtro.hasta ? new Date(filtro.hasta) : rangoToFechas(rango, now, inicioJornada).hasta,
+          }
+        : rangoToFechas(rango, now, inicioJornada);
+      const filtroCajasSel: VentaFiltro | null = cajaIds.length > 0 ? filtroCajas(cajaIds) : null;
+      // Periodo Y cajas: se combinan, no se excluyen.
+      const filtroPeriodo = filtroY(
+        filtroRango(ventana.desde.toISOString(), ventana.hasta.toISOString()),
+        filtroCajasSel,
+      );
 
       const monedaPrincipalId = await getMonedaPrincipalId(dataSource);
 
@@ -232,8 +316,13 @@ export function registerDashboardVentasHandlers(
       // cae al día calendario para que la card no quede en 0. El total incluye
       // TODAS las monedas y formas de pago, convertidas y sumadas a Gs.
       const cajaIdsAbiertas = cajasAbiertasEntities.map((c) => c.id);
-      const totalBasadoEnCajas = cajaIdsAbiertas.length > 0;
-      const filtroHoy: VentaFiltro = totalBasadoEnCajas
+      const totalBasadoEnCajas = !filtroExplicito && cajaIdsAbiertas.length > 0;
+      // Con filtro explicito manda lo que pidio el usuario. Sin filtro, la
+      // Opcion B: el total sigue a la caja abierta para que un turno que cruza
+      // el corte no se parta al medio.
+      const filtroHoy: VentaFiltro = filtroExplicito
+        ? filtroPeriodo
+        : totalBasadoEnCajas
         ? filtroCajas(cajaIdsAbiertas)
         : filtroRango(hoyInicio.toISOString(), hoyFin.toISOString());
 
@@ -313,8 +402,10 @@ export function registerDashboardVentasHandlers(
         });
       }
 
-      // 5. Top productos (en el rango)
-      const { desde, hasta } = rangoToFechas(rango, now);
+      // 5. Top productos — usa el MISMO filtro combinado que el total.
+      // Antes tenia su propio `v.created_at >= ? AND <= ?` y no sabia de
+      // `cajaIds`: filtrando por caja 7, el total mostraba esa caja y el top de
+      // productos TODAS, en la misma pantalla.
       const topRows: any[] = await dbQuery(dataSource, `
         SELECT p.id, p.nombre, SUM(vi.cantidad) as cantidad,
                SUM(vi.cantidad * vi.precio_venta_unitario) as total
@@ -323,12 +414,11 @@ export function registerDashboardVentasHandlers(
         JOIN producto p ON p.id = vi.producto_id
         WHERE v.estado = ?
           AND vi.estado = ?
-          AND v.created_at >= ?
-          AND v.created_at <= ?
+          AND ${filtroPeriodo.sql}
         GROUP BY p.id, p.nombre
         ORDER BY total DESC
         LIMIT 8
-      `, [VentaEstado.CONCLUIDA, EstadoVentaItem.ACTIVO, desde.toISOString(), hasta.toISOString()]);
+      `, [VentaEstado.CONCLUIDA, EstadoVentaItem.ACTIVO, ...filtroPeriodo.params]);
 
       const maxTotal = topRows.reduce((m, r) => Math.max(m, Number(r.total || 0)), 0);
       const topProductos = topRows.map(r => ({
@@ -369,7 +459,14 @@ export function registerDashboardVentasHandlers(
         }));
 
       // 7. Ventas por periodo (chart)
-      const periodoData = await buildVentasPorPeriodo(dataSource, rango, now);
+      const periodoData = await buildVentasPorPeriodo(dataSource, rango, now, inicioJornada, filtroCajasSel);
+
+      // Desde cuando acumula el total, para que la UI no muestre dos "hoy"
+      // distintos sin explicacion: con la Opcion B el total sigue la APERTURA de
+      // la caja, que puede ser anterior al corte de jornada.
+      const totalDesde = totalBasadoEnCajas
+        ? (cajasAbiertasEntities[0]?.fechaApertura ?? hoyInicio)
+        : (filtroExplicito ? ventana.desde : hoyInicio);
 
       return {
         ventasHoy,
@@ -388,6 +485,12 @@ export function registerDashboardVentasHandlers(
         // false → al día calendario (fallback sin cajas abiertas). El front usa
         // esto para el label de la card ("Total en caja" vs "Total hoy").
         totalBasadoEnCajas,
+        // Metadatos del filtro aplicado, para que la UI pueda rotularlo.
+        totalDesde: totalDesde instanceof Date ? totalDesde.toISOString() : totalDesde,
+        inicioJornada,
+        filtroAplicado: filtroExplicito
+          ? { desde: ventana.desde.toISOString(), hasta: ventana.hasta.toISOString(), cajaIds }
+          : null,
       };
     } catch (error) {
       console.error('Error get-dashboard-ventas-kpis:', error);
@@ -400,6 +503,8 @@ async function buildVentasPorPeriodo(
   dataSource: DataSource,
   rango: Rango,
   now: Date,
+  inicioJornada = 0,
+  filtroExtra: VentaFiltro | null = null,
 ): Promise<{ labels: string[]; ventas: number[]; cantidades: number[] }> {
   const labels: string[] = [];
   const ventas: number[] = [];
@@ -410,11 +515,11 @@ async function buildVentasPorPeriodo(
 
   // Los tramos del eje X (y su granularidad) los define `bucketsForRango`; acá
   // solo se agrega el total cobrado de cada uno.
-  for (const bucket of bucketsForRango(rango, now)) {
+  for (const bucket of bucketsForRango(rango, now, inicioJornada)) {
     const r = await sumaVentasRango(
       dataSource,
       monedaPrincipalId,
-      filtroRango(bucket.desde.toISOString(), bucket.hasta.toISOString()),
+      filtroY(filtroRango(bucket.desde.toISOString(), bucket.hasta.toISOString()), filtroExtra),
       cotizacionMap,
     );
     labels.push(bucket.label);

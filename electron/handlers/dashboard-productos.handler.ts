@@ -6,6 +6,7 @@ import { VentaEstado } from '../../src/app/database/entities/ventas/venta.entity
 import { EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { dbQuery } from '../utils/db-query';
+import { getInicioJornada } from './dashboard-ventas.handler';
 import { Rango, rangoToFechas } from '../utils/dashboard-rangos.util';
 
 export function registerDashboardProductosHandlers(
@@ -19,7 +20,8 @@ export function registerDashboardProductosHandlers(
       // Solo el cruce con Ventas (top vendidos) depende del rango; los conteos
       // de catalogo (activos, sin precio, parciales, recetas) son de estado
       // actual y no tienen periodo.
-      const { desde, hasta } = rangoToFechas(rango, now);
+      const inicioJornada = await getInicioJornada(dataSource);
+      const { desde, hasta } = rangoToFechas(rango, now, inicioJornada);
       const productoRepo = dataSource.getRepository(Producto);
       const recetaRepo = dataSource.getRepository(Receta);
 

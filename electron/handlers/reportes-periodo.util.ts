@@ -23,18 +23,64 @@ export interface PeriodoResuelto {
   labelAnterior: string | null;
 }
 
+/**
+ * Parsea una fecha del usuario como fecha LOCAL, no UTC.
+ *
+ * `new Date('2026-07-15')` es UTC-medianoche: en Paraguay (UTC-3/-4) eso es el
+ * 14 a la noche, asi que TODO rango `custom` corria un dia hacia atras. El bug
+ * era anterior a la jornada comercial; lo destapo el test de la ventana 07:00.
+ * Las fechas con hora explicita (ISO completo) se dejan al parser nativo.
+ */
+function parseFechaLocal(v: string | Date): Date {
+  if (v instanceof Date) return new Date(v);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v).trim());
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0);
+  return new Date(v);
+}
+
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
-function startOfDay(d: Date): Date { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
-function endOfDay(d: Date): Date { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; }
+/**
+ * JORNADA COMERCIAL — el mismo corte que usan los dashboards.
+ *
+ * Este archivo tenia su PROPIA aritmetica de dias, independiente de
+ * `dashboard-rangos.util.ts`. Con la jornada encendida y esta sin enterarse, una
+ * venta de la 01:30 aparecia en dias distintos segun la pantalla: los dashboards
+ * la contaban en la jornada de ayer y Reportes en el dia calendario de hoy. Es
+ * el mismo desfase card/chart que ya se corrigio una vez, ahora entre pantallas.
+ *
+ * `inicioJornada = 0` reproduce exactamente el dia calendario.
+ * Aritmetica de CALENDARIO (`setHours`/`setDate`), nunca sumando milisegundos:
+ * eso rompe en dias de transicion de horario de verano.
+ */
+function startOfDay(d: Date, inicioJornada = 0): Date {
+  const x = new Date(d);
+  x.setHours(inicioJornada, 0, 0, 0);
+  return x;
+}
+function endOfDay(d: Date, inicioJornada = 0): Date {
+  const x = startOfDay(d, inicioJornada);
+  x.setDate(x.getDate() + 1);
+  x.setMilliseconds(x.getMilliseconds() - 1);
+  return x;
+}
+/** La fecha cuya jornada esta en curso: antes del corte, es la de ayer. */
+function anclaDia(d: Date, inicioJornada = 0): Date {
+  const x = new Date(d);
+  if (x.getHours() < inicioJornada) x.setDate(x.getDate() - 1);
+  return x;
+}
 function addDays(d: Date, n: number): Date { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 function fmtDia(d: Date): string { return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`; }
 
 export function resolverPeriodo(
   params: { rango?: string; desde?: string; hasta?: string; comparar?: boolean },
   now: Date = new Date(),
+  inicioJornada = 0,
 ): PeriodoResuelto {
   const rango = params?.rango || 'month';
+  // Toda la aritmetica se ancla en la jornada en curso, no en el dia calendario.
+  now = anclaDia(now, inicioJornada);
   const comparar = params?.comparar === true;
   let desde: Date;
   let hasta: Date;
@@ -46,27 +92,27 @@ export function resolverPeriodo(
   const m = now.getMonth();
 
   if (rango === 'today') {
-    desde = startOfDay(now); hasta = endOfDay(now);
+    desde = startOfDay(now, inicioJornada); hasta = endOfDay(now, inicioJornada);
     label = fmtDia(now);
   } else if (rango === 'week') {
-    hasta = endOfDay(now); desde = startOfDay(addDays(now, -6));
+    hasta = endOfDay(now, inicioJornada); desde = startOfDay(addDays(now, -6), inicioJornada);
     label = `${fmtDia(desde)} – ${fmtDia(hasta)}`;
   } else if (rango === 'quarter') {
-    hasta = endOfDay(now); desde = startOfDay(addDays(now, -89));
+    hasta = endOfDay(now, inicioJornada); desde = startOfDay(addDays(now, -89), inicioJornada);
     label = `${fmtDia(desde)} – ${fmtDia(hasta)}`;
   } else if (rango === 'prevMonth') {
-    desde = new Date(y, m - 1, 1, 0, 0, 0, 0);
-    hasta = new Date(y, m, 0, 23, 59, 59, 999); // último día del mes anterior
+    desde = startOfDay(new Date(y, m - 1, 1), inicioJornada);
+    hasta = endOfDay(new Date(y, m, 0), inicioJornada); // último día del mes anterior
     label = `${MESES[desde.getMonth()]} ${desde.getFullYear()}`;
   } else if (rango === 'custom' && params.desde && params.hasta) {
-    desde = startOfDay(new Date(params.desde));
-    hasta = endOfDay(new Date(params.hasta));
+    desde = startOfDay(parseFechaLocal(params.desde), inicioJornada);
+    hasta = endOfDay(parseFechaLocal(params.hasta), inicioJornada);
     label = `${fmtDia(desde)} – ${fmtDia(hasta)}`;
   } else {
     // 'month' (default): mes actual a la fecha.
-    desde = new Date(y, m, 1, 0, 0, 0, 0);
+    desde = startOfDay(new Date(y, m, 1), inicioJornada);
     const finMes = new Date(y, m + 1, 0, 23, 59, 59, 999);
-    hasta = now < finMes ? endOfDay(now) : finMes;
+    hasta = now < finMes ? endOfDay(now, inicioJornada) : finMes;
     label = `${fmtDia(desde)} – ${fmtDia(hasta)}`;
   }
 

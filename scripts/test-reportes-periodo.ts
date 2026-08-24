@@ -92,6 +92,48 @@ function main() {
   ok(variacionPct(50, 100) === -50, '-50% (50 vs 100)', variacionPct(50, 100));
   ok(variacionPct(100, 0) === null, 'null cuando base = 0', variacionPct(100, 0));
 
+
+  // ── jornada comercial (B3): reportes usan el mismo ancla que dashboards ──
+  console.log('\n[H] jornada comercial · inicioJornada = 7');
+  {
+    // 01:30 del 16/Jul todavia pertenece a la jornada del 15/Jul.
+    const madrugada = new Date(2026, 6, 16, 1, 30, 0);
+    const p = resolverPeriodo({ rango: 'today', comparar: false }, madrugada, 7);
+    ok(ymd(p.actual.desde) === '2026-07-15', 'today madrugada arranca el dia anterior', ymd(p.actual.desde));
+    ok(p.actual.desde.getHours() === 7, 'desde a las 07:00', p.actual.desde.getHours());
+    ok(ymd(p.actual.hasta) === '2026-07-16', 'hasta cruza medianoche', ymd(p.actual.hasta));
+    ok(p.actual.hasta.getHours() === 6 && p.actual.hasta.getMinutes() === 59,
+       'hasta 06:59:59.999', `${p.actual.hasta.getHours()}:${p.actual.hasta.getMinutes()}`);
+    ok(madrugada >= p.actual.desde && madrugada <= p.actual.hasta, 'la venta de la 01:30 cae dentro');
+  }
+  {
+    // 10:00 del 16/Jul ya es jornada del 16.
+    const manana = new Date(2026, 6, 16, 10, 0, 0);
+    const p = resolverPeriodo({ rango: 'today', comparar: false }, manana, 7);
+    ok(ymd(p.actual.desde) === '2026-07-16', 'today de manana arranca el mismo dia', ymd(p.actual.desde));
+  }
+  {
+    // Sin jornada (0) el comportamiento historico no cambia.
+    const madrugada = new Date(2026, 6, 16, 1, 30, 0);
+    const p = resolverPeriodo({ rango: 'today', comparar: false }, madrugada, 0);
+    ok(ymd(p.actual.desde) === '2026-07-16', 'inicioJornada=0 mantiene el dia calendario', ymd(p.actual.desde));
+    ok(p.actual.desde.getHours() === 0, 'desde a las 00:00', p.actual.desde.getHours());
+  }
+  {
+    // El mes tambien se corre: 01:30 del 1/Ago pertenece a Julio.
+    const madrugada = new Date(2026, 7, 1, 1, 30, 0);
+    const p = resolverPeriodo({ rango: 'month', comparar: false }, madrugada, 7);
+    ok(p.actual.desde.getMonth() === 6, 'month en la madrugada del 1 sigue en el mes anterior', p.actual.desde.getMonth());
+  }
+  {
+    // custom: las fechas elegidas por el usuario tambien respetan la ventana.
+    const now = new Date(2026, 6, 20, 10, 0, 0);
+    const p = resolverPeriodo({ rango: 'custom', desde: '2026-07-01', hasta: '2026-07-15', comparar: false }, now, 7);
+    ok(p.actual.desde.getHours() === 7, 'custom desde a las 07:00', p.actual.desde.getHours());
+    ok(ymd(p.actual.hasta) === '2026-07-16' && p.actual.hasta.getHours() === 6,
+       'custom hasta llega a las 06:59 del dia siguiente', `${ymd(p.actual.hasta)} ${p.actual.hasta.getHours()}`);
+  }
+
   console.log(`\n${failed === 0 ? '✅' : '❌'} REPORTES PERÍODO: ${passed} OK, ${failed} fallos.\n`);
   if (failed > 0) process.exit(1);
 }

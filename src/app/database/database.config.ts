@@ -279,6 +279,7 @@ import { MusicaClasificacionSemantica1786563231306 } from './migrations/17865632
 import { MusicaPreferenciaEstilo1786804287491 } from './migrations/1786804287491-MusicaPreferenciaEstilo';
 import { ProductoConfigVariacion1787063450518 } from './migrations/1787063450518-ProductoConfigVariacion';
 import { IndicesRucYReconciliarMesas1787255528889 } from './migrations/1787255528889-IndicesRucYReconciliarMesas';
+import { InicioJornadaHora1787563118200 } from './migrations/1787563118200-InicioJornadaHora';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -692,6 +693,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddEgresoCajaToPagoCuotaDetalle1785335253817,
     AddPagoConsolidado1787169888415,
     IndicesRucYReconciliarMesas1787255528889,
+    InicioJornadaHora1787563118200,
   ];
 }
 
