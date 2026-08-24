@@ -158,7 +158,10 @@ export function registerDeliveryHandlers(
       qb.andWhere('delivery.estado = :estado', { estado: filtros.estado });
     }
 
-    qb.orderBy('delivery.fecha_abierto', 'DESC')
+    // Propiedad de la entidad, no nombre de columna: con `skip`/`take` TypeORM
+    // reescribe el ORDER BY contra el mapa de columnas y con el nombre crudo
+    // revienta ("Cannot read properties of undefined (reading 'databaseName')").
+    qb.orderBy('delivery.fechaAbierto', 'DESC')
       .skip((page - 1) * pageSize)
       .take(pageSize);
 
