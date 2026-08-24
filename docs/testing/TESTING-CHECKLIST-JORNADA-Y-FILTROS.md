@@ -34,7 +34,8 @@ siguen hasta las 2 AM, y antes ese turno aparecía partido en dos días.
   - Esto último es la regresión concreta que se cuidó: `0` es un valor válido
     (día calendario) y con un `||` en vez de `??` se convertía en 7 solo
 - [ ] Poner **24** o **-1** y guardar → el campo se marca en rojo con *"Tiene que
-      ser una hora entre 0 y 23"* y **no** guarda
+      ser una hora entre 0 y 23"*, sale el aviso *"Revisá los campos marcados"* y
+      el diálogo **NO se cierra** (no guardó)
   - Antes el `min`/`max` del HTML era sólo una sugerencia del navegador: el valor
     se guardaba, el backend lo descartaba en silencio y volvía a 7
 - [ ] Dejarlo de nuevo en **7** antes de seguir
@@ -115,6 +116,10 @@ siguen hasta las 2 AM, y antes ese turno aparecía partido en dos días.
   - Antes devolvía cero con "No hubo ventas en el período": la caja se cruzaba
     además con la ventana de hoy. Una caja es un turno cerrado y su período es
     el suyo
+- [ ] En ese caso el rótulo dice **sólo la caja** (`#15 · CAJA 1 · 31/03`), sin
+      ninguna fecha, y el label del total es **"Total de la caja"**
+  - Si apareciera un rango de fechas ahí, el rótulo estaría anunciando un
+    período que no se está filtrando
 
 ## Fase 6: Reportes y dashboards siguen el mismo corte
 
