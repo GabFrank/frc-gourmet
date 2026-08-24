@@ -112,6 +112,26 @@ async function withMesaLock<T>(mesaId: number, fn: () => Promise<T>): Promise<T>
 // entre dos comandas no toca ninguna mesa, asi que corria sin serializar y dos
 // cajeros podian dejar dos ventas ABIERTA colgando de la misma comanda — una de
 // ellas inalcanzable desde el cobro, con sus items ya en cocina.
+// Y lo mismo por pedido online. Un pedido de PICKUP/DELIVERY no tiene mesa, así
+// que `withMesaLock` no lo cubre: usarlo con `mesaId` nulo haría que TODOS los
+// pedidos sin mesa compartan una única clave y se serialicen entre sí, un mutex
+// global accidental. La unidad que hay que serializar es el pedido.
+const pedidoTails = new Map<number, Promise<void>>();
+async function withPedidoLock<T>(pedidoId: number, fn: () => Promise<T>): Promise<T> {
+  const prev = pedidoTails.get(pedidoId) ?? Promise.resolve();
+  let release!: () => void;
+  const myTurn = new Promise<void>((res) => (release = res));
+  const composed = prev.then(() => myTurn);
+  pedidoTails.set(pedidoId, composed);
+  await prev.catch(() => {});
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (pedidoTails.get(pedidoId) === composed) pedidoTails.delete(pedidoId);
+  }
+}
+
 const comandaTails = new Map<number, Promise<void>>();
 async function withComandaLock<T>(comandaId: number, fn: () => Promise<T>): Promise<T> {
   const prev = comandaTails.get(comandaId) ?? Promise.resolve();
@@ -129,11 +149,19 @@ async function withComandaLock<T>(comandaId: number, fn: () => Promise<T>): Prom
 }
 
 /**
- * Materializa un PedidoOnline en la Venta ABIERTA de su mesa (canal MESA_QR).
- * Resuelve/abre la venta de la mesa y vuelca los items como VentaItem (+ sabores
- * + adicionales + observaciones/nota libre) disparando el KDS/impresión por los
- * hooks. Idempotente por `pedido.ventaId`. Escrituras en transacción; los hooks
- * corren post-commit.
+ * Materializa un PedidoOnline en una Venta y lo manda a cocina.
+ *
+ * Dos caminos según el canal:
+ * - **MESA_QR** (con `mesaId`): reusa la Venta ABIERTA de la mesa o la abre, y
+ *   marca la mesa OCUPADO. Varios comensales de la misma mesa caen en una sola
+ *   cuenta. Se serializa por mesa.
+ * - **PICKUP/DELIVERY** (sin mesa): abre una Venta propia por pedido, con
+ *   `canalOrigen = 'WEB'`. No reusa ninguna venta de mostrador abierta: cada
+ *   pedido web es una cuenta en sí misma. Se serializa por pedido.
+ *
+ * Vuelca los items como VentaItem (+ sabores + adicionales + observaciones/nota
+ * libre) disparando el KDS/impresión por los hooks. Idempotente por
+ * `pedido.ventaId`. Escrituras en transacción; los hooks corren post-commit.
  *
  * Las observaciones predefinidas se resuelven por texto contra el catálogo
  * `Observacion`; la nota libre y las no matcheadas se cuelgan de un sentinel
@@ -153,12 +181,18 @@ export async function materializarPedidoOnlineEnVenta(
   // Fast-path (no autoritativo): si ya se materializó, salir sin tomar el lock.
   const pedidoPre = await dataSource.getRepository(PedidoOnline).findOne({ where: { id: pedidoId } });
   if (!pedidoPre) throw new Error(`Pedido online ${pedidoId} no encontrado`);
-  if (!pedidoPre.mesaId) throw new Error('El pedido no es de mesa (sin mesaId)');
   if (pedidoPre.ventaId) {
     return { ventaId: pedidoPre.ventaId, yaMaterializado: true, itemsCreados: 0, observacionesNoMapeadas: [] };
   }
 
-  return withMesaLock(pedidoPre.mesaId, async () => {
+  // MESA_QR se serializa por mesa (varios comensales pidiendo a la misma cuenta);
+  // PICKUP/DELIVERY no tienen mesa y se serializan por pedido.
+  const conMesa = !!pedidoPre.mesaId;
+  const conLock = conMesa
+    ? <T,>(fn: () => Promise<T>) => withMesaLock(pedidoPre.mesaId as number, fn)
+    : <T,>(fn: () => Promise<T>) => withPedidoLock(pedidoId, fn);
+
+  return conLock(async () => {
     const pedido = await dataSource.getRepository(PedidoOnline).findOne({
       where: { id: pedidoId },
       relations: ['items'],
@@ -206,27 +240,48 @@ export async function materializarPedidoOnlineEnVenta(
       return sentinelObsId;
     };
 
-    const mesa = await mesaRepo.findOneBy({ id: pedido.mesaId });
-    if (!mesa) throw new Error(`Mesa ${pedido.mesaId} no encontrada`);
+    let venta: Venta | null = null;
 
-    // Venta ABIERTA de la mesa (comanda IsNull = cuenta de mesa), o crear una.
-    let venta = await ventaRepo.findOne({
-      where: { mesa: { id: mesa.id }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
-    });
-    if (!venta) {
+    if (conMesa) {
+      const mesa = await mesaRepo.findOneBy({ id: pedido.mesaId });
+      if (!mesa) throw new Error(`Mesa ${pedido.mesaId} no encontrada`);
+
+      // Venta ABIERTA de la mesa (comanda IsNull = cuenta de mesa), o crear una.
+      // Se REUSA a propósito: varios comensales de la misma mesa pidiendo desde
+      // su celular tienen que caer en una sola cuenta.
+      venta = await ventaRepo.findOne({
+        where: { mesa: { id: mesa.id }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
+      });
+      if (!venta) {
+        venta = ventaRepo.create({
+          estado: VentaEstado.ABIERTA,
+          caja: { id: cajaId } as any,
+          mesa: { id: mesa.id } as any,
+          canalOrigen: 'QR_MESA',
+        });
+        await setEntityUserTracking(dataSource, venta, userId, false);
+        venta = await ventaRepo.save(venta);
+        if (mesa.estado !== PdvMesaEstado.OCUPADO) {
+          mesa.estado = PdvMesaEstado.OCUPADO;
+          await setEntityUserTracking(dataSource, mesa, userId, true);
+          await mesaRepo.save(mesa);
+        }
+      }
+    } else {
+      // PICKUP/DELIVERY: venta propia por pedido, sin mesa. NO se reusa ninguna
+      // venta abierta — cada pedido web es una cuenta cerrada en sí misma, y
+      // colgarlo de una venta de mostrador ajena mezclaría dos clientes.
+      // `canalOrigen: 'WEB'` es lo que hace que los hooks la manden a cocina.
       venta = ventaRepo.create({
         estado: VentaEstado.ABIERTA,
         caja: { id: cajaId } as any,
-        mesa: { id: mesa.id } as any,
+        canalOrigen: 'WEB',
+        nombreCliente: pedido.nombreCliente || undefined,
       });
       await setEntityUserTracking(dataSource, venta, userId, false);
       venta = await ventaRepo.save(venta);
-      if (mesa.estado !== PdvMesaEstado.OCUPADO) {
-        mesa.estado = PdvMesaEstado.OCUPADO;
-        await setEntityUserTracking(dataSource, mesa, userId, true);
-        await mesaRepo.save(mesa);
-      }
     }
+
     ventaId = venta.id;
 
     for (const pItem of pedido.items || []) {
@@ -4059,7 +4114,11 @@ async function autoPrintComandaIfNeeded(
   if (!venta) return;
   const tieneMesa = !!(venta as any).mesa?.id;
   const tieneComanda = !!(venta as any).comanda?.id;
-  if (!tieneMesa && !tieneComanda) return; // Venta directa sin cocina
+  // Un pedido online (PICKUP/DELIVERY) no tiene mesa ni comanda y IGUAL va a
+  // cocina: `canal_origen` distingue eso de la venta rápida de mostrador, que
+  // sigue sin imprimir comanda.
+  const vieneDeLaWeb = ((venta as any).canalOrigen ?? 'LOCAL') !== 'LOCAL';
+  if (!tieneMesa && !tieneComanda && !vieneDeLaWeb) return; // Venta directa sin cocina
 
   // 2. Verificar config global
   const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
@@ -4098,7 +4157,7 @@ async function autoPrintComandaIfNeeded(
  * Idempotente: si ya existe un ComandaItem activo para (ventaItem, sector) no
  * lo duplica (cubre reintentos / doble-fire). Emite evento por cada item creado.
  */
-async function crearComandaItemsSiCorresponde(
+export async function crearComandaItemsSiCorresponde(
   dataSource: DataSource,
   ventaItemId: number,
 ): Promise<void> {
@@ -4113,7 +4172,9 @@ async function crearComandaItemsSiCorresponde(
   const venta: any = (item as any).venta;
   const producto: any = (item as any).producto;
   if (!venta?.id) return;
-  if (!venta.mesa?.id && !venta.comanda?.id) return; // venta de mostrador
+  // Igual que en la impresión: los pedidos online sin mesa sí van a cocina.
+  const vieneDeLaWeb = (venta.canalOrigen ?? 'LOCAL') !== 'LOCAL';
+  if (!venta.mesa?.id && !venta.comanda?.id && !vieneDeLaWeb) return; // venta de mostrador
   if (!producto?.id || producto.requiereComanda === false) return;
 
   // Sectores destino (M2M producto_sectores, activos, por prioridad)

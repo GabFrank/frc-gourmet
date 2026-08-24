@@ -5,13 +5,17 @@ import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/ped
 import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zona-delivery.entity';
 import { EstadoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { ensurePermission } from '../utils/auth.utils';
+import { materializarPedidoOnlineEnVenta } from './ventas.handler';
 
 /**
  * Pedidos online — Fase 4: BANDEJA en el PdV (admin, vía /api/rpc, permisos staff).
  *
- * Máquina de estados del pedido. La MATERIALIZACIÓN en `Venta` se hace con el
- * flujo probado del PdV (el inbox abre el pedido pre-cargado); acá se registra
- * la transición y el vínculo `ventaId`, evitando un pipeline de venta paralelo.
+ * Máquina de estados del pedido. ACEPTAR materializa: un solo clic cambia el
+ * estado, crea la `Venta` y dispara cocina. Con el local lleno, obligar al
+ * cajero a un segundo paso para mandar el pedido a la cocina no es operable.
+ * La materialización es best-effort: si falla (no hay caja abierta, dos cajas
+ * abiertas), el pedido igual queda ACEPTADO y se puede reintentar desde la
+ * bandeja — nunca se pierde la aceptación por un problema de caja.
  *
  * Ver docs/arquitectura/webapp-pedidos-plan.md (Fase 4).
  */
@@ -114,10 +118,37 @@ export function registerPedidosOnlineAdminHandlers(
     }
     pedido.estado = EstadoPedidoOnline.ACEPTADO;
     pedido.fechaAceptado = new Date();
-    // Vínculo a la venta creada en el flujo del PdV (opcional; se puede setear luego).
+    // Vínculo a una venta ya creada a mano (compat; el camino normal materializa acá).
     if (data?.ventaId) pedido.ventaId = data.ventaId;
     const saved = await repo().save(pedido);
-    return { success: true, pedido: mapPedidoAdmin(saved) };
+
+    // Materializar en la misma acción: crear la Venta y mandar a cocina.
+    // Best-effort a propósito: un problema de caja no debe deshacer la
+    // aceptación, que ya es visible para el cliente.
+    let ventaId: number | null = saved.ventaId ?? null;
+    let errorMaterializacion: string | null = null;
+    if (!ventaId) {
+      try {
+        const mat = await materializarPedidoOnlineEnVenta(
+          dataSource,
+          saved.id,
+          data?.cajaId ? { cajaId: Number(data.cajaId) } : undefined,
+          getCurrentUser()?.id,
+        );
+        ventaId = mat?.ventaId ?? null;
+      } catch (e) {
+        errorMaterializacion = (e as Error)?.message || 'error_materializando';
+        console.warn('[aceptar-pedido-online] materialización falló:', errorMaterializacion);
+      }
+    }
+
+    const final = await repo().findOne({ where: { id: pedidoId } });
+    return {
+      success: true,
+      pedido: mapPedidoAdmin(final || saved),
+      ventaId,
+      errorMaterializacion,
+    };
   });
 
   // ============== VINCULAR VENTA (tras crearla en el PdV) ==============

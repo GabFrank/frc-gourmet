@@ -444,16 +444,21 @@ export function registerPedidosOnlinePedidosHandlers(
       }
     }
 
-    // MESA_QR: materializar automáticamente en la venta de la mesa (auto a cocina).
-    // Best-effort: si no hay caja abierta o es ambiguo, el pedido queda para que el
-    // cajero lo materialice desde la bandeja. Nunca falla el pedido por esto.
+    // Materialización automática (auto a cocina). Dos casos:
+    // - MESA_QR: siempre. El cliente ya está sentado y el gate del cajero se
+    //   aplicó al habilitar la mesa; pedirle otra aceptación no aporta nada.
+    // - PICKUP/DELIVERY: sólo si el local activó `aceptacionAutomatica`. Por
+    //   defecto está apagado y el pedido espera a que una persona lo mire, que
+    //   es lo que evita cocinar algo que después hay que cancelar.
+    // Best-effort en los dos casos: si no hay caja abierta o es ambiguo, el
+    // pedido queda para la bandeja. Nunca falla el pedido por esto.
     let ventaId: number | null = null;
-    if (tipoPedido === TipoPedidoOnline.MESA_QR) {
+    if (tipoPedido === TipoPedidoOnline.MESA_QR || cfg.aceptacionAutomatica) {
       try {
         const mat = await materializarPedidoOnlineEnVenta(dataSource, saved.id);
         ventaId = mat?.ventaId ?? null;
       } catch (e) {
-        console.warn('[crear-pedido-online] auto-materialización MESA_QR falló:', (e as any)?.message || e);
+        console.warn('[crear-pedido-online] auto-materialización falló:', (e as any)?.message || e);
       }
     }
 
