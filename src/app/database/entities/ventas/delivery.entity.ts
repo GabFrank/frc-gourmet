@@ -2,6 +2,7 @@ import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import { Cliente } from '../personas/cliente.entity';
 import { Usuario } from '../personas/usuario.entity';
+import { Funcionario } from '../rrhh/funcionario.entity';
 import { PrecioDelivery } from './precio-delivery.entity';
 
 /**
@@ -68,7 +69,18 @@ export class Delivery extends BaseModel {
   @Column({ name: 'cobro_anticipado', default: false })
   cobroAnticipado!: boolean;
 
+  /**
+   * @deprecated El repartidor se modela como `Funcionario`, no como `Usuario`:
+   * un repartidor rara vez tiene usuario del sistema. La columna se conserva
+   * (nunca llegó a escribirse: el botón ENVIAR tenía un TODO) para no romper
+   * instalaciones existentes. Usar `entregadoPorFuncionario`.
+   */
   @ManyToOne(() => Usuario, { nullable: true })
   @JoinColumn({ name: 'entregado_por' })
   entregadoPor?: Usuario;
+
+  /** Repartidor que llevó el pedido. Se asigna al pasar a EN_CAMINO. */
+  @ManyToOne(() => Funcionario, { nullable: true })
+  @JoinColumn({ name: 'entregado_por_funcionario_id' })
+  entregadoPorFuncionario?: Funcionario;
 } 

@@ -91,6 +91,7 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'PDV_PAGAR_VALE', descripcion: 'Crear/pagar vales de funcionario desde el cajón del PdV', modulo: 'VENTAS' },
   { codigo: 'PDV_PAGAR_COMPRA', descripcion: 'Crear/pagar compras desde el cajón del PdV', modulo: 'VENTAS' },
   { codigo: 'PDV_ANULAR_EGRESO', descripcion: 'Anular egresos de caja (vales/compras) del PdV', modulo: 'VENTAS' },
+  { codigo: 'VENTAS_DELIVERY_CANCELAR_COBRADO', descripcion: 'Cancelar un delivery ya cobrado (revierte el cobro, el stock y la cuenta por cobrar)', modulo: 'VENTAS' },
 
   // Facturación legal (SET/SIFEN)
   { codigo: 'FACTURACION_VER', descripcion: 'Ver facturas, timbrados y plantillas', modulo: 'FACTURACION' },

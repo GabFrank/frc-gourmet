@@ -23,12 +23,61 @@ export class PdvConfig extends BaseModel {
   @Column({ name: 'umbral_diferencia_alta', type: 'decimal', precision: 10, scale: 2, default: 15 })
   umbralDiferenciaAlta!: number;
 
+  // ─── Delivery ───────────────────────────────────────────────────────────
+  // Toda esta sección se edita desde Configuración del PdV → pestaña Delivery.
+
   // Umbrales de tiempo de espera delivery (minutos)
   @Column({ name: 'delivery_tiempo_amarillo', type: 'int', default: 30 })
   deliveryTiempoAmarillo!: number;
 
   @Column({ name: 'delivery_tiempo_rojo', type: 'int', default: 60 })
   deliveryTiempoRojo!: number;
+
+  /** Si false, el botón DELIVERY no se renderiza en el PdV. */
+  @Column({ name: 'delivery_habilitado', type: 'boolean', default: true })
+  deliveryHabilitado!: boolean;
+
+  /**
+   * Zona de entrega preseleccionada al crear un delivery. Si es null se
+   * preselecciona la de menor valor (comportamiento histórico).
+   */
+  @Column({ name: 'delivery_precio_default_id', type: 'int', nullable: true })
+  deliveryPrecioDefaultId?: number | null;
+
+  /** Estado inicial del toggle COBRO ANTICIPADO en el alta de un delivery. */
+  @Column({ name: 'delivery_cobro_anticipado_default', type: 'boolean', default: false })
+  deliveryCobroAnticipadoDefault!: boolean;
+
+  /** Exigir dirección para dar de alta un delivery. */
+  @Column({ name: 'delivery_requiere_direccion', type: 'boolean', default: true })
+  deliveryRequiereDireccion!: boolean;
+
+  /** Exigir repartidor al pasar un delivery a EN_CAMINO. */
+  @Column({ name: 'delivery_requiere_repartidor', type: 'boolean', default: true })
+  deliveryRequiereRepartidor!: boolean;
+
+  /** Mínimo de dígitos del teléfono para habilitar el alta. */
+  @Column({ name: 'delivery_telefono_min_digitos', type: 'int', default: 4 })
+  deliveryTelefonoMinDigitos!: number;
+
+  /** Filas por página en la lista de deliveries. */
+  @Column({ name: 'delivery_page_size', type: 'int', default: 20 })
+  deliveryPageSize!: number;
+
+  /**
+   * Si true, la lista muestra además los deliveries en estado no terminal de
+   * otras cajas (turnos anteriores), para que ninguno quede huérfano.
+   */
+  @Column({ name: 'delivery_mostrar_pendientes_otras_cajas', type: 'boolean', default: true })
+  deliveryMostrarPendientesOtrasCajas!: boolean;
+
+  /** Al crear el delivery → imprimir el ticket de reparto automáticamente. */
+  @Column({ name: 'delivery_auto_imprimir_al_crear', type: 'boolean', default: false })
+  deliveryAutoImprimirAlCrear!: boolean;
+
+  /** Al pasar a EN_CAMINO → imprimir el ticket de reparto automáticamente. */
+  @Column({ name: 'delivery_auto_imprimir_al_enviar', type: 'boolean', default: false })
+  deliveryAutoImprimirAlEnviar!: boolean;
 
   // Comandas
   @Column({ name: 'pdv_tab_default', type: 'varchar', default: 'MESAS' })
