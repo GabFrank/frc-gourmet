@@ -240,6 +240,10 @@ async function main() {
     const r = await kpis({ cajaIds: [caja1.id] });
     ok(r.totalHoyPYG === 150_000,
        'caja1 sola devuelve sus 150.000 aunque sean de julio', r.totalHoyPYG);
+    // El rotulo no puede anunciar una ventana que no se aplico.
+    ok(r.filtroAplicado?.desde === null && r.filtroAplicado?.hasta === null,
+       'sin fechas, filtroAplicado NO inventa un periodo', r.filtroAplicado);
+    ok(r.filtroAplicado?.cajaIds?.length === 1, 'pero si informa la caja', r.filtroAplicado);
   }
   {
     const r = await kpis({ cajaIds: [caja1.id, caja2.id] });

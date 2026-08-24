@@ -506,8 +506,15 @@ export function registerDashboardVentasHandlers(
         // Metadatos del filtro aplicado, para que la UI pueda rotularlo.
         totalDesde: totalDesde instanceof Date ? totalDesde.toISOString() : totalDesde,
         inicioJornada,
+        // Con SOLO cajas no hay ventana de fecha aplicada: mandar una igual
+        // hacia que la UI rotulara un periodo que no se estaba filtrando. El
+        // rotulo tiene que decir lo que se consulto, no lo que sobro del preset.
         filtroAplicado: filtroExplicito
-          ? { desde: ventana.desde.toISOString(), hasta: ventana.hasta.toISOString(), cajaIds }
+          ? {
+              desde: soloCajas ? null : ventana.desde.toISOString(),
+              hasta: soloCajas ? null : ventana.hasta.toISOString(),
+              cajaIds,
+            }
           : null,
       };
     } catch (error) {

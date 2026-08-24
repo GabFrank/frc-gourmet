@@ -77,7 +77,9 @@ function etiquetaPeriodo(filtro: any, cajas: CajaOpcion[]): string {
     const p = (n: number) => `${n}`.padStart(2, '0');
     return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
   };
-  const partes = [`${f(filtro.desde)} → ${f(filtro.hasta)}`];
+  // Sin fechas el filtro es sólo por caja, y no hay período que rotular: una
+  // caja es un turno cerrado y su período es el suyo.
+  const partes = filtro.desde && filtro.hasta ? [`${f(filtro.desde)} → ${f(filtro.hasta)}`] : [];
   const ids: number[] = filtro.cajaIds || [];
   if (ids.length === 1) {
     const c = cajas.find((x) => x.id === ids[0]);
@@ -278,8 +280,9 @@ export class VentasResumenPage implements OnInit {
       this.basadoEnCajas = !!k.totalBasadoEnCajas;
       // Con filtro el total ya no es "de hoy" ni "de la caja": es del periodo
       // pedido, y el label tiene que decirlo o el numero se lee como otra cosa.
+      // Con sólo cajas el total no es "del período": es de esas cajas.
       this.labelTotal = k.filtroAplicado
-        ? 'Total del período'
+        ? (k.filtroAplicado.desde ? 'Total del período' : 'Total de la caja')
         : this.basadoEnCajas
         ? 'Total en caja'
         : 'Total del día';
