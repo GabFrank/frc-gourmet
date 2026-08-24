@@ -85,9 +85,11 @@ async function main() {
 
   // ── Fixtures ────────────────────────────────────────────────────────────
   const admin = await save(Usuario, { nickname: 'admin', password: 'x', activo: true });
-  const perm = await save(Permission, { codigo: 'VENTAS_PDV', descripcion: 'PDV', activo: true });
   const role = await save(Role, { descripcion: 'ADMIN', activo: true });
-  await save(RolePermission, { role, permission: perm });
+  for (const codigo of ['VENTAS_PDV', 'PEDIDOS_ONLINE_VER', 'PEDIDOS_ONLINE_GESTIONAR']) {
+    const permiso = await save(Permission, { codigo, descripcion: codigo, activo: true });
+    await save(RolePermission, { role, permission: permiso });
+  }
   await save(UsuarioRole, { usuario: admin, role });
   const moneda = await save(Moneda, { denominacion: 'GUARANI', simbolo: 'Gs', principal: true });
   const tipoPrecio = await save(TipoPrecio, { descripcion: 'NORMAL', activo: true });

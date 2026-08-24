@@ -478,6 +478,8 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       'STOCK_MOVIMIENTO_VER', 'STOCK_MOVIMIENTO_REGISTRAR',
       // Ventas
       'VENTAS_PDV', 'VENTAS_PDV_CONFIGURAR', 'VENTAS_HISTORICO_VER',
+      // Pedidos online: el gerente gestiona y además configura la tienda y las zonas.
+      'PEDIDOS_ONLINE_VER', 'PEDIDOS_ONLINE_GESTIONAR', 'PEDIDOS_ONLINE_CONFIGURAR',
       // Cajon del PdV: el gerente hace todo lo del cajero, y ademas anula.
       // PDV_ANULAR_EGRESO se le niega al cajero por separacion de funciones
       // (ver rol CAJERO), asi que tiene que vivir aca o no lo tiene nadie.
@@ -522,6 +524,9 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
     permisos: [
       'HOME_DASHBOARD_VER', 'VENTAS_DASHBOARD_VER', 'CAJA_MAYOR_DASHBOARD_VER',
       'VENTAS_PDV', 'VENTAS_COBRAR', 'VENTAS_HISTORICO_VER',
+      // Pedidos online: el cajero acepta y rechaza -es quien atiende el reparto-
+      // pero NO configura la tienda ni dibuja zonas.
+      'PEDIDOS_ONLINE_VER', 'PEDIDOS_ONLINE_GESTIONAR',
       // Facturación: el cajero factura al cobrar en el PdV
       'FACTURACION_VER', 'FACTURACION_EMITIR',
       // Vales/compras pagados desde el cajón del PdV (Utilitarios).

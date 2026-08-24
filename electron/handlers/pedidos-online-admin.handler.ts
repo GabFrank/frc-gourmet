@@ -22,7 +22,11 @@ import { invokeHandler } from '../utils/handler-registry';
  * Ver docs/arquitectura/webapp-pedidos-plan.md (Fase 4).
  */
 
-const PERM = 'VENTAS_PDV';
+const PERM_VER = 'PEDIDOS_ONLINE_VER';
+const PERM_GESTIONAR = 'PEDIDOS_ONLINE_GESTIONAR';
+// Las zonas son configuración del negocio, no operación: mismo criterio que
+// `VENTAS_PDV_CONFIGURAR` para los precios de delivery del PdV.
+const PERM_CONFIGURAR = 'PEDIDOS_ONLINE_CONFIGURAR';
 
 // Transiciones válidas de la bandeja (avance del pedido). La cancelación de un
 // pedido RECIBIDO/ACEPTADO se maneja con `rechazar-pedido-online` (con motivo),
@@ -83,7 +87,7 @@ export function registerPedidosOnlineAdminHandlers(
 
   // ============== LISTA (bandeja) ==============
   ipcMain.handle('get-pedidos-online-admin', async (_event: any, filtros?: any) => {
-    await ensurePermission(dataSource, getCurrentUser, PERM);
+    await ensurePermission(dataSource, getCurrentUser, PERM_VER);
     const qb = repo()
       .createQueryBuilder('p')
       .leftJoinAndSelect('p.items', 'items')
@@ -104,7 +108,7 @@ export function registerPedidosOnlineAdminHandlers(
   // Cuenta RECIBIDO + ACEPTADO sin venta materializada: así el staff también ve
   // señal de los pedidos auto-aceptados (que no pasan por RECIBIDO).
   ipcMain.handle('contar-pedidos-online-pendientes', async () => {
-    await ensurePermission(dataSource, getCurrentUser, PERM);
+    await ensurePermission(dataSource, getCurrentUser, PERM_VER);
     const count = await repo().count({
       where: { estado: In([EstadoPedidoOnline.RECIBIDO, EstadoPedidoOnline.ACEPTADO]) },
     });
@@ -113,7 +117,7 @@ export function registerPedidosOnlineAdminHandlers(
 
   // ============== ACEPTAR ==============
   ipcMain.handle('aceptar-pedido-online', async (_event: any, pedidoId: number, data?: any) => {
-    await ensurePermission(dataSource, getCurrentUser, PERM);
+    await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
     const pedido = await repo().findOne({ where: { id: pedidoId }, relations: ['items'] });
     if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
     if (pedido.estado !== EstadoPedidoOnline.RECIBIDO) {
@@ -156,7 +160,7 @@ export function registerPedidosOnlineAdminHandlers(
 
   // ============== VINCULAR VENTA (tras crearla en el PdV) ==============
   ipcMain.handle('vincular-venta-pedido-online', async (_event: any, pedidoId: number, ventaId: number) => {
-    await ensurePermission(dataSource, getCurrentUser, PERM);
+    await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
     const pedido = await repo().findOne({ where: { id: pedidoId } });
     if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
     pedido.ventaId = ventaId;
@@ -179,7 +183,7 @@ export function registerPedidosOnlineAdminHandlers(
   ];
 
   ipcMain.handle('rechazar-pedido-online', async (_event: any, pedidoId: number, motivo: string) => {
-    await ensurePermission(dataSource, getCurrentUser, PERM);
+    await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
     const pedido = await repo().findOne({ where: { id: pedidoId } });
     if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
     if (!ESTADOS_CANCELABLES.includes(pedido.estado)) {
@@ -224,7 +228,7 @@ export function registerPedidosOnlineAdminHandlers(
   });
 
   ipcMain.handle('get-zonas-delivery-admin', async () => {
-    await ensurePermission(dataSource, getCurrentUser, PERM);
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
     const zonas = await dataSource.getRepository(ZonaDelivery).find({
       order: { orden: 'ASC', nombre: 'ASC' },
       relations: ['precioDelivery'],
@@ -233,7 +237,7 @@ export function registerPedidosOnlineAdminHandlers(
   });
 
   ipcMain.handle('guardar-zona-delivery', async (_event: any, data: any) => {
-    await ensurePermission(dataSource, getCurrentUser, PERM);
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
     const repoZ = dataSource.getRepository(ZonaDelivery);
     const zona = data?.id ? await repoZ.findOne({ where: { id: data.id } }) : repoZ.create();
     if (!zona) return { success: false, error: 'zona_no_encontrada' };
@@ -270,14 +274,14 @@ export function registerPedidosOnlineAdminHandlers(
   });
 
   ipcMain.handle('eliminar-zona-delivery', async (_event: any, zonaId: number) => {
-    await ensurePermission(dataSource, getCurrentUser, PERM);
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
     await dataSource.getRepository(ZonaDelivery).delete({ id: zonaId });
     return { success: true };
   });
 
   // ============== AVANZAR ESTADO ==============
   ipcMain.handle('avanzar-estado-pedido-online', async (_event: any, pedidoId: number, nuevoEstado: string, data?: any) => {
-    await ensurePermission(dataSource, getCurrentUser, PERM);
+    await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
     const pedido = await repo().findOne({ where: { id: pedidoId } });
     if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
 

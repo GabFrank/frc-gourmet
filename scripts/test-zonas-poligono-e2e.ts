@@ -99,9 +99,11 @@ async function main() {
   const { ZonaDelivery } = E('pedidos-online/zona-delivery.entity');
 
   const admin = await save(Usuario, { nickname: 'admin', password: 'x', activo: true });
-  const perm = await save(Permission, { codigo: 'VENTAS_PDV', descripcion: 'PDV', activo: true });
   const role = await save(Role, { descripcion: 'ADMIN', activo: true });
-  await save(RolePermission, { role, permission: perm });
+  for (const codigo of ['VENTAS_PDV', 'PEDIDOS_ONLINE_CONFIGURAR']) {
+    const permiso = await save(Permission, { codigo, descripcion: codigo, activo: true });
+    await save(RolePermission, { role, permission: permiso });
+  }
   await save(UsuarioRole, { usuario: admin, role });
 
   installHandlerRegistry();

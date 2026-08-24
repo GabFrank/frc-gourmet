@@ -86,6 +86,12 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   // Ventas
   { codigo: 'VENTAS_PDV', descripcion: 'Operar punto de venta (PdV/mesas/comandas)', modulo: 'VENTAS' },
   { codigo: 'VENTAS_PDV_CONFIGURAR', descripcion: 'Configurar el PdV (categorías, ítems, atajos, mesas, sectores, config)', modulo: 'VENTAS' },
+  // Pedidos online. Hasta ahora todo el módulo usaba `VENTAS_PDV`, incluida la
+  // configuración de la tienda y el borrado de zonas: cualquier cajero podía
+  // tocarlas. Se separa gestión de configuración, igual que en el resto del PdV.
+  { codigo: 'PEDIDOS_ONLINE_VER', descripcion: 'Ver la cola de pedidos de la web', modulo: 'VENTAS' },
+  { codigo: 'PEDIDOS_ONLINE_GESTIONAR', descripcion: 'Aceptar, rechazar y avanzar pedidos de la web', modulo: 'VENTAS' },
+  { codigo: 'PEDIDOS_ONLINE_CONFIGURAR', descripcion: 'Configurar la tienda online y dibujar las zonas de reparto', modulo: 'VENTAS' },
   { codigo: 'VENTAS_HISTORICO_VER', descripcion: 'Ver historico de ventas concluidas', modulo: 'VENTAS' },
   { codigo: 'VENTAS_COBRAR', descripcion: 'Cobrar una venta: registrar pagos, vuelto y acreditaciones', modulo: 'VENTAS' },
   { codigo: 'PDV_PAGAR_VALE', descripcion: 'Crear/pagar vales de funcionario desde el cajón del PdV', modulo: 'VENTAS' },

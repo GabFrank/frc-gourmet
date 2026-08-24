@@ -48,6 +48,9 @@ function mapCuenta(c: CuentaCliente): any {
     email: c.email ?? null,
     nombre: c.nombre ?? null,
     clienteId: (c.cliente as any)?.id ?? null,
+    // Sólo si tiene contraseña, nunca el hash: la UI necesita saber si pedir la
+    // actual antes de dejar cambiarla.
+    tienePassword: !!c.passwordHash,
   };
 }
 
@@ -247,6 +250,15 @@ export function registerPedidosOnlineAuthHandlers(
       cuenta.emailVerificado = false;
     }
     if (data?.password) {
+      // Exigir la contraseña actual cuando ya hay una. Sin esto, un access token
+      // robado -30 minutos de vida- alcanzaba para quedarse con la cuenta de
+      // forma permanente, incluso después de que el dueño cerrara la sesión.
+      if (cuenta.passwordHash) {
+        const actual = String(data.passwordActual || '');
+        if (!actual) return { success: false, error: 'falta_password_actual' };
+        const coincide = await verifyPassword(actual, cuenta.passwordHash);
+        if (!coincide) return { success: false, error: 'password_actual_incorrecta' };
+      }
       cuenta.passwordHash = await hashPassword(String(data.password));
     }
     const saved = await cuentaRepo().save(cuenta);
@@ -290,7 +302,12 @@ export function registerPedidosOnlineAuthHandlers(
       const info: any = await res.json();
       if (info.aud !== clientId) return { success: false, error: 'google_aud_mismatch' };
       const email = String(info.email || '').trim().toLowerCase();
-      if (!email || info.email_verified === 'false') return { success: false, error: 'google_email_no_verificado' };
+      // `email_verified` llega como string desde tokeninfo. Comparar contra
+      // 'false' fallaba ABIERTO: undefined, un booleano nativo o el campo
+      // ausente pasaban como verificados. Se exige el 'true' explícito.
+      if (!email || String(info.email_verified) !== 'true') {
+        return { success: false, error: 'google_email_no_verificado' };
+      }
 
       let cuenta = await cuentaRepo()
         .createQueryBuilder('c')
