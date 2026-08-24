@@ -190,7 +190,7 @@
           </mat-checkbox>
         </div>
 
-        <mat-form-field appearance="outline" *ngIf="form.get('deliveryRequiereRepartidor')?.value">
+        <mat-form-field appearance="outline" *ngIf="configForm.get('deliveryRequiereRepartidor')?.value">
           <mat-label>EXIGIRLO AL</mat-label>
           <mat-select formControlName="deliveryRepartidorEtapa">
             <mat-option value="EN_CAMINO">Enviar el pedido</mat-option>

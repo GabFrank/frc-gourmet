@@ -241,6 +241,23 @@ async function main() {
   const pDeli2Final = await R(PedidoOnline).findOneBy({ id: pDeli2.id });
   ok(pDeli2Final?.estado === 'LISTO', 'el pedido no avanzó', pDeli2Final?.estado);
 
+  // ── 6d · Delivery cargado a mano por el cajero ──────────────────────────
+  console.log('\n[6d] Un delivery del PdV (sin mesa ni comanda) también va a cocina');
+  const deliManual = await save(Delivery, {
+    nombre: 'CLIENTE TELEFONO', telefono: '0985111222', direccion: 'BARRIO SAN MIGUEL',
+    estado: 'ABIERTO', fechaAbierto: new Date(),
+  });
+  const vDeliManual = await save(Venta, {
+    estado: 'ABIERTA', canalOrigen: 'LOCAL', delivery: { id: deliManual.id },
+  });
+  const viDeliManual = await save(VentaItem, {
+    venta: { id: vDeliManual.id }, producto: { id: producto.id }, cantidad: 1,
+    precioCostoUnitario: 0, precioVentaUnitario: 45000, valor: 45000, estado: 'ACTIVO',
+  });
+  await crearComandaItemsSiCorresponde(ds, viDeliManual.id);
+  ok(await comandaItemsDe(vDeliManual.id) === 1,
+     'un delivery telefónico rutea sus items al sector del producto');
+
   // ── 7 · Cancelar un pedido YA materializado revierte la venta ───────────
   console.log('\n[7] Cancelar un pedido en preparación revierte la venta');
   const pCancel = await nuevoPedido('DELIVERY');

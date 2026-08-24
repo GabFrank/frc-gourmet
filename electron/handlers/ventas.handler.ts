@@ -4131,16 +4131,17 @@ async function autoPrintComandaIfNeeded(
   // 1. Buscar la venta con mesa+comanda
   const venta = await dataSource.getRepository(Venta).findOne({
     where: { id: ventaId },
-    relations: ['mesa', 'comanda'],
+    relations: ['mesa', 'comanda', 'delivery'],
   });
   if (!venta) return;
   const tieneMesa = !!(venta as any).mesa?.id;
   const tieneComanda = !!(venta as any).comanda?.id;
-  // Un pedido online (PICKUP/DELIVERY) no tiene mesa ni comanda y IGUAL va a
-  // cocina: `canal_origen` distingue eso de la venta rápida de mostrador, que
-  // sigue sin imprimir comanda.
+  // Un delivery o un pedido online no tienen mesa ni comanda y IGUAL van a
+  // cocina. Lo que de verdad NO va a cocina es la venta rápida de mostrador, y
+  // eso es lo que distingue este predicado.
+  const tieneDelivery = !!(venta as any).delivery?.id;
   const vieneDeLaWeb = ((venta as any).canalOrigen ?? 'LOCAL') !== 'LOCAL';
-  if (!tieneMesa && !tieneComanda && !vieneDeLaWeb) return; // Venta directa sin cocina
+  if (!tieneMesa && !tieneComanda && !tieneDelivery && !vieneDeLaWeb) return; // Venta directa sin cocina
 
   // 2. Verificar config global
   const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
@@ -4187,16 +4188,20 @@ export async function crearComandaItemsSiCorresponde(
 
   const item = await dataSource.getRepository(VentaItem).findOne({
     where: { id: ventaItemId },
-    relations: ['venta', 'venta.mesa', 'venta.comanda', 'producto'],
+    relations: ['venta', 'venta.mesa', 'venta.comanda', 'venta.delivery', 'producto'],
   });
   if (!item) return;
 
   const venta: any = (item as any).venta;
   const producto: any = (item as any).producto;
   if (!venta?.id) return;
-  // Igual que en la impresión: los pedidos online sin mesa sí van a cocina.
+  // Igual que en la impresión: delivery y pedidos online sin mesa sí van a
+  // cocina. Un delivery cargado por el cajero jamás generaba ComandaItem, así
+  // que sus items nunca se ruteaban a la impresora del sector del producto: la
+  // cocina sólo veía el ticket único del reparto, si estaba configurado.
+  const tieneDelivery = !!(venta as any).delivery?.id;
   const vieneDeLaWeb = (venta.canalOrigen ?? 'LOCAL') !== 'LOCAL';
-  if (!venta.mesa?.id && !venta.comanda?.id && !vieneDeLaWeb) return; // venta de mostrador
+  if (!venta.mesa?.id && !venta.comanda?.id && !tieneDelivery && !vieneDeLaWeb) return; // venta de mostrador
   if (!producto?.id || producto.requiereComanda === false) return;
 
   // Sectores destino (M2M producto_sectores, activos, por prioridad)
