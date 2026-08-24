@@ -401,14 +401,28 @@ export function registerDeliveryHandlers(
         throw new Error('No se puede marcar como ENTREGADO un delivery cuya venta todavía no fue cobrada.');
       }
 
-      if (nuevoEstado === DeliveryEstado.EN_CAMINO) {
-        const funcionarioId = opts?.funcionarioId;
-        if (funcionarioId) {
-          const funcionario = await manager.getRepository(Funcionario).findOneBy({ id: funcionarioId });
-          if (!funcionario) throw new Error(`Funcionario ${funcionarioId} no encontrado`);
-          delivery.entregadoPorFuncionario = funcionario;
-        } else if (config?.deliveryRequiereRepartidor && !delivery.entregadoPorFuncionario) {
+      // El repartidor se puede registrar en cualquiera de las dos transiciones:
+      // al enviar o al entregar. Si viene en el payload, se guarda siempre.
+      const funcionarioId = opts?.funcionarioId;
+      if (
+        funcionarioId
+        && (nuevoEstado === DeliveryEstado.EN_CAMINO || nuevoEstado === DeliveryEstado.ENTREGADO)
+      ) {
+        const funcionario = await manager.getRepository(Funcionario).findOneBy({ id: funcionarioId });
+        if (!funcionario) throw new Error(`Funcionario ${funcionarioId} no encontrado`);
+        delivery.entregadoPorFuncionario = funcionario;
+      }
+
+      // Candado configurable: si el repartidor es bloqueante, la etapa en la que
+      // bloquea la decide el local. Hay operaciones donde el pedido sale y recién
+      // al volver se registra quién lo llevó — ahí el candado va en ENTREGADO.
+      if (config?.deliveryRequiereRepartidor && !delivery.entregadoPorFuncionario) {
+        const etapa = config.deliveryRepartidorEtapa || 'EN_CAMINO';
+        if (etapa === 'EN_CAMINO' && nuevoEstado === DeliveryEstado.EN_CAMINO) {
           throw new Error('Seleccioná el repartidor antes de enviar el pedido.');
+        }
+        if (etapa === 'ENTREGADO' && nuevoEstado === DeliveryEstado.ENTREGADO) {
+          throw new Error('Registrá quién entregó el pedido antes de finalizarlo.');
         }
       }
 
