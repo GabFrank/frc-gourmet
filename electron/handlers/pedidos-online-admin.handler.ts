@@ -212,13 +212,24 @@ export function registerPedidosOnlineAdminHandlers(
   });
 
   // ============== ZONAS DE DELIVERY (CRUD admin) ==============
+  const mapZona = (z: any) => ({
+    id: z.id,
+    nombre: z.nombre,
+    tarifa: Number(z.tarifa),
+    montoMinimo: Number(z.montoMinimo),
+    activa: z.activa,
+    orden: z.orden,
+    poligono: z.poligono ?? null,
+    precioDeliveryId: z.precioDelivery?.id ?? null,
+  });
+
   ipcMain.handle('get-zonas-delivery-admin', async () => {
     await ensurePermission(dataSource, getCurrentUser, PERM);
-    const zonas = await dataSource.getRepository(ZonaDelivery).find({ order: { orden: 'ASC', nombre: 'ASC' } });
-    return zonas.map((z) => ({
-      id: z.id, nombre: z.nombre, tarifa: Number(z.tarifa), montoMinimo: Number(z.montoMinimo),
-      activa: z.activa, orden: z.orden,
-    }));
+    const zonas = await dataSource.getRepository(ZonaDelivery).find({
+      order: { orden: 'ASC', nombre: 'ASC' },
+      relations: ['precioDelivery'],
+    });
+    return zonas.map(mapZona);
   });
 
   ipcMain.handle('guardar-zona-delivery', async (_event: any, data: any) => {
@@ -231,9 +242,31 @@ export function registerPedidosOnlineAdminHandlers(
     zona.montoMinimo = Number(data?.montoMinimo) || 0;
     zona.activa = data?.activa !== false;
     zona.orden = Number(data?.orden) || 0;
+    // Polígono dibujado en el mapa (GeoJSON en texto). Se valida que parsee y que
+    // sea una geometría de área: guardar un GeoJSON roto dejaría la zona muda —
+    // no resolvería nunca y el pedido caería en "fuera de cobertura" sin que
+    // nadie entienda por qué.
+    if (data?.poligono !== undefined) {
+      const crudo = data.poligono;
+      if (!crudo) {
+        zona.poligono = null;
+      } else {
+        const texto = typeof crudo === 'string' ? crudo : JSON.stringify(crudo);
+        let geo: any;
+        try { geo = JSON.parse(texto); } catch { return { success: false, error: 'poligono_invalido' }; }
+        const g = geo?.type === 'Feature' ? geo.geometry : geo;
+        if (!g || (g.type !== 'Polygon' && g.type !== 'MultiPolygon') || !Array.isArray(g.coordinates)) {
+          return { success: false, error: 'poligono_invalido' };
+        }
+        zona.poligono = texto;
+      }
+    }
+    if (data?.precioDeliveryId !== undefined) {
+      zona.precioDelivery = data.precioDeliveryId ? ({ id: Number(data.precioDeliveryId) } as any) : null;
+    }
     if (!zona.nombre) return { success: false, error: 'nombre_requerido' };
     const saved = await repoZ.save(zona);
-    return { success: true, zona: { id: saved.id, nombre: saved.nombre, tarifa: Number(saved.tarifa), montoMinimo: Number(saved.montoMinimo), activa: saved.activa, orden: saved.orden } };
+    return { success: true, zona: mapZona(saved) };
   });
 
   ipcMain.handle('eliminar-zona-delivery', async (_event: any, zonaId: number) => {

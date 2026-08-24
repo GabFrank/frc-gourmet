@@ -236,6 +236,7 @@ import { AddPagoConsolidado1787169888415 } from './migrations/1787169888415-AddP
 import { DeliveryCostoRepartidorYConfig1787564255118 } from './migrations/1787564255118-DeliveryCostoRepartidorYConfig';
 import { DeliveryRepartidorEtapa1787602817736 } from './migrations/1787602817736-DeliveryRepartidorEtapa';
 import { VentaCanalOrigen1787603993308 } from './migrations/1787603993308-VentaCanalOrigen';
+import { ZonaDeliveryPoligono1787605293739 } from './migrations/1787605293739-ZonaDeliveryPoligono';
 import { AddPagoCuotaCppDetalle1785320463398 } from './migrations/1785320463398-AddPagoCuotaCppDetalle';
 import { AddEgresoCajaToPagoCuotaDetalle1785335253817 } from './migrations/1785335253817-AddEgresoCajaToPagoCuotaDetalle';
 import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVacacionVentas';
@@ -700,6 +701,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     DeliveryCostoRepartidorYConfig1787564255118,
     DeliveryRepartidorEtapa1787602817736,
     VentaCanalOrigen1787603993308,
+    ZonaDeliveryPoligono1787605293739,
   ];
 }
 

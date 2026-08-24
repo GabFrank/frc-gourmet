@@ -94,7 +94,8 @@
     "test:api-map": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-api-map.ts",
     "seed:dev-roles": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/seed-dev-roles.ts",
     "test:dashboard-rangos": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-dashboard-rangos.ts",
-    "test:pedido-online-materializacion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedido-online-materializacion-e2e.ts"
+    "test:pedido-online-materializacion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedido-online-materializacion-e2e.ts",
+    "test:zonas-poligono": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-zonas-poligono-e2e.ts"
   },
   "private": true,
   "dependencies": {
