@@ -1022,8 +1022,23 @@
         (click)="openDelivery()"
         data-testid="pdv-btn-delivery"
       >
-        <mat-icon>delivery_dining</mat-icon>
-        <span>DELIVERY</span>
+        <!-- Dos contadores distintos: repartos vivos (naranja) y pedidos de la
+             web esperando aceptación (rojo). matBadge es uno por elemento, así
+             que van en dos hijos del mismo botón. -->
+        <mat-icon
+          [matBadge]="deliveriesPendientesCount"
+          matBadgeColor="accent"
+          [matBadgeHidden]="deliveriesPendientesCount === 0"
+          matBadgeSize="small"
+          matTooltip="Repartos sin concluir"
+        >delivery_dining</mat-icon>
+        <span
+          [matBadge]="pedidosOnlinePendientesCount"
+          matBadgeColor="warn"
+          [matBadgeHidden]="pedidosOnlinePendientesCount === 0"
+          matBadgeSize="small"
+          matTooltip="Pedidos de la web por aceptar"
+        >DELIVERY</span>
       </button>
       <button
         mat-raised-button

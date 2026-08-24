@@ -103,6 +103,44 @@
       </mat-paginator>
     </div>
 
+    <!-- Cola de pedidos online. Ocupa el panel derecho cuando no hay ningún
+         delivery seleccionado: quien atiende el reparto ya tiene esta pantalla
+         abierta, y una segunda pantalla es una segunda cosa que monitorear. -->
+    <div class="delivery-detalle cola-online" *ngIf="!selectedDelivery && pedidosOnline.length">
+      <div class="cola-header">
+        <mat-icon>storefront</mat-icon>
+        <span>PEDIDOS DE LA WEB</span>
+        <span class="cola-count">{{ pedidosOnline.length }}</span>
+      </div>
+
+      <div class="cola-item" *ngFor="let p of pedidosOnline">
+        <div class="cola-item-top">
+          <span class="cola-numero">{{ p.numero }}</span>
+          <span class="cola-tipo" [class.retiro]="p.tipoPedido === 'PICKUP'">
+            {{ p.tipoPedido === 'PICKUP' ? 'RETIRO' : 'DELIVERY' }}
+          </span>
+          <span class="cola-espera" [class]="p.esperaColor">{{ p.espera }}</span>
+        </div>
+        <div class="cola-cliente">{{ p.nombreCliente || 'SIN NOMBRE' }}</div>
+        <div class="cola-dir" *ngIf="p.direccionEntrega">{{ p.direccionEntrega }}</div>
+        <div class="cola-items">{{ p.resumenItems }}</div>
+        <div class="cola-total">
+          <span>{{ p.total | number:'1.0-2' }}</span>
+          <span class="cola-envio" *ngIf="p.costoEnvio > 0">envío {{ p.costoEnvio | number:'1.0-2' }}</span>
+        </div>
+        <div class="cola-acciones">
+          <button mat-flat-button color="primary" [disabled]="procesandoPedidoId === p.id"
+                  (click)="aceptarPedidoOnline(p)">
+            <mat-icon>check</mat-icon> ACEPTAR
+          </button>
+          <button mat-stroked-button color="warn" [disabled]="procesandoPedidoId === p.id"
+                  (click)="rechazarPedidoOnline(p)">
+            <mat-icon>close</mat-icon> RECHAZAR
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Detalle ticket (30%) -->
     <div class="delivery-detalle" *ngIf="selectedDelivery">
       <!-- Card Cliente -->

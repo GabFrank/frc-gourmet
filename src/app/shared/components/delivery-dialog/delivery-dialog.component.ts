@@ -94,6 +94,15 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
 
   private timerInterval: any;
 
+  /**
+   * Cola de pedidos de la web esperando aceptación. Vive acá y no en una
+   * pantalla aparte a propósito: quien atiende el reparto ya tiene este diálogo
+   * abierto, y una segunda pantalla es una segunda cosa que hay que mirar.
+   */
+  pedidosOnline: any[] = [];
+  procesandoPedidoId: number | null = null;
+  private pedidosInterval: any;
+
   constructor(
     public dialogRef: MatDialogRef<DeliveryDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: DeliveryDialogData,
@@ -115,15 +124,112 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     }
 
     await this.loadDeliveries();
+    await this.cargarPedidosOnline();
 
     // Timer cada segundo para actualizar espera
     this.timerInterval = setInterval(() => {
       this.updateEsperas();
     }, 1000);
+    // Los pedidos de la web entran solos: sin este poll el cajero tendría que
+    // cerrar y reabrir el diálogo para enterarse.
+    this.pedidosInterval = setInterval(() => this.cargarPedidosOnline(), 15000);
   }
 
   ngOnDestroy(): void {
     if (this.timerInterval) clearInterval(this.timerInterval);
+    if (this.pedidosInterval) clearInterval(this.pedidosInterval);
+  }
+
+  // ─── Pedidos de la web ──────────────────────────────────────────────────
+
+  async cargarPedidosOnline(): Promise<void> {
+    try {
+      const pedidos = await firstValueFrom(
+        this.repositoryService.getPedidosOnlineAdmin({ estado: 'RECIBIDO' }),
+      );
+      this.pedidosOnline = (pedidos || []).map((p: any) => this.mapPedidoOnline(p));
+    } catch (e) {
+      // Un fallo del poll no puede romper la pantalla de delivery, que es lo
+      // que el cajero está usando para trabajar.
+      console.warn('No se pudieron cargar los pedidos online:', e);
+    }
+  }
+
+  private mapPedidoOnline(p: any): any {
+    const creado = p.createdAt ? new Date(p.createdAt).getTime() : Date.now();
+    const mins = Math.max(0, Math.floor((Date.now() - creado) / 60000));
+    const items = (p.items || []).map((i: any) => `${i.cantidad}× ${i.nombreProducto}`);
+    return {
+      ...p,
+      espera: this.formatEspera(mins),
+      // Mismos umbrales que la tabla de deliveries: un pedido de hace 20 minutos
+      // no puede verse igual que uno de hace 20 segundos.
+      esperaColor: mins >= this.tiempoRojo ? 'rojo' : mins >= this.tiempoAmarillo ? 'amarillo' : 'verde',
+      resumenItems: items.slice(0, 3).join(', ') + (items.length > 3 ? ` +${items.length - 3}` : ''),
+    };
+  }
+
+  /**
+   * Aceptar materializa: crea la venta, la manda a cocina y —si es delivery—
+   * abre el registro de reparto, que aparece en la lista de la izquierda.
+   */
+  async aceptarPedidoOnline(p: any): Promise<void> {
+    this.procesandoPedidoId = p.id;
+    try {
+      const res: any = await firstValueFrom(
+        this.repositoryService.aceptarPedidoOnline(p.id, { cajaId: this.data.caja.id }),
+      );
+      if (!res?.success) {
+        this.snackBar.open(`No se pudo aceptar: ${res?.error || ''}`, 'OK', { duration: 4000 });
+        return;
+      }
+      if (res.errorMaterializacion) {
+        // El pedido quedó aceptado igual: se avisa sin deshacer nada.
+        this.snackBar.open(
+          `Pedido ${p.numero} aceptado, pero no se pudo mandar a cocina: ${res.errorMaterializacion}`,
+          'OK', { duration: 6000 },
+        );
+      } else {
+        this.snackBar.open(`Pedido ${p.numero} aceptado y enviado a cocina`, 'OK', { duration: 3000 });
+      }
+      await this.cargarPedidosOnline();
+      await this.loadDeliveries();
+    } catch (e: any) {
+      this.snackBar.open(`Error: ${e?.message || e}`, 'OK', { duration: 4000 });
+    } finally {
+      this.procesandoPedidoId = null;
+    }
+  }
+
+  async rechazarPedidoOnline(p: any): Promise<void> {
+    const ref = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: `Rechazar ${p.numero}`,
+        message: 'El cliente va a ver el pedido como rechazado. ¿Por qué motivo?',
+        confirmText: 'Rechazar',
+        cancelText: 'Volver',
+        showInput: true,
+        inputLabel: 'Motivo',
+      },
+    });
+    const motivo = await firstValueFrom(ref.afterClosed());
+    if (!motivo) return;
+
+    this.procesandoPedidoId = p.id;
+    try {
+      const res: any = await firstValueFrom(this.repositoryService.rechazarPedidoOnline(p.id, motivo));
+      if (res?.success) {
+        this.snackBar.open(`Pedido ${p.numero} rechazado`, 'OK', { duration: 3000 });
+        await this.cargarPedidosOnline();
+        await this.loadDeliveries();
+      } else {
+        this.snackBar.open(`No se pudo rechazar: ${res?.error || ''}`, 'OK', { duration: 4000 });
+      }
+    } catch (e: any) {
+      this.snackBar.open(`Error: ${e?.message || e}`, 'OK', { duration: 4000 });
+    } finally {
+      this.procesandoPedidoId = null;
+    }
   }
 
   async loadDeliveries(): Promise<void> {
