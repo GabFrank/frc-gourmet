@@ -6,6 +6,7 @@ import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zon
 import { EstadoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { ensurePermission } from '../utils/auth.utils';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
+import { cancelarVentaCompletaEnTx } from '../utils/venta-reversa.utils';
 
 /**
  * Pedidos online — Fase 4: BANDEJA en el PdV (admin, vía /api/rpc, permisos staff).
@@ -162,17 +163,50 @@ export function registerPedidosOnlineAdminHandlers(
   });
 
   // ============== RECHAZAR ==============
+  // Estados desde los que se puede cancelar. Incluye EN_PREPARACION y LISTO a
+  // propósito: como aceptar ahora materializa, el camino normal deja el pedido
+  // en EN_PREPARACION de inmediato, y limitar el rechazo a RECIBIDO/ACEPTADO
+  // dejaba sin salida el caso más común — el cliente se arrepiente o el local no
+  // puede cumplirlo con la comida ya en la plancha. ENTREGADO no se cancela: el
+  // pedido ya salió; eso se resuelve con una devolución, no acá.
+  const ESTADOS_CANCELABLES = [
+    EstadoPedidoOnline.RECIBIDO,
+    EstadoPedidoOnline.ACEPTADO,
+    EstadoPedidoOnline.EN_PREPARACION,
+    EstadoPedidoOnline.LISTO,
+  ];
+
   ipcMain.handle('rechazar-pedido-online', async (_event: any, pedidoId: number, motivo: string) => {
     await ensurePermission(dataSource, getCurrentUser, PERM);
     const pedido = await repo().findOne({ where: { id: pedidoId } });
     if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
-    if (![EstadoPedidoOnline.RECIBIDO, EstadoPedidoOnline.ACEPTADO].includes(pedido.estado)) {
+    if (!ESTADOS_CANCELABLES.includes(pedido.estado)) {
       return { success: false, error: 'estado_no_rechazable', estadoActual: pedido.estado };
     }
-    pedido.estado = EstadoPedidoOnline.RECHAZADO;
-    pedido.motivoRechazo = motivo ? String(motivo).toUpperCase() : 'SIN MOTIVO';
-    const saved = await repo().save(pedido);
-    return { success: true, pedido: mapPedidoAdmin(saved) };
+
+    const motivoNormalizado = motivo ? String(motivo).toUpperCase() : 'SIN MOTIVO';
+    const usuarioId = getCurrentUser()?.id;
+
+    // Si el pedido ya se materializó hay una Venta viva detrás: cancelar sólo el
+    // pedido dejaría al local cobrando algo que el cliente da por cancelado, y
+    // con el stock ya descontado si además estaba cobrada. La reversa y el
+    // cambio de estado van en UNA transacción: o se cancelan las dos cosas o
+    // ninguna.
+    let reversa: any = null;
+    await dataSource.transaction(async (manager) => {
+      if (pedido.ventaId) {
+        reversa = await cancelarVentaCompletaEnTx(manager, dataSource, pedido.ventaId, {
+          usuarioId,
+          motivo: motivoNormalizado,
+        });
+      }
+      pedido.estado = EstadoPedidoOnline.RECHAZADO;
+      pedido.motivoRechazo = motivoNormalizado;
+      await manager.getRepository(PedidoOnline).save(pedido);
+    });
+
+    const saved = await repo().findOne({ where: { id: pedidoId } });
+    return { success: true, pedido: mapPedidoAdmin(saved || pedido), reversa };
   });
 
   // ============== ZONAS DE DELIVERY (CRUD admin) ==============

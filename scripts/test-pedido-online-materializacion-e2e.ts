@@ -25,12 +25,14 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { DataSource } from 'typeorm';
 
+import { invokeHandler, installHandlerRegistry } from '../electron/utils/handler-registry';
 import { getDataSourceOptions } from '../src/app/database/database.config';
 import {
   registerVentasHandlers,
   materializarPedidoOnlineEnVenta,
   crearComandaItemsSiCorresponde,
 } from '../electron/handlers/ventas.handler';
+import { registerPedidosOnlineAdminHandlers } from '../electron/handlers/pedidos-online-admin.handler';
 
 let passed = 0, failed = 0;
 function ok(cond: boolean, name: string, extra?: any) {
@@ -55,6 +57,10 @@ async function main() {
   const save = (e: any, data: any) => R(e).save(R(e).create(data));
 
   const { Usuario } = E('personas/usuario.entity');
+  const { Permission } = E('personas/permission.entity');
+  const { Role } = E('personas/role.entity');
+  const { RolePermission } = E('personas/role-permission.entity');
+  const { UsuarioRole } = E('personas/usuario-role.entity');
   const { Moneda } = E('financiero/moneda.entity');
   const { TipoPrecio } = E('financiero/tipo-precio.entity');
   const { Dispositivo } = E('financiero/dispositivo.entity');
@@ -77,6 +83,10 @@ async function main() {
 
   // ── Fixtures ────────────────────────────────────────────────────────────
   const admin = await save(Usuario, { nickname: 'admin', password: 'x', activo: true });
+  const perm = await save(Permission, { codigo: 'VENTAS_PDV', descripcion: 'PDV', activo: true });
+  const role = await save(Role, { descripcion: 'ADMIN', activo: true });
+  await save(RolePermission, { role, permission: perm });
+  await save(UsuarioRole, { usuario: admin, role });
   const moneda = await save(Moneda, { denominacion: 'GUARANI', simbolo: 'Gs', principal: true });
   const tipoPrecio = await save(TipoPrecio, { descripcion: 'NORMAL', activo: true });
   const dispositivo = await save(Dispositivo, { nombre: 'CAJA1', activo: true });
@@ -98,7 +108,9 @@ async function main() {
   // El ruteo a cocina es por esta M2M: sin un sector activo no hay ComandaItem.
   await save(ProductoSector, { producto, sector, activo: true, prioridad: 1 });
 
+  installHandlerRegistry();
   registerVentasHandlers(ds, () => admin);
+  registerPedidosOnlineAdminHandlers(ds, () => admin);
 
   const nuevoPedido = async (tipo: string, mesaId?: number) => {
     const p = await save(PedidoOnline, {
@@ -190,6 +202,35 @@ async function main() {
   // Mismo hook que dispara el PdV al agregar un item.
   await crearComandaItemsSiCorresponde(ds, viMostrador.id);
   ok(await comandaItemsDe(vMostrador.id) === 0, 'sin mesa, sin comanda y canalOrigen=LOCAL → no genera ComandaItem');
+
+  // ── 7 · Cancelar un pedido YA materializado revierte la venta ───────────
+  console.log('\n[7] Cancelar un pedido en preparación revierte la venta');
+  const pCancel = await nuevoPedido('DELIVERY');
+  const matCancel = await materializarPedidoOnlineEnVenta(ds, pCancel.id, undefined, admin.id);
+  const estadoPrevio = (await R(PedidoOnline).findOneBy({ id: pCancel.id }))?.estado;
+  ok(estadoPrevio === 'EN_PREPARACION', 'parte de EN_PREPARACION (el camino normal)', estadoPrevio);
+
+  const res: any = await invokeHandler('rechazar-pedido-online', pCancel.id, 'SIN STOCK');
+  ok(res?.success === true, 'EN_PREPARACION ahora es cancelable', res?.error);
+
+  const pDespues = await R(PedidoOnline).findOneBy({ id: pCancel.id });
+  ok(pDespues?.estado === 'RECHAZADO', 'el pedido queda RECHAZADO', pDespues?.estado);
+  ok(pDespues?.motivoRechazo === 'SIN STOCK', 'guarda el motivo en UPPERCASE', pDespues?.motivoRechazo);
+
+  const vCancel = await R(Venta).findOneBy({ id: matCancel.ventaId });
+  ok(vCancel?.estado === 'CANCELADA', 'la venta detrás queda CANCELADA', vCancel?.estado);
+  const itemsVivos = await R(VentaItem)
+    .createQueryBuilder('vi')
+    .where('vi.venta_id = :v AND vi.estado = :e', { v: matCancel.ventaId, e: 'ACTIVO' })
+    .getCount();
+  ok(itemsVivos === 0, 'no quedan items activos en la venta', itemsVivos);
+
+  console.log('\n[8] Un pedido ENTREGADO no se cancela');
+  const pEnt = await nuevoPedido('DELIVERY');
+  await R(PedidoOnline).update({ id: pEnt.id }, { estado: 'ENTREGADO' } as any);
+  const resEnt: any = await invokeHandler('rechazar-pedido-online', pEnt.id, 'TARDE');
+  ok(resEnt?.success === false && resEnt?.error === 'estado_no_rechazable',
+     'ENTREGADO se rechaza como no cancelable', resEnt);
 
   await ds.destroy();
   console.log(`\n${passed} passed, ${failed} failed`);
