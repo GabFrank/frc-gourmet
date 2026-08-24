@@ -15,6 +15,8 @@ export {
   bucketsForVentana,
   buildRangoChips,
   anclaJornada,
+  inicioDelDia,
+  finDelDia,
   ventanaDeFechas,
   parseFechaLocal,
 } from '../../src/app/shared/utils/dashboard-rangos.util';

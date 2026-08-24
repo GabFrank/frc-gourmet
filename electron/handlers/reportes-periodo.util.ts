@@ -24,40 +24,32 @@ export interface PeriodoResuelto {
 }
 
 
-import { parseFechaLocal } from '../utils/dashboard-rangos.util';
+import {
+  anclaJornada,
+  finDelDia,
+  inicioDelDia,
+  parseFechaLocal,
+} from '../utils/dashboard-rangos.util';
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
 /**
- * JORNADA COMERCIAL — el mismo corte que usan los dashboards.
+ * JORNADA COMERCIAL — literalmente las mismas funciones que usan los dashboards.
  *
- * Este archivo tenia su PROPIA aritmetica de dias, independiente de
- * `dashboard-rangos.util.ts`. Con la jornada encendida y esta sin enterarse, una
- * venta de la 01:30 aparecia en dias distintos segun la pantalla: los dashboards
- * la contaban en la jornada de ayer y Reportes en el dia calendario de hoy. Es
- * el mismo desfase card/chart que ya se corrigio una vez, ahora entre pantallas.
+ * Este archivo tenia su PROPIA aritmetica de dias. Con la jornada encendida y
+ * esta sin enterarse, una venta de la 01:30 aparecia en dias distintos segun la
+ * pantalla: los dashboards la contaban en la jornada de ayer y Reportes en el
+ * dia calendario de hoy.
  *
- * `inicioJornada = 0` reproduce exactamente el dia calendario.
- * Aritmetica de CALENDARIO (`setHours`/`setDate`), nunca sumando milisegundos:
- * eso rompe en dias de transicion de horario de verano.
+ * Se importan en vez de reimplementarse a proposito. Mientras fueron dos copias
+ * "equivalentes", un ajuste a una no llegaba a la otra — que es exactamente como
+ * nacio el desfase que se acaba de corregir. Con un solo origen, no puede volver
+ * a pasar.
  */
-function startOfDay(d: Date, inicioJornada = 0): Date {
-  const x = new Date(d);
-  x.setHours(inicioJornada, 0, 0, 0);
-  return x;
-}
-function endOfDay(d: Date, inicioJornada = 0): Date {
-  const x = startOfDay(d, inicioJornada);
-  x.setDate(x.getDate() + 1);
-  x.setMilliseconds(x.getMilliseconds() - 1);
-  return x;
-}
-/** La fecha cuya jornada esta en curso: antes del corte, es la de ayer. */
-function anclaDia(d: Date, inicioJornada = 0): Date {
-  const x = new Date(d);
-  if (x.getHours() < inicioJornada) x.setDate(x.getDate() - 1);
-  return x;
-}
+const startOfDay = inicioDelDia;
+const endOfDay = finDelDia;
+const anclaDia = anclaJornada;
+
 function addDays(d: Date, n: number): Date { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
 function fmtDia(d: Date): string { return `${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`; }
 

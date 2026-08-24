@@ -139,6 +139,13 @@ export class VentasResumenPage implements OnInit {
 
   cajasOpciones: CajaOpcion[] = [];
 
+  /**
+   * Nro. de la carga en curso. Dos toques seguidos en Aplicar disparaban dos
+   * pedidos y pintaba el que llegara ultimo, no el ultimo pedido: los datos de
+   * un filtro con el rotulo de otro. Ahora la respuesta vieja se descarta.
+   */
+  private cargaSeq = 0;
+
   readonly filtros = this.fb.nonNullable.group({
     desde: [''],
     hasta: [''],
@@ -257,11 +264,13 @@ export class VentasResumenPage implements OnInit {
       this.loading = false;
       return;
     }
+    const seq = ++this.cargaSeq;
     this.loading = true;
     this.error = null;
     this.sinResultados = false;
     try {
       const k: any = await firstValueFrom(this.repo.getDashboardVentasKpis(this.paramKpis()));
+      if (seq !== this.cargaSeq) return; // llego tarde: mando otro filtro despues
       if (!k) {
         this.error = 'No se pudo cargar el resumen';
         return;
@@ -328,9 +337,9 @@ export class VentasResumenPage implements OnInit {
         cantidadVentas: Number(c.cantidadVentas || 0),
       }));
     } catch {
-      this.error = 'No se pudo cargar el resumen';
+      if (seq === this.cargaSeq) this.error = 'No se pudo cargar el resumen';
     } finally {
-      this.loading = false;
+      if (seq === this.cargaSeq) this.loading = false;
     }
   }
 }

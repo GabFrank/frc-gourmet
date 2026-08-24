@@ -71,14 +71,14 @@ export function anclaJornada(now: Date, inicioJornada = 0): Date {
 }
 
 /** Instante en que arranca la jornada de la fecha `d`. */
-function inicioDelDia(d: Date, inicioJornada = 0): Date {
+export function inicioDelDia(d: Date, inicioJornada = 0): Date {
   const r = new Date(d);
   r.setHours(inicioJornada, 0, 0, 0);
   return r;
 }
 
 /** Último instante de la jornada de `d`: el arranque de la siguiente, menos 1ms. */
-function finDelDia(d: Date, inicioJornada = 0): Date {
+export function finDelDia(d: Date, inicioJornada = 0): Date {
   const r = inicioDelDia(d, inicioJornada);
   r.setDate(r.getDate() + 1);
   r.setMilliseconds(r.getMilliseconds() - 1);
