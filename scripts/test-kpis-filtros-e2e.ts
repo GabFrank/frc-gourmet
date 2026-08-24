@@ -24,7 +24,11 @@ import { DataSource } from 'typeorm';
 
 import { invokeHandler } from '../electron/utils/handler-registry';
 import { getDataSourceOptions } from '../src/app/database/database.config';
-import { registerDashboardVentasHandlers } from '../electron/handlers/dashboard-ventas.handler';
+import {
+  getInicioJornada,
+  invalidarCacheJornada,
+  registerDashboardVentasHandlers,
+} from '../electron/handlers/dashboard-ventas.handler';
 import { registerFinancieroHandlers } from '../electron/handlers/financiero.handler';
 
 let passed = 0, failed = 0;
@@ -204,6 +208,19 @@ async function main() {
   {
     const cajas: any[] = await invokeHandler('get-cajas-selector', { limite: 1 }) as any;
     ok(cajas.length === 1, 'respeta el límite', cajas.length);
+  }
+
+  console.log('\n[F] el cambio de configuración se ve enseguida');
+  {
+    // `getInicioJornada` cachea 60s. Sin invalidar, el usuario cambia el corte,
+    // vuelve al resumen y sigue viendo el anterior durante un minuto.
+    ok((await getInicioJornada(ds)) === 7, 'arranca en 7');
+    await ds.query(`UPDATE pdv_config SET inicio_jornada_hora = 5`);
+    ok((await getInicioJornada(ds)) === 7, 'sin invalidar, sigue el valor cacheado');
+    invalidarCacheJornada();
+    ok((await getInicioJornada(ds)) === 5, 'tras invalidar, toma el nuevo valor');
+    await ds.query(`UPDATE pdv_config SET inicio_jornada_hora = 7`);
+    invalidarCacheJornada();
   }
 
   await ds.destroy();

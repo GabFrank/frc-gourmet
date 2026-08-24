@@ -54,6 +54,7 @@ export class PdvConfigDialogComponent implements OnInit {
       ocuparMesaAlVincularComanda: [false],
       pizzaMaxSabores: [2],
       pizzaEstrategiaPrecio: ['MAYOR_PRECIO'],
+      inicioJornadaHora: [7],
       umbralDiferenciaBaja: [5],
       umbralDiferenciaAlta: [15],
       deliveryTiempoAmarillo: [30],
@@ -75,6 +76,9 @@ export class PdvConfigDialogComponent implements OnInit {
           ocuparMesaAlVincularComanda: cfg.ocuparMesaAlVincularComanda || false,
           pizzaMaxSabores: cfg.pizzaMaxSabores || 2,
           pizzaEstrategiaPrecio: cfg.pizzaEstrategiaPrecio || 'MAYOR_PRECIO',
+          // `?? 7` y no `|| 7`: 0 es un valor valido (jornada = dia calendario)
+          // y con `||` se convertiria en 7 cada vez que se abre el dialogo.
+          inicioJornadaHora: cfg.inicioJornadaHora ?? 7,
           umbralDiferenciaBaja: cfg.umbralDiferenciaBaja || 5,
           umbralDiferenciaAlta: cfg.umbralDiferenciaAlta || 15,
           deliveryTiempoAmarillo: cfg.deliveryTiempoAmarillo || 30,
