@@ -189,11 +189,13 @@ describe un comportamiento que no existe.
 de Ventas. No está en `MENU_TREE` → **no aparece ni en el sidenav ni en el
 buscador global**, violando la regla 22 del proyecto.
 
-### B-9 · Los umbrales de tiempo no son editables
+### B-9 · La configuración de delivery se agota en dos umbrales
 
-`PdvConfig.deliveryTiempoAmarillo` / `deliveryTiempoRojo` existen en la entidad
-y los lee el diálogo, pero `pdv-config-dialog` **no los expone**: de hecho son
-30 y 60 fijos, salvo que se edite la base a mano.
+`pdv-config-dialog` tiene una sección DELIVERY, pero sólo con
+`deliveryTiempoAmarillo` y `deliveryTiempoRojo`. Todo lo demás que el módulo
+decide —si está habilitado, la zona por defecto, si la dirección es
+obligatoria, si hace falta repartidor para enviar, el tamaño de página, la
+auto-impresión— está fijo en el código de los componentes (ver §E).
 
 ---
 
@@ -260,7 +262,6 @@ Van a la nueva sección **Delivery** de la configuración del PdV:
 
 | Hoy | Dónde está hardcodeado |
 |---|---|
-| Umbral amarillo 30 min / rojo 60 min | Existen en `PdvConfig` pero sin UI (B-9) |
 | `pageSize = 20` | `delivery-dialog.component.ts:78` |
 | Zona por defecto = la de menor valor | `crear-delivery-dialog.component.ts:96` (`preciosDelivery[0]`) |
 | Teléfono mínimo 4 dígitos / búsqueda desde 3 | `canConfirm` y el `debounce` del autocomplete |
