@@ -289,6 +289,52 @@ async function main() {
   ok(resEnt?.success === false && resEnt?.error === 'estado_no_rechazable',
      'ENTREGADO se rechaza como no cancelable', resEnt);
 
+  // ── 9 · Los tres bloqueantes de la auditoría del diff ───────────────────
+  console.log('\n[9] Rechazar un pedido de MESA no puede cancelar la cuenta compartida');
+  const mesaComp = await save(PdvMesa, { numero: 12, activo: true, estado: 'DISPONIBLE' });
+  const pA = await nuevoPedido('MESA_QR', mesaComp.id);
+  const pB = await nuevoPedido('MESA_QR', mesaComp.id);
+  const matA = await materializarPedidoOnlineEnVenta(ds, pA.id, undefined, admin.id);
+  const matB = await materializarPedidoOnlineEnVenta(ds, pB.id, undefined, admin.id);
+  ok(matA.ventaId === matB.ventaId, 'los dos comensales comparten la cuenta de la mesa');
+
+  const rechMesa: any = await invokeHandler('rechazar-pedido-online', pA.id, 'SE ARREPINTIO');
+  ok(rechMesa?.success === false && rechMesa?.error === 'mesa_ya_materializada',
+     'rechazar uno se corta en vez de revertir la cuenta entera', rechMesa);
+  const ventaComp = await R(Venta).findOneBy({ id: matA.ventaId });
+  ok(ventaComp?.estado === 'ABIERTA', 'la cuenta de la mesa sigue viva', ventaComp?.estado);
+  const itemsComp = await R(VentaItem)
+    .createQueryBuilder('vi')
+    .where('vi.venta_id = :v AND vi.estado = :e', { v: matA.ventaId, e: 'ACTIVO' })
+    .getCount();
+  ok(itemsComp === 2, 'los platos de los dos comensales siguen activos', itemsComp);
+
+  console.log('\n[10] Revertir una venta ya cobrada exige el permiso reservado');
+  const pCobrado = await nuevoPedido('DELIVERY');
+  const matCobrado = await materializarPedidoOnlineEnVenta(ds, pCobrado.id, undefined, admin.id);
+  await R(Venta).update({ id: matCobrado.ventaId }, { estado: 'CONCLUIDA' } as any);
+  let bloqueado = false;
+  try {
+    await invokeHandler('rechazar-pedido-online', pCobrado.id, 'TARDE');
+  } catch (e: any) {
+    bloqueado = e?.code === 'FORBIDDEN' && /VENTAS_DELIVERY_CANCELAR_COBRADO/.test(String(e?.message));
+  }
+  ok(bloqueado, 'sin VENTAS_DELIVERY_CANCELAR_COBRADO no se puede revertir un cobro');
+
+  console.log('\n[11] Un retiro materializado es cobrable desde la bandeja');
+  const pRetiro = await nuevoPedido('PICKUP');
+  const matRetiro = await materializarPedidoOnlineEnVenta(ds, pRetiro.id, undefined, admin.id);
+  const retiros: any = await invokeHandler('get-retiros-online-en-curso');
+  const encontrado = (retiros || []).find((r: any) => r.id === pRetiro.id);
+  ok(!!encontrado, 'el retiro aparece en la lista de retiros en curso');
+  ok(encontrado?.ventaId === matRetiro.ventaId, 'con su venta, que es lo que se cobra');
+  ok(encontrado?.cobrada === false, 'y marcado como sin cobrar', encontrado?.cobrada);
+
+  await R(Venta).update({ id: matRetiro.ventaId }, { estado: 'CONCLUIDA' } as any);
+  const retiros2: any = await invokeHandler('get-retiros-online-en-curso');
+  ok(retiros2.find((r: any) => r.id === pRetiro.id)?.cobrada === true,
+     'una vez cobrada la venta, el retiro queda marcado COBRADO');
+
   await ds.destroy();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

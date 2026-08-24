@@ -84,6 +84,18 @@ export class CuentaPage implements OnInit {
     this.tienePassword = !!(this.auth.cuenta as any)?.tienePassword;
   }
 
+  /** Nunca mostrar el código crudo del backend al cliente. */
+  private mensajeError(codigo?: string): string {
+    switch (codigo) {
+      case 'email_en_uso': return 'Ese email ya está en uso.';
+      case 'falta_password_actual': return 'Ingresá tu contraseña actual para cambiarla.';
+      case 'password_actual_incorrecta': return 'La contraseña actual no coincide.';
+      case 'cuenta_no_encontrada': return 'No encontramos tu cuenta. Volvé a ingresar.';
+      case 'no_autenticado': return 'Tu sesión venció. Volvé a ingresar.';
+      default: return 'No pudimos guardar los cambios. Probá de nuevo.';
+    }
+  }
+
   guardar(): void {
     this.ok = false; this.error = null; this.guardando = true;
     const data: any = { nombre: this.nombre, email: this.email };
@@ -98,7 +110,7 @@ export class CuentaPage implements OnInit {
           this.ok = true; this.password = ''; this.passwordActual = ''; this.tienePassword = true;
           if (this.completar) this.router.navigateByUrl(this.volver);
         } else {
-          this.error = res?.error === 'email_en_uso' ? 'Ese email ya está en uso.' : res?.error || 'Error';
+          this.error = this.mensajeError(res?.error);
         }
       },
       error: (e) => { this.guardando = false; this.error = e?.message || 'Error'; },

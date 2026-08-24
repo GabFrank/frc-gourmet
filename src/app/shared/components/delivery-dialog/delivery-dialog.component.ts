@@ -48,6 +48,18 @@ interface DeliveryRow {
   otraCaja: boolean;
 }
 
+/** Estados del pedido online, en el idioma del mostrador. */
+const ESTADO_PEDIDO_LABEL: Record<string, string> = {
+  RECIBIDO: 'Recibido',
+  ACEPTADO: 'Aceptado',
+  EN_PREPARACION: 'En preparación',
+  LISTO: 'Listo',
+  EN_CAMINO: 'En camino',
+  ENTREGADO: 'Entregado',
+  RECHAZADO: 'Rechazado',
+  CANCELADO: 'Cancelado',
+};
+
 @Component({
   selector: 'app-delivery-dialog',
   templateUrl: './delivery-dialog.component.html',
@@ -100,6 +112,12 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
    * abierto, y una segunda pantalla es una segunda cosa que hay que mirar.
    */
   pedidosOnline: any[] = [];
+  /**
+   * Retiros ya aceptados y sin entregar. Van acá porque un PICKUP no genera
+   * ningún `Delivery`, así que su venta no aparece en la tabla de la izquierda
+   * ni en ninguna otra pantalla del PdV: sin esta lista no habría dónde cobrarlo.
+   */
+  retirosEnCurso: any[] = [];
   procesandoPedidoId: number | null = null;
   private pedidosInterval: any;
 
@@ -147,13 +165,82 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       const pedidos = await firstValueFrom(
         this.repositoryService.getPedidosOnlineAdmin({ estado: 'RECIBIDO' }),
       );
-      this.pedidosOnline = (pedidos || []).map((p: any) => this.mapPedidoOnline(p));
+      // El handler devuelve DESC (más nuevo arriba), que sirve para la pantalla
+      // de historial pero no para una cola de atención: acá el que espera hace
+      // más tiempo va primero, y el orden se mantiene estable aunque entren
+      // pedidos nuevos mientras el cajero está por tocar un botón.
+      this.pedidosOnline = (pedidos || [])
+        .map((p: any) => this.mapPedidoOnline(p))
+        .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+      const retiros = await firstValueFrom(this.repositoryService.getRetirosOnlineEnCurso());
+      this.retirosEnCurso = (retiros || []).map((r: any) => ({
+        ...this.mapPedidoOnline(r),
+        cobrada: !!r.cobrada,
+        estadoLabel: ESTADO_PEDIDO_LABEL[r.estado] || r.estado,
+      }));
     } catch (e) {
       // Un fallo del poll no puede romper la pantalla de delivery, que es lo
       // que el cajero está usando para trabajar.
       console.warn('No se pudieron cargar los pedidos online:', e);
     }
   }
+
+  /** Cobra un retiro: misma pantalla de cobro que usa el delivery. */
+  async cobrarRetiro(r: any): Promise<void> {
+    if (!r?.ventaId) return;
+    this.procesandoPedidoId = r.id;
+    try {
+      const venta = await firstValueFrom(this.repositoryService.getVenta(r.ventaId));
+      const items = await firstValueFrom(this.repositoryService.getVentaItems(r.ventaId));
+      const dialogData: CobrarVentaDialogData = {
+        venta,
+        items: items || [],
+        monedas: this.data.filteredMonedas?.length > 0 ? this.data.filteredMonedas : this.data.monedas,
+        exchangeRates: this.data.exchangeRates,
+        principalMoneda: this.data.principalMoneda,
+        caja: this.data.caja,
+      };
+      const ref = this.dialog.open(CobrarVentaDialogComponent, {
+        width: '80vw', height: '80vh', maxWidth: '95vw', disableClose: true, data: dialogData,
+      });
+      const res = await firstValueFrom(ref.afterClosed());
+      if (res?.success) this.snackBar.open(`Retiro ${r.numero} cobrado`, 'OK', { duration: 3000 });
+      await this.cargarPedidosOnline();
+    } catch (e) {
+      this.mostrarError(e, 'No se pudo abrir el cobro del retiro');
+    } finally {
+      this.procesandoPedidoId = null;
+    }
+  }
+
+  /** Cierra el retiro cuando el cliente ya se lo llevó. */
+  async entregarRetiro(r: any): Promise<void> {
+    this.procesandoPedidoId = r.id;
+    try {
+      const res: any = await firstValueFrom(
+        this.repositoryService.avanzarEstadoPedidoOnline(r.id, 'ENTREGADO'),
+      );
+      if (res?.success) {
+        this.snackBar.open(`Retiro ${r.numero} entregado`, 'OK', { duration: 3000 });
+        await this.cargarPedidosOnline();
+      } else {
+        this.snackBar.open(`No se pudo cerrar: ${res?.detalle || res?.error || ''}`, 'OK', { duration: 5000 });
+      }
+    } catch (e) {
+      this.mostrarError(e, 'No se pudo cerrar el retiro');
+    } finally {
+      this.procesandoPedidoId = null;
+    }
+  }
+
+  /** Deselecciona el delivery abierto para que el panel muestre la cola. */
+  verColaPedidos(): void {
+    this.selectedDelivery = null;
+  }
+
+  /** Sin esto Angular reconstruye toda la cola en cada poll de 15s. */
+  trackPedido(_i: number, p: any): number { return p.id; }
 
   private mapPedidoOnline(p: any): any {
     const creado = p.createdAt ? new Date(p.createdAt).getTime() : Date.now();
@@ -195,7 +282,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       await this.cargarPedidosOnline();
       await this.loadDeliveries();
     } catch (e: any) {
-      this.snackBar.open(`Error: ${e?.message || e}`, 'OK', { duration: 4000 });
+      this.mostrarError(e, 'No se pudo aceptar el pedido');
     } finally {
       this.procesandoPedidoId = null;
     }
@@ -226,7 +313,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
         this.snackBar.open(`No se pudo rechazar: ${res?.error || ''}`, 'OK', { duration: 4000 });
       }
     } catch (e: any) {
-      this.snackBar.open(`Error: ${e?.message || e}`, 'OK', { duration: 4000 });
+      this.mostrarError(e, 'No se pudo rechazar el pedido');
     } finally {
       this.procesandoPedidoId = null;
     }

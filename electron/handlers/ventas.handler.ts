@@ -277,7 +277,7 @@ export async function materializarPedidoOnlineEnVenta(
         estado: VentaEstado.ABIERTA,
         caja: { id: cajaId } as any,
         canalOrigen: 'WEB',
-        nombreCliente: pedido.nombreCliente || undefined,
+        nombreCliente: pedido.nombreCliente ? pedido.nombreCliente.toUpperCase() : undefined,
       });
 
       // DELIVERY: además de la venta se abre el registro de reparto, en la misma

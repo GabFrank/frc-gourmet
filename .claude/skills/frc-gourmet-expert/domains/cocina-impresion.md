@@ -307,3 +307,26 @@ Auth del TV: reusa el `authGuard` + shim HTTP del PWA (`154f193`); se loguea una
 - **Ticket de cierre de caja** (`a4761a4`): handler `print-cierre-caja({cajaId, printerId?})` + `printCierreCajaInternal` usando `resumen-caja.utils.ts` `computeResumenCaja()` (apertura/cierre, tiempo abierto, arqueo por moneda, retiros). **Auto-impresión al cerrar** desde `create-caja-dialog`. Distinto de `print-conteo-caja-ticket` (acta breve).
 
 > Ambos TODOs históricos "KDS" e "impresión real de tickets/comandas" quedan **completados** con esto (ver [workflows/todos-pendientes.md](../workflows/todos-pendientes.md)).
+
+
+---
+
+## El gate de "va a cocina" (2026-08-24)
+
+Una venta genera `ComandaItem` -y por lo tanto llega al KDS y a la impresora del
+sector- sólo si pasa el gate de `ventas.handler.ts`:
+
+```ts
+mesa || comanda || delivery || canalOrigen !== 'LOCAL'
+```
+
+Antes era sólo `mesa || comanda`, y por eso **los ítems de un delivery nunca se
+imprimían en la impresora de su producto**: la venta de un delivery no tiene mesa
+ni comanda. El único papel que salía era el ticket único del reparto, que usa el
+rol `TICKET_VENTA` y no respeta la asignación por producto.
+
+Al desplegar ese cambio, **la cocina empieza a recibir comandas de delivery que
+antes no recibía**. Es lo correcto, pero es un cambio visible en la operación:
+conviene avisar antes de que aparezcan tickets nuevos.
+
+Detalle en [domains/pedidos-online.md](pedidos-online.md).

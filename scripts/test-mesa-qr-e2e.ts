@@ -102,9 +102,12 @@ async function main() {
 
   // Seed base
   const admin = await save(Usuario, { nickname: 'admin', password: 'x', activo: true });
-  const perm = await save(Permission, { codigo: 'VENTAS_PDV', descripcion: 'PDV', activo: true });
   const role = await save(Role, { descripcion: 'ADMIN', activo: true });
-  await save(RolePermission, { role, permission: perm });
+  // El módulo de pedidos online dejó de usar `VENTAS_PDV` para todo.
+  for (const codigo of ['VENTAS_PDV', 'PEDIDOS_ONLINE_VER', 'PEDIDOS_ONLINE_GESTIONAR', 'PEDIDOS_ONLINE_CONFIGURAR']) {
+    const permiso = await save(Permission, { codigo, descripcion: codigo, activo: true });
+    await save(RolePermission, { role, permission: permiso });
+  }
   await save(UsuarioRole, { usuario: admin, role });
   const moneda = await save(Moneda, { denominacion: 'GUARANI', simbolo: 'Gs', principal: true });
   const tipoPrecio = await save(TipoPrecio, { descripcion: 'NORMAL', activo: true });

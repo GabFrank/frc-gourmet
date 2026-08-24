@@ -2,6 +2,34 @@
 
 El módulo más visible y operativamente más usado. Ventas, mesas, comandas, delivery, atajos, multi-sabor, descuento de stock automático.
 
+
+## Qué venta va a cocina (cambió el 2026-08-24)
+
+Los hooks `crearComandaItemsSiCorresponde` y `autoPrintComandaIfNeeded`
+(`ventas.handler.ts`) deciden si una venta genera `ComandaItem` — y sin
+`ComandaItem` no hay KDS ni ruteo a la impresora del sector del producto.
+
+El gate era `mesa || comanda`. Eso dejaba afuera **al delivery**: una venta creada
+por `delivery-crear` no tiene mesa ni comanda, así que sus ítems **nunca se
+imprimían en la impresora asignada al producto**. Lo único que salía era el ticket
+único del reparto (`printDeliveryTicketInternal`, rol `TICKET_VENTA`), que es otra
+cosa. Era un bug, no una limitación de diseño.
+
+Hoy el gate es:
+
+```ts
+mesa || comanda || delivery || canalOrigen !== 'LOCAL'
+```
+
+O sea: **van a cocina mesa, comanda, delivery y los pedidos de la web; la única
+que no va es la venta rápida de mostrador.** `ventas.canal_origen` es la columna
+nueva (`LOCAL` por default, así que ninguna venta histórica cambia de
+comportamiento) y además sirve para separar el canal en los reportes.
+
+⚠️ Si tocás esos hooks, acordate de cargar las relaciones: el chequeo de
+`venta.delivery?.id` da siempre falso si la consulta no la trae.
+
+
 ## Estado de la mesa: quién la ocupa y quién la libera (2026-08)
 
 **El estado de la mesa lo maneja el backend, junto con la venta.** Antes el

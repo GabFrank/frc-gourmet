@@ -1084,6 +1084,9 @@ export class RepositoryHttpService extends RepositoryService {
   contarPedidosOnlinePendientes(): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.contarPedidosOnlinePendientes() no esta implementado todavia.`)) as any;
   }
+  getRetirosOnlineEnCurso(): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getRetirosOnlineEnCurso() no esta implementado todavia.`)) as any;
+  }
   aceptarPedidoOnline(pedidoId: number, data?: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.aceptarPedidoOnline() no esta implementado todavia.`)) as any;
   }

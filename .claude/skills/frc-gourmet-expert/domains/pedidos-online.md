@@ -89,23 +89,56 @@ Todas las ops vía `/pub/rpc`:
 - Solo corre en **modo `server`**; en standalone/client no hay storefront.
 - Migrations del dominio usan timestamps rounded consecutivos (contra la convención) — no imitar.
 
-## Huecos conocidos (auditoría 2026-08-24)
+## Estado tras el trabajo de 2026-08-24
 
-El subsistema está entero para **MESA_QR** y a medio camino para **PICKUP/DELIVERY**. Lo que el
-código NO hace, aunque el modelo de datos o los enums sugieran que sí:
+PICKUP y DELIVERY **ya llegan a la operación**. Lo que cambió:
 
-| Hueco | Evidencia |
+| Antes | Ahora |
 |---|---|
-| **PICKUP/DELIVERY no se materializan en `Venta`** | `materializarPedidoOnlineEnVenta` exige `mesaId` (`ventas.handler.ts:157`); la bandeja gatea el botón a MESA_QR (`list-pedidos-online.component.html:89`); el PdV no tiene una sola referencia a pedidos online. El cajero retipea. |
-| **`vincular-venta-pedido-online` nunca se llama** | Cableado hasta `repository.service.ts:526` + `preload.ts:2345`; ningún componente lo invoca. En `mode=client` además tira "no implementado" (`repository-http.service.ts:1097`). |
-| **DELIVERY online no crea un `Delivery`** | `PedidoOnline.deliveryId` no se escribe en ningún handler. El módulo delivery (PR #263, 8 canales `delivery-*`) no referencia pedidos online ni viceversa: no entran al tablero, ni asignan repartidor, ni imprimen ticket. |
-| **El costo de envío siempre es 0** | El checkout fuerza `costoEnvio = 0` y muestra «A coordinar» (`checkout.page.ts:127`), nunca manda `zonaDeliveryId`, y **ningún handler muta `pedido.costoEnvio` después de crearlo**. Las `ZonaDelivery` (CRUD admin + op `zonas.get` + lógica de tarifa/mínimo en `crear-pedido-online:377-390`) están vivas en backend y **muertas en el storefront**. |
-| **`EstadoPedidoOnline.CANCELADO`: 0 usos** | El cliente no puede cancelar su pedido; no hay op pública. |
-| **Cero notificación al cliente** | Avanzar estado en la bandeja no dispara nada; el storefront debe preguntar con `pedido.estado`. |
-| **BANCARD / UPAY / PAGOPAR: 0 usos** | Declarados en `MetodoPagoOnline`, sin implementación. Solo EFECTIVO. `CanalPedidoOnline.WHATSAPP` idem. |
-| **Rechazar no revierte la venta** | `rechazar-pedido-online` acepta un ACEPTADO con `ventaId` seteado y no toca la `Venta`. |
+| `materializarPedidoOnlineEnVenta` exigía `mesaId` | Bifurca por canal. Con mesa reusa la cuenta; sin mesa abre una venta propia por pedido |
+| Una venta sin mesa ni comanda no generaba `ComandaItem` | `ventas.canal_origen` (`LOCAL`/`WEB`/`QR_MESA`) hace explícito el «va a cocina». El gate ahora es mesa, comanda, **delivery** o web |
+| Aceptar sólo cambiaba el estado | Aceptar **materializa en la misma acción** y manda a cocina |
+| `PedidoOnline.deliveryId` nunca se escribía | Un DELIVERY abre su `Delivery` en la misma transacción (`crearDeliveryEnTx`) y arrastra `costoEnvio` a `venta.costoDelivery` |
+| Rechazar dejaba la venta viva | Corre `cancelarVentaCompletaEnTx` en la misma transacción, y admite cancelar desde `EN_PREPARACION`/`LISTO` |
+| El envío quedaba siempre en 0 | Zonas dibujadas como **polígonos**; el servidor resuelve por el pin del cliente (`geo.utils.ts`) |
+| Todo con `VENTAS_PDV` | `PEDIDOS_ONLINE_VER` / `_GESTIONAR` (CAJERO+GERENTE) / `_CONFIGURAR` (GERENTE) |
+| Nadie llamaba a `contar-pedidos-online-pendientes` | Dos badges en el botón DELIVERY del PdV + beep WebAudio cuando sube el conteo |
+| La bandeja era una pantalla aparte | La cola vive en el **panel derecho del diálogo de delivery** |
+| `mis-pedidos` era carga única | Poll de 12 s que se autodetiene |
 
-**Archivos clave:** `entities/pedidos-online/*`, `electron/handlers/pedidos-online*.handler.ts` (5), `electron/server/public-routes.ts` + `server.ts`, `electron/utils/customer-jwt.utils.ts` + `whatsapp-sender.ts`, `main.ts` (storefrontRoot `:225-234`, `startServer` `:246`), `electron/utils/register-all-handlers.ts:178-183`, `pages/ventas/pedidos-online/list-pedidos-online.component.ts`, `projects/storefront/src/app/`.
+### Reglas que hay que respetar al tocar esto
+
+- **La cuenta de una mesa es compartida.** Varios comensales de la misma mesa
+  materializan en UNA `Venta`. Por eso `rechazar-pedido-online` **se niega** a
+  revertir un pedido MESA_QR ya materializado (`error: 'mesa_ya_materializada'`):
+  cancelar esa venta borraría los platos de los demás. No se sabe qué `VentaItem`
+  vino de qué pedido — no se persiste el vínculo.
+- **Revertir un cobro pide permiso aparte.** Si la venta está `CONCLUIDA`,
+  rechazar exige `VENTAS_DELIVERY_CANCELAR_COBRADO`, igual que `delivery-cancelar`.
+  Ese permiso **no lo tiene ningún rol plantilla** a propósito.
+- **Un PICKUP no genera `Delivery`**, así que su venta no sale en la tabla del
+  diálogo. Vive en la sección «Retiros en curso» del panel derecho
+  (`get-retiros-online-en-curso`), que es el único lugar donde se puede cobrar.
+- **El pin es obligatorio para DELIVERY**: sin coordenadas no hay polígono que
+  resolver. La dirección escrita quedó como complemento para el repartidor.
+- **GeoJSON va en `[lng, lat]`.** Invertirlo es el error clásico; hay un test que
+  lo cubre.
+
+### Lo que sigue pendiente
+
+- El cliente **no puede cancelar** su pedido (`EstadoPedidoOnline.CANCELADO`
+  sigue sin usarse).
+- **No hay aviso al cliente por WhatsApp**; el seguimiento es por poll.
+- `CuentaCliente` **nunca se vincula** al `Cliente` interno: sin crédito, sin CPC,
+  sin dashboard. Y el storefront no pide RUC en ningún lado.
+- `BANCARD`/`UPAY`/`PAGOPAR` y `CanalPedidoOnline.WHATSAPP` siguen declarados sin
+  implementación — el pago es efectivo contra entrega y es una decisión cerrada.
+- Falta **pantalla de curación de la carta**: publicar es un toggle por producto,
+  y las categorías del storefront son las `Familia`/`Subfamilia` del stock.
+- Sin índice en `pedidos_online.cuenta_cliente_id`, sin único en
+  `cuentas_cliente.email`, y `presentacion.activo` no se filtra en el menú.
+
+**Archivos clave:** `entities/pedidos-online/*`, `electron/utils/geo.utils.ts`, `electron/utils/delivery-alta.utils.ts`, `src/app/pages/ventas/pedidos-online/mapa-zonas-dialog/`, `src/app/shared/components/delivery-dialog/`, `electron/handlers/pedidos-online*.handler.ts` (5), `electron/server/public-routes.ts` + `server.ts`, `electron/utils/customer-jwt.utils.ts` + `whatsapp-sender.ts`, `main.ts` (storefrontRoot `:225-234`, `startServer` `:246`), `electron/utils/register-all-handlers.ts:178-183`, `pages/ventas/pedidos-online/list-pedidos-online.component.ts`, `projects/storefront/src/app/`.
 
 ---
 

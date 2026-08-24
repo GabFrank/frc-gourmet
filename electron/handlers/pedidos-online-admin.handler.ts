@@ -2,8 +2,9 @@ import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { In } from 'typeorm';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
+import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
 import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zona-delivery.entity';
-import { EstadoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { EstadoPedidoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { ensurePermission } from '../utils/auth.utils';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
 import { cancelarVentaCompletaEnTx } from '../utils/venta-reversa.utils';
@@ -107,6 +108,43 @@ export function registerPedidosOnlineAdminHandlers(
   // ============== CONTADOR DE PENDIENTES (badge/sonido) ==============
   // Cuenta RECIBIDO + ACEPTADO sin venta materializada: así el staff también ve
   // señal de los pedidos auto-aceptados (que no pasan por RECIBIDO).
+  /**
+   * Retiros en curso: pedidos PICKUP ya materializados y todavía sin entregar.
+   *
+   * Un DELIVERY materializado aparece solo en la tabla de la izquierda del
+   * diálogo, porque tiene un `Delivery` detrás. Un PICKUP no genera ninguno, así
+   * que su `Venta` -sin mesa, sin comanda, sin delivery- no sale en ninguna
+   * pantalla del PdV y no habría forma de cobrarla. Esta lista es esa pantalla.
+   */
+  ipcMain.handle('get-retiros-online-en-curso', async () => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_VER);
+    const pedidos = await repo().find({
+      where: {
+        tipoPedido: TipoPedidoOnline.PICKUP,
+        estado: In([
+          EstadoPedidoOnline.ACEPTADO,
+          EstadoPedidoOnline.EN_PREPARACION,
+          EstadoPedidoOnline.LISTO,
+        ]),
+      },
+      relations: ['items'],
+      order: { createdAt: 'ASC' },
+    });
+    const conVenta = pedidos.filter((p) => !!p.ventaId);
+    if (!conVenta.length) return [];
+
+    // Estado de cobro de cada venta, para saber si ofrecer COBRAR o ENTREGAR.
+    const ventas = await dataSource.getRepository(Venta).find({
+      where: { id: In(conVenta.map((p) => p.ventaId as number)) },
+    });
+    const porId = new Map(ventas.map((v) => [v.id, v]));
+    return conVenta.map((p) => ({
+      ...mapPedidoAdmin(p),
+      ventaEstado: porId.get(p.ventaId as number)?.estado ?? null,
+      cobrada: porId.get(p.ventaId as number)?.estado === VentaEstado.CONCLUIDA,
+    }));
+  });
+
   ipcMain.handle('contar-pedidos-online-pendientes', async () => {
     await ensurePermission(dataSource, getCurrentUser, PERM_VER);
     const count = await repo().count({
@@ -193,11 +231,36 @@ export function registerPedidosOnlineAdminHandlers(
     const motivoNormalizado = motivo ? String(motivo).toUpperCase() : 'SIN MOTIVO';
     const usuarioId = getCurrentUser()?.id;
 
+    // MESA_QR comparte UNA cuenta por mesa: varios comensales pidiendo desde su
+    // celular caen en la misma `Venta`. Revertirla por el rechazo de un solo
+    // pedido cancelaría los platos de los demás -y su cobro, y su stock-. No hay
+    // forma de deshacer sólo la parte de este pedido porque no se persiste qué
+    // VentaItem vino de qué pedido, así que se corta acá y se manda a editar la
+    // cuenta en el PdV, que es la pantalla que sí sabe operar sobre ítems.
+    if (pedido.mesaId && pedido.ventaId) {
+      return {
+        success: false,
+        error: 'mesa_ya_materializada',
+        detalle: 'El pedido ya está en la cuenta de la mesa. Quitá los ítems desde el PdV.',
+        ventaId: pedido.ventaId,
+      };
+    }
+
     // Si el pedido ya se materializó hay una Venta viva detrás: cancelar sólo el
     // pedido dejaría al local cobrando algo que el cliente da por cancelado, y
     // con el stock ya descontado si además estaba cobrada. La reversa y el
     // cambio de estado van en UNA transacción: o se cancelan las dos cosas o
     // ninguna.
+    // Revertir un cobro ya hecho no es lo mismo que descartar un pedido que
+    // nunca se cobró: `delivery-cancelar` exige un permiso aparte para eso y
+    // esta puerta lo estaba bypaseando. Mismo criterio, mismo permiso.
+    if (pedido.ventaId) {
+      const ventaPrevia = await dataSource.getRepository(Venta).findOne({ where: { id: pedido.ventaId } });
+      if (ventaPrevia?.estado === VentaEstado.CONCLUIDA) {
+        await ensurePermission(dataSource, getCurrentUser, 'VENTAS_DELIVERY_CANCELAR_COBRADO');
+      }
+    }
+
     let reversa: any = null;
     await dataSource.transaction(async (manager) => {
       if (pedido.ventaId) {
