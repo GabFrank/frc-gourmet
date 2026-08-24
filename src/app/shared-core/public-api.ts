@@ -18,7 +18,7 @@
 
 // --- Contrato de datos + impl IPC (reusada como HTTP en mobile vía shim) ---
 export { RepositoryService } from '../database/repository.service';
-export type { LoginResult, ClienteFilters } from '../database/repository.service';
+export type { LoginResult, ClienteFilters, DashboardVentasFiltro, CajaSelectorItem } from '../database/repository.service';
 export { RepositoryIpcService } from '../database/repository-ipc.service';
 
 // --- Servicios Angular reutilizables ---

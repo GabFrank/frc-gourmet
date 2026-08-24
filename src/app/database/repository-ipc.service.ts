@@ -65,7 +65,7 @@ import { RecetaAdicionalVinculacion } from './entities/productos/receta-adiciona
 import { RecetaIngredienteIntercambiable } from './entities/productos/receta-ingrediente-intercambiable.entity';
 
 // LoginResult queda definido en repository.service.ts (abstract base)
-import { RepositoryService, LoginResult, ClienteFilters } from './repository.service';
+import { RepositoryService, LoginResult, ClienteFilters, DashboardVentasFiltro, CajaSelectorItem } from './repository.service';
 
 // Define an interface for the electron API
 interface ElectronAPI {
@@ -1070,7 +1070,8 @@ interface ElectronAPI {
   getDashboardRrhhKpis: (periodo: string) => Promise<any>;
 
   // Dashboards por dominio
-  getDashboardVentasKpis: (rango?: string) => Promise<any>;
+  getCajasSelector: (params?: any) => Promise<any>;
+  getDashboardVentasKpis: (param?: any) => Promise<any>;
   getDashboardComprasKpis: (rango?: string) => Promise<any>;
   getDashboardProductosKpis: (rango?: string) => Promise<any>;
   getDashboardFinancieroKpis: () => Promise<any>;
@@ -4158,8 +4159,12 @@ export class RepositoryIpcService extends RepositoryService {
   }
 
   // ===================== DASHBOARDS POR DOMINIO =====================
-  getDashboardVentasKpis(rango: string = 'week'): Observable<any> {
-    return from(this.api.getDashboardVentasKpis(rango));
+  getCajasSelector(params: { desde?: string; hasta?: string; limite?: number } = {}): Observable<CajaSelectorItem[]> {
+    return from(this.api.getCajasSelector(params));
+  }
+
+  getDashboardVentasKpis(param: string | DashboardVentasFiltro = 'week'): Observable<any> {
+    return from(this.api.getDashboardVentasKpis(param));
   }
   getDashboardComprasKpis(rango: string = 'month'): Observable<any> {
     return from(this.api.getDashboardComprasKpis(rango));

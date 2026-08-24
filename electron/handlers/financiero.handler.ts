@@ -23,6 +23,7 @@ import { generarResumenCajaImagenes, buildResumenCajaCaption } from '../utils/re
 import { buildEvolutionConfig } from '../services/notificacion.service';
 import { getEvolutionApiKey } from '../utils/notificaciones-secrets.util';
 import { sendWhatsappMedia, sendWhatsappText, normalizeWhatsappNumber } from '../services/whatsapp.service';
+import { dbQuery } from '../utils/db-query';
 
 interface EnvioCierreResult {
   ok: boolean;
@@ -570,6 +571,65 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
       throw error;
     }
   });
+
+  /**
+   * Cajas para el SELECTOR de filtros: sólo id, dispositivo, estado y fechas.
+   *
+   * `get-cajas` no sirve para esto: no tiene `where` ni `LIMIT` y arrastra 6
+   * relaciones eager (incluidos los dos conteos completos y las personas). En un
+   * local con dos años de operación son miles de filas con sus conteos, por una
+   * lista desplegable de un filtro. Acá se pide lo que se muestra y nada más.
+   *
+   * `desde`/`hasta` acotan por fecha de apertura para que el selector ofrezca
+   * las cajas del período que el usuario está mirando, no todo el histórico.
+   */
+  ipcMain.handle(
+    'get-cajas-selector',
+    async (
+      _event: IpcMainInvokeEvent,
+      params: { desde?: string; hasta?: string; limite?: number } = {},
+    ) => {
+      try {
+        const limite = Math.min(Math.max(Number(params.limite) || 200, 1), 500);
+        const where: string[] = [];
+        const args: any[] = [];
+        // `fecha_apertura` es un datetime completo. Un `YYYY-MM-DD` pelado como
+        // `hasta` compara como texto contra `YYYY-MM-DD HH:MM:SS` y, siendo un
+        // prefijo mas corto, deja AFUERA las cajas abiertas ese mismo dia. Se
+        // expande a los extremos del dia antes de comparar.
+        const soloFecha = /^\d{4}-\d{2}-\d{2}$/;
+        if (params.desde) {
+          where.push('c.fecha_apertura >= ?');
+          args.push(soloFecha.test(params.desde) ? `${params.desde} 00:00:00` : params.desde);
+        }
+        if (params.hasta) {
+          where.push('c.fecha_apertura <= ?');
+          args.push(soloFecha.test(params.hasta) ? `${params.hasta} 23:59:59` : params.hasta);
+        }
+        const filtro = where.length ? `WHERE ${where.join(' AND ')}` : '';
+        const rows: any[] = await dbQuery(
+          dataSource,
+          `SELECT c.id, c.estado, c.fecha_apertura, c.fecha_cierre, d.nombre AS dispositivo_nombre
+             FROM cajas c
+             LEFT JOIN dispositivos d ON d.id = c.dispositivo_id
+             ${filtro}
+            ORDER BY c.fecha_apertura DESC
+            LIMIT ${limite}`,
+          args,
+        );
+        return rows.map((r) => ({
+          id: Number(r.id),
+          estado: String(r.estado || ''),
+          fechaApertura: r.fecha_apertura,
+          fechaCierre: r.fecha_cierre ?? null,
+          dispositivoNombre: String(r.dispositivo_nombre || 'SIN DISPOSITIVO').toUpperCase(),
+        }));
+      } catch (error) {
+        console.error('Error getting cajas selector:', error);
+        throw error;
+      }
+    },
+  );
 
   ipcMain.handle('get-caja', async (_event: IpcMainInvokeEvent, id: number) => {
     try {

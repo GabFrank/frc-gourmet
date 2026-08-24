@@ -62,6 +62,7 @@ import { EstadoPedidoOnline } from '../../src/app/database/entities/pedidos-onli
 import { CobroParcial } from '../../src/app/database/entities/ventas/cobro-parcial.entity';
 import { CobroParcialItem } from '../../src/app/database/entities/ventas/cobro-parcial-item.entity';
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
+import { invalidarCacheJornada } from './dashboard-ventas.handler';
 
 /**
  * M-04: mutex por-venta para serializar procesarStockVenta. El chequeo de
@@ -1823,7 +1824,11 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       
       // Apply updates
       repository.merge(config, data as DeepPartial<PdvConfig>);
-      return await repository.save(config);
+      const guardado = await repository.save(config);
+      // La hora de la jornada se cachea 60s en los dashboards: sin esto, el
+      // usuario cambia el corte, vuelve al resumen y sigue viendo el anterior.
+      invalidarCacheJornada();
+      return guardado;
     } catch (error) {
       console.error(`Error updating PDV config ID ${id}:`, error);
       throw error;

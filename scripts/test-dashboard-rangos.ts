@@ -14,7 +14,8 @@
  *
  * Uso: npm run test:dashboard-rangos
  */
-import { rangoToFechas, bucketsForRango, RANGOS, RANGO_LABEL, Rango } from '../src/app/shared/utils/dashboard-rangos.util';
+import {
+  anclaJornada, rangoToFechas, bucketsForRango, RANGOS, RANGO_LABEL, Rango } from '../src/app/shared/utils/dashboard-rangos.util';
 
 let passed = 0, failed = 0;
 function ok(cond: boolean, name: string, extra?: any) {
@@ -190,6 +191,98 @@ function main() {
       ok(typeof label === 'string' && label.length > 0, `${rango} → "${label}"`);
     }
   }
+  // ═══════════════ JORNADA COMERCIAL ═══════════════
+  // Los turnos noche cruzan las 00:00 y llegan hasta las 02:00. Con corte a las
+  // 07:00 la jornada del dia D va de D 07:00 a D+1 06:59:59.999.
+  //
+  // El invariante union(buckets)==rango NO detecta un ancla equivocada: las dos
+  // funciones seguirian coincidiendo entre si, sobre una ventana mal ubicada.
+  // Por eso estos casos miran la ventana, no la coherencia interna.
+  console.log('\n[jornada] Ancla: antes del corte, la jornada viva es la de AYER');
+  {
+    const H = 7;
+    // Martes 15 a las 03:00 -> la jornada en curso arranco el LUNES 14 a las 07:00
+    const madrugada = new Date(2026, 6, 15, 3, 0, 0);
+    const a = anclaJornada(madrugada, H);
+    ok(a.getDate() === 14, 'ancla a las 03:00 apunta al dia anterior', a.getDate());
+
+    const despues = new Date(2026, 6, 15, 9, 0, 0);
+    ok(anclaJornada(despues, H).getDate() === 15, 'ancla a las 09:00 apunta a hoy');
+
+    // Borde exacto: 07:00:00.000 ya es la jornada nueva
+    ok(anclaJornada(new Date(2026, 6, 15, 7, 0, 0, 0), H).getDate() === 15, 'las 07:00 en punto ya es hoy');
+    ok(anclaJornada(new Date(2026, 6, 15, 6, 59, 59, 999), H).getDate() === 14, 'las 06:59:59.999 siguen siendo ayer');
+
+    ok(anclaJornada(madrugada, 0).getDate() === 15, 'con corte 0 el ancla es el dia calendario');
+  }
+
+  console.log('\n[jornada] today: los buckets CRUZAN la medianoche');
+  {
+    const H = 7;
+    // 03:00 del martes: la jornada arranco ayer 07:00 -> 21 horas transcurridas
+    const b = bucketsForRango('today', new Date(2026, 6, 15, 3, 30, 0), H);
+    ok(b.length === 21, 'a las 03:30 hay 21 tramos (07h de ayer .. 03h de hoy)', b.length);
+    ok(b[0].label === '07h', 'el primero es 07h', b[0].label);
+    ok(b[0].desde.getDate() === 14, 'y cae en el dia ANTERIOR', b[0].desde.getDate());
+    ok(b[b.length - 1].label === '03h', 'el ultimo es 03h', b[b.length - 1].label);
+    ok(b[b.length - 1].desde.getDate() === 15, 'y cae en el dia de hoy');
+    // El bug que esto ataja: iterar 0..now.getHours() daria 7..3 = ningun bucket
+    ok(b.length > 0, 'NO queda vacio (el bug de iterar 7..3)');
+
+    const r = rangoToFechas('today', new Date(2026, 6, 15, 3, 30, 0), H);
+    ok(r.desde.getDate() === 14 && r.desde.getHours() === 7, 'el rango arranca ayer 07:00');
+  }
+
+  console.log('\n[jornada] La ventana de un dia dura 24h exactas');
+  {
+    const H = 7;
+    const r = rangoToFechas('week', new Date(2026, 6, 15, 10, 0, 0), H);
+    const b = bucketsForRango('week', new Date(2026, 6, 15, 10, 0, 0), H);
+    ok(b[0].desde.getHours() === 7, 'cada dia arranca a las 07:00', b[0].desde.getHours());
+    ok(b[0].hasta.getHours() === 6 && b[0].hasta.getMinutes() === 59, 'y termina 06:59', b[0].hasta.getHours());
+    const dur = b[0].hasta.getTime() - b[0].desde.getTime();
+    ok(dur === 24 * 3600 * 1000 - 1, 'la jornada dura 24h menos 1ms', dur);
+    ok(r.desde.getTime() === b[0].desde.getTime(), 'invariante: el rango arranca donde el primer bucket');
+  }
+
+  console.log('\n[jornada] Antes del corte, TODOS los rangos anclan en ayer');
+  {
+    const H = 7;
+    const madrugada = new Date(2026, 6, 1, 2, 0, 0); // 1 de julio 02:00
+    for (const rango of ['week', 'month', '3months'] as const) {
+      const b = bucketsForRango(rango, madrugada, H);
+      const ult = b[b.length - 1];
+      ok(ult.desde.getMonth() === 5, `${rango}: el ultimo bucket sigue en JUNIO`, ult.desde.getMonth());
+    }
+    // 6months usa getMonth() directo: a las 02:00 del 1 de julio la jornada es de junio
+    const b6 = bucketsForRango('6months', madrugada, H);
+    ok(b6[b6.length - 1].label === 'Jun', '6months: el ultimo mes es Junio, no Julio', b6[b6.length - 1].label);
+  }
+
+  console.log('\n[jornada] El invariante union(buckets)==rango sigue cerrando con corte');
+  {
+    for (const H of [0, 5, 7, 12]) {
+      for (const rango of RANGOS) {
+        const now = new Date(2026, 6, 15, 3, 30, 0);
+        const r = rangoToFechas(rango, now, H);
+        const b = bucketsForRango(rango, now, H);
+        ok(r.desde.getTime() === b[0].desde.getTime() && r.hasta.getTime() === b[b.length - 1].hasta.getTime(),
+          `H=${H} ${rango}: rango == union de buckets`);
+      }
+    }
+  }
+
+  console.log('\n[jornada] corte 0 reproduce EXACTAMENTE el dia calendario');
+  {
+    const now = new Date(2026, 6, 15, 14, 0, 0);
+    for (const rango of RANGOS) {
+      const sin = rangoToFechas(rango, now);
+      const con0 = rangoToFechas(rango, now, 0);
+      ok(sin.desde.getTime() === con0.desde.getTime() && sin.hasta.getTime() === con0.hasta.getTime(),
+        `${rango}: sin parametro == con 0`);
+    }
+  }
+
 
   console.log(`\n${failed === 0 ? '✅' : '❌'} DASHBOARD RANGOS: ${passed} OK, ${failed} fallos.\n`);
   if (failed > 0) process.exit(1);

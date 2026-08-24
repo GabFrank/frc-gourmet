@@ -4,6 +4,7 @@ import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-
 import { getMonedaPrincipalId, getCotizacionMap } from './dashboard-ventas.handler';
 import { resolverPeriodo, variacionPct, RangoFechas } from './reportes-periodo.util';
 import type { ReportePeriodoParams } from './reportes.handler';
+import { getInicioJornada } from './dashboard-ventas.handler';
 
 const TIPOS_INGRESO: string[] = [
   TipoMovimiento.INGRESO_RETIRO_CAJA, TipoMovimiento.INGRESO_CIERRE_CAJA, TipoMovimiento.INGRESO_ENTRADA_VARIA,
@@ -269,7 +270,8 @@ export async function construirReporteFinanzasCierre(
   dataSource: DataSource,
   params: ReportePeriodoParams,
 ): Promise<any> {
-  const periodo = resolverPeriodo(params);
+  const inicioJornada = await getInicioJornada(dataSource);
+  const periodo = resolverPeriodo(params, new Date(), inicioJornada);
   const { actual, anterior } = periodo;
   const monPrincipal = await getMonedaPrincipalId(dataSource);
   const ctx: Ctx = { cotMap: await getCotizacionMap(dataSource, monPrincipal) };

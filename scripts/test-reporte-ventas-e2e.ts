@@ -70,7 +70,12 @@ async function main() {
     } as any));
     (venta as any).pago = pago;
     await ds.getRepository(Venta).save(venta);
-    await ds.query(`UPDATE ventas SET created_at = ? WHERE id = ?`, [createdAt.toISOString(), venta.id]);
+    // `YYYY-MM-DD HH:MM:SS` UTC: el formato REAL que TypeORM escribe en SQLite.
+    // Sellar en ISO hacia pasar el test por la razon equivocada — el ISO tambien
+    // estaba de los dos lados de la comparacion, asi que coincidian entre si
+    // mientras la app, que guarda el otro formato, devolvia cero.
+    await ds.query(`UPDATE ventas SET created_at = ? WHERE id = ?`,
+      [createdAt.toISOString().slice(0, 19).replace('T', ' '), venta.id]);
     return { id: venta.id, totalPago };
   };
 

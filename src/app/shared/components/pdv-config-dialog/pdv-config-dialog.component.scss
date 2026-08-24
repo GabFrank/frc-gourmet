@@ -57,3 +57,12 @@
   align-items: center;
   padding-top: 12px;
 }
+
+/* Nota explicativa dentro de una sección: por qué existe la opción, no qué hace
+   el campo (eso ya lo dice el mat-hint). */
+.config-nota {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}

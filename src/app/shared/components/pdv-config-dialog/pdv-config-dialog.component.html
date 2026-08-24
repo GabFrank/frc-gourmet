@@ -73,6 +73,31 @@
 
     <mat-divider></mat-divider>
 
+    <!-- Sección: Jornada comercial -->
+    <div class="config-section">
+      <div class="section-title">
+        <mat-icon>schedule</mat-icon>
+        JORNADA COMERCIAL
+      </div>
+
+      <div class="config-row">
+        <mat-form-field appearance="outline" class="field-small">
+          <mat-label>Inicio de la jornada (hora)</mat-label>
+          <input matInput type="number" formControlName="inicioJornadaHora" min="0" max="23">
+          <mat-hint>Un día va de esta hora a la misma del día siguiente. 0 = día calendario.</mat-hint>
+          <mat-error *ngIf="configForm.get('inicioJornadaHora')?.invalid">Tiene que ser una hora entre 0 y 23</mat-error>
+        </mat-form-field>
+      </div>
+
+      <p class="config-nota">
+        Las cajas del turno noche cruzan las 00:00 y siguen hasta las 2 AM. Con el corte a
+        medianoche, ese turno aparecía partido en dos días distintos en los dashboards y en los
+        reportes. Afecta a todos los totales por período, no sólo al resumen de ventas.
+      </p>
+    </div>
+
+    <mat-divider></mat-divider>
+
     <!-- Sección: Caja -->
     <div class="config-section">
       <div class="section-title">

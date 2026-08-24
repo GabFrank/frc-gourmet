@@ -275,6 +275,32 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
 - [ ] **Test impresión**: tickets, comandas.
 - [ ] **Performance**: paginación en todas las listas, carga lazy de relaciones.
 
+
+## Fechas y períodos — abierto tras el PR de jornada comercial (2026-08-24)
+
+- [ ] **Barrer los `ds.query()` directos con fechas.** `dbQuery` normaliza el
+      límite ISO-Z al formato de SQLite, pero **sólo cubre sus propios call
+      sites**. Cualquier consulta de fechas escrita con `dataSource.query()`
+      pelado sigue expuesta al bug de comparación de texto (una fila creada hoy
+      cae fuera del rango "hoy", sin error). Vale un `grep` de `ds.query(` con
+      `created_at`/`fecha` y migrarlos, o mover la normalización más abajo.
+- [ ] **La ventana `anterior` no-mensual suma milisegundos.**
+      `reportes-periodo.util.ts`, rama `else` de `comparar` (`today`/`week`/
+      `quarter`/`custom`): resta `hasta - desde` en ms para conseguir "una
+      ventana de igual longitud". Es intencional y hoy inofensivo — Paraguay no
+      tiene horario de verano — pero es la única excepción al principio que el
+      propio archivo documenta. Si alguna vez opera en un país con DST, revisar.
+- [ ] **Persistir los filtros del resumen entre visitas.** Hoy se pierden al
+      salir de la pantalla. Se dejó afuera del PR porque **no hay precedente en
+      el proyecto**: ninguna otra lista persiste sus filtros, y hacerlo en una
+      sola crea una inconsistencia. Si se hace, hacerlo para todas.
+- [ ] **El rótulo del período usa la zona del navegador.** `filtroAplicado` viaja
+      como ISO absoluto y el front lo formatea con `getHours()` local. Backend y
+      dispositivos del local comparten zona, así que coincide; un dispositivo con
+      la zona mal configurada mostraría el corte corrido. Sólo importa si alguna
+      vez se accede desde otra zona horaria.
+
+---
 ---
 
 ## Plan de implementación priorizado (P0→P5)

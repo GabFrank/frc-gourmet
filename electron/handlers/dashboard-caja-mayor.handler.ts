@@ -7,6 +7,7 @@ import { ChequeEstado } from '../../src/app/database/entities/financiero/cheques
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { dbQuery } from '../utils/db-query';
 import { Rango, bucketsForRango } from '../utils/dashboard-rangos.util';
+import { getInicioJornada } from './dashboard-ventas.handler';
 
 const TIPOS_INGRESO: TipoMovimiento[] = [
   TipoMovimiento.INGRESO_RETIRO_CAJA,
@@ -90,7 +91,7 @@ export function registerDashboardCajaMayorHandlers(
       // 4. Movimientos del rango (entradas vs salidas). La clave del retorno
       // sigue siendo `movimientos30d` por compatibilidad con los consumidores
       // (dashboard Financiero, Home): lo que cambia es la ventana, no la forma.
-      const movimientos30d = await buildMovimientosPorRango(dataSource, rango);
+      const movimientos30d = await buildMovimientosPorRango(dataSource, rango, await getInicioJornada(dataSource));
 
       // 5. Proximos vencimientos (CPP + cheques) ordenado por fecha
       const cppListRows: any[] = await dbQuery(dataSource, `
@@ -150,6 +151,7 @@ export function registerDashboardCajaMayorHandlers(
 async function buildMovimientosPorRango(
   dataSource: DataSource,
   rango: Rango,
+  inicioJornada = 0,
 ): Promise<{ labels: string[]; entradas: number[]; salidas: number[] }> {
   const labels: string[] = [];
   const entradas: number[] = [];
@@ -161,7 +163,10 @@ async function buildMovimientosPorRango(
     return { labels, entradas, salidas };
   }
 
-  for (const bucket of bucketsForRango(rango)) {
+  // Movimientos = cuando OCURRIO, asi que sigue la jornada comercial. Los
+  // vencimientos de CPP y cheques NO pasan por aca: un cheque vence el dia X,
+  // no "en la jornada X".
+  for (const bucket of bucketsForRango(rango, new Date(), inicioJornada)) {
     labels.push(bucket.label);
     const desde = bucket.desde.toISOString();
     const hasta = bucket.hasta.toISOString();

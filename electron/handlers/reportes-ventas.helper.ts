@@ -7,6 +7,7 @@ import {
 } from './dashboard-ventas.handler';
 import { resolverPeriodo, variacionPct, RangoFechas } from './reportes-periodo.util';
 import type { ReportePeriodoParams } from './reportes.handler';
+import { getInicioJornada } from './dashboard-ventas.handler';
 
 const DIAS_LUN_PRIMERO = [1, 2, 3, 4, 5, 6, 0]; // strftime/EXTRACT DOW: 0=Dom..6=Sáb
 const DIAS_LABEL = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
@@ -275,7 +276,8 @@ export async function construirReporteVentasCierre(
   dataSource: DataSource,
   params: ReportePeriodoParams,
 ): Promise<any> {
-  const periodo = resolverPeriodo(params);
+  const inicioJornada = await getInicioJornada(dataSource);
+  const periodo = resolverPeriodo(params, new Date(), inicioJornada);
   const { actual, anterior } = periodo;
   const ctx: CotCtx = {
     monPrincipal: await getMonedaPrincipalId(dataSource),

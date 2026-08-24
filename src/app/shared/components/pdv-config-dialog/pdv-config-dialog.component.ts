@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -54,6 +54,10 @@ export class PdvConfigDialogComponent implements OnInit {
       ocuparMesaAlVincularComanda: [false],
       pizzaMaxSabores: [2],
       pizzaEstrategiaPrecio: ['MAYOR_PRECIO'],
+      // Validators de verdad: `min`/`max` en el HTML son sugerencias del
+      // navegador. Sin esto se guardaba un 24 o un -1, el backend lo descartaba
+      // en silencio y volvia a 7 — el admin creia haber configurado otro corte.
+      inicioJornadaHora: [7, [Validators.required, Validators.min(0), Validators.max(23)]],
       umbralDiferenciaBaja: [5],
       umbralDiferenciaAlta: [15],
       deliveryTiempoAmarillo: [30],
@@ -75,6 +79,9 @@ export class PdvConfigDialogComponent implements OnInit {
           ocuparMesaAlVincularComanda: cfg.ocuparMesaAlVincularComanda || false,
           pizzaMaxSabores: cfg.pizzaMaxSabores || 2,
           pizzaEstrategiaPrecio: cfg.pizzaEstrategiaPrecio || 'MAYOR_PRECIO',
+          // `?? 7` y no `|| 7`: 0 es un valor valido (jornada = dia calendario)
+          // y con `||` se convertiria en 7 cada vez que se abre el dialogo.
+          inicioJornadaHora: cfg.inicioJornadaHora ?? 7,
           umbralDiferenciaBaja: cfg.umbralDiferenciaBaja || 5,
           umbralDiferenciaAlta: cfg.umbralDiferenciaAlta || 15,
           deliveryTiempoAmarillo: cfg.deliveryTiempoAmarillo || 30,
@@ -92,6 +99,11 @@ export class PdvConfigDialogComponent implements OnInit {
 
   async guardar(): Promise<void> {
     if (!this.pdvConfigId) return;
+    if (this.configForm.invalid) {
+      this.configForm.markAllAsTouched();
+      this.snackBar.open('Revisá los campos marcados', 'OK', { duration: 3000 });
+      return;
+    }
     this.isSaving = true;
     try {
       const data = this.configForm.value;
