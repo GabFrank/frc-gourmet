@@ -118,6 +118,14 @@ export class VentasResumenPage implements OnInit {
 
   loading = true;
   error: string | null = null;
+  /**
+   * Rango mal armado. Se separa de `error` porque son cosas distintas: `error`
+   * es "no pude traer los datos" y vacia la pantalla; esto es "corregi el
+   * filtro" y tiene que mostrarse DENTRO del panel, con los campos a la vista y
+   * los datos anteriores intactos. Si no, el usuario ve el reclamo y la pantalla
+   * en blanco, sin los campos que tiene que arreglar.
+   */
+  errorFiltro: string | null = null;
   /** Distinto de `error`: la consulta anduvo, el periodo no tiene ventas. */
   sinResultados = false;
 
@@ -164,6 +172,10 @@ export class VentasResumenPage implements OnInit {
   }
 
   aplicar(): void {
+    this.errorFiltro = this.validarRango();
+    // Con el rango mal, el panel queda ABIERTO: es donde estan los campos a
+    // corregir. Cerrarlo obligaba a reabrirlo para entender que reclamaba.
+    if (this.errorFiltro) return;
     this.filtrosAbiertos = false;
     void this.cargar();
   }
@@ -171,6 +183,7 @@ export class VentasResumenPage implements OnInit {
   limpiar(): void {
     this.filtros.reset({ desde: '', hasta: '', cajaIds: [] });
     this.filtrosAbiertos = false;
+    this.errorFiltro = null;
     void this.cargar();
   }
 
@@ -221,6 +234,12 @@ export class VentasResumenPage implements OnInit {
   /** null si el rango es valido; si no, el motivo para mostrar al usuario. */
   private validarRango(): string | null {
     const { desde, hasta } = this.filtros.getRawValue();
+    // Medio rango es ambiguo: "hasta el 1/8" no dice desde cuándo. Antes se
+    // dejaba pasar y el backend completaba el extremo faltante con el preset
+    // (que arranca HOY), armando un rango invertido: cero resultados y el
+    // cartel "No hubo ventas en el período" cuando sí las había.
+    if (desde && !hasta) return 'Falta la fecha "hasta"';
+    if (!desde && hasta) return 'Falta la fecha "desde"';
     if (!desde || !hasta) return null;
     if (desde > hasta) return 'La fecha "desde" es posterior a "hasta"';
     const dias = Math.round(
@@ -231,9 +250,10 @@ export class VentasResumenPage implements OnInit {
   }
 
   async cargar(): Promise<void> {
-    const invalido = this.validarRango();
-    if (invalido) {
-      this.error = invalido;
+    // `aplicar()` ya valido; esto cubre a `cargar()` llamado desde el refresh.
+    this.errorFiltro = this.validarRango();
+    if (this.errorFiltro) {
+      this.filtrosAbiertos = true;
       this.loading = false;
       return;
     }

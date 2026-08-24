@@ -203,3 +203,13 @@
   font-size: 0.74rem;
   color: var(--text-secondary);
 }
+
+/* Reclamo del filtro: vive DENTRO del panel, junto a los campos que hay que
+   corregir. No usa `.crud-error` porque ese reemplaza la pantalla. */
+.resumen-filtro-error {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--warn-color, #f44336);
+}

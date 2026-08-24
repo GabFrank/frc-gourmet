@@ -134,6 +134,46 @@ function main() {
        'custom hasta llega a las 06:59 del dia siguiente', `${ymd(p.actual.hasta)} ${p.actual.hasta.getHours()}`);
   }
 
+
+  // ── comparación con jornada (la que pasaba desapercibida) ──
+  console.log('\n[I] ventana de comparación con jornada · inicioJornada = 7');
+  {
+    // Este es el DEFAULT de la pantalla: rango `month` con comparar activado.
+    // La ventana `anterior` se armaba con medianoche fija mientras la `actual`
+    // ya usaba la jornada: salia 24 h mas larga y el % de variacion quedaba
+    // sesgado en todos los reportes.
+    const now = new Date(2026, 7, 19, 14, 0, 0); // 19 Ago 2026 14:00
+    const p = resolverPeriodo({ rango: 'month', comparar: true }, now, 7);
+    const horas = (r: any) => (r.hasta.getTime() - r.desde.getTime()) / 3_600_000;
+    ok(Math.abs(horas(p.actual) - horas(p.anterior!)) < 1,
+       'actual y anterior tienen la misma longitud',
+       { actual: horas(p.actual), anterior: horas(p.anterior!) });
+    ok(p.anterior!.desde.getHours() === 7, 'anterior.desde arranca en el corte', p.anterior!.desde.getHours());
+    ok(p.anterior!.hasta.getHours() === 6, 'anterior.hasta cierra en el corte', p.anterior!.hasta.getHours());
+    ok(ymd(p.anterior!.desde) === '2026-07-01', 'anterior arranca el 1 de julio', ymd(p.anterior!.desde));
+    // La jornada del 19 termina el 20 a las 06:59, asi que leer el dia de corte
+    // de `hasta` daba 20 en vez de 19.
+    ok(ymd(p.anterior!.hasta) === '2026-07-20',
+       'el corte es el dia 19 (su jornada cierra el 20 a las 06:59)', ymd(p.anterior!.hasta));
+  }
+  {
+    // Con jornada 0 la comparacion es la de siempre.
+    const now = new Date(2026, 7, 19, 14, 0, 0);
+    const p = resolverPeriodo({ rango: 'month', comparar: true }, now, 0);
+    ok(ymd(p.anterior!.desde) === '2026-07-01' && p.anterior!.desde.getHours() === 0,
+       'jornada 0: anterior arranca a medianoche del 1', ymd(p.anterior!.desde));
+    ok(ymd(p.anterior!.hasta) === '2026-07-19' && p.anterior!.hasta.getHours() === 23,
+       'jornada 0: anterior cierra el 19 a las 23:59', ymd(p.anterior!.hasta));
+  }
+  {
+    // prevMonth: mes completo, tambien con los limites de la jornada.
+    const now = new Date(2026, 7, 19, 14, 0, 0);
+    const p = resolverPeriodo({ rango: 'prevMonth', comparar: true }, now, 7);
+    ok(p.anterior!.desde.getHours() === 7 && p.anterior!.hasta.getHours() === 6,
+       'prevMonth: la comparacion respeta el corte',
+       [p.anterior!.desde.getHours(), p.anterior!.hasta.getHours()]);
+  }
+
   console.log(`\n${failed === 0 ? '✅' : '❌'} REPORTES PERÍODO: ${passed} OK, ${failed} fallos.\n`);
   if (failed > 0) process.exit(1);
 }

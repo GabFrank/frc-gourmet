@@ -108,10 +108,30 @@ export function resolverPeriodo(
     if (rango === 'month' || rango === 'prevMonth') {
       // Mes calendario anterior. Para `month` (mes-a-fecha) se recorta al mismo
       // día de corte; para `prevMonth` (mes completo) se toma el mes entero.
-      const pDesde = new Date(desde.getFullYear(), desde.getMonth() - 1, 1, 0, 0, 0, 0);
+      //
+      // Dos cosas que se hacian mal y hay que sostener juntas:
+      //
+      // 1. Los limites se armaban con medianoche fija (`0,0,0,0` / `23:59:59.999`)
+      //    mientras la ventana ACTUAL ya usaba `startOfDay`/`endOfDay` con la
+      //    jornada. Con corte a las 07:00 la comparacion salia 24 h mas larga
+      //    que el periodo actual: ventanas no comparables, y el % de variacion
+      //    sesgado. Es el default de la pantalla (`comparar = true`, rango
+      //    `month`), asi que se veia siempre.
+      // 2. El dia de corte salia de `hasta.getDate()`, pero con la jornada
+      //    encendida `hasta` ya rodo al dia calendario SIGUIENTE (la jornada del
+      //    19 termina el 20 a las 06:59). Habia que leerlo del ancla de negocio,
+      //    no del limite.
+      const anclaActual = anclaDia(now, inicioJornada);
+      const primeroMesAnterior = new Date(desde.getFullYear(), desde.getMonth() - 1, 1);
+      const pDesde = startOfDay(primeroMesAnterior, inicioJornada);
       const diasEnMesAnterior = new Date(desde.getFullYear(), desde.getMonth(), 0).getDate();
-      const diaCorte = rango === 'prevMonth' ? diasEnMesAnterior : hasta.getDate();
-      const pHasta = new Date(pDesde.getFullYear(), pDesde.getMonth(), Math.min(diaCorte, diasEnMesAnterior), 23, 59, 59, 999);
+      const diaCorte = rango === 'prevMonth' ? diasEnMesAnterior : anclaActual.getDate();
+      const ultimoDia = new Date(
+        primeroMesAnterior.getFullYear(),
+        primeroMesAnterior.getMonth(),
+        Math.min(diaCorte, diasEnMesAnterior),
+      );
+      const pHasta = endOfDay(ultimoDia, inicioJornada);
       anterior = { desde: pDesde, hasta: pHasta };
       labelAnterior = `${MESES[pDesde.getMonth()]} ${pDesde.getFullYear()}`;
     } else {

@@ -7,7 +7,14 @@ import { PdvMesa } from '../../src/app/database/entities/ventas/pdv-mesa.entity'
 import { ComandaItem, ComandaItemEstado } from '../../src/app/database/entities/ventas/comanda-item.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { dbQuery } from '../utils/db-query';
-import { Rango, rangoToFechas, bucketsForRango, ventanaDeFechas } from '../utils/dashboard-rangos.util';
+import {
+  Rango,
+  RangoBucket,
+  rangoToFechas,
+  bucketsForRango,
+  bucketsForVentana,
+  ventanaDeFechas,
+} from '../utils/dashboard-rangos.util';
 
 // El "total" real de una venta NO vive en la columna ventas.total (no poblada),
 // sino en pagos_detalles (PAGO - VUELTO). Estos helpers calculan el monto cobrado
@@ -292,11 +299,19 @@ export function registerDashboardVentasHandlers(
         ? ventanaDeFechas(filtro.desde, filtro.hasta, ventanaPreset, inicioJornada)
         : ventanaPreset;
       const filtroCajasSel: VentaFiltro | null = cajaIds.length > 0 ? filtroCajas(cajaIds) : null;
+      // Elegir SOLO cajas no debe acotar ademas al dia de hoy: una caja es un
+      // turno cerrado, y su periodo es el suyo. Cruzarla con la ventana de "hoy"
+      // hacia que elegir una caja de la semana pasada devolviera cero con el
+      // cartel "No hubo ventas en el periodo" — falso, la caja si tuvo ventas.
+      // El selector ofrece cajas viejas, asi que es el camino normal, no un borde.
+      const soloCajas = !periodoExplicito && cajaIds.length > 0;
       // Periodo Y cajas: se combinan, no se excluyen.
-      const filtroPeriodo = filtroY(
-        filtroRango(ventana.desde.toISOString(), ventana.hasta.toISOString()),
-        filtroCajasSel,
-      );
+      const filtroPeriodo = soloCajas
+        ? (filtroCajasSel as VentaFiltro)
+        : filtroY(
+            filtroRango(ventana.desde.toISOString(), ventana.hasta.toISOString()),
+            filtroCajasSel,
+          );
 
       const monedaPrincipalId = await getMonedaPrincipalId(dataSource);
 
@@ -457,7 +472,12 @@ export function registerDashboardVentasHandlers(
         }));
 
       // 7. Ventas por periodo (chart)
-      const periodoData = await buildVentasPorPeriodo(dataSource, rango, now, inicioJornada, filtroCajasSel);
+      // Los tramos salen de la ventana REAL, no del preset: con fechas explicitas
+      // `rango` sigue siendo el default y el chart se iria a otro periodo.
+      const tramos = periodoExplicito
+        ? bucketsForVentana(ventana.desde, ventana.hasta, inicioJornada)
+        : bucketsForRango(rango, now, inicioJornada);
+      const periodoData = await buildVentasPorPeriodo(dataSource, tramos, filtroCajasSel);
 
       // Desde cuando acumula el total, para que la UI no muestre dos "hoy"
       // distintos sin explicacion: con la Opcion B el total sigue la APERTURA de
@@ -497,11 +517,19 @@ export function registerDashboardVentasHandlers(
   });
 }
 
+/**
+ * Serie del chart. `tramos` ya viene resuelto por el caller para que el chart y
+ * las cards miren SIEMPRE la misma ventana.
+ *
+ * Antes esta funcion recibia el preset (`rango`) y armaba los buckets sola. Con
+ * fechas explicitas eso rompia: las cards usaban la ventana pedida y el chart
+ * seguia en el preset — el usuario filtraba julio y veia las cards de julio con
+ * un chart de la semana actual, en cero. Es el mismo desfase card/chart que el
+ * invariante de `rangoToFechas` existe para evitar.
+ */
 async function buildVentasPorPeriodo(
   dataSource: DataSource,
-  rango: Rango,
-  now: Date,
-  inicioJornada = 0,
+  tramos: RangoBucket[],
   filtroExtra: VentaFiltro | null = null,
 ): Promise<{ labels: string[]; ventas: number[]; cantidades: number[] }> {
   const labels: string[] = [];
@@ -511,9 +539,8 @@ async function buildVentasPorPeriodo(
   const monedaPrincipalId = await getMonedaPrincipalId(dataSource);
   const cotizacionMap = await getCotizacionMap(dataSource, monedaPrincipalId);
 
-  // Los tramos del eje X (y su granularidad) los define `bucketsForRango`; acá
-  // solo se agrega el total cobrado de cada uno.
-  for (const bucket of bucketsForRango(rango, now, inicioJornada)) {
+  // Acá solo se agrega el total cobrado de cada tramo.
+  for (const bucket of tramos) {
     const r = await sumaVentasRango(
       dataSource,
       monedaPrincipalId,

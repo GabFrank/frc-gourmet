@@ -37,6 +37,7 @@
         <mat-option *ngFor="let c of cajasOpciones" [value]="c.id">{{ c.label }}</mat-option>
       </mat-select>
     </mat-form-field>
+    <p class="resumen-filtro-error" *ngIf="errorFiltro">{{ errorFiltro }}</p>
     <p class="resumen-filtro-nota">
       Un día va de las {{ inicioJornadaLabel }} a las {{ finJornadaLabel }} del día siguiente,
       así el turno noche no se parte al cruzar las 00:00.

@@ -317,6 +317,22 @@ por los casos `[H]` de `test:reportes-periodo`.
   período".
 - El selector de cajas usa **`get-cajas-selector`**, no `get-cajas`: éste no tiene
   `where` ni `LIMIT` y arrastra 6 relaciones eager, incluidos los dos conteos.
+- **Filtrar SÓLO por cajas no se acota además a "hoy".** Una caja es un turno
+  cerrado y su período es el suyo; cruzarla con la ventana de hoy hacía que
+  elegir una caja de la semana pasada devolviera cero con el cartel "No hubo
+  ventas en el período" — falso. El selector ofrece cajas viejas, así que es el
+  camino normal, no un borde.
+- **El chart (`ventasPorPeriodo`) usa la ventana pedida, no el preset.** Con
+  fechas explícitas los tramos salen de `bucketsForVentana(desde, hasta)`, que
+  elige granularidad por duración (horaria ≤1 día, diaria ≤45, semanal ≤180,
+  mensual más allá). Antes el chart se armaba sobre el preset (`'week'` por
+  default) mientras las cards usaban la ventana: filtrar julio mostraba las
+  cards de julio con un chart de la semana actual en cero — el mismo desfase
+  card/chart que el invariante de `rangoToFechas` existe para evitar.
+- **Medio rango se rechaza en la UI.** "Hasta el 1/8" no dice desde cuándo; el
+  backend completaba el extremo faltante con el preset (que arranca HOY) y
+  armaba un rango invertido: cero resultados en silencio. `ventanaDeFechas`
+  conserva un piso defensivo por si otro caller manda un solo extremo.
 
 ### ⚠️ Fechas en SQLite: el límite se normaliza, la columna no
 

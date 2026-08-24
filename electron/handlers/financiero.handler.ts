@@ -593,8 +593,19 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
         const limite = Math.min(Math.max(Number(params.limite) || 200, 1), 500);
         const where: string[] = [];
         const args: any[] = [];
-        if (params.desde) { where.push('c.fecha_apertura >= ?'); args.push(params.desde); }
-        if (params.hasta) { where.push('c.fecha_apertura <= ?'); args.push(params.hasta); }
+        // `fecha_apertura` es un datetime completo. Un `YYYY-MM-DD` pelado como
+        // `hasta` compara como texto contra `YYYY-MM-DD HH:MM:SS` y, siendo un
+        // prefijo mas corto, deja AFUERA las cajas abiertas ese mismo dia. Se
+        // expande a los extremos del dia antes de comparar.
+        const soloFecha = /^\d{4}-\d{2}-\d{2}$/;
+        if (params.desde) {
+          where.push('c.fecha_apertura >= ?');
+          args.push(soloFecha.test(params.desde) ? `${params.desde} 00:00:00` : params.desde);
+        }
+        if (params.hasta) {
+          where.push('c.fecha_apertura <= ?');
+          args.push(soloFecha.test(params.hasta) ? `${params.hasta} 23:59:59` : params.hasta);
+        }
         const filtro = where.length ? `WHERE ${where.join(' AND ')}` : '';
         const rows: any[] = await dbQuery(
           dataSource,

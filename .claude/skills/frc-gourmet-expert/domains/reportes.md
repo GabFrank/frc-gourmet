@@ -61,6 +61,15 @@ Hoy los orquestadores leen `getInicioJornada(dataSource)` y lo pasan:
 `resolverPeriodo(params, new Date(), inicioJornada)`. `inicioJornada = 0`
 reproduce exactamente el día calendario.
 
+**La ventana de comparación también.** El bloque `if (comparar)` armaba
+`anterior` con medianoche fija mientras `actual` ya usaba la jornada: con corte a
+las 07:00 la comparación salía **24 h más larga** y el % de variación quedaba
+sesgado. Y el día de corte se leía de `hasta.getDate()`, que con la jornada
+encendida ya rodó al día calendario siguiente (la jornada del 19 cierra el 20 a
+las 06:59). Es el **default de la pantalla** (`comparar = true`, rango `month`),
+así que se veía siempre. Cubierto por los casos `[I]` de `test:reportes-periodo`
+— la suite pasaba con el bug porque ninguno miraba la longitud de `anterior`.
+
 **fix relacionado:** los rangos `custom` corrían un día. `new Date('2026-07-15')`
 es UTC-medianoche, que en Paraguay es el 14 a la noche. Se parsea con
 `parseFechaLocal()` del util compartido.

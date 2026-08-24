@@ -105,8 +105,27 @@ export function ventanaDeFechas(
   fallback: { desde: Date; hasta: Date },
   inicioJornada = 0,
 ): { desde: Date; hasta: Date } {
-  const desde = desdeStr ? inicioDelDia(parseFechaLocal(desdeStr), inicioJornada) : fallback.desde;
   const hasta = hastaStr ? finDelDia(parseFechaLocal(hastaStr), inicioJornada) : fallback.hasta;
+  let desde = desdeStr ? inicioDelDia(parseFechaLocal(desdeStr), inicioJornada) : fallback.desde;
+
+  // Con SÓLO "hasta", el fallback de `desde` es el preset — que arranca HOY.
+  // Pedir "hasta el 1/8" daba `24/8 07:00 .. 2/8 06:59`: un rango invertido,
+  // SQL siempre falso, y la UI mostrando "No hubo ventas en el período" cuando
+  // sí las había. El caso simétrico (sólo "desde") no tiene el problema porque
+  // su techo es "ahora".
+  //
+  // Piso defensivo: si el fallback quedaría DESPUÉS de `hasta`, la ventana se
+  // acota a la jornada de `hasta`. Nunca devuelve un rango invertido, que es lo
+  // que producía el resultado vacío silencioso.
+  //
+  // La ambigüedad de fondo ("¿hasta el 1/8 desde cuándo?") se resuelve en la UI,
+  // que pide los dos extremos; esto es la red por si otro caller manda uno solo.
+  if (!desdeStr && desde > hasta) {
+    // Se ancla en la FECHA que eligió el usuario, no en `hasta`: éste ya es el
+    // cierre de la jornada (06:59), y `inicioDelDia` sobre él caería en la
+    // jornada siguiente, dejando el rango invertido por 1 ms.
+    desde = inicioDelDia(parseFechaLocal(hastaStr as string), inicioJornada);
+  }
   return { desde, hasta };
 }
 
@@ -230,6 +249,92 @@ export function bucketsForRango(
     const desde = new Date(ancla.getFullYear(), ancla.getMonth() - i, 1);
     const hasta = new Date(desde.getFullYear(), desde.getMonth() + 1, 0);
     buckets.push({ desde: inicioDelDia(desde, inicioJornada), hasta: finDelDia(hasta, inicioJornada), label: MESES[desde.getMonth()] });
+  }
+  return buckets;
+}
+
+/**
+ * Tramos del chart para una ventana ARBITRARIA (las fechas que eligió el usuario).
+ *
+ * `bucketsForRango` sólo sabe de presets. Con fechas explícitas el chart se
+ * construía igual sobre el preset (`'week'` por default) mientras las cards
+ * usaban la ventana pedida: el usuario filtraba julio y veía las cards de julio
+ * con un chart de la semana actual, en cero. Es exactamente el desfase
+ * card/chart que el invariante de `rangoToFechas` existe para evitar.
+ *
+ * La granularidad sale de la duración, con el mismo criterio que los presets:
+ * horaria hasta 1 día, diaria hasta 45, semanal hasta 180, mensual más allá.
+ * Los tramos cubren [desde, hasta] por construcción, así que la suma de las
+ * barras cierra con el total de la card.
+ */
+export function bucketsForVentana(
+  desde: Date,
+  hasta: Date,
+  inicioJornada = 0,
+): RangoBucket[] {
+  const buckets: RangoBucket[] = [];
+  const dias = Math.max(1, Math.round((hasta.getTime() - desde.getTime()) / 86_400_000));
+
+  if (dias <= 1) {
+    // Una barra por hora. Igual que `today`, puede cruzar la medianoche.
+    const cursor = new Date(desde);
+    while (cursor <= hasta) {
+      const fin = new Date(cursor);
+      fin.setHours(fin.getHours() + 1);
+      fin.setMilliseconds(fin.getMilliseconds() - 1);
+      buckets.push({
+        desde: new Date(cursor),
+        hasta: fin > hasta ? new Date(hasta) : fin,
+        label: `${String(cursor.getHours()).padStart(2, '0')}h`,
+      });
+      cursor.setHours(cursor.getHours() + 1);
+    }
+    return buckets;
+  }
+
+  if (dias <= 45) {
+    const d = new Date(desde);
+    while (d <= hasta) {
+      const fin = finDelDia(d, inicioJornada);
+      buckets.push({
+        desde: inicioDelDia(d, inicioJornada),
+        hasta: fin > hasta ? new Date(hasta) : fin,
+        label: `${d.getDate()}/${d.getMonth() + 1}`,
+      });
+      d.setDate(d.getDate() + 1);
+    }
+    return buckets;
+  }
+
+  if (dias <= 180) {
+    const d = new Date(desde);
+    let n = 1;
+    while (d <= hasta) {
+      const finSemana = new Date(d);
+      finSemana.setDate(finSemana.getDate() + 6);
+      const fin = finDelDia(finSemana, inicioJornada);
+      buckets.push({
+        desde: inicioDelDia(d, inicioJornada),
+        hasta: fin > hasta ? new Date(hasta) : fin,
+        label: `S${n++}`,
+      });
+      d.setDate(d.getDate() + 7);
+    }
+    return buckets;
+  }
+
+  // Un tramo por mes calendario.
+  const d = new Date(desde.getFullYear(), desde.getMonth(), 1);
+  while (d <= hasta) {
+    const ultimo = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const arranque = inicioDelDia(d, inicioJornada);
+    const fin = finDelDia(ultimo, inicioJornada);
+    buckets.push({
+      desde: arranque < desde ? new Date(desde) : arranque,
+      hasta: fin > hasta ? new Date(hasta) : fin,
+      label: MESES[d.getMonth()],
+    });
+    d.setMonth(d.getMonth() + 1);
   }
   return buckets;
 }

@@ -210,6 +210,57 @@ async function main() {
     ok(cajas.length === 1, 'respeta el límite', cajas.length);
   }
 
+  console.log('\n[G] el chart sigue la ventana pedida, no el preset');
+  {
+    // Las cards usaban la ventana y el chart el preset (`week` por default):
+    // filtrar julio mostraba las cards de julio con un chart de la semana
+    // actual, en cero. Es el desfase card/chart que la feature dice corregir.
+    const r = await kpis({ desde: '2026-07-15', hasta: '2026-07-16' });
+    const serie = r.ventasPorPeriodo;
+    ok(!!serie && serie.labels.length > 0, 'la serie tiene tramos', serie?.labels);
+    const sumaBarras = (serie.ventas || []).reduce((a: number, b: number) => a + b, 0);
+    ok(sumaBarras === r.totalHoyPYG,
+       'la suma de las barras cierra con el total de la card',
+       { sumaBarras, card: r.totalHoyPYG });
+    ok(serie.labels.some((l: string) => l.includes('7')),
+       'los tramos son de julio, no de la semana actual', serie.labels);
+  }
+  {
+    // Rango largo: la granularidad baja pero el invariante se mantiene.
+    const r = await kpis({ desde: '2026-05-01', hasta: '2026-07-31' });
+    const suma = (r.ventasPorPeriodo.ventas || []).reduce((a: number, b: number) => a + b, 0);
+    ok(suma === r.totalHoyPYG, 'rango largo: barras == card', { suma, card: r.totalHoyPYG });
+  }
+
+  console.log('\n[H] filtrar SOLO por caja no se acota ademas a hoy');
+  {
+    // El selector ofrece cajas viejas. Elegir una y aplicar sin fechas cruzaba
+    // la caja con la ventana de "hoy" y devolvia cero, con el cartel
+    // "No hubo ventas en el periodo" — falso, la caja si tuvo ventas.
+    const r = await kpis({ cajaIds: [caja1.id] });
+    ok(r.totalHoyPYG === 150_000,
+       'caja1 sola devuelve sus 150.000 aunque sean de julio', r.totalHoyPYG);
+  }
+  {
+    const r = await kpis({ cajaIds: [caja1.id, caja2.id] });
+    ok(r.totalHoyPYG === 220_000, 'las dos cajas solas suman 220.000', r.totalHoyPYG);
+  }
+  {
+    // Con fechas SI se acota: la caja no anula el periodo.
+    const r = await kpis({ desde: '2026-07-16', hasta: '2026-07-16', cajaIds: [caja1.id] });
+    ok(r.totalHoyPYG === 0, 'caja1 el 16 no tiene ventas (la 01:30 es del 15)', r.totalHoyPYG);
+  }
+
+  console.log('\n[I] medio rango no devuelve vacio en silencio');
+  {
+    // Solo `hasta`: el fallback de `desde` es el preset, que arranca HOY, asi
+    // que la ventana quedaba invertida y el SQL siempre falso.
+    const r = await kpis({ hasta: '2026-07-16' });
+    const f = r.filtroAplicado;
+    ok(new Date(f.desde) <= new Date(f.hasta),
+       'la ventana nunca queda invertida', { desde: f.desde, hasta: f.hasta });
+  }
+
   console.log('\n[F] el cambio de configuración se ve enseguida');
   {
     // `getInicioJornada` cachea 60s. Sin invalidar, el usuario cambia el corte,

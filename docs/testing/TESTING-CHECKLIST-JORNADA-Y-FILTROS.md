@@ -33,7 +33,10 @@ siguen hasta las 2 AM, y antes ese turno aparecía partido en dos días.
 - [ ] Cambiar a **0**, guardar, reabrir: **sigue en 0** (no vuelve a 7)
   - Esto último es la regresión concreta que se cuidó: `0` es un valor válido
     (día calendario) y con un `||` en vez de `??` se convertía en 7 solo
-- [ ] El campo no acepta valores fuera de 0–23
+- [ ] Poner **24** o **-1** y guardar → el campo se marca en rojo con *"Tiene que
+      ser una hora entre 0 y 23"* y **no** guarda
+  - Antes el `min`/`max` del HTML era sólo una sugerencia del navegador: el valor
+    se guardaba, el backend lo descartaba en silencio y volvía a 7
 - [ ] Dejarlo de nuevo en **7** antes de seguir
 
 ## Fase 2: El cambio se ve enseguida
@@ -74,10 +77,23 @@ siguen hasta las 2 AM, y antes ese turno aparecía partido en dos días.
 - [ ] **Limpiar**: vuelve a "Jornada de hoy", el badge desaparece y el label del
       total vuelve a "Total en caja" / "Total del día"
 
+> **Ojo con la hora en esta máquina:** la app corre en `America/Asuncion` (UTC-4)
+> y el Mac en UTC-3, así que el rótulo muestra `08:00 → 07:59` donde la nota del
+> panel dice `07:00 → 06:59`. En el local real backend y dispositivos comparten
+> zona y coinciden. La diferencia de una hora acá no es un fallo.
+
 ### Validaciones
 
 - [ ] Poner **Desde** posterior a **Hasta** y Aplicar → mensaje
-      *"La fecha 'desde' es posterior a 'hasta'"*, y **no** se rompe la pantalla
+      *"La fecha 'desde' es posterior a 'hasta'"*
+- [ ] **El panel queda ABIERTO** con los campos a la vista, y **los datos que ya
+      estaban en pantalla no desaparecen**. El reclamo aparece dentro del panel,
+      no reemplazando el resumen
+- [ ] Llenar **sólo Desde** y Aplicar → *"Falta la fecha 'hasta'"*
+- [ ] Llenar **sólo Hasta** y Aplicar → *"Falta la fecha 'desde'"*
+  - Antes se dejaba pasar: el backend completaba el extremo faltante con el
+    preset (que arranca hoy), el rango quedaba invertido y salía "No hubo ventas
+    en el período" con ventas existiendo
 - [ ] Poner un rango de **más de 92 días** → mensaje *"El rango no puede superar
       92 días"*
 - [ ] Elegir una fecha **sin ventas** → mensaje **"No hubo ventas en el período
@@ -94,6 +110,11 @@ siguen hasta las 2 AM, y antes ese turno aparecía partido en dos días.
       ese período), no la unión. Verificarlo contra los totales por separado
 - [ ] Deseleccionar todas las cajas dejando sólo la fecha: vuelve al total del
       período completo
+- [ ] **Elegir una caja VIEJA (de semanas atrás) sin tocar las fechas** y Aplicar:
+      trae las ventas de esa caja
+  - Antes devolvía cero con "No hubo ventas en el período": la caja se cruzaba
+    además con la ventana de hoy. Una caja es un turno cerrado y su período es
+    el suyo
 
 ## Fase 6: Reportes y dashboards siguen el mismo corte
 
@@ -111,6 +132,10 @@ pantalla.
 - [ ] **Dashboard de Ventas**, chip *Hoy*: el chart cruza la medianoche — las
       últimas barras son las horas de madrugada, no arranca de cero a las 00:00
 - [ ] El total de la card sigue cerrando con la suma de las barras del chart
+- [ ] **Dashboard de Ventas del desktop con fechas explícitas**: los tramos del
+      chart son del período pedido, no de la semana actual
+  - Antes las cards usaban la ventana pedida y el chart el preset: se filtraba
+    julio y aparecía un chart de la semana actual, en cero
 
 ## Fase 7: Rango personalizado de los reportes
 

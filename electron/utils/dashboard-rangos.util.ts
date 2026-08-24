@@ -12,6 +12,7 @@ export {
   RANGO_LABEL,
   rangoToFechas,
   bucketsForRango,
+  bucketsForVentana,
   buildRangoChips,
   anclaJornada,
   ventanaDeFechas,
