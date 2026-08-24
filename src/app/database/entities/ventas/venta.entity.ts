@@ -101,4 +101,17 @@ export class Venta extends BaseModel {
 
   @Column({ name: 'total', type: 'decimal', precision: 18, scale: 2, nullable: true })
   total?: number;
+
+  /**
+   * Costo del envío congelado al momento de asignar (o cambiar) la zona de
+   * entrega del delivery. Se persiste acá y NO se deriva de
+   * `delivery.precioDelivery.valor` a propósito: el precio de la zona cambia
+   * con el tiempo, y el ticket de una venta vieja tiene que seguir mostrando lo
+   * que realmente se cobró.
+   *
+   * Sólo lo escribe el flujo de delivery. En una venta de mesa/mostrador queda
+   * null y no participa de ningún total.
+   */
+  @Column({ name: 'costo_delivery', type: 'decimal', precision: 18, scale: 2, nullable: true })
+  costoDelivery?: number | null;
 } 

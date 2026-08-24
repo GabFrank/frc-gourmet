@@ -38,6 +38,7 @@ import { registerComprasHandlers } from '../handlers/compras.handler';
 import { registerSystemHandlers } from '../handlers/system.handler';
 import { registerRemoteTunnelHandlers } from '../handlers/remote-tunnel.handler';
 import { registerVentasHandlers } from '../handlers/ventas.handler';
+import { registerDeliveryHandlers } from '../handlers/delivery.handler';
 import { registerKdsHandlers } from '../handlers/kds.handler';
 import { registerRecetasHandlers } from '../handlers/recetas.handler';
 import { registerCajaMayorHandlers } from '../handlers/caja-mayor.handler';
@@ -124,6 +125,7 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerSystemHandlers(); // system handler doesn't need dataSource or user
   registerRemoteTunnelHandlers(); // acceso remoto via cloudflare quick tunnel
   registerVentasHandlers(dataSource, getCurrentUser);
+  registerDeliveryHandlers(dataSource, getCurrentUser); // Delivery del PdV: maquina de estados + cancelacion transaccional
   registerKdsHandlers(dataSource, getCurrentUser); // KDS: comandas en pantalla de cocina (estado por sector)
   registerRecetasHandlers(dataSource, getCurrentUser); // Recetas + Sabores + Variaciones (unificado)
   registerCajaMayorHandlers(dataSource, getCurrentUser); // Caja Mayor + Gastos + Retiros

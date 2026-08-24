@@ -349,6 +349,16 @@ export abstract class RepositoryService {
   abstract updateDelivery(deliveryId: number, deliveryData: Partial<Delivery>): Observable<any>;
   abstract deleteDelivery(deliveryId: number): Observable<any>;
   abstract getDeliveriesByCaja(cajaId: number, filtros?: any): Observable<{ data: any[], total: number }>;
+  // Delivery del PdV: maquina de estados + operaciones transaccionales.
+  // `updateDelivery` rechaza cualquier cambio de estado o de fechas.
+  abstract deliveryListarPdv(cajaId: number, filtros?: any): Observable<{ data: any[], total: number }>;
+  abstract deliveryListarRepartidores(): Observable<{ id: number; nombre: string; cargo: string | null }[]>;
+  abstract deliveryCrear(payload: any): Observable<{ delivery: any; venta: any }>;
+  abstract deliveryActualizarDatos(deliveryId: number, payload: any): Observable<any>;
+  abstract deliveryCambiarEstado(deliveryId: number, nuevoEstado: DeliveryEstado, opts?: { funcionarioId?: number }): Observable<any>;
+  abstract deliveryAsignarRepartidor(deliveryId: number, funcionarioId: number | null): Observable<any>;
+  abstract deliveryCancelar(deliveryId: number, motivo: string): Observable<any>;
+  abstract deliveryImprimirTicket(deliveryId: number, printerId?: number): Observable<any>;
   abstract buscarClientePorTelefono(telefono: string): Observable<any>;
   abstract buscarClientesPorTelefono(telefono: string): Observable<any[]>;
   abstract crearClienteRapido(data: { telefono: string; nombre?: string; direccion?: string }): Observable<any>;

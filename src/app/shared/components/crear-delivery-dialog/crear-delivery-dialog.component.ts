@@ -12,14 +12,13 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatAutocompleteModule, MatAutocompleteTrigger } from '@angular/material/autocomplete';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 
 import { RepositoryService } from '../../../database/repository.service';
-import { Delivery, DeliveryEstado } from '../../../database/entities/ventas/delivery.entity';
 import { PrecioDelivery } from '../../../database/entities/ventas/precio-delivery.entity';
 import { Caja } from '../../../database/entities/financiero/caja.entity';
-import { Venta, VentaEstado } from '../../../database/entities/ventas/venta.entity';
 import { BuscarClienteDialogComponent } from '../buscar-cliente-dialog/buscar-cliente-dialog.component';
 
 export interface CrearDeliveryDialogData {
@@ -71,38 +70,65 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
   isEditMode = false;
   precioDeliveryOriginalId: number | null = null;
 
+  // Configuración del PdV (antes eran constantes en este archivo).
+  telefonoMinDigitos = 4;
+  requiereDireccion = true;
+
+  // Pre-computados: la vista no llama funciones ni getters.
+  puedeConfirmar = false;
+  precioDeliveryCambio = false;
+  /** Cambiar la zona con la venta ya cobrada lo rechaza el backend. */
+  zonaBloqueada = false;
+
   private telefonoSubject = new Subject<string>();
 
   constructor(
     public dialogRef: MatDialogRef<CrearDeliveryDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: CrearDeliveryDialogData,
     private repositoryService: RepositoryService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private snackBar: MatSnackBar,
   ) {}
 
   async ngOnInit(): Promise<void> {
-    const precios = await firstValueFrom(this.repositoryService.getPreciosDelivery());
-    this.preciosDelivery = precios
-      .filter((p: any) => p.activo)
-      .sort((a: any, b: any) => Number(a.valor) - Number(b.valor));
-
-    if (this.data.delivery) {
-      this.isEditMode = true;
-      const d = this.data.delivery;
-      this.telefono = d.telefono || '';
-      this.nombre = d.nombre || d.cliente?.persona?.nombre || '';
-      this.direccion = d.direccion || '';
-      this.observacion = d.observacion || '';
-      this.precioDeliveryId = d.precioDelivery?.id || null;
-      this.precioDeliveryOriginalId = this.precioDeliveryId;
-      this.cobroAnticipado = d.cobroAnticipado || false;
-      this.clienteEncontrado = d.cliente || null;
-    } else {
-      // Precio por defecto: el de menor valor (principal a futuro)
-      if (this.preciosDelivery.length > 0) {
-        this.precioDeliveryId = this.preciosDelivery[0].id;
+    try {
+      const config = await firstValueFrom(this.repositoryService.getPdvConfig());
+      if (config) {
+        this.telefonoMinDigitos = config.deliveryTelefonoMinDigitos ?? 4;
+        this.requiereDireccion = config.deliveryRequiereDireccion ?? true;
+        this.cobroAnticipado = !!config.deliveryCobroAnticipadoDefault;
       }
+      const precios = await firstValueFrom(this.repositoryService.getPreciosDelivery());
+      this.preciosDelivery = precios
+        .filter((p: any) => p.activo)
+        // `valor` es decimal → string en Postgres: sin Number() el orden sería
+        // alfabético ("10000" < "5000").
+        .sort((a: any, b: any) => Number(a.valor) - Number(b.valor));
+
+      if (this.data.delivery) {
+        this.isEditMode = true;
+        const d = this.data.delivery;
+        this.telefono = d.telefono || '';
+        this.nombre = d.nombre || d.cliente?.persona?.nombre || '';
+        this.direccion = d.direccion || '';
+        this.observacion = d.observacion || '';
+        this.precioDeliveryId = d.precioDelivery?.id ?? null;
+        this.precioDeliveryOriginalId = this.precioDeliveryId;
+        this.cobroAnticipado = !!d.cobroAnticipado;
+        this.clienteEncontrado = d.cliente || null;
+        this.zonaBloqueada = !!d.venta && d.venta.estado !== 'ABIERTA';
+      } else {
+        // Zona por defecto: la configurada; si no hay, la de menor valor.
+        const preferida = config?.deliveryPrecioDefaultId
+          ? this.preciosDelivery.find((p) => p.id === config.deliveryPrecioDefaultId)
+          : null;
+        this.precioDeliveryId = preferida?.id ?? this.preciosDelivery[0]?.id ?? null;
+      }
+    } catch (error) {
+      this.mostrarError(error, 'No se pudo cargar la configuración de delivery');
     }
+
+    this.recalcular();
 
     this.telefonoSubject.pipe(
       debounceTime(400),
@@ -112,9 +138,14 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
         this.buscando = true;
         try {
           this.clientesSugeridos = await firstValueFrom(this.repositoryService.buscarClientesPorTelefono(tel)) || [];
-          if (this.clientesSugeridos.length === 1 && this.clientesSugeridos[0].persona?.telefono === tel) {
-            this.seleccionarCliente(this.clientesSugeridos[0]);
-          }
+          // Comparación por dígitos: "0981 123456" y "0981123456" son el mismo
+          // teléfono. Con el `===` crudo de antes, cada variante de formato
+          // creaba un cliente nuevo para la misma persona.
+          const soloDigitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
+          const exacto = this.clientesSugeridos.find(
+            (c) => soloDigitos(c.persona?.telefono) === soloDigitos(tel),
+          );
+          if (exacto) this.seleccionarCliente(exacto);
         } catch (e) {
           this.clientesSugeridos = [];
         } finally {
@@ -124,6 +155,7 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
         this.clientesSugeridos = [];
         this.clienteEncontrado = null;
       }
+      this.recalcular();
     });
   }
 
@@ -131,25 +163,35 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
     this.telefonoSubject.complete();
   }
 
+  /** Recalcula todo lo que la vista consume como propiedad. */
+  private recalcular(): void {
+    const telefonoOk = this.telefono.replace(/\D/g, '').length >= this.telefonoMinDigitos;
+    const direccionOk = !this.requiereDireccion || this.direccion.trim().length > 0;
+    this.puedeConfirmar = telefonoOk && direccionOk && !this.processing;
+    this.precioDeliveryCambio = this.isEditMode && this.precioDeliveryId !== this.precioDeliveryOriginalId;
+  }
+
+  onCampoChange(): void {
+    this.recalcular();
+  }
+
   onTelefonoChange(): void {
     this.clienteEncontrado = null;
     this.telefonoSubject.next(this.telefono);
+    this.recalcular();
   }
 
   onEnterTelefono(event: Event): void {
     event.preventDefault();
-    // Cerrar autocomplete si está abierto
     if (this.autoTrigger?.panelOpen) {
       this.autoTrigger.closePanel();
     }
     this.clientesSugeridos = [];
-    // Navegar al siguiente campo
     setTimeout(() => this.nombreInput?.nativeElement?.focus(), 50);
   }
 
   onAutoCompleteSelected(event: any): void {
     this.seleccionarCliente(event.option.value);
-    // Navegar al siguiente campo después de seleccionar
     setTimeout(() => this.nombreInput?.nativeElement?.focus(), 50);
   }
 
@@ -159,6 +201,7 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
     this.nombre = cliente.persona?.nombre || '';
     this.direccion = cliente.persona?.direccion || '';
     this.clientesSugeridos = [];
+    this.recalcular();
   }
 
   focusDireccion(): void {
@@ -191,13 +234,10 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
     });
   }
 
-  get canConfirm(): boolean {
-    return this.telefono.length >= 4 && !this.processing;
-  }
-
   async confirmar(): Promise<void> {
-    if (!this.canConfirm) return;
+    if (!this.puedeConfirmar) return;
     this.processing = true;
+    this.recalcular();
 
     try {
       let cliente = this.clienteEncontrado;
@@ -209,58 +249,43 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
         }));
       }
 
+      const payload: any = {
+        clienteId: cliente?.id ?? null,
+        nombre: this.nombre || cliente?.persona?.nombre || '',
+        telefono: this.telefono,
+        direccion: this.direccion,
+        observacion: this.observacion,
+        cobroAnticipado: this.cobroAnticipado,
+      };
+
       if (this.isEditMode) {
-        const updateData: any = {
-          nombre: (this.nombre || cliente?.persona?.nombre || '').toUpperCase(),
-          telefono: this.telefono,
-          direccion: this.direccion.toUpperCase() || undefined,
-          observacion: this.observacion.toUpperCase() || undefined,
-          cobroAnticipado: this.cobroAnticipado,
-          cliente,
-        };
-
-        if (this.precioDeliveryId !== this.precioDeliveryOriginalId) {
-          updateData.precioDelivery = this.precioDeliveryId ? { id: this.precioDeliveryId } : null;
-        }
-
-        await firstValueFrom(this.repositoryService.updateDelivery(this.data.delivery.id, updateData));
+        // Sólo se manda `precioDeliveryId` si cambió: el backend usa la
+        // presencia de la clave para decidir si resincroniza el costo de la
+        // venta.
+        if (this.precioDeliveryCambio) payload.precioDeliveryId = this.precioDeliveryId;
+        await firstValueFrom(this.repositoryService.deliveryActualizarDatos(this.data.delivery.id, payload));
         this.dialogRef.close({ edited: true });
       } else {
-        const deliveryData: Partial<Delivery> = {
-          cliente,
-          nombre: (this.nombre || cliente?.persona?.nombre || '').toUpperCase(),
-          telefono: this.telefono,
-          direccion: this.direccion.toUpperCase() || undefined,
-          observacion: this.observacion.toUpperCase() || undefined,
-          estado: DeliveryEstado.ABIERTO,
-          fechaAbierto: new Date(),
-          cobroAnticipado: this.cobroAnticipado,
-        };
-
-        if (this.precioDeliveryId) {
-          deliveryData.precioDelivery = { id: this.precioDeliveryId } as any;
-        }
-
-        const delivery = await firstValueFrom(this.repositoryService.createDelivery(deliveryData));
-
-        const ventaData: Partial<Venta> = {
-          estado: VentaEstado.ABIERTA,
-          caja: this.data.caja,
-          delivery,
-          nombreCliente: deliveryData.nombre,
-        };
-        const venta = await firstValueFrom(this.repositoryService.createVenta(ventaData));
-
-        this.dialogRef.close({ delivery, venta });
+        payload.cajaId = this.data.caja.id;
+        payload.precioDeliveryId = this.precioDeliveryId;
+        // Alta atómica: el backend crea Delivery + Venta en una transacción.
+        // Antes eran dos llamadas y un fallo en la segunda dejaba un delivery
+        // sin venta, invisible para la lista (que parte de Venta).
+        const resultado = await firstValueFrom(this.repositoryService.deliveryCrear(payload));
+        this.dialogRef.close(resultado);
       }
     } catch (error) {
-      console.error('Error en delivery:', error);
+      this.mostrarError(error, 'No se pudo guardar el delivery');
       this.processing = false;
+      this.recalcular();
     }
   }
 
-  get precioDeliveryCambio(): boolean {
-    return this.isEditMode && this.precioDeliveryId !== this.precioDeliveryOriginalId;
+  private mostrarError(error: unknown, fallback: string): void {
+    console.error(fallback, error);
+    const mensaje = (error as any)?.message?.replace(/^Error invoking remote method '[^']+':\s*Error:\s*/, '')
+      || fallback;
+    this.snackBar.open(mensaje, 'CERRAR', { duration: 6000, panelClass: ['error-snackbar'] });
   }
 
   cancelar(): void {

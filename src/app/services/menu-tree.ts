@@ -61,6 +61,7 @@ import { VentasDashboardComponent } from 'src/app/pages/ventas/dashboard/ventas-
 import { VentasReportesComponent } from 'src/app/pages/reportes/ventas-reportes/ventas-reportes.component';
 import { FinanzasReportesComponent } from 'src/app/pages/reportes/finanzas-reportes/finanzas-reportes.component';
 import { ZonasDeliveryComponent } from 'src/app/pages/ventas/pedidos-online/zonas-delivery.component';
+import { ListPreciosDeliveryComponent } from 'src/app/pages/ventas/precios-delivery/list-precios-delivery.component';
 
 // ── Destinos fuera del sidenav (sub-listados y acciones) ──
 import { ListCajasMayorComponent } from 'src/app/pages/financiero/caja-mayor/list-cajas-mayor/list-cajas-mayor.component';
@@ -165,6 +166,13 @@ export const MENU_TREE: MenuNode[] = [
           { id: 'zonas-delivery', label: 'Zonas de Delivery', icon: 'pin_drop', permiso: 'VENTAS_PDV', esConfig: true,
             keywords: ['zonas', 'delivery', 'reparto'],
             action: { component: ZonasDeliveryComponent, title: 'Zonas de Delivery', tabId: 'zonas-delivery-tab', data: NAV } },
+          // Zonas de entrega del delivery del PdV, con su precio. Distinto de
+          // 'Zonas de Delivery', que es el mapa de cobertura de la tienda
+          // online. Solo se alcanzaba desde una tarjeta del dashboard de
+          // Ventas: no aparecia ni en el sidenav ni en el buscador.
+          { id: 'precios-delivery', label: 'Precios de Delivery', icon: 'local_shipping', permiso: 'VENTAS_PDV_CONFIGURAR', esConfig: true,
+            keywords: ['precios', 'delivery', 'envio', 'zona', 'reparto', 'costo'],
+            action: { component: ListPreciosDeliveryComponent, title: 'Precios de Delivery', tabId: 'precios-delivery-tab', data: NAV } },
           { id: 'kds-pantallas', label: 'Pantallas KDS', icon: 'tv', permiso: 'COMANDAS_KDS_CONFIGURAR', esConfig: true,
             keywords: ['pantallas', 'kds', 'cocina'],
             action: { component: ListKdsPantallasComponent, title: 'Pantallas KDS', tabId: 'kds-pantallas-tab', data: NAV } },

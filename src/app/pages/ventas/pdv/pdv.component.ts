@@ -172,6 +172,8 @@ export class PdvComponent implements OnInit, OnDestroy {
 
   // Delivery activo (cuando se editan items de un delivery)
   deliveryActual: Delivery | null = null;
+  /** Muestra el boton DELIVERY del PdV (Configuracion del PdV -> Delivery). */
+  deliveryHabilitado = true;
 
   // Comandas (tarjetas de cuenta individual)
   comandas: any[] = [];
@@ -432,6 +434,9 @@ export class PdvComponent implements OnInit, OnDestroy {
           if (config?.atajosProductosGridSize) {
             this.atajosProductosGridSize = config.atajosProductosGridSize;
           }
+          // `deliveryHabilitado` es nuevo: en una base sin migrar llega
+          // undefined, y ahi el modulo tiene que seguir visible.
+          this.deliveryHabilitado = config?.deliveryHabilitado !== false;
         }
       } catch (e) { /* use default */ }
 
@@ -1970,6 +1975,8 @@ export class PdvComponent implements OnInit, OnDestroy {
       exchangeRates: this.exchangeRates,
       principalMoneda: this.principalMoneda!,
       caja: this.caja!,
+      // Cobrando un delivery desde el PdV, el envio es parte del total.
+      costoDelivery: Number((venta as any)?.costoDelivery ?? 0) || 0,
     };
 
     const dialogRef = this.dialog.open(CobrarVentaDialogComponent, {
@@ -2000,6 +2007,9 @@ export class PdvComponent implements OnInit, OnDestroy {
         if (this.ventaRapidaActual) {
           this.ventaRapidaActual = null;
         }
+        // Salir del modo delivery: la venta ya está cobrada, dejar el cartel
+        // colgado hacía creer que seguía habiendo un pedido en edición.
+        this.deliveryActual = null;
         // Limpiar UI
         this.ventaItemsDataSource.data = [];
         this.calculateTotals();

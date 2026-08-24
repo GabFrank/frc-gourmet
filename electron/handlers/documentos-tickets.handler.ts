@@ -38,6 +38,7 @@ import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity
 import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { Delivery } from '../../src/app/database/entities/ventas/delivery.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import {
@@ -775,6 +776,10 @@ export async function buildVentaTicketLines(
     }
   }
   const descuentoTotal = descItems + descPago;
+
+  // Costo del envío: cargo de la venta, no un ítem. Va como línea propia en el
+  // bloque de totales. `decimal` → string en Postgres, de ahí el Number().
+  const costoDelivery = Number((venta as any).costoDelivery ?? 0) || 0;
   // OJO: hoy `Venta.total` NO se escribe en ningún flujo del repo — ni al cobrar
   // (`cobrar-venta-dialog` manda estado/formaPago/pago/fechaCierre, sin total),
   // ni en la venta a crédito. La rama de abajo es defensiva por si algún día se
@@ -782,7 +787,7 @@ export async function buildVentaTicketLines(
   // cancelado inflaba también el comprobante post-cobro, no sólo la pre-cuenta.
   const totalPrincipal = Number((venta as any).total) > 0
     ? Number((venta as any).total)
-    : bruto - descItems - descPago + aumPago;
+    : bruto - descItems - descPago + aumPago + costoDelivery;
 
   const lines: TicketLine[] = [...headerLines];
 
@@ -845,11 +850,14 @@ export async function buildVentaTicketLines(
   }
 
   lines.push(ticketSeparador('-'));
-  if (descuentoTotal > 0) {
+  if (descuentoTotal > 0 || costoDelivery > 0) {
     lines.push(ticketKv('SUBTOTAL', `Gs. ${ticketFmtMonto(bruto)}`));
+  }
+  if (descuentoTotal > 0) {
     lines.push(ticketKv('DESCUENTO', `Gs. -${ticketFmtMonto(descuentoTotal)}`));
   }
   if (aumPago > 0) lines.push(ticketKv('AUMENTO', `Gs. ${ticketFmtMonto(aumPago)}`));
+  if (costoDelivery > 0) lines.push(ticketKv('ENVIO', `Gs. ${ticketFmtMonto(costoDelivery)}`));
   lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(totalPrincipal)}`, true));
 
   // Totales en las demás monedas configuradas (según cotización vigente).
@@ -1143,33 +1151,14 @@ export function registerDocumentosTicketsHandlers(
     });
   });
 
-  // ─── ETIQUETA DELIVERY ──────────────────────────────────────────────────
-  ipcMain.handle('print-etiqueta-delivery', async (_event, params: {
-    deliveryId: number;
-    cliente?: string;
-    direccion?: string;
-    telefono?: string;
-    printerId?: number;
-  }) => {
-    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_PDV', 'DOCUMENTOS_IMPRIMIR_TICKET']);
-    const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, { printerId: params.printerId });
-    if (!printer) return { ok: false, printed: [], errors: [{ message: 'Sin impresora' }] };
-    const width = printerWidthToChars(printer.width);
-    const lines: TicketLine[] = [
-      ticketText(`DELIVERY #${params.deliveryId}`, { align: 'C', bold: true, size: 'tall' }),
-      ticketSeparador('-'),
-      ticketKv('CLIENTE', (params.cliente || '—').toUpperCase()),
-      ticketKv('TEL', params.telefono || '—'),
-      ticketBlank(),
-      ticketText('DIRECCIÓN:', { bold: true }),
-      ticketText((params.direccion || '—').toUpperCase()),
-    ];
-    const res = await printTicketSpec(printer, { printerWidth: width, lines });
-    return res.ok
-      ? { ok: true, printed: [{ itemId: params.deliveryId, sectorId: null, printerId: printer.id, printerName: printer.name }], errors: [] }
-      : { ok: false, printed: [], errors: [{ printerId: printer.id, message: res.error || 'Error' }] };
-  });
-
+  // ─── TICKET DELIVERY ────────────────────────────────────────────────────
+  // Reemplaza a la vieja `print-etiqueta-delivery`, que era código muerto (no
+  // estaba en preload.ts ni en el mapa de canales, así que nadie podía
+  // invocarla) y además imprimía sólo cliente/tel/dirección: sin ítems, sin
+  // totales y sin cuánto cobrar, es decir inútil para el repartidor.
+  // El handler IPC vive ahora en `delivery.handler.ts`
+  // (`delivery-imprimir-ticket`); acá abajo queda el armado del ticket, en
+  // `printDeliveryTicketInternal`.
   // ─── ACREDITACIÓN POS ───────────────────────────────────────────────────
   ipcMain.handle('print-acreditacion-pos-ticket', async (_event, params: {
     acreditacionId: number;
@@ -1583,4 +1572,171 @@ export async function printCierreCajaInternal(
   return res.ok
     ? { ok: true, printed: [{ itemId: caja?.id ?? cajaId, sectorId: null, printerId: printer.id, printerName: printer.name }], errors: [] }
     : { ok: false, printed: [], errors: [{ printerId: printer.id, message: res.error || 'Error' }] };
+}
+
+// ============================================================
+// TICKET DE DELIVERY (comanda de reparto)
+// ============================================================
+
+/**
+ * Ticket que se lleva el repartidor.
+ *
+ * A diferencia del comprobante de venta, tiene que responder tres preguntas de
+ * un vistazo: **a dónde va**, **qué lleva** y **cuánto tiene que cobrar**. La
+ * vieja `print-etiqueta-delivery` sólo cubría la primera — y ni siquiera se
+ * podía invocar, no estaba expuesta en `preload.ts`.
+ *
+ * El costo del envío sale como línea propia: es un cargo de la venta
+ * (`Venta.costoDelivery`, congelado al asignar la zona), no un ítem del
+ * pedido, así que no puede ir mezclado con los productos.
+ */
+export async function printDeliveryTicketInternal(
+  dataSource: DataSource,
+  deliveryId: number,
+  opts: { printerId?: number; dispositivoId?: number } = {},
+): Promise<ImpresionResultado> {
+  const delivery = await dataSource.getRepository(Delivery).findOne({
+    where: { id: deliveryId },
+    relations: [
+      'precioDelivery',
+      'cliente',
+      'cliente.persona',
+      'entregadoPorFuncionario',
+      'entregadoPorFuncionario.persona',
+    ],
+  });
+  if (!delivery) {
+    return { ok: false, printed: [], errors: [{ message: `Delivery ${deliveryId} no encontrado` }] };
+  }
+
+  const venta = await dataSource.getRepository(Venta).findOne({
+    where: { delivery: { id: deliveryId } },
+    relations: ['pago'],
+  });
+
+  const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, {
+    printerId: opts.printerId,
+    dispositivoId: opts.dispositivoId,
+  });
+  if (!printer) {
+    return { ok: false, printed: [], errors: [{ message: 'No hay impresora configurada para tickets de venta' }] };
+  }
+
+  const width = printerWidthToChars(printer.width);
+  const headerLines = await ticketHeaderEmpresa(dataSource, width, { showTimbrado: false });
+
+  const items = venta
+    ? await dataSource.getRepository(VentaItem).find({
+        where: { venta: { id: venta.id } as any, estado: EstadoVentaItem.ACTIVO },
+        relations: ['producto', 'presentacion'],
+      })
+    : [];
+  const adicionalesByItem = await getAdicionalesActivosPorItem(dataSource, items.map((i) => i.id));
+
+  let bruto = 0;
+  let descuentoItems = 0;
+  for (const it of items) {
+    const qty = Number(it.cantidad || 1);
+    bruto += qty * (Number(it.precioVentaUnitario || 0) + Number(it.precioAdicionales || 0));
+    descuentoItems += qty * Number(it.descuentoUnitario || 0);
+  }
+  // `costoDelivery` es `decimal`: en Postgres llega como string. Sin `Number()`
+  // se concatenaría en vez de sumarse.
+  const costoEnvio = Number(venta?.costoDelivery ?? 0) || 0;
+  const total = bruto - descuentoItems + costoEnvio;
+
+  const cobrada = venta?.estado === 'CONCLUIDA';
+  const nombreCliente = (delivery.nombre
+    || (delivery.cliente as any)?.persona?.nombre
+    || '—').toUpperCase();
+  const repartidor = (delivery.entregadoPorFuncionario as any)?.persona?.nombre;
+
+  const lines: TicketLine[] = [...headerLines];
+  lines.push(ticketSeparador('='));
+  lines.push(ticketText('DELIVERY', { align: 'C', bold: true, size: 'tall' }));
+  lines.push(ticketText(`N° ${deliveryId}${venta ? ` · VENTA #${venta.id}` : ''}`, { align: 'C' }));
+  lines.push(ticketText(ticketFmtFechaHora(delivery.fechaAbierto || new Date()), { align: 'C' }));
+  lines.push(ticketSeparador('='));
+
+  // Bloque de entrega. La dirección va en su propia línea a ancho completo:
+  // en 32 columnas un `ticketKv` la truncaría justo donde importa.
+  lines.push(ticketKv('CLIENTE', nombreCliente));
+  lines.push(ticketKv('TEL', delivery.telefono || '—'));
+  lines.push(ticketText('DIRECCION:', { bold: true }));
+  lines.push(ticketText((delivery.direccion || '—').toUpperCase()));
+  if (delivery.observacion) {
+    lines.push(ticketText('OBSERVACION:', { bold: true }));
+    lines.push(ticketText(delivery.observacion.toUpperCase()));
+  }
+  if (delivery.precioDelivery?.descripcion) {
+    lines.push(ticketKv('ZONA', String(delivery.precioDelivery.descripcion).toUpperCase()));
+  }
+  if (repartidor) lines.push(ticketKv('REPARTIDOR', String(repartidor).toUpperCase()));
+
+  // Ítems, con el mismo layout de columnas que el comprobante de venta.
+  const totalW = 12;
+  const cantW = Math.max(5, Math.min(6, Math.floor(width * 0.12)));
+  const descW = width - cantW - totalW;
+  lines.push(ticketSeparador('-'));
+  lines.push(ticketColumns([
+    { text: 'CANT', width: cantW, align: 'L' },
+    { text: 'DESCRIPCION', width: descW, align: 'L' },
+    { text: 'TOTAL', width: totalW, align: 'R' },
+  ]));
+  lines.push(ticketSeparador('-'));
+  for (const it of items) {
+    const qty = Number(it.cantidad || 1);
+    const precio = Number(it.precioVentaUnitario || 0) + Number(it.precioAdicionales || 0);
+    const totalLinea = qty * precio - qty * Number(it.descuentoUnitario || 0);
+    lines.push(ticketColumns([
+      { text: String(qty), width: cantW, align: 'L' },
+      { text: (it.producto?.nombre || 'PRODUCTO').toUpperCase(), width: descW, align: 'L' },
+      { text: ticketFmtMonto(totalLinea), width: totalW, align: 'R' },
+    ]));
+    for (const extra of (adicionalesByItem.get(it.id) || [])) {
+      lines.push(ticketColumns([
+        { text: '', width: cantW, align: 'L' },
+        { text: `+ ${extra}`, width: descW + totalW, align: 'L' },
+      ]));
+    }
+  }
+  if (items.length === 0) {
+    lines.push(ticketText('(SIN ITEMS CARGADOS)', { align: 'C' }));
+  }
+
+  lines.push(ticketSeparador('-'));
+  if (descuentoItems > 0 || costoEnvio > 0) {
+    lines.push(ticketKv('SUBTOTAL', `Gs. ${ticketFmtMonto(bruto)}`));
+  }
+  if (descuentoItems > 0) lines.push(ticketKv('DESCUENTO', `Gs. -${ticketFmtMonto(descuentoItems)}`));
+  if (costoEnvio > 0) lines.push(ticketKv('ENVIO', `Gs. ${ticketFmtMonto(costoEnvio)}`));
+  lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(total)}`, true));
+
+  // Lo más importante del ticket: si el repartidor cobra o no.
+  lines.push(ticketSeparador('='));
+  if (cobrada) {
+    lines.push(ticketText('PAGADO — NO COBRAR', { align: 'C', bold: true, size: 'tall' }));
+  } else {
+    lines.push(ticketText('A COBRAR', { align: 'C', bold: true }));
+    lines.push(ticketText(`Gs. ${ticketFmtMonto(total)}`, { align: 'C', bold: true, size: 'tall' }));
+  }
+  lines.push(ticketSeparador('='));
+  lines.push(ticketBlank());
+
+  const res = await printTicketSpec(printer, { printerWidth: width, lines, cutAtEnd: true });
+  if (!res.ok) {
+    broadcastPrinterEvent({
+      level: 'error',
+      handler: 'delivery-imprimir-ticket',
+      entityRef: { tipo: 'VENTA', id: venta?.id ?? deliveryId },
+      errors: [{ printerId: printer.id, message: res.error || 'Error desconocido' }],
+      message: `No se pudo imprimir el ticket del delivery ${deliveryId}`,
+    });
+    return { ok: false, printed: [], errors: [{ printerId: printer.id, message: res.error || 'Error desconocido' }] };
+  }
+  return {
+    ok: true,
+    printed: [{ itemId: deliveryId, sectorId: null, printerId: printer.id, printerName: printer.name }],
+    errors: [],
+  };
 }

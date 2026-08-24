@@ -233,6 +233,7 @@ import { AddDestinoToGasto1779300000000 } from './migrations/1779300000000-AddDe
 import { AddCuentaBancariaToLiquidacionSueldo1779400000000 } from './migrations/1779400000000-AddCuentaBancariaToLiquidacionSueldo';
 import { AddConveniosCobroConsolidado1779500000000 } from './migrations/1779500000000-AddConveniosCobroConsolidado';
 import { AddPagoConsolidado1787169888415 } from './migrations/1787169888415-AddPagoConsolidado';
+import { DeliveryCostoRepartidorYConfig1787564255118 } from './migrations/1787564255118-DeliveryCostoRepartidorYConfig';
 import { AddPagoCuotaCppDetalle1785320463398 } from './migrations/1785320463398-AddPagoCuotaCppDetalle';
 import { AddEgresoCajaToPagoCuotaDetalle1785335253817 } from './migrations/1785335253817-AddEgresoCajaToPagoCuotaDetalle';
 import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVacacionVentas';
@@ -694,6 +695,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     AddPagoConsolidado1787169888415,
     IndicesRucYReconciliarMesas1787255528889,
     InicioJornadaHora1787563118200,
+    DeliveryCostoRepartidorYConfig1787564255118,
   ];
 }
 

@@ -11,6 +11,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { firstValueFrom } from 'rxjs';
 
 import { RepositoryService } from '../../../database/repository.service';
@@ -34,6 +35,7 @@ import { RepositoryService } from '../../../database/repository.service';
     MatSnackBarModule,
     MatProgressSpinnerModule,
     MatDividerModule,
+    MatSlideToggleModule,
   ]
 })
 export class PdvConfigDialogComponent implements OnInit {
@@ -41,6 +43,8 @@ export class PdvConfigDialogComponent implements OnInit {
   isSaving = false;
   configForm: FormGroup;
   pdvConfigId: number | null = null;
+  /** Zonas de entrega activas, para el selector de zona por defecto. */
+  preciosDelivery: any[] = [];
 
   constructor(
     private dialogRef: MatDialogRef<PdvConfigDialogComponent>,
@@ -60,8 +64,22 @@ export class PdvConfigDialogComponent implements OnInit {
       inicioJornadaHora: [7, [Validators.required, Validators.min(0), Validators.max(23)]],
       umbralDiferenciaBaja: [5],
       umbralDiferenciaAlta: [15],
+      // --- Delivery ---
+      // `deliveryTiempoAmarillo` / `deliveryTiempoRojo` ya estaban en el form
+      // pero NO tenian campo en el HTML: de hecho eran 30 y 60 fijos salvo que
+      // se editara la base a mano.
+      deliveryHabilitado: [true],
       deliveryTiempoAmarillo: [30],
       deliveryTiempoRojo: [60],
+      deliveryPrecioDefaultId: [null],
+      deliveryCobroAnticipadoDefault: [false],
+      deliveryRequiereDireccion: [true],
+      deliveryRequiereRepartidor: [true],
+      deliveryTelefonoMinDigitos: [4],
+      deliveryPageSize: [20],
+      deliveryMostrarPendientesOtrasCajas: [true],
+      deliveryAutoImprimirAlCrear: [false],
+      deliveryAutoImprimirAlEnviar: [false],
       whatsappCierreCajaActivo: [false],
       whatsappCierreCajaDestino: [''],
     });
@@ -69,6 +87,18 @@ export class PdvConfigDialogComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
+      // Zonas de entrega, para elegir la preseleccionada al crear un delivery.
+      // `valor` es decimal -> string en Postgres: el Number() evita que el
+      // orden salga alfabetico ("10000" < "5000").
+      try {
+        const precios = await firstValueFrom(this.repositoryService.getPreciosDelivery());
+        this.preciosDelivery = (precios || [])
+          .filter((p: any) => p.activo)
+          .sort((a: any, b: any) => Number(a.valor) - Number(b.valor));
+      } catch (e) {
+        console.warn('No se pudieron cargar las zonas de delivery:', e);
+      }
+
       const config = await firstValueFrom(this.repositoryService.getPdvConfig());
       const cfg = Array.isArray(config) ? config[0] : config;
       if (cfg) {
@@ -84,8 +114,18 @@ export class PdvConfigDialogComponent implements OnInit {
           inicioJornadaHora: cfg.inicioJornadaHora ?? 7,
           umbralDiferenciaBaja: cfg.umbralDiferenciaBaja || 5,
           umbralDiferenciaAlta: cfg.umbralDiferenciaAlta || 15,
+          deliveryHabilitado: cfg.deliveryHabilitado !== false,
           deliveryTiempoAmarillo: cfg.deliveryTiempoAmarillo || 30,
           deliveryTiempoRojo: cfg.deliveryTiempoRojo || 60,
+          deliveryPrecioDefaultId: cfg.deliveryPrecioDefaultId ?? null,
+          deliveryCobroAnticipadoDefault: cfg.deliveryCobroAnticipadoDefault || false,
+          deliveryRequiereDireccion: cfg.deliveryRequiereDireccion !== false,
+          deliveryRequiereRepartidor: cfg.deliveryRequiereRepartidor !== false,
+          deliveryTelefonoMinDigitos: cfg.deliveryTelefonoMinDigitos || 4,
+          deliveryPageSize: cfg.deliveryPageSize || 20,
+          deliveryMostrarPendientesOtrasCajas: cfg.deliveryMostrarPendientesOtrasCajas !== false,
+          deliveryAutoImprimirAlCrear: cfg.deliveryAutoImprimirAlCrear || false,
+          deliveryAutoImprimirAlEnviar: cfg.deliveryAutoImprimirAlEnviar || false,
           whatsappCierreCajaActivo: cfg.whatsappCierreCajaActivo || false,
           whatsappCierreCajaDestino: cfg.whatsappCierreCajaDestino || '',
         });

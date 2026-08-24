@@ -249,3 +249,14 @@ tr.mat-mdc-row {
 
   mat-icon { font-size: 48px; width: 48px; height: 48px; }
 }
+
+/* Marca de "delivery de otro turno": la lista ahora trae tambien los pendientes
+   de otras cajas, para que ninguno quede huerfano al cerrar la caja. */
+.otra-caja-icon {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+  vertical-align: middle;
+  margin-left: 4px;
+  color: var(--text-secondary);
+}
