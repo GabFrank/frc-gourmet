@@ -86,6 +86,42 @@ function finDelDia(d: Date, inicioJornada = 0): Date {
 }
 
 /**
+ * Ventana [desde, hasta] a partir de las fechas que eligió el usuario.
+ *
+ * Acepta `YYYY-MM-DD` (lo que manda un `<input type="date">`) y lo interpreta
+ * como fecha LOCAL. `new Date('2026-07-15')` es UTC-medianoche: en Paraguay
+ * (UTC-3/-4) eso cae el 14 a la noche, así que el rango entero corría un día
+ * hacia atrás. El mismo bug existía en los reportes de cierre de mes.
+ *
+ * Los extremos se expanden a la JORNADA completa: elegir "15/07" trae desde las
+ * 07:00 del 15 hasta las 06:59 del 16 — el turno noche del 15 entero, que es lo
+ * que el usuario quiere decir cuando pide "el 15".
+ *
+ * Un extremo ausente lo cubre `fallback` (normalmente el rango del preset).
+ */
+export function ventanaDeFechas(
+  desdeStr: string | undefined,
+  hastaStr: string | undefined,
+  fallback: { desde: Date; hasta: Date },
+  inicioJornada = 0,
+): { desde: Date; hasta: Date } {
+  const desde = desdeStr ? inicioDelDia(parseFechaLocal(desdeStr), inicioJornada) : fallback.desde;
+  const hasta = hastaStr ? finDelDia(parseFechaLocal(hastaStr), inicioJornada) : fallback.hasta;
+  return { desde, hasta };
+}
+
+/**
+ * Parsea la fecha del usuario como local. Un ISO con hora explícita se deja al
+ * parser nativo: ahí el offset ya viene dicho y no hay ambigüedad que resolver.
+ */
+export function parseFechaLocal(v: string | Date): Date {
+  if (v instanceof Date) return new Date(v);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v).trim());
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0);
+  return new Date(v);
+}
+
+/**
  * Intervalo [desde, hasta] del rango: exactamente la union de sus buckets.
  *
  * Se deriva de `bucketsForRango` a proposito, y no con su propia aritmetica de

@@ -23,20 +23,8 @@ export interface PeriodoResuelto {
   labelAnterior: string | null;
 }
 
-/**
- * Parsea una fecha del usuario como fecha LOCAL, no UTC.
- *
- * `new Date('2026-07-15')` es UTC-medianoche: en Paraguay (UTC-3/-4) eso es el
- * 14 a la noche, asi que TODO rango `custom` corria un dia hacia atras. El bug
- * era anterior a la jornada comercial; lo destapo el test de la ventana 07:00.
- * Las fechas con hora explicita (ISO completo) se dejan al parser nativo.
- */
-function parseFechaLocal(v: string | Date): Date {
-  if (v instanceof Date) return new Date(v);
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v).trim());
-  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0);
-  return new Date(v);
-}
+
+import { parseFechaLocal } from '../utils/dashboard-rangos.util';
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 

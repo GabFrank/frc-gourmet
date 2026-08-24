@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Observable, throwError, of } from 'rxjs';
-import { RepositoryService, LoginResult, ClienteFilters } from './repository.service';
+import { RepositoryService, LoginResult, ClienteFilters, DashboardVentasFiltro, CajaSelectorItem } from './repository.service';
 import { Printer } from './entities/printer.entity';
 import { Persona } from './entities/personas/persona.entity';
 import { DocumentoTipo } from './entities/personas/documento-tipo.enum';
@@ -2432,7 +2432,11 @@ export class RepositoryHttpService extends RepositoryService {
   getDashboardRrhhKpis(periodo: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardRrhhKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  getDashboardVentasKpis(rango?: string): Observable<any> {
+  getCajasSelector(params?: { desde?: string; hasta?: string; limite?: number }): Observable<CajaSelectorItem[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getCajasSelector() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+
+  getDashboardVentasKpis(param?: string | DashboardVentasFiltro): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardVentasKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getDashboardComprasKpis(_rango?: string): Observable<any> {

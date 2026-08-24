@@ -7,7 +7,7 @@ import { PdvMesa } from '../../src/app/database/entities/ventas/pdv-mesa.entity'
 import { ComandaItem, ComandaItemEstado } from '../../src/app/database/entities/ventas/comanda-item.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { dbQuery } from '../utils/db-query';
-import { Rango, rangoToFechas, bucketsForRango } from '../utils/dashboard-rangos.util';
+import { Rango, rangoToFechas, bucketsForRango, ventanaDeFechas } from '../utils/dashboard-rangos.util';
 
 // El "total" real de una venta NO vive en la columna ventas.total (no poblada),
 // sino en pagos_detalles (PAGO - VUELTO). Estos helpers calculan el monto cobrado
@@ -287,12 +287,10 @@ export function registerDashboardVentasHandlers(
       const { desde: hoyInicio, hasta: hoyFin } = rangoToFechas('today', now, inicioJornada);
 
       // Ventana del periodo pedido: fechas explicitas si vinieron, si no el rango.
+      const ventanaPreset = rangoToFechas(rango, now, inicioJornada);
       const ventana = periodoExplicito
-        ? {
-            desde: filtro.desde ? new Date(filtro.desde) : rangoToFechas(rango, now, inicioJornada).desde,
-            hasta: filtro.hasta ? new Date(filtro.hasta) : rangoToFechas(rango, now, inicioJornada).hasta,
-          }
-        : rangoToFechas(rango, now, inicioJornada);
+        ? ventanaDeFechas(filtro.desde, filtro.hasta, ventanaPreset, inicioJornada)
+        : ventanaPreset;
       const filtroCajasSel: VentaFiltro | null = cajaIds.length > 0 ? filtroCajas(cajaIds) : null;
       // Periodo Y cajas: se combinan, no se excluyen.
       const filtroPeriodo = filtroY(
