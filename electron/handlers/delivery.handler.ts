@@ -32,6 +32,7 @@ import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.en
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { crearDeliveryEnTx } from '../utils/delivery-alta.utils';
 import {
   cancelarVentaCompletaEnTx,
   verificarVentaCancelable,
@@ -228,19 +229,15 @@ export function registerDeliveryHandlers(
     const costoDelivery = await resolverCostoDelivery(dataSource, payload?.precioDeliveryId);
 
     const resultado = await dataSource.transaction(async (manager) => {
-      const delivery = manager.getRepository(Delivery).create({
-        precioDelivery: payload?.precioDeliveryId ? ({ id: payload.precioDeliveryId } as any) : undefined,
-        cliente: payload?.clienteId ? ({ id: payload.clienteId } as any) : undefined,
-        nombre: upper(payload?.nombre) ?? undefined,
+      const deliveryGuardado = await crearDeliveryEnTx(manager, dataSource, {
+        precioDeliveryId: payload?.precioDeliveryId,
+        clienteId: payload?.clienteId,
+        nombre: payload?.nombre,
         telefono,
-        direccion: direccion ?? undefined,
-        observacion: upper(payload?.observacion) ?? undefined,
-        estado: DeliveryEstado.ABIERTO,
-        fechaAbierto: new Date(),
-        cobroAnticipado: !!(payload?.cobroAnticipado ?? config?.deliveryCobroAnticipadoDefault),
-      });
-      await setEntityUserTracking(dataSource, delivery, usuarioId, false);
-      const deliveryGuardado = await manager.save(Delivery, delivery);
+        direccion,
+        observacion: payload?.observacion,
+        cobroAnticipado: payload?.cobroAnticipado ?? config?.deliveryCobroAnticipadoDefault,
+      }, usuarioId);
 
       const venta = manager.getRepository(Venta).create({
         estado: VentaEstado.ABIERTA,

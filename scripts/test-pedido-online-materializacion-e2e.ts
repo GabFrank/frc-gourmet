@@ -33,6 +33,7 @@ import {
   crearComandaItemsSiCorresponde,
 } from '../electron/handlers/ventas.handler';
 import { registerPedidosOnlineAdminHandlers } from '../electron/handlers/pedidos-online-admin.handler';
+import { registerDeliveryHandlers } from '../electron/handlers/delivery.handler';
 
 let passed = 0, failed = 0;
 function ok(cond: boolean, name: string, extra?: any) {
@@ -78,6 +79,7 @@ async function main() {
   const { Venta } = E('ventas/venta.entity');
   const { VentaItem } = E('ventas/venta-item.entity');
   const { ComandaItem } = E('ventas/comanda-item.entity');
+  const { Delivery } = E('ventas/delivery.entity');
   const { PedidoOnline } = E('pedidos-online/pedido-online.entity');
   const { PedidoOnlineItem } = E('pedidos-online/pedido-online-item.entity');
 
@@ -111,6 +113,7 @@ async function main() {
   installHandlerRegistry();
   registerVentasHandlers(ds, () => admin);
   registerPedidosOnlineAdminHandlers(ds, () => admin);
+  registerDeliveryHandlers(ds, () => admin);
 
   const nuevoPedido = async (tipo: string, mesaId?: number) => {
     const p = await save(PedidoOnline, {
@@ -202,6 +205,41 @@ async function main() {
   // Mismo hook que dispara el PdV al agregar un item.
   await crearComandaItemsSiCorresponde(ds, viMostrador.id);
   ok(await comandaItemsDe(vMostrador.id) === 0, 'sin mesa, sin comanda y canalOrigen=LOCAL → no genera ComandaItem');
+
+  // ── 6b · DELIVERY crea el registro de reparto ───────────────────────────
+  console.log('\n[6b] Un pedido DELIVERY abre su Delivery y arrastra el envío');
+  const pDeli2 = await R(PedidoOnline).save(R(PedidoOnline).create({
+    numero: `PO-TEST-DELI2-${Date.now() % 100000}`, tipoPedido: 'DELIVERY', estado: 'ACEPTADO',
+    canalOrigen: 'WEB', metodoPago: 'EFECTIVO', subtotal: 45000, costoEnvio: 12000, total: 57000,
+    nombreCliente: 'ANA', telefonoCliente: '0981222333',
+    direccionEntrega: 'AVDA MCAL LOPEZ 1234', referenciaDireccion: 'PORTON NEGRO', notas: 'TOCAR TIMBRE',
+  }));
+  await save(PedidoOnlineItem, {
+    pedido: { id: pDeli2.id }, productoId: producto.id, presentacionId: presentacion.id,
+    nombreProducto: 'HAMBURGUESA', cantidad: 1, precioUnitario: 45000, subtotal: 45000,
+    personalizacion: JSON.stringify({}),
+  });
+  const matDeli2 = await materializarPedidoOnlineEnVenta(ds, pDeli2.id, undefined, admin.id);
+  const pDeli2Post = await R(PedidoOnline).findOneBy({ id: pDeli2.id });
+  ok(!!pDeli2Post?.deliveryId, 'el pedido queda vinculado a un Delivery', pDeli2Post?.deliveryId);
+
+  const vDeli2 = await R(Venta).findOne({ where: { id: matDeli2.ventaId }, relations: ['delivery'] });
+  ok(vDeli2?.delivery?.id === pDeli2Post?.deliveryId, 'la venta apunta al mismo Delivery');
+  ok(Number(vDeli2?.costoDelivery) === 12000, 'el costo de envío congelado llega a la venta', vDeli2?.costoDelivery);
+
+  const deli = await R(Delivery).findOneBy({ id: pDeli2Post?.deliveryId });
+  ok(deli?.estado === 'ABIERTO', 'el Delivery nace ABIERTO', deli?.estado);
+  ok((deli?.direccion || '').includes('PORTON NEGRO'), 'la referencia va en la dirección', deli?.direccion);
+  ok(deli?.telefono === '0981222333', 'arrastra el teléfono del cliente', deli?.telefono);
+
+  console.log('\n[6c] La bandeja no puede marcar ENTREGADO con la venta sin cobrar');
+  await R(PedidoOnline).update({ id: pDeli2.id }, { estado: 'LISTO' } as any);
+  const resEntregar: any = await invokeHandler('avanzar-estado-pedido-online', pDeli2.id, 'ENTREGADO');
+  ok(resEntregar?.success === false, 'la transición se rechaza', resEntregar);
+  ok(resEntregar?.error === 'delivery_rechazo_transicion',
+     'y el motivo viene del módulo de delivery, no de una regla duplicada', resEntregar?.error);
+  const pDeli2Final = await R(PedidoOnline).findOneBy({ id: pDeli2.id });
+  ok(pDeli2Final?.estado === 'LISTO', 'el pedido no avanzó', pDeli2Final?.estado);
 
   // ── 7 · Cancelar un pedido YA materializado revierte la venta ───────────
   console.log('\n[7] Cancelar un pedido en preparación revierte la venta');

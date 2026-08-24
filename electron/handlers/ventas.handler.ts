@@ -13,6 +13,7 @@ import { PdvCategoria } from '../../src/app/database/entities/ventas/pdv-categor
 import { PdvCategoriaItem } from '../../src/app/database/entities/ventas/pdv-categoria-item.entity';
 import { PdvItemProducto } from '../../src/app/database/entities/ventas/pdv-item-producto.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { crearDeliveryEnTx } from '../utils/delivery-alta.utils';
 import { getRangosPrecioVariacion } from '../utils/variacion-precio.utils';
 import { getVariacionConfig, getVariacionConfigGlobal } from '../utils/variacion-config.utils';
 import { ensureObservacionNotaLibreId } from '../utils/observacion-libre.utils';
@@ -58,7 +59,7 @@ import { dbQuery } from '../utils/db-query';
 import { computeResumenCaja } from '../utils/resumen-caja.utils';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
-import { EstadoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { EstadoPedidoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { CobroParcial } from '../../src/app/database/entities/ventas/cobro-parcial.entity';
 import { CobroParcialItem } from '../../src/app/database/entities/ventas/cobro-parcial-item.entity';
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
@@ -278,6 +279,27 @@ export async function materializarPedidoOnlineEnVenta(
         canalOrigen: 'WEB',
         nombreCliente: pedido.nombreCliente || undefined,
       });
+
+      // DELIVERY: además de la venta se abre el registro de reparto, en la misma
+      // transacción. Sin esto el pedido no entra al tablero del PdV, no se le
+      // puede asignar repartidor ni imprimir el ticket de reparto — vivía en un
+      // carril paralelo al módulo de delivery.
+      if (pedido.tipoPedido === TipoPedidoOnline.DELIVERY) {
+        const delivery = await crearDeliveryEnTx(qr.manager, dataSource, {
+          nombre: pedido.nombreCliente,
+          telefono: pedido.telefonoCliente,
+          direccion: [pedido.direccionEntrega, pedido.referenciaDireccion]
+            .filter(Boolean).join(' · ') || undefined,
+          observacion: pedido.notas,
+          // El costo ya viene congelado en el pedido: no se re-resuelve por zona,
+          // que podría haber cambiado de precio entre el pedido y la aceptación.
+          cobroAnticipado: false,
+        }, userId);
+        venta.delivery = delivery as any;
+        venta.costoDelivery = Number(pedido.costoEnvio) || 0;
+        pedido.deliveryId = delivery.id;
+      }
+
       await setEntityUserTracking(dataSource, venta, userId, false);
       venta = await ventaRepo.save(venta);
     }

@@ -7,6 +7,7 @@ import { EstadoPedidoOnline } from '../../src/app/database/entities/pedidos-onli
 import { ensurePermission } from '../utils/auth.utils';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
 import { cancelarVentaCompletaEnTx } from '../utils/venta-reversa.utils';
+import { invokeHandler } from '../utils/handler-registry';
 
 /**
  * Pedidos online — Fase 4: BANDEJA en el PdV (admin, vía /api/rpc, permisos staff).
@@ -52,6 +53,7 @@ function mapPedidoAdmin(p: PedidoOnline): any {
     referenciaDireccion: p.referenciaDireccion ?? null,
     notas: p.notas ?? null,
     ventaId: p.ventaId ?? null,
+    deliveryId: p.deliveryId ?? null,
     mesaId: p.mesaId ?? null,
     zonaDelivery: p.zonaDelivery ? { id: p.zonaDelivery.id, nombre: p.zonaDelivery.nombre } : null,
     fechaProgramada: p.fechaProgramada ?? null,
@@ -241,7 +243,7 @@ export function registerPedidosOnlineAdminHandlers(
   });
 
   // ============== AVANZAR ESTADO ==============
-  ipcMain.handle('avanzar-estado-pedido-online', async (_event: any, pedidoId: number, nuevoEstado: string) => {
+  ipcMain.handle('avanzar-estado-pedido-online', async (_event: any, pedidoId: number, nuevoEstado: string, data?: any) => {
     await ensurePermission(dataSource, getCurrentUser, PERM);
     const pedido = await repo().findOne({ where: { id: pedidoId } });
     if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
@@ -250,6 +252,34 @@ export function registerPedidosOnlineAdminHandlers(
     if (!permitidos.includes(nuevoEstado as EstadoPedidoOnline)) {
       return { success: false, error: 'transicion_invalida', estadoActual: pedido.estado, permitidos };
     }
+
+    // Si el pedido tiene un Delivery detrás, la transición equivalente se delega
+    // al módulo de delivery en vez de duplicar sus reglas acá. Eso mantiene una
+    // sola máquina de estados: sin esto, marcar ENTREGADO desde la bandeja
+    // saltaba el guard de "la venta tiene que estar cobrada" que ese módulo ya
+    // impone, y reintroducía por la puerta de atrás un bug que cerró el 2026-08-24.
+    // Si el delivery rechaza la transición, el pedido tampoco avanza.
+    const ESTADO_DELIVERY_EQUIVALENTE: Partial<Record<string, string>> = {
+      [EstadoPedidoOnline.LISTO]: 'PARA_ENTREGA',
+      [EstadoPedidoOnline.EN_CAMINO]: 'EN_CAMINO',
+      [EstadoPedidoOnline.ENTREGADO]: 'ENTREGADO',
+    };
+    const destinoDelivery = ESTADO_DELIVERY_EQUIVALENTE[nuevoEstado];
+    if (pedido.deliveryId && destinoDelivery) {
+      try {
+        await invokeHandler('delivery-cambiar-estado', pedido.deliveryId, destinoDelivery, {
+          funcionarioId: data?.funcionarioId,
+        });
+      } catch (e) {
+        return {
+          success: false,
+          error: 'delivery_rechazo_transicion',
+          detalle: (e as Error)?.message || String(e),
+          estadoActual: pedido.estado,
+        };
+      }
+    }
+
     pedido.estado = nuevoEstado as EstadoPedidoOnline;
     if (nuevoEstado === EstadoPedidoOnline.LISTO) pedido.fechaListo = new Date();
     if (nuevoEstado === EstadoPedidoOnline.ENTREGADO) pedido.fechaEntregado = new Date();

@@ -345,10 +345,15 @@ async function main() {
   const ventasRe = await R(Venta).find({ where: { mesa: { id: mesaRe.id }, estado: 'ABIERTA' } });
   ok(ventasRe.length === 1, 'sigue habiendo una sola venta abierta');
 
+  // Un pedido sin mesa YA NO es un error: desde que PICKUP/DELIVERY se
+  // materializan, abre su propia venta sin mesa marcada canalOrigen=WEB. Lo que
+  // acá importa es que ese camino no toque ninguna mesa.
   const pedidoSinMesa = await save(PedidoOnline, { numero: `T-${String(++numeroSeq).padStart(6, '0')}`, tipoPedido: 'PICKUP', estado: 'RECIBIDO', canalOrigen: 'WEB', metodoPago: 'EFECTIVO', subtotal: 0, costoEnvio: 0, total: 0 });
-  let threw = false;
-  try { await materializarPedidoOnlineEnVenta(ds, pedidoSinMesa.id); } catch { threw = true; }
-  ok(threw, 'pedido sin mesaId → lanza error');
+  const resSinMesa = await materializarPedidoOnlineEnVenta(ds, pedidoSinMesa.id);
+  ok(!!resSinMesa.ventaId, 'pedido sin mesaId → abre su propia venta');
+  const ventaSinMesa = await R(Venta).findOne({ where: { id: resSinMesa.ventaId }, relations: ['mesa'] });
+  ok(!ventaSinMesa?.mesa, 'esa venta no queda colgada de ninguna mesa');
+  ok(ventaSinMesa?.canalOrigen === 'WEB', 'y queda marcada canalOrigen=WEB', ventaSinMesa?.canalOrigen);
 
   const mesaMan = await save(PdvMesa, { numero: 31, activo: true, estado: 'DISPONIBLE', autoservicioActivo: true, qrToken: 'tok-Man' });
   const pedidoMan = await crearPedidoMesa(mesaMan.id);
