@@ -258,6 +258,106 @@ Granularidad por rango: horaria (`today`), diaria (`week`, `month`,
 Entre `await` y `await` de un request, dos `new Date()` distintos pueden caer en
 horas (o días) diferentes y volver a desincronizar card y chart.
 
+## 7.6. Jornada comercial (el corte del "día")
+
+**Un día NO empieza a medianoche.** `PdvConfig.inicioJornadaHora` (default **7**,
+configurable desde *Configuración del PdV → JORNADA COMERCIAL*) define la ventana:
+un día va de esa hora a la misma del día siguiente menos 1 ms.
+
+Existe porque las cajas del turno noche cruzan las 00:00 y siguen hasta las 2 AM.
+Con el corte a medianoche ese turno aparecía **partido en dos días distintos**, y
+el "total de hoy" se reiniciaba a mitad del turno.
+
+```ts
+anclaJornada(now, inicioJornada)   // a qué fecha-jornada pertenece un instante
+rangoToFechas(rango, now, inicioJornada)
+bucketsForRango(rango, now, inicioJornada)
+ventanaDeFechas(desde, hasta, fallback, inicioJornada)  // fechas del usuario
+```
+
+- **`inicioJornada = 0` reproduce exactamente el día calendario.** Es el default
+  de todas las firmas, así que un call site que no se enteró sigue comportándose
+  como antes en vez de romper.
+- **Aritmética de calendario (`setHours`/`setDate`), nunca sumar milisegundos.**
+  Sumar 24 h se rompe en los días de cambio de horario.
+- El backend la lee con `getInicioJornada(dataSource)` (`dashboard-ventas.handler.ts`),
+  cacheada 60 s. **`updatePdvConfig` llama a `invalidarCacheJornada()`** — sin eso
+  el usuario cambia el corte y durante un minuto ve el valor viejo.
+- **`resolverPeriodo()` de los reportes comparte el mismo ancla.** Tenía su propia
+  aritmética de días; con la jornada sólo en los dashboards, una venta de la 01:30
+  aparecía en días distintos según la pantalla.
+- El front lee `inicioJornada` de la respuesta para rotular el corte; nunca lo
+  asume.
+
+Cubierto por `scripts/test-kpis-filtros-e2e.ts` (`npm run test:kpis-filtros`) y
+por los casos `[H]` de `test:reportes-periodo`.
+
+## 7.7. Filtros del resumen de ventas
+
+`get-dashboard-ventas-kpis` acepta el string suelto (`'today'`) **o** un objeto
+`DashboardVentasFiltro`:
+
+```ts
+{ rango?: Rango; desde?: string; hasta?: string; cajaIds?: number[] }
+```
+
+- **Fechas y cajas se combinan con AND**, no se pisan.
+- `desde`/`hasta` aceptan `YYYY-MM-DD` y se expanden a la **jornada completa**:
+  pedir "15/07" trae el turno noche del 15 entero (15 07:00 → 16 06:59).
+- **El default histórico se preserva por AUSENCIA de filtro, no por la forma del
+  argumento.** `{ rango: 'today' }` sin fechas ni cajas se comporta idéntico al
+  string. Sin filtro sigue valiendo la Opción B: el total sigue a la caja abierta,
+  así una caja que cruza medianoche no reinicia el total. Con filtro manda lo que
+  pidió el usuario.
+- La respuesta trae `inicioJornada` y `filtroAplicado` (`{desde, hasta, cajaIds}`
+  o `null`) para que la UI pueda rotular el período **con la jornada ya resuelta**.
+  Rotular lo que el usuario escribió escondería justamente el corte.
+- Con filtro, `totalHoyPYG`/`ventasHoy` ya no son "de hoy" sino del período. El
+  nombre quedó del contrato original; el label de la UI **sí** cambia a "Total del
+  período".
+- El selector de cajas usa **`get-cajas-selector`**, no `get-cajas`: éste no tiene
+  `where` ni `LIMIT` y arrastra 6 relaciones eager, incluidos los dos conteos.
+- **Filtrar SÓLO por cajas no se acota además a "hoy".** Una caja es un turno
+  cerrado y su período es el suyo; cruzarla con la ventana de hoy hacía que
+  elegir una caja de la semana pasada devolviera cero con el cartel "No hubo
+  ventas en el período" — falso. El selector ofrece cajas viejas, así que es el
+  camino normal, no un borde.
+- **El chart (`ventasPorPeriodo`) usa la ventana pedida, no el preset.** Con
+  fechas explícitas los tramos salen de `bucketsForVentana(desde, hasta)`, que
+  elige granularidad por duración (horaria ≤1 día, diaria ≤45, semanal ≤180,
+  mensual más allá). Antes el chart se armaba sobre el preset (`'week'` por
+  default) mientras las cards usaban la ventana: filtrar julio mostraba las
+  cards de julio con un chart de la semana actual en cero — el mismo desfase
+  card/chart que el invariante de `rangoToFechas` existe para evitar.
+- **Medio rango se rechaza en la UI.** "Hasta el 1/8" no dice desde cuándo; el
+  backend completaba el extremo faltante con el preset (que arranca HOY) y
+  armaba un rango invertido: cero resultados en silencio. `ventanaDeFechas`
+  conserva un piso defensivo por si otro caller manda un solo extremo.
+
+### ⚠️ Fechas en SQLite: el límite se normaliza, la columna no
+
+TypeORM escribe `created_at` con `datetime('now')` → **`YYYY-MM-DD HH:MM:SS`, UTC,
+sin `T` ni `Z`**. Los handlers arman los límites con `Date.toISOString()`. SQLite
+compara esa columna como **texto**, y el espacio (`0x20`) ordena **antes** que la
+`T` (`0x54`):
+
+```
+'2026-08-24 09:40:12' >= '2026-08-24T03:00:00.000Z'   →  FALSO
+```
+
+Una fila creada hoy quedaba **fuera** del rango "hoy". No fallaba: devolvía cero.
+Sólo afecta al modo standalone — en Postgres la columna es `timestamp` de verdad.
+
+**`dbQuery` normaliza los parámetros ISO-Z al formato del driver** cuando el
+driver es SQLite (el límite, no la columna, para no perder el índice). Es un punto
+único y cubre los 65 call sites. Si escribís una consulta de fechas con
+`ds.query()` directo, **no** tenés esa red.
+
+Los tests sellaban `created_at` en ISO — el mismo formato ficticio de los
+límites — así que coincidían entre sí y pasaban mientras la app devolvía cero.
+`test:kpis-filtros` verifica que el formato sembrado siga siendo el que escribe
+BaseModel.
+
 ### Cómo se conecta un dashboard
 
 1. El handler recibe `rango: Rango = '<default>'` y resuelve fechas/buckets con

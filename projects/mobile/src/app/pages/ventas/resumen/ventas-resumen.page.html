@@ -1,13 +1,61 @@
 <div class="resumen-page">
+  <form [formGroup]="filtros" class="resumen-toolbar">
+    <span class="resumen-periodo" *ngIf="periodoLabel">{{ periodoLabel }}</span>
+    <span class="resumen-periodo muted" *ngIf="!periodoLabel">Jornada de hoy</span>
+    <button
+      mat-icon-button
+      type="button"
+      class="crud-filter-toggle"
+      [class.active]="filtrosActivos > 0"
+      (click)="toggleFiltros()"
+      aria-label="Filtros"
+    >
+      <mat-icon
+        [matBadge]="filtrosActivos"
+        [matBadgeHidden]="filtrosActivos === 0"
+        matBadgeColor="accent"
+        matBadgeSize="small"
+      >tune</mat-icon>
+    </button>
+    <button mat-icon-button type="button" (click)="cargar()" aria-label="Actualizar">
+      <mat-icon>refresh</mat-icon>
+    </button>
+  </form>
+
+  <div class="crud-filter-panel" *ngIf="filtrosAbiertos" [formGroup]="filtros">
+    <mat-form-field appearance="outline">
+      <mat-label>Desde</mat-label>
+      <input matInput type="date" formControlName="desde" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Hasta</mat-label>
+      <input matInput type="date" formControlName="hasta" />
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="campo-cajas">
+      <mat-label>Cajas</mat-label>
+      <mat-select formControlName="cajaIds" multiple>
+        <mat-option *ngFor="let c of cajasOpciones" [value]="c.id">{{ c.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <p class="resumen-filtro-error" *ngIf="errorFiltro">{{ errorFiltro }}</p>
+    <p class="resumen-filtro-nota">
+      Un día va de las {{ inicioJornadaLabel }} a las {{ finJornadaLabel }} del día siguiente,
+      así el turno noche no se parte al cruzar las 00:00.
+    </p>
+    <div class="crud-filter-actions">
+      <button mat-stroked-button type="button" (click)="limpiar()">Limpiar</button>
+      <button mat-flat-button color="primary" type="button" (click)="aplicar()">Aplicar</button>
+    </div>
+  </div>
+
   <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
   <p *ngIf="error" class="crud-error">{{ error }}</p>
 
+  <p *ngIf="!loading && !error && sinResultados" class="resumen-vacio">
+    No hubo ventas en el período seleccionado.
+  </p>
+
   <ng-container *ngIf="!loading && !error">
-    <div class="resumen-actions">
-      <button mat-icon-button (click)="cargar()" aria-label="Actualizar">
-        <mat-icon>refresh</mat-icon>
-      </button>
-    </div>
 
     <!-- Stat cards -->
     <div class="stat-grid">

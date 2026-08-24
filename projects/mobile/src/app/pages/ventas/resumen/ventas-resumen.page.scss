@@ -2,11 +2,48 @@
   padding: 12px 12px calc(16px + env(safe-area-inset-bottom));
 }
 
-.resumen-actions {
+.resumen-toolbar {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
   margin-bottom: 4px;
   color: var(--text-secondary);
+}
+
+/* El rótulo del período se come el espacio sobrante y empuja los botones a la
+   derecha; si el rango es largo se corta con puntos en vez de romper la fila. */
+.resumen-periodo {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &.muted {
+    font-weight: 400;
+    color: var(--text-secondary);
+  }
+}
+
+.resumen-filtro-nota {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.resumen-vacio {
+  margin: 24px 0;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.campo-cajas {
+  flex: 1 1 100%;
 }
 
 /* --- Stat cards --- */
@@ -165,4 +202,14 @@
 .rank-sub {
   font-size: 0.74rem;
   color: var(--text-secondary);
+}
+
+/* Reclamo del filtro: vive DENTRO del panel, junto a los campos que hay que
+   corregir. No usa `.crud-error` porque ese reemplaza la pantalla. */
+.resumen-filtro-error {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--warn-color, #f44336);
 }

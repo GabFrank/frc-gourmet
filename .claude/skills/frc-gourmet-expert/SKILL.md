@@ -149,6 +149,38 @@ Auditoría de ~240 commits desde 2026-06-28. Subsistemas **nuevos completos** qu
 - **Batch de seguridad/correctness 2026-07-15 (`docs/HALLAZGOS-AUDITORIA-DESKTOP.md`):** ~20 bugs C/M/A cerrados (doble conteo ledger bancario, stock por sabor en pizza multi-sabor, permisos precio/stock, revertir CPC al cancelar venta a crédito, costo receta / rendimiento, idempotencia anulaciones, TOCTOU stock, hash de password no expuesto al renderer, must-change-password en backend, +23 handlers RRHH con permiso). `BLOCKED_CHANNELS` de `/api/rpc` ampliado de 3 a ~30. → [reference/known-bugs.md](reference/known-bugs.md).
 - **Backup/Restore driver-aware + WhatsApp (2026-08):** el módulo *Configuración → Backup* ya NO es solo SQLite. Si `database.type === 'postgres'`, todo opera con `pg_dump`/`pg_restore` (motor `electron/utils/pg-backup.utils.ts`): formato **custom (`.dump`)** o **plano (`.sql`)** elegible, autodetección de binarios (+`pgBinDir` override), safety dump con abort/rollback, reset = drop schema. El contenedor `.frcbak` es genérico (manifest con `dbType`/`dbFileName`, retrocompatible). Nuevo handler **`backup-send-whatsapp`** (perm `SISTEMA_BACKUP`) envía cualquier backup como **documento** vía Evolution API a un `whatsappDestino` configurable. Config nueva en `app-settings.backup`: `pgFormat`/`pgBinDir`/`whatsappDestino`. Test `npm run test:pg-backup` (levanta Postgres temporal). → [docs/BACKUP-POSTGRES-WHATSAPP.md](../../../docs/BACKUP-POSTGRES-WHATSAPP.md).
 
+### Sesión 2026-08-24 (Jornada comercial + filtros del resumen)
+
+- **Jornada comercial configurable** — un día deja de ser el día calendario:
+  `PdvConfig.inicioJornadaHora` (default **7**, editable en *Configuración del
+  PdV*) define la ventana `07:00 → 06:59 del día siguiente`. Existe porque las
+  cajas del turno noche cruzan las 00:00 y siguen hasta las 2 AM: con el corte a
+  medianoche ese turno aparecía **partido en dos días** y el total de "hoy" se
+  reiniciaba a mitad del turno. `anclaJornada()` es la única fuente del corte, y
+  **los reportes comparten el mismo ancla** (`resolverPeriodo` tenía aritmética
+  propia y habría hecho que la misma venta cayera en días distintos según la
+  pantalla). `inicioJornada = 0` reproduce exactamente el comportamiento previo.
+  → [domains/dashboards.md](domains/dashboards.md) §7.6.
+- **Filtros del resumen de ventas (PWA)** — `get-dashboard-ventas-kpis` acepta
+  `{rango, desde, hasta, cajaIds}` además del string suelto; fechas y cajas se
+  combinan con **AND**. El default histórico se preserva por **ausencia** de
+  filtro, no por la forma del argumento. Nuevo canal liviano `get-cajas-selector`
+  para el desplegable. → [domains/dashboards.md](domains/dashboards.md) §7.7,
+  [architecture/mobile-pwa.md](architecture/mobile-pwa.md).
+- **fix: el filtro por fecha devolvía CERO en SQLite** — TypeORM guarda
+  `created_at` como `YYYY-MM-DD HH:MM:SS` (sin `T` ni `Z`) y los handlers
+  comparaban contra `toISOString()`; como texto, el espacio ordena antes que la
+  `T`, así que una fila creada hoy quedaba fuera del rango "hoy". No fallaba:
+  devolvía cero. Sólo afectaba al modo standalone. `dbQuery` normaliza ahora el
+  **límite** (no la columna, para no perder el índice). **Los tests no lo agarraban
+  porque sellaban `created_at` en el mismo formato ficticio que usaban los
+  límites** — coincidían entre sí. → [reference/known-bugs.md](reference/known-bugs.md).
+- **fix: los rangos `custom` de los reportes corrían un día** — `new Date('2026-07-15')`
+  es UTC-medianoche, que en Paraguay cae el 14 a la noche.
+- Tests: `npm run test:kpis-filtros` (nuevo), `test:reportes-periodo`,
+  `test:dashboard-rangos`. Manual:
+  [docs/testing/TESTING-CHECKLIST-JORNADA-Y-FILTROS.md](../../../docs/testing/TESTING-CHECKLIST-JORNADA-Y-FILTROS.md).
+
 ### Sesión 2026-07 (Funcionario/Vales + Impresoras + Multimoneda)
 
 - **Funcionario ↔ Cliente en liquidaciones MERGED (PR #196):** una persona puede ser funcionario y cliente a la vez (mismo `persona_id`). (1) La **liquidación de sueldo descuenta el consumo a crédito (CPC)** del cliente vinculado: concepto `CREDITO_CONSUMO`, cuotas CPC del período neteadas como las cuotas de préstamo (cobro atómico al pagar, sin movimiento aparte de Caja Mayor; migración `liquidacion_id` en `cuentas_por_cobrar_cuotas`). (2) La **liquidación final netea deudas** (vales → préstamos → crédito, neto topado en 0, residual queda a cobrar; migración `tipo`/`referencia_*` en `liquidacion_final_items` + `total_haberes/descuentos/neto` en `liquidaciones_final`). (3) Handler **`get-funcionario-resumen-financiero`**. (4) **`funcionario-detalle` → dashboard padrón** con resumen financiero. (5) **Chips cruzados** funcionario↔cliente (handler `get-funcionario-de-cliente`) + página **funcionario-detalle read-only en mobile**. Test: `npm run test:funcionario-vales`. Detalles → [domains/rrhh-liquidaciones.md](domains/rrhh-liquidaciones.md), [domains/rrhh.md](domains/rrhh.md). ⚠️ La **liquidación final no tiene UI** todavía (TODO) y el **neteo multimoneda DENTRO del cálculo de liquidación sigue pendiente** (ver Multimoneda abajo).

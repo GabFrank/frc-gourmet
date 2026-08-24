@@ -2,6 +2,44 @@
 
 Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo sigue roto. La sección de **Seguridad** está mayormente resuelta (bcrypt, JWT en keytar, permisos en backend, must-change-password) — ver detalle abajo y [architecture/auth-permissions.md](../architecture/auth-permissions.md).
 
+## Fechas / períodos
+
+### Filtro por rango de fechas devolvía CERO en SQLite — RESUELTO (2026-08-24)
+
+**Síntoma:** en modo standalone (SQLite), cualquier consulta acotada a "hoy"
+devolvía cero filas. No lanzaba error — devolvía un total vacío, que se lee como
+"no hubo ventas".
+
+**Causa:** TypeORM escribe `created_at` con el literal `datetime('now')` →
+`YYYY-MM-DD HH:MM:SS`, UTC y **sin `T` ni `Z`**. Los handlers arman los límites
+del rango con `Date.toISOString()` → `2026-08-24T03:00:00.000Z`. SQLite compara
+esa columna como **texto**, y el espacio (`0x20`) ordena **antes** que la `T`
+(`0x54`):
+
+```
+'2026-08-24 09:40:12' >= '2026-08-24T03:00:00.000Z'   →  FALSO
+```
+
+En Postgres no pasaba: ahí la columna es `timestamp` de verdad y el driver
+castea el ISO. Por eso sobrevivió — producción corre Postgres.
+
+**Por qué no lo agarró ningún test:** los tests sellaban `created_at` en ISO, el
+mismo formato ficticio que usaban los límites. Coincidían **entre sí** y pasaban
+mientras la app devolvía cero. Un test que miente en las dos puntas no prueba nada.
+
+**Fix:** `dbQuery` normaliza los parámetros ISO-Z al formato del driver cuando el
+driver es SQLite — el **límite**, no la columna, para no perder el índice. Punto
+único, cubre los 65 call sites. **Si escribís una consulta de fechas con
+`ds.query()` directo, no tenés esa red.** `test:kpis-filtros` ancla que el formato
+sembrado siga siendo el que escribe BaseModel.
+
+### Rangos `custom` de los reportes corrían un día — RESUELTO (2026-08-24)
+
+`new Date('2026-07-15')` es **UTC-medianoche**: en Paraguay (UTC-3/-4) eso cae el
+14 a la noche, así que todo rango `custom` arrancaba y terminaba un día antes. Se
+parsea con `parseFechaLocal()` (`shared/utils/dashboard-rangos.util.ts`), que
+interpreta `YYYY-MM-DD` como fecha local y deja los ISO con hora al parser nativo.
+
 ## RRHH / Financiero
 
 ### Operación Financiera: campos requeridos que la UI no poblaba — RESUELTO (2026-08)

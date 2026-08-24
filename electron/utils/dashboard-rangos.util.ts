@@ -12,6 +12,12 @@ export {
   RANGO_LABEL,
   rangoToFechas,
   bucketsForRango,
+  bucketsForVentana,
   buildRangoChips,
+  anclaJornada,
+  inicioDelDia,
+  finDelDia,
+  ventanaDeFechas,
+  parseFechaLocal,
 } from '../../src/app/shared/utils/dashboard-rangos.util';
 export type { Rango, RangoBucket, RangoChip } from '../../src/app/shared/utils/dashboard-rangos.util';

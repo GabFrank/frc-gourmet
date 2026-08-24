@@ -5,6 +5,7 @@ import { CuotaEstado, CuentaPorPagarEstado } from '../../src/app/database/entiti
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { dbQuery } from '../utils/db-query';
 import { Rango, rangoToFechas, bucketsForRango } from '../utils/dashboard-rangos.util';
+import { getInicioJornada } from './dashboard-ventas.handler';
 
 export function registerDashboardComprasHandlers(
   dataSource: DataSource,
@@ -14,10 +15,11 @@ export function registerDashboardComprasHandlers(
   ipcMain.handle('get-dashboard-compras-kpis', async (_event, rango: Rango = 'month') => {
     try {
       const now = new Date();
+      const inicioJornada = await getInicioJornada(dataSource);
       // El periodo de las compras y del top de proveedores lo define el rango
       // elegido en la UI; los vencimientos de CPP siguen siendo a futuro fijo
       // (7 y 14 dias), porque son una alerta, no una serie historica.
-      const { desde, hasta } = rangoToFechas(rango, now);
+      const { desde, hasta } = rangoToFechas(rango, now, inicioJornada);
       const en7dias = new Date(now); en7dias.setDate(en7dias.getDate() + 7);
 
       // 1. Compras del periodo
@@ -108,7 +110,7 @@ export function registerDashboardComprasHandlers(
       const labels: string[] = [];
       const compras: number[] = [];
       const cantidades: number[] = [];
-      for (const bucket of bucketsForRango(rango, now)) {
+      for (const bucket of bucketsForRango(rango, now, inicioJornada)) {
         const rows: any[] = await dbQuery(dataSource, `
           SELECT COUNT(*) as cnt, COALESCE(SUM(total), 0) as suma
           FROM compras

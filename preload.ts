@@ -3858,8 +3858,11 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // === Dashboards por dominio ===
-  getDashboardVentasKpis: async (rango: string = 'week'): Promise<any> => {
-    return await ipcRenderer.invoke('get-dashboard-ventas-kpis', rango);
+  getCajasSelector: async (params: { desde?: string; hasta?: string; limite?: number } = {}): Promise<any> => {
+    return await ipcRenderer.invoke('get-cajas-selector', params);
+  },
+  getDashboardVentasKpis: async (param: any = 'week'): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-ventas-kpis', param);
   },
   getDashboardComprasKpis: async (rango: string = 'month'): Promise<any> => {
     return await ipcRenderer.invoke('get-dashboard-compras-kpis', rango);

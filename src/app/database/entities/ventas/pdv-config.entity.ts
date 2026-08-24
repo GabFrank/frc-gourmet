@@ -79,6 +79,24 @@ export class PdvConfig extends BaseModel {
   @Column({ name: 'delivery_auto_imprimir_al_enviar', type: 'boolean', default: false })
   deliveryAutoImprimirAlEnviar!: boolean;
 
+  /**
+   * Hora en que arranca la JORNADA COMERCIAL (0–23).
+   *
+   * Los turnos noche cruzan las 00:00 y llegan hasta las 02:00, así que el día
+   * calendario parte las ventas de un mismo turno en dos. Con 7, la jornada del
+   * día D va de `D 07:00:00.000` a `D+1 06:59:59.999`, y una venta de la 01:30
+   * cuenta para el día anterior — que es como lo piensa el negocio.
+   *
+   * ⚠️ **0 = día calendario**, el comportamiento previo a 2026-08. Es la vía de
+   * escape si algo no cuadra: se pone 0 y todos los dashboards vuelven a cortar
+   * a medianoche, sin desplegar nada.
+   *
+   * Aplica a fechas de TRANSACCIÓN (cuándo pasó), nunca a fechas de vencimiento
+   * (cuándo vence): un cheque vence el día X, no "en la jornada X".
+   */
+  @Column({ name: 'inicio_jornada_hora', type: 'int', default: 7 })
+  inicioJornadaHora!: number;
+
   // Comandas
   @Column({ name: 'pdv_tab_default', type: 'varchar', default: 'MESAS' })
   pdvTabDefault!: string;

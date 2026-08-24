@@ -99,6 +99,37 @@ export interface ClienteFilters {
   conCredito?: boolean;
 }
 
+/**
+ * Filtro del resumen de ventas (`get-dashboard-ventas-kpis`).
+ *
+ * El canal acepta además el string suelto (`'today'`, `'week'`, …) y lo sigue
+ * aceptando: el default histórico se preserva por su AUSENCIA, no por la forma
+ * del argumento. `{ rango: 'today' }` sin fechas ni cajas se comporta idéntico
+ * al string `'today'`.
+ *
+ * Sin filtro explícito, el total de "hoy" sigue a la CAJA ABIERTA (Opción B):
+ * una caja que cruza medianoche no reinicia el total. En cuanto el usuario
+ * elige fechas o cajas manda lo que pidió, no la caja abierta.
+ */
+export interface DashboardVentasFiltro {
+  /** Preset. Default `'week'`. Lo pisan `desde`/`hasta` si vienen. */
+  rango?: 'today' | 'week' | 'month' | 'last-month' | '3months' | '6months';
+  /** `YYYY-MM-DD` (fecha local) o ISO completo. Se expande a la jornada entera. */
+  desde?: string;
+  hasta?: string;
+  /** Varias cajas a la vez. Se COMBINA con el período (AND), no lo reemplaza. */
+  cajaIds?: number[];
+}
+
+/** Fila del selector de cajas de los filtros: lo mínimo para elegir una caja. */
+export interface CajaSelectorItem {
+  id: number;
+  estado: string;
+  fechaApertura: string;
+  fechaCierre: string | null;
+  dispositivoNombre: string;
+}
+
 /** Archivo devuelto por la subida (genérica o por QR). */
 export interface QrUploadedFile {
   url: string;
@@ -994,7 +1025,8 @@ export abstract class RepositoryService {
   abstract generarNotificacionesRrhh(): Observable<any>;
   abstract countNotificacionesNoLeidas(usuarioId?: number): Observable<any>;
   abstract getDashboardRrhhKpis(periodo: string): Observable<any>;
-  abstract getDashboardVentasKpis(rango?: string): Observable<any>;
+  abstract getCajasSelector(params?: { desde?: string; hasta?: string; limite?: number }): Observable<CajaSelectorItem[]>;
+  abstract getDashboardVentasKpis(param?: string | DashboardVentasFiltro): Observable<any>;
   abstract getDashboardComprasKpis(rango?: string): Observable<any>;
   abstract getDashboardProductosKpis(rango?: string): Observable<any>;
   abstract getDashboardFinancieroKpis(): Observable<any>;
