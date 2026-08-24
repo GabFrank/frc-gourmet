@@ -385,7 +385,84 @@ ComandaItem {
 
 **Configuración**: `PdvConfig.comandasHabilitadas` (boolean) y `pdvTabDefault: MESAS | COMANDAS`.
 
-## Delivery
+## Delivery (reescrito 2026-08-24 — leer antes de tocar nada)
+
+El módulo estaba implementado pero **nunca se usó en producción**. La auditoría
+completa está en [`docs/DIAGNOSTICO-DELIVERY.md`](../../../../docs/DIAGNOSTICO-DELIVERY.md):
+26 hallazgos, cuatro bloqueantes. Lo que sigue describe el estado **después** de
+cerrarlos.
+
+### La regla que faltaba: el envío es un cargo de la venta
+
+```
+venta.costoDelivery  =  monto CONGELADO del envío
+```
+
+Se persiste el **monto**, no sólo la FK a la zona: el precio de una zona cambia
+con el tiempo y el ticket de una venta vieja tiene que seguir mostrando lo que
+se cobró. Se escribe al crear el delivery y al cambiar la zona.
+
+⚠️ **Antes de este cambio el envío NO SE COBRABA NUNCA.** `cobrar-venta-dialog`
+sumaba únicamente `Σ ítems − descuento` y `precioDelivery.valor` era decorativo.
+Hoy el costo entra en el total del cobro, en `getEstadoCobroVenta` y en el
+comprobante como línea `ENVIO`. **No modelarlo como `VentaItem`**: fue evaluado
+y descartado porque ensucia stock, costo/rentabilidad, comisiones y KDS.
+
+### La máquina de estados es del backend
+
+`delivery.handler.ts` es el dueño. `updateDelivery` (el CRUD genérico) **rechaza**
+cualquier payload que traiga `estado` o un timestamp.
+
+```
+ABIERTO      → PARA_ENTREGA | EN_CAMINO
+PARA_ENTREGA → EN_CAMINO | ABIERTO
+EN_CAMINO    → ENTREGADO | PARA_ENTREGA
+ENTREGADO    → EN_CAMINO          (corrección de un click errado)
+CANCELADO    → (nada: es terminal)
+```
+
+- **ENTREGADO exige la venta CONCLUIDA.** Marcar entregado sin cobrar deja un
+  pedido en la calle que nadie va a cobrar.
+- **EN_CAMINO exige repartidor** si `PdvConfig.deliveryRequiereRepartidor`.
+- Los timestamps los estampa y los limpia el backend; al retroceder se borran
+  las fechas de los estados que quedan por delante.
+- ⚠️ **Reabrir un CANCELADO no se puede, a propósito.** Antes se podía y estaba
+  roto de raíz: la reapertura ponía la venta en ABIERTA confiando en que "el
+  stock se re-procesará", pero `revertirStockVenta` desactiva los
+  `StockMovimiento` y **nada los reactiva**. Si el cliente vuelve a pedir, se
+  crea un delivery nuevo.
+
+### Cancelar mueve plata: es transaccional y tiene permiso propio
+
+`delivery-cancelar(id, motivo)` hace todo en un `queryRunner`, vía
+`electron/utils/venta-reversa.utils.ts` (`cancelarVentaCompletaEnTx`): ítems →
+CANCELADO, `PagoDetalle.activo = false`, rondas de `CobroParcial` de baja, CPC
+revertida con el saldo del cliente y su `MovimientoCliente`, `StockMovimiento`
+desactivados, venta CANCELADA.
+
+- El **motivo es obligatorio**.
+- Si la venta estaba CONCLUIDA exige **`VENTAS_DELIVERY_CANCELAR_COBRADO`**
+  además de `VENTAS_PDV`.
+- Es **idempotente**: reintentar tras un error de red no descuadra al cliente.
+
+`venta-reversa.utils.ts` es reutilizable: es el lugar donde poner cualquier
+futura "cancelación de venta cobrada" (p. ej. desde Últimas Ventas, que hoy
+sigue sin revertir el cobro).
+
+### Handlers
+
+| Canal | Qué hace |
+|---|---|
+| `delivery-listar-pdv(cajaId, filtros)` | Lista del PdV: la caja actual **+ los pendientes de cualquier caja** (marcados `otraCaja`). Reemplaza a `getDeliveriesByCaja`, que perdía de vista un EN_CAMINO al cerrar la caja. |
+| `delivery-crear(payload)` | Delivery **+ Venta en una transacción**. Antes eran dos llamadas y un fallo en la segunda dejaba un delivery sin venta, invisible (la lista parte de `Venta`). |
+| `delivery-actualizar-datos(id, payload)` | Datos del cliente + zona. Sincroniza `venta.costoDelivery`; rechaza el cambio de zona si la venta ya no está ABIERTA. |
+| `delivery-cambiar-estado(id, estado, {funcionarioId})` | La máquina de estados. |
+| `delivery-asignar-repartidor(id, funcionarioId)` | — |
+| `delivery-cancelar(id, motivo)` | Reversa transaccional. |
+| `delivery-listar-repartidores()` | Funcionarios activos sin egreso. |
+| `delivery-imprimir-ticket(id, printerId?)` | Ticket de reparto. |
+
+### Entidades
 
 `Delivery`:
 | Campo | Notas |
@@ -394,15 +471,61 @@ ComandaItem {
 | `cliente_id` FK nullable | Cliente registrado |
 | `nombre, telefono, direccion` | Si no hay cliente registrado |
 | `observacion` | Notas |
-| `estado` | ABIERTO → PARA_ENTREGA → EN_CAMINO → ENTREGADO / CANCELADO |
-| `fechaAbierto, fechaParaEntrega, fechaEnCamino, fechaEntregado, fechaCancelacion` | Timestamps por estado |
-| `motivoCancelacion` | Texto |
-| `cobroAnticipado` | boolean |
-| `entregadoPor` | Usuario (repartidor) |
+| `estado` | Ver la máquina de estados |
+| `fechaAbierto, fechaParaEntrega, fechaEnCamino, fechaEntregado, fechaCancelacion` | Los escribe el backend |
+| `motivoCancelacion` | Obligatorio al cancelar |
+| `cobroAnticipado` | boolean. ⚠️ Sigue siendo **informativo**: ningún flujo lo lee todavía |
+| `entregadoPorFuncionario_id` | **Repartidor = `Funcionario`**, no `Usuario` |
+| `entregadoPor` | ⚠️ **DEPRECADO** (FK a `Usuario`). Nunca llegó a escribirse: el botón ENVIAR tenía un TODO. La columna se conserva |
 
-`PrecioDelivery`: `descripcion`, `valor`. Configurable.
+`PrecioDelivery`: `descripcion`, `valor`, `activo`.
 
-**UI Delivery**: dialog 90vw × 85vh con lista paginada (filtros por estado), detalle ticket, timer de espera por estado (con colores configurables en `PdvConfig.deliveryTiempoAmarillo` / `deliveryTiempoRojo`).
+⚠️ **`PrecioDelivery.valor` y `Venta.costoDelivery` son `decimal`**: en Postgres
+llegan al renderer como **string** (no hay `pg.types.setTypeParser(1700)` en el
+repo). Sin `Number()` se concatenan en vez de sumarse — el total del detalle
+mostraba `100005000`.
+
+### Ticket de reparto
+
+`printDeliveryTicketInternal` (en `documentos-tickets.handler.ts`). Responde las
+tres preguntas del repartidor: **a dónde va, qué lleva y cuánto cobra** — con
+`A COBRAR Gs. X` / `PAGADO — NO COBRAR` en letra grande al pie.
+
+Reemplaza a `print-etiqueta-delivery`, que era **código muerto** (no estaba en
+`preload.ts` ni en el mapa de canales, así que nadie podía invocarla) y sólo
+imprimía nombre y dirección.
+
+Rol de impresora: `TICKET_VENTA` (no hay rol DELIVERY propio).
+
+### UI
+
+- **`delivery-dialog`** (90vw × 85vh): lista paginada con filtro por estado,
+  panel de detalle con totales (SUBTOTAL / ENVÍO / TOTAL), timer de espera con
+  colores por umbral, y footer de acciones. El menú ESTADO se arma desde un
+  espejo de la tabla de transiciones del backend.
+- **`crear-delivery-dialog`**: alta/edición, con autocomplete de cliente por
+  teléfono (**match por dígitos**, no por string: antes `0981 123456` y
+  `0981123456` creaban dos clientes).
+- **`seleccionar-repartidor-dialog`** (nuevo): elige el `Funcionario` al enviar.
+- **ABM de zonas**: `Ventas → Configuración → Precios de Delivery`, ahora en el
+  `MENU_TREE` (antes sólo se alcanzaba desde el dashboard de Ventas).
+
+### `ConfirmationDialogComponent` cambió de contrato
+
+Ahora implementa `showInput` / `inputLabel` / `inputRequerido` / `showCancel`,
+que varios llamadores le pasaban desde siempre y el componente **ignoraba**.
+
+**Con `showInput: true` cierra devolviendo el STRING** (en UPPERCASE, trimeado),
+no `true`. Sin `showInput` sigue devolviendo `true`/`false` como siempre.
+
+Este era el bug A-3: el delivery pedía el motivo de cancelación con `showInput`,
+el diálogo no lo implementaba, la guarda `typeof result === 'string'` nunca se
+cumplía y **todos** los deliveries cancelados quedaban con `'SIN MOTIVO'`.
+
+### Test
+
+`npm run test:delivery` — 46 asserts. Manual de pruebas:
+`docs/testing/TESTING-CHECKLIST-DELIVERY.md`.
 
 ## Sistema de Atajos PdV
 
@@ -447,8 +570,18 @@ Una sola fila. Campos:
 | `pdvGrupoCategoria_id` | null | Grupo categorías default |
 | `umbralDiferenciaBaja` | 5 | % aceptable diferencia caja (verde) |
 | `umbralDiferenciaAlta` | 15 | % alerta diferencia (rojo) |
+| `deliveryHabilitado` | true | Muestra el botón DELIVERY en el PdV |
 | `deliveryTiempoAmarillo` | 30 | min para color amarillo |
 | `deliveryTiempoRojo` | 60 | min para color rojo |
+| `deliveryPrecioDefaultId` | null | Zona preseleccionada al crear (null = la de menor valor) |
+| `deliveryCobroAnticipadoDefault` | false | Estado inicial del toggle COBRO ANTICIPADO |
+| `deliveryRequiereDireccion` | true | Dirección obligatoria para dar de alta |
+| `deliveryRequiereRepartidor` | true | Repartidor obligatorio para pasar a EN_CAMINO |
+| `deliveryTelefonoMinDigitos` | 4 | Mínimo de dígitos para habilitar el alta |
+| `deliveryPageSize` | 20 | Filas por página en la lista |
+| `deliveryMostrarPendientesOtrasCajas` | true | Suma a la lista los pendientes de otros turnos |
+| `deliveryAutoImprimirAlCrear` | false | Imprime el ticket de reparto al crear |
+| `deliveryAutoImprimirAlEnviar` | false | Imprime el ticket al pasar a EN_CAMINO |
 | `pdvTabDefault` | "MESAS" | Tab inicial PdV (MESAS/COMANDAS/CATEGORIAS/ATAJOS) |
 | `comandasHabilitadas` | false | Activa sistema de comandas |
 | `ocuparMesaAlVincularComanda` | false | Si true, vincular comanda a mesa marca la mesa OCUPADA; al cerrar la comanda vuelve a DISPONIBLE si no quedan otras comandas/venta abierta |

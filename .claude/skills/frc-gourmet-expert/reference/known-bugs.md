@@ -551,3 +551,26 @@ Aprendidos en la auditoría de bugs de julio 2026 (rama `claude/desktop-forma-pa
   (`get-moneda-cambio-by-moneda-principal`, `get-valor-en-moneda-principal`) usa la
   convención **inversa**. No se cruzan hoy, pero es una trampa. El pago consolidado
   usa `getCotizacionBidireccional`, que prueba las dos direcciones.
+
+## Delivery del PdV — cerrado 2026-08-24 (queda un resto)
+
+El módulo se auditó entero antes de su primer uso real
+(`docs/DIAGNOSTICO-DELIVERY.md`, 26 hallazgos). Los cuatro bloqueantes y la
+mayoría de los mayores están cerrados. **Lo que quedó abierto:**
+
+- **`Delivery.cobroAnticipado` sigue siendo decorativo.** Se guarda y se edita,
+  pero ningún flujo lo lee: no fuerza el cobro al crear, no altera el orden de
+  estados y no sale en el ticket.
+- **Cancelar una venta COBRADA desde Últimas Ventas sigue sin revertir el
+  cobro.** El delivery ya lo hace (`delivery-cancelar` →
+  `cancelarVentaCompletaEnTx`), pero `ultimas-ventas-dialog.cancelarVenta()`
+  sigue haciendo `updateVenta({estado:CANCELADA})` + `revertirStockVenta` sin
+  tocar `PagoDetalle` ni las rondas de `CobroParcial`. El util
+  `electron/utils/venta-reversa.utils.ts` está listo para reusarse ahí.
+- **`deletePrecioDelivery` es hard-delete** (`repo.remove`) aunque la entidad
+  tenga `activo`. Debería ser baja lógica.
+- **No hay `pg.types.setTypeParser(1700, parseFloat)` en el repo.** Todos los
+  `decimal` llegan como **string** en modo Postgres. Se compensa con `Number()`
+  caso por caso; es una fuente recurrente de bugs de concatenación
+  (`10000 + "5000"` → `"100005000"`). Arreglarlo de raíz es un cambio global
+  con su propio riesgo.

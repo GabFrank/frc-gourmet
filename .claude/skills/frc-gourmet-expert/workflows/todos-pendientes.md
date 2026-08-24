@@ -401,3 +401,20 @@ Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `proje
   Revisar junto con el resto de las lecturas si alguna vez se endurece.
 - [ ] **`repository-http`**: los 2 canales nuevos quedaron como stubs, igual que
   el resto del archivo.
+
+## Delivery — resto pendiente (2026-08-24)
+
+El módulo se cerró para poder usarse en producción
+(`docs/DIAGNOSTICO-DELIVERY.md`). Quedó fuera de alcance, a propósito:
+
+- **`Delivery.cobroAnticipado` no lo lee nadie.** Decidir qué debe hacer: ¿forzar
+  el cobro al crear? ¿mostrarlo en el ticket y en la lista? Hoy es un toggle que
+  se guarda y nada más.
+- **Comisiones por entrega.** El repartidor ya es un `Funcionario`, que es lo que
+  habilita engancharlo a `comisiones/`. Falta la regla.
+- **Reusar `venta-reversa.utils.ts` en Últimas Ventas**, que sigue cancelando una
+  venta cobrada sin revertir el cobro (ver `reference/known-bugs.md`).
+- **Baja lógica en `deletePrecioDelivery`** (hoy es `repo.remove`).
+- **Delivery en modo cliente (HTTP).** `repository-http.service.ts` tiene los
+  ocho métodos nuevos como stubs que lanzan, igual que los otros ~769 del
+  archivo.
