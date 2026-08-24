@@ -555,6 +555,20 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('updateDelivery', async (_event: any, id: number, data: any) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+      // El estado y sus timestamps son de la máquina de estados
+      // (`delivery-cambiar-estado` / `delivery-cancelar`), no de este merge
+      // crudo. Como `/api/rpc` es default-allow, sin este guard cualquier
+      // cliente con un JWT de VENTAS_PDV podía saltar de ABIERTO a ENTREGADO,
+      // escribir un estado inexistente o falsear las fechas.
+      const camposReservados = [
+        'estado', 'fechaAbierto', 'fechaParaEntrega', 'fechaEnCamino',
+        'fechaEntregado', 'fechaCancelacion', 'motivoCancelacion',
+      ].filter((c) => data && Object.prototype.hasOwnProperty.call(data, c));
+      if (camposReservados.length > 0) {
+        throw new Error(
+          `updateDelivery no puede modificar ${camposReservados.join(', ')}: usá delivery-cambiar-estado o delivery-cancelar.`,
+        );
+      }
       const repo = dataSource.getRepository(Delivery);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Delivery ID ${id} not found`);
@@ -3970,14 +3984,22 @@ async function getEstadoCobroVentaInternal(dataSource: DataSource, ventaId: numb
     else estado = 'PARCIAL';
     return { id: it.id, netoBruto, montoCubierto: cubierto, estado };
   });
-  const deudaBruta = itemsEstado.reduce((s, i) => s + i.netoBruto, 0);
+  const venta = await dataSource.getRepository(Venta).findOne({ where: { id: ventaId }, relations: ['pago'] });
+
+  // El costo del envío es un cargo de la venta, no un ítem: no se puede cubrir
+  // desde el panel de cobro parcial por ítems, pero SÍ es deuda. Antes no
+  // entraba en ningún total y el envío terminaba regalado.
+  // `costoDelivery` es `decimal` → string en Postgres, de ahí el Number().
+  const costoDelivery = Number(venta?.costoDelivery ?? 0) || 0;
+
+  const deudaItems = itemsEstado.reduce((s, i) => s + i.netoBruto, 0);
+  const deudaBruta = deudaItems + costoDelivery;
   const totalCubierto = itemsEstado.reduce((s, i) => s + i.montoCubierto, 0);
   const pendienteBruto = Math.max(0, deudaBruta - totalCubierto);
 
   // Descuento/aumento global desde las líneas del pago (si existe pago).
   let descuentoGlobal = 0;
   let aumentoGlobal = 0;
-  const venta = await dataSource.getRepository(Venta).findOne({ where: { id: ventaId }, relations: ['pago'] });
   if (venta?.pago?.id) {
     const detalles = await dataSource.getRepository(PagoDetalle).find({
       where: { pago: { id: venta.pago.id }, activo: true },
@@ -3988,7 +4010,7 @@ async function getEstadoCobroVentaInternal(dataSource: DataSource, ventaId: numb
     }
   }
 
-  return { items: itemsEstado, deudaBruta, totalCubierto, pendienteBruto, descuentoGlobal, aumentoGlobal };
+  return { items: itemsEstado, deudaItems, costoDelivery, deudaBruta, totalCubierto, pendienteBruto, descuentoGlobal, aumentoGlobal };
 }
 
 // Retardo antes de auto-imprimir la comanda: da tiempo a que el PdV persista los
