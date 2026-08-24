@@ -41,6 +41,7 @@ la zona de entrega era puramente decorativo.
 | # | Paso | Esperado |
 |---|---|---|
 | 1.8 | Si la instalación usa Postgres, repetir 1.7 | El TOTAL es **65.000**. Antes salía un número absurdo tipo `600005000`: los `decimal` llegan como string desde Postgres y el template los concatenaba en vez de sumarlos. |
+| 1.9 | **En Postgres**, cobrar una venta (de delivery o normal) con un ítem que tenga **adicionales/extras** | El total es correcto. Antes salía **NaN / vacío**: `(precioVentaUnitario + precioAdicionales) * cantidad` con los tres campos como string daba NaN. Bug pre-existente del diálogo de cobro, corregido en este trabajo. |
 
 ---
 
@@ -75,6 +76,8 @@ podía saltar de ABIERTO a ENTREGADO.
 | 3.6 | Cobrar → aparece "¿marcar como ENTREGADO?" → Sí | Queda ENTREGADO. |
 | 3.7 | Menú **ESTADO** con el delivery ENTREGADO | Ofrece **sólo EN_CAMINO** (corrección de un click errado). Antes ofrecía también ABIERTO, que dejaba la venta inconsistente. |
 | 3.8 | Menú ESTADO con un delivery ABIERTO | Ofrece PARA_ENTREGA y EN_CAMINO. |
+| 3.8b | Botón **REPARTIDOR** sobre un pedido EN_CAMINO | Reasigna el repartidor **sin** cambiar el estado. |
+| 3.8c | Click en ENVIAR y, **con el selector de repartidor abierto**, clickear otra fila de la tabla; después confirmar el repartidor | El cambio se aplica al pedido **original**, no al que quedó seleccionado. |
 
 ### 3.b El botón ENVIAR sin repartidores
 

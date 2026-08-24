@@ -570,7 +570,30 @@ mayoría de los mayores están cerrados. **Lo que quedó abierto:**
 - **`deletePrecioDelivery` es hard-delete** (`repo.remove`) aunque la entidad
   tenga `activo`. Debería ser baja lógica.
 - **No hay `pg.types.setTypeParser(1700, parseFloat)` en el repo.** Todos los
-  `decimal` llegan como **string** en modo Postgres. Se compensa con `Number()`
-  caso por caso; es una fuente recurrente de bugs de concatenación
-  (`10000 + "5000"` → `"100005000"`). Arreglarlo de raíz es un cambio global
-  con su propio riesgo.
+  `decimal` llegan como **string** en modo Postgres. **Verificado empíricamente
+  contra un Postgres 16 con el esquema real** (2026-08-24):
+
+  ```
+  PrecioDelivery.valor        = "5000.00"    string
+  VentaItem.precioVentaUnitario = "150000.00"  string
+  VentaItem.cantidad          = "2.000"      string
+  10000 + valor               = "100005000.00"   ← concatena
+  ```
+
+  Se compensa con `Number()` caso por caso, pero **es una mina activa**: el
+  subtotal del diálogo de cobro daba **NaN** para cualquier ítem con adicionales
+  en modo servidor (`(precioVentaUnitario + precioAdicionales) * cantidad` con
+  los tres como string), y se descubrió recién al auditar el delivery.
+
+  ⚠️ **Al tocar cualquier cálculo de montos, envolver TODOS los términos en
+  `Number()`** — no sólo el que uno agrega. Y al revisar código viejo que suma
+  `decimal`, asumir que está roto en Postgres hasta probar lo contrario.
+
+  Arreglarlo de raíz (`setTypeParser` global) es un cambio de una línea con
+  impacto en toda la app: hay que auditar qué código depende hoy de recibir
+  strings antes de hacerlo. **Candidato fuerte para un trabajo propio.**
+
+  ⚠️ **`pessimistic_write` + `relations` no se puede en Postgres**: el `findOne`
+  con relaciones genera un LEFT JOIN y `FOR UPDATE` no se puede aplicar sobre el
+  lado nullable de un outer join. Tomar el lock en una consulta aparte, sin
+  relaciones (ver `venta-reversa.utils.ts`).

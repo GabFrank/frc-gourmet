@@ -283,3 +283,92 @@ Van a la nueva sección **Delivery** de la configuración del PdV:
 3. **Repartidor:** `Funcionario` de RRHH, no `Usuario`.
 4. **Lista:** caja actual + pendientes de cualquier caja, marcados como de otro
    turno.
+
+---
+
+## Hallazgos posteriores (auditoría de código, 2026-08-24)
+
+Dos agentes auditores sobre el diff completo encontraron seis cosas más, todas
+verificadas contra el código antes de aplicarlas. Las dos primeras son del
+propio trabajo; la tercera es un bug pre-existente **grave** que apareció al
+mirar de cerca la función del cobro.
+
+### F-1 · El CRUD genérico seguía siendo una puerta trasera
+
+El primer guard de `updateDelivery` bloqueaba `estado` y los timestamps, pero
+**no la zona**. Cambiar `precioDelivery` por ahí no resincroniza
+`venta.costoDelivery` ni respeta el chequeo de "venta todavía ABIERTA": el envío
+quedaba cobrado a un precio y mostrado a otro. Y `createDelivery` seguía
+pudiendo crear un `Delivery` sin `Venta` — exactamente el registro invisible que
+`delivery-crear` vino a eliminar. Ambos canales están en `preload.ts`, así que
+eran alcanzables por `/api/rpc` con sólo `VENTAS_PDV`.
+
+Hoy `updateDelivery` reserva también `precioDelivery` / `entregadoPorFuncionario`
+y `createDelivery` rechaza apuntando a `delivery-crear`.
+
+### F-2 · Concurrencia: la idempotencia no alcanzaba
+
+`cancelarVentaCompletaEnTx` es idempotente ante un **reintento serial**, pero no
+ante concurrencia real: dos cancelaciones simultáneas de la misma venta (doble
+click, un reintento de red que se cruza con el original) podían leer las dos la
+CPC como `ACTIVO` y **descontar el saldo del cliente dos veces**. Lo mismo, más
+leve, en `delivery-cambiar-estado`: dos transiciones concurrentes leían el mismo
+estado viejo, las dos pasaban la validación y ganaba la última, saltándose un
+estado sin que la API devolviera nunca "Transición no permitida".
+
+Ambos van ahora en transacción con `pessimistic_write` en Postgres (en SQLite no
+aplica: un solo escritor). ⚠️ El lock se toma en una consulta **sin relaciones**:
+Postgres rechaza `FOR UPDATE` sobre el lado nullable de un outer join.
+
+### F-3 · El subtotal del cobro daba NaN en Postgres (pre-existente)
+
+`cobrar-venta-dialog.calculateTotals()` hacía:
+
+```ts
+this.subtotal += (item.precioVentaUnitario + (item.precioAdicionales || 0)) * item.cantidad;
+```
+
+Los tres campos son `decimal`. **Verificado contra un Postgres 16 real** con el
+esquema completo de la app:
+
+```
+precioVentaUnitario = "150000.00"  string
+precioAdicionales   = "5000.00"    string
+cantidad            = "2.000"      string
+expresión actual    = NaN          (esperado 310000)
+con Number()        = 310000
+```
+
+Es decir: **en modo servidor, el total de cobro de cualquier ítem con adicionales
+era NaN**. No es un hallazgo del delivery, pero está en la función que este
+trabajo modifica y rompía también el cobro del envío, así que se corrigió acá.
+
+### F-4 · Race en el botón ENVIAR
+
+Entre el click y el cierre del selector de repartidor hay dos huecos asíncronos
+con la tabla clickeable de fondo, y `cambiarEstado` releía `this.selectedDelivery`.
+Si el cajero seleccionaba otra fila mientras tanto, el envío y el repartidor se
+aplicaban **al pedido equivocado, en silencio**. Ahora el delivery objetivo se
+captura al inicio.
+
+### F-5 · Errores mudos en el panel de detalle
+
+Los `catch` de `loadDeliveryDetails` dejaban el panel vacío sin avisar: un panel
+vacío es indistinguible de un pedido sin ítems.
+
+### F-6 · `deliveryAsignarRepartidor` era superficie muerta
+
+Estaba en las cuatro capas pero ningún componente lo llamaba. Se cableó a un
+botón **REPARTIDOR** que reasigna sin cambiar de estado (el pedido ya salió y lo
+termina llevando otra persona).
+
+---
+
+## Verificación
+
+| Qué | Cómo |
+|---|---|
+| Lógica de negocio | `npm run test:delivery` — 49 asserts |
+| Resto del repo | 39 suites `test:*`; la única roja (`test:pedidos-online`, 1 assert de auth) **ya falla en `develop`** sin estos cambios |
+| Compilación estricta | `npm run check` (AOT de producción) — exit 0 |
+| **Postgres** | Las 62 migraciones corridas contra un **Postgres 16 real** desde una base vacía — exit 0. Esquema verificado columna por columna. Es lo que la verificación local del repo normalmente no cubre |
