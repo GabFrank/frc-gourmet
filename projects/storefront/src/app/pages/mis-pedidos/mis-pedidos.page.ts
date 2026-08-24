@@ -1,9 +1,12 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, ActivatedRoute } from '@angular/router';
 import { PublicApiService } from '../../core/public-api.service';
 import { AuthService } from '../../core/auth.service';
 import { PedidoResumen } from '../../core/models';
+
+/** Estados en los que ya no hay nada más que esperar. */
+const TERMINALES = ['ENTREGADO', 'RECHAZADO', 'CANCELADO'];
 
 const ESTADO_LABEL: Record<string, string> = {
   RECIBIDO: 'Recibido',
@@ -32,6 +35,10 @@ const ESTADO_LABEL: Record<string, string> = {
         Ingresá para ver tus pedidos. <a routerLink="/login">Ingresar</a>.
       </p>
       <p class="sf-muted" *ngIf="cargando">Cargando…</p>
+      <p class="sf-muted sf-live" *ngIf="!cargando && actualizado">
+        Se actualiza solo · {{ actualizado | date:'HH:mm:ss' }}
+        <button type="button" class="sf-refresh" (click)="cargar(true)">Actualizar</button>
+      </p>
       <p class="sf-muted" *ngIf="auth.isAuthenticated && !cargando && pedidos.length === 0">
         Todavía no hiciste pedidos.
       </p>
@@ -61,9 +68,14 @@ const ESTADO_LABEL: Record<string, string> = {
     .sf-pedido-sub { font-size: 12px; margin: 4px 0 8px; }
     .sf-pedido-item { font-size: 14px; padding: 2px 0; }
     .sf-pedido-total { margin-top: 8px; font-weight: 600; }
+    .sf-live { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+    .sf-refresh {
+      background: none; border: none; padding: 0;
+      color: var(--sf-primary); font: inherit; cursor: pointer; text-decoration: underline;
+    }
   `],
 })
-export class MisPedidosPage implements OnInit {
+export class MisPedidosPage implements OnInit, OnDestroy {
   private api = inject(PublicApiService);
   private route = inject(ActivatedRoute);
   auth = inject(AuthService);
@@ -71,15 +83,38 @@ export class MisPedidosPage implements OnInit {
   pedidos: PedidoResumen[] = [];
   cargando = false;
   nuevo: string | null = null;
+  /** Marca de la última actualización, para que se note que la página está viva. */
+  actualizado: Date | null = null;
+  private poll: any = null;
 
   ngOnInit(): void {
     this.nuevo = this.route.snapshot.queryParamMap.get('nuevo');
     if (!this.auth.isAuthenticated) return;
-    this.cargando = true;
+    this.cargar(true);
+    // Sin esto la página era una carga única: el cliente tenía que recargar el
+    // navegador para ver si su pedido avanzó, y en la práctica termina llamando
+    // por teléfono al local — el peor final para un canal digital.
+    this.poll = setInterval(() => this.cargar(false), 12000);
+  }
+
+  ngOnDestroy(): void {
+    if (this.poll) clearInterval(this.poll);
+  }
+
+  /** `mostrarSpinner` sólo en la primera carga: el refresco es silencioso. */
+  cargar(mostrarSpinner: boolean): void {
+    if (mostrarSpinner) this.cargando = true;
     this.api.call<any>('pedido.mis').subscribe({
       next: (res) => {
         this.cargando = false;
-        if (res?.success) this.pedidos = res.pedidos || [];
+        if (res?.success) {
+          this.pedidos = res.pedidos || [];
+          this.actualizado = new Date();
+          // Cuando ya no queda nada en curso no hay nada que mirar: se corta el
+          // poll para no golpear el server desde una pestaña abierta y olvidada.
+          const enCurso = this.pedidos.some((p: any) => !TERMINALES.includes(p.estado));
+          if (!enCurso && this.poll) { clearInterval(this.poll); this.poll = null; }
+        }
       },
       error: () => (this.cargando = false),
     });
