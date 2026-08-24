@@ -8,6 +8,7 @@
     <div class="header-right">
       <span class="header-detail">Subtotal: {{ subtotal | number:'1.0-0' }}</span>
       <span class="header-detail descuento-text" *ngIf="descuentoTotal > 0">Desc: -{{ descuentoTotal | number:'1.0-0' }}</span>
+      <span class="header-detail" *ngIf="costoDelivery > 0">Envío: {{ costoDelivery | number:'1.0-0' }}</span>
       <span class="header-detail">{{ activeItems.length }} items</span>
       <button mat-stroked-button class="btn-ver-costo" (click)="toggleCosto()" [class.costo-visible]="showCosto">
         <mat-icon>{{ showCosto ? 'visibility_off' : 'visibility' }}</mat-icon>

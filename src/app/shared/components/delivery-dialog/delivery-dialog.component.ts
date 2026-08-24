@@ -12,17 +12,18 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
-import { VentaEstado } from '../../../database/entities/ventas/venta.entity';
 
 import { RepositoryService } from '../../../database/repository.service';
-import { Delivery, DeliveryEstado } from '../../../database/entities/ventas/delivery.entity';
+import { DeliveryEstado } from '../../../database/entities/ventas/delivery.entity';
 import { Caja } from '../../../database/entities/financiero/caja.entity';
 import { Moneda } from '../../../database/entities/financiero/moneda.entity';
 import { CrearDeliveryDialogComponent } from '../crear-delivery-dialog/crear-delivery-dialog.component';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { CobrarVentaDialogComponent, CobrarVentaDialogData } from '../cobrar-venta-dialog/cobrar-venta-dialog.component';
 import { MonedaCambio } from '../../../database/entities/financiero/moneda-cambio.entity';
+import { SeleccionarRepartidorDialogComponent } from '../seleccionar-repartidor-dialog/seleccionar-repartidor-dialog.component';
 
 export interface DeliveryDialogData {
   caja: Caja;
@@ -44,6 +45,7 @@ interface DeliveryRow {
   entregador: string;
   observacion: string;
   tiempoColor: string;
+  otraCaja: boolean;
 }
 
 @Component({
@@ -81,9 +83,14 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   pageSize = 20;
   pageIndex = 0;
 
-  // Umbrales de tiempo
+  // Umbrales de tiempo (configurables en Configuración del PdV → Delivery)
   tiempoAmarillo = 30;
   tiempoRojo = 60;
+
+  // Totales del panel de detalle. Pre-computados: la vista no llama funciones.
+  detalleSubtotal = 0;
+  detalleEnvio = 0;
+  detalleTotal = 0;
 
   private timerInterval: any;
 
@@ -91,18 +98,21 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     public dialogRef: MatDialogRef<DeliveryDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: DeliveryDialogData,
     private repositoryService: RepositoryService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private snackBar: MatSnackBar,
   ) {}
 
   async ngOnInit(): Promise<void> {
-    // Load umbrales
     try {
       const config = await firstValueFrom(this.repositoryService.getPdvConfig());
       if (config) {
         this.tiempoAmarillo = config.deliveryTiempoAmarillo || 30;
         this.tiempoRojo = config.deliveryTiempoRojo || 60;
+        this.pageSize = config.deliveryPageSize || 20;
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('No se pudo leer la configuración de delivery, se usan los defaults:', e);
+    }
 
     await this.loadDeliveries();
 
@@ -121,11 +131,11 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       const filtros: any = { page: this.pageIndex + 1, pageSize: this.pageSize };
       if (this.estadoFiltro) filtros.estado = this.estadoFiltro;
 
-      const result = await firstValueFrom(this.repositoryService.getDeliveriesByCaja(this.data.caja.id, filtros));
+      const result = await firstValueFrom(this.repositoryService.deliveryListarPdv(this.data.caja.id, filtros));
       this.totalDeliveries = result.total;
       this.deliveryRows = result.data.map((d: any) => this.mapDeliveryRow(d));
     } catch (error) {
-      console.error('Error loading deliveries:', error);
+      this.mostrarError(error, 'No se pudo cargar la lista de deliveries');
     }
   }
 
@@ -145,10 +155,14 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       estadoColor: this.getEstadoColor(d.estado),
       espera: this.formatEspera(mins),
       totalVenta: this.calcTotalVenta(d),
-      valorDelivery: d.precioDelivery?.valor || 0,
-      entregador: d.entregadoPor?.persona?.nombre || '-',
+      // `costoDelivery` viene congelado en la venta; la zona es sólo el
+      // fallback para deliveries anteriores a la columna. `Number()` porque
+      // ambos son `decimal` → string en Postgres.
+      valorDelivery: Number(d.venta?.costoDelivery ?? d.precioDelivery?.valor ?? 0) || 0,
+      entregador: d.entregadoPorFuncionario?.persona?.nombre || '-',
       observacion: d.observacion || '',
       tiempoColor: this.getTiempoColor(mins, d.estado),
+      otraCaja: !!d.otraCaja,
     };
   }
 
@@ -181,12 +195,17 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     return '';
   }
 
+  /** Total de la venta: ítems activos + costo de envío. */
   private calcTotalVenta(d: any): number {
-    if (!d.venta?.items) return 0;
+    const envio = Number(d.venta?.costoDelivery ?? 0) || 0;
+    if (!d.venta?.items) return envio;
     return d.venta.items.reduce((sum: number, i: any) => {
-      if (i.estado === 'ACTIVO') return sum + (i.precioVentaUnitario + (i.precioAdicionales || 0) - (i.descuentoUnitario || 0)) * i.cantidad;
-      return sum;
-    }, 0);
+      if (i.estado !== 'ACTIVO') return sum;
+      const unit = Number(i.precioVentaUnitario || 0)
+        + Number(i.precioAdicionales || 0)
+        - Number(i.descuentoUnitario || 0);
+      return sum + unit * Number(i.cantidad || 0);
+    }, envio);
   }
 
   private updateEsperas(): void {
@@ -204,6 +223,21 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   isEntregado = false;
   isCancelado = false;
   isTerminal = false;
+  /** El menú ESTADO sólo ofrece transiciones que el backend acepta. */
+  estadosDisponibles: DeliveryEstado[] = [];
+
+  /**
+   * Espejo de la tabla de transiciones del backend
+   * (`delivery.handler.ts:TRANSICIONES`). Acá sólo decide qué botones se
+   * muestran: la validación real y su mensaje de error son del backend.
+   */
+  private static readonly TRANSICIONES: Record<string, DeliveryEstado[]> = {
+    [DeliveryEstado.ABIERTO]: [DeliveryEstado.PARA_ENTREGA, DeliveryEstado.EN_CAMINO],
+    [DeliveryEstado.PARA_ENTREGA]: [DeliveryEstado.EN_CAMINO, DeliveryEstado.ABIERTO],
+    [DeliveryEstado.EN_CAMINO]: [DeliveryEstado.ENTREGADO, DeliveryEstado.PARA_ENTREGA],
+    [DeliveryEstado.ENTREGADO]: [DeliveryEstado.EN_CAMINO],
+    [DeliveryEstado.CANCELADO]: [],
+  };
 
   selectDelivery(row: DeliveryRow): void {
     this.selectedDelivery = row.delivery;
@@ -219,14 +253,15 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     this.isEntregado = estado === DeliveryEstado.ENTREGADO;
     this.isCancelado = estado === DeliveryEstado.CANCELADO;
     this.isTerminal = this.isEntregado || this.isCancelado;
+    this.estadosDisponibles = estado ? (DeliveryDialogComponent.TRANSICIONES[estado] ?? []) : [];
   }
 
   private async loadDeliveryDetails(): Promise<void> {
-    if (!this.selectedDelivery?.venta?.id) {
-      this.selectedItems = [];
-      this.selectedPagoDetalles = [];
-      return;
-    }
+    this.selectedItems = [];
+    this.selectedPagoDetalles = [];
+    this.recalcularTotalesDetalle();
+
+    if (!this.selectedDelivery?.venta?.id) return;
 
     try {
       this.selectedItems = await firstValueFrom(this.repositoryService.getVentaItems(this.selectedDelivery.venta.id));
@@ -237,12 +272,34 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     try {
       if (this.selectedDelivery.venta.pago?.id) {
         this.selectedPagoDetalles = await firstValueFrom(this.repositoryService.getPagoDetalles(this.selectedDelivery.venta.pago.id));
-      } else {
-        this.selectedPagoDetalles = [];
       }
     } catch (e) {
       this.selectedPagoDetalles = [];
     }
+
+    this.recalcularTotalesDetalle();
+  }
+
+  /**
+   * Totales del panel derecho.
+   *
+   * Antes el template hacía `calcTotalItems() + precioDelivery?.valor`, que
+   * además de ser una llamada en la vista concatenaba strings en Postgres
+   * (`valor` es `decimal`): el total salía como "100005000".
+   */
+  private recalcularTotalesDetalle(): void {
+    this.detalleSubtotal = this.selectedItems
+      .filter((i) => i.estado === 'ACTIVO')
+      .reduce((sum, i) => {
+        const unit = Number(i.precioVentaUnitario || 0)
+          + Number(i.precioAdicionales || 0)
+          - Number(i.descuentoUnitario || 0);
+        return sum + unit * Number(i.cantidad || 0);
+      }, 0);
+    this.detalleEnvio = Number(
+      this.selectedDelivery?.venta?.costoDelivery ?? this.selectedDelivery?.precioDelivery?.valor ?? 0,
+    ) || 0;
+    this.detalleTotal = this.detalleSubtotal + this.detalleEnvio;
   }
 
   onFiltroChange(): void {
@@ -257,13 +314,8 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     });
 
     dialogRef.afterClosed().subscribe(async (result) => {
-      if (result) {
-        await this.loadDeliveries();
-        // Seleccionar el nuevo delivery
-        const newRow = this.deliveryRows.find(r => r.delivery.id === result.delivery.id);
-        if (newRow) this.selectDelivery(newRow);
-
-        // Cerrar diálogo y cargar en PdV para tomar pedido
+      if (result?.delivery && result?.venta) {
+        // Cerrar el diálogo y cargar el pedido en el PdV para tomar los ítems.
         this.dialogRef.close({ action: 'editItems', delivery: result.delivery, venta: result.venta });
       }
     });
@@ -272,6 +324,13 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   // Acciones según estado
   editarItems(): void {
     if (!this.selectedDelivery) return;
+    if (this.selectedDelivery.venta?.estado !== 'ABIERTA') {
+      this.snackBar.open(
+        `La venta de este delivery está ${this.selectedDelivery.venta?.estado ?? 'sin abrir'}: no se pueden editar los ítems.`,
+        'CERRAR', { duration: 5000, panelClass: ['error-snackbar'] },
+      );
+      return;
+    }
     this.dialogRef.close({ action: 'editItems', delivery: this.selectedDelivery, venta: this.selectedDelivery.venta });
   }
 
@@ -283,11 +342,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     });
 
     dialogRef.afterClosed().subscribe(async (result) => {
-      if (result?.edited) {
-        await this.loadDeliveries();
-        const row = this.deliveryRows.find(r => r.delivery.id === this.selectedDelivery.id);
-        if (row) this.selectDelivery(row);
-      }
+      if (result?.edited) await this.recargarManteniendoSeleccion();
     });
   }
 
@@ -301,6 +356,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       exchangeRates: this.data.exchangeRates,
       principalMoneda: this.data.principalMoneda,
       caja: this.data.caja,
+      costoDelivery: this.detalleEnvio,
     };
 
     const dialogRef = this.dialog.open(CobrarVentaDialogComponent, {
@@ -312,208 +368,182 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     });
 
     dialogRef.afterClosed().subscribe(async (result) => {
-      if (result?.success && this.selectedDelivery && this.selectedDelivery.estado !== DeliveryEstado.ENTREGADO) {
-        // Cobro finalizado → preguntar si finalizar delivery
-        const confirmRef = this.dialog.open(ConfirmationDialogComponent, {
-          width: '400px',
-          data: {
-            title: 'FINALIZAR DELIVERY',
-            message: 'El cobro ha sido finalizado. ¿Desea también marcar el delivery como ENTREGADO?',
-          },
-        });
-        confirmRef.afterClosed().subscribe(async (confirmed) => {
-          if (confirmed) {
-            await firstValueFrom(this.repositoryService.updateDelivery(this.selectedDelivery.id, {
-              estado: DeliveryEstado.ENTREGADO,
-              fechaEntregado: new Date(),
-            }));
-          }
-          await this.loadDeliveries();
-          if (this.selectedDelivery) {
-            const row = this.deliveryRows.find(r => r.delivery.id === this.selectedDelivery.id);
-            if (row) this.selectDelivery(row);
-          }
-        });
-      } else {
-        await this.loadDeliveries();
-        if (this.selectedDelivery) {
-          const row = this.deliveryRows.find(r => r.delivery.id === this.selectedDelivery.id);
-          if (row) this.selectDelivery(row);
-        }
+      const cobroOk = result?.success && this.selectedDelivery && !this.isEntregado;
+      if (!cobroOk) {
+        await this.recargarManteniendoSeleccion();
+        return;
       }
+
+      // Con el cobro cerrado, ofrecer marcar la entrega. Sólo tiene sentido si
+      // el pedido ya salió: el backend rechaza ENTREGADO desde ABIERTO.
+      if (!this.isEnCamino) {
+        await this.recargarManteniendoSeleccion();
+        return;
+      }
+      const confirmRef = this.dialog.open(ConfirmationDialogComponent, {
+        width: '400px',
+        data: {
+          title: 'FINALIZAR DELIVERY',
+          message: 'El cobro ha sido finalizado. ¿Desea también marcar el delivery como ENTREGADO?',
+          confirmText: 'SÍ, ENTREGADO',
+          cancelText: 'AHORA NO',
+        },
+      });
+      confirmRef.afterClosed().subscribe(async (confirmed) => {
+        if (confirmed) await this.cambiarEstado(DeliveryEstado.ENTREGADO, { silencioso: true });
+        await this.recargarManteniendoSeleccion();
+      });
     });
   }
 
   async marcarListoParaEntrega(): Promise<void> {
-    if (!this.selectedDelivery) return;
-    await firstValueFrom(this.repositoryService.updateDelivery(this.selectedDelivery.id, {
-      estado: DeliveryEstado.PARA_ENTREGA,
-      fechaParaEntrega: new Date(),
-    }));
-    await this.loadDeliveries();
-    const row = this.deliveryRows.find(r => r.delivery.id === this.selectedDelivery.id);
-    if (row) this.selectDelivery(row);
+    await this.cambiarEstado(DeliveryEstado.PARA_ENTREGA);
   }
 
+  /** ENVIAR: pide el repartidor y pasa a EN_CAMINO. */
   async enviar(): Promise<void> {
     if (!this.selectedDelivery) return;
-    // TODO: seleccionar entregador (por ahora solo cambia estado)
-    await firstValueFrom(this.repositoryService.updateDelivery(this.selectedDelivery.id, {
-      estado: DeliveryEstado.EN_CAMINO,
-      fechaEnCamino: new Date(),
-    }));
-    await this.loadDeliveries();
-    const row = this.deliveryRows.find(r => r.delivery.id === this.selectedDelivery.id);
-    if (row) this.selectDelivery(row);
+
+    let repartidores: { id: number; nombre: string; cargo: string | null }[] = [];
+    try {
+      repartidores = await firstValueFrom(this.repositoryService.deliveryListarRepartidores());
+    } catch (error) {
+      this.mostrarError(error, 'No se pudo cargar la lista de repartidores');
+      return;
+    }
+
+    const ref = this.dialog.open(SeleccionarRepartidorDialogComponent, {
+      width: '420px',
+      data: {
+        repartidores,
+        seleccionadoId: this.selectedDelivery.entregadoPorFuncionario?.id ?? null,
+      },
+    });
+
+    ref.afterClosed().subscribe(async (funcionarioId: number | null | undefined) => {
+      if (funcionarioId === undefined) return; // cancelado
+      await this.cambiarEstado(DeliveryEstado.EN_CAMINO, { funcionarioId: funcionarioId ?? undefined });
+    });
   }
 
   async finalizar(): Promise<void> {
     if (!this.selectedDelivery) return;
 
-    // Si no tiene cobro completo, abrir cobro primero
-    if (!this.selectedDelivery.venta?.pago?.id || this.selectedDelivery.venta.estado !== 'CONCLUIDA') {
+    // Sin cobro cerrado no hay entrega: el backend rechaza la transición, así
+    // que primero se abre el cobro.
+    if (this.selectedDelivery.venta?.estado !== 'CONCLUIDA') {
       this.editarPago();
       return;
     }
-
-    // Finalizar delivery
-    await firstValueFrom(this.repositoryService.updateDelivery(this.selectedDelivery.id, {
-      estado: DeliveryEstado.ENTREGADO,
-      fechaEntregado: new Date(),
-    }));
-    await this.loadDeliveries();
-    const row = this.deliveryRows.find(r => r.delivery.id === this.selectedDelivery.id);
-    if (row) this.selectDelivery(row);
+    await this.cambiarEstado(DeliveryEstado.ENTREGADO);
   }
 
-  async cambiarEstado(nuevoEstado: string): Promise<void> {
+  /**
+   * Única puerta de entrada a un cambio de estado.
+   *
+   * La validación (qué transición es legal, qué fechas limpiar, si hace falta
+   * repartidor) es del backend: acá sólo se despacha y se muestra el error.
+   */
+  async cambiarEstado(
+    nuevoEstado: DeliveryEstado,
+    opts: { funcionarioId?: number; silencioso?: boolean } = {},
+  ): Promise<void> {
     if (!this.selectedDelivery) return;
-
-    const estadoActual = this.selectedDelivery.estado;
-    let mensaje = `¿Cambiar estado de ${estadoActual} a ${nuevoEstado}?`;
-    let advertencia = '';
-
-    // Advertencias según el cambio
-    if (estadoActual === DeliveryEstado.ENTREGADO) {
-      advertencia = 'Este delivery ya fue entregado. Retroceder el estado podría causar inconsistencias con el cobro.';
-    }
-    if (estadoActual === DeliveryEstado.CANCELADO) {
-      advertencia = 'Este delivery fue cancelado. Al reactivarlo, la venta asociada también se reactivará.';
-    }
-
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-      width: '400px',
-      data: {
-        title: 'CAMBIAR ESTADO',
-        message: advertencia ? `${advertencia}\n\n${mensaje}` : mensaje,
-      },
-    });
-
-    dialogRef.afterClosed().subscribe(async (result) => {
-      if (result) {
-        const updateData: any = { estado: nuevoEstado };
-
-        // Limpiar timestamps posteriores al nuevo estado
-        if (nuevoEstado === DeliveryEstado.ABIERTO) {
-          updateData.fechaParaEntrega = null;
-          updateData.fechaEnCamino = null;
-          updateData.fechaEntregado = null;
-          updateData.fechaCancelacion = null;
-          updateData.motivoCancelacion = null;
-        } else if (nuevoEstado === DeliveryEstado.PARA_ENTREGA) {
-          updateData.fechaEnCamino = null;
-          updateData.fechaEntregado = null;
-          updateData.fechaCancelacion = null;
-          updateData.motivoCancelacion = null;
-          if (!this.selectedDelivery.fechaParaEntrega) {
-            updateData.fechaParaEntrega = new Date();
-          }
-        } else if (nuevoEstado === DeliveryEstado.EN_CAMINO) {
-          updateData.fechaEntregado = null;
-          updateData.fechaCancelacion = null;
-          updateData.motivoCancelacion = null;
-          if (!this.selectedDelivery.fechaEnCamino) {
-            updateData.fechaEnCamino = new Date();
-          }
-        }
-
-        await firstValueFrom(this.repositoryService.updateDelivery(this.selectedDelivery.id, updateData));
-
-        // Si se reactiva desde CANCELADO, reactivar la venta
-        // Nota: el stock se re-procesará cuando la venta se finalice nuevamente
-        if (estadoActual === DeliveryEstado.CANCELADO && this.selectedDelivery.venta?.id) {
-          await firstValueFrom(this.repositoryService.updateVenta(this.selectedDelivery.venta.id, {
-            estado: 'ABIERTA' as any,
-          }));
-        }
-
-        await this.loadDeliveries();
-        const row = this.deliveryRows.find(r => r.delivery.id === this.selectedDelivery.id);
-        if (row) this.selectDelivery(row);
+    try {
+      await firstValueFrom(this.repositoryService.deliveryCambiarEstado(
+        this.selectedDelivery.id,
+        nuevoEstado,
+        opts.funcionarioId ? { funcionarioId: opts.funcionarioId } : undefined,
+      ));
+      if (!opts.silencioso) {
+        this.snackBar.open(`Delivery #${this.selectedDelivery.id} → ${nuevoEstado}`, 'CERRAR', { duration: 2500 });
       }
-    });
+      await this.recargarManteniendoSeleccion();
+    } catch (error) {
+      this.mostrarError(error, 'No se pudo cambiar el estado del delivery');
+    }
   }
 
   cancelarDelivery(): void {
     if (!this.selectedDelivery) return;
+
+    const cobrada = this.selectedDelivery.venta?.estado === 'CONCLUIDA';
+    const advertencia = cobrada
+      ? 'Esta venta YA FUE COBRADA. Al cancelar se revierte el cobro, el stock y la cuenta por cobrar.\n\n'
+      : '';
+
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-      width: '400px',
+      width: '450px',
       data: {
         title: 'CANCELAR DELIVERY',
-        message: '¿Está seguro de cancelar este delivery? Ingrese el motivo:',
+        message: `${advertencia}Indique el motivo de la cancelación:`,
         showInput: true,
         inputLabel: 'MOTIVO',
+        confirmText: 'CANCELAR DELIVERY',
+        cancelText: 'VOLVER',
       },
     });
 
-    dialogRef.afterClosed().subscribe(async (result) => {
-      if (result) {
-        const motivo = typeof result === 'string' ? result : 'SIN MOTIVO';
-        await firstValueFrom(this.repositoryService.updateDelivery(this.selectedDelivery.id, {
-          estado: DeliveryEstado.CANCELADO,
-          fechaCancelacion: new Date(),
-          motivoCancelacion: motivo.toUpperCase(),
-        }));
-
-        // También cancelar la venta y revertir stock si estaba CONCLUIDA
-        if (this.selectedDelivery.venta?.id) {
-          const ventaEstado = this.selectedDelivery.venta.estado;
-          await firstValueFrom(this.repositoryService.updateVenta(this.selectedDelivery.venta.id, {
-            estado: 'CANCELADA' as any,
-          }));
-          if (ventaEstado === 'CONCLUIDA') {
-            this.repositoryService.revertirStockVenta(this.selectedDelivery.venta.id).subscribe({
-              next: (r) => console.log('Stock revertido:', r),
-              error: (e) => console.error('Error revirtiendo stock:', e),
-            });
-          }
-        }
-
-        await this.loadDeliveries();
+    dialogRef.afterClosed().subscribe(async (motivo) => {
+      // El diálogo devuelve el texto del motivo (o `false` si se cerró).
+      if (!motivo || typeof motivo !== 'string') return;
+      try {
+        // Una sola llamada transaccional: delivery + venta + cobro + stock.
+        await firstValueFrom(this.repositoryService.deliveryCancelar(this.selectedDelivery.id, motivo));
+        this.snackBar.open(`Delivery #${this.selectedDelivery.id} cancelado`, 'CERRAR', { duration: 3000 });
         this.selectedDelivery = null;
         this.selectedItems = [];
         this.selectedPagoDetalles = [];
         this.updateEstadoFlags();
+        this.recalcularTotalesDetalle();
+        await this.loadDeliveries();
+      } catch (error) {
+        this.mostrarError(error, 'No se pudo cancelar el delivery');
       }
     });
   }
 
-  imprimir(): void {
-    // TODO: implementar impresión
-    this.dialog.open(ConfirmationDialogComponent, {
-      width: '400px',
-      data: { title: 'IMPRIMIR', message: 'Impresión será implementada próximamente.', confirmText: 'CERRAR', showCancel: false },
-    });
+  async imprimir(): Promise<void> {
+    if (!this.selectedDelivery) return;
+    try {
+      const res = await firstValueFrom(this.repositoryService.deliveryImprimirTicket(this.selectedDelivery.id));
+      if (res?.ok) {
+        this.snackBar.open('Ticket de delivery enviado a la impresora', 'CERRAR', { duration: 2500 });
+      } else {
+        const msg = res?.errors?.[0]?.message || 'No se pudo imprimir el ticket';
+        this.snackBar.open(msg, 'CERRAR', { duration: 5000, panelClass: ['error-snackbar'] });
+      }
+    } catch (error) {
+      this.mostrarError(error, 'No se pudo imprimir el ticket de delivery');
+    }
   }
 
   cerrar(): void {
     this.dialogRef.close(null);
   }
 
-  calcTotalItems(): number {
-    return this.selectedItems
-      .filter(i => i.estado === 'ACTIVO')
-      .reduce((sum, i) => sum + (i.precioVentaUnitario + (i.precioAdicionales || 0) - (i.descuentoUnitario || 0)) * i.cantidad, 0);
+  /** Recarga la lista dejando seleccionado el mismo delivery. */
+  private async recargarManteniendoSeleccion(): Promise<void> {
+    const id = this.selectedDelivery?.id;
+    await this.loadDeliveries();
+    if (!id) return;
+    const row = this.deliveryRows.find((r) => r.delivery.id === id);
+    if (row) {
+      this.selectDelivery(row);
+    } else {
+      // Salió de la página o del filtro actual.
+      this.selectedDelivery = null;
+      this.selectedItems = [];
+      this.selectedPagoDetalles = [];
+      this.updateEstadoFlags();
+      this.recalcularTotalesDetalle();
+    }
   }
 
+  private mostrarError(error: unknown, fallback: string): void {
+    console.error(fallback, error);
+    const mensaje = (error as any)?.message?.replace(/^Error invoking remote method '[^']+':\s*Error:\s*/, '')
+      || fallback;
+    this.snackBar.open(mensaje, 'CERRAR', { duration: 6000, panelClass: ['error-snackbar'] });
+  }
 }

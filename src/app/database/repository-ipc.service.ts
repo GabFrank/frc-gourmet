@@ -277,6 +277,14 @@ interface ElectronAPI {
   createDelivery: (deliveryData: Partial<Delivery>) => Promise<Delivery>;
   updateDelivery: (deliveryId: number, deliveryData: Partial<Delivery>) => Promise<any>;
   deleteDelivery: (deliveryId: number) => Promise<any>;
+  deliveryListarPdv: (cajaId: number, filtros?: any) => Promise<{ data: any[]; total: number }>;
+  deliveryListarRepartidores: () => Promise<any[]>;
+  deliveryCrear: (payload: any) => Promise<any>;
+  deliveryActualizarDatos: (deliveryId: number, payload: any) => Promise<any>;
+  deliveryCambiarEstado: (deliveryId: number, nuevoEstado: string, opts?: any) => Promise<any>;
+  deliveryAsignarRepartidor: (deliveryId: number, funcionarioId: number | null) => Promise<any>;
+  deliveryCancelar: (deliveryId: number, motivo: string) => Promise<any>;
+  deliveryImprimirTicket: (deliveryId: number, printerId?: number) => Promise<any>;
   getDeliveriesByCaja: (cajaId: number, filtros?: any) => Promise<{ data: any[], total: number }>;
   buscarClientePorTelefono: (telefono: string) => Promise<any>;
   buscarClientesPorTelefono: (telefono: string) => Promise<any[]>;
@@ -1937,6 +1945,38 @@ export class RepositoryIpcService extends RepositoryService {
 
   deleteDelivery(deliveryId: number): Observable<any> {
     return from(this.api.deleteDelivery(deliveryId));
+  }
+
+  deliveryListarPdv(cajaId: number, filtros?: any): Observable<{ data: any[], total: number }> {
+    return from(this.api.deliveryListarPdv(cajaId, filtros));
+  }
+
+  deliveryListarRepartidores(): Observable<{ id: number; nombre: string; cargo: string | null }[]> {
+    return from(this.api.deliveryListarRepartidores());
+  }
+
+  deliveryCrear(payload: any): Observable<{ delivery: any; venta: any }> {
+    return from(this.api.deliveryCrear(payload));
+  }
+
+  deliveryActualizarDatos(deliveryId: number, payload: any): Observable<any> {
+    return from(this.api.deliveryActualizarDatos(deliveryId, payload));
+  }
+
+  deliveryCambiarEstado(deliveryId: number, nuevoEstado: DeliveryEstado, opts?: { funcionarioId?: number }): Observable<any> {
+    return from(this.api.deliveryCambiarEstado(deliveryId, nuevoEstado, opts));
+  }
+
+  deliveryAsignarRepartidor(deliveryId: number, funcionarioId: number | null): Observable<any> {
+    return from(this.api.deliveryAsignarRepartidor(deliveryId, funcionarioId));
+  }
+
+  deliveryCancelar(deliveryId: number, motivo: string): Observable<any> {
+    return from(this.api.deliveryCancelar(deliveryId, motivo));
+  }
+
+  deliveryImprimirTicket(deliveryId: number, printerId?: number): Observable<any> {
+    return from(this.api.deliveryImprimirTicket(deliveryId, printerId));
   }
 
   getDeliveriesByCaja(cajaId: number, filtros?: any): Observable<{ data: any[], total: number }> {

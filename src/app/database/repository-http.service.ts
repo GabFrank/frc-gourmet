@@ -611,6 +611,30 @@ export class RepositoryHttpService extends RepositoryService {
   getDeliveriesByCaja(cajaId: number, filtros?: any): Observable<{ data: any[], total: number }> {
     return throwError(() => new Error(`RepositoryHttpService.getDeliveriesByCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  deliveryListarPdv(cajaId: number, filtros?: any): Observable<{ data: any[], total: number }> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryListarPdv() no esta implementado todavia.`)) as any;
+  }
+  deliveryListarRepartidores(): Observable<{ id: number; nombre: string; cargo: string | null }[]> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryListarRepartidores() no esta implementado todavia.`)) as any;
+  }
+  deliveryCrear(payload: any): Observable<{ delivery: any; venta: any }> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryCrear() no esta implementado todavia.`)) as any;
+  }
+  deliveryActualizarDatos(deliveryId: number, payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryActualizarDatos() no esta implementado todavia.`)) as any;
+  }
+  deliveryCambiarEstado(deliveryId: number, nuevoEstado: DeliveryEstado, opts?: { funcionarioId?: number }): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryCambiarEstado() no esta implementado todavia.`)) as any;
+  }
+  deliveryAsignarRepartidor(deliveryId: number, funcionarioId: number | null): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryAsignarRepartidor() no esta implementado todavia.`)) as any;
+  }
+  deliveryCancelar(deliveryId: number, motivo: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryCancelar() no esta implementado todavia.`)) as any;
+  }
+  deliveryImprimirTicket(deliveryId: number, printerId?: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryImprimirTicket() no esta implementado todavia.`)) as any;
+  }
   buscarClientePorTelefono(telefono: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.buscarClientePorTelefono() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

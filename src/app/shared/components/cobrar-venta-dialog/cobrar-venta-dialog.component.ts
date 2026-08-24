@@ -42,6 +42,15 @@ export interface CobrarVentaDialogData {
   exchangeRates: MonedaCambio[];
   principalMoneda: Moneda;
   caja: Caja;
+  /**
+   * Costo del envío de un delivery. Es un cargo de la venta, no un ítem, así
+   * que el llamador lo pasa aparte y acá se suma al total.
+   *
+   * Sin esto el envío NO se cobraba: el diálogo sumaba únicamente
+   * `ítems − descuento` y el valor de la zona de entrega era decorativo.
+   * Si no viene, se lee de `venta.costoDelivery`.
+   */
+  costoDelivery?: number;
 }
 
 interface DetalleRow {
@@ -131,6 +140,8 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
   currencyDisplays: CurrencyDisplay[] = [];
   activeItems: VentaItem[] = [];
   subtotal = 0;
+  /** Costo del envío del delivery, si la venta es de delivery. */
+  costoDelivery = 0;
   descuentoTotal = 0;
   totalPrincipal = 0;
   saldoPrincipal = 0;
@@ -604,7 +615,13 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       this.descuentoTotal += (item.descuentoUnitario || 0) * item.cantidad;
     }
 
-    this.totalPrincipal = this.subtotal - this.descuentoTotal;
+    // Costo del envío (delivery). `costoDelivery` es `decimal` → string en
+    // Postgres: sin el Number() se concatenaría en vez de sumarse.
+    this.costoDelivery = Number(
+      this.data.costoDelivery ?? (this.data.venta as any)?.costoDelivery ?? 0,
+    ) || 0;
+
+    this.totalPrincipal = this.subtotal - this.descuentoTotal + this.costoDelivery;
 
     // Calcular costo total
     this.costoTotal = 0;

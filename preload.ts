@@ -1786,6 +1786,34 @@ contextBridge.exposeInMainWorld('api', {
   deleteDelivery: async (deliveryId: number): Promise<any> => {
     return await ipcRenderer.invoke('deleteDelivery', deliveryId);
   },
+
+  // Delivery del PdV — maquina de estados y operaciones transaccionales.
+  // Los CRUD genericos de arriba quedan para lectura y datos sueltos: el
+  // estado, la cancelacion y el alta van SIEMPRE por estos canales.
+  deliveryListarPdv: async (cajaId: number, filtros?: any): Promise<{ data: any[]; total: number }> => {
+    return await ipcRenderer.invoke('delivery-listar-pdv', cajaId, filtros);
+  },
+  deliveryListarRepartidores: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('delivery-listar-repartidores');
+  },
+  deliveryCrear: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('delivery-crear', payload);
+  },
+  deliveryActualizarDatos: async (deliveryId: number, payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('delivery-actualizar-datos', deliveryId, payload);
+  },
+  deliveryCambiarEstado: async (deliveryId: number, nuevoEstado: string, opts?: any): Promise<any> => {
+    return await ipcRenderer.invoke('delivery-cambiar-estado', deliveryId, nuevoEstado, opts);
+  },
+  deliveryAsignarRepartidor: async (deliveryId: number, funcionarioId: number | null): Promise<any> => {
+    return await ipcRenderer.invoke('delivery-asignar-repartidor', deliveryId, funcionarioId);
+  },
+  deliveryCancelar: async (deliveryId: number, motivo: string): Promise<any> => {
+    return await ipcRenderer.invoke('delivery-cancelar', deliveryId, motivo);
+  },
+  deliveryImprimirTicket: async (deliveryId: number, printerId?: number): Promise<any> => {
+    return await ipcRenderer.invoke('delivery-imprimir-ticket', deliveryId, printerId);
+  },
   getDeliveriesByCaja: async (cajaId: number, filtros?: any): Promise<{ data: any[], total: number }> => {
     return await ipcRenderer.invoke('getDeliveriesByCaja', cajaId, filtros);
   },
