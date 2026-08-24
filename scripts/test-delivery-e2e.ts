@@ -230,8 +230,30 @@ async function main() {
     try { await invokeHandler('updateDelivery', delivery.id, { fechaEntregado: new Date() }); } catch (e: any) { err = e.message; }
     ok(/no puede modificar fechaEntregado/.test(err), 'C: tampoco los timestamps', err);
 
+    err = '';
+    try {
+      await invokeHandler('updateDelivery', delivery.id, { precioDelivery: { id: zonaLejos.id } });
+    } catch (e: any) { err = e.message; }
+    ok(/no puede modificar precioDelivery/.test(err),
+      'C: tampoco la zona (cambiarla tiene que resincronizar el costo de la venta)', err);
+
+    err = '';
+    try { await invokeHandler('createDelivery', { telefono: '0981000000' }); } catch (e: any) { err = e.message; }
+    ok(/createDelivery está deprecado/.test(err),
+      'C: createDelivery ya no puede crear un delivery sin venta', err);
+
     const actual = await ds.getRepository(Delivery).findOneBy({ id: delivery.id } as any);
     ok((actual as any).estado === 'ABIERTO', 'C: el delivery quedó intacto', (actual as any).estado);
+  }
+  {
+    // El nombre se sincroniza en la venta aunque NO cambie la zona.
+    const { delivery, venta }: any = await crearDelivery();
+    await invokeHandler('delivery-actualizar-datos', delivery.id, {
+      telefono: '0981123456', nombre: 'NOMBRE CORREGIDO', direccion: 'CALLE 1',
+    });
+    const v: any = await ds.getRepository(Venta).findOneBy({ id: venta.id } as any);
+    ok(v.nombreCliente === 'NOMBRE CORREGIDO',
+      'C: corregir sólo el nombre lo propaga a la venta', v.nombreCliente);
   }
 
   // ═══════ [D] Costo del envío en el cobro (A-1) ═══════

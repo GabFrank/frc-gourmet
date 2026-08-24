@@ -235,6 +235,11 @@
       <button mat-stroked-button (click)="editarPago()" [disabled]="!selectedDelivery || isTerminal">
         <mat-icon>payments</mat-icon> PAGO
       </button>
+      <!-- Reasignar sin cambiar de estado: el pedido ya salió y lo termina
+           llevando otra persona. -->
+      <button mat-stroked-button (click)="cambiarRepartidor()" [disabled]="!selectedDelivery || isTerminal">
+        <mat-icon>person_pin_circle</mat-icon> REPARTIDOR
+      </button>
       <button mat-stroked-button (click)="imprimir()" [disabled]="!selectedDelivery">
         <mat-icon>print</mat-icon> IMPRIMIR
       </button>

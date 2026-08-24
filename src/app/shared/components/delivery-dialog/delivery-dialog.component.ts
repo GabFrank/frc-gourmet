@@ -263,10 +263,13 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
 
     if (!this.selectedDelivery?.venta?.id) return;
 
+    // Si esto falla hay que avisar: un panel vacío es indistinguible de un
+    // pedido sin ítems, y el cajero puede creer que el pedido está mal cargado.
     try {
       this.selectedItems = await firstValueFrom(this.repositoryService.getVentaItems(this.selectedDelivery.venta.id));
     } catch (e) {
       this.selectedItems = [];
+      this.mostrarError(e, 'No se pudieron cargar los ítems del delivery');
     }
 
     try {
@@ -275,6 +278,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       }
     } catch (e) {
       this.selectedPagoDetalles = [];
+      this.mostrarError(e, 'No se pudo cargar el detalle del cobro');
     }
 
     this.recalcularTotalesDetalle();
@@ -403,6 +407,12 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   /** ENVIAR: pide el repartidor y pasa a EN_CAMINO. */
   async enviar(): Promise<void> {
     if (!this.selectedDelivery) return;
+    // Se captura el delivery objetivo ACÁ y no se vuelve a leer
+    // `this.selectedDelivery`: entre el click y el cierre del selector hay dos
+    // huecos asíncronos con la tabla clickeable de fondo, y si el cajero
+    // selecciona otra fila mientras tanto el envío (y el repartidor) se
+    // aplicarían al pedido equivocado, en silencio.
+    const objetivo = this.selectedDelivery;
 
     let repartidores: { id: number; nombre: string; cargo: string | null }[] = [];
     try {
@@ -416,13 +426,50 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       width: '420px',
       data: {
         repartidores,
-        seleccionadoId: this.selectedDelivery.entregadoPorFuncionario?.id ?? null,
+        seleccionadoId: objetivo.entregadoPorFuncionario?.id ?? null,
       },
     });
 
     ref.afterClosed().subscribe(async (funcionarioId: number | null | undefined) => {
       if (funcionarioId === undefined) return; // cancelado
-      await this.cambiarEstado(DeliveryEstado.EN_CAMINO, { funcionarioId: funcionarioId ?? undefined });
+      await this.cambiarEstado(DeliveryEstado.EN_CAMINO, {
+        funcionarioId: funcionarioId ?? undefined,
+        deliveryId: objetivo.id,
+      });
+    });
+  }
+
+  /**
+   * Reasigna el repartidor sin tocar el estado: el pedido ya salió y lo termina
+   * llevando otra persona. Sin esto, `deliveryAsignarRepartidor` quedaba como
+   * superficie IPC sin usar.
+   */
+  async cambiarRepartidor(): Promise<void> {
+    if (!this.selectedDelivery) return;
+    const objetivo = this.selectedDelivery;
+
+    let repartidores: { id: number; nombre: string; cargo: string | null }[] = [];
+    try {
+      repartidores = await firstValueFrom(this.repositoryService.deliveryListarRepartidores());
+    } catch (error) {
+      this.mostrarError(error, 'No se pudo cargar la lista de repartidores');
+      return;
+    }
+
+    const ref = this.dialog.open(SeleccionarRepartidorDialogComponent, {
+      width: '420px',
+      data: { repartidores, seleccionadoId: objetivo.entregadoPorFuncionario?.id ?? null },
+    });
+
+    ref.afterClosed().subscribe(async (funcionarioId: number | null | undefined) => {
+      if (funcionarioId === undefined) return;
+      try {
+        await firstValueFrom(this.repositoryService.deliveryAsignarRepartidor(objetivo.id, funcionarioId));
+        this.snackBar.open('Repartidor actualizado', 'CERRAR', { duration: 2500 });
+        await this.recargarManteniendoSeleccion();
+      } catch (error) {
+        this.mostrarError(error, 'No se pudo asignar el repartidor');
+      }
     });
   }
 
@@ -446,17 +493,20 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
    */
   async cambiarEstado(
     nuevoEstado: DeliveryEstado,
-    opts: { funcionarioId?: number; silencioso?: boolean } = {},
+    opts: { funcionarioId?: number; silencioso?: boolean; deliveryId?: number } = {},
   ): Promise<void> {
-    if (!this.selectedDelivery) return;
+    // `deliveryId` explícito para los flujos con diálogo de por medio, donde la
+    // selección puede haber cambiado mientras tanto.
+    const deliveryId = opts.deliveryId ?? this.selectedDelivery?.id;
+    if (!deliveryId) return;
     try {
       await firstValueFrom(this.repositoryService.deliveryCambiarEstado(
-        this.selectedDelivery.id,
+        deliveryId,
         nuevoEstado,
         opts.funcionarioId ? { funcionarioId: opts.funcionarioId } : undefined,
       ));
       if (!opts.silencioso) {
-        this.snackBar.open(`Delivery #${this.selectedDelivery.id} → ${nuevoEstado}`, 'CERRAR', { duration: 2500 });
+        this.snackBar.open(`Delivery #${deliveryId} → ${nuevoEstado}`, 'CERRAR', { duration: 2500 });
       }
       await this.recargarManteniendoSeleccion();
     } catch (error) {

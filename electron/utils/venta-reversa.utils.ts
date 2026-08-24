@@ -92,6 +92,22 @@ export async function cancelarVentaCompletaEnTx(
     cpcRevertidaId: null,
   };
 
+  // Lock pesimista en Postgres sobre la venta y (más abajo) la CPC. La
+  // idempotencia de los `activo = false` protege contra un REINTENTO SERIAL,
+  // pero no contra concurrencia real: dos cancelaciones simultáneas de la misma
+  // venta (doble click, reintento de red que se cruza con el original) pueden
+  // leer las dos la CPC como ACTIVO y descontar el saldo del cliente DOS VECES.
+  // En SQLite no aplica (un solo escritor) y `pessimistic_write` no se soporta.
+  const esPostgres = dataSource.options.type === 'postgres';
+  const lock = esPostgres ? { lock: { mode: 'pessimistic_write' as const } } : {};
+
+  // El lock se toma en una consulta SIN relaciones: `pessimistic_write` sobre un
+  // `findOne` con `relations` genera un LEFT JOIN, y Postgres rechaza
+  // `FOR UPDATE` sobre el lado nullable de un outer join.
+  if (esPostgres) {
+    await manager.getRepository(Venta).findOne({ where: { id: ventaId }, ...lock });
+  }
+
   const venta = await manager.getRepository(Venta).findOne({
     where: { id: ventaId },
     relations: ['pago'],
@@ -135,6 +151,12 @@ export async function cancelarVentaCompletaEnTx(
   resumen.cobrosParcialesDesactivados = rondas.length;
 
   // 3 · Cuenta por cobrar (venta a crédito) + saldo del cliente.
+  if (esPostgres) {
+    await manager.getRepository(CuentaPorCobrar).findOne({
+      where: { ventaId, estado: CuentaPorCobrarEstado.ACTIVO },
+      ...lock,
+    });
+  }
   const cpc = await manager.getRepository(CuentaPorCobrar).findOne({
     where: { ventaId, estado: CuentaPorCobrarEstado.ACTIVO },
     relations: ['cliente'],

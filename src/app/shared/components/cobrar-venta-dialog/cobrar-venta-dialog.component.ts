@@ -610,9 +610,17 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     this.subtotal = 0;
     this.descuentoTotal = 0;
 
+    // Number() en cada término, no por prolijidad: `precioVentaUnitario`,
+    // `precioAdicionales` y `cantidad` son `decimal` y en Postgres llegan como
+    // STRING. `"150000.00" + "5000.00"` concatena, y el producto termina en
+    // NaN: verificado contra un Postgres real, el subtotal de cualquier ítem
+    // con adicionales daba NaN en modo servidor.
     for (const item of this.activeItems) {
-      this.subtotal += (item.precioVentaUnitario + (item.precioAdicionales || 0)) * item.cantidad;
-      this.descuentoTotal += (item.descuentoUnitario || 0) * item.cantidad;
+      const cantidad = Number(item.cantidad) || 0;
+      const unitario = Number(item.precioVentaUnitario) || 0;
+      const adicionales = Number(item.precioAdicionales) || 0;
+      this.subtotal += (unitario + adicionales) * cantidad;
+      this.descuentoTotal += (Number(item.descuentoUnitario) || 0) * cantidad;
     }
 
     // Costo del envío (delivery). `costoDelivery` es `decimal` → string en
@@ -626,7 +634,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     // Calcular costo total
     this.costoTotal = 0;
     for (const item of this.activeItems) {
-      this.costoTotal += (Number(item.precioCostoUnitario) || 0) * item.cantidad;
+      this.costoTotal += (Number(item.precioCostoUnitario) || 0) * (Number(item.cantidad) || 0);
     }
 
     this.updateCurrencyDisplays();

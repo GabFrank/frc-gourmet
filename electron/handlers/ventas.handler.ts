@@ -539,17 +539,21 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     }
   });
 
-  ipcMain.handle('createDelivery', async (_event: any, data: any) => {
-    try {
-      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
-      const repo = dataSource.getRepository(Delivery);
-      const entity = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
-      return await repo.save(entity);
-    } catch (error) {
-      console.error('Error creating delivery:', error);
-      throw error;
-    }
+  /**
+   * @deprecated Usar `delivery-crear`, que crea el Delivery y su Venta en UNA
+   * transacción.
+   *
+   * Este handler creaba un `Delivery` suelto. Como la lista del PdV se arma
+   * partiendo de `Venta`, un delivery sin venta es un registro invisible e
+   * inalcanzable para siempre. El canal sigue registrado (está en `preload.ts`
+   * y en el mapa de canales) pero rechaza: `/api/rpc` es default-allow y
+   * dejarlo vivo reabre el agujero desde cualquier cliente.
+   */
+  ipcMain.handle('createDelivery', async () => {
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+    throw new Error(
+      'createDelivery está deprecado: usá delivery-crear, que crea el delivery y su venta en una sola transacción.',
+    );
   });
 
   ipcMain.handle('updateDelivery', async (_event: any, id: number, data: any) => {
@@ -560,13 +564,18 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // crudo. Como `/api/rpc` es default-allow, sin este guard cualquier
       // cliente con un JWT de VENTAS_PDV podía saltar de ABIERTO a ENTREGADO,
       // escribir un estado inexistente o falsear las fechas.
+      // Además del estado y sus timestamps, la ZONA está reservada: cambiarla
+      // tiene que resincronizar `venta.costoDelivery` (y sólo se puede si la
+      // venta sigue ABIERTA), y este merge crudo no hace ni una cosa ni la otra
+      // — dejaría el envío cobrado con un precio y el delivery mostrando otro.
       const camposReservados = [
         'estado', 'fechaAbierto', 'fechaParaEntrega', 'fechaEnCamino',
         'fechaEntregado', 'fechaCancelacion', 'motivoCancelacion',
+        'precioDelivery', 'precioDeliveryId', 'entregadoPorFuncionario',
       ].filter((c) => data && Object.prototype.hasOwnProperty.call(data, c));
       if (camposReservados.length > 0) {
         throw new Error(
-          `updateDelivery no puede modificar ${camposReservados.join(', ')}: usá delivery-cambiar-estado o delivery-cancelar.`,
+          `updateDelivery no puede modificar ${camposReservados.join(', ')}: usá delivery-actualizar-datos, delivery-cambiar-estado o delivery-cancelar.`,
         );
       }
       const repo = dataSource.getRepository(Delivery);

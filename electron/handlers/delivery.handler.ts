@@ -328,11 +328,24 @@ export function registerDeliveryHandlers(
       await setEntityUserTracking(dataSource, delivery, usuarioId, true);
       const guardado = await manager.save(Delivery, delivery);
 
-      if (venta && costoDelivery !== undefined) {
-        (venta as any).costoDelivery = costoDelivery;
-        if (upper(payload?.nombre)) venta.nombreCliente = upper(payload?.nombre) ?? undefined;
-        await setEntityUserTracking(dataSource, venta, usuarioId, true);
-        await manager.save(Venta, venta);
+      // El nombre y el costo se sincronizan por separado: antes el update del
+      // `nombreCliente` estaba anidado dentro de la rama del costo, así que
+      // corregir sólo el nombre dejaba la venta con el valor viejo.
+      if (venta) {
+        let ventaCambia = false;
+        if (costoDelivery !== undefined) {
+          (venta as any).costoDelivery = costoDelivery;
+          ventaCambia = true;
+        }
+        const nombreNuevo = upper(payload?.nombre);
+        if (nombreNuevo && nombreNuevo !== venta.nombreCliente) {
+          venta.nombreCliente = nombreNuevo;
+          ventaCambia = true;
+        }
+        if (ventaCambia) {
+          await setEntityUserTracking(dataSource, venta, usuarioId, true);
+          await manager.save(Venta, venta);
+        }
       }
 
       return guardado;
@@ -355,7 +368,17 @@ export function registerDeliveryHandlers(
         throw new Error('Para cancelar un delivery usá la acción CANCELAR (revierte el cobro y el stock).');
       }
 
-      const delivery = await dataSource.getRepository(Delivery).findOne({ where: { id } });
+      // Todo el cambio de estado va en UNA transacción con lock pesimista en
+      // Postgres: sin él, dos transiciones simultáneas sobre el mismo delivery
+      // (dos cajeros, un doble tap) leen las dos el estado viejo, las dos pasan
+      // la validación y gana la última — saltándose un estado intermedio sin
+      // que la API devuelva nunca "Transición no permitida".
+      const esPostgres = dataSource.options.type === 'postgres';
+      return await dataSource.transaction(async (manager) => {
+      const delivery = await manager.getRepository(Delivery).findOne({
+        where: { id },
+        ...(esPostgres ? { lock: { mode: 'pessimistic_write' as const } } : {}),
+      });
       if (!delivery) throw new Error(`Delivery ${id} no encontrado`);
 
       if (delivery.estado === nuevoEstado) return delivery; // idempotente
@@ -370,7 +393,7 @@ export function registerDeliveryHandlers(
         );
       }
 
-      const venta = await dataSource.getRepository(Venta).findOne({ where: { delivery: { id } } });
+      const venta = await manager.getRepository(Venta).findOne({ where: { delivery: { id } } });
 
       // Entregar exige que la venta esté cobrada: marcar ENTREGADO con la venta
       // ABIERTA deja un pedido en la calle que nadie va a cobrar nunca.
@@ -381,7 +404,7 @@ export function registerDeliveryHandlers(
       if (nuevoEstado === DeliveryEstado.EN_CAMINO) {
         const funcionarioId = opts?.funcionarioId;
         if (funcionarioId) {
-          const funcionario = await dataSource.getRepository(Funcionario).findOneBy({ id: funcionarioId });
+          const funcionario = await manager.getRepository(Funcionario).findOneBy({ id: funcionarioId });
           if (!funcionario) throw new Error(`Funcionario ${funcionarioId} no encontrado`);
           delivery.entregadoPorFuncionario = funcionario;
         } else if (config?.deliveryRequiereRepartidor && !delivery.entregadoPorFuncionario) {
@@ -392,13 +415,16 @@ export function registerDeliveryHandlers(
       aplicarTimestamps(delivery, nuevoEstado);
       delivery.estado = nuevoEstado;
       await setEntityUserTracking(dataSource, delivery, usuarioId, true);
-      const guardado = await dataSource.getRepository(Delivery).save(delivery);
+      const guardado = await manager.save(Delivery, delivery);
 
       if (nuevoEstado === DeliveryEstado.EN_CAMINO && config?.deliveryAutoImprimirAlEnviar) {
+        // Fuera de la transacción en la práctica: `setImmediate` corre después
+        // del commit, y si la impresora falla no revierte el cambio de estado.
         dispararImpresion(dataSource, id, 'delivery-cambiar-estado');
       }
 
       return guardado;
+      });
     },
   );
 
