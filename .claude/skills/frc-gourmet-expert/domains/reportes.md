@@ -47,6 +47,24 @@ Grupo top-level **`grp-reportes`** (icon `assessment`) en `menu-tree.ts`, entre 
 
 Cuando el período de comparación tiene más cubetas que el actual (mes anterior más largo), las cubetas sobrantes se **pliegan en el último punto** para que la línea punteada siga sumando el total completo del anterior.
 
+### Jornada comercial — `resolverPeriodo` comparte el ancla de los dashboards
+
+`resolverPeriodo()` tenía su **propia aritmética de días** (`startOfDay`/`endOfDay`),
+independiente de `dashboard-rangos.util.ts`. Cuando se agregó la jornada comercial
+(día de 07:00 a 06:59, ver `domains/dashboards.md` §7.6) y los reportes no se
+enteraron, **una venta de la 01:30 aparecía en días distintos según la pantalla**:
+el dashboard la contaba en la jornada de ayer y el reporte en el día calendario de
+hoy. Es el mismo desfase card/chart que ya se había corregido una vez, ahora entre
+pantallas.
+
+Hoy los orquestadores leen `getInicioJornada(dataSource)` y lo pasan:
+`resolverPeriodo(params, new Date(), inicioJornada)`. `inicioJornada = 0`
+reproduce exactamente el día calendario.
+
+**fix relacionado:** los rangos `custom` corrían un día. `new Date('2026-07-15')`
+es UTC-medianoche, que en Paraguay es el 14 a la noche. Se parsea con
+`parseFechaLocal()` del util compartido.
+
 ## 4. Wiring IPC (4 capas)
 
 `repository.service.ts` (abstract) + `repository-ipc.service.ts` (impl standalone/server) + `repository-http.service.ts` (**stubs que lanzan "no implementado" en modo client** — pendiente) + `preload.ts` (3 métodos) + `api-channel-map.generated.ts` (regenerar con `npm run generate:web-api`). Métodos: `getReporteVentasCierre`, `getReporteFinanzasCierre`, `enviarReporteWhatsapp`.

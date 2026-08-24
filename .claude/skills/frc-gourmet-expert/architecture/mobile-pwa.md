@@ -270,6 +270,25 @@ Patrón: búsqueda siempre visible + panel colapsable.
   `.crud-filter-actions` (Limpiar / Aplicar). "Aplicar" cierra el panel y ejecuta la búsqueda.
 - Contador de activos en el componente (`contarFiltros()`), recomputado en `filtros.valueChanges`.
 - Ejemplo de referencia: `pages/compras/compras/compras-list.page.*`.
+- El patrón **también sirve sin búsqueda**: el resumen de ventas
+  (`pages/ventas/resumen/ventas-resumen.page.*`) usa la misma fila y el mismo panel,
+  con el rótulo del período ocupando el lugar del campo de búsqueda.
+
+## Resumen de ventas: filtros de fecha y caja (2026-08-24)
+
+`Ventas → Resumen` filtra por fecha, por caja (multi-selección) o por las dos a la vez.
+Detalle del contrato en `domains/dashboards.md` §7.7; lo que hay que saber al tocar la
+pantalla:
+
+- **Sin filtro se manda el string `'today'`, no un objeto vacío.** El comportamiento
+  por defecto (el total sigue a la caja abierta) depende de la AUSENCIA de filtro.
+- **El rótulo del período sale de `filtroAplicado`, no del formulario.** Lo que el
+  usuario escribe ("15/07") y lo que se consulta (15/07 07:00 → 16/07 06:59, por la
+  jornada comercial) no son lo mismo; mostrar el primero esconde el corte.
+- **"Sin resultados" ≠ error.** La consulta anduvo y el período no tiene ventas.
+- La lista de cajas se pide con `getCajasSelector` y **no se recarga con el filtro**:
+  si dependiera del período, elegir una caja podría sacarla de la lista y dejar al
+  usuario sin poder deseleccionarla.
 
 ## Reglas al construir pantallas
 
