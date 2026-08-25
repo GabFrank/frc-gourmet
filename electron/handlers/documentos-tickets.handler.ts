@@ -44,7 +44,7 @@ import { ensurePermission } from '../utils/auth.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import {
   TicketSpec, TicketLine,
-  ticketText, ticketSeparador, ticketBlank, ticketKv, ticketColumns,
+  ticketText, ticketSeparador, ticketBlank, ticketKv, ticketColumns, ticketCantidad,
   ticketLineasFirma, ticketHeaderEmpresa,
   ticketFmtMonto, ticketFmtFecha, ticketFmtFechaHora,
   printTicketSpec, printerWidthToChars, monedaSimboloAscii,
@@ -612,10 +612,10 @@ export async function printComandaInternal(
       const v = j.item;
       const nombre = ((v as any).producto?.nombre || 'PRODUCTO').toUpperCase();
       const qty = Number(v.cantidad || 1);
-      // `2× PIZZA`, no `2  PIZZA`: el signo ata la cantidad al producto. Con
-      // sólo espacios, en un ticket angosto y con la vista cansada, el número
-      // de una línea se lee pegado al nombre de la de arriba.
-      lines.push(ticketText(`${qty}× ${nombre}`, { bold: true, size: 'tall' }));
+      // `2  x  PIZZA`: la x separada del número, no pegada. Ata la cantidad al
+      // producto sin leerse como parte del número, y queda en la misma
+      // posición en todas las líneas aunque una diga 1 y la otra 12.
+      lines.push(ticketText(`${ticketCantidad(qty)}${nombre}`, { bold: true, size: 'tall' }));
       const pizza = pizzaByItem.get(v.id);
       if (pizza && pizza.sabores.length) {
         // Pizza: tamaño y cada mitad en GRANDE, uno por línea.
@@ -922,7 +922,9 @@ export async function buildVentaTicketLines(
   // espacio). Con anchos chicos (32/40 col) floor(width*0.12) daba 3-4 → sin
   // separación. TOTAL usa 12 col fijos.
   const totalW = 12;
-  const cantW = Math.max(5, Math.min(6, Math.floor(width * 0.12)));
+  // 6 fijo: es lo que necesita `ticketCantidad` para dejar la x separada del
+  // número y alineada entre líneas. Con 5 la x quedaba pegada al producto.
+  const cantW = 6;
   const descW = width - cantW - totalW;
   lines.push(ticketSeparador('-'));
   lines.push(ticketColumns([
@@ -938,7 +940,7 @@ export async function buildVentaTicketLines(
     const total = qty * precio - qty * Number(it.descuentoUnitario || 0);
     const nombre = (it.producto?.nombre || 'PRODUCTO').toUpperCase();
     lines.push(ticketColumns([
-      { text: `${qty}×`, width: cantW, align: 'L' },
+      { text: ticketCantidad(qty, cantW), width: cantW, align: 'L' },
       { text: nombre, width: descW, align: 'L' },
       { text: ticketFmtMonto(total), width: totalW, align: 'R' },
     ]));
@@ -1872,7 +1874,9 @@ export async function printDeliveryTicketInternal(
 
   // Ítems, con el mismo layout de columnas que el comprobante de venta.
   const totalW = 12;
-  const cantW = Math.max(5, Math.min(6, Math.floor(width * 0.12)));
+  // 6 fijo: es lo que necesita `ticketCantidad` para dejar la x separada del
+  // número y alineada entre líneas. Con 5 la x quedaba pegada al producto.
+  const cantW = 6;
   const descW = width - cantW - totalW;
   lines.push(ticketSeparador('-'));
   lines.push(ticketColumns([
@@ -1886,7 +1890,7 @@ export async function printDeliveryTicketInternal(
     const precio = Number(it.precioVentaUnitario || 0) + Number(it.precioAdicionales || 0);
     const totalLinea = qty * precio - qty * Number(it.descuentoUnitario || 0);
     lines.push(ticketColumns([
-      { text: `${qty}×`, width: cantW, align: 'L' },
+      { text: ticketCantidad(qty, cantW), width: cantW, align: 'L' },
       { text: (it.producto?.nombre || 'PRODUCTO').toUpperCase(), width: descW, align: 'L' },
       { text: ticketFmtMonto(totalLinea), width: totalW, align: 'R' },
     ]));

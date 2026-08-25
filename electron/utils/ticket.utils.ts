@@ -111,6 +111,27 @@ export function sanitizarParaTicket(texto: string): string {
   return out;
 }
 
+/**
+ * La cantidad de un ítem, con la `x` separada del número.
+ *
+ * `1x   PIZZA` pega la x al número y se lee como parte de él; `1  x   PIZZA`
+ * la deja como lo que es, un separador entre la cantidad y el producto. En un
+ * ticket angosto y leído de reojo, esa distancia es la diferencia entre ver
+ * «uno por pizza» y ver «1x» como un código.
+ *
+ * Devuelve un bloque de ancho fijo para que las cantidades queden alineadas
+ * entre sí en columna: la `x` cae siempre en la misma posición, aunque una
+ * línea diga 1 y la siguiente 12.
+ */
+export function ticketCantidad(qty: number | string, ancho: number = 6): string {
+  const n = String(qty);
+  // La x va después del número, dejando al menos un espacio, y el resto se
+  // rellena a la derecha. Con una cantidad larga (12) el bloque no se rompe:
+  // empuja la x un lugar en vez de desbordar la columna.
+  const posX = Math.max(n.length + 1, Math.floor(ancho / 2));
+  return (n.padEnd(posX, ' ') + 'x').padEnd(ancho, ' ');
+}
+
 export function ticketText(text: string, opts: Omit<Extract<TicketLine, { type: 'text' }>, 'type' | 'text'> = {}): TicketLine {
   text = sanitizarParaTicket(text);
   return { type: 'text', text, ...opts };

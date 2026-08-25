@@ -22,7 +22,7 @@ import { DataSource } from 'typeorm';
 import { getDataSourceOptions } from '../src/app/database/database.config';
 import { buildVentaTicketLines, printComandaInternal } from '../electron/handlers/documentos-tickets.handler';
 import { componerEncabezadoComanda } from '../electron/utils/nombre-variacion.utils';
-import { renderTicketToPlainText, invalidateTicketEmpresaCache, sanitizarParaTicket, ticketColumns } from '../electron/utils/ticket.utils';
+import { renderTicketToPlainText, invalidateTicketEmpresaCache, sanitizarParaTicket, ticketColumns, ticketCantidad } from '../electron/utils/ticket.utils';
 
 const WIDTH = 48;
 
@@ -273,7 +273,7 @@ async function main() {
     // degrada el punto medio porque en térmica queda casi invisible. El test
     // mira el texto tal como sale impreso, no el que compone la función.
     ok(/GRANDE - CALABRESA/.test(txt), 'imprime tamaño y sabor debajo', txt);
-    ok(/1x\s+PIZZA/.test(txt), 'la cantidad va con la x pegada al producto', txt);
+    ok(/1\s+x\s+PIZZA/.test(txt), 'la x va separada del número, no pegada', txt);
     ok(/SIN CEBOLLA/.test(txt), 'imprime la observación del cliente');
 
     // Mitad y mitad: la fracción es lo que el cliente pidió y por lo que pagó.
@@ -325,6 +325,10 @@ async function main() {
     console.log('\n[charset] el texto que va a la impresora');
     ok(sanitizarParaTicket('2× PIZZA') === '2x PIZZA',
        'el signo de multiplicación pasa a x', sanitizarParaTicket('2× PIZZA'));
+    // La cantidad se compone con `ticketCantidad`, que ya escribe una x ASCII;
+    // el saneador es la red por si algún texto trae el símbolo Unicode.
+    ok(ticketCantidad(1, 6) === '1  x  ', 'bloque de cantidad de ancho fijo', JSON.stringify(ticketCantidad(1, 6)));
+    ok(ticketCantidad(12, 6) === '12 x  ', 'con dos dígitos la x no se corre', JSON.stringify(ticketCantidad(12, 6)));
     ok(sanitizarParaTicket('ÁNGEL') === 'ANGEL',
        'una mayúscula acentuada que CP437 no tiene pierde el acento, no el carácter',
        sanitizarParaTicket('ÁNGEL'));

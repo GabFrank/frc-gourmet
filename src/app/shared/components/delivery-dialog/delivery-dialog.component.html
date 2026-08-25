@@ -228,7 +228,13 @@
         <!-- Ítems: el mismo detalle que sale impreso en el ticket -->
         <div class="recibo-item" *ngFor="let item of itemsDetalle" [class.anulado]="item.cancelado">
           <div class="recibo-item-top">
-            <span class="recibo-item-nombre">{{ item.cantidad }}× {{ item.nombre }}</span>
+            <!-- Mismo formato que el papel: la x separada del número, en una
+                 columna de ancho fijo para que quede alineada entre líneas. -->
+            <span class="recibo-item-nombre">
+              <span class="recibo-cant">{{ item.cantidad }}</span>
+              <span class="recibo-x">x</span>
+              {{ item.nombre }}
+            </span>
             <span class="recibo-item-total">{{ item.total | number:'1.0-2' }}</span>
           </div>
           <div class="recibo-item-var" *ngIf="item.variacion">{{ item.variacion }}</div>

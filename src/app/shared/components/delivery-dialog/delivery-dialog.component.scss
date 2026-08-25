@@ -672,3 +672,16 @@ tr.mat-mdc-row {
   color: #555;
   margin-top: 10px;
 }
+
+/* Cantidad y x en anchos fijos: alineadas entre líneas, igual que en el papel. */
+.recibo-cant {
+  display: inline-block;
+  min-width: 1.6em;
+}
+
+.recibo-x {
+  display: inline-block;
+  width: 1.4em;
+  text-align: center;
+  color: #777;
+}
