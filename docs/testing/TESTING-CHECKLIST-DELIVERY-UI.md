@@ -28,12 +28,12 @@ corre en `standalone`. Hace falta una **caja abierta**.
 |---|---|---|
 | 1.1 | Abrí el PdV y mirá el botón **DELIVERY** | Puede tener el badge **naranja** de repartos pendientes. **No** tiene el badge rojo de pedidos web |
 | 1.2 | Abrí el diálogo de delivery | En la fila de *ESTADO* / *NUEVO DELIVERY* **no** aparece el botón «N PEDIDOS WEB» |
-| 1.3 | Sin ningún delivery seleccionado, mirá el panel derecho | Muestra sólo el ícono y «SELECCIONE UN DELIVERY», centrado y ocupando **todo** el lado derecho |
+| 1.3 | Sin ninguna fila seleccionada, mirá el panel derecho | Muestra sólo el ícono y «SELECCIONE UN DELIVERY», centrado y ocupando **todo** el lado derecho |
 | 1.4 | Dejá el diálogo abierto un minuto | No hay actividad de red hacia los pedidos online (el poll de 15 s no arranca) |
 
 ---
 
-## 2 · Tienda encendida: una sola cola, en el lugar del detalle
+## 2 · La bandeja confirma; la lista muestra el trabajo en curso
 
 Encendé la tienda en *Config Tienda Online* y volvé a abrir el diálogo (la
 config se lee al abrir, no en caliente).
@@ -41,14 +41,17 @@ config se lee al abrir, no en caliente).
 | # | Paso | Qué tiene que pasar |
 |---|---|---|
 | 2.1 | Con al menos un pedido pendiente, abrí el diálogo | Aparece el botón rojo **«N PEDIDOS WEB»** al **extremo derecho** de la fila de *ESTADO* / *NUEVO DELIVERY*, no arriba junto al título |
-| 2.2 | Mirá el panel derecho | Una sola sección **PEDIDOS DE LA WEB** con el contador. **No** hay una segunda sección «Retiros en curso» al pie |
-| 2.3 | Compará con el detalle: seleccioná un delivery de la tabla y volvé a deseleccionar (botón «N PEDIDOS WEB») | La cola y el detalle arrancan **exactamente en la misma x** y tienen el mismo ancho. Antes la cola quedaba más a la izquierda y más angosta |
-| 2.4 | Con pedidos pendientes **y** un retiro aceptado a la vez | Los dos están en la **misma lista**, ordenados por antigüedad (el que espera hace más tiempo, arriba) |
-| 2.5 | Mirá los chips de cada tarjeta | Chip **DELIVERY** (azul) o **RETIRO** (verde). El retiro además tiene el borde izquierdo verde |
-| 2.6 | Mirá los botones de cada tarjeta | Pendiente → *ACEPTAR* / *RECHAZAR*. Retiro aceptado → *COBRAR* (o *ENTREGADO* si ya se cobró) y la línea de estado («En preparación») |
-| 2.7 | Aceptá un pedido | Desaparece de la cola; si es DELIVERY entra en la tabla de la izquierda, si es RETIRO se queda en la cola pero ahora con *COBRAR* |
-| 2.8 | Cobrá el retiro y volvé | La tarjeta pasa de «SIN COBRAR» a **COBRADO** en verde y el botón cambia a *ENTREGADO* |
-| 2.9 | Vaciá la cola (aceptando o rechazando todo) | Desaparecen el botón «PEDIDOS WEB» y el panel, y vuelve el «SELECCIONE UN DELIVERY» ocupando todo el lado derecho |
+| 2.2 | Mirá el panel derecho | **Sólo** pedidos esperando confirmación, con *ACEPTAR* / *RECHAZAR*. Nada de trabajo en curso |
+| 2.3 | Compará con el detalle: seleccioná un delivery y volvé con «N PEDIDOS WEB» | La bandeja y el detalle arrancan **exactamente en la misma x** y tienen el mismo ancho |
+| 2.4 | **Aceptá** un pedido DELIVERY | Sale de la bandeja y aparece en la **lista de la izquierda** como delivery `ABIERTO`, con su costo de envío |
+| 2.5 | Mirá la columna ESTADO de esa fila | Junto al chip de estado, un chip **WEB**. Las filas que cargó el cajero llevan **LOCAL**, más discreto |
+| 2.6 | **Aceptá** un pedido de RETIRO | También aparece en la lista, aunque no genere ningún reparto |
+| 2.7 | Mirá su columna DELIVERY | Chip verde **RETIRAR** en lugar de un monto. Y la columna ENTREGADOR queda en `-` |
+| 2.8 | Seleccioná la fila del retiro | El panel derecho muestra su detalle (cliente, ítems, total) con el botón **COBRAR**. El footer de acciones de delivery queda **deshabilitado**: no hay reparto que gestionar |
+| 2.9 | Cobrá el retiro | El botón pasa a **ENTREGADO** |
+| 2.10 | Marcá ENTREGADO | La fila desaparece de la lista |
+| 2.11 | Vaciá la bandeja | Desaparecen el botón «PEDIDOS WEB» y el panel; vuelve el «SELECCIONE UN DELIVERY» ocupando todo el lado derecho |
+| 2.12 | **Con un retiro en curso, apagá la tienda online** y reabrí el diálogo | La bandeja desaparece, pero **la fila del retiro sigue en la lista y se puede cobrar**. Apagar la tienda no puede esconder trabajo ya aceptado |
 
 ---
 

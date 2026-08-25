@@ -13,7 +13,7 @@
  * Mismo patrón que `venta-reversa.utils.ts` (`cancelarVentaCompletaEnTx`).
  */
 import { DataSource, EntityManager } from 'typeorm';
-import { Delivery, DeliveryEstado } from '../../src/app/database/entities/ventas/delivery.entity';
+import { Delivery, DeliveryEstado, DeliveryModo } from '../../src/app/database/entities/ventas/delivery.entity';
 import { setEntityUserTracking } from './entity.utils';
 
 export interface DatosAltaDelivery {
@@ -24,6 +24,8 @@ export interface DatosAltaDelivery {
   clienteId?: number | null;
   precioDeliveryId?: number | null;
   cobroAnticipado?: boolean;
+  /** `RETIRO` para el pedido que el cliente pasa a buscar. Default `DELIVERY`. */
+  modo?: DeliveryModo;
 }
 
 function upper(v: unknown): string | undefined {
@@ -46,6 +48,7 @@ export async function crearDeliveryEnTx(
     direccion: upper(datos.direccion),
     observacion: upper(datos.observacion),
     estado: DeliveryEstado.ABIERTO,
+    modo: datos.modo ?? DeliveryModo.DELIVERY,
     fechaAbierto: new Date(),
     cobroAnticipado: !!datos.cobroAnticipado,
   });

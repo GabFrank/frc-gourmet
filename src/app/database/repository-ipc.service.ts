@@ -481,7 +481,6 @@ interface ElectronAPI {
   // Pedidos online (bandeja PdV)
   getPedidosOnlineAdmin: (filtros?: any) => Promise<any[]>;
   contarPedidosOnlinePendientes: () => Promise<any>;
-  getRetirosOnlineEnCurso: () => Promise<any[]>;
   aceptarPedidoOnline: (pedidoId: number, data?: any) => Promise<any>;
   rechazarPedidoOnline: (pedidoId: number, motivo: string) => Promise<any>;
   avanzarEstadoPedidoOnline: (pedidoId: number, nuevoEstado: string) => Promise<any>;
@@ -2600,9 +2599,6 @@ export class RepositoryIpcService extends RepositoryService {
   }
   contarPedidosOnlinePendientes(): Observable<any> {
     return from(this.api.contarPedidosOnlinePendientes());
-  }
-  getRetirosOnlineEnCurso(): Observable<any[]> {
-    return from(this.api.getRetirosOnlineEnCurso());
   }
   aceptarPedidoOnline(pedidoId: number, data?: any): Observable<any> {
     return from(this.api.aceptarPedidoOnline(pedidoId, data));

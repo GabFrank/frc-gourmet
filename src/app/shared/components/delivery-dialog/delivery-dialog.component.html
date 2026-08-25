@@ -65,6 +65,10 @@
             <th mat-header-cell *matHeaderCellDef>ESTADO</th>
             <td mat-cell *matCellDef="let row">
               <span class="estado-chip" [class]="'estado-' + row.estadoColor">{{ row.estadoLabel }}</span>
+              <!-- De dónde salió el pedido. El WEB va marcado y el LOCAL
+                   discreto: lo normal es que el cajero lo haya cargado, y
+                   resaltar los 20 de siempre para distinguir 1 no sirve. -->
+              <span class="canal-chip" [class.canal-web]="row.canal === 'WEB'">{{ row.canal }}</span>
             </td>
           </ng-container>
 
@@ -77,7 +81,12 @@
 
           <ng-container matColumnDef="valorDelivery">
             <th mat-header-cell *matHeaderCellDef>DELIVERY</th>
-            <td mat-cell *matCellDef="let row">{{ row.valorDelivery | number:'1.0-0' }}</td>
+            <td mat-cell *matCellDef="let row">
+              <!-- Un retiro no se reparte, así que no hay costo de envío que
+                   mostrar: la columna dice qué es en vez de un 0 engañoso. -->
+              <span *ngIf="row.esRetiro" class="retirar-chip">RETIRAR</span>
+              <span *ngIf="!row.esRetiro">{{ row.valorDelivery | number:'1.0-0' }}</span>
+            </td>
           </ng-container>
 
           <ng-container matColumnDef="total">
@@ -119,16 +128,13 @@
       </mat-paginator>
     </div>
 
-    <!-- Cola de pedidos de la web. Ocupa el panel derecho cuando no hay ningún
-         delivery seleccionado: quien atiende el reparto ya tiene esta pantalla
-         abierta, y una segunda pantalla es una segunda cosa que monitorear.
-
-         Una sola lista para todo lo que viene de la web. Antes los RETIROS
-         aceptados vivían en una sección aparte al pie del panel, y quedaban
-         lejos del pedido que los originó; ahora van en la misma cola con el
-         chip RETIRO, que ya distinguía a los pendientes. Lo que cambia entre
-         un pedido y otro es qué botón ofrece, no en qué lista está. -->
-    <div class="delivery-detalle cola-online" *ngIf="hayColaWeb && !selectedDelivery">
+    <!-- Bandeja de pedidos de la web: SÓLO los que esperan confirmación.
+         Es una lista de decisiones pendientes, no de trabajo en curso. En
+         cuanto se acepta uno, sale de acá y entra en la lista de la izquierda
+         junto al resto de los pedidos, con su chip WEB. Tener los aceptados
+         también en el panel partía la operación en dos lugares para mirar. -->
+    <div class="delivery-detalle cola-online"
+         *ngIf="hayColaWeb && !selectedDelivery">
       <div class="cola-header">
         <mat-icon>storefront</mat-icon>
         <span>PEDIDOS DE LA WEB</span>
@@ -147,43 +153,17 @@
         <div class="cola-items">{{ p.resumenItems }}</div>
         <div class="cola-total">
           <span>{{ p.total | number:'1.0-2' }}</span>
-          <span class="cola-envio" *ngIf="p.pendiente && p.costoEnvio > 0">
-            envío {{ p.costoEnvio | number:'1.0-2' }}
-          </span>
-          <span class="cola-envio" *ngIf="!p.pendiente" [class.pagado]="p.cobrada">
-            {{ p.cobrada ? 'COBRADO' : 'SIN COBRAR' }}
-          </span>
+          <span class="cola-envio" *ngIf="p.costoEnvio > 0">envío {{ p.costoEnvio | number:'1.0-2' }}</span>
         </div>
-
-        <!-- Estado, sólo en los ya aceptados: los pendientes son todos
-             RECIBIDO y repetirlo en cada tarjeta es ruido. -->
-        <div class="cola-estado" *ngIf="!p.pendiente">{{ p.estadoLabel }}</div>
-
         <div class="cola-acciones">
-          <ng-container *ngIf="p.pendiente">
-            <button mat-flat-button color="primary" [disabled]="procesandoPedidoId === p.id"
-                    (click)="aceptarPedidoOnline(p)">
-              <mat-icon>check</mat-icon> ACEPTAR
-            </button>
-            <button mat-stroked-button color="warn" [disabled]="procesandoPedidoId === p.id"
-                    (click)="rechazarPedidoOnline(p)">
-              <mat-icon>close</mat-icon> RECHAZAR
-            </button>
-          </ng-container>
-
-          <!-- Un RETIRO aceptado no genera ningún `Delivery`, así que su venta
-               no aparece en la tabla de la izquierda: acá está el único lugar
-               donde se lo cobra y se lo cierra. -->
-          <ng-container *ngIf="!p.pendiente">
-            <button mat-flat-button color="primary" *ngIf="!p.cobrada"
-                    [disabled]="procesandoPedidoId === p.id" (click)="cobrarRetiro(p)">
-              <mat-icon>payments</mat-icon> COBRAR
-            </button>
-            <button mat-stroked-button *ngIf="p.cobrada"
-                    [disabled]="procesandoPedidoId === p.id" (click)="entregarRetiro(p)">
-              <mat-icon>check_circle</mat-icon> ENTREGADO
-            </button>
-          </ng-container>
+          <button mat-flat-button color="primary" [disabled]="procesandoPedidoId === p.id"
+                  (click)="aceptarPedidoOnline(p)">
+            <mat-icon>check</mat-icon> ACEPTAR
+          </button>
+          <button mat-stroked-button color="warn" [disabled]="procesandoPedidoId === p.id"
+                  (click)="rechazarPedidoOnline(p)">
+            <mat-icon>close</mat-icon> RECHAZAR
+          </button>
         </div>
       </div>
     </div>
@@ -279,7 +259,7 @@
          segunda condición se renderizaba JUNTO a la cola, y los dos paneles se
          repartían el lado derecho: la cola quedaba a media pantalla en vez de
          donde cae el detalle. -->
-    <div class="delivery-detalle empty-detalle" *ngIf="!selectedDelivery && !hayColaWeb">
+    <div class="delivery-detalle empty-detalle" *ngIf="!panelOcupado">
       <mat-icon>receipt_long</mat-icon>
       <span>SELECCIONE UN DELIVERY</span>
     </div>
@@ -303,7 +283,7 @@
            transiciones que valida el backend: un delivery CANCELADO no ofrece
            ninguna, porque cancelar es terminal. -->
       <button mat-stroked-button [matMenuTriggerFor]="menuEstado"
-        [disabled]="!selectedDelivery || estadosDisponibles.length === 0">
+        [disabled]="!puedeCambiarEstado">
         <mat-icon>swap_horiz</mat-icon> ESTADO
       </button>
       <mat-menu #menuEstado="matMenu">
@@ -321,12 +301,15 @@
       <button mat-stroked-button (click)="editarItems()" [disabled]="!selectedDelivery || isTerminal">
         <mat-icon>edit</mat-icon> ITEMS
       </button>
-      <button mat-stroked-button (click)="editarPago()" [disabled]="!selectedDelivery || isTerminal">
+      <button mat-stroked-button (click)="editarPago()" [disabled]="!puedeCobrar">
         <mat-icon>payments</mat-icon> PAGO
       </button>
       <!-- Reasignar sin cambiar de estado: el pedido ya salió y lo termina
            llevando otra persona. -->
-      <button mat-stroked-button (click)="cambiarRepartidor()" [disabled]="!selectedDelivery || isTerminal">
+      <!-- Único botón que un retiro no puede usar: nadie lo lleva. -->
+      <button mat-stroked-button (click)="cambiarRepartidor()"
+        [disabled]="!puedeAsignarRepartidor"
+        [matTooltip]="esRetiroSeleccionado ? 'Un retiro no tiene repartidor: lo pasa a buscar el cliente' : ''">
         <mat-icon>person_pin_circle</mat-icon> REPARTIDOR
       </button>
       <button mat-stroked-button (click)="imprimir()" [disabled]="!selectedDelivery">

@@ -33,8 +33,18 @@ export interface DeliveryDialogData {
   filteredMonedas: Moneda[];
 }
 
+/**
+ * Una fila de la lista. Siempre es un `Delivery`: el pedido para retirar es el
+ * mismo registro en `modo: RETIRO`, con dirección, costo de envío y repartidor
+ * vacíos. Por eso no hace falta ningún camino paralelo — la lista, el footer,
+ * el cobro y la impresión operan sobre lo mismo.
+ */
 interface DeliveryRow {
   delivery: any;
+  /** El cliente lo pasa a buscar: sin reparto ni costo de envío. */
+  esRetiro: boolean;
+  /** 'WEB' si entró por la tienda online, 'LOCAL' si lo cargó el cajero. */
+  canal: string;
   nombre: string;
   telefono: string;
   estadoLabel: string;
@@ -113,15 +123,13 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
    */
   pedidosOnline: any[] = [];
   /**
-   * Retiros ya aceptados y sin entregar. Van acá porque un PICKUP no genera
-   * ningún `Delivery`, así que su venta no aparece en la tabla de la izquierda
-   * ni en ninguna otra pantalla del PdV: sin esta lista no habría dónde cobrarlo.
-   */
-  retirosEnCurso: any[] = [];
-  /**
-   * Las dos listas de arriba fusionadas, que es lo que se renderiza: una sola
-   * cola de "pedidos de la web", ordenada por antigüedad, donde cada tarjeta
-   * dice de qué tipo es y ofrece la acción que corresponde a su estado.
+   * La bandeja del panel derecho: **sólo pedidos esperando confirmación**.
+   *
+   * Un pedido aceptado deja de ser una decisión pendiente y pasa a ser trabajo
+   * en curso, así que sale de acá y entra en la lista de la izquierda junto a
+   * los deliveries que carga el cajero — incluidos los RETIROS, que no generan
+   * `Delivery` y entran como fila sintética. Tener los aceptados en un panel
+   * aparte partía la operación en dos lugares para mirar.
    */
   colaWeb: any[] = [];
   /**
@@ -136,6 +144,8 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
    * partían el lado derecho entre sí.
    */
   hayColaWeb = false;
+  /** El panel derecho está mostrando algo: cola, detalle de delivery o de retiro. */
+  panelOcupado = false;
   avisoTooltip = 'Pedidos de la web';
   procesandoPedidoId: number | null = null;
   private pedidosInterval: any;
@@ -172,8 +182,10 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       this.tiendaActiva = false;
     }
 
+    // Los retiros primero: son filas de la tabla, así que tienen que estar en
+    // memoria antes de armarla o el primer render sale sin ellos.
+    await this.cargarPedidosOnline();
     await this.loadDeliveries();
-    if (this.tiendaActiva) await this.cargarPedidosOnline();
 
     // Timer cada segundo para actualizar espera
     this.timerInterval = setInterval(() => {
@@ -193,11 +205,21 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
 
   // ─── Pedidos de la web ──────────────────────────────────────────────────
 
+  /**
+   * Trae lo que viene de la web: la bandeja de pendientes y los retiros en
+   * curso.
+   *
+   * Los pendientes sólo se piden con la tienda encendida —apagada no puede
+   * entrar ninguno—, pero **los retiros en curso se piden siempre**: apagar la
+   * tienda no hace desaparecer los pedidos que ya se aceptaron, y como su
+   * venta no aparece en ninguna otra pantalla, dejar de traerlos los volvería
+   * invisibles y sin forma de cobrarlos.
+   */
   async cargarPedidosOnline(): Promise<void> {
     try {
-      const pedidos = await firstValueFrom(
-        this.repositoryService.getPedidosOnlineAdmin({ estado: 'RECIBIDO' }),
-      );
+      const pedidos = this.tiendaActiva
+        ? await firstValueFrom(this.repositoryService.getPedidosOnlineAdmin({ estado: 'RECIBIDO' }))
+        : [];
       // El handler devuelve DESC (más nuevo arriba), que sirve para la pantalla
       // de historial pero no para una cola de atención: acá el que espera hace
       // más tiempo va primero, y el orden se mantiene estable aunque entren
@@ -205,14 +227,6 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       this.pedidosOnline = (pedidos || [])
         .map((p: any) => this.mapPedidoOnline(p))
         .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-      const retiros = await firstValueFrom(this.repositoryService.getRetirosOnlineEnCurso());
-      this.retirosEnCurso = (retiros || []).map((r: any) => ({
-        ...this.mapPedidoOnline(r),
-        pendiente: false,
-        cobrada: !!r.cobrada,
-        estadoLabel: ESTADO_PEDIDO_LABEL[r.estado] || r.estado,
-      }));
 
       this.armarColaWeb();
     } catch (e) {
@@ -228,67 +242,25 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
    * mientras el cajero está por tocar un botón.
    */
   private armarColaWeb(): void {
-    this.colaWeb = [...this.pedidosOnline, ...this.retirosEnCurso]
+    this.colaWeb = [...this.pedidosOnline]
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     this.hayColaWeb = this.tiendaActiva && this.colaWeb.length > 0;
-
-    const porAceptar = this.pedidosOnline.length;
-    this.avisoTooltip = porAceptar
-      ? `${porAceptar} pedido(s) de la web esperando aceptación`
-      : 'Retiros de la web en curso';
+    this.actualizarPanel();
+    this.avisoTooltip = this.colaWeb.length
+      ? `${this.colaWeb.length} pedido(s) de la web esperando confirmación`
+      : 'Pedidos de la web';
   }
 
-  /** Cobra un retiro: misma pantalla de cobro que usa el delivery. */
-  async cobrarRetiro(r: any): Promise<void> {
-    if (!r?.ventaId) return;
-    this.procesandoPedidoId = r.id;
-    try {
-      const venta = await firstValueFrom(this.repositoryService.getVenta(r.ventaId));
-      const items = await firstValueFrom(this.repositoryService.getVentaItems(r.ventaId));
-      const dialogData: CobrarVentaDialogData = {
-        venta,
-        items: items || [],
-        monedas: this.data.filteredMonedas?.length > 0 ? this.data.filteredMonedas : this.data.monedas,
-        exchangeRates: this.data.exchangeRates,
-        principalMoneda: this.data.principalMoneda,
-        caja: this.data.caja,
-      };
-      const ref = this.dialog.open(CobrarVentaDialogComponent, {
-        width: '80vw', height: '80vh', maxWidth: '95vw', disableClose: true, data: dialogData,
-      });
-      const res = await firstValueFrom(ref.afterClosed());
-      if (res?.success) this.snackBar.open(`Retiro ${r.numero} cobrado`, 'OK', { duration: 3000 });
-      await this.cargarPedidosOnline();
-    } catch (e) {
-      this.mostrarError(e, 'No se pudo abrir el cobro del retiro');
-    } finally {
-      this.procesandoPedidoId = null;
-    }
-  }
-
-  /** Cierra el retiro cuando el cliente ya se lo llevó. */
-  async entregarRetiro(r: any): Promise<void> {
-    this.procesandoPedidoId = r.id;
-    try {
-      const res: any = await firstValueFrom(
-        this.repositoryService.avanzarEstadoPedidoOnline(r.id, 'ENTREGADO'),
-      );
-      if (res?.success) {
-        this.snackBar.open(`Retiro ${r.numero} entregado`, 'OK', { duration: 3000 });
-        await this.cargarPedidosOnline();
-      } else {
-        this.snackBar.open(`No se pudo cerrar: ${res?.detalle || res?.error || ''}`, 'OK', { duration: 5000 });
-      }
-    } catch (e) {
-      this.mostrarError(e, 'No se pudo cerrar el retiro');
-    } finally {
-      this.procesandoPedidoId = null;
-    }
-  }
-
-  /** Deselecciona el delivery abierto para que el panel muestre la cola. */
+  /** Deselecciona lo que haya abierto para que el panel vuelva a la bandeja. */
   verColaPedidos(): void {
     this.selectedDelivery = null;
+    this.actualizarPanel();
+    this.updateEstadoFlags();
+  }
+
+  /** Pre-computado: la vista no llama funciones. */
+  private actualizarPanel(): void {
+    this.panelOcupado = !!this.selectedDelivery || this.hayColaWeb;
   }
 
   /** Sin esto Angular reconstruye toda la cola en cada poll de 15s. */
@@ -398,21 +370,24 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
 
   private mapDeliveryRow(d: any): DeliveryRow {
     const mins = this.calcMinutos(d.fechaAbierto);
+    const esRetiro = d.modo === 'RETIRO';
     return {
       delivery: d,
+      esRetiro,
+      canal: (d.venta?.canalOrigen ?? 'LOCAL') === 'LOCAL' ? 'LOCAL' : 'WEB',
       nombre: d.nombre || d.cliente?.persona?.nombre || '-',
       telefono: d.telefono || '-',
       estadoLabel: d.estado,
       estadoColor: this.getEstadoColor(d.estado),
-      espera: this.formatEspera(mins),
+      espera: this.esperaDe(d, mins),
       totalVenta: this.calcTotalVenta(d),
       // `costoDelivery` viene congelado en la venta; la zona es sólo el
       // fallback para deliveries anteriores a la columna. `Number()` porque
       // ambos son `decimal` → string en Postgres.
-      valorDelivery: Number(d.venta?.costoDelivery ?? d.precioDelivery?.valor ?? 0) || 0,
+      valorDelivery: esRetiro ? 0 : (Number(d.venta?.costoDelivery ?? d.precioDelivery?.valor ?? 0) || 0),
       entregador: d.entregadoPorFuncionario?.persona?.nombre || '-',
       observacion: d.observacion || '',
-      tiempoColor: this.getTiempoColor(mins, d.estado),
+      tiempoColor: this.colorDe(d, mins),
       otraCaja: !!d.otraCaja,
     };
   }
@@ -439,6 +414,30 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Cuánto hace que espera este pedido.
+   *
+   * En un retiro el reloj **se congela** al marcarlo PARA_ENTREGA: a partir de
+   * ahí el pedido está pronto en el mostrador y lo que falta es que el cliente
+   * venga, que no depende del local. Sin esto un retiro se ponía rojo a las
+   * horas y el rojo dejaba de significar "hay que apurarse" en toda la lista.
+   */
+  private esperaDe(d: any, mins: number): string {
+    if (d.modo === 'RETIRO' && d.fechaParaEntrega) {
+      const listoEn = Math.max(0, Math.floor(
+        (new Date(d.fechaParaEntrega).getTime() - new Date(d.fechaAbierto).getTime()) / 60000,
+      ));
+      return `${this.formatEspera(listoEn)} · LISTO`;
+    }
+    return this.formatEspera(mins);
+  }
+
+  /** El color sigue al reloj: congelado el reloj, no hay alarma que dar. */
+  private colorDe(d: any, mins: number): string {
+    if (d.modo === 'RETIRO' && d.fechaParaEntrega) return '';
+    return this.getTiempoColor(mins, d.estado);
+  }
+
   private getTiempoColor(mins: number, estado: DeliveryEstado): string {
     if (estado === DeliveryEstado.ENTREGADO || estado === DeliveryEstado.CANCELADO) return '';
     if (mins >= this.tiempoRojo) return 'tiempo-rojo';
@@ -462,8 +461,8 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   private updateEsperas(): void {
     for (const row of this.deliveryRows) {
       const mins = this.calcMinutos(row.delivery.fechaAbierto);
-      row.espera = this.formatEspera(mins);
-      row.tiempoColor = this.getTiempoColor(mins, row.delivery.estado);
+      row.espera = this.esperaDe(row.delivery, mins);
+      row.tiempoColor = this.colorDe(row.delivery, mins);
     }
   }
 
@@ -490,11 +489,27 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     [DeliveryEstado.CANCELADO]: [],
   };
 
+  /** Un retiro no sale a la calle: sin EN_CAMINO. */
+  private static readonly TRANSICIONES_RETIRO: Record<string, DeliveryEstado[]> = {
+    [DeliveryEstado.ABIERTO]: [DeliveryEstado.PARA_ENTREGA, DeliveryEstado.ENTREGADO],
+    [DeliveryEstado.PARA_ENTREGA]: [DeliveryEstado.ENTREGADO, DeliveryEstado.ABIERTO],
+    [DeliveryEstado.EN_CAMINO]: [DeliveryEstado.ENTREGADO],
+    [DeliveryEstado.ENTREGADO]: [DeliveryEstado.PARA_ENTREGA],
+    [DeliveryEstado.CANCELADO]: [],
+  };
+
   selectDelivery(row: DeliveryRow): void {
     this.selectedDelivery = row.delivery;
+    this.actualizarPanel();
     this.updateEstadoFlags();
     this.loadDeliveryDetails();
   }
+
+  /** Habilitación de los botones del footer. Pre-computados: sin getters. */
+  puedeCobrar = false;
+  puedeCambiarEstado = false;
+  puedeAsignarRepartidor = false;
+  esRetiroSeleccionado = false;
 
   private updateEstadoFlags(): void {
     const estado = this.selectedDelivery?.estado;
@@ -504,7 +519,20 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     this.isEntregado = estado === DeliveryEstado.ENTREGADO;
     this.isCancelado = estado === DeliveryEstado.CANCELADO;
     this.isTerminal = this.isEntregado || this.isCancelado;
-    this.estadosDisponibles = estado ? (DeliveryDialogComponent.TRANSICIONES[estado] ?? []) : [];
+    // Espejo de `transicionesDe()` en el backend: un retiro no pasa por
+    // EN_CAMINO, así que ofrecerlo sería ofrecer algo que el backend rechaza.
+    const tabla = this.selectedDelivery?.modo === 'RETIRO'
+      ? DeliveryDialogComponent.TRANSICIONES_RETIRO
+      : DeliveryDialogComponent.TRANSICIONES;
+    this.estadosDisponibles = estado ? (tabla[estado] ?? []) : [];
+
+    this.puedeCobrar = !!this.selectedDelivery && !this.isTerminal;
+    this.puedeCambiarEstado = !!this.selectedDelivery && this.estadosDisponibles.length > 0;
+
+    // El repartidor es quien LLEVA el pedido. En un retiro nadie lo lleva:
+    // asignarlo sería registrar a una persona que no participa.
+    this.esRetiroSeleccionado = this.selectedDelivery?.modo === 'RETIRO';
+    this.puedeAsignarRepartidor = !!this.selectedDelivery && !this.isTerminal && !this.esRetiroSeleccionado;
   }
 
   private async loadDeliveryDetails(): Promise<void> {

@@ -117,35 +117,6 @@ export function registerPedidosOnlineAdminHandlers(
    * que su `Venta` -sin mesa, sin comanda, sin delivery- no sale en ninguna
    * pantalla del PdV y no habría forma de cobrarla. Esta lista es esa pantalla.
    */
-  ipcMain.handle('get-retiros-online-en-curso', async () => {
-    await ensurePermission(dataSource, getCurrentUser, PERM_VER);
-    const pedidos = await repo().find({
-      where: {
-        tipoPedido: TipoPedidoOnline.PICKUP,
-        estado: In([
-          EstadoPedidoOnline.ACEPTADO,
-          EstadoPedidoOnline.EN_PREPARACION,
-          EstadoPedidoOnline.LISTO,
-        ]),
-      },
-      relations: ['items'],
-      order: { createdAt: 'ASC' },
-    });
-    const conVenta = pedidos.filter((p) => !!p.ventaId);
-    if (!conVenta.length) return [];
-
-    // Estado de cobro de cada venta, para saber si ofrecer COBRAR o ENTREGAR.
-    const ventas = await dataSource.getRepository(Venta).find({
-      where: { id: In(conVenta.map((p) => p.ventaId as number)) },
-    });
-    const porId = new Map(ventas.map((v) => [v.id, v]));
-    return conVenta.map((p) => ({
-      ...mapPedidoAdmin(p),
-      ventaEstado: porId.get(p.ventaId as number)?.estado ?? null,
-      cobrada: porId.get(p.ventaId as number)?.estado === VentaEstado.CONCLUIDA,
-    }));
-  });
-
   ipcMain.handle('contar-pedidos-online-pendientes', async () => {
     await ensurePermission(dataSource, getCurrentUser, PERM_VER);
     const count = await repo().count({

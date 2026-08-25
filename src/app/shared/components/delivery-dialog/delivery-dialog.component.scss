@@ -384,3 +384,38 @@ tr.mat-mdc-row {
   letter-spacing: .04em;
   color: var(--text-secondary);
 }
+
+
+/* ── Chips de la lista ─────────────────────────────────────────────────── */
+
+/* Canal de origen, al lado del estado. El LOCAL va sin relleno a propósito:
+   es el caso normal y resaltarlo en todas las filas no distingue nada. */
+.canal-chip {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  border: 1px solid var(--divider-color, rgba(255,255,255,0.24));
+  color: var(--text-secondary);
+  vertical-align: middle;
+
+  &.canal-web {
+    border-color: var(--info-color);
+    color: var(--info-color);
+    background: color-mix(in srgb, var(--info-color) 14%, transparent);
+  }
+}
+
+/* En la columna DELIVERY, para el pedido que el cliente pasa a buscar. */
+.retirar-chip {
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  border: 1px solid var(--success-color);
+  color: var(--success-color);
+}
+

@@ -520,7 +520,6 @@ export abstract class RepositoryService {
   // Pedidos online (bandeja PdV)
   abstract getPedidosOnlineAdmin(filtros?: any): Observable<any[]>;
   abstract contarPedidosOnlinePendientes(): Observable<any>;
-  abstract getRetirosOnlineEnCurso(): Observable<any[]>;
   abstract aceptarPedidoOnline(pedidoId: number, data?: any): Observable<any>;
   abstract rechazarPedidoOnline(pedidoId: number, motivo: string): Observable<any>;
   abstract avanzarEstadoPedidoOnline(pedidoId: number, nuevoEstado: string): Observable<any>;

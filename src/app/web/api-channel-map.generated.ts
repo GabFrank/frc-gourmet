@@ -609,7 +609,6 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getResumenCaja": "getResumenCaja",
   "getRetiroCaja": "get-retiro-caja",
   "getRetirosCaja": "get-retiros-caja",
-  "getRetirosOnlineEnCurso": "get-retiros-online-en-curso",
   "getRole": "get-role",
   "getRolePermissions": "get-role-permissions",
   "getRoles": "get-roles",

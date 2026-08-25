@@ -321,19 +321,55 @@ async function main() {
   }
   ok(bloqueado, 'sin VENTAS_DELIVERY_CANCELAR_COBRADO no se puede revertir un cobro');
 
-  console.log('\n[11] Un retiro materializado es cobrable desde la bandeja');
+  console.log('\n[11] Un retiro entra a la lista como Delivery en modo RETIRO');
+  // Antes un PICKUP no generaba ningún `Delivery`, así que su venta no salía
+  // en la lista del PdV y hacía falta una pantalla paralela para cobrarla. Un
+  // retiro comparte con un reparto todo salvo las tres cosas que dependen de
+  // que alguien lo lleve, así que es el mismo registro en otro modo.
   const pRetiro = await nuevoPedido('PICKUP');
   const matRetiro = await materializarPedidoOnlineEnVenta(ds, pRetiro.id, undefined, admin.id);
-  const retiros: any = await invokeHandler('get-retiros-online-en-curso');
-  const encontrado = (retiros || []).find((r: any) => r.id === pRetiro.id);
-  ok(!!encontrado, 'el retiro aparece en la lista de retiros en curso');
-  ok(encontrado?.ventaId === matRetiro.ventaId, 'con su venta, que es lo que se cobra');
-  ok(encontrado?.cobrada === false, 'y marcado como sin cobrar', encontrado?.cobrada);
+  const ventaRetiro: any = await R(Venta).findOne({
+    where: { id: matRetiro.ventaId },
+    relations: ['delivery'],
+  });
+  ok(!!ventaRetiro?.delivery?.id, 'la venta del retiro tiene su Delivery', ventaRetiro?.delivery?.id);
+  ok(ventaRetiro?.delivery?.modo === 'RETIRO', 'y está en modo RETIRO', ventaRetiro?.delivery?.modo);
+  ok(!ventaRetiro?.delivery?.direccion, 'sin dirección: nadie lo lleva a ningún lado');
+  ok(Number(ventaRetiro?.costoDelivery ?? 0) === 0, 'y sin costo de envío', ventaRetiro?.costoDelivery);
 
+  const pedidoRetiro: any = await R(PedidoOnline).findOneBy({ id: pRetiro.id });
+  ok(pedidoRetiro?.deliveryId === ventaRetiro.delivery.id,
+     'el pedido queda vinculado al Delivery', pedidoRetiro?.deliveryId);
+
+  // El candado del repartidor es sobre quién LLEVA el pedido: en un retiro no
+  // hay nadie que lo lleve, así que no puede bloquear el cierre.
+  await R(PdvConfig).update({}, { deliveryRequiereRepartidor: true, deliveryRepartidorEtapa: 'ENTREGADO' } as any);
+  // Cobrada primero: entregar sin cobrar lo frena otra regla, anterior a esta,
+  // y taparía lo que se quiere medir.
   await R(Venta).update({ id: matRetiro.ventaId }, { estado: 'CONCLUIDA' } as any);
-  const retiros2: any = await invokeHandler('get-retiros-online-en-curso');
-  ok(retiros2.find((r: any) => r.id === pRetiro.id)?.cobrada === true,
-     'una vez cobrada la venta, el retiro queda marcado COBRADO');
+  let cerroSinRepartidor = false;
+  try {
+    await invokeHandler('delivery-cambiar-estado', ventaRetiro.delivery.id, 'ENTREGADO', {});
+    cerroSinRepartidor = true;
+  } catch (e: any) {
+    cerroSinRepartidor = false;
+  }
+  ok(cerroSinRepartidor, 'un retiro se cierra sin repartidor aunque el candado esté activo');
+
+  // Y el mismo candado SÍ frena a un delivery.
+  const pDel = await nuevoPedido('DELIVERY');
+  const matDel = await materializarPedidoOnlineEnVenta(ds, pDel.id, undefined, admin.id);
+  const ventaDel: any = await R(Venta).findOne({ where: { id: matDel.ventaId }, relations: ['delivery'] });
+  await invokeHandler('delivery-cambiar-estado', ventaDel.delivery.id, 'EN_CAMINO', {});
+  await R(Venta).update({ id: matDel.ventaId }, { estado: 'CONCLUIDA' } as any);
+  let frenoAlDelivery = false;
+  try {
+    await invokeHandler('delivery-cambiar-estado', ventaDel.delivery.id, 'ENTREGADO', {});
+  } catch (e: any) {
+    frenoAlDelivery = /repartidor|entregó/i.test(String(e?.message));
+  }
+  ok(frenoAlDelivery, 'el mismo candado sí frena a un delivery sin repartidor');
+  await R(PdvConfig).update({}, { deliveryRequiereRepartidor: false } as any);
 
   console.log('\n[12] Un pedido rechazado no resucita al materializarse');
   // La carrera: `aceptar-pedido-online` marca ACEPTADO y recién después llama a

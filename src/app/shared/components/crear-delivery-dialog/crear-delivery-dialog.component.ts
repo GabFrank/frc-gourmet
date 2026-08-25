@@ -12,6 +12,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatAutocompleteModule, MatAutocompleteTrigger } from '@angular/material/autocomplete';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
@@ -44,6 +45,7 @@ export interface CrearDeliveryDialogData {
     MatProgressSpinnerModule,
     MatAutocompleteModule,
     MatTooltipModule,
+    MatButtonToggleModule,
   ],
 })
 export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
@@ -77,6 +79,18 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
   // Configuración del PdV (antes eran constantes en este archivo).
   telefonoMinDigitos = 4;
   requiereDireccion = true;
+
+  /**
+   * `DELIVERY` (se reparte) o `RETIRO` (el cliente lo pasa a buscar).
+   *
+   * El alta es la misma para los dos porque el cajero no sabe de antemano qué
+   * va a pedir el cliente: atiende el teléfono y se entera en la conversación.
+   * Elegir RETIRO saca del form la dirección y el precio de envío, que dejan de
+   * existir, y hace obligatorio el nombre, que pasa a ser lo que identifica la
+   * bolsa en el mostrador.
+   */
+  modo: 'DELIVERY' | 'RETIRO' = 'DELIVERY';
+  esRetiro = false;
 
   // Pre-computados: la vista no llama funciones ni getters.
   puedeConfirmar = false;
@@ -119,6 +133,11 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
         this.precioDeliveryId = d.precioDelivery?.id ?? null;
         this.precioDeliveryOriginalId = this.precioDeliveryId;
         this.cobroAnticipado = !!d.cobroAnticipado;
+        // El modo no se cambia al editar: convertir un reparto en retiro (o al
+        // revés) implicaría rehacer el costo de envío y el repartidor ya
+        // asignado. Se muestra, no se toca.
+        this.modo = d.modo === 'RETIRO' ? 'RETIRO' : 'DELIVERY';
+        this.esRetiro = this.modo === 'RETIRO';
         this.clienteEncontrado = d.cliente || null;
         this.zonaBloqueada = !!d.venta && d.venta.estado !== 'ABIERTA';
       } else {
@@ -170,12 +189,29 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
   /** Recalcula todo lo que la vista consume como propiedad. */
   private recalcular(): void {
     const telefonoOk = this.telefono.replace(/\D/g, '').length >= this.telefonoMinDigitos;
-    const direccionOk = !this.requiereDireccion || this.direccion.trim().length > 0;
-    this.puedeConfirmar = telefonoOk && direccionOk && !this.processing;
+    // En un retiro no hay dirección que exigir; a cambio el nombre pasa a ser
+    // obligatorio: sin él nadie sabe de quién es la bolsa.
+    const direccionOk = this.esRetiro || !this.requiereDireccion || this.direccion.trim().length > 0;
+    const nombreOk = !this.esRetiro || this.nombre.trim().length > 0;
+    this.puedeConfirmar = telefonoOk && direccionOk && nombreOk && !this.processing;
     this.precioDeliveryCambio = this.isEditMode && this.precioDeliveryId !== this.precioDeliveryOriginalId;
   }
 
   onCampoChange(): void {
+    this.recalcular();
+  }
+
+  /** Cambio entre reparto y retiro. */
+  onModoChange(modo: 'DELIVERY' | 'RETIRO'): void {
+    this.modo = modo;
+    this.esRetiro = modo === 'RETIRO';
+    if (this.esRetiro) {
+      // Se limpian en vez de quedar ocultos con valor: si el cajero se
+      // equivoca de modo y vuelve, es preferible que los reescriba a que se
+      // guarde una dirección que nadie pidió.
+      this.direccion = '';
+      this.precioDeliveryId = null;
+    }
     this.recalcular();
   }
 
@@ -266,9 +302,10 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
         clienteId: cliente?.id ?? null,
         nombre: this.nombre || cliente?.persona?.nombre || '',
         telefono: this.telefono,
-        direccion: this.direccion,
+        direccion: this.esRetiro ? '' : this.direccion,
         observacion: this.observacion,
         cobroAnticipado: this.cobroAnticipado,
+        modo: this.modo,
       };
 
       if (this.isEditMode) {

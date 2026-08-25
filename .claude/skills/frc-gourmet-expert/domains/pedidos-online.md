@@ -104,7 +104,8 @@ PICKUP y DELIVERY **ya llegan a la operación**. Lo que cambió:
 | Todo con `VENTAS_PDV` | `PEDIDOS_ONLINE_VER` / `_GESTIONAR` (CAJERO+GERENTE) / `_CONFIGURAR` (GERENTE) |
 | Nadie llamaba a `contar-pedidos-online-pendientes` | Dos badges en el botón DELIVERY del PdV + beep WebAudio cuando sube el conteo |
 | La bandeja era una pantalla aparte | La cola vive en el **panel derecho del diálogo de delivery** |
-| Los retiros iban en una sección aparte | **Una sola cola** con chip `DELIVERY`/`RETIRO` por tarjeta |
+| Los retiros iban en una sección aparte | Entran en la **lista principal** como fila, con chip `RETIRAR` en la columna DELIVERY |
+| No se distinguía un pedido web de uno cargado por el cajero | Chip de canal `WEB`/`LOCAL` en la columna ESTADO |
 | El panel de la cola se partía el lado derecho con el empty-state | Excluyentes, y los dos ocupan exactamente el mismo lugar |
 | Con la tienda apagada seguían apareciendo el botón y el panel | Todo lo web se oculta cuando `TiendaOnlineConfig.activa = false` |
 | `mis-pedidos` era carga única | Poll de 12 s que se autodetiene |
@@ -122,14 +123,22 @@ PICKUP y DELIVERY **ya llegan a la operación**. Lo que cambió:
 - **Un PICKUP no genera `Delivery`**, así que su venta no sale en la tabla del
   diálogo. Vive en la cola del panel derecho (`get-retiros-online-en-curso`),
   que es el único lugar donde se puede cobrar.
-- **El panel derecho muestra UNA sola cola** (`colaWeb`), no dos: pendientes de
-  aceptación y retiros en curso se fusionan y se ordenan por antigüedad. Cada
-  tarjeta lleva su chip `DELIVERY`/`RETIRO` y ofrece la acción que le toca
-  (`ACEPTAR`/`RECHAZAR` si está pendiente, `COBRAR`/`ENTREGADO` si ya se
-  aceptó). Hasta 2026-08-25 los retiros vivían en una sección «Retiros en
-  curso» aparte, al pie del panel.
-- **La cola y el empty-state «seleccione un delivery» son excluyentes**
-  (`hayColaWeb`). Cuando se renderizaban los dos, se repartían el lado derecho
+- **El panel derecho es la BANDEJA: sólo pedidos esperando confirmación**
+  (`colaWeb`, estado `RECIBIDO`). Es una lista de decisiones pendientes, no de
+  trabajo en curso: en cuanto se acepta uno, sale del panel y pasa a la lista
+  de la izquierda, junto a los deliveries que carga el cajero.
+- **Un retiro aceptado es una fila sintética de la lista** (`mapRetiroRow`),
+  con `delivery: null` y `pedido` cargado. La columna DELIVERY muestra el chip
+  `RETIRAR` en vez de un costo de envío que no existe, y la columna ESTADO
+  lleva el chip de canal `WEB`/`LOCAL`. Seleccionarla abre un detalle propio
+  con `COBRAR`/`ENTREGADO`, porque el footer de acciones opera sobre un
+  `Delivery` que acá no hay.
+- **Los retiros en curso se traen SIEMPRE, con la tienda encendida o apagada.**
+  Apagarla no hace desaparecer los pedidos ya aceptados, y como su venta no
+  sale en ninguna otra pantalla, dejar de traerlos los volvería invisibles y
+  sin forma de cobrarlos. Lo que sí se apaga es la bandeja de pendientes.
+- **La bandeja, el detalle y el empty-state «seleccione un delivery» son
+  excluyentes** (`panelOcupado`). Cuando se renderizaban los dos, se repartían el lado derecho
   entre sí y la cola quedaba a media pantalla en vez de donde cae el detalle.
   Los tres paneles usan `flex-basis: 0`: con `auto`, el reparto 70/30 depende
   del ancho intrínseco del contenido y las tarjetas con botones lo empujaban.

@@ -2,6 +2,19 @@
 
 <mat-dialog-content>
   <div class="form-container">
+    <!-- El cajero atiende el teléfono sin saber qué va a pedir el cliente, así
+         que el alta es una sola y el modo se elige acá. RETIRAR saca del form
+         la dirección y el precio de envío, que dejan de existir. -->
+    <mat-button-toggle-group class="modo-toggle" [value]="modo"
+      (change)="onModoChange($event.value)" [disabled]="isEditMode">
+      <mat-button-toggle value="DELIVERY">
+        <mat-icon>delivery_dining</mat-icon> DELIVERY
+      </mat-button-toggle>
+      <mat-button-toggle value="RETIRO">
+        <mat-icon>shopping_bag</mat-icon> RETIRAR
+      </mat-button-toggle>
+    </mat-button-toggle-group>
+
     <!-- Teléfono con autocomplete + botón buscar -->
     <div class="telefono-row">
       <mat-form-field appearance="outline" class="telefono-field">
@@ -41,11 +54,13 @@
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>NOMBRE</mat-label>
       <input matInput #nombreInput [(ngModel)]="nombre" (ngModelChange)="onCampoChange()"
-        placeholder="Nombre del cliente (opcional)" (keydown.enter)="focusDireccion()" />
+        [placeholder]="esRetiro ? 'Nombre del cliente' : 'Nombre del cliente (opcional)'"
+        (keydown.enter)="esRetiro ? focusObservacion() : focusDireccion()" />
+      <mat-hint *ngIf="esRetiro">Obligatorio: identifica el pedido en el mostrador</mat-hint>
     </mat-form-field>
 
     <!-- Dirección -->
-    <mat-form-field appearance="outline" class="full-width">
+    <mat-form-field appearance="outline" class="full-width" *ngIf="!esRetiro">
       <mat-label>DIRECCIÓN</mat-label>
       <textarea matInput #direccionInput [(ngModel)]="direccion" (ngModelChange)="onCampoChange()" rows="2"
         placeholder="Dirección de entrega" (keydown.enter)="focusPrecio(); $event.preventDefault()"></textarea>
@@ -53,7 +68,7 @@
     </mat-form-field>
 
     <!-- Precio Delivery -->
-    <mat-form-field appearance="outline" class="full-width">
+    <mat-form-field appearance="outline" class="full-width" *ngIf="!esRetiro">
       <mat-label>PRECIO DELIVERY</mat-label>
       <mat-select #precioSelect [(value)]="precioDeliveryId" [disabled]="zonaBloqueada"
         (selectionChange)="onCampoChange()"

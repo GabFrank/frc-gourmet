@@ -1785,9 +1785,17 @@ export async function printDeliveryTicketInternal(
     || '—').toUpperCase();
   const repartidor = (delivery.entregadoPorFuncionario as any)?.persona?.nombre;
 
+  // Mismo ticket para las dos formas de entrega, con el modo anunciado arriba:
+  // quien lo agarra tiene que saber de un vistazo si esto sale a la calle o
+  // espera en el mostrador. Lo que cambia es sólo lo que depende de que
+  // alguien lo lleve — dirección, zona y repartidor —, que en un retiro no
+  // existe y se omite en vez de imprimirse en blanco.
+  const esRetiro = (delivery as any).modo === 'RETIRO';
+
   const lines: TicketLine[] = [...headerLines];
   lines.push(ticketSeparador('='));
-  lines.push(ticketText('DELIVERY', { align: 'C', bold: true, size: 'tall' }));
+  lines.push(ticketText(esRetiro ? 'RETIRO EN LOCAL' : 'DELIVERY',
+    { align: 'C', bold: true, size: 'tall' }));
   lines.push(ticketText(`N° ${deliveryId}${venta ? ` · VENTA #${venta.id}` : ''}`, { align: 'C' }));
   lines.push(ticketText(ticketFmtFechaHora(delivery.fechaAbierto || new Date()), { align: 'C' }));
   lines.push(ticketSeparador('='));
@@ -1796,16 +1804,18 @@ export async function printDeliveryTicketInternal(
   // en 32 columnas un `ticketKv` la truncaría justo donde importa.
   lines.push(ticketKv('CLIENTE', nombreCliente));
   lines.push(ticketKv('TEL', delivery.telefono || '—'));
-  lines.push(ticketText('DIRECCION:', { bold: true }));
-  lines.push(ticketText((delivery.direccion || '—').toUpperCase()));
+  if (!esRetiro) {
+    lines.push(ticketText('DIRECCION:', { bold: true }));
+    lines.push(ticketText((delivery.direccion || '—').toUpperCase()));
+  }
   if (delivery.observacion) {
     lines.push(ticketText('OBSERVACION:', { bold: true }));
     lines.push(ticketText(delivery.observacion.toUpperCase()));
   }
-  if (delivery.precioDelivery?.descripcion) {
+  if (!esRetiro && delivery.precioDelivery?.descripcion) {
     lines.push(ticketKv('ZONA', String(delivery.precioDelivery.descripcion).toUpperCase()));
   }
-  if (repartidor) lines.push(ticketKv('REPARTIDOR', String(repartidor).toUpperCase()));
+  if (!esRetiro && repartidor) lines.push(ticketKv('REPARTIDOR', String(repartidor).toUpperCase()));
 
   // Ítems, con el mismo layout de columnas que el comprobante de venta.
   const totalW = 12;

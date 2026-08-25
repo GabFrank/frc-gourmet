@@ -24,7 +24,7 @@
 import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 
-import { Delivery, DeliveryEstado } from '../../src/app/database/entities/ventas/delivery.entity';
+import { Delivery, DeliveryEstado, DeliveryModo } from '../../src/app/database/entities/ventas/delivery.entity';
 import { PrecioDelivery } from '../../src/app/database/entities/ventas/precio-delivery.entity';
 import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
@@ -60,6 +60,25 @@ const TRANSICIONES: Record<DeliveryEstado, DeliveryEstado[]> = {
   [DeliveryEstado.ENTREGADO]: [DeliveryEstado.EN_CAMINO],
   [DeliveryEstado.CANCELADO]: [],
 };
+
+/**
+ * Un retiro no sale a ningún lado, así que `EN_CAMINO` no existe para él:
+ * ABIERTO → PARA_ENTREGA (pronto en el mostrador) → ENTREGADO (se lo llevó).
+ * Dejarlo pasar por EN_CAMINO sería ofrecer un estado que no significa nada y
+ * que además dispara el candado del repartidor.
+ */
+const TRANSICIONES_RETIRO: Record<DeliveryEstado, DeliveryEstado[]> = {
+  [DeliveryEstado.ABIERTO]: [DeliveryEstado.PARA_ENTREGA, DeliveryEstado.ENTREGADO],
+  [DeliveryEstado.PARA_ENTREGA]: [DeliveryEstado.ENTREGADO, DeliveryEstado.ABIERTO],
+  [DeliveryEstado.EN_CAMINO]: [DeliveryEstado.ENTREGADO],
+  [DeliveryEstado.ENTREGADO]: [DeliveryEstado.PARA_ENTREGA],
+  [DeliveryEstado.CANCELADO]: [],
+};
+
+/** La tabla que rige según el modo. */
+export function transicionesDe(modo?: string): Record<DeliveryEstado, DeliveryEstado[]> {
+  return modo === 'RETIRO' ? TRANSICIONES_RETIRO : TRANSICIONES;
+}
 
 /** Estados en los que el delivery sigue vivo (no terminal). */
 export const ESTADOS_DELIVERY_PENDIENTES = [
@@ -178,6 +197,9 @@ export function registerDeliveryHandlers(
         items: venta.items,
         pago: venta.pago,
         costoDelivery: venta.costoDelivery == null ? null : Number(venta.costoDelivery),
+        // Para el chip de canal de la lista: distingue el reparto que cargó el
+        // cajero del que entró por la tienda online.
+        canalOrigen: (venta as any).canalOrigen ?? 'LOCAL',
       },
     }));
 
@@ -220,22 +242,36 @@ export function registerDeliveryHandlers(
     if (telefono.length < minDigitos) {
       throw new Error(`El teléfono debe tener al menos ${minDigitos} dígitos.`);
     }
-    const direccion = upper(payload?.direccion);
-    if (config?.deliveryRequiereDireccion && !direccion) {
+    // El cajero no sabe de antemano si el cliente va a pedir envío o pasar a
+    // buscarlo, así que el alta es la misma y el modo se elige en el form.
+    const esRetiro = String(payload?.modo ?? '').toUpperCase() === 'RETIRO';
+
+    // En un retiro el nombre reemplaza a la dirección como dato imprescindible:
+    // es lo que permite encontrar la bolsa entre otras cinco en el mostrador.
+    if (esRetiro && !String(payload?.nombre ?? '').trim()) {
+      throw new Error('El nombre del cliente es obligatorio para un retiro.');
+    }
+
+    // Dirección y costo de envío no existen en un retiro: exigir la primera
+    // sería pedir un dato que nadie va a usar.
+    const direccion = esRetiro ? undefined : upper(payload?.direccion);
+    if (!esRetiro && config?.deliveryRequiereDireccion && !direccion) {
       throw new Error('La dirección de entrega es obligatoria.');
     }
     if (!payload?.cajaId) throw new Error('No hay una caja abierta para registrar el delivery.');
 
-    const costoDelivery = await resolverCostoDelivery(dataSource, payload?.precioDeliveryId);
+    const precioDeliveryId = esRetiro ? null : payload?.precioDeliveryId;
+    const costoDelivery = esRetiro ? 0 : await resolverCostoDelivery(dataSource, precioDeliveryId);
 
     const resultado = await dataSource.transaction(async (manager) => {
       const deliveryGuardado = await crearDeliveryEnTx(manager, dataSource, {
-        precioDeliveryId: payload?.precioDeliveryId,
+        precioDeliveryId,
         clienteId: payload?.clienteId,
         nombre: payload?.nombre,
         telefono,
         direccion,
         observacion: payload?.observacion,
+        modo: esRetiro ? DeliveryModo.RETIRO : DeliveryModo.DELIVERY,
         cobroAnticipado: payload?.cobroAnticipado ?? config?.deliveryCobroAnticipadoDefault,
       }, usuarioId);
 
@@ -380,7 +416,7 @@ export function registerDeliveryHandlers(
 
       if (delivery.estado === nuevoEstado) return delivery; // idempotente
 
-      const permitidas = TRANSICIONES[delivery.estado] ?? [];
+      const permitidas = transicionesDe((delivery as any).modo)[delivery.estado] ?? [];
       if (!permitidas.includes(nuevoEstado)) {
         throw new Error(
           `Transición no permitida: ${delivery.estado} → ${nuevoEstado}.`
@@ -413,7 +449,11 @@ export function registerDeliveryHandlers(
       // Candado configurable: si el repartidor es bloqueante, la etapa en la que
       // bloquea la decide el local. Hay operaciones donde el pedido sale y recién
       // al volver se registra quién lo llevó — ahí el candado va en ENTREGADO.
-      if (config?.deliveryRequiereRepartidor && !delivery.entregadoPorFuncionario) {
+      // El candado del repartidor es sobre quién LLEVA el pedido. En un retiro
+      // nadie lo lleva: exigirlo sería pedir el nombre de una persona que no
+      // participa.
+      const esRetiro = (delivery as any).modo === 'RETIRO';
+      if (!esRetiro && config?.deliveryRequiereRepartidor && !delivery.entregadoPorFuncionario) {
         const etapa = config.deliveryRepartidorEtapa || 'EN_CAMINO';
         if (etapa === 'EN_CAMINO' && nuevoEstado === DeliveryEstado.EN_CAMINO) {
           throw new Error('Seleccioná el repartidor antes de enviar el pedido.');

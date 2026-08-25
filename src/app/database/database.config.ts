@@ -239,6 +239,7 @@ import { VentaCanalOrigen1787603993308 } from './migrations/1787603993308-VentaC
 import { ZonaDeliveryPoligono1787605293739 } from './migrations/1787605293739-ZonaDeliveryPoligono';
 import { MostrarEnNombreVariacion1787616860074 } from './migrations/1787616860074-MostrarEnNombreVariacion';
 import { DireccionDeliveryOpcional1787668984617 } from './migrations/1787668984617-DireccionDeliveryOpcional';
+import { DeliveryModoRetiro1787677459724 } from './migrations/1787677459724-DeliveryModoRetiro';
 import { AddPagoCuotaCppDetalle1785320463398 } from './migrations/1785320463398-AddPagoCuotaCppDetalle';
 import { AddEgresoCajaToPagoCuotaDetalle1785335253817 } from './migrations/1785335253817-AddEgresoCajaToPagoCuotaDetalle';
 import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVacacionVentas';
@@ -706,6 +707,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     ZonaDeliveryPoligono1787605293739,
     MostrarEnNombreVariacion1787616860074,
     DireccionDeliveryOpcional1787668984617,
+    DeliveryModoRetiro1787677459724,
   ];
 }
 

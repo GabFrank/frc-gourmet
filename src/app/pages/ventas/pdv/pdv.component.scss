@@ -1248,8 +1248,13 @@ tr.example-element-row:not(.example-expanded-row):active {
 
 /* Material envuelve el contenido proyectado en `.mdc-button__label`, y ese
    wrapper viene con `position: relative`. Sin esto los badges se anclan al
-   label —o sea al centro del botón, pegados al texto— en vez de al borde. */
-.bottom-buttons .bottom-button .mdc-button__label {
+   label —o sea al centro del botón, pegados al texto— en vez de al borde.
+
+   Va con `::ng-deep` porque el label lo genera el template de `MatButton`, no
+   el nuestro: no lleva el atributo de scope del componente y un selector
+   normal no lo alcanza. Acotado con `:host` para que no se escape al resto de
+   la app. */
+:host ::ng-deep .bottom-buttons .bottom-button .mdc-button__label {
   position: static;
 }
 

@@ -14,6 +14,7 @@ import { PdvCategoriaItem } from '../../src/app/database/entities/ventas/pdv-cat
 import { PdvItemProducto } from '../../src/app/database/entities/ventas/pdv-item-producto.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { crearDeliveryEnTx } from '../utils/delivery-alta.utils';
+import { DeliveryModo } from '../../src/app/database/entities/ventas/delivery.entity';
 import { getRangosPrecioVariacion } from '../utils/variacion-precio.utils';
 import { getVariacionConfig, getVariacionConfigGlobal } from '../utils/variacion-config.utils';
 import { ensureObservacionNotaLibreId } from '../utils/observacion-libre.utils';
@@ -280,23 +281,31 @@ export async function materializarPedidoOnlineEnVenta(
         nombreCliente: pedido.nombreCliente ? pedido.nombreCliente.toUpperCase() : undefined,
       });
 
-      // DELIVERY: además de la venta se abre el registro de reparto, en la misma
-      // transacción. Sin esto el pedido no entra al tablero del PdV, no se le
-      // puede asignar repartidor ni imprimir el ticket de reparto — vivía en un
-      // carril paralelo al módulo de delivery.
-      if (pedido.tipoPedido === TipoPedidoOnline.DELIVERY) {
+      // DELIVERY y PICKUP abren su registro en la misma transacción. Sin esto
+      // el pedido no entra al tablero del PdV: no se le puede cambiar de
+      // estado, ni cobrar desde el footer, ni imprimir su ticket — vivía en un
+      // carril paralelo.
+      //
+      // El PICKUP entra como `Delivery` en modo RETIRO, sin dirección ni costo
+      // de envío. Es la misma fila de la lista que un reparto, con las tres
+      // columnas que dependen de que alguien lo lleve vacías.
+      const esRetiro = pedido.tipoPedido === TipoPedidoOnline.PICKUP;
+      if (esRetiro || pedido.tipoPedido === TipoPedidoOnline.DELIVERY) {
         const delivery = await crearDeliveryEnTx(qr.manager, dataSource, {
           nombre: pedido.nombreCliente,
           telefono: pedido.telefonoCliente,
-          direccion: [pedido.direccionEntrega, pedido.referenciaDireccion]
-            .filter(Boolean).join(' · ') || undefined,
+          direccion: esRetiro
+            ? undefined
+            : [pedido.direccionEntrega, pedido.referenciaDireccion]
+                .filter(Boolean).join(' · ') || undefined,
           observacion: pedido.notas,
+          modo: esRetiro ? DeliveryModo.RETIRO : DeliveryModo.DELIVERY,
           // El costo ya viene congelado en el pedido: no se re-resuelve por zona,
           // que podría haber cambiado de precio entre el pedido y la aceptación.
           cobroAnticipado: false,
         }, userId);
         venta.delivery = delivery as any;
-        venta.costoDelivery = Number(pedido.costoEnvio) || 0;
+        venta.costoDelivery = esRetiro ? 0 : (Number(pedido.costoEnvio) || 0);
         pedido.deliveryId = delivery.id;
       }
 
