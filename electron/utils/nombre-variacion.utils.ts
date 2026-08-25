@@ -94,23 +94,22 @@ export function componerDetalleVariacion(
 }
 
 /**
- * Encabezado del ítem en la COMANDA de cocina: producto + tamaño.
+ * Línea de tamaño del ítem en la COMANDA de cocina.
  *
- * La comanda no usa `componerDetalleVariacion` porque imprime el tamaño y cada
- * sabor en líneas separadas y en grande —el cocinero lee de lejos—, pero tiene
- * que respetar `mostrarEnNombre` igual que el ticket del cliente. Al
- * implementar el flag esto quedó afuera y el tamaño destildado se seguía
- * imprimiendo en cocina.
+ * El encabezado del ítem ya imprime «1 PIZZA», así que esta línea sólo lleva el
+ * TAMAÑO. Antes componía producto + tamaño y salía «1 PIZZA» seguido de «PIZZA
+ * GRANDE», con el nombre repetido.
+ *
+ * Devuelve `''` cuando no hay nada que agregar —sin presentación, o con
+ * `mostrarEnNombre` apagado— y el llamador omite la línea.
  */
 export function componerEncabezadoComanda(
-  nombreProducto: string,
+  _nombreProducto: string,
   presentacionNombre?: string | null,
   mostrarPresentacion: boolean = true,
 ): string {
-  const prod = String(nombreProducto || '').trim();
-  const pres = String(presentacionNombre || '').trim();
-  if (!pres || mostrarPresentacion === false) return prod;
-  return `${prod} ${pres}`.trim();
+  if (mostrarPresentacion === false) return '';
+  return String(presentacionNombre || '').trim().toUpperCase();
 }
 
 // ============================================================

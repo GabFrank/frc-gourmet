@@ -432,15 +432,24 @@ export async function printComandaInternal(
 
   const venta = await dataSource.getRepository(Venta).findOne({
     where: { id: ventaId },
-    relations: ['mesa', 'comanda'],
+    relations: ['mesa', 'comanda', 'delivery'],
   });
   if (!venta) {
     return { ok: false, printed, errors: [{ message: `Venta ${ventaId} no encontrada` }] };
   }
   const mesa: any = (venta as any).mesa;
   const comanda: any = (venta as any).comanda;
-  if (!mesa?.id && !comanda?.id) {
-    // Venta sin mesa ni comanda → no aplica ticket de cocina.
+  // Mismo predicado que los hooks de KDS: van a cocina mesa, comanda, delivery y
+  // los pedidos de la web. La única que no va es la venta rápida de mostrador.
+  //
+  // Este gate estaba desalineado con los otros dos: el `ComandaItem` se creaba
+  // —así que la pantalla de cocina sí mostraba el pedido— pero acá se cortaba y
+  // el papel no salía nunca, devolviendo `ok: true` sin ningún error. Un
+  // delivery jamás imprimió su comanda por esto.
+  const tieneDelivery = !!(venta as any).delivery?.id;
+  const vieneDeLaWeb = ((venta as any).canalOrigen ?? 'LOCAL') !== 'LOCAL';
+  if (!mesa?.id && !comanda?.id && !tieneDelivery && !vieneDeLaWeb) {
+    // Venta directa de mostrador → no aplica ticket de cocina.
     return { ok: true, printed, errors };
   }
 
@@ -613,9 +622,8 @@ export async function printComandaInternal(
         const tamano = componerEncabezadoComanda(
           nombre, pizza.presentacion, pizza.mostrarPresentacion,
         );
-        // Si no hay tamaño que agregar, esta línea repetiría el nombre que ya
-        // está arriba («1 QUESADILLAS» seguido de «QUESADILLAS»). Se omite.
-        if (tamano && tamano !== nombre) {
+        // Vacío = no hay tamaño que mostrar (sin presentación, o destildada).
+        if (tamano) {
           lines.push(ticketText(tamano, { bold: true, size: 'tall' }));
         }
         const n = pizza.sabores.length;

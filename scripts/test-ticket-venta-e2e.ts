@@ -20,7 +20,7 @@ import * as fs from 'fs';
 import { DataSource } from 'typeorm';
 
 import { getDataSourceOptions } from '../src/app/database/database.config';
-import { buildVentaTicketLines } from '../electron/handlers/documentos-tickets.handler';
+import { buildVentaTicketLines, printComandaInternal } from '../electron/handlers/documentos-tickets.handler';
 import { componerEncabezadoComanda } from '../electron/utils/nombre-variacion.utils';
 import { renderTicketToPlainText, invalidateTicketEmpresaCache } from '../electron/utils/ticket.utils';
 
@@ -297,14 +297,71 @@ async function main() {
     // el flag igual que el ticket del cliente. Se pasó por alto al implementarlo
     // y salió en la primera prueba real: se destildó la presentación de
     // QUESADILLAS y el tamaño siguió imprimiéndose en cocina.
-    ok(componerEncabezadoComanda('QUESADILLAS', 'TRADICIONAL', false) === 'QUESADILLAS',
-       'comanda: con el flag apagado NO imprime el tamaño',
+    ok(componerEncabezadoComanda('QUESADILLAS', 'TRADICIONAL', false) === '',
+       'comanda: con el flag apagado no hay línea de tamaño',
        componerEncabezadoComanda('QUESADILLAS', 'TRADICIONAL', false));
-    ok(componerEncabezadoComanda('PIZZA', 'GRANDE', true) === 'PIZZA GRANDE',
-       'comanda: con el flag prendido sí lo imprime');
-    ok(componerEncabezadoComanda('PIZZA', null, true) === 'PIZZA',
-       'comanda: sin presentación no deja espacios colgando');
+    // El encabezado ya dice «1 PIZZA»: esta línea lleva SÓLO el tamaño, o se
+    // imprimía «1 PIZZA» seguido de «PIZZA GRANDE».
+    ok(componerEncabezadoComanda('PIZZA', 'GRANDE', true) === 'GRANDE',
+       'comanda: sólo el tamaño, sin repetir el producto',
+       componerEncabezadoComanda('PIZZA', 'GRANDE', true));
+    ok(componerEncabezadoComanda('PIZZA', null, true) === '',
+       'comanda: sin presentación no imprime línea vacía');
 
+  }
+
+  // ── El gate de a quién le corresponde comanda de cocina ─────────────────
+  //
+  // Hay TRES lugares que deciden si un ítem llega a cocina: el que crea el
+  // `ComandaItem`, el que dispara la impresión automática y este, que imprime.
+  // Estaban desalineados: los dos primeros ya aceptaban delivery y web, y este
+  // seguía exigiendo mesa o comanda. El síntoma era mudo — el pedido aparecía
+  // en la pantalla de cocina, el papel no salía, y `printComandaInternal`
+  // devolvía `ok: true` sin un solo error.
+  //
+  // Se asierta sobre `printed`/`errors` y no sobre papel: sin impresoras
+  // configuradas, una venta que SÍ corresponde a cocina falla al buscar la
+  // impresora del sector, y una que NO corresponde sale limpia por el early
+  // return. Esa diferencia es exactamente el gate.
+  {
+    console.log('\n[gate cocina] a quién le corresponde comanda');
+    const { Venta } = require('../src/app/database/entities/ventas/venta.entity');
+    const { VentaItem } = require('../src/app/database/entities/ventas/venta-item.entity');
+    const { Delivery } = require('../src/app/database/entities/ventas/delivery.entity');
+    const { Producto } = require('../src/app/database/entities/productos/producto.entity');
+
+    const prod = await ds.getRepository(Producto).save(
+      ds.getRepository(Producto).create({ nombre: 'PRODUCTO GATE', tipo: 'RETAIL', activo: true } as any),
+    );
+
+    const crearVenta = async (extra: any) => {
+      const v: any = await ds.getRepository(Venta).save(
+        ds.getRepository(Venta).create({ estado: 'ABIERTA', ...extra } as any),
+      );
+      await ds.getRepository(VentaItem).save(ds.getRepository(VentaItem).create({
+        venta: { id: v.id }, producto: { id: (prod as any).id },
+        cantidad: 1, precioVentaUnitario: 1000, precioCostoUnitario: 0, estado: 'ACTIVO',
+      } as any));
+      return v;
+    };
+
+    const mostrador = await crearVenta({});
+    const rMostrador = await printComandaInternal(ds, mostrador.id);
+    ok(rMostrador.ok && rMostrador.printed.length === 0 && rMostrador.errors.length === 0,
+       'venta de mostrador: no le corresponde comanda, sale por el early return', rMostrador);
+
+    const del: any = await ds.getRepository(Delivery).save(
+      ds.getRepository(Delivery).create({ estado: 'ABIERTO', telefono: '0981000000', fechaAbierto: new Date() } as any),
+    );
+    const conDelivery = await crearVenta({ delivery: { id: del.id } });
+    const rDelivery = await printComandaInternal(ds, conDelivery.id);
+    ok(rDelivery.errors.length > 0 || rDelivery.printed.length > 0,
+       'delivery: SÍ le corresponde comanda — pasa el gate y busca la impresora', rDelivery);
+
+    const web = await crearVenta({ canalOrigen: 'PEDIDO_ONLINE' });
+    const rWeb = await printComandaInternal(ds, web.id);
+    ok(rWeb.errors.length > 0 || rWeb.printed.length > 0,
+       'pedido de la web sin delivery (retiro): también le corresponde', rWeb);
   }
 
   await ds.destroy();
