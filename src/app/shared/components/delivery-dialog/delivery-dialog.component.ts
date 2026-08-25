@@ -112,6 +112,19 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   ventaCobrada = false;
   /** 'WEB' o 'LOCAL', para el chip del detalle. */
   detalleCanal = 'LOCAL';
+  /**
+   * Datos del local en el encabezado del resumen.
+   *
+   * El panel no es sólo una pantalla de trabajo: cuando el cliente pide su
+   * resumen, el cajero le manda una **foto de esta pantalla** por WhatsApp. Sin
+   * el nombre y el teléfono del local, esa foto llega sin contexto — podría ser
+   * de cualquier lado.
+   */
+  empresa: any = null;
+  /** Fecha del pedido, para que la foto se explique sola. */
+  detalleFecha: Date | null = null;
+  /** Título del comprobante: qué es este pedido. */
+  detalleTitulo = 'DELIVERY';
   selectedPagoDetalles: any[] = [];
   estadoFiltro = '';
   estados = Object.values(DeliveryEstado);
@@ -185,6 +198,14 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       }
     } catch (e) {
       console.warn('No se pudo leer la configuración de delivery, se usan los defaults:', e);
+    }
+
+    // Los datos del local van en el encabezado del resumen y no cambian
+    // mientras el diálogo está abierto.
+    try {
+      this.empresa = await firstValueFrom(this.repositoryService.getEmpresa());
+    } catch (e) {
+      console.warn('No se pudieron leer los datos de la empresa:', e);
     }
 
     // La tienda apagada se consulta una sola vez: es una decisión del gerente,
@@ -650,6 +671,9 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     this.detalleTotal = this.detalleSubtotal + this.detalleEnvio;
     this.ventaCobrada = this.selectedDelivery?.venta?.estado === 'CONCLUIDA';
     this.detalleCanal = (this.selectedDelivery?.venta?.canalOrigen ?? 'LOCAL') === 'LOCAL' ? 'LOCAL' : 'WEB';
+    this.detalleFecha = this.selectedDelivery?.fechaAbierto
+      ? new Date(this.selectedDelivery.fechaAbierto) : null;
+    this.detalleTitulo = this.selectedDelivery?.modo === 'RETIRO' ? 'RETIRO EN LOCAL' : 'DELIVERY';
     this.recalcularTotalesMoneda();
   }
 

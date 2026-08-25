@@ -460,3 +460,202 @@ tr.mat-mdc-row {
   gap: 4px;
   align-items: center;
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   RESUMEN DEL PEDIDO CON FORMA DE COMPROBANTE
+
+   Único bloque del diálogo con colores fijos en vez de variables de tema, y
+   es a propósito: el destino de esto es una FOTO que el cajero le manda al
+   cliente por WhatsApp. Una captura de UI oscura, recortada de una pantalla
+   más grande, se lee como un pedazo de pantalla; ésta se lee como un
+   comprobante. Los colores del tema harían que el mismo pedido llegue
+   distinto según cómo tenga configurada la app quien lo mande.
+
+   Ancho de ticket y no de panel: es la proporción que la gente reconoce como
+   recibo, y la que mejor entra en la pantalla de un teléfono.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.recibo-wrap {
+  // El panel sigue el tema; el papel de adentro, no.
+  align-items: center;
+  padding: 12px 10px;
+}
+
+.recibo {
+  width: 100%;
+  max-width: 320px;
+  background: #ffffff;
+  color: #1a1a1a;
+  border-radius: 6px;
+  padding: 16px 18px 14px;
+  // Sombra suave: despega el papel del fondo y hace evidente dónde recortar.
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.recibo-header {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.recibo-local {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.recibo-contacto {
+  font-size: 11px;
+  color: #555;
+}
+
+.recibo-titulo {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  padding: 5px 0;
+  border-top: 1px solid #1a1a1a;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.recibo-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #555;
+  padding: 5px 0;
+}
+
+/* Línea de guiones, como la de un ticket térmico. */
+.recibo-sep {
+  border-top: 1px dashed #999;
+  margin: 8px 0;
+}
+
+.recibo-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+
+  > span:first-child {
+    color: #555;
+    white-space: nowrap;
+  }
+  > span:last-child {
+    text-align: right;
+    word-break: break-word;
+  }
+}
+
+/* La dirección va en su propia línea a ancho completo: en 320px, partida en
+   dos columnas se corta justo donde importa. */
+.recibo-dir {
+  margin-top: 4px;
+
+  > span {
+    color: #555;
+    font-size: 11px;
+  }
+  > div {
+    word-break: break-word;
+  }
+}
+
+.recibo-item {
+  margin-bottom: 7px;
+
+  &.anulado {
+    text-decoration: line-through;
+    opacity: .5;
+  }
+}
+
+.recibo-item-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.recibo-item-nombre { word-break: break-word; }
+.recibo-item-total { white-space: nowrap; }
+
+/* La variación es parte del plato, no una nota al pie: mismo color que el
+   nombre, apenas más chica. */
+.recibo-item-var {
+  padding-left: 12px;
+  font-size: 11px;
+}
+
+.recibo-item-mod {
+  padding-left: 12px;
+  font-size: 11px;
+  color: #555;
+
+  /* En papel el color no siempre sobrevive a la foto, así que la distinción
+     se apoya también en la palabra («sin …», «+ …»). */
+  &.quitado { color: #b00020; }
+  &.extra { color: #1b5e20; }
+  &.cambio { color: #8a5a00; }
+  &.nota { font-style: italic; }
+}
+
+.recibo-vacio {
+  text-align: center;
+  color: #777;
+  padding: 6px 0;
+}
+
+.recibo-total {
+  display: flex;
+  justify-content: space-between;
+  font-size: 16px;
+  font-weight: 700;
+  padding-top: 6px;
+  margin-top: 4px;
+  border-top: 1px solid #1a1a1a;
+}
+
+.recibo-moneda {
+  font-size: 11px;
+  color: #555;
+}
+
+/* Lo primero que se mira en la foto: si está pago o no. */
+.recibo-sello {
+  margin: 10px auto 4px;
+  width: fit-content;
+  padding: 3px 14px;
+  border: 2px solid #b00020;
+  border-radius: 4px;
+  color: #b00020;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: .14em;
+  transform: rotate(-3deg);
+
+  &.pagado {
+    border-color: #1b5e20;
+    color: #1b5e20;
+  }
+}
+
+.recibo-pagos {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #999;
+  font-size: 11px;
+  color: #555;
+}
+
+.recibo-pie {
+  text-align: center;
+  font-size: 11px;
+  color: #555;
+  margin-top: 10px;
+}

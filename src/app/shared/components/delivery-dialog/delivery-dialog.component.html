@@ -168,119 +168,116 @@
       </div>
     </div>
 
-    <!-- Detalle ticket (30%) -->
-    <div class="delivery-detalle" *ngIf="selectedDelivery">
-      <!-- Card Cliente -->
-      <div class="detalle-card">
-        <div class="detalle-card-header">
-          <mat-icon>person</mat-icon>
+    <!-- Resumen del pedido, con forma de comprobante.
+         =====================================================================
+         Esto no es sólo una pantalla de trabajo: cuando el cliente pide su
+         resumen, el cajero le manda una FOTO de esta pantalla por WhatsApp.
+         Por eso va sobre papel blanco y en un ancho de ticket en vez de seguir
+         el tema de la app — una captura de una UI oscura, recortada de una
+         pantalla más grande, se lee como un pedazo de pantalla; ésta se lee
+         como un comprobante. Es el único lugar del diálogo donde el color no
+         sale de las variables de tema, y es deliberado: el destino de este
+         bloque es una imagen, no un monitor.
+
+         Los botones NO viven acá sino en el footer, así que el recorte sale
+         limpio: no hay controles que fotografiar. -->
+    <div class="delivery-detalle recibo-wrap" *ngIf="selectedDelivery">
+      <div class="recibo">
+        <div class="recibo-header">
+          <div class="recibo-local">{{ empresa?.nombreComercial || empresa?.nombre || '' }}</div>
+          <div class="recibo-contacto" *ngIf="empresa?.telefono">{{ empresa.telefono }}</div>
+          <div class="recibo-contacto" *ngIf="empresa?.direccion">{{ empresa.direccion }}</div>
+        </div>
+
+        <div class="recibo-titulo">{{ detalleTitulo }}</div>
+        <div class="recibo-meta">
+          <span>N° {{ selectedDelivery.id }}</span>
+          <span *ngIf="detalleFecha">{{ detalleFecha | date:'dd/MM/yyyy HH:mm' }}</span>
+        </div>
+
+        <div class="recibo-sep"></div>
+
+        <!-- Datos de entrega -->
+        <div class="recibo-kv">
           <span>CLIENTE</span>
-          <!-- Qué es y de dónde vino. Sin esto hay que deducir el modo por la
-               ausencia de la dirección, y el canal no se veía en ningún lado
-               del detalle. -->
-          <span class="header-chips">
-            <span class="canal-chip" [class.canal-web]="detalleCanal === 'WEB'">{{ detalleCanal }}</span>
-            <span class="retirar-chip" *ngIf="esRetiroSeleccionado">RETIRAR</span>
-          </span>
+          <span>{{ selectedDelivery.nombre || selectedDelivery.cliente?.persona?.nombre || '-' }}</span>
         </div>
-        <div class="detalle-card-body">
-          <div class="detalle-row">
-            <span class="detalle-label">NOMBRE:</span>
-            <span>{{ selectedDelivery.nombre || selectedDelivery.cliente?.persona?.nombre || '-' }}</span>
-          </div>
-          <div class="detalle-row">
-            <span class="detalle-label">TEL:</span>
-            <span>{{ selectedDelivery.telefono || '-' }}</span>
-          </div>
-          <div class="detalle-row" *ngIf="!esRetiroSeleccionado">
-            <span class="detalle-label">DIR:</span>
-            <span>{{ selectedDelivery.direccion || '-' }}</span>
-          </div>
-          <div class="detalle-row" *ngIf="selectedDelivery.observacion">
-            <span class="detalle-label">OBS:</span>
-            <span>{{ selectedDelivery.observacion }}</span>
-          </div>
-          <div class="detalle-row" *ngIf="selectedDelivery.entregadoPorFuncionario">
-            <span class="detalle-label">REPARTIDOR:</span>
-            <span>{{ selectedDelivery.entregadoPorFuncionario.persona?.nombre }}</span>
-          </div>
-          <div class="detalle-row" *ngIf="isCancelado && selectedDelivery.motivoCancelacion">
-            <span class="detalle-label">MOTIVO:</span>
-            <span>{{ selectedDelivery.motivoCancelacion }}</span>
-          </div>
+        <div class="recibo-kv">
+          <span>TEL</span>
+          <span>{{ selectedDelivery.telefono || '-' }}</span>
         </div>
-      </div>
+        <div class="recibo-dir" *ngIf="!esRetiroSeleccionado">
+          <span>DIRECCIÓN</span>
+          <div>{{ selectedDelivery.direccion || '-' }}</div>
+        </div>
+        <div class="recibo-dir" *ngIf="selectedDelivery.observacion">
+          <span>OBSERVACIÓN</span>
+          <div>{{ selectedDelivery.observacion }}</div>
+        </div>
+        <div class="recibo-kv" *ngIf="selectedDelivery.entregadoPorFuncionario">
+          <span>REPARTIDOR</span>
+          <span>{{ selectedDelivery.entregadoPorFuncionario.persona?.nombre }}</span>
+        </div>
+        <div class="recibo-dir" *ngIf="isCancelado && selectedDelivery.motivoCancelacion">
+          <span>MOTIVO DE CANCELACIÓN</span>
+          <div>{{ selectedDelivery.motivoCancelacion }}</div>
+        </div>
 
-      <!-- Card Items -->
-      <div class="detalle-card">
-        <div class="detalle-card-header">
-          <mat-icon>receipt</mat-icon>
-          <span>ITEMS</span>
-        </div>
-        <!-- El mismo detalle que sale impreso en el ticket del cliente: si el
-             cajero lee acá «1 PIZZA» y el papel dice «PIZZA GRANDE 1/2
-             CALABRESA sin cebolla», no hay forma de resolver un reclamo. -->
-        <div class="detalle-card-body">
-          <div *ngFor="let item of itemsDetalle" class="item-row" [class.item-cancelado]="item.cancelado">
-            <div class="item-main">
-              <span>{{ item.cantidad }}x {{ item.nombre }}</span>
-              <span>{{ item.total | number:'1.0-2' }}</span>
-            </div>
-            <div *ngIf="item.variacion" class="item-variacion">{{ item.variacion }}</div>
-            <div *ngFor="let r of item.removidos" class="item-sub item-removido">SIN {{ r }}</div>
-            <div *ngFor="let c of item.cambios" class="item-sub item-cambio">{{ c }}</div>
-            <div *ngFor="let a of item.adicionales" class="item-sub item-adicional">+ {{ a }}</div>
-            <div *ngFor="let o of item.observaciones" class="item-sub item-observacion">{{ o }}</div>
-            <div *ngIf="item.descuento > 0" class="item-sub">DESC: -{{ item.descuento | number:'1.0-2' }}</div>
-          </div>
-          <div *ngIf="itemsDetalle.length === 0" class="empty-items">SIN ITEMS</div>
-        </div>
-      </div>
+        <div class="recibo-sep"></div>
 
-      <!-- Card Totales -->
-      <div class="detalle-card detalle-card-total">
-        <div class="detalle-card-body">
-          <div class="detalle-row">
-            <span>SUBTOTAL:</span>
-            <span>{{ detalleSubtotal | number:'1.0-2' }}</span>
+        <!-- Ítems: el mismo detalle que sale impreso en el ticket -->
+        <div class="recibo-item" *ngFor="let item of itemsDetalle" [class.anulado]="item.cancelado">
+          <div class="recibo-item-top">
+            <span class="recibo-item-nombre">{{ item.cantidad }}× {{ item.nombre }}</span>
+            <span class="recibo-item-total">{{ item.total | number:'1.0-2' }}</span>
           </div>
-          <div class="detalle-row" *ngIf="detalleEnvio > 0">
-            <span>ENVÍO:</span>
-            <span>{{ detalleEnvio | number:'1.0-2' }}</span>
-          </div>
-          <div class="detalle-row total-row">
-            <span>TOTAL:</span>
-            <span>{{ detalleTotal | number:'1.0-2' }}</span>
-          </div>
-          <!-- El mismo total en las otras monedas del PdV. El cliente llega con
-               reales o dólares y el cajero necesita el número sin abrir la
-               pantalla de cobro, que además puede cerrar la venta. -->
-          <div class="detalle-row moneda-row" *ngFor="let t of totalesMoneda">
-            <span>{{ t.simbolo }}</span>
-            <span *ngIf="t.decimales === 0">{{ t.valor | number:'1.0-0' }}</span>
-            <span *ngIf="t.decimales !== 0">{{ t.valor | number:'1.2-2' }}</span>
-          </div>
-          <div class="detalle-row estado-cobro" [class.cobrado]="ventaCobrada">
-            <span>{{ ventaCobrada ? 'COBRADO' : 'SIN COBRAR' }}</span>
+          <div class="recibo-item-var" *ngIf="item.variacion">{{ item.variacion }}</div>
+          <div class="recibo-item-mod quitado" *ngFor="let r of item.removidos">sin {{ r }}</div>
+          <div class="recibo-item-mod cambio" *ngFor="let c of item.cambios">{{ c }}</div>
+          <div class="recibo-item-mod extra" *ngFor="let a of item.adicionales">+ {{ a }}</div>
+          <div class="recibo-item-mod nota" *ngFor="let o of item.observaciones">{{ o }}</div>
+          <div class="recibo-item-mod" *ngIf="item.descuento > 0">
+            descuento −{{ item.descuento | number:'1.0-2' }}
           </div>
         </div>
-      </div>
+        <div class="recibo-vacio" *ngIf="itemsDetalle.length === 0">SIN ITEMS</div>
 
-      <!-- Card Cobro -->
-      <div class="detalle-card" *ngIf="selectedPagoDetalles.length > 0">
-        <div class="detalle-card-header">
-          <mat-icon>payments</mat-icon>
-          <span>COBRO</span>
+        <div class="recibo-sep"></div>
+
+        <!-- Totales -->
+        <div class="recibo-kv">
+          <span>SUBTOTAL</span>
+          <span>{{ detalleSubtotal | number:'1.0-2' }}</span>
         </div>
-        <div class="detalle-card-body">
-          <!-- `1.0-0` truncaba los centavos: un pago de R$ 12,50 se leía
-               «12». Cada moneda declara sus decimales. -->
-          <div *ngFor="let pd of selectedPagoDetalles" class="detalle-row">
+        <div class="recibo-kv" *ngIf="detalleEnvio > 0">
+          <span>ENVÍO</span>
+          <span>{{ detalleEnvio | number:'1.0-2' }}</span>
+        </div>
+        <div class="recibo-total">
+          <span>TOTAL</span>
+          <span>{{ detalleTotal | number:'1.0-2' }}</span>
+        </div>
+        <div class="recibo-kv recibo-moneda" *ngFor="let t of totalesMoneda">
+          <span>{{ t.simbolo }}</span>
+          <span *ngIf="t.decimales === 0">{{ t.valor | number:'1.0-0' }}</span>
+          <span *ngIf="t.decimales !== 0">{{ t.valor | number:'1.2-2' }}</span>
+        </div>
+
+        <!-- Sello de cobro: lo primero que se mira en la foto. -->
+        <div class="recibo-sello" [class.pagado]="ventaCobrada">
+          {{ ventaCobrada ? 'PAGADO' : 'A COBRAR' }}
+        </div>
+
+        <!-- Cómo se pagó, sólo si ya se cobró. -->
+        <div class="recibo-pagos" *ngIf="selectedPagoDetalles.length > 0">
+          <div class="recibo-kv" *ngFor="let pd of selectedPagoDetalles">
             <span>{{ pd.moneda?.simbolo }} {{ pd.formaPago?.nombre }}</span>
-            <span *ngIf="(pd.moneda?.decimales ?? 0) === 0">{{ pd.valor | number:'1.0-0' }} ({{ pd.tipo }})</span>
-            <span *ngIf="(pd.moneda?.decimales ?? 0) !== 0">{{ pd.valor | number:'1.2-2' }} ({{ pd.tipo }})</span>
+            <span *ngIf="(pd.moneda?.decimales ?? 0) === 0">{{ pd.valor | number:'1.0-0' }}</span>
+            <span *ngIf="(pd.moneda?.decimales ?? 0) !== 0">{{ pd.valor | number:'1.2-2' }}</span>
           </div>
         </div>
+
+        <div class="recibo-pie">¡Gracias por su compra!</div>
       </div>
     </div>
 
