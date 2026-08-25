@@ -225,26 +225,39 @@ tr.mat-mdc-row {
 }
 
 // Footer
+/* Footer de acciones ~15% más grande que el default de Material. Son los
+   botones que el cajero toca con el pedido en la mano y a veces en una pantalla
+   táctil: a 36px de alto y 12px de texto se erraba el objetivo. */
 .delivery-footer {
-  padding: 8px 16px;
+  padding: 10px 16px;
   border-top: 1px solid var(--divider-color, rgba(255,255,255,0.12));
 
   .footer-actions {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     align-items: center;
     flex-wrap: wrap;
   }
 
   .footer-separator {
     width: 1px;
-    height: 24px;
+    height: 28px;
     background-color: var(--divider-color, rgba(255,255,255,0.12));
-    margin: 0 4px;
+    margin: 0 6px;
   }
 
   button {
-    font-size: 12px;
+    font-size: 14px;
+    min-height: 42px;
+    padding: 0 16px;
+    letter-spacing: .02em;
+
+    mat-icon {
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+      margin-right: 4px;
+    }
   }
 }
 
