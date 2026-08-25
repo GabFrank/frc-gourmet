@@ -1267,5 +1267,5 @@ tr.example-element-row:not(.example-expanded-row):active {
 
 /* Rojo = pide una decisión ahora (aceptar o rechazar).
    Naranja = trabajo en curso, no bloquea a nadie. */
-.pdv-badge-web { background-color: #f44336; }
-.pdv-badge-repartos { background-color: #f4a536; }
+.pdv-badge-web { background-color: var(--error-color); }
+.pdv-badge-repartos { background-color: var(--warning-color); }

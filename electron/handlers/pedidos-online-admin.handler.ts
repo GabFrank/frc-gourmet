@@ -4,6 +4,7 @@ import { In } from 'typeorm';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
 import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zona-delivery.entity';
+import { Delivery } from '../../src/app/database/entities/ventas/delivery.entity';
 import { EstadoPedidoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { ensurePermission } from '../utils/auth.utils';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
@@ -366,25 +367,49 @@ export function registerPedidosOnlineAdminHandlers(
     };
     const destinoDelivery = ESTADO_DELIVERY_EQUIVALENTE[nuevoEstado];
     if (pedido.deliveryId && destinoDelivery) {
-      try {
-        await invokeHandler('delivery-cambiar-estado', pedido.deliveryId, destinoDelivery, {
-          funcionarioId: data?.funcionarioId,
-        });
-      } catch (e) {
-        return {
-          success: false,
-          error: 'delivery_rechazo_transicion',
-          detalle: (e as Error)?.message || String(e),
-          estadoActual: pedido.estado,
-        };
+      // El delivery avanza en su propia transacción y el pedido se guarda
+      // después: si esa segunda escritura falla, el delivery queda adelantado
+      // y el pedido atrás. No se puede unificar sin reescribir el módulo de
+      // delivery, así que se hace REINTENTABLE: si el delivery ya está donde
+      // queremos llevarlo, no se le pide la transición de nuevo (la rechazaría
+      // por "transición inválida") y el handler sigue para dejar el pedido al
+      // día. Así el operador destraba el desfasaje repitiendo la acción.
+      const actual = await dataSource.getRepository(Delivery).findOne({
+        where: { id: pedido.deliveryId },
+        select: ['id', 'estado'],
+      });
+      if (String(actual?.estado) !== destinoDelivery) {
+        try {
+          await invokeHandler('delivery-cambiar-estado', pedido.deliveryId, destinoDelivery, {
+            funcionarioId: data?.funcionarioId,
+          });
+        } catch (e) {
+          return {
+            success: false,
+            error: 'delivery_rechazo_transicion',
+            detalle: (e as Error)?.message || String(e),
+            estadoActual: pedido.estado,
+          };
+        }
       }
     }
 
     pedido.estado = nuevoEstado as EstadoPedidoOnline;
     if (nuevoEstado === EstadoPedidoOnline.LISTO) pedido.fechaListo = new Date();
     if (nuevoEstado === EstadoPedidoOnline.ENTREGADO) pedido.fechaEntregado = new Date();
-    const saved = await repo().save(pedido);
-    return { success: true, pedido: mapPedidoAdmin(saved) };
+    try {
+      const saved = await repo().save(pedido);
+      return { success: true, pedido: mapPedidoAdmin(saved) };
+    } catch (e) {
+      // El delivery ya avanzó y el pedido no: se nombra el desfasaje en vez de
+      // devolver un error genérico, porque la salida es repetir la acción.
+      return {
+        success: false,
+        error: 'pedido_desfasado_del_delivery',
+        detalle: (e as Error)?.message || String(e),
+        estadoActual: pedido.estado,
+      };
+    }
   });
 }
 

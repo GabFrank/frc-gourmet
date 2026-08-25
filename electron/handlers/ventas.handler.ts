@@ -428,6 +428,34 @@ export async function materializarPedidoOnlineEnVenta(
       }
     }
 
+    // Relectura del estado DENTRO de la transacción, justo antes de escribir.
+    //
+    // El `pedido` que tenemos en memoria se cargó al abrir la transacción, y
+    // entre ese momento y ahora hay una ventana real: `aceptar-pedido-online`
+    // marca ACEPTADO y recién después llama acá, así que un RECHAZAR de otro
+    // operador (o un reintento cruzado) puede haber comiteado RECHAZADO
+    // mientras esto corría. Sin este chequeo el `save` de abajo pisaba ese
+    // rechazo y el pedido resucitaba EN_PREPARACION, con venta viva y comanda
+    // ya impresa: el operador rechazó y la cocina cocinó igual.
+    const estadoActual = await qr.manager.getRepository(PedidoOnline).findOne({
+      where: { id: pedidoId },
+      select: ['id', 'estado', 'ventaId'],
+    });
+    if (!estadoActual) throw new Error(`Pedido online ${pedidoId} no encontrado`);
+    if (
+      estadoActual.estado === EstadoPedidoOnline.RECHAZADO ||
+      estadoActual.estado === EstadoPedidoOnline.CANCELADO
+    ) {
+      // Rollback: la Venta y sus ítems creados en esta transacción se
+      // descartan enteros, que es exactamente lo que corresponde a un pedido
+      // que ya no existe para el negocio.
+      throw new Error('pedido_rechazado_durante_materializacion');
+    }
+    if (estadoActual.ventaId) {
+      // Otro camino lo materializó primero. Igual que arriba: descartar.
+      throw new Error('pedido_ya_materializado_por_otro');
+    }
+
     pedido.ventaId = ventaId;
     pedido.estado = EstadoPedidoOnline.EN_PREPARACION;
     await qr.manager.getRepository(PedidoOnline).save(pedido);
@@ -1871,7 +1899,12 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       if (!config) {
         const newConfig = repository.create({
           cantidad_mesas: 0,
-          activo: true
+          activo: true,
+          // Explícito y no por default de columna: en una base vieja la columna
+          // conserva el `DEFAULT true` con que se creó (SQLite no soporta
+          // ALTER COLUMN SET DEFAULT), así que una fila insertada sin el campo
+          // nacería exigiendo dirección aunque la migración diga lo contrario.
+          deliveryRequiereDireccion: false,
         } as DeepPartial<PdvConfig>);
         
         config = await repository.save(newConfig);

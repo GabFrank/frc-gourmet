@@ -335,6 +335,30 @@ async function main() {
   ok(retiros2.find((r: any) => r.id === pRetiro.id)?.cobrada === true,
      'una vez cobrada la venta, el retiro queda marcado COBRADO');
 
+  console.log('\n[12] Un pedido rechazado no resucita al materializarse');
+  // La carrera: `aceptar-pedido-online` marca ACEPTADO y recién después llama a
+  // materializar. En esa ventana otro operador puede rechazar. Antes, el `save`
+  // final de la materialización pisaba el RECHAZADO y el pedido volvía a
+  // EN_PREPARACION con venta viva y comanda ya impresa — el operador rechazaba
+  // y la cocina cocinaba igual. Se simula la ventana poniendo el pedido en
+  // RECHAZADO antes de materializar, que es el estado con el que la
+  // materialización se encuentra al ir a escribir.
+  const pCarrera = await nuevoPedido('DELIVERY');
+  await R(PedidoOnline).update({ id: pCarrera.id }, { estado: 'RECHAZADO' } as any);
+  const ventasAntes = await R(Venta).count();
+  let abortada = false;
+  try {
+    await materializarPedidoOnlineEnVenta(ds, pCarrera.id, undefined, admin.id);
+  } catch (e: any) {
+    abortada = /pedido_rechazado_durante_materializacion/.test(String(e?.message));
+  }
+  ok(abortada, 'materializar un pedido rechazado aborta en vez de resucitarlo');
+  const trasCarrera = await R(PedidoOnline).findOne({ where: { id: pCarrera.id } });
+  ok(trasCarrera?.estado === 'RECHAZADO', 'el rechazo sobrevive', trasCarrera?.estado);
+  ok(!trasCarrera?.ventaId, 'y no quedó vinculado a ninguna venta', trasCarrera?.ventaId);
+  ok(await R(Venta).count() === ventasAntes,
+     'la venta a medio crear se descarta entera con el rollback');
+
   await ds.destroy();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
