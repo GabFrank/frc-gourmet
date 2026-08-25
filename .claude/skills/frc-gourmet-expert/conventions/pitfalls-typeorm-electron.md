@@ -437,3 +437,53 @@ encabezados.
 > `*ngIf` no es visible fuera de esa vista embebida. Si además existe una
 > propiedad del componente con el mismo nombre, la vista resuelve a la propiedad
 > y el bug queda camuflado.
+
+## `@ViewChild('btn')` sobre un botón Material devuelve la directiva, no el elemento
+
+En el Material MDC de Angular 15, **`MatButton` es un `@Component`**, no una
+directiva. Una template ref sin `exportAs` sobre un elemento que hospeda un
+componente resuelve a **la instancia del componente**, así que esto compila,
+no tira ningún error en runtime y no hace absolutamente nada:
+
+```ts
+@ViewChild('confirmarBtn') confirmarBtn!: ElementRef<HTMLButtonElement>;
+// ...
+this.confirmarBtn?.nativeElement?.focus();   // nativeElement es undefined
+```
+
+El optional chaining se traga el `undefined` y el foco nunca se mueve. Va con
+`read`:
+
+```ts
+@ViewChild('confirmarBtn', { read: ElementRef }) confirmarBtn!: ElementRef<HTMLButtonElement>;
+```
+
+Cómo distinguir sin adivinar: `<input matInput>` / `<textarea matInput>` son
+elementos nativos con una **directiva** encima, así que un `#ref` pelado ya da
+`ElementRef`. `<mat-select>`, `<button mat-raised-button>` y compañía son
+componentes: sin `read` obtenés la instancia — que a veces es justo lo que
+querés (`MatSelect` tiene su propio `.focus()` y `.open()`), y a veces no.
+
+Apareció en `crear-delivery-dialog`: el Enter en OBSERVACIÓN nunca llevó el
+foco al botón CREAR desde que se escribió, sin síntoma visible más allá de
+"no pasa nada".
+
+## `matBadge` se ancla al elemento que lo declara, no al botón que lo contiene
+
+Material envuelve el contenido proyectado de un botón en
+`.mdc-button__label`, y ese wrapper viene con `position: relative`. Un
+`matBadge` colgado del `<mat-icon>` o del `<span>` del texto —o cualquier
+`position: absolute` propio— se posiciona **contra el label**, o sea contra el
+medio del botón, no contra su esquina.
+
+Si querés el badge en la esquina, hay que neutralizar el wrapper:
+
+```scss
+.mi-boton .mdc-button__label { position: static; }
+.mi-badge { position: absolute; top: 2px; right: 3px; z-index: 2; }
+```
+
+El `z-index` es necesario porque el ripple (`.mat-mdc-button-persistent-ripple`)
+es el otro absolute del botón. Y ojo con `overflow: hidden` en el botón: el
+badge tiene que caer **por dentro** del borde, no montado encima como haría
+matBadge.

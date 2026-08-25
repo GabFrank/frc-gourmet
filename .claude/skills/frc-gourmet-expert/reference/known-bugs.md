@@ -2,6 +2,36 @@
 
 Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo sigue roto. La sección de **Seguridad** está mayormente resuelta (bcrypt, JWT en keytar, permisos en backend, must-change-password) — ver detalle abajo y [architecture/auth-permissions.md](../architecture/auth-permissions.md).
 
+## Cocina / delivery
+
+### El delivery nunca imprimía su comanda — RESUELTO (2026-08-25)
+
+**Síntoma:** un ítem de delivery aparecía en la pantalla de cocina (KDS) pero el
+papel no salía nunca. `printComandaInternal` devolvía `ok: true`, sin errores,
+sin nada en los logs.
+
+**Causa:** el predicado de "va a cocina" está escrito en **tres** lugares y sólo
+se movieron dos. `crearComandaItemsSiCorresponde` y `autoPrintComandaIfNeeded`
+ya aceptaban delivery y pedidos web; `printComandaInternal` seguía exigiendo
+mesa o comanda y cortaba por su early return. Detalle y tabla de los tres gates
+en [domains/cocina-impresion.md](../domains/cocina-impresion.md).
+
+**Cómo no repetirlo:** los tres cargan `relations: ['mesa','comanda','delivery']`.
+Si una relación no se carga, el gate lee `undefined` y volvés al mismo bug mudo.
+Tests en `scripts/test-ticket-venta-e2e.ts`, bloque «gate cocina».
+
+### Un pedido rechazado podía resucitar — RESUELTO (2026-08-25)
+
+**Síntoma (teórico, encontrado en auditoría, no reportado en producción):** con
+dos operadores, rechazar un pedido justo mientras se materializaba dejaba el
+pedido en `EN_PREPARACION` con venta viva y comanda impresa, pese al rechazo.
+
+**Causa:** `aceptar-pedido-online` marca `ACEPTADO` sin lock y materializa
+después; el `save` final de la materialización usaba el objeto `pedido` cargado
+al abrir su transacción y pisaba el `RECHAZADO` comiteado en el medio. Se cerró
+releyendo el estado dentro de la transacción antes de escribir. Detalle en
+[domains/pedidos-online.md](../domains/pedidos-online.md) → «Concurrencia».
+
 ## Fechas / períodos
 
 ### Filtro por rango de fechas devolvía CERO en SQLite — RESUELTO (2026-08-24)

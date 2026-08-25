@@ -603,8 +603,9 @@ Una sola fila. Campos:
 | `deliveryTiempoRojo` | 60 | min para color rojo |
 | `deliveryPrecioDefaultId` | null | Zona preseleccionada al crear (null = la de menor valor) |
 | `deliveryCobroAnticipadoDefault` | false | Estado inicial del toggle COBRO ANTICIPADO |
-| `deliveryRequiereDireccion` | true | Dirección obligatoria para dar de alta |
-| `deliveryRequiereRepartidor` | true | Repartidor obligatorio para pasar a EN_CAMINO |
+| `deliveryRequiereDireccion` | **false** desde 2026-08-25 | Dirección obligatoria para dar de alta. El default era `true`; se invirtió porque el mostrador toma pedidos por teléfono y la dirección suele llegar después. La migración `DireccionDeliveryOpcional` también pone en `false` la fila existente |
+| `deliveryRequiereRepartidor` | true | Repartidor obligatorio. La etapa en la que bloquea la define `deliveryRepartidorEtapa` |
+| `deliveryRepartidorEtapa` | `EN_CAMINO` | Cuándo exige el repartidor: `EN_CAMINO` (al enviar) o `ENTREGADO` (al finalizar). Permite que un delivery salga sin repartidor asignado y se complete después |
 | `deliveryTelefonoMinDigitos` | 4 | Mínimo de dígitos para habilitar el alta |
 | `deliveryPageSize` | 20 | Filas por página en la lista |
 | `deliveryMostrarPendientesOtrasCajas` | true | Suma a la lista los pendientes de otros turnos |

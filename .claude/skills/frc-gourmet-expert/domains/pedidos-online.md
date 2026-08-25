@@ -104,6 +104,9 @@ PICKUP y DELIVERY **ya llegan a la operación**. Lo que cambió:
 | Todo con `VENTAS_PDV` | `PEDIDOS_ONLINE_VER` / `_GESTIONAR` (CAJERO+GERENTE) / `_CONFIGURAR` (GERENTE) |
 | Nadie llamaba a `contar-pedidos-online-pendientes` | Dos badges en el botón DELIVERY del PdV + beep WebAudio cuando sube el conteo |
 | La bandeja era una pantalla aparte | La cola vive en el **panel derecho del diálogo de delivery** |
+| Los retiros iban en una sección aparte | **Una sola cola** con chip `DELIVERY`/`RETIRO` por tarjeta |
+| El panel de la cola se partía el lado derecho con el empty-state | Excluyentes, y los dos ocupan exactamente el mismo lugar |
+| Con la tienda apagada seguían apareciendo el botón y el panel | Todo lo web se oculta cuando `TiendaOnlineConfig.activa = false` |
 | `mis-pedidos` era carga única | Poll de 12 s que se autodetiene |
 
 ### Reglas que hay que respetar al tocar esto
@@ -117,12 +120,51 @@ PICKUP y DELIVERY **ya llegan a la operación**. Lo que cambió:
   rechazar exige `VENTAS_DELIVERY_CANCELAR_COBRADO`, igual que `delivery-cancelar`.
   Ese permiso **no lo tiene ningún rol plantilla** a propósito.
 - **Un PICKUP no genera `Delivery`**, así que su venta no sale en la tabla del
-  diálogo. Vive en la sección «Retiros en curso» del panel derecho
-  (`get-retiros-online-en-curso`), que es el único lugar donde se puede cobrar.
+  diálogo. Vive en la cola del panel derecho (`get-retiros-online-en-curso`),
+  que es el único lugar donde se puede cobrar.
+- **El panel derecho muestra UNA sola cola** (`colaWeb`), no dos: pendientes de
+  aceptación y retiros en curso se fusionan y se ordenan por antigüedad. Cada
+  tarjeta lleva su chip `DELIVERY`/`RETIRO` y ofrece la acción que le toca
+  (`ACEPTAR`/`RECHAZAR` si está pendiente, `COBRAR`/`ENTREGADO` si ya se
+  aceptó). Hasta 2026-08-25 los retiros vivían en una sección «Retiros en
+  curso» aparte, al pie del panel.
+- **La cola y el empty-state «seleccione un delivery» son excluyentes**
+  (`hayColaWeb`). Cuando se renderizaban los dos, se repartían el lado derecho
+  entre sí y la cola quedaba a media pantalla en vez de donde cae el detalle.
+  Los tres paneles usan `flex-basis: 0`: con `auto`, el reparto 70/30 depende
+  del ancho intrínseco del contenido y las tarjetas con botones lo empujaban.
+- **Con `TiendaOnlineConfig.activa = false` se oculta todo lo que habla de
+  pedidos web**: el botón del subheader, el panel y el poll de 15 s en el
+  diálogo, y el badge rojo del botón DELIVERY del PdV. No hay pedidos posibles,
+  así que un sector vacío sólo confunde.
 - **El pin es obligatorio para DELIVERY**: sin coordenadas no hay polígono que
   resolver. La dirección escrita quedó como complemento para el repartidor.
 - **GeoJSON va en `[lng, lat]`.** Invertirlo es el error clásico; hay un test que
   lo cubre.
+
+### Concurrencia: dónde están las costuras
+
+`aceptar-pedido-online` escribe `estado = ACEPTADO` **sin lock** y recién
+después llama a `materializarPedidoOnlineEnVenta`. Entre las dos escrituras hay
+una ventana en la que el pedido está ACEPTADO y todavía sin `ventaId`, y un
+`rechazar-pedido-online` de otro operador entra ahí: pasa el chequeo de estados
+cancelables, no encuentra venta que revertir, y comitea `RECHAZADO`. Hasta que
+se cerró (2026-08-25), el `save` final de la materialización pisaba ese rechazo
+y el pedido resucitaba en `EN_PREPARACION` con venta viva y comanda impresa.
+
+La materialización **relee el estado dentro de su transacción** justo antes de
+escribir, y hace rollback si el pedido quedó `RECHAZADO`/`CANCELADO` o si otro
+camino ya lo materializó. Si tocás ese camino, mantené la relectura: el objeto
+`pedido` en memoria se cargó al abrir la transacción y no refleja lo que pasó
+mientras tanto.
+
+`avanzar-estado-pedido-online` tiene la otra costura: delega la transición al
+módulo de delivery, que abre y comitea **su propia** transacción, y recién
+después guarda el `PedidoOnline`. No son atómicas y no se pueden unificar sin
+reescribir el módulo de delivery, así que la operación se hizo **reintentable**:
+si el delivery ya está en el estado destino no se le vuelve a pedir la
+transición (la rechazaría por inválida) y el handler sigue para poner el pedido
+al día. El operador destraba un desfasaje repitiendo la acción.
 
 ### Lo que sigue pendiente
 

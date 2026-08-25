@@ -380,4 +380,35 @@ Al desplegar ese cambio, **la cocina empieza a recibir comandas de delivery que
 antes no recibía**. Es lo correcto, pero es un cambio visible en la operación:
 conviene avisar antes de que aparezcan tickets nuevos.
 
-Detalle en [domains/pedidos-online.md](pedidos-online.md).
+### Son TRES gates, y hay que moverlos juntos (2026-08-25)
+
+El predicado de arriba está escrito en **tres lugares distintos**, y cada uno
+decide una cosa diferente:
+
+| Dónde | Qué decide |
+|---|---|
+| `ventas.handler.ts` → `crearComandaItemsSiCorresponde` | Si se crea el `ComandaItem` — o sea, si el KDS lo ve |
+| `ventas.handler.ts` → `autoPrintComandaIfNeeded` | Si se dispara la impresión automática |
+| `documentos-tickets.handler.ts` → `printComandaInternal` | Si efectivamente sale papel |
+
+El fix de 2026-08-24 movió los dos primeros y **se olvidó del tercero**. El
+síntoma fue de los peores posibles: el pedido aparecía en la pantalla de
+cocina (gate 1 pasó), la impresión se disparaba (gate 2 pasó), y
+`printComandaInternal` cortaba por el early return devolviendo `ok: true` **sin
+un solo error**. Ningún delivery imprimió su comanda, y no había nada en los
+logs que lo dijera. Se descubrió recién probando con la impresora física.
+
+Los tres cargan hoy `relations: ['mesa', 'comanda', 'delivery']`. **Eso no es
+opcional**: si una relación no se carga, `venta.delivery?.id` lee `undefined`,
+el gate da false y volvés a tener el mismo bug mudo. Hay tests de regresión en
+`scripts/test-ticket-venta-e2e.ts` (bloque «gate cocina»).
+
+### La línea de tamaño no repite el nombre del producto
+
+El encabezado del ítem ya imprime `1 PIZZA`. La línea siguiente lleva **sólo el
+tamaño** (`GRANDE`), vía `componerEncabezadoComanda`. Componía
+`producto + presentación` y salía `1 PIZZA` / `PIZZA GRANDE`. Respeta
+`mostrarEnNombre` de la presentación: apagado, no imprime la línea.
+
+Detalle en [domains/pedidos-online.md](pedidos-online.md) y
+[domains/recetas-sabores-variaciones.md](recetas-sabores-variaciones.md).
