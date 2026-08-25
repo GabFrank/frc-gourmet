@@ -186,6 +186,11 @@ export class PdvComponent implements OnInit, OnDestroy {
   deliveriesPendientesCount = 0;
   /** Pedidos de la web esperando que alguien los acepte. */
   pedidosOnlinePendientesCount = 0;
+  /**
+   * Con la tienda online apagada no entran pedidos web, así que su badge no
+   * tiene nada que contar y el poll que lo alimenta no tiene a qué preguntarle.
+   */
+  tiendaOnlineActiva = false;
   private pedidosOnlineInterval: any;
   private ultimoConteoPedidosOnline = 0;
   private refreshingComandas = false;
@@ -452,6 +457,11 @@ export class PdvComponent implements OnInit, OnDestroy {
         }
       } catch (e) { /* use default */ }
 
+      try {
+        const tienda: any = await firstValueFrom(this.repositoryService.getTiendaOnlineConfig());
+        this.tiendaOnlineActiva = !!tienda?.activa;
+      } catch { /* sin config legible se asume apagada */ }
+
       // Load atajo grupos
       await this.loadAtajoGrupos();
 
@@ -480,14 +490,16 @@ export class PdvComponent implements OnInit, OnDestroy {
    */
   private async refrescarContadoresDelivery(): Promise<void> {
     if (!this.deliveryHabilitado) return;
-    try {
-      const res: any = await firstValueFrom(this.repositoryService.contarPedidosOnlinePendientes());
-      const nuevos = Number(res?.total ?? res ?? 0) || 0;
-      if (nuevos > this.ultimoConteoPedidosOnline) this.sonarAvisoPedido();
-      this.ultimoConteoPedidosOnline = nuevos;
-      this.pedidosOnlinePendientesCount = nuevos;
-    } catch {
-      /* el badge no puede romper el PdV */
+    if (this.tiendaOnlineActiva) {
+      try {
+        const res: any = await firstValueFrom(this.repositoryService.contarPedidosOnlinePendientes());
+        const nuevos = Number(res?.total ?? res ?? 0) || 0;
+        if (nuevos > this.ultimoConteoPedidosOnline) this.sonarAvisoPedido();
+        this.ultimoConteoPedidosOnline = nuevos;
+        this.pedidosOnlinePendientesCount = nuevos;
+      } catch {
+        /* el badge no puede romper el PdV */
+      }
     }
     try {
       const caja = this.caja?.id;

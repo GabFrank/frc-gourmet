@@ -1022,23 +1022,23 @@
         (click)="openDelivery()"
         data-testid="pdv-btn-delivery"
       >
+        <mat-icon>delivery_dining</mat-icon>
+        <span>DELIVERY</span>
         <!-- Dos contadores distintos: repartos vivos (naranja) y pedidos de la
-             web esperando aceptación (rojo). matBadge es uno por elemento, así
-             que van en dos hijos del mismo botón. -->
-        <mat-icon
-          [matBadge]="deliveriesPendientesCount"
-          matBadgeColor="accent"
-          [matBadgeHidden]="deliveriesPendientesCount === 0"
-          matBadgeSize="small"
-          matTooltip="Repartos sin concluir"
-        >delivery_dining</mat-icon>
-        <span
-          [matBadge]="pedidosOnlinePendientesCount"
-          matBadgeColor="warn"
-          [matBadgeHidden]="pedidosOnlinePendientesCount === 0"
-          matBadgeSize="small"
-          matTooltip="Pedidos de la web por aceptar"
-        >DELIVERY</span>
+             web esperando aceptación (rojo). `matBadge` se ancla al elemento
+             que lo declara, así que colgado del icono y del texto los círculos
+             caían sobre el medio del botón; acá van posicionados contra la
+             esquina superior derecha, que es donde el ojo los busca. -->
+        <span class="pdv-badges" *ngIf="deliveriesPendientesCount || pedidosOnlinePendientesCount">
+          <span class="pdv-badge pdv-badge-web"
+                *ngIf="tiendaOnlineActiva && pedidosOnlinePendientesCount"
+                matTooltip="Pedidos de la web por aceptar"
+          >{{ pedidosOnlinePendientesCount }}</span>
+          <span class="pdv-badge pdv-badge-repartos"
+                *ngIf="deliveriesPendientesCount"
+                matTooltip="Repartos sin concluir"
+          >{{ deliveriesPendientesCount }}</span>
+        </span>
       </button>
       <button
         mat-raised-button

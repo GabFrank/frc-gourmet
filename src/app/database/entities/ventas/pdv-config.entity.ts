@@ -49,7 +49,7 @@ export class PdvConfig extends BaseModel {
   deliveryCobroAnticipadoDefault!: boolean;
 
   /** Exigir dirección para dar de alta un delivery. */
-  @Column({ name: 'delivery_requiere_direccion', type: 'boolean', default: true })
+  @Column({ name: 'delivery_requiere_direccion', type: 'boolean', default: false })
   deliveryRequiereDireccion!: boolean;
 
   /**

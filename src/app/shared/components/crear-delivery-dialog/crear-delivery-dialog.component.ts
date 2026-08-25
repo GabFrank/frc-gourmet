@@ -52,7 +52,11 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
   @ViewChild('direccionInput') direccionInput!: ElementRef<HTMLTextAreaElement>;
   @ViewChild('precioSelect') precioSelect!: MatSelect;
   @ViewChild('observacionInput') observacionInput!: ElementRef<HTMLTextAreaElement>;
-  @ViewChild('confirmarBtn') confirmarBtn!: ElementRef<HTMLButtonElement>;
+  // `read: ElementRef` no es opcional: `MatButton` es un *componente* en el
+  // Material MDC de Angular 15, así que un `#ref` pelado devuelve la instancia
+  // de la directiva y no el elemento. Sin esto `nativeElement` era `undefined`
+  // y el Enter en OBSERVACIÓN no movía el foco a ningún lado, en silencio.
+  @ViewChild('confirmarBtn', { read: ElementRef }) confirmarBtn!: ElementRef<HTMLButtonElement>;
   @ViewChild(MatAutocompleteTrigger) autoTrigger!: MatAutocompleteTrigger;
 
   telefono = '';
@@ -217,8 +221,17 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
     this.observacionInput?.nativeElement?.focus();
   }
 
+  /**
+   * Enter en OBSERVACIÓN lleva al botón CREAR.
+   *
+   * `recalcular()` antes de enfocar no es de más: un botón `[disabled]` no
+   * acepta foco, así que si `puedeConfirmar` quedó desactualizado el Enter no
+   * hacía nada visible y el cajero se quedaba escribiendo en la observación.
+   * El `setTimeout` espera a que Angular aplique el cambio al DOM.
+   */
   focusConfirmar(): void {
-    this.confirmarBtn?.nativeElement?.focus();
+    this.recalcular();
+    setTimeout(() => this.confirmarBtn?.nativeElement?.focus(), 0);
   }
 
   abrirBuscarCliente(): void {

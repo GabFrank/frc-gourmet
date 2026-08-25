@@ -118,6 +118,25 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
    * ni en ninguna otra pantalla del PdV: sin esta lista no habría dónde cobrarlo.
    */
   retirosEnCurso: any[] = [];
+  /**
+   * Las dos listas de arriba fusionadas, que es lo que se renderiza: una sola
+   * cola de "pedidos de la web", ordenada por antigüedad, donde cada tarjeta
+   * dice de qué tipo es y ofrece la acción que corresponde a su estado.
+   */
+  colaWeb: any[] = [];
+  /**
+   * Con la tienda online apagada no hay pedidos web posibles, así que todo lo
+   * que habla de ellos —el botón del subheader, el panel, el poll— sobra y
+   * confunde: el cajero ve un sector vacío de algo que no existe.
+   */
+  tiendaActiva = false;
+  /**
+   * Si el panel derecho muestra la cola. Pre-computado y compartido con el
+   * empty-state: son excluyentes y cuando los dos se renderizaban a la vez se
+   * partían el lado derecho entre sí.
+   */
+  hayColaWeb = false;
+  avisoTooltip = 'Pedidos de la web';
   procesandoPedidoId: number | null = null;
   private pedidosInterval: any;
 
@@ -141,8 +160,20 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       console.warn('No se pudo leer la configuración de delivery, se usan los defaults:', e);
     }
 
+    // La tienda apagada se consulta una sola vez: es una decisión del gerente,
+    // no algo que cambie mientras el cajero tiene el diálogo abierto.
+    try {
+      const tienda = await firstValueFrom(this.repositoryService.getTiendaOnlineConfig());
+      this.tiendaActiva = !!tienda?.activa;
+    } catch (e) {
+      // Sin config legible se asume apagada: mostrar una cola que nunca se va a
+      // poblar es peor que no mostrarla.
+      console.warn('No se pudo leer la configuración de la tienda online:', e);
+      this.tiendaActiva = false;
+    }
+
     await this.loadDeliveries();
-    await this.cargarPedidosOnline();
+    if (this.tiendaActiva) await this.cargarPedidosOnline();
 
     // Timer cada segundo para actualizar espera
     this.timerInterval = setInterval(() => {
@@ -150,7 +181,9 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     }, 1000);
     // Los pedidos de la web entran solos: sin este poll el cajero tendría que
     // cerrar y reabrir el diálogo para enterarse.
-    this.pedidosInterval = setInterval(() => this.cargarPedidosOnline(), 15000);
+    if (this.tiendaActiva) {
+      this.pedidosInterval = setInterval(() => this.cargarPedidosOnline(), 15000);
+    }
   }
 
   ngOnDestroy(): void {
@@ -176,14 +209,33 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       const retiros = await firstValueFrom(this.repositoryService.getRetirosOnlineEnCurso());
       this.retirosEnCurso = (retiros || []).map((r: any) => ({
         ...this.mapPedidoOnline(r),
+        pendiente: false,
         cobrada: !!r.cobrada,
         estadoLabel: ESTADO_PEDIDO_LABEL[r.estado] || r.estado,
       }));
+
+      this.armarColaWeb();
     } catch (e) {
       // Un fallo del poll no puede romper la pantalla de delivery, que es lo
       // que el cajero está usando para trabajar.
       console.warn('No se pudieron cargar los pedidos online:', e);
     }
+  }
+
+  /**
+   * Funde pendientes y retiros en curso en una sola cola, el que espera hace
+   * más tiempo primero. El orden es estable aunque entren pedidos nuevos
+   * mientras el cajero está por tocar un botón.
+   */
+  private armarColaWeb(): void {
+    this.colaWeb = [...this.pedidosOnline, ...this.retirosEnCurso]
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    this.hayColaWeb = this.tiendaActiva && this.colaWeb.length > 0;
+
+    const porAceptar = this.pedidosOnline.length;
+    this.avisoTooltip = porAceptar
+      ? `${porAceptar} pedido(s) de la web esperando aceptación`
+      : 'Retiros de la web en curso';
   }
 
   /** Cobra un retiro: misma pantalla de cobro que usa el delivery. */
@@ -253,6 +305,12 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       // no puede verse igual que uno de hace 20 segundos.
       esperaColor: mins >= this.tiempoRojo ? 'rojo' : mins >= this.tiempoAmarillo ? 'amarillo' : 'verde',
       resumenItems: items.slice(0, 3).join(', ') + (items.length > 3 ? ` +${items.length - 3}` : ''),
+      // Pre-computado y no un getter: la cola se renderiza en un *ngFor y la
+      // vista no llama funciones.
+      esRetiro: p.tipoPedido === 'PICKUP',
+      tipoLabel: p.tipoPedido === 'PICKUP' ? 'RETIRO' : 'DELIVERY',
+      // Por defecto pendiente de aceptación; los retiros en curso lo pisan.
+      pendiente: true,
     };
   }
 
