@@ -58,18 +58,6 @@ interface DeliveryRow {
   otraCaja: boolean;
 }
 
-/** Estados del pedido online, en el idioma del mostrador. */
-const ESTADO_PEDIDO_LABEL: Record<string, string> = {
-  RECIBIDO: 'Recibido',
-  ACEPTADO: 'Aceptado',
-  EN_PREPARACION: 'En preparación',
-  LISTO: 'Listo',
-  EN_CAMINO: 'En camino',
-  ENTREGADO: 'Entregado',
-  RECHAZADO: 'Rechazado',
-  CANCELADO: 'Cancelado',
-};
-
 @Component({
   selector: 'app-delivery-dialog',
   templateUrl: './delivery-dialog.component.html',

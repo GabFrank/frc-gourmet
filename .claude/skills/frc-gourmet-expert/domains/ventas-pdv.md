@@ -603,6 +603,31 @@ Una sola fila. Campos:
 | `deliveryTiempoRojo` | 60 | min para color rojo |
 | `deliveryPrecioDefaultId` | null | Zona preseleccionada al crear (null = la de menor valor) |
 | `deliveryCobroAnticipadoDefault` | false | Estado inicial del toggle COBRO ANTICIPADO |
+> ### Delivery y retiro son el mismo registro (2026-08-25)
+>
+> `Delivery.modo` vale `DELIVERY` (se reparte) o `RETIRO` (el cliente lo pasa a
+> buscar). Comparten cliente, ítems, cocina, cobro y cancelación; el retiro se
+> diferencia sólo en las tres cosas que dependen de que alguien lo lleve:
+> **dirección, costo de envío y repartidor**.
+>
+> Consecuencias que hay que respetar al tocar el módulo:
+>
+> - El alta es **un solo formulario** con un toggle. El cajero atiende el
+>   teléfono sin saber qué va a pedir el cliente.
+> - En modo RETIRO el **nombre pasa a ser obligatorio** (reemplaza a la
+>   dirección como lo que identifica la bolsa en el mostrador) y se valida en el
+>   backend, no sólo en el diálogo.
+> - **`EN_CAMINO` no existe** para un retiro: `transicionesDe(modo)` en
+>   `delivery.handler.ts` tiene su propia tabla, espejada en el front.
+> - **El candado del repartidor no aplica**: nadie lo lleva.
+> - El **único botón del footer** que un retiro no puede usar es REPARTIDOR.
+>   Cobra, edita ítems, imprime y se cancela por los mismos botones — el cobro
+>   nunca fue distinto, es el mismo diálogo con el envío en cero.
+> - El **reloj se congela** al marcar `PARA_ENTREGA`: de ahí en más falta que
+>   venga el cliente, que no depende del local. Sin eso un retiro se ponía rojo
+>   a las horas y el rojo dejaba de significar «hay que apurarse» en toda la
+>   lista.
+
 | `deliveryRequiereDireccion` | **false** desde 2026-08-25 | Dirección obligatoria para dar de alta. El default era `true`; se invirtió porque el mostrador toma pedidos por teléfono y la dirección suele llegar después. La migración `DireccionDeliveryOpcional` también pone en `false` la fila existente |
 | `deliveryRequiereRepartidor` | true | Repartidor obligatorio. La etapa en la que bloquea la define `deliveryRepartidorEtapa` |
 | `deliveryRepartidorEtapa` | `EN_CAMINO` | Cuándo exige el repartidor: `EN_CAMINO` (al enviar) o `ENTREGADO` (al finalizar). Permite que un delivery salga sin repartidor asignado y se complete después |

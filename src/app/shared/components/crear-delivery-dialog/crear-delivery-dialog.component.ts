@@ -66,6 +66,8 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
   direccion = '';
   observacion = '';
   precioDeliveryId: number | null = null;
+  /** La zona con la que arrancó el form, para reponerla al volver de RETIRO. */
+  private precioDeliveryDefaultId: number | null = null;
   cobroAnticipado = false;
 
   preciosDelivery: PrecioDelivery[] = [];
@@ -146,6 +148,7 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
           ? this.preciosDelivery.find((p) => p.id === config.deliveryPrecioDefaultId)
           : null;
         this.precioDeliveryId = preferida?.id ?? this.preciosDelivery[0]?.id ?? null;
+        this.precioDeliveryDefaultId = this.precioDeliveryId;
       }
     } catch (error) {
       this.mostrarError(error, 'No se pudo cargar la configuración de delivery');
@@ -206,11 +209,16 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
     this.modo = modo;
     this.esRetiro = modo === 'RETIRO';
     if (this.esRetiro) {
-      // Se limpian en vez de quedar ocultos con valor: si el cajero se
-      // equivoca de modo y vuelve, es preferible que los reescriba a que se
-      // guarde una dirección que nadie pidió.
+      // La dirección se limpia: si el cajero se equivoca de modo y vuelve, es
+      // preferible que la reescriba a que se guarde una que nadie pidió. Y
+      // como el campo es obligatorio en DELIVERY, la ausencia se nota.
       this.direccion = '';
       this.precioDeliveryId = null;
+    } else {
+      // La zona, en cambio, se RESTAURA. `null` es un valor válido —«SIN
+      // CARGO»— así que nada avisaría de que se perdió: el delivery saldría
+      // con envío 0 y el cajero se enteraría al cerrar la caja.
+      this.precioDeliveryId = this.precioDeliveryDefaultId;
     }
     this.recalcular();
   }

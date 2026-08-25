@@ -502,8 +502,20 @@ export async function materializarPedidoOnlineEnVenta(
  * `recetaPresentacion` es lo que identifica la variación (sabor × tamaño) y es
  * lo que el PdV manda siempre; sin eso el ítem no describe nada vendible.
  */
-async function validarVariacionDelItem(dataSource: DataSource, data: any): Promise<void> {
-  const productoId = data?.producto?.id ?? data?.productoId ?? data?.producto_id;
+async function validarVariacionDelItem(
+  dataSource: DataSource,
+  data: any,
+  existente?: any,
+): Promise<void> {
+  // Se valida el ESTADO FINAL del ítem, no el payload.
+  //
+  // Es la diferencia entre funcionar y bloquear ventas: `cancelItem` en el PdV
+  // reenvía el `VentaItem` entero tal como lo devolvió `getVentaItems`, y esa
+  // consulta no carga la relación `recetaPresentacion`. Mirando sólo el payload,
+  // cancelar una pizza fallaba siempre con "falta elegir el tamaño y el sabor"
+  // — el ítem sí tenía su variación, simplemente no venía en el objeto.
+  const productoId = data?.producto?.id ?? data?.productoId ?? data?.producto_id
+    ?? existente?.producto?.id;
   if (!productoId) return;
 
   const producto = await dataSource.getRepository(Producto).findOne({
@@ -512,7 +524,8 @@ async function validarVariacionDelItem(dataSource: DataSource, data: any): Promi
   });
   if (!producto || (producto as any).tipo !== ProductoTipo.ELABORADO_CON_VARIACION) return;
 
-  const rp = data?.recetaPresentacion?.id ?? data?.recetaPresentacionId ?? data?.receta_presentacion_id;
+  const rp = data?.recetaPresentacion?.id ?? data?.recetaPresentacionId ?? data?.receta_presentacion_id
+    ?? existente?.recetaPresentacion?.id;
   if (!rp) {
     throw new Error(
       `${producto.nombre} se vende por variación: falta elegir el tamaño y el sabor.`,
@@ -718,6 +731,10 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         'estado', 'fechaAbierto', 'fechaParaEntrega', 'fechaEnCamino',
         'fechaEntregado', 'fechaCancelacion', 'motivoCancelacion',
         'precioDelivery', 'precioDeliveryId', 'entregadoPorFuncionario',
+        // `modo` se fija al dar de alta y no se cambia después: convertir un
+        // reparto en curso en retiro dejaría un registro con repartidor y
+        // costo de envío disfrazado de algo que nadie lleva.
+        'modo',
       ].filter((c) => data && Object.prototype.hasOwnProperty.call(data, c));
       if (camposReservados.length > 0) {
         throw new Error(
@@ -1386,12 +1403,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItem);
-      const entity = await repo.findOneBy({ id });
+      // Con las relaciones que necesita la validación: sin ellas no se puede
+      // saber si el ítem YA tenía su variación elegida.
+      const entity = await repo.findOne({
+        where: { id },
+        relations: ['producto', 'recetaPresentacion'],
+      });
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
       // El update puede cambiar el producto: si el nuevo exige variación, hay
-      // que exigirla igual que en el alta. `data` sólo trae lo que cambió, así
-      // que se valida sobre la mezcla.
-      await validarVariacionDelItem(dataSource, { ...entity, ...data });
+      // que exigirla igual que en el alta. Se pasa el ítem existente aparte
+      // para que el chequeo mire el resultado final, no sólo lo que vino.
+      await validarVariacionDelItem(dataSource, data, entity);
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);

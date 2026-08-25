@@ -52,10 +52,12 @@ se archivan.
 
 ## Convenciones que valen para todos
 
-- **`2× PIZZA`, no `2  PIZZA`.** El signo de multiplicación ata la cantidad al
-  producto. Con sólo espacios, en un ticket angosto y con la vista cansada, el
-  número de una línea se lee pegado al nombre de la de arriba. Vale para los
-  tres tickets con ítems, y para el resumen en pantalla.
+- **La cantidad va con `ticketCantidad(qty, ancho)`**, que produce `1  x  ` —
+  la `x` **separada** del número, no pegada. `1x` se lee como un código; `1  x`
+  se lee como «uno por». El bloque es de ancho fijo para que la `x` caiga en la
+  misma posición en todas las líneas aunque una diga 1 y la siguiente 12; con
+  tres dígitos empuja la `x` un lugar en vez de desbordar la columna. La
+  columna CANT es **6 fija** por eso: con 5 no entra la separación.
 - **Totales en todas las monedas activas.** Los tickets con un total a pagar
   (#2, #3, #4) lo muestran también en las demás monedas configuradas, según la
   cotización vigente (`buscarCotizacion`). En el ticket de delivery se repite
@@ -65,11 +67,55 @@ se archivan.
 - **Los anchos son 32, 42 o 48 columnas** según la impresora. `ticketColumns`
   **trunca** lo que no entra; para texto largo (direcciones, nombres de
   variación) usar líneas a ancho completo o envolver con `envolverDetalle`.
+
+- ⚠️ **El papel es CP437, no Unicode.** Ver la sección siguiente: es el gotcha
+  que más silenciosamente rompe tickets.
 - **Strings en UPPERCASE**, como todo lo que va a BD y a papel.
 - **Ningún handler de impresión es libre**: todos llevan `ensurePermission`,
   casi siempre con `DOCUMENTOS_IMPRIMIR_TICKET` más el permiso del dominio
   (`VENTAS_PDV`, `CAJA_MAYOR_OPERAR`, `CPC_COBRAR`…). La reimpresión del
   ticket de venta pide uno aparte, `DOCUMENTOS_REIMPRIMIR_TICKET_VENTA`.
+
+---
+
+## El charset: por qué en el papel aparecen signos de pregunta
+
+Las térmicas imprimen con **CP437** (`characterSet` de la impresora, default
+`PC437_USA`). La librería manda `?` por **todo** lo que no entra en ese
+charset, y no avisa: el ticket sale, no hay error en ningún log, y en el papel
+hay un signo de pregunta donde iba un carácter.
+
+Verificado carácter por carácter el 2026-08-25:
+
+| Se pierden | Sobreviven |
+|---|---|
+| `×` `—` `–` `→` `€` `₲` `✓` **`Á`** | `á é í ó ú ñ Ñ ü É ¿ ¡ · º °` |
+
+**Lo de `Á` es lo que más muerde**, y era un bug previo a todo esto: como
+**todos los strings van en UPPERCASE**, un cliente llamado «Ángel» se imprimía
+**«?NGEL»** en todos los tickets. No es un caso de borde — es cualquier nombre
+con tilde en la primera letra.
+
+`sanitizarParaTicket` (en `ticket.utils.ts`) lo resuelve, y corre **al
+construir cada línea, no al mandarla**. El orden importa: `→` pasa a `->`, o
+sea un carácter que se vuelve dos, y sanear después de calcular el padding
+correría las columnas. Como efecto colateral bueno, los tests ven exactamente
+lo que sale impreso.
+
+Qué hace:
+
+- Tipográficos con equivalente ASCII: `×`→`x`, `—`→`-`, `→`→`->`, `…`→`...`,
+  comillas curvas a rectas, `₲`→`Gs.`.
+- Acentuadas que el charset no tiene: se les saca el acento. **«ANGEL» se lee;
+  «?NGEL» no.**
+- El `·` se degrada a `-` **aunque CP437 lo tenga**: en 203dpi queda casi
+  invisible, y el separador de variación («GRANDE · BACON») es justo donde
+  tiene que leerse.
+
+**Si agregás texto a un ticket, no hace falta que llames al saneador**: los
+constructores (`ticketText`, `ticketKv`, `ticketColumns`) ya lo aplican. Lo que
+sí hace falta es no asumir que un símbolo lindo va a salir. Tests en
+`scripts/test-ticket-venta-e2e.ts`, bloque «charset».
 
 ---
 

@@ -30,6 +30,22 @@ comanda de cocina y al ticket sin describir nada cocinable. Test en
 en un diálogo del PdV es evadible. El diálogo es ergonomía; el guard del
 handler es la única frontera.
 
+## Impresión
+
+### Los tickets imprimían `?` por cualquier carácter fuera de CP437 — RESUELTO (2026-08-25)
+
+**Síntoma:** un signo de pregunta en el papel donde iba un carácter. Sin error
+en ningún log: el ticket sale, el handler devuelve `ok: true`.
+
+**El caso que dolía:** todos los strings van en UPPERCASE y CP437 **no tiene
+`Á`**, así que un cliente llamado «Ángel» se imprimía «?NGEL» en todos los
+tickets. Venía de siempre; se descubrió recién cuando el `×` de un separador
+nuevo tampoco salía.
+
+**Resuelto** con `sanitizarParaTicket` en `ticket.utils.ts`, aplicado al
+construir cada línea. Detalle y tabla de qué sobrevive en
+[domains/tickets-impresos.md](../domains/tickets-impresos.md) → «El charset».
+
 ## Cocina / delivery
 
 ### El delivery nunca imprimía su comanda — RESUELTO (2026-08-25)

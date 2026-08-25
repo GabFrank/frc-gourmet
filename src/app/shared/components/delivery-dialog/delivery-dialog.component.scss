@@ -145,85 +145,6 @@ tr.mat-mdc-row {
 }
 
 // Detalle cards
-.detalle-card {
-  border-radius: 6px;
-  overflow: hidden;
-  background-color: var(--surface-hover, rgba(255,255,255,0.04));
-
-  .detalle-card-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
-    background-color: rgba(33, 150, 243, 0.1);
-    font-size: 11px;
-    font-weight: 600;
-    color: #2196f3;
-
-    mat-icon {
-      font-size: 14px;
-      width: 14px;
-      height: 14px;
-    }
-  }
-
-  .detalle-card-body {
-    padding: 8px 10px;
-  }
-}
-
-.detalle-card-total {
-  background-color: rgba(33, 150, 243, 0.06);
-  border: 1px solid rgba(33, 150, 243, 0.15);
-}
-
-.detalle-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  padding: 1px 0;
-}
-
-.detalle-label {
-  font-weight: 600;
-  opacity: 0.7;
-}
-
-.total-row {
-  font-weight: 700;
-  font-size: 14px;
-  padding-top: 4px;
-  color: #2196f3;
-}
-
-.item-row {
-  margin-bottom: 4px;
-  font-size: 12px;
-}
-
-.item-main {
-  display: flex;
-  justify-content: space-between;
-}
-
-.item-sub {
-  padding-left: 12px;
-  opacity: 0.6;
-  font-size: 11px;
-}
-
-.item-cancelado {
-  opacity: 0.4;
-  text-decoration: line-through;
-}
-
-.empty-items {
-  text-align: center;
-  opacity: 0.4;
-  padding: 8px;
-  font-size: 12px;
-}
-
 // Footer
 /* Footer de acciones ~15% más grande que el default de Material. Son los
    botones que el cajero toca con el pedido en la mano y a veces en una pantalla
@@ -391,14 +312,6 @@ tr.mat-mdc-row {
 .cola-item.retiro-item { border-left-color: var(--success-color); }
 .cola-envio.pagado { color: var(--success-color); font-weight: 700; }
 
-.cola-estado {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .04em;
-  color: var(--text-secondary);
-}
-
-
 /* ── Chips de la lista ─────────────────────────────────────────────────── */
 
 /* Canal de origen, al lado del estado. El LOCAL va sin relleno a propósito:
@@ -438,12 +351,6 @@ tr.mat-mdc-row {
 
 /* La variación es parte del nombre del plato, no una nota al pie: va en el
    mismo color que el producto y sólo un punto más chica. */
-.item-variacion {
-  font-size: 11px;
-  color: var(--text-primary);
-  padding-left: 10px;
-}
-
 .item-sub.item-removido { color: var(--error-color); }
 .item-sub.item-cambio { color: var(--warning-color); }
 .item-sub.item-adicional { color: var(--success-color); }
