@@ -307,3 +307,55 @@ Auth del TV: reusa el `authGuard` + shim HTTP del PWA (`154f193`); se loguea una
 - **Ticket de cierre de caja** (`a4761a4`): handler `print-cierre-caja({cajaId, printerId?})` + `printCierreCajaInternal` usando `resumen-caja.utils.ts` `computeResumenCaja()` (apertura/cierre, tiempo abierto, arqueo por moneda, retiros). **Auto-impresión al cerrar** desde `create-caja-dialog`. Distinto de `print-conteo-caja-ticket` (acta breve).
 
 > Ambos TODOs históricos "KDS" e "impresión real de tickets/comandas" quedan **completados** con esto (ver [workflows/todos-pendientes.md](../workflows/todos-pendientes.md)).
+
+
+---
+
+## El detalle del ítem en los tickets (2026-08-25)
+
+Los tres tickets —venta, pre-cuenta y delivery— arman el detalle de cada ítem
+con **`cargarDetalleDeItems`** (`documentos-tickets.handler.ts`): variación,
+ingredientes sacados, cambios, adicionales y observaciones, todo en una consulta
+por lote.
+
+Antes esa recolección vivía **adentro de `printComandaInternal`**, así que la
+comanda de cocina era el único ticket que mostraba el detalle: el del cliente
+imprimía sólo el nombre del producto —«1 PIZZA» en vez de «1 PIZZA GRANDE
+CALABRESA, sin cebolla»—, y en delivery esa hoja es lo único que recibe.
+
+**La fuente común no lleva prefijos.** Cada ticket pone el suyo: la cocina usa
+`ADD` y `>>` y el video invertido para lo que hay que sacar; el del cliente usa
+`+` y texto plano. Si agregás un prefijo en la recolección, se filtra a los tres.
+
+**El nombre se compone en vivo**, no se lee de `RecetaPresentacion.nombre_generado`
+— ver `electron/utils/nombre-variacion.utils.ts` y el apartado de abajo.
+
+⚠️ **`ticketColumns` TRUNCA lo que no entra.** En una impresora de 58mm la
+descripción tiene ~26 columnas, así que cualquier detalle largo se corta sin
+aviso: «GRANDE · 1/2 CALABRESA + 1/2 4 QUESOS» salía como «1/2 CALABRESA +» y el
+cliente perdía su segunda mitad. Por eso el detalle pasa por `envolverDetalle`,
+que corta por palabra. Si agregás una línea nueva al ticket, usala.
+
+### `nombre_generado` es un snapshot, no la verdad
+
+`RecetaPresentacion.nombre_generado` se calcula UNA vez, al crear la variación.
+Hasta 2026-08-25 nadie lo recalculaba: renombrar un producto, una presentación o
+un sabor lo dejaba describiendo algo que ya no existe. En el catálogo real de
+producción 8 de 61 estaban podridas («PICADA DE LA CASA…» con el producto ya
+renombrado a «PICADA DON FRANCO»; «PIZZA GRANDE PIZZA» con el sabor ya renombrado
+a «PEPPERONI»).
+
+Ahora `update-sabor`, `update-producto` y `update-presentacion` llaman a
+`recalcularNombresDeVariacion`. Aun así, **para cualquier cosa que vea el cliente
+se compone en vivo**: el campo queda como caché para las pantallas de gestión.
+
+### `mostrarEnNombre`
+
+`Presentacion` y `Sabor` tienen `mostrarEnNombre` (default `true`). Sirve para
+apagar una parte que no aporta: hay presentaciones llamadas «TRADICIONAL» que
+existen sólo porque el nombre es obligatorio (QUESADILLAS salía como
+«QUESADILLAS TRADICIONAL CARNE») y sabores únicos que no distinguen nada
+(«MILANESITA DON FRANCO GRANDE TRADICIONAL»).
+
+Es una marca explícita y **no** una heurística sobre el texto: en AROS DE CEBOLLA
+y PAPAS FRITAS «TRADICIONAL» **sí** distingue, contra BACON Y CHEDDAR.

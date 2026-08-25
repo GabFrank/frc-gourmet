@@ -486,3 +486,23 @@ otro sabor **reemplaza** al elegido.
 - Tests: `npm run test:reparar-recetas` (7/7) y `npm run test:receta-por-variacion` (Fase A, 4/4).
 
 > **Nota histórica:** el fix `14253af` corrigió handlers que referenciaban un `Receta.sabor` inexistente; el modelo real es `Sabor → RecetaPresentacion → Receta` (Sabor no tiene FK directa a Receta). El refactor "cada variación su receta" (2026-07-11) es distinto del refactor de *naming* de 2024-07-29.
+
+
+---
+
+## `mostrarEnNombre` y el nombre de la variación (2026-08-25)
+
+El nombre de una variación es `producto + tamaño + sabor`. Dos cosas que hay que
+saber al tocar esto:
+
+1. **`RecetaPresentacion.nombre_generado` es un snapshot.** Se escribe al crear
+   la variación. Desde 2026-08-25 `update-sabor`, `update-producto` y
+   `update-presentacion` lo recalculan (`recalcularNombresDeVariacion` en
+   `electron/utils/nombre-variacion.utils.ts`), pero antes quedaba podrido para
+   siempre al renombrar. Para lo que ve el cliente **se compone en vivo**.
+2. **`Presentacion.mostrarEnNombre` / `Sabor.mostrarEnNombre`** (default `true`)
+   apagan una parte del nombre que no aporta. Se marcan a mano desde el form del
+   producto y el diálogo del sabor; no hay heurística automática, porque
+   «TRADICIONAL» a veces es relleno y a veces distingue de verdad.
+
+Detalle de cómo se imprime en [domains/cocina-impresion.md](cocina-impresion.md).
