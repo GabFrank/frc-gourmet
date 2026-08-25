@@ -52,9 +52,20 @@ export class PdvConfig extends BaseModel {
   @Column({ name: 'delivery_requiere_direccion', type: 'boolean', default: true })
   deliveryRequiereDireccion!: boolean;
 
-  /** Exigir repartidor al pasar un delivery a EN_CAMINO. */
+  /**
+   * El repartidor es bloqueante. La etapa en la que bloquea la define
+   * `deliveryRepartidorEtapa`; este flag sólo dice si el candado existe.
+   */
   @Column({ name: 'delivery_requiere_repartidor', type: 'boolean', default: true })
   deliveryRequiereRepartidor!: boolean;
+
+  /**
+   * En qué etapa se exige el repartidor, cuando `deliveryRequiereRepartidor`
+   * está activo: `EN_CAMINO` (hay que elegirlo para enviar) o `ENTREGADO` (el
+   * pedido puede salir sin repartidor pero no se finaliza sin registrarlo).
+   */
+  @Column({ name: 'delivery_repartidor_etapa', type: 'varchar', length: 20, default: 'EN_CAMINO' })
+  deliveryRepartidorEtapa!: 'EN_CAMINO' | 'ENTREGADO';
 
   /** Mínimo de dígitos del teléfono para habilitar el alta. */
   @Column({ name: 'delivery_telefono_min_digitos', type: 'int', default: 4 })

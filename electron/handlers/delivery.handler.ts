@@ -32,6 +32,7 @@ import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.en
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { crearDeliveryEnTx } from '../utils/delivery-alta.utils';
 import {
   cancelarVentaCompletaEnTx,
   verificarVentaCancelable,
@@ -228,19 +229,15 @@ export function registerDeliveryHandlers(
     const costoDelivery = await resolverCostoDelivery(dataSource, payload?.precioDeliveryId);
 
     const resultado = await dataSource.transaction(async (manager) => {
-      const delivery = manager.getRepository(Delivery).create({
-        precioDelivery: payload?.precioDeliveryId ? ({ id: payload.precioDeliveryId } as any) : undefined,
-        cliente: payload?.clienteId ? ({ id: payload.clienteId } as any) : undefined,
-        nombre: upper(payload?.nombre) ?? undefined,
+      const deliveryGuardado = await crearDeliveryEnTx(manager, dataSource, {
+        precioDeliveryId: payload?.precioDeliveryId,
+        clienteId: payload?.clienteId,
+        nombre: payload?.nombre,
         telefono,
-        direccion: direccion ?? undefined,
-        observacion: upper(payload?.observacion) ?? undefined,
-        estado: DeliveryEstado.ABIERTO,
-        fechaAbierto: new Date(),
-        cobroAnticipado: !!(payload?.cobroAnticipado ?? config?.deliveryCobroAnticipadoDefault),
-      });
-      await setEntityUserTracking(dataSource, delivery, usuarioId, false);
-      const deliveryGuardado = await manager.save(Delivery, delivery);
+        direccion,
+        observacion: payload?.observacion,
+        cobroAnticipado: payload?.cobroAnticipado ?? config?.deliveryCobroAnticipadoDefault,
+      }, usuarioId);
 
       const venta = manager.getRepository(Venta).create({
         estado: VentaEstado.ABIERTA,
@@ -401,14 +398,28 @@ export function registerDeliveryHandlers(
         throw new Error('No se puede marcar como ENTREGADO un delivery cuya venta todavía no fue cobrada.');
       }
 
-      if (nuevoEstado === DeliveryEstado.EN_CAMINO) {
-        const funcionarioId = opts?.funcionarioId;
-        if (funcionarioId) {
-          const funcionario = await manager.getRepository(Funcionario).findOneBy({ id: funcionarioId });
-          if (!funcionario) throw new Error(`Funcionario ${funcionarioId} no encontrado`);
-          delivery.entregadoPorFuncionario = funcionario;
-        } else if (config?.deliveryRequiereRepartidor && !delivery.entregadoPorFuncionario) {
+      // El repartidor se puede registrar en cualquiera de las dos transiciones:
+      // al enviar o al entregar. Si viene en el payload, se guarda siempre.
+      const funcionarioId = opts?.funcionarioId;
+      if (
+        funcionarioId
+        && (nuevoEstado === DeliveryEstado.EN_CAMINO || nuevoEstado === DeliveryEstado.ENTREGADO)
+      ) {
+        const funcionario = await manager.getRepository(Funcionario).findOneBy({ id: funcionarioId });
+        if (!funcionario) throw new Error(`Funcionario ${funcionarioId} no encontrado`);
+        delivery.entregadoPorFuncionario = funcionario;
+      }
+
+      // Candado configurable: si el repartidor es bloqueante, la etapa en la que
+      // bloquea la decide el local. Hay operaciones donde el pedido sale y recién
+      // al volver se registra quién lo llevó — ahí el candado va en ENTREGADO.
+      if (config?.deliveryRequiereRepartidor && !delivery.entregadoPorFuncionario) {
+        const etapa = config.deliveryRepartidorEtapa || 'EN_CAMINO';
+        if (etapa === 'EN_CAMINO' && nuevoEstado === DeliveryEstado.EN_CAMINO) {
           throw new Error('Seleccioná el repartidor antes de enviar el pedido.');
+        }
+        if (etapa === 'ENTREGADO' && nuevoEstado === DeliveryEstado.ENTREGADO) {
+          throw new Error('Registrá quién entregó el pedido antes de finalizarlo.');
         }
       }
 

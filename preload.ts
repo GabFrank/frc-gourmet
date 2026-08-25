@@ -2333,6 +2333,9 @@ contextBridge.exposeInMainWorld('api', {
   contarPedidosOnlinePendientes: async (): Promise<any> => {
     return await ipcRenderer.invoke('contar-pedidos-online-pendientes');
   },
+  getRetirosOnlineEnCurso: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-retiros-online-en-curso');
+  },
   aceptarPedidoOnline: async (pedidoId: number, data?: any): Promise<any> => {
     return await ipcRenderer.invoke('aceptar-pedido-online', pedidoId, data);
   },

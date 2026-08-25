@@ -3,6 +3,21 @@
   <div class="delivery-header">
     <div class="header-left">
       <h2>LISTA DE DELIVERY</h2>
+      <!-- El panel derecho muestra la cola O el detalle del delivery
+           seleccionado, nunca los dos. Sin este aviso en el header, un pedido
+           nuevo quedaba invisible mientras el cajero tenía un delivery abierto,
+           que es la mayor parte del tiempo. Vuelve a la cola con un click. -->
+      <button
+        *ngIf="pedidosOnline.length"
+        mat-flat-button
+        color="warn"
+        class="aviso-pedidos"
+        (click)="verColaPedidos()"
+        matTooltip="Pedidos de la web esperando aceptación"
+      >
+        <mat-icon>storefront</mat-icon>
+        {{ pedidosOnline.length }} PEDIDO{{ pedidosOnline.length === 1 ? '' : 'S' }} WEB
+      </button>
     </div>
     <div class="header-right">
       <button mat-icon-button (click)="cerrar()" matTooltip="Cerrar">
@@ -101,6 +116,83 @@
         (page)="onPageChange($event)"
         showFirstLastButtons>
       </mat-paginator>
+    </div>
+
+    <!-- Cola de pedidos online. Ocupa el panel derecho cuando no hay ningún
+         delivery seleccionado: quien atiende el reparto ya tiene esta pantalla
+         abierta, y una segunda pantalla es una segunda cosa que monitorear. -->
+    <div class="delivery-detalle cola-online"
+         *ngIf="!selectedDelivery && (pedidosOnline.length || retirosEnCurso.length)">
+      <div class="cola-header">
+        <mat-icon>storefront</mat-icon>
+        <span>PEDIDOS DE LA WEB</span>
+        <span class="cola-count">{{ pedidosOnline.length }}</span>
+      </div>
+
+      <div class="cola-item" *ngFor="let p of pedidosOnline; trackBy: trackPedido">
+        <div class="cola-item-top">
+          <span class="cola-numero">{{ p.numero }}</span>
+          <span class="cola-tipo" [class.retiro]="p.tipoPedido === 'PICKUP'">
+            {{ p.tipoPedido === 'PICKUP' ? 'RETIRO' : 'DELIVERY' }}
+          </span>
+          <span class="cola-espera" [class]="p.esperaColor">{{ p.espera }}</span>
+        </div>
+        <div class="cola-cliente">{{ p.nombreCliente || 'SIN NOMBRE' }}</div>
+        <div class="cola-dir" *ngIf="p.direccionEntrega">{{ p.direccionEntrega }}</div>
+        <div class="cola-items">{{ p.resumenItems }}</div>
+        <div class="cola-total">
+          <span>{{ p.total | number:'1.0-2' }}</span>
+          <span class="cola-envio" *ngIf="p.costoEnvio > 0">envío {{ p.costoEnvio | number:'1.0-2' }}</span>
+        </div>
+        <div class="cola-acciones">
+          <button mat-flat-button color="primary" [disabled]="procesandoPedidoId === p.id"
+                  (click)="aceptarPedidoOnline(p)">
+            <mat-icon>check</mat-icon> ACEPTAR
+          </button>
+          <button mat-stroked-button color="warn" [disabled]="procesandoPedidoId === p.id"
+                  (click)="rechazarPedidoOnline(p)">
+            <mat-icon>close</mat-icon> RECHAZAR
+          </button>
+        </div>
+      </div>
+
+      <!-- Retiros en curso. Un DELIVERY aceptado aparece solo en la tabla de la
+           izquierda porque tiene un Delivery detrás; un RETIRO no genera
+           ninguno, así que sin esta sección su venta no saldría en ninguna
+           pantalla y no habría dónde cobrarla. -->
+      <ng-container *ngIf="retirosEnCurso.length">
+        <div class="cola-header retiros">
+          <mat-icon>shopping_bag</mat-icon>
+          <span>RETIROS EN CURSO</span>
+          <span class="cola-count">{{ retirosEnCurso.length }}</span>
+        </div>
+
+        <div class="cola-item retiro-item" *ngFor="let r of retirosEnCurso; trackBy: trackPedido">
+          <div class="cola-item-top">
+            <span class="cola-numero">{{ r.numero }}</span>
+            <span class="cola-tipo retiro">{{ r.estadoLabel }}</span>
+            <span class="cola-espera" [class]="r.esperaColor">{{ r.espera }}</span>
+          </div>
+          <div class="cola-cliente">{{ r.nombreCliente || 'SIN NOMBRE' }}</div>
+          <div class="cola-items">{{ r.resumenItems }}</div>
+          <div class="cola-total">
+            <span>{{ r.total | number:'1.0-2' }}</span>
+            <span class="cola-envio" [class.pagado]="r.cobrada">
+              {{ r.cobrada ? 'COBRADO' : 'SIN COBRAR' }}
+            </span>
+          </div>
+          <div class="cola-acciones">
+            <button mat-flat-button color="primary" *ngIf="!r.cobrada"
+                    [disabled]="procesandoPedidoId === r.id" (click)="cobrarRetiro(r)">
+              <mat-icon>payments</mat-icon> COBRAR
+            </button>
+            <button mat-stroked-button *ngIf="r.cobrada"
+                    [disabled]="procesandoPedidoId === r.id" (click)="entregarRetiro(r)">
+              <mat-icon>check_circle</mat-icon> ENTREGADO
+            </button>
+          </div>
+        </div>
+      </ng-container>
     </div>
 
     <!-- Detalle ticket (30%) -->

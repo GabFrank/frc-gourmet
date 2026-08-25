@@ -93,7 +93,9 @@
     "test:roles-pdv": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-roles-pdv-e2e.ts",
     "test:api-map": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-api-map.ts",
     "seed:dev-roles": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/seed-dev-roles.ts",
-    "test:dashboard-rangos": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-dashboard-rangos.ts"
+    "test:dashboard-rangos": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-dashboard-rangos.ts",
+    "test:pedido-online-materializacion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedido-online-materializacion-e2e.ts",
+    "test:zonas-poligono": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-zonas-poligono-e2e.ts"
   },
   "private": true,
   "dependencies": {
@@ -125,6 +127,7 @@
     "fastify": "4.10",
     "jsonwebtoken": "^9.0.2",
     "keytar": "^7.9.0",
+    "leaflet": "^1.9.4",
     "ng2-charts": "^4.1.1",
     "ngx-currency": "^2.5.3",
     "node-thermal-printer": "^4.4.4",
@@ -169,6 +172,7 @@
     "@types/jasmine": "4.3.1",
     "@types/jasminewd2": "2.0.10",
     "@types/jsonwebtoken": "^9.0.9",
+    "@types/leaflet": "^1.9.12",
     "@types/node": "^18.16.9",
     "@types/nodemailer": "^6.4.24",
     "@types/pg": "^8.20.0",

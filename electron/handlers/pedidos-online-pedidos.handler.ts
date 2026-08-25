@@ -18,6 +18,7 @@ import {
 import { PdvMesa } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { registerPublicOperation } from '../server/public-routes';
 import { getTiendaConfig, estaAbierta, getPizzaConfig } from './pedidos-online-config.handler';
+import { resolverZonaPorPunto } from '../utils/geo.utils';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
 import { ipEnRangosLan } from '../utils/ip-lan.util';
 
@@ -361,33 +362,54 @@ export function registerPedidosOnlinePedidosHandlers(
       };
     }
 
-    // Delivery: el cliente indica DÓNDE entregar (mapa o dirección escrita); el
-    // costo de envío lo define la tienda al aceptar (no hay selector de zonas).
+    // DELIVERY: el costo del envío lo resuelve el SERVIDOR a partir del punto que
+    // el cliente marcó en el mapa. El cliente no elige zona ni manda tarifa —
+    // ambas cosas son datos internos del negocio, y que las mandara el cliente
+    // abría la puerta a pedir la zona barata.
     let costoEnvio = 0;
     let zona: ZonaDelivery | null = null;
     if (tipoPedido === TipoPedidoOnline.DELIVERY) {
-      // Ubicación requerida: coordenadas del mapa O dirección escrita.
+      // El pin es obligatorio: sin coordenadas no hay polígono que resolver, y
+      // una dirección escrita no se puede cotizar. El texto sigue viajando como
+      // complemento (referencia, piso, portón) porque le sirve al repartidor.
       const tieneCoords =
         typeof data?.latitud === 'number' && typeof data?.longitud === 'number';
-      const tieneDireccion = !!(data?.direccionEntrega && String(data.direccionEntrega).trim());
-      if (!tieneCoords && !tieneDireccion) return { success: false, error: 'falta_ubicacion' };
+      if (!tieneCoords) return { success: false, error: 'falta_ubicacion_mapa' };
 
-      // Zona opcional (compat / config avanzada): si el pedido trae una, se aplica
-      // su tarifa y su monto mínimo. Si no, el envío queda "a coordinar" (0).
-      if (data?.zonaDeliveryId) {
-        zona = await dataSource
-          .getRepository(ZonaDelivery)
-          .findOne({ where: { id: data.zonaDeliveryId, activa: true } });
+      const zonas = await dataSource.getRepository(ZonaDelivery).find({ where: { activa: true } });
+      const conPoligono = zonas.filter((z) => !!z.poligono);
+
+      if (conPoligono.length) {
+        zona = resolverZonaPorPunto(data.latitud, data.longitud, conPoligono as any) as ZonaDelivery | null;
+        // Fuera de todo polígono es un resultado legítimo, no un error interno:
+        // el local no llega ahí. Se rechaza explícito en vez de dejar pasar un
+        // envío gratis en silencio, que es lo que pasaba antes.
+        if (!zona) return { success: false, error: 'fuera_de_cobertura' };
+      } else if (data?.zonaDeliveryId) {
+        // Compat: instalaciones que todavía no dibujaron sus zonas.
+        zona = zonas.find((z) => z.id === Number(data.zonaDeliveryId)) || null;
         if (!zona) return { success: false, error: 'zona_delivery_invalida' };
+      }
+
+      if (zona) {
         if (subtotal < Number(zona.montoMinimo)) {
           return {
             success: false,
             error: 'monto_minimo_no_alcanzado',
             montoMinimo: Number(zona.montoMinimo),
             subtotal,
+            zona: zona.nombre,
           };
         }
-        costoEnvio = Number(zona.tarifa);
+        // La tarifa sale del precio compartido con el PdV; `tarifa` es el
+        // fallback de las zonas anteriores a la unificación.
+        const zonaConPrecio = await dataSource.getRepository(ZonaDelivery).findOne({
+          where: { id: zona.id }, relations: ['precioDelivery'],
+        });
+        const valorCompartido = Number(zonaConPrecio?.precioDelivery?.valor);
+        costoEnvio = Number.isFinite(valorCompartido) && zonaConPrecio?.precioDelivery
+          ? valorCompartido
+          : Number(zona.tarifa) || 0;
       }
     }
 
@@ -444,16 +466,21 @@ export function registerPedidosOnlinePedidosHandlers(
       }
     }
 
-    // MESA_QR: materializar automáticamente en la venta de la mesa (auto a cocina).
-    // Best-effort: si no hay caja abierta o es ambiguo, el pedido queda para que el
-    // cajero lo materialice desde la bandeja. Nunca falla el pedido por esto.
+    // Materialización automática (auto a cocina). Dos casos:
+    // - MESA_QR: siempre. El cliente ya está sentado y el gate del cajero se
+    //   aplicó al habilitar la mesa; pedirle otra aceptación no aporta nada.
+    // - PICKUP/DELIVERY: sólo si el local activó `aceptacionAutomatica`. Por
+    //   defecto está apagado y el pedido espera a que una persona lo mire, que
+    //   es lo que evita cocinar algo que después hay que cancelar.
+    // Best-effort en los dos casos: si no hay caja abierta o es ambiguo, el
+    // pedido queda para la bandeja. Nunca falla el pedido por esto.
     let ventaId: number | null = null;
-    if (tipoPedido === TipoPedidoOnline.MESA_QR) {
+    if (tipoPedido === TipoPedidoOnline.MESA_QR || cfg.aceptacionAutomatica) {
       try {
         const mat = await materializarPedidoOnlineEnVenta(dataSource, saved.id);
         ventaId = mat?.ventaId ?? null;
       } catch (e) {
-        console.warn('[crear-pedido-online] auto-materialización MESA_QR falló:', (e as any)?.message || e);
+        console.warn('[crear-pedido-online] auto-materialización falló:', (e as any)?.message || e);
       }
     }
 
@@ -514,8 +541,42 @@ export function registerPedidosOnlinePedidosHandlers(
     };
   });
 
+  // ====== COTIZAR ENVÍO POR UBICACIÓN (público, sin auth) ======
+  // El checkout llama a esto mientras el cliente mueve el pin, para mostrarle el
+  // costo ANTES de confirmar. Es sólo una previsualización: el precio que vale
+  // es el que recalcula `crear-pedido-online` con la misma función.
+  ipcMain.handle('cotizar-envio-online', async (_event: any, lat: number, lng: number) => {
+    if (typeof lat !== 'number' || typeof lng !== 'number') {
+      return { success: false, error: 'coordenadas_invalidas' };
+    }
+    const zonas = await dataSource.getRepository(ZonaDelivery).find({
+      where: { activa: true }, relations: ['precioDelivery'],
+    });
+    const conPoligono = zonas.filter((z) => !!z.poligono);
+    if (!conPoligono.length) {
+      // Todavía nadie dibujó las zonas: no se puede cotizar, pero tampoco se
+      // bloquea el pedido (el handler de creación mantiene el camino de compat).
+      return { success: true, cubierto: true, sinZonasDefinidas: true, costoEnvio: 0, zona: null };
+    }
+    const zona = resolverZonaPorPunto(lat, lng, conPoligono as any) as ZonaDelivery | null;
+    if (!zona) return { success: true, cubierto: false, costoEnvio: 0, zona: null };
+
+    const valorCompartido = Number((zona as any).precioDelivery?.valor);
+    const costoEnvio = Number.isFinite(valorCompartido) && (zona as any).precioDelivery
+      ? valorCompartido
+      : Number(zona.tarifa) || 0;
+    return {
+      success: true,
+      cubierto: true,
+      costoEnvio,
+      montoMinimo: Number(zona.montoMinimo) || 0,
+      zona: { id: zona.id, nombre: zona.nombre },
+    };
+  });
+
   // ---- Operaciones públicas ----
   registerPublicOperation('zonas.get', { channel: 'get-zonas-delivery-online', requiresAuth: false, description: 'Zonas de delivery activas.' });
+  registerPublicOperation('envio.cotizar', { channel: 'cotizar-envio-online', requiresAuth: false, description: 'Costo de envío para una ubicación del mapa.' });
   registerPublicOperation('mesa.get', { channel: 'get-mesa-online-por-token', requiresAuth: false, description: 'Contexto de una mesa por su token QR.' });
   // pedido.crear usa optionalAuth: MESA_QR admite invitado; PICKUP/DELIVERY exige
   // cliente (validado dentro del handler). Si viene token de cliente, se resuelve.

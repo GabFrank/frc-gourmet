@@ -359,3 +359,25 @@ existen sólo porque el nombre es obligatorio (QUESADILLAS salía como
 
 Es una marca explícita y **no** una heurística sobre el texto: en AROS DE CEBOLLA
 y PAPAS FRITAS «TRADICIONAL» **sí** distingue, contra BACON Y CHEDDAR.
+
+---
+
+## El gate de "va a cocina" (2026-08-24)
+
+Una venta genera `ComandaItem` -y por lo tanto llega al KDS y a la impresora del
+sector- sólo si pasa el gate de `ventas.handler.ts`:
+
+```ts
+mesa || comanda || delivery || canalOrigen !== 'LOCAL'
+```
+
+Antes era sólo `mesa || comanda`, y por eso **los ítems de un delivery nunca se
+imprimían en la impresora de su producto**: la venta de un delivery no tiene mesa
+ni comanda. El único papel que salía era el ticket único del reparto, que usa el
+rol `TICKET_VENTA` y no respeta la asignación por producto.
+
+Al desplegar ese cambio, **la cocina empieza a recibir comandas de delivery que
+antes no recibía**. Es lo correcto, pero es un cambio visible en la operación:
+conviene avisar antes de que aparezcan tickets nuevos.
+
+Detalle en [domains/pedidos-online.md](pedidos-online.md).

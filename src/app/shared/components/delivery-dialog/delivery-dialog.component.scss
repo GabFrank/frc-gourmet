@@ -260,3 +260,111 @@ tr.mat-mdc-row {
   margin-left: 4px;
   color: var(--text-secondary);
 }
+
+/* ── Cola de pedidos online (panel derecho, sin delivery seleccionado) ─── */
+.cola-online {
+  gap: 10px;
+}
+
+.cola-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--text-secondary);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--divider-color, rgba(255,255,255,0.12));
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+  .cola-count {
+    margin-left: auto;
+    background: var(--warning-color);
+    color: #fff;
+    border-radius: 10px;
+    padding: 1px 8px;
+    font-size: 12px;
+  }
+}
+
+.cola-item {
+  border: 1px solid var(--divider-color, rgba(255,255,255,0.12));
+  border-left: 3px solid var(--warning-color);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cola-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cola-numero { font-weight: 700; color: var(--text-primary); font-size: 13px; }
+
+.cola-tipo {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  padding: 2px 7px;
+  border-radius: 10px;
+  border: 1px solid var(--info-color);
+  color: var(--info-color);
+
+  /* El retiro se distingue del delivery de un vistazo: no lleva repartidor. */
+  &.retiro { border-color: var(--success-color); color: var(--success-color); }
+}
+
+.cola-espera {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  &.verde { color: var(--success-color); }
+  &.amarillo { color: var(--warning-color); }
+  &.rojo { color: var(--error-color); }
+}
+
+.cola-cliente { color: var(--text-primary); font-size: 13px; }
+.cola-dir, .cola-items { color: var(--text-secondary); font-size: 12px; }
+
+.cola-total {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--text-primary);
+  .cola-envio { font-weight: 400; font-size: 12px; color: var(--text-secondary); }
+}
+
+.cola-acciones {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  button { flex: 1; font-size: 12px; }
+}
+
+/* Aviso de pedidos web en el header: visible aunque haya un delivery abierto. */
+.aviso-pedidos {
+  margin-left: 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  line-height: 30px;
+  padding: 0 12px;
+
+  mat-icon {
+    font-size: 17px;
+    width: 17px;
+    height: 17px;
+    margin-right: 4px;
+    vertical-align: -3px;
+  }
+}
+
+.cola-header.retiros { margin-top: 6px; }
+.cola-item.retiro-item { border-left-color: var(--success-color); }
+.cola-envio.pagado { color: var(--success-color); font-weight: 700; }

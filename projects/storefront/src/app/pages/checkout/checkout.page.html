@@ -54,28 +54,21 @@
     <div class="sf-card" *ngIf="tipo === 'DELIVERY'">
       <h3>¿Dónde entregamos?</h3>
 
-      <!-- Toggle: ubicación en el mapa o dirección escrita -->
-      <div class="choices ubic">
-        <button type="button" class="choice" [class.active]="!manual" (click)="setUbicacion(false)"><sf-icon name="pin" [size]="18"></sf-icon>En el mapa</button>
-        <button type="button" class="choice" [class.active]="manual" (click)="setUbicacion(true)"><sf-icon name="pencil" [size]="18"></sf-icon>Escribir dirección</button>
+      <!-- El pin define la zona y el costo del envío; el texto es complemento. -->
+      <div class="map-wrap">
+        <div id="sf-map" class="map"></div>
+        <div class="map-pin"><sf-icon name="pin" [size]="34"></sf-icon></div>
+        <button type="button" class="map-loc" (click)="usarMiUbicacion()">Usar mi ubicación</button>
       </div>
+      <p class="map-dir sf-muted" *ngIf="direccionMapa">{{ direccionMapa }}</p>
+      <p class="map-hint sf-muted" *ngIf="!direccionMapa">Mové el mapa para ubicar el pin en tu dirección.</p>
 
-      <!-- Mapa -->
-      <ng-container *ngIf="!manual">
-        <div class="map-wrap">
-          <div id="sf-map" class="map"></div>
-          <div class="map-pin"><sf-icon name="pin" [size]="34"></sf-icon></div>
-          <button type="button" class="map-loc" (click)="usarMiUbicacion()">Usar mi ubicación</button>
-        </div>
-        <p class="map-dir sf-muted" *ngIf="direccionMapa">{{ direccionMapa }}</p>
-        <p class="map-hint sf-muted" *ngIf="!direccionMapa">Mové el mapa para ubicar el pin en tu dirección.</p>
-      </ng-container>
+      <p class="sf-error" *ngIf="cubierto === false">
+        Todavía no llegamos a esa zona. Podés elegir Retiro, o escribirnos.
+      </p>
 
-      <!-- Manual -->
-      <ng-container *ngIf="manual">
-        <label class="lbl">Dirección</label>
-        <input class="sf-input" [(ngModel)]="direccion" placeholder="Calle, número, barrio" />
-      </ng-container>
+      <label class="lbl">Dirección (opcional)</label>
+      <input class="sf-input" [(ngModel)]="direccion" placeholder="Calle, número, barrio" />
 
       <label class="lbl">Referencia (opcional)</label>
       <input class="sf-input" [(ngModel)]="referencia" placeholder="Casa, timbre, portón, etc." />
@@ -90,10 +83,15 @@
     <!-- Totales -->
     <div class="sf-card totales">
       <div class="row"><span>Subtotal</span><span>{{ cart.subtotal | number:'1.0-2' }}</span></div>
-      <div class="row" *ngIf="tipo === 'DELIVERY'"><span>Envío</span><span class="acoordinar">A coordinar</span></div>
+      <div class="row" *ngIf="tipo === 'DELIVERY'">
+        <span>Envío<span class="sf-muted zona" *ngIf="zonaNombre"> · {{ zonaNombre }}</span></span>
+        <span *ngIf="cotizando" class="acoordinar">Calculando…</span>
+        <span *ngIf="!cotizando && cubierto === false" class="acoordinar">Fuera de cobertura</span>
+        <span *ngIf="!cotizando && cubierto === null" class="acoordinar">Marcá el mapa</span>
+        <span *ngIf="!cotizando && cubierto">{{ costoEnvio | number:'1.0-2' }}</span>
+      </div>
       <div class="row grand"><strong>Total</strong><strong>{{ total | number:'1.0-2' }}</strong></div>
     </div>
-    <p class="sf-muted envio-nota" *ngIf="tipo === 'DELIVERY'">El costo de envío se confirma cuando la tienda acepta tu pedido.</p>
 
     <p class="sf-muted pago"><sf-icon name="cash" [size]="15"></sf-icon>Pago: efectivo contra entrega/retiro.</p>
     <p class="sf-error" *ngIf="error">{{ error }}</p>

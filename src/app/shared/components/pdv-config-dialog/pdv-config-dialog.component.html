@@ -186,9 +186,18 @@
 
         <div class="checkbox-field">
           <mat-checkbox formControlName="deliveryRequiereRepartidor" color="primary">
-            Repartidor obligatorio al enviar
+            Repartidor obligatorio
           </mat-checkbox>
         </div>
+
+        <mat-form-field appearance="outline" *ngIf="configForm.get('deliveryRequiereRepartidor')?.value">
+          <mat-label>EXIGIRLO AL</mat-label>
+          <mat-select formControlName="deliveryRepartidorEtapa">
+            <mat-option value="EN_CAMINO">Enviar el pedido</mat-option>
+            <mat-option value="ENTREGADO">Finalizar el pedido</mat-option>
+          </mat-select>
+          <mat-hint>Con "Finalizar", el pedido puede salir sin repartidor y se registra al volver</mat-hint>
+        </mat-form-field>
 
         <div class="checkbox-field">
           <mat-checkbox formControlName="deliveryCobroAnticipadoDefault" color="primary">
