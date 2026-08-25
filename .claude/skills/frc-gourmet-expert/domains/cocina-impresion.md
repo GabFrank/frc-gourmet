@@ -362,6 +362,11 @@ y PAPAS FRITAS «TRADICIONAL» **sí** distingue, contra BACON Y CHEDDAR.
 
 ---
 
+> 📄 **El catálogo completo de lo que imprime el sistema** —los 13 tickets, qué
+> decide cada uno, quién lo recibe y las convenciones de formato— está en
+> [tickets-impresos.md](tickets-impresos.md). Este documento cubre la cocina y
+> el KDS; ese otro cubre el papel en general.
+
 ## El gate de "va a cocina" (2026-08-24)
 
 Una venta genera `ComandaItem` -y por lo tanto llega al KDS y a la impresora del

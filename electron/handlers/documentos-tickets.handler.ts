@@ -612,7 +612,10 @@ export async function printComandaInternal(
       const v = j.item;
       const nombre = ((v as any).producto?.nombre || 'PRODUCTO').toUpperCase();
       const qty = Number(v.cantidad || 1);
-      lines.push(ticketText(`${qty}  ${nombre}`, { bold: true, size: 'tall' }));
+      // `2× PIZZA`, no `2  PIZZA`: el signo ata la cantidad al producto. Con
+      // sólo espacios, en un ticket angosto y con la vista cansada, el número
+      // de una línea se lee pegado al nombre de la de arriba.
+      lines.push(ticketText(`${qty}× ${nombre}`, { bold: true, size: 'tall' }));
       const pizza = pizzaByItem.get(v.id);
       if (pizza && pizza.sabores.length) {
         // Pizza: tamaño y cada mitad en GRANDE, uno por línea.
@@ -935,7 +938,7 @@ export async function buildVentaTicketLines(
     const total = qty * precio - qty * Number(it.descuentoUnitario || 0);
     const nombre = (it.producto?.nombre || 'PRODUCTO').toUpperCase();
     lines.push(ticketColumns([
-      { text: String(qty), width: cantW, align: 'L' },
+      { text: `${qty}×`, width: cantW, align: 'L' },
       { text: nombre, width: descW, align: 'L' },
       { text: ticketFmtMonto(total), width: totalW, align: 'R' },
     ]));
@@ -1883,7 +1886,7 @@ export async function printDeliveryTicketInternal(
     const precio = Number(it.precioVentaUnitario || 0) + Number(it.precioAdicionales || 0);
     const totalLinea = qty * precio - qty * Number(it.descuentoUnitario || 0);
     lines.push(ticketColumns([
-      { text: String(qty), width: cantW, align: 'L' },
+      { text: `${qty}×`, width: cantW, align: 'L' },
       { text: (it.producto?.nombre || 'PRODUCTO').toUpperCase(), width: descW, align: 'L' },
       { text: ticketFmtMonto(totalLinea), width: totalW, align: 'R' },
     ]));
@@ -1924,6 +1927,38 @@ export async function printDeliveryTicketInternal(
   if (costoEnvio > 0) lines.push(ticketKv('ENVIO', `Gs. ${ticketFmtMonto(costoEnvio)}`));
   lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(total)}`, true));
 
+  // El total en las demás monedas, igual que el ticket de venta.
+  //
+  // Acá pesa más que en el mostrador: el repartidor cobra en la puerta, sin
+  // sistema y sin nadie a quien preguntarle. Si el cliente paga en reales,
+  // tener el número ya convertido en el papel es la diferencia entre cobrar
+  // bien y sacar la cuenta de memoria en la vereda.
+  const monedaRepo = dataSource.getRepository(Moneda);
+  const [principalMoneda, monedasActivas, cambios] = await Promise.all([
+    monedaRepo.findOne({ where: { principal: true } as any }),
+    monedaRepo.find({ where: { activo: true } as any }),
+    dataSource.getRepository(MonedaCambio).find({
+      where: { activo: true } as any,
+      relations: ['monedaOrigen', 'monedaDestino'],
+      order: { createdAt: 'DESC' } as any,
+    }),
+  ]);
+  const totalesOtras: TicketLine[] = [];
+  for (const m of (monedasActivas || [])) {
+    if ((m as any).id === (principalMoneda as any)?.id) continue;
+    const rate = buscarCotizacion(cambios, principalMoneda, m);
+    if (!rate || rate <= 0) continue;
+    const label = String((m as any).denominacion || (m as any).simbolo || '').toUpperCase();
+    totalesOtras.push(ticketKv(
+      `TOTAL ${label}`,
+      ticketFmtMonto(total / rate, Number((m as any).decimales) || 0),
+    ));
+  }
+  if (totalesOtras.length) {
+    lines.push(ticketSeparador('-'));
+    lines.push(...totalesOtras);
+  }
+
   // Lo más importante del ticket: si el repartidor cobra o no.
   lines.push(ticketSeparador('='));
   if (cobrada) {
@@ -1931,6 +1966,9 @@ export async function printDeliveryTicketInternal(
   } else {
     lines.push(ticketText('A COBRAR', { align: 'C', bold: true }));
     lines.push(ticketText(`Gs. ${ticketFmtMonto(total)}`, { align: 'C', bold: true, size: 'tall' }));
+    // Y el monto a cobrar en cada moneda, que es lo que el repartidor mira
+    // cuando el cliente saca la plata.
+    for (const l of totalesOtras) lines.push(l);
   }
   lines.push(ticketSeparador('='));
   lines.push(ticketBlank());

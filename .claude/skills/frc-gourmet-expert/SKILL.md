@@ -74,6 +74,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | **Liquidaciones, comisiones** (sueldo, aguinaldo, equipos) | [domains/rrhh-liquidaciones.md](domains/rrhh-liquidaciones.md) |
 | **Personas, Clientes, Usuarios** | [domains/personas-clientes.md](domains/personas-clientes.md) |
 | **Impresoras térmicas** | [domains/cocina-impresion.md](domains/cocina-impresion.md) |
+| **Qué imprime el sistema y para qué** (catálogo de los 13 tickets, ruteo por rol de impresora, convenciones de formato) | [domains/tickets-impresos.md](domains/tickets-impresos.md) |
 | **Dashboards** (padrón unificado, componentes shared, handlers KPI) | [domains/dashboards.md](domains/dashboards.md) |
 | **Reportes de cierre de mes** (hub Ventas + Finanzas, período comparativo, presentación/PDF/WhatsApp, series por rango local) | [domains/reportes.md](domains/reportes.md) |
 | Reglas de código (UPPERCASE, no func en templates, colores) | [conventions/coding-rules.md](conventions/coding-rules.md) |
