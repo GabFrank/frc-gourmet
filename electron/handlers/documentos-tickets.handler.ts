@@ -1147,10 +1147,60 @@ async function printReciboCobroCuotaInternal(
 // REGISTRO DE HANDLERS IPC
 // ============================================================
 
+/**
+ * Detalle de variación de un conjunto de ítems, para pantalla.
+ *
+ * Los tickets ya componen esto mismo con `cargarDetalleDeItems`, pero el panel
+ * de detalle del delivery mostraba sólo `producto.nombre` — «1 PIZZA» donde el
+ * papel decía «1 PIZZA · GRANDE · 1/2 CALABRESA + 1/2 MARGUERITA, sin cebolla».
+ * El cajero leía en pantalla algo distinto de lo que el cliente tenía en la
+ * mano, que es justo cuando aparecen los reclamos que nadie puede resolver.
+ *
+ * Devuelve un objeto plano por item id: lo mismo que imprime el ticket, sin
+ * los prefijos de papel, para que la vista decida cómo mostrarlo.
+ */
+export async function detalleVariacionDeItems(
+  dataSource: DataSource,
+  itemIds: number[],
+): Promise<Record<number, {
+  variacion: string;
+  removidos: string[];
+  cambios: string[];
+  adicionales: string[];
+  observaciones: string[];
+}>> {
+  const out: Record<number, any> = {};
+  if (!itemIds?.length) return out;
+
+  const det = await cargarDetalleDeItems(dataSource, itemIds);
+  for (const id of itemIds) {
+    const pizza = det.pizzaByItem.get(id);
+    out[id] = {
+      variacion: pizza
+        ? componerDetalleVariacion(pizza.presentacion, pizza.sabores, {
+            mostrarPresentacion: pizza.mostrarPresentacion,
+          })
+        : '',
+      removidos: det.removidosByItem.get(id) ?? [],
+      cambios: det.cambiosByItem.get(id) ?? [],
+      // Los prefijos `+` y `>>` son cosa del papel: en pantalla el estilo lo
+      // pone el CSS.
+      adicionales: (det.adicionalesByItem.get(id) ?? []).map((a) => a.replace(/^\+\s*/, '')),
+      observaciones: (det.observacionesByItem.get(id) ?? []).map((o) => o.replace(/^>>\s*/, '')),
+    };
+  }
+  return out;
+}
+
 export function registerDocumentosTicketsHandlers(
   dataSource: DataSource,
   getCurrentUser: GetCurrentUser,
 ) {
+  /** Detalle de variación de los ítems de una venta, para el panel del PdV. */
+  ipcMain.handle('get-detalle-variacion-items', async (_e: any, itemIds: number[]) => {
+    return await detalleVariacionDeItems(dataSource, itemIds || []);
+  });
+
 
   // ─── COMANDA (ticket de cocina) ─────────────────────────────────────────
   // Recibe `ventaId`. La venta debe tener mesa o comanda asignada.

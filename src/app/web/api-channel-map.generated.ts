@@ -627,6 +627,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getSubfamilias": "get-subfamilias",
   "getSubfamiliasByFamilia": "get-subfamilias-by-familia",
   "getSystemMacAddress": "get-system-mac-address",
+  "getDetalleVariacionItems": "get-detalle-variacion-items",
   "getTiendaOnlineConfig": "get-tienda-online-config",
   "getTipoCliente": "get-tipo-cliente",
   "getTipoClientes": "get-tipo-clientes",

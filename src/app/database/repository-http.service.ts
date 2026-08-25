@@ -1096,6 +1096,9 @@ export class RepositoryHttpService extends RepositoryService {
   vincularVentaPedidoOnline(pedidoId: number, ventaId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.vincularVentaPedidoOnline() no esta implementado todavia.`)) as any;
   }
+  getDetalleVariacionItems(_itemIds: number[]): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getDetalleVariacionItems() no esta implementado todavia.`)) as any;
+  }
   getTiendaOnlineConfig(): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getTiendaOnlineConfig() no esta implementado todavia.`)) as any;
   }

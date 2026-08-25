@@ -419,3 +419,44 @@ tr.mat-mdc-row {
   color: var(--success-color);
 }
 
+
+
+/* ── Detalle de un ítem, igual que el ticket del cliente ───────────────── */
+
+/* La variación es parte del nombre del plato, no una nota al pie: va en el
+   mismo color que el producto y sólo un punto más chica. */
+.item-variacion {
+  font-size: 11px;
+  color: var(--text-primary);
+  padding-left: 10px;
+}
+
+.item-sub.item-removido { color: var(--error-color); }
+.item-sub.item-cambio { color: var(--warning-color); }
+.item-sub.item-adicional { color: var(--success-color); }
+.item-sub.item-observacion { font-style: italic; }
+
+/* Totales en las otras monedas: subordinados al principal, no compitiendo. */
+.detalle-row.moneda-row {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.detalle-row.estado-cobro {
+  justify-content: flex-end;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--warning-color);
+  padding-top: 4px;
+
+  &.cobrado { color: var(--success-color); }
+}
+
+/* Chips del encabezado del detalle: a la derecha, sin empujar el título. */
+.detalle-card-header .header-chips {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}

@@ -95,6 +95,23 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   deliveryRows: DeliveryRow[] = [];
   selectedDelivery: any = null;
   selectedItems: any[] = [];
+  /**
+   * Los ítems ya listos para la vista: nombre con su variación, líneas de
+   * detalle y total por línea. Se pre-computa acá porque la vista no llama
+   * funciones, y porque el detalle de variación viene de otra consulta.
+   */
+  itemsDetalle: any[] = [];
+  /**
+   * El total convertido a las otras monedas del PdV. El cajero cobra en
+   * guaraníes, reales o dólares según con qué llegue el cliente, y tener que
+   * abrir la pantalla de cobro sólo para saber cuánto es en reales obliga a
+   * entrar y salir de un diálogo que además puede cerrar la venta.
+   */
+  totalesMoneda: { simbolo: string; valor: number; decimales: number }[] = [];
+  /** Estado de cobro, para no tener que deducirlo del card COBRO. */
+  ventaCobrada = false;
+  /** 'WEB' o 'LOCAL', para el chip del detalle. */
+  detalleCanal = 'LOCAL';
   selectedPagoDetalles: any[] = [];
   estadoFiltro = '';
   estados = Object.values(DeliveryEstado);
@@ -537,6 +554,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
 
   private async loadDeliveryDetails(): Promise<void> {
     this.selectedItems = [];
+    this.itemsDetalle = [];
     this.selectedPagoDetalles = [];
     this.recalcularTotalesDetalle();
 
@@ -550,6 +568,8 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       this.selectedItems = [];
       this.mostrarError(e, 'No se pudieron cargar los ítems del delivery');
     }
+
+    await this.armarItemsDetalle();
 
     try {
       if (this.selectedDelivery.venta.pago?.id) {
@@ -570,6 +590,51 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
    * además de ser una llamada en la vista concatenaba strings en Postgres
    * (`valor` es `decimal`): el total salía como "100005000".
    */
+  /**
+   * Los ítems con el MISMO nombre que sale impreso en el ticket del cliente.
+   *
+   * El panel mostraba sólo `producto.nombre`: «1 PIZZA» donde el papel decía
+   * «1 PIZZA · GRANDE · 1/2 CALABRESA + 1/2 MARGUERITA, sin cebolla». El
+   * cajero leía en pantalla algo distinto de lo que el cliente tenía en la
+   * mano, que es justo cuando aparece un reclamo que nadie puede resolver.
+   *
+   * El detalle es una consulta aparte: si falla, los ítems se muestran igual
+   * con el nombre pelado en vez de dejar el panel vacío.
+   */
+  private async armarItemsDetalle(): Promise<void> {
+    const ids = this.selectedItems.map((i) => i.id).filter(Boolean);
+    let detalle: Record<number, any> = {};
+    if (ids.length) {
+      try {
+        detalle = await firstValueFrom(this.repositoryService.getDetalleVariacionItems(ids)) || {};
+      } catch (e) {
+        console.warn('No se pudo cargar el detalle de variación:', e);
+      }
+    }
+
+    this.itemsDetalle = this.selectedItems.map((i) => {
+      const d = detalle[i.id] || {};
+      const cantidad = Number(i.cantidad || 0);
+      // El precio de línea incluye los adicionales: sin ellos, un ítem con
+      // extras mostraba menos de lo que el cliente paga y el panel no cerraba
+      // con el TOTAL de abajo.
+      const unit = Number(i.precioVentaUnitario || 0) + Number(i.precioAdicionales || 0);
+      return {
+        id: i.id,
+        cancelado: i.estado === 'CANCELADO',
+        cantidad,
+        nombre: (i.producto?.nombre || '-').toUpperCase(),
+        variacion: d.variacion || '',
+        removidos: d.removidos || [],
+        cambios: d.cambios || [],
+        adicionales: d.adicionales || [],
+        observaciones: d.observaciones || [],
+        descuento: Number(i.descuentoUnitario || 0) * cantidad,
+        total: unit * cantidad,
+      };
+    });
+  }
+
   private recalcularTotalesDetalle(): void {
     this.detalleSubtotal = this.selectedItems
       .filter((i) => i.estado === 'ACTIVO')
@@ -583,6 +648,41 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       this.selectedDelivery?.venta?.costoDelivery ?? this.selectedDelivery?.precioDelivery?.valor ?? 0,
     ) || 0;
     this.detalleTotal = this.detalleSubtotal + this.detalleEnvio;
+    this.ventaCobrada = this.selectedDelivery?.venta?.estado === 'CONCLUIDA';
+    this.detalleCanal = (this.selectedDelivery?.venta?.canalOrigen ?? 'LOCAL') === 'LOCAL' ? 'LOCAL' : 'WEB';
+    this.recalcularTotalesMoneda();
+  }
+
+  /**
+   * El total en cada moneda configurada, además de la principal.
+   *
+   * `compraLocal` expresa cuántos PRINCIPAL vale 1 de la otra, así que para ir
+   * de principal a la otra se divide. Misma fórmula que usa el diálogo de
+   * cobro; si falta la cotización se omite la moneda en vez de mostrar un
+   * número inventado con rate 1.
+   */
+  private recalcularTotalesMoneda(): void {
+    this.totalesMoneda = [];
+    const principal = this.data.principalMoneda;
+    if (!principal || !this.detalleTotal) return;
+
+    const monedas = this.data.filteredMonedas?.length ? this.data.filteredMonedas : this.data.monedas;
+    for (const m of monedas || []) {
+      if (!m?.id || m.id === principal.id) continue;
+      const rate = (this.data.exchangeRates || []).find(
+        (r: any) =>
+          (r.monedaOrigen?.id === principal.id && r.monedaDestino?.id === m.id) ||
+          (r.monedaOrigen?.id === m.id && r.monedaDestino?.id === principal.id),
+      );
+      const compra = Number(rate?.compraLocal || 0);
+      if (!compra) continue;
+      this.totalesMoneda.push({
+        simbolo: (m as any).simbolo || (m as any).denominacion || '',
+        valor: this.detalleTotal / compra,
+        // Guaraníes no lleva decimales; el resto sí.
+        decimales: (m as any).decimales ?? 2,
+      });
+    }
   }
 
   onFiltroChange(): void {
