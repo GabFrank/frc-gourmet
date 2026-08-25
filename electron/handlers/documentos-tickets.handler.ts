@@ -30,7 +30,7 @@ import { VentaItemAdicional } from '../../src/app/database/entities/ventas/venta
 import { VentaItemSabor } from '../../src/app/database/entities/ventas/venta-item-sabor.entity';
 import { VentaItemObservacion } from '../../src/app/database/entities/ventas/venta-item-observacion.entity';
 import { VentaItemIngredienteModificacion } from '../../src/app/database/entities/ventas/venta-item-ingrediente-modificacion.entity';
-import { componerDetalleVariacion } from '../utils/nombre-variacion.utils';
+import { componerDetalleVariacion, componerEncabezadoComanda } from '../utils/nombre-variacion.utils';
 import { Printer } from '../../src/app/database/entities/printer.entity';
 import { SectorImpresora, SectorImpresoraRol } from '../../src/app/database/entities/ventas/sector-impresora.entity';
 import { ProductoSector } from '../../src/app/database/entities/productos/producto-sector.entity';
@@ -607,8 +607,17 @@ export async function printComandaInternal(
       const pizza = pizzaByItem.get(v.id);
       if (pizza && pizza.sabores.length) {
         // Pizza: tamaño y cada mitad en GRANDE, uno por línea.
-        const tamano = `${nombre} ${pizza.presentacion}`.trim();
-        lines.push(ticketText(tamano, { bold: true, size: 'tall' }));
+        // El tamaño se omite si el operador marcó que su nombre no figura: hay
+        // presentaciones de relleno («TRADICIONAL») que existen sólo porque el
+        // nombre es obligatorio, y repetirlas en la comanda es ruido.
+        const tamano = componerEncabezadoComanda(
+          nombre, pizza.presentacion, pizza.mostrarPresentacion,
+        );
+        // Si no hay tamaño que agregar, esta línea repetiría el nombre que ya
+        // está arriba («1 QUESADILLAS» seguido de «QUESADILLAS»). Se omite.
+        if (tamano && tamano !== nombre) {
+          lines.push(ticketText(tamano, { bold: true, size: 'tall' }));
+        }
         const n = pizza.sabores.length;
         const iguales = pizza.sabores.every(s => Math.abs(s.proporcion - pizza.sabores[0].proporcion) < 0.001);
         for (const s of pizza.sabores) {

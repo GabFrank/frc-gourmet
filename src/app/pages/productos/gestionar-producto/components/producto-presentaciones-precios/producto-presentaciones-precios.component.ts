@@ -501,6 +501,7 @@ export class ProductoPresentacionesPreciosComponent implements OnInit, OnDestroy
       cantidad: presentacion.cantidad,
       principal: presentacion.principal,
       activo: presentacion.activo,
+      mostrarEnNombre: (presentacion as any).mostrarEnNombre !== false,
       imageUrl: (presentacion as any).imageUrl ?? null
     });
     
@@ -528,6 +529,7 @@ export class ProductoPresentacionesPreciosComponent implements OnInit, OnDestroy
       cantidad: formValue.cantidad,
       principal: formValue.principal,
       activo: formValue.activo,
+      mostrarEnNombre: formValue.mostrarEnNombre,
       imageUrl: formValue.imageUrl ?? null
     };
 

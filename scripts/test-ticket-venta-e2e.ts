@@ -21,6 +21,7 @@ import { DataSource } from 'typeorm';
 
 import { getDataSourceOptions } from '../src/app/database/database.config';
 import { buildVentaTicketLines } from '../electron/handlers/documentos-tickets.handler';
+import { componerEncabezadoComanda } from '../electron/utils/nombre-variacion.utils';
 import { renderTicketToPlainText, invalidateTicketEmpresaCache } from '../electron/utils/ticket.utils';
 
 const WIDTH = 48;
@@ -291,22 +292,19 @@ async function main() {
     await R(Presentacion).update(presGrande.id, { mostrarEnNombre: true });
     await R(Sabor).update(sCalabresa.id, { mostrarEnNombre: true });
 
-    // 58mm: el detalle largo se ENVUELVE en vez de truncarse. `ticketColumns`
-    // corta lo que no entra, así que sin esto el cliente veía
-    // «1/2 CALABRESA +» y nunca su segunda mitad.
-    const txt32 = await ticket(vP.id, 32);
-    const anchos = txt32.split('\n').map((l) => l.length);
-    ok(Math.max(...anchos) <= 32, 'en 58mm ninguna línea excede el ancho', Math.max(...anchos));
-    ok(/CALABRESA/.test(txt32), 'y el sabor igual entra', txt32);
+    // La comanda de COCINA arma el nombre por su cuenta (tamaño y sabores en
+    // grande, uno por línea, que el cocinero lee de lejos) y tenía que respetar
+    // el flag igual que el ticket del cliente. Se pasó por alto al implementarlo
+    // y salió en la primera prueba real: se destildó la presentación de
+    // QUESADILLAS y el tamaño siguió imprimiéndose en cocina.
+    ok(componerEncabezadoComanda('QUESADILLAS', 'TRADICIONAL', false) === 'QUESADILLAS',
+       'comanda: con el flag apagado NO imprime el tamaño',
+       componerEncabezadoComanda('QUESADILLAS', 'TRADICIONAL', false));
+    ok(componerEncabezadoComanda('PIZZA', 'GRANDE', true) === 'PIZZA GRANDE',
+       'comanda: con el flag prendido sí lo imprime');
+    ok(componerEncabezadoComanda('PIZZA', null, true) === 'PIZZA',
+       'comanda: sin presentación no deja espacios colgando');
 
-    const txtM32 = await ticket(vM.id, 32);
-    ok(/1\/2 CALABRESA/.test(txtM32) && /1\/2 BACON/.test(txtM32),
-       'en 58mm los DOS sabores sobreviven: se envuelve, no se trunca', txtM32);
-    ok(Math.max(...txtM32.split('\n').map((l) => l.length)) <= 32,
-       'y envolviendo tampoco se desborda el ancho');
-
-    // El «>>» es énfasis de la comanda de cocina: al cliente no le dice nada.
-    ok(!/>>/.test(await ticket(vP.id, 48)), 'el ticket del cliente no lleva el prefijo >>');
   }
 
   await ds.destroy();

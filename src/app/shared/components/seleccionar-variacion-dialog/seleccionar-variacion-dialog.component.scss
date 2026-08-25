@@ -151,6 +151,9 @@
 }
 
 .size-card {
+  // Un <button> NO hereda `color`: el navegador le aplica `buttontext`
+  // (negro), que sobre la tarjeta oscura queda ilegible. Va explícito.
+  color: var(--text-primary);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -200,6 +203,9 @@
 }
 
 .sabor-card {
+  // Un <button> NO hereda `color`: el navegador le aplica `buttontext`
+  // (negro), que sobre la tarjeta oscura queda ilegible. Va explícito.
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   justify-content: space-between;

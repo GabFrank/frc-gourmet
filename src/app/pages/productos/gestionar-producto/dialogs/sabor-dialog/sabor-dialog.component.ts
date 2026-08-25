@@ -200,6 +200,7 @@ export class SaborDialogComponent implements OnInit, OnDestroy {
       nombre: this.saborForm.value.nombre.trim().toUpperCase(),
       categoria: this.saborForm.value.categoria.toUpperCase(),
       descripcion: this.saborForm.value.descripcion?.trim().toUpperCase() || undefined,
+      mostrarEnNombre: this.saborForm.value.mostrarEnNombre,
       imageUrl: this.saborForm.value.imageUrl ?? null
     };
 

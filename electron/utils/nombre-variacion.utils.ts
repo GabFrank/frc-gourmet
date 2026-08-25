@@ -93,6 +93,26 @@ export function componerDetalleVariacion(
   return partes.join(' · ');
 }
 
+/**
+ * Encabezado del ítem en la COMANDA de cocina: producto + tamaño.
+ *
+ * La comanda no usa `componerDetalleVariacion` porque imprime el tamaño y cada
+ * sabor en líneas separadas y en grande —el cocinero lee de lejos—, pero tiene
+ * que respetar `mostrarEnNombre` igual que el ticket del cliente. Al
+ * implementar el flag esto quedó afuera y el tamaño destildado se seguía
+ * imprimiendo en cocina.
+ */
+export function componerEncabezadoComanda(
+  nombreProducto: string,
+  presentacionNombre?: string | null,
+  mostrarPresentacion: boolean = true,
+): string {
+  const prod = String(nombreProducto || '').trim();
+  const pres = String(presentacionNombre || '').trim();
+  if (!pres || mostrarPresentacion === false) return prod;
+  return `${prod} ${pres}`.trim();
+}
+
 // ============================================================
 // Mantenimiento de `RecetaPresentacion.nombre_generado`
 // ============================================================
