@@ -22,7 +22,7 @@ import { DataSource } from 'typeorm';
 import { getDataSourceOptions } from '../src/app/database/database.config';
 import { buildVentaTicketLines, printComandaInternal } from '../electron/handlers/documentos-tickets.handler';
 import { componerEncabezadoComanda } from '../electron/utils/nombre-variacion.utils';
-import { renderTicketToPlainText, invalidateTicketEmpresaCache } from '../electron/utils/ticket.utils';
+import { renderTicketToPlainText, invalidateTicketEmpresaCache, sanitizarParaTicket, ticketColumns } from '../electron/utils/ticket.utils';
 
 const WIDTH = 48;
 
@@ -269,7 +269,11 @@ async function main() {
 
     const txt = await ticket(vP.id, 48);
     ok(/PIZZA/.test(txt), 'imprime el producto');
-    ok(/GRANDE · CALABRESA/.test(txt), 'imprime tamaño y sabor debajo', txt);
+    // `-` y no `·`: lo que va al papel pasa por `sanitizarParaTicket`, que
+    // degrada el punto medio porque en térmica queda casi invisible. El test
+    // mira el texto tal como sale impreso, no el que compone la función.
+    ok(/GRANDE - CALABRESA/.test(txt), 'imprime tamaño y sabor debajo', txt);
+    ok(/1x\s+PIZZA/.test(txt), 'la cantidad va con la x pegada al producto', txt);
     ok(/SIN CEBOLLA/.test(txt), 'imprime la observación del cliente');
 
     // Mitad y mitad: la fracción es lo que el cliente pidió y por lo que pagó.
@@ -308,6 +312,41 @@ async function main() {
     ok(componerEncabezadoComanda('PIZZA', null, true) === '',
        'comanda: sin presentación no imprime línea vacía');
 
+  }
+
+  // ── Lo que va al papel tiene que ser imprimible ─────────────────────────
+  //
+  // El charset de las térmicas es CP437 y la librería manda `?` por todo lo que
+  // no entra. Falla en silencio: el ticket sale, nadie ve un error, y en el
+  // papel hay un signo de pregunta. Se descubrió porque el `×` del separador de
+  // cantidad no aparecía; mirando de cerca, `Á` tampoco — y como todos los
+  // strings van en UPPERCASE, cualquier nombre con tilde inicial salía roto.
+  {
+    console.log('\n[charset] el texto que va a la impresora');
+    ok(sanitizarParaTicket('2× PIZZA') === '2x PIZZA',
+       'el signo de multiplicación pasa a x', sanitizarParaTicket('2× PIZZA'));
+    ok(sanitizarParaTicket('ÁNGEL') === 'ANGEL',
+       'una mayúscula acentuada que CP437 no tiene pierde el acento, no el carácter',
+       sanitizarParaTicket('ÁNGEL'));
+    ok(sanitizarParaTicket('JALAPEÑO') === 'JALAPEÑO',
+       'la Ñ sí existe en CP437 y se conserva', sanitizarParaTicket('JALAPEÑO'));
+    ok(sanitizarParaTicket('PAGADO — NO COBRAR') === 'PAGADO - NO COBRAR',
+       'el guion largo pasa a guion');
+    ok(!/[^\x00-\xFF]/.test(sanitizarParaTicket('A → B … ₲ ✓ “x”')),
+       'no queda ningún carácter fuera del rango de un byte',
+       sanitizarParaTicket('A → B … ₲ ✓ “x”'));
+
+    // El saneo corre ANTES de medir: si corriera después, `→` (1 carácter que
+    // pasa a 2) correría las columnas.
+    const fila = renderTicketToPlainText({
+      printerWidth: 32, cutAtEnd: false,
+      lines: [ticketColumns([
+        { text: '10×', width: 5, align: 'L' },
+        { text: 'A → B', width: 15, align: 'L' },
+        { text: '5.000', width: 12, align: 'R' },
+      ])],
+    }).split('\n').find((l) => l.includes('10x')) || '';
+    ok(fila.trimEnd().length <= 32, 'las columnas siguen alineadas tras el saneo', fila);
   }
 
   // ── El gate de a quién le corresponde comanda de cocina ─────────────────

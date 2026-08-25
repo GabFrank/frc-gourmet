@@ -60,7 +60,59 @@ export interface TicketSpec {
 // BUILDERS (composición de specs)
 // ============================================================
 
+/**
+ * Deja el texto en algo que una impresora térmica pueda imprimir de verdad.
+ *
+ * El charset por defecto es **CP437**, y todo lo que no entra ahí la librería
+ * lo manda como `?`. Es un fallo silencioso: el ticket sale, nadie ve un error,
+ * y en el papel aparece un signo de pregunta donde iba un carácter.
+ *
+ * Verificado contra CP437 el 2026-08-25:
+ * - Se pierden: `×` `—` `–` `→` `€` `₲` `✓` y **`Á`**.
+ * - Sobreviven: `á é í ó ú ñ Ñ ü É ¿ ¡ · º °`.
+ *
+ * El `·` entra en esa lista pero igual se degrada a `-`: existe en CP437, pero
+ * en térmica de 203dpi queda casi invisible, y el separador de variación
+ * («GRANDE · BACON») es justo donde tiene que leerse.
+ *
+ * Lo de `Á` es lo que más muerde, porque **todos los strings van en
+ * UPPERCASE**: un cliente llamado «Ángel» se imprimía «?NGEL». No es un caso
+ * de borde, es cualquier nombre con tilde en la primera letra.
+ *
+ * Estrategia: primero un mapa explícito para los tipográficos (donde hay un
+ * equivalente ASCII obvio y mejor que perder el carácter), y después
+ * descomposición Unicode para las vocales acentuadas que el charset no tiene —
+ * «ÁNGEL» sale «ANGEL», que se lee, en vez de «?NGEL», que no.
+ *
+ * No se usa `iconv` para decidir qué se pierde a propósito: sería exacto pero
+ * ata este helper a una dependencia transitiva de la librería de impresión.
+ */
+const REEMPLAZOS_TICKET: Record<string, string> = {
+  '×': 'x', '·': '-', '—': '-', '–': '-', '‑': '-',
+  '→': '->', '←': '<-', '…': '...',
+  '“': '"', '”': '"', '‘': "'", '’': "'", '«': '"', '»': '"',
+  '€': 'EUR', '₲': 'Gs.', '✓': 'OK', '✗': 'X', '•': '*',
+};
+
+/** Los no-ASCII que CP437 SÍ tiene y conviene conservar. */
+const SEGUROS_CP437 = 'áéíóúñÑüÉ¿¡ºÀÂÄÅÇÈÊËÌÎÏÔÖÒÙÛÜßæÆôöòûùÿÖÜ¢£¥₧ƒªí°';
+
+export function sanitizarParaTicket(texto: string): string {
+  if (!texto) return texto;
+  let out = '';
+  for (const ch of texto) {
+    if (ch.charCodeAt(0) < 128) { out += ch; continue; }
+    if (REEMPLAZOS_TICKET[ch] !== undefined) { out += REEMPLAZOS_TICKET[ch]; continue; }
+    if (SEGUROS_CP437.includes(ch)) { out += ch; continue; }
+    // Última chance: sacarle el acento. `Á` → `A`, que se lee.
+    const plano = ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    out += plano.charCodeAt(0) < 128 ? plano : '?';
+  }
+  return out;
+}
+
 export function ticketText(text: string, opts: Omit<Extract<TicketLine, { type: 'text' }>, 'type' | 'text'> = {}): TicketLine {
+  text = sanitizarParaTicket(text);
   return { type: 'text', text, ...opts };
 }
 
@@ -73,10 +125,15 @@ export function ticketBlank(count: number = 1): TicketLine {
 }
 
 export function ticketKv(key: string, value: string, bold = false): TicketLine {
+  key = sanitizarParaTicket(key);
+  value = sanitizarParaTicket(value);
   return { type: 'kv', key, value, bold };
 }
 
 export function ticketColumns(cols: { text: string; width: number; align?: TicketAlign }[]): TicketLine {
+  // Sanear ANTES de medir: `→` pasa a `->` y `…` a `...`, así que hacerlo
+  // después del cálculo de padding correría las columnas.
+  cols = cols.map((c) => ({ ...c, text: sanitizarParaTicket(c.text) }));
   return { type: 'columns', cols };
 }
 
