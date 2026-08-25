@@ -489,6 +489,37 @@ export async function materializarPedidoOnlineEnVenta(
   });
 }
 
+/**
+ * Un producto con variación no puede venderse sin su variación.
+ *
+ * El diálogo del PdV no deja avanzar sin elegir tamaño y sabor, pero esa
+ * validación es de la UI: `/api/rpc` es default-allow, así que cualquier
+ * cliente con `VENTAS_PDV` podía crear un ítem de PAPAS FRITAS sin tamaño ni
+ * sabor —y con el precio que quisiera— llamando al handler directo. El ítem
+ * entraba a la venta, a la comanda de cocina y al ticket como «1 PAPAS
+ * FRITAS», sin que nadie supiera cuáles.
+ *
+ * `recetaPresentacion` es lo que identifica la variación (sabor × tamaño) y es
+ * lo que el PdV manda siempre; sin eso el ítem no describe nada vendible.
+ */
+async function validarVariacionDelItem(dataSource: DataSource, data: any): Promise<void> {
+  const productoId = data?.producto?.id ?? data?.productoId ?? data?.producto_id;
+  if (!productoId) return;
+
+  const producto = await dataSource.getRepository(Producto).findOne({
+    where: { id: Number(productoId) },
+    select: ['id', 'nombre', 'tipo'],
+  });
+  if (!producto || (producto as any).tipo !== ProductoTipo.ELABORADO_CON_VARIACION) return;
+
+  const rp = data?.recetaPresentacion?.id ?? data?.recetaPresentacionId ?? data?.receta_presentacion_id;
+  if (!rp) {
+    throw new Error(
+      `${producto.nombre} se vende por variación: falta elegir el tamaño y el sabor.`,
+    );
+  }
+}
+
 export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Remove this line - get the current user in each handler instead
   // const currentUser = getCurrentUser(); // Get user for tracking
@@ -1306,6 +1337,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('createVentaItem', async (_event: any, data: any) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+      await validarVariacionDelItem(dataSource, data);
       const repo = dataSource.getRepository(VentaItem);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -1356,6 +1388,10 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(VentaItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
+      // El update puede cambiar el producto: si el nuevo exige variación, hay
+      // que exigirla igual que en el alta. `data` sólo trae lo que cambió, así
+      // que se valida sobre la mezcla.
+      await validarVariacionDelItem(dataSource, { ...entity, ...data });
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);

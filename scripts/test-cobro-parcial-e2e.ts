@@ -160,6 +160,47 @@ async function main() {
   const d3row = await ds.getRepository(PagoDetalle).findOne({ where: { id: d3 } });
   ok((d3row as any).activo === false, 'R4: PagoDetalle de la ronda anulada queda inactivo');
 
+  // ── Un producto con variación no se vende sin su variación ──────────────
+  //
+  // El diálogo del PdV no deja avanzar sin elegir tamaño y sabor, pero esa
+  // validación es de la UI: `/api/rpc` es default-allow, así que un cliente con
+  // `VENTAS_PDV` podía llamar `createVentaItem` directo y meter «1 PAPAS
+  // FRITAS» sin tamaño ni sabor —y con el precio que quisiera—. El ítem entraba
+  // a la venta, a la comanda de cocina y al ticket sin describir nada vendible.
+  {
+    console.log('\n[variación] un producto con variación exige su variación');
+    const { Producto } = require('../src/app/database/entities/productos/producto.entity');
+    const pVar: any = await ds.getRepository(Producto).save(
+      ds.getRepository(Producto).create({
+        nombre: 'PAPAS CON VARIACION', tipo: 'ELABORADO_CON_VARIACION', activo: true,
+      } as any),
+    );
+    const pPlano: any = await ds.getRepository(Producto).save(
+      ds.getRepository(Producto).create({ nombre: 'GASEOSA', tipo: 'RETAIL', activo: true } as any),
+    );
+
+    const crear = async (payload: any) => {
+      try { return { ok: true, r: await invokeHandlerWithContext('createVentaItem', undefined, payload) }; }
+      catch (e: any) { return { ok: false, err: String(e?.message || e) }; }
+    };
+    const base = { venta: { id: venta.id }, cantidad: 1, precioVentaUnitario: 1, precioCostoUnitario: 0, estado: 'ACTIVO' };
+
+    const sinVariacion = await crear({ ...base, producto: { id: pVar.id } });
+    ok(!sinVariacion.ok && /variación/i.test(sinVariacion.err || ''),
+       'sin recetaPresentacion, el backend rechaza el ítem', sinVariacion.err);
+
+    // Con la variación presente el gate deja pasar. Se asierta que el error
+    // —si lo hay— ya NO es el del gate: armar una RecetaPresentacion completa
+    // (receta + presentación + sabor + precios) para esto sería montar medio
+    // catálogo, y lo que se mide acá es el gate, no la FK.
+    const conVariacion = await crear({ ...base, producto: { id: pVar.id }, recetaPresentacion: { id: 1 } });
+    ok(!/se vende por variación/i.test((conVariacion as any).err || ''),
+       'con la variación elegida, el gate ya no interviene', (conVariacion as any).err);
+
+    const plano = await crear({ ...base, producto: { id: pPlano.id } });
+    ok(plano.ok, 'un producto sin variación no se ve afectado', (plano as any).err);
+  }
+
   await ds.destroy();
   console.log(`\n[cobro-parcial] ${passed} OK, ${failed} FALLARON`);
   // Salida explícita: registerVentasHandlers deja un setInterval (retry comanda)
