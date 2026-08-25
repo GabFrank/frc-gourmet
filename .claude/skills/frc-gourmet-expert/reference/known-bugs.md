@@ -2,6 +2,34 @@
 
 Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo sigue roto. La sección de **Seguridad** está mayormente resuelta (bcrypt, JWT en keytar, permisos en backend, must-change-password) — ver detalle abajo y [architecture/auth-permissions.md](../architecture/auth-permissions.md).
 
+## Ventas / PdV
+
+### `createVentaItem` acepta el precio que le mande el cliente — ABIERTO
+
+**Síntoma:** ninguno visible. El handler hace `repo.create(data)` y guarda el
+`precioVentaUnitario` tal cual viene del renderer, sin contrastarlo contra el
+catálogo. Como `/api/rpc` es **default-allow**, cualquier cliente con
+`VENTAS_PDV` puede crear un ítem con el precio que quiera llamando al handler
+directo. Comprobado el 2026-08-25: se creó un ítem de un producto de 25.000 a
+**1 guaraní** y entró sin una sola queja.
+
+**Por qué sigue abierto:** el PdV calcula el precio en el front (variaciones,
+adicionales, promociones, tipo de precio por cliente) y lo manda ya resuelto.
+Validarlo en el backend implica reimplementar ahí esa resolución, que es
+exactamente lo que hace `resolveOpcion` en el flujo de pedidos online — o sea,
+existe el modelo a seguir, pero es trabajo de verdad y toca el PdV entero.
+
+Lo que **sí** se cerró en 2026-08-25 es el caso más grosero: un producto
+`ELABORADO_CON_VARIACION` sin `recetaPresentacion` ahora se rechaza
+(`validarVariacionDelItem`, en `createVentaItem` y `updateVentaItem`). Antes se
+podía vender «1 PAPAS FRITAS» sin tamaño ni sabor, y ese ítem seguía a la
+comanda de cocina y al ticket sin describir nada cocinable. Test en
+`scripts/test-cobro-parcial-e2e.ts`, bloque «variación».
+
+**Regla general que deja esto:** en este repo, *toda* validación que sólo vive
+en un diálogo del PdV es evadible. El diálogo es ergonomía; el guard del
+handler es la única frontera.
+
 ## Cocina / delivery
 
 ### El delivery nunca imprimía su comanda — RESUELTO (2026-08-25)
