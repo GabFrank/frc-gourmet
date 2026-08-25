@@ -228,6 +228,87 @@ async function main() {
       'ubicacion: sola, la comanda va en grande');
   }
 
+  // ── Detalle del ítem: variación, quitados, extras, observaciones ────────
+  //
+  // Antes el ticket decía «1 PIZZA» y nada más: el cliente no tenía forma de
+  // verificar que le dieron lo que pidió, y en delivery esa hoja es lo único
+  // que recibe.
+  {
+    console.log('\n[detalle del item]');
+    const { Presentacion } = require('../src/app/database/entities/productos/presentacion.entity');
+    const { Sabor } = require('../src/app/database/entities/productos/sabor.entity');
+    const { Receta } = require('../src/app/database/entities/productos/receta.entity');
+    const { RecetaPresentacion } = require('../src/app/database/entities/productos/receta-presentacion.entity');
+    const { VentaItemSabor } = require('../src/app/database/entities/ventas/venta-item-sabor.entity');
+    const { VentaItemObservacion } = require('../src/app/database/entities/ventas/venta-item-observacion.entity');
+    const { Observacion } = require('../src/app/database/entities/productos/observacion.entity');
+    const R = (e: any) => ds.getRepository(e);
+    const save = (e: any, d: any) => R(e).save(R(e).create(d));
+    const ticket = async (ventaId: number, w: number) => {
+      const b = await buildVentaTicketLines(ds, ventaId, { width: w });
+      return render(b!.lines, w);
+    };
+
+    const pPizza = await save(Producto, { nombre: 'PIZZA', tipo: 'ELABORADO_CON_VARIACION', activo: true });
+    const presGrande = await save(Presentacion, { nombre: 'GRANDE', cantidad: 1, principal: true, producto: pPizza });
+    const sCalabresa = await save(Sabor, { nombre: 'CALABRESA', categoria: 'PIZZA', activo: true, producto_id: pPizza.id });
+    const sBacon = await save(Sabor, { nombre: 'BACON', categoria: 'PIZZA', activo: true, producto_id: pPizza.id });
+    const rec = await save(Receta, { nombre: 'R', rendimiento: 1, costoCalculado: 0, activo: true, unidadRendimiento: 'UNIDADES' });
+    const rpCal = await save(RecetaPresentacion, { nombre_generado: 'X', costo_calculado: 0, activo: true, receta: rec, presentacion: presGrande, sabor: sCalabresa });
+    const rpBac = await save(RecetaPresentacion, { nombre_generado: 'X', costo_calculado: 0, activo: true, receta: rec, presentacion: presGrande, sabor: sBacon });
+
+    const vP = await save(Venta, { estado: 'CONCLUIDA', total: 85000 });
+    const itP = await save(VentaItem, {
+      venta: { id: vP.id }, producto: { id: pPizza.id }, cantidad: 1,
+      precioCostoUnitario: 0, precioVentaUnitario: 85000, precioAdicionales: 0, estado: 'ACTIVO',
+    });
+    await save(VentaItemSabor, { ventaItem: { id: itP.id }, recetaPresentacion: { id: rpCal.id }, proporcion: 1, precioReferencia: 85000, costoReferencia: 0, activo: true });
+    const obs = await save(Observacion, { descripcion: 'SIN CEBOLLA', activo: true });
+    await save(VentaItemObservacion, { ventaItem: { id: itP.id }, observacion: { id: obs.id }, activo: true });
+
+    const txt = await ticket(vP.id, 48);
+    ok(/PIZZA/.test(txt), 'imprime el producto');
+    ok(/GRANDE · CALABRESA/.test(txt), 'imprime tamaño y sabor debajo', txt);
+    ok(/SIN CEBOLLA/.test(txt), 'imprime la observación del cliente');
+
+    // Mitad y mitad: la fracción es lo que el cliente pidió y por lo que pagó.
+    const vM = await save(Venta, { estado: 'CONCLUIDA', total: 85000 });
+    const itM = await save(VentaItem, {
+      venta: { id: vM.id }, producto: { id: pPizza.id }, cantidad: 1,
+      precioCostoUnitario: 0, precioVentaUnitario: 85000, precioAdicionales: 0, estado: 'ACTIVO',
+    });
+    await save(VentaItemSabor, { ventaItem: { id: itM.id }, recetaPresentacion: { id: rpCal.id }, proporcion: 0.5, precioReferencia: 85000, costoReferencia: 0, activo: true });
+    await save(VentaItemSabor, { ventaItem: { id: itM.id }, recetaPresentacion: { id: rpBac.id }, proporcion: 0.5, precioReferencia: 85000, costoReferencia: 0, activo: true });
+    const txtM = await ticket(vM.id, 48);
+    ok(/1\/2 CALABRESA \+ 1\/2 BACON/.test(txtM), 'mitad y mitad con su fracción', txtM);
+
+    // El flag apaga la parte que no aporta.
+    await R(Presentacion).update(presGrande.id, { mostrarEnNombre: false });
+    await R(Sabor).update(sCalabresa.id, { mostrarEnNombre: false });
+    const txtSin = await ticket(vP.id, 48);
+    ok(!/GRANDE/.test(txtSin.split('SIN CEBOLLA')[0].split('PIZZA')[1] || ''),
+       'con mostrarEnNombre=false el tamaño desaparece del detalle', txtSin);
+    await R(Presentacion).update(presGrande.id, { mostrarEnNombre: true });
+    await R(Sabor).update(sCalabresa.id, { mostrarEnNombre: true });
+
+    // 58mm: el detalle largo se ENVUELVE en vez de truncarse. `ticketColumns`
+    // corta lo que no entra, así que sin esto el cliente veía
+    // «1/2 CALABRESA +» y nunca su segunda mitad.
+    const txt32 = await ticket(vP.id, 32);
+    const anchos = txt32.split('\n').map((l) => l.length);
+    ok(Math.max(...anchos) <= 32, 'en 58mm ninguna línea excede el ancho', Math.max(...anchos));
+    ok(/CALABRESA/.test(txt32), 'y el sabor igual entra', txt32);
+
+    const txtM32 = await ticket(vM.id, 32);
+    ok(/1\/2 CALABRESA/.test(txtM32) && /1\/2 BACON/.test(txtM32),
+       'en 58mm los DOS sabores sobreviven: se envuelve, no se trunca', txtM32);
+    ok(Math.max(...txtM32.split('\n').map((l) => l.length)) <= 32,
+       'y envolviendo tampoco se desborda el ancho');
+
+    // El «>>» es énfasis de la comanda de cocina: al cliente no le dice nada.
+    ok(!/>>/.test(await ticket(vP.id, 48)), 'el ticket del cliente no lleva el prefijo >>');
+  }
+
   await ds.destroy();
   console.log(`\n[ticket-venta] ${passed} OK, ${failed} FALLARON`);
   process.exit(failed > 0 ? 1 : 0);

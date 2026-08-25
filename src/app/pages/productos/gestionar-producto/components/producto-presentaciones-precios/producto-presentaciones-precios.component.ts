@@ -130,6 +130,9 @@ export class ProductoPresentacionesPreciosComponent implements OnInit, OnDestroy
       cantidad: [1, [Validators.required, Validators.min(0.001)]],
       principal: [false],
       activo: [true],
+      // Si el nombre de la presentación figura en el nombre compuesto de la
+      // variación. Se apaga para las presentaciones de relleno.
+      mostrarEnNombre: [true],
       imageUrl: [null]
     });
   }
@@ -224,6 +227,7 @@ export class ProductoPresentacionesPreciosComponent implements OnInit, OnDestroy
         cantidad: formValue.cantidad,
         principal: formValue.principal,
         activo: formValue.activo,
+        mostrarEnNombre: formValue.mostrarEnNombre,
         productoId: productoId,
         imageUrl: formValue.imageUrl ?? null
       };
@@ -243,6 +247,7 @@ export class ProductoPresentacionesPreciosComponent implements OnInit, OnDestroy
             cantidad: 1,
             principal: false,
             activo: true,
+            mostrarEnNombre: true,
             imageUrl: null
           });
           

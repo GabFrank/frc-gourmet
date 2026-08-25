@@ -16,6 +16,17 @@ export class Sabor extends BaseModel {
   @Column({ type: 'boolean', default: true })
   activo!: boolean;
 
+  /**
+   * Si el nombre de esta parte figura en el nombre compuesto de la variación
+   * (`producto + tamaño + sabor`). Se apaga cuando el nombre es de relleno: hay
+   * presentaciones llamadas «TRADICIONAL» que existen sólo porque el nombre es
+   * obligatorio, y sabores únicos que no distinguen nada. Default true: no
+   * cambia nada hasta que alguien lo marque.
+   */
+  @Column({ name: 'mostrar_en_nombre', type: 'boolean', default: true })
+  mostrarEnNombre!: boolean;
+
+
   // Imagen del sabor (PIZZA Pepperoni vs Calabresa). URL `app://producto-images/<file>`.
   @Column({ type: 'varchar', length: 500, nullable: true, name: 'image_url' })
   imageUrl?: string;

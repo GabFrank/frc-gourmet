@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { ensurePermission } from '../utils/auth.utils';
+import { recalcularNombresDeVariacion } from '../utils/nombre-variacion.utils';
 
 // Import all productos entities
 import { Familia } from '../../src/app/database/entities/productos/familia.entity';
@@ -686,6 +687,11 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
       await setEntityUserTracking(dataSource, producto, currentUser?.id, true);
       const updatedProducto = await productoRepository.save(producto);
+      // Las variaciones llevan el nombre del producto adentro: si se renombró,
+      // hay que recomponerlas o quedan describiendo el nombre viejo.
+      if (productoData.nombre !== undefined) {
+        await recalcularNombresDeVariacion(dataSource, { productoId });
+      }
       return { success: true, producto: updatedProducto };
     } catch (error) {
       console.error('Error updating producto:', error);
@@ -787,6 +793,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         principal: presentacionData.principal,
         producto: producto,
         activo: presentacionData.activo !== undefined ? presentacionData.activo : true,
+        mostrarEnNombre: presentacionData.mostrarEnNombre !== undefined
+          ? presentacionData.mostrarEnNombre : true,
         imageUrl: presentacionData.imageUrl || undefined
       });
 
@@ -832,6 +840,9 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       if (presentacionData.principal !== undefined) {
         presentacion.principal = presentacionData.principal;
       }
+      if (presentacionData.mostrarEnNombre !== undefined) {
+        presentacion.mostrarEnNombre = presentacionData.mostrarEnNombre;
+      }
       if (presentacionData.activo !== undefined) {
         presentacion.activo = presentacionData.activo;
       }
@@ -847,6 +858,9 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
 
       await setEntityUserTracking(dataSource, presentacion, currentUser?.id, true);
       const updatedPresentacion = await presentacionRepository.save(presentacion);
+      if (presentacionData.nombre !== undefined || presentacionData.mostrarEnNombre !== undefined) {
+        await recalcularNombresDeVariacion(dataSource, { presentacionId });
+      }
       return updatedPresentacion;
     } catch (error) {
       console.error('Error updating presentacion:', error);

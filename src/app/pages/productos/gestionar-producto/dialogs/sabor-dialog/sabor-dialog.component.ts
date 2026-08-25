@@ -68,6 +68,7 @@ export class SaborDialogComponent implements OnInit, OnDestroy {
       descripcion: ['', [
         Validators.maxLength(200)
       ]],
+      mostrarEnNombre: [true],
       imageUrl: [null]
     });
   }
@@ -78,6 +79,7 @@ export class SaborDialogComponent implements OnInit, OnDestroy {
         nombre: this.data.sabor.nombre,
         categoria: this.data.sabor.categoria,
         descripcion: this.data.sabor.descripcion || '',
+        mostrarEnNombre: (this.data.sabor as any).mostrarEnNombre !== false,
         imageUrl: (this.data.sabor as any).imageUrl ?? null
       });
     }

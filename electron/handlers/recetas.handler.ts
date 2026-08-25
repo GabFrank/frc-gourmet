@@ -22,6 +22,7 @@ import { TipoPrecio } from '../../src/app/database/entities/financiero/tipo-prec
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { Like, IsNull, Not } from 'typeorm';
 import { ensurePermission } from '../utils/auth.utils';
+import { recalcularNombresDeVariacion } from '../utils/nombre-variacion.utils';
 import { desduplicarRecetasCompartidas } from '../utils/receta-clone.utils';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -1901,6 +1902,11 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       categoria: saborData.categoria?.toUpperCase(),
       descripcion: saborData.descripcion?.toUpperCase()
     } as any);
+    // El nombre de las variaciones deriva del sabor: sin esto quedaba
+    // describiendo el nombre viejo para siempre.
+    if (saborData.nombre !== undefined || saborData.mostrarEnNombre !== undefined) {
+      await recalcularNombresDeVariacion(dataSource, { saborId: id });
+    }
     return await repo.findOne({ where: { id } });
   });
 
