@@ -86,3 +86,23 @@
   opacity: 0.5;
   font-size: 12px;
 }
+
+
+/* Elegir entre reparto y retiro, arriba de todo: cambia qué campos existen
+   debajo, así que tiene que decidirse antes de empezar a escribir. */
+.modo-toggle {
+  width: 100%;
+  margin-bottom: 4px;
+
+  ::ng-deep .mat-button-toggle { flex: 1; }
+  ::ng-deep .mat-button-toggle-label-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .04em;
+  }
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+}

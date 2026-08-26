@@ -307,3 +307,113 @@ Auth del TV: reusa el `authGuard` + shim HTTP del PWA (`154f193`); se loguea una
 - **Ticket de cierre de caja** (`a4761a4`): handler `print-cierre-caja({cajaId, printerId?})` + `printCierreCajaInternal` usando `resumen-caja.utils.ts` `computeResumenCaja()` (apertura/cierre, tiempo abierto, arqueo por moneda, retiros). **Auto-impresión al cerrar** desde `create-caja-dialog`. Distinto de `print-conteo-caja-ticket` (acta breve).
 
 > Ambos TODOs históricos "KDS" e "impresión real de tickets/comandas" quedan **completados** con esto (ver [workflows/todos-pendientes.md](../workflows/todos-pendientes.md)).
+
+
+---
+
+## El detalle del ítem en los tickets (2026-08-25)
+
+Los tres tickets —venta, pre-cuenta y delivery— arman el detalle de cada ítem
+con **`cargarDetalleDeItems`** (`documentos-tickets.handler.ts`): variación,
+ingredientes sacados, cambios, adicionales y observaciones, todo en una consulta
+por lote.
+
+Antes esa recolección vivía **adentro de `printComandaInternal`**, así que la
+comanda de cocina era el único ticket que mostraba el detalle: el del cliente
+imprimía sólo el nombre del producto —«1 PIZZA» en vez de «1 PIZZA GRANDE
+CALABRESA, sin cebolla»—, y en delivery esa hoja es lo único que recibe.
+
+**La fuente común no lleva prefijos.** Cada ticket pone el suyo: la cocina usa
+`ADD` y `>>` y el video invertido para lo que hay que sacar; el del cliente usa
+`+` y texto plano. Si agregás un prefijo en la recolección, se filtra a los tres.
+
+**El nombre se compone en vivo**, no se lee de `RecetaPresentacion.nombre_generado`
+— ver `electron/utils/nombre-variacion.utils.ts` y el apartado de abajo.
+
+⚠️ **`ticketColumns` TRUNCA lo que no entra.** En una impresora de 58mm la
+descripción tiene ~26 columnas, así que cualquier detalle largo se corta sin
+aviso: «GRANDE · 1/2 CALABRESA + 1/2 4 QUESOS» salía como «1/2 CALABRESA +» y el
+cliente perdía su segunda mitad. Por eso el detalle pasa por `envolverDetalle`,
+que corta por palabra. Si agregás una línea nueva al ticket, usala.
+
+### `nombre_generado` es un snapshot, no la verdad
+
+`RecetaPresentacion.nombre_generado` se calcula UNA vez, al crear la variación.
+Hasta 2026-08-25 nadie lo recalculaba: renombrar un producto, una presentación o
+un sabor lo dejaba describiendo algo que ya no existe. En el catálogo real de
+producción 8 de 61 estaban podridas («PICADA DE LA CASA…» con el producto ya
+renombrado a «PICADA DON FRANCO»; «PIZZA GRANDE PIZZA» con el sabor ya renombrado
+a «PEPPERONI»).
+
+Ahora `update-sabor`, `update-producto` y `update-presentacion` llaman a
+`recalcularNombresDeVariacion`. Aun así, **para cualquier cosa que vea el cliente
+se compone en vivo**: el campo queda como caché para las pantallas de gestión.
+
+### `mostrarEnNombre`
+
+`Presentacion` y `Sabor` tienen `mostrarEnNombre` (default `true`). Sirve para
+apagar una parte que no aporta: hay presentaciones llamadas «TRADICIONAL» que
+existen sólo porque el nombre es obligatorio (QUESADILLAS salía como
+«QUESADILLAS TRADICIONAL CARNE») y sabores únicos que no distinguen nada
+(«MILANESITA DON FRANCO GRANDE TRADICIONAL»).
+
+Es una marca explícita y **no** una heurística sobre el texto: en AROS DE CEBOLLA
+y PAPAS FRITAS «TRADICIONAL» **sí** distingue, contra BACON Y CHEDDAR.
+
+---
+
+> 📄 **El catálogo completo de lo que imprime el sistema** —los 13 tickets, qué
+> decide cada uno, quién lo recibe y las convenciones de formato— está en
+> [tickets-impresos.md](tickets-impresos.md). Este documento cubre la cocina y
+> el KDS; ese otro cubre el papel en general.
+
+## El gate de "va a cocina" (2026-08-24)
+
+Una venta genera `ComandaItem` -y por lo tanto llega al KDS y a la impresora del
+sector- sólo si pasa el gate de `ventas.handler.ts`:
+
+```ts
+mesa || comanda || delivery || canalOrigen !== 'LOCAL'
+```
+
+Antes era sólo `mesa || comanda`, y por eso **los ítems de un delivery nunca se
+imprimían en la impresora de su producto**: la venta de un delivery no tiene mesa
+ni comanda. El único papel que salía era el ticket único del reparto, que usa el
+rol `TICKET_VENTA` y no respeta la asignación por producto.
+
+Al desplegar ese cambio, **la cocina empieza a recibir comandas de delivery que
+antes no recibía**. Es lo correcto, pero es un cambio visible en la operación:
+conviene avisar antes de que aparezcan tickets nuevos.
+
+### Son TRES gates, y hay que moverlos juntos (2026-08-25)
+
+El predicado de arriba está escrito en **tres lugares distintos**, y cada uno
+decide una cosa diferente:
+
+| Dónde | Qué decide |
+|---|---|
+| `ventas.handler.ts` → `crearComandaItemsSiCorresponde` | Si se crea el `ComandaItem` — o sea, si el KDS lo ve |
+| `ventas.handler.ts` → `autoPrintComandaIfNeeded` | Si se dispara la impresión automática |
+| `documentos-tickets.handler.ts` → `printComandaInternal` | Si efectivamente sale papel |
+
+El fix de 2026-08-24 movió los dos primeros y **se olvidó del tercero**. El
+síntoma fue de los peores posibles: el pedido aparecía en la pantalla de
+cocina (gate 1 pasó), la impresión se disparaba (gate 2 pasó), y
+`printComandaInternal` cortaba por el early return devolviendo `ok: true` **sin
+un solo error**. Ningún delivery imprimió su comanda, y no había nada en los
+logs que lo dijera. Se descubrió recién probando con la impresora física.
+
+Los tres cargan hoy `relations: ['mesa', 'comanda', 'delivery']`. **Eso no es
+opcional**: si una relación no se carga, `venta.delivery?.id` lee `undefined`,
+el gate da false y volvés a tener el mismo bug mudo. Hay tests de regresión en
+`scripts/test-ticket-venta-e2e.ts` (bloque «gate cocina»).
+
+### La línea de tamaño no repite el nombre del producto
+
+El encabezado del ítem ya imprime `1 PIZZA`. La línea siguiente lleva **sólo el
+tamaño** (`GRANDE`), vía `componerEncabezadoComanda`. Componía
+`producto + presentación` y salía `1 PIZZA` / `PIZZA GRANDE`. Respeta
+`mostrarEnNombre` de la presentación: apagado, no imprime la línea.
+
+Detalle en [domains/pedidos-online.md](pedidos-online.md) y
+[domains/recetas-sabores-variaciones.md](recetas-sabores-variaciones.md).

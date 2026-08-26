@@ -68,6 +68,7 @@ export class SaborDialogComponent implements OnInit, OnDestroy {
       descripcion: ['', [
         Validators.maxLength(200)
       ]],
+      mostrarEnNombre: [true],
       imageUrl: [null]
     });
   }
@@ -78,6 +79,7 @@ export class SaborDialogComponent implements OnInit, OnDestroy {
         nombre: this.data.sabor.nombre,
         categoria: this.data.sabor.categoria,
         descripcion: this.data.sabor.descripcion || '',
+        mostrarEnNombre: (this.data.sabor as any).mostrarEnNombre !== false,
         imageUrl: (this.data.sabor as any).imageUrl ?? null
       });
     }
@@ -198,6 +200,7 @@ export class SaborDialogComponent implements OnInit, OnDestroy {
       nombre: this.saborForm.value.nombre.trim().toUpperCase(),
       categoria: this.saborForm.value.categoria.toUpperCase(),
       descripcion: this.saborForm.value.descripcion?.trim().toUpperCase() || undefined,
+      mostrarEnNombre: this.saborForm.value.mostrarEnNombre,
       imageUrl: this.saborForm.value.imageUrl ?? null
     };
 

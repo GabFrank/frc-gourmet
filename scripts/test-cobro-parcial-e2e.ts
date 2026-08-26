@@ -160,6 +160,104 @@ async function main() {
   const d3row = await ds.getRepository(PagoDetalle).findOne({ where: { id: d3 } });
   ok((d3row as any).activo === false, 'R4: PagoDetalle de la ronda anulada queda inactivo');
 
+  // ── Un producto con variación no se vende sin su variación ──────────────
+  //
+  // El diálogo del PdV no deja avanzar sin elegir tamaño y sabor, pero esa
+  // validación es de la UI: `/api/rpc` es default-allow, así que un cliente con
+  // `VENTAS_PDV` podía llamar `createVentaItem` directo y meter «1 PAPAS
+  // FRITAS» sin tamaño ni sabor —y con el precio que quisiera—. El ítem entraba
+  // a la venta, a la comanda de cocina y al ticket sin describir nada vendible.
+  {
+    console.log('\n[variación] un producto con variación exige su variación');
+    const { Producto } = require('../src/app/database/entities/productos/producto.entity');
+    const pVar: any = await ds.getRepository(Producto).save(
+      ds.getRepository(Producto).create({
+        nombre: 'PAPAS CON VARIACION', tipo: 'ELABORADO_CON_VARIACION', activo: true,
+      } as any),
+    );
+    const pPlano: any = await ds.getRepository(Producto).save(
+      ds.getRepository(Producto).create({ nombre: 'GASEOSA', tipo: 'RETAIL', activo: true } as any),
+    );
+
+    const crear = async (payload: any) => {
+      try { return { ok: true, r: await invokeHandlerWithContext('createVentaItem', undefined, payload) }; }
+      catch (e: any) { return { ok: false, err: String(e?.message || e) }; }
+    };
+    const base = { venta: { id: venta.id }, cantidad: 1, precioVentaUnitario: 1, precioCostoUnitario: 0, estado: 'ACTIVO' };
+
+    const sinVariacion = await crear({ ...base, producto: { id: pVar.id } });
+    ok(!sinVariacion.ok && /variación/i.test(sinVariacion.err || ''),
+       'sin recetaPresentacion, el backend rechaza el ítem', sinVariacion.err);
+
+    // Con la variación presente el gate deja pasar. Se asierta que el error
+    // —si lo hay— ya NO es el del gate: armar una RecetaPresentacion completa
+    // (receta + presentación + sabor + precios) para esto sería montar medio
+    // catálogo, y lo que se mide acá es el gate, no la FK.
+    const conVariacion = await crear({ ...base, producto: { id: pVar.id }, recetaPresentacion: { id: 1 } });  // id inexistente a propósito: mide el gate, no la FK
+    ok(!/se vende por variación/i.test((conVariacion as any).err || ''),
+       'con la variación elegida, el gate ya no interviene', (conVariacion as any).err);
+
+    const plano = await crear({ ...base, producto: { id: pPlano.id } });
+    ok(plano.ok, 'un producto sin variación no se ve afectado', (plano as any).err);
+
+    // ── El gate mira el estado FINAL, no el payload ──────────────────────
+    //
+    // `cancelItem` en el PdV reenvía el `VentaItem` entero tal como lo devolvió
+    // `getVentaItems`, y esa consulta NO carga la relación `recetaPresentacion`.
+    // Con el gate mirando sólo el payload, cancelar una pizza fallaba SIEMPRE
+    // con "falta elegir el tamaño y el sabor" — el ítem sí tenía su variación,
+    // simplemente no venía en el objeto. Lo encontró la revisión por agentes.
+    // Cadena mínima para tener una variación real: la FK no acepta un id suelto.
+    const { Receta } = require('../src/app/database/entities/productos/receta.entity');
+    const { Presentacion } = require('../src/app/database/entities/productos/presentacion.entity');
+    const { Sabor } = require('../src/app/database/entities/productos/sabor.entity');
+    const { RecetaPresentacion } = require('../src/app/database/entities/productos/receta-presentacion.entity');
+    const mk = async (ent: any, data: any) =>
+      await ds.getRepository(ent).save(ds.getRepository(ent).create(data as any) as any);
+
+    const receta: any = await mk(Receta, { nombre: 'RECETA GATE', activo: true });
+    const pres: any = await mk(Presentacion, {
+      nombre: 'GRANDE', producto: { id: pVar.id }, cantidad: 1, activo: true,
+    });
+    const sab: any = await mk(Sabor, {
+      nombre: 'CALABRESA', producto: { id: pVar.id }, categoria: 'GENERAL', activo: true,
+    });
+    const rp: any = await mk(RecetaPresentacion, {
+      nombre_generado: 'PAPAS CON VARIACION GRANDE CALABRESA',
+      receta: { id: receta.id }, presentacion: { id: pres.id }, sabor: { id: sab.id },
+      costo_calculado: 0, activo: true,
+    });
+
+    const itemVar: any = await ds.getRepository(VentaItem).save(
+      ds.getRepository(VentaItem).create({
+        venta: { id: venta.id }, producto: { id: pVar.id },
+        recetaPresentacion: { id: rp.id },
+        cantidad: 1, precioVentaUnitario: 1000, precioCostoUnitario: 0, estado: 'ACTIVO',
+      } as any),
+    );
+    // El payload que manda el PdV: producto cargado, recetaPresentacion NO.
+    const comoLoMandaElPdv = {
+      id: itemVar.id,
+      producto: { id: pVar.id, tipo: 'ELABORADO_CON_VARIACION' },
+      estado: 'CANCELADO',
+      cantidad: 1,
+    };
+    let cancelo = true; let errCancel = '';
+    try {
+      await invokeHandlerWithContext('updateVentaItem', undefined, itemVar.id, comoLoMandaElPdv);
+    } catch (e: any) { cancelo = false; errCancel = String(e?.message || e); }
+    ok(cancelo, 'se puede cancelar un ítem con variación aunque el payload no la traiga', errCancel);
+
+    // Y cambiar el producto a uno con variación SÍ la sigue exigiendo.
+    let bloqueoCambio = false;
+    try {
+      await invokeHandlerWithContext('updateVentaItem', undefined, plano.r.id, {
+        producto: { id: pVar.id },
+      });
+    } catch (e: any) { bloqueoCambio = /variación/i.test(String(e?.message || e)); }
+    ok(bloqueoCambio, 'pero cambiar el producto a uno con variación sigue exigiéndola');
+  }
+
   await ds.destroy();
   console.log(`\n[cobro-parcial] ${passed} OK, ${failed} FALLARON`);
   // Salida explícita: registerVentasHandlers deja un setInterval (retry comanda)

@@ -17,6 +17,21 @@ export enum DeliveryEstado {
 }
 
 /**
+ * Cómo llega el pedido a manos del cliente.
+ *
+ * `RETIRO` es un pedido que el cliente pasa a buscar: comparte todo con un
+ * delivery —cliente, ítems, cocina, cobro, cancelación— salvo las tres cosas
+ * que dependen de que alguien lo lleve: dirección, costo de envío y
+ * repartidor. Modelarlo como un modo de `Delivery` en vez de una entidad
+ * aparte es lo que hace que la lista, el footer, el cobro y la impresión
+ * funcionen sin enseñarles nada nuevo.
+ */
+export enum DeliveryModo {
+  DELIVERY = 'DELIVERY',
+  RETIRO = 'RETIRO',
+}
+
+/**
  * Entity representing a delivery
  */
 @Entity('deliveries')
@@ -47,6 +62,20 @@ export class Delivery extends BaseModel {
     default: DeliveryEstado.ABIERTO
   })
   estado!: DeliveryEstado;
+
+  /**
+   * `DELIVERY` (se reparte) o `RETIRO` (el cliente lo pasa a buscar).
+   *
+   * Default `DELIVERY`: todo lo que existía antes de esta columna era un
+   * reparto, así que la migración no cambia el sentido de ningún registro.
+   */
+  @Column({
+    name: 'modo',
+    type: 'varchar',
+    enum: DeliveryModo,
+    default: DeliveryModo.DELIVERY,
+  })
+  modo!: DeliveryModo;
 
   @Column({ name: 'fecha_abierto' })
   fechaAbierto!: Date;

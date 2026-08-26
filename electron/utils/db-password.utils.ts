@@ -18,6 +18,16 @@ function loadKeytar(): any | null {
 }
 
 export async function getDbPassword(): Promise<string> {
+  // `FRC_PG_PASSWORD` gana sobre el keychain, y se chequea ANTES de cargar
+  // keytar. En macOS, un item de keychain cuyo ACL no confía en el binario que
+  // lo lee dispara un diálogo de autorización: si nadie está frente a la
+  // máquina, `getPassword` no devuelve nunca y el arranque queda colgado sin
+  // error. Con esta salida el proceso headless (CI, script, sesión remota)
+  // nunca toca el llavero. Mismo nombre de variable que usa el DataSource del
+  // CLI (`src/app/database/datasource.ts`).
+  const fromEnv = process.env['FRC_PG_PASSWORD'];
+  if (fromEnv) return fromEnv;
+
   const k = loadKeytar();
   if (!k) return '';
   try {

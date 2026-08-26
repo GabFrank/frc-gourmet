@@ -2,6 +2,80 @@
 
 Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo sigue roto. La sección de **Seguridad** está mayormente resuelta (bcrypt, JWT en keytar, permisos en backend, must-change-password) — ver detalle abajo y [architecture/auth-permissions.md](../architecture/auth-permissions.md).
 
+## Ventas / PdV
+
+### `createVentaItem` acepta el precio que le mande el cliente — ABIERTO
+
+**Síntoma:** ninguno visible. El handler hace `repo.create(data)` y guarda el
+`precioVentaUnitario` tal cual viene del renderer, sin contrastarlo contra el
+catálogo. Como `/api/rpc` es **default-allow**, cualquier cliente con
+`VENTAS_PDV` puede crear un ítem con el precio que quiera llamando al handler
+directo. Comprobado el 2026-08-25: se creó un ítem de un producto de 25.000 a
+**1 guaraní** y entró sin una sola queja.
+
+**Por qué sigue abierto:** el PdV calcula el precio en el front (variaciones,
+adicionales, promociones, tipo de precio por cliente) y lo manda ya resuelto.
+Validarlo en el backend implica reimplementar ahí esa resolución, que es
+exactamente lo que hace `resolveOpcion` en el flujo de pedidos online — o sea,
+existe el modelo a seguir, pero es trabajo de verdad y toca el PdV entero.
+
+Lo que **sí** se cerró en 2026-08-25 es el caso más grosero: un producto
+`ELABORADO_CON_VARIACION` sin `recetaPresentacion` ahora se rechaza
+(`validarVariacionDelItem`, en `createVentaItem` y `updateVentaItem`). Antes se
+podía vender «1 PAPAS FRITAS» sin tamaño ni sabor, y ese ítem seguía a la
+comanda de cocina y al ticket sin describir nada cocinable. Test en
+`scripts/test-cobro-parcial-e2e.ts`, bloque «variación».
+
+**Regla general que deja esto:** en este repo, *toda* validación que sólo vive
+en un diálogo del PdV es evadible. El diálogo es ergonomía; el guard del
+handler es la única frontera.
+
+## Impresión
+
+### Los tickets imprimían `?` por cualquier carácter fuera de CP437 — RESUELTO (2026-08-25)
+
+**Síntoma:** un signo de pregunta en el papel donde iba un carácter. Sin error
+en ningún log: el ticket sale, el handler devuelve `ok: true`.
+
+**El caso que dolía:** todos los strings van en UPPERCASE y CP437 **no tiene
+`Á`**, así que un cliente llamado «Ángel» se imprimía «?NGEL» en todos los
+tickets. Venía de siempre; se descubrió recién cuando el `×` de un separador
+nuevo tampoco salía.
+
+**Resuelto** con `sanitizarParaTicket` en `ticket.utils.ts`, aplicado al
+construir cada línea. Detalle y tabla de qué sobrevive en
+[domains/tickets-impresos.md](../domains/tickets-impresos.md) → «El charset».
+
+## Cocina / delivery
+
+### El delivery nunca imprimía su comanda — RESUELTO (2026-08-25)
+
+**Síntoma:** un ítem de delivery aparecía en la pantalla de cocina (KDS) pero el
+papel no salía nunca. `printComandaInternal` devolvía `ok: true`, sin errores,
+sin nada en los logs.
+
+**Causa:** el predicado de "va a cocina" está escrito en **tres** lugares y sólo
+se movieron dos. `crearComandaItemsSiCorresponde` y `autoPrintComandaIfNeeded`
+ya aceptaban delivery y pedidos web; `printComandaInternal` seguía exigiendo
+mesa o comanda y cortaba por su early return. Detalle y tabla de los tres gates
+en [domains/cocina-impresion.md](../domains/cocina-impresion.md).
+
+**Cómo no repetirlo:** los tres cargan `relations: ['mesa','comanda','delivery']`.
+Si una relación no se carga, el gate lee `undefined` y volvés al mismo bug mudo.
+Tests en `scripts/test-ticket-venta-e2e.ts`, bloque «gate cocina».
+
+### Un pedido rechazado podía resucitar — RESUELTO (2026-08-25)
+
+**Síntoma (teórico, encontrado en auditoría, no reportado en producción):** con
+dos operadores, rechazar un pedido justo mientras se materializaba dejaba el
+pedido en `EN_PREPARACION` con venta viva y comanda impresa, pese al rechazo.
+
+**Causa:** `aceptar-pedido-online` marca `ACEPTADO` sin lock y materializa
+después; el `save` final de la materialización usaba el objeto `pedido` cargado
+al abrir su transacción y pisaba el `RECHAZADO` comiteado en el medio. Se cerró
+releyendo el estado dentro de la transacción antes de escribir. Detalle en
+[domains/pedidos-online.md](../domains/pedidos-online.md) → «Concurrencia».
+
 ## Fechas / períodos
 
 ### Filtro por rango de fechas devolvía CERO en SQLite — RESUELTO (2026-08-24)

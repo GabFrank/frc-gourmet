@@ -161,9 +161,26 @@ async function main() {
     try { await crearDelivery({ telefono: '12' }); } catch (e: any) { err = e.message; }
     ok(/al menos 4 dígitos/.test(err), 'A: rechaza un teléfono corto', err);
 
+    // La dirección ya NO es obligatoria por default (el mostrador toma pedidos
+    // por teléfono y la dirección suele llegar después), así que hay que
+    // encender el flag para probar que el candado sigue funcionando.
+    await ds.getRepository(PdvConfig).update({}, { deliveryRequiereDireccion: true } as any);
     err = '';
     try { await crearDelivery({ direccion: '   ' }); } catch (e: any) { err = e.message; }
-    ok(/dirección de entrega es obligatoria/.test(err), 'A: rechaza sin dirección', err);
+    ok(/dirección de entrega es obligatoria/.test(err), 'A: con el flag activo, rechaza sin dirección', err);
+
+    // Y en un RETIRO no aplica: no hay dirección que exigir.
+    const retiro: any = await crearDelivery({ direccion: '', modo: 'RETIRO', nombre: 'MARIA' });
+    ok(retiro?.delivery?.modo === 'RETIRO', 'A: un retiro se crea sin dirección', retiro?.delivery?.modo);
+    ok(!retiro?.delivery?.direccion, 'A: y no guarda dirección');
+    ok(Number(retiro?.venta?.costoDelivery ?? 0) === 0, 'A: sin costo de envío', retiro?.venta?.costoDelivery);
+
+    err = '';
+    try { await crearDelivery({ direccion: '', modo: 'RETIRO', nombre: '  ' }); } catch (e: any) { err = e.message; }
+    ok(/nombre del cliente es obligatorio/i.test(err),
+       'A: un retiro sin nombre se rechaza — es lo que identifica la bolsa', err);
+
+    await ds.getRepository(PdvConfig).update({}, { deliveryRequiereDireccion: false } as any);
   }
 
   // ═══════ [B] Máquina de estados (A-4) ═══════

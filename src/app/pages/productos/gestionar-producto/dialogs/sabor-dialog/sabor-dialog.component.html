@@ -68,6 +68,15 @@
         </mat-form-field>
       </div>
 
+      <!-- Si el nombre del sabor figura en el nombre compuesto de la variación.
+           Se apaga en los productos de un solo sabor, donde no distingue nada. -->
+      <div class="form-row">
+        <mat-checkbox formControlName="mostrarEnNombre"
+                      matTooltip="Destildalo cuando el sabor no aporta al nombre, por ejemplo un único sabor llamado TRADICIONAL">
+          Mostrar en el nombre del producto
+        </mat-checkbox>
+      </div>
+
       <!-- Descripcion Field -->
       <div class="form-row">
         <mat-form-field appearance="outline" class="full-width">

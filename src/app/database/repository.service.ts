@@ -524,6 +524,7 @@ export abstract class RepositoryService {
   abstract rechazarPedidoOnline(pedidoId: number, motivo: string): Observable<any>;
   abstract avanzarEstadoPedidoOnline(pedidoId: number, nuevoEstado: string): Observable<any>;
   abstract vincularVentaPedidoOnline(pedidoId: number, ventaId: number): Observable<any>;
+  abstract getDetalleVariacionItems(itemIds: number[]): Observable<any>;
   abstract getTiendaOnlineConfig(): Observable<any>;
   abstract updateTiendaOnlineConfig(data: any): Observable<any>;
   abstract getZonasDeliveryAdmin(): Observable<any[]>;

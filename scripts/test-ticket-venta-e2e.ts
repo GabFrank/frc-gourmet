@@ -20,8 +20,9 @@ import * as fs from 'fs';
 import { DataSource } from 'typeorm';
 
 import { getDataSourceOptions } from '../src/app/database/database.config';
-import { buildVentaTicketLines } from '../electron/handlers/documentos-tickets.handler';
-import { renderTicketToPlainText, invalidateTicketEmpresaCache } from '../electron/utils/ticket.utils';
+import { buildVentaTicketLines, printComandaInternal } from '../electron/handlers/documentos-tickets.handler';
+import { componerEncabezadoComanda } from '../electron/utils/nombre-variacion.utils';
+import { renderTicketToPlainText, invalidateTicketEmpresaCache, sanitizarParaTicket, ticketColumns, ticketCantidad } from '../electron/utils/ticket.utils';
 
 const WIDTH = 48;
 
@@ -226,6 +227,184 @@ async function main() {
     ok(conAmbas[3].o.size === 'tall', 'ubicacion: con mesa, la comanda no compite en tamano');
     ok(buildEncabezadoUbicacion(null, '#3', tt)[1].o.size === 'big',
       'ubicacion: sola, la comanda va en grande');
+  }
+
+  // ── Detalle del ítem: variación, quitados, extras, observaciones ────────
+  //
+  // Antes el ticket decía «1 PIZZA» y nada más: el cliente no tenía forma de
+  // verificar que le dieron lo que pidió, y en delivery esa hoja es lo único
+  // que recibe.
+  {
+    console.log('\n[detalle del item]');
+    const { Presentacion } = require('../src/app/database/entities/productos/presentacion.entity');
+    const { Sabor } = require('../src/app/database/entities/productos/sabor.entity');
+    const { Receta } = require('../src/app/database/entities/productos/receta.entity');
+    const { RecetaPresentacion } = require('../src/app/database/entities/productos/receta-presentacion.entity');
+    const { VentaItemSabor } = require('../src/app/database/entities/ventas/venta-item-sabor.entity');
+    const { VentaItemObservacion } = require('../src/app/database/entities/ventas/venta-item-observacion.entity');
+    const { Observacion } = require('../src/app/database/entities/productos/observacion.entity');
+    const R = (e: any) => ds.getRepository(e);
+    const save = (e: any, d: any) => R(e).save(R(e).create(d));
+    const ticket = async (ventaId: number, w: number) => {
+      const b = await buildVentaTicketLines(ds, ventaId, { width: w });
+      return render(b!.lines, w);
+    };
+
+    const pPizza = await save(Producto, { nombre: 'PIZZA', tipo: 'ELABORADO_CON_VARIACION', activo: true });
+    const presGrande = await save(Presentacion, { nombre: 'GRANDE', cantidad: 1, principal: true, producto: pPizza });
+    const sCalabresa = await save(Sabor, { nombre: 'CALABRESA', categoria: 'PIZZA', activo: true, producto_id: pPizza.id });
+    const sBacon = await save(Sabor, { nombre: 'BACON', categoria: 'PIZZA', activo: true, producto_id: pPizza.id });
+    const rec = await save(Receta, { nombre: 'R', rendimiento: 1, costoCalculado: 0, activo: true, unidadRendimiento: 'UNIDADES' });
+    const rpCal = await save(RecetaPresentacion, { nombre_generado: 'X', costo_calculado: 0, activo: true, receta: rec, presentacion: presGrande, sabor: sCalabresa });
+    const rpBac = await save(RecetaPresentacion, { nombre_generado: 'X', costo_calculado: 0, activo: true, receta: rec, presentacion: presGrande, sabor: sBacon });
+
+    const vP = await save(Venta, { estado: 'CONCLUIDA', total: 85000 });
+    const itP = await save(VentaItem, {
+      venta: { id: vP.id }, producto: { id: pPizza.id }, cantidad: 1,
+      precioCostoUnitario: 0, precioVentaUnitario: 85000, precioAdicionales: 0, estado: 'ACTIVO',
+    });
+    await save(VentaItemSabor, { ventaItem: { id: itP.id }, recetaPresentacion: { id: rpCal.id }, proporcion: 1, precioReferencia: 85000, costoReferencia: 0, activo: true });
+    const obs = await save(Observacion, { descripcion: 'SIN CEBOLLA', activo: true });
+    await save(VentaItemObservacion, { ventaItem: { id: itP.id }, observacion: { id: obs.id }, activo: true });
+
+    const txt = await ticket(vP.id, 48);
+    ok(/PIZZA/.test(txt), 'imprime el producto');
+    // `-` y no `·`: lo que va al papel pasa por `sanitizarParaTicket`, que
+    // degrada el punto medio porque en térmica queda casi invisible. El test
+    // mira el texto tal como sale impreso, no el que compone la función.
+    ok(/GRANDE - CALABRESA/.test(txt), 'imprime tamaño y sabor debajo', txt);
+    ok(/1\s+x\s+PIZZA/.test(txt), 'la x va separada del número, no pegada', txt);
+    ok(/SIN CEBOLLA/.test(txt), 'imprime la observación del cliente');
+
+    // Mitad y mitad: la fracción es lo que el cliente pidió y por lo que pagó.
+    const vM = await save(Venta, { estado: 'CONCLUIDA', total: 85000 });
+    const itM = await save(VentaItem, {
+      venta: { id: vM.id }, producto: { id: pPizza.id }, cantidad: 1,
+      precioCostoUnitario: 0, precioVentaUnitario: 85000, precioAdicionales: 0, estado: 'ACTIVO',
+    });
+    await save(VentaItemSabor, { ventaItem: { id: itM.id }, recetaPresentacion: { id: rpCal.id }, proporcion: 0.5, precioReferencia: 85000, costoReferencia: 0, activo: true });
+    await save(VentaItemSabor, { ventaItem: { id: itM.id }, recetaPresentacion: { id: rpBac.id }, proporcion: 0.5, precioReferencia: 85000, costoReferencia: 0, activo: true });
+    const txtM = await ticket(vM.id, 48);
+    ok(/1\/2 CALABRESA \+ 1\/2 BACON/.test(txtM), 'mitad y mitad con su fracción', txtM);
+
+    // El flag apaga la parte que no aporta.
+    await R(Presentacion).update(presGrande.id, { mostrarEnNombre: false });
+    await R(Sabor).update(sCalabresa.id, { mostrarEnNombre: false });
+    const txtSin = await ticket(vP.id, 48);
+    ok(!/GRANDE/.test(txtSin.split('SIN CEBOLLA')[0].split('PIZZA')[1] || ''),
+       'con mostrarEnNombre=false el tamaño desaparece del detalle', txtSin);
+    await R(Presentacion).update(presGrande.id, { mostrarEnNombre: true });
+    await R(Sabor).update(sCalabresa.id, { mostrarEnNombre: true });
+
+    // La comanda de COCINA arma el nombre por su cuenta (tamaño y sabores en
+    // grande, uno por línea, que el cocinero lee de lejos) y tenía que respetar
+    // el flag igual que el ticket del cliente. Se pasó por alto al implementarlo
+    // y salió en la primera prueba real: se destildó la presentación de
+    // QUESADILLAS y el tamaño siguió imprimiéndose en cocina.
+    ok(componerEncabezadoComanda('QUESADILLAS', 'TRADICIONAL', false) === '',
+       'comanda: con el flag apagado no hay línea de tamaño',
+       componerEncabezadoComanda('QUESADILLAS', 'TRADICIONAL', false));
+    // El encabezado ya dice «1 PIZZA»: esta línea lleva SÓLO el tamaño, o se
+    // imprimía «1 PIZZA» seguido de «PIZZA GRANDE».
+    ok(componerEncabezadoComanda('PIZZA', 'GRANDE', true) === 'GRANDE',
+       'comanda: sólo el tamaño, sin repetir el producto',
+       componerEncabezadoComanda('PIZZA', 'GRANDE', true));
+    ok(componerEncabezadoComanda('PIZZA', null, true) === '',
+       'comanda: sin presentación no imprime línea vacía');
+
+  }
+
+  // ── Lo que va al papel tiene que ser imprimible ─────────────────────────
+  //
+  // El charset de las térmicas es CP437 y la librería manda `?` por todo lo que
+  // no entra. Falla en silencio: el ticket sale, nadie ve un error, y en el
+  // papel hay un signo de pregunta. Se descubrió porque el `×` del separador de
+  // cantidad no aparecía; mirando de cerca, `Á` tampoco — y como todos los
+  // strings van en UPPERCASE, cualquier nombre con tilde inicial salía roto.
+  {
+    console.log('\n[charset] el texto que va a la impresora');
+    ok(sanitizarParaTicket('2× PIZZA') === '2x PIZZA',
+       'el signo de multiplicación pasa a x', sanitizarParaTicket('2× PIZZA'));
+    // La cantidad se compone con `ticketCantidad`, que ya escribe una x ASCII;
+    // el saneador es la red por si algún texto trae el símbolo Unicode.
+    ok(ticketCantidad(1, 6) === '1  x  ', 'bloque de cantidad de ancho fijo', JSON.stringify(ticketCantidad(1, 6)));
+    ok(ticketCantidad(12, 6) === '12 x  ', 'con dos dígitos la x no se corre', JSON.stringify(ticketCantidad(12, 6)));
+    ok(sanitizarParaTicket('ÁNGEL') === 'ANGEL',
+       'una mayúscula acentuada que CP437 no tiene pierde el acento, no el carácter',
+       sanitizarParaTicket('ÁNGEL'));
+    ok(sanitizarParaTicket('JALAPEÑO') === 'JALAPEÑO',
+       'la Ñ sí existe en CP437 y se conserva', sanitizarParaTicket('JALAPEÑO'));
+    ok(sanitizarParaTicket('PAGADO — NO COBRAR') === 'PAGADO - NO COBRAR',
+       'el guion largo pasa a guion');
+    ok(!/[^\x00-\xFF]/.test(sanitizarParaTicket('A → B … ₲ ✓ “x”')),
+       'no queda ningún carácter fuera del rango de un byte',
+       sanitizarParaTicket('A → B … ₲ ✓ “x”'));
+
+    // El saneo corre ANTES de medir: si corriera después, `→` (1 carácter que
+    // pasa a 2) correría las columnas.
+    const fila = renderTicketToPlainText({
+      printerWidth: 32, cutAtEnd: false,
+      lines: [ticketColumns([
+        { text: '10×', width: 5, align: 'L' },
+        { text: 'A → B', width: 15, align: 'L' },
+        { text: '5.000', width: 12, align: 'R' },
+      ])],
+    }).split('\n').find((l) => l.includes('10x')) || '';
+    ok(fila.trimEnd().length <= 32, 'las columnas siguen alineadas tras el saneo', fila);
+  }
+
+  // ── El gate de a quién le corresponde comanda de cocina ─────────────────
+  //
+  // Hay TRES lugares que deciden si un ítem llega a cocina: el que crea el
+  // `ComandaItem`, el que dispara la impresión automática y este, que imprime.
+  // Estaban desalineados: los dos primeros ya aceptaban delivery y web, y este
+  // seguía exigiendo mesa o comanda. El síntoma era mudo — el pedido aparecía
+  // en la pantalla de cocina, el papel no salía, y `printComandaInternal`
+  // devolvía `ok: true` sin un solo error.
+  //
+  // Se asierta sobre `printed`/`errors` y no sobre papel: sin impresoras
+  // configuradas, una venta que SÍ corresponde a cocina falla al buscar la
+  // impresora del sector, y una que NO corresponde sale limpia por el early
+  // return. Esa diferencia es exactamente el gate.
+  {
+    console.log('\n[gate cocina] a quién le corresponde comanda');
+    const { Venta } = require('../src/app/database/entities/ventas/venta.entity');
+    const { VentaItem } = require('../src/app/database/entities/ventas/venta-item.entity');
+    const { Delivery } = require('../src/app/database/entities/ventas/delivery.entity');
+    const { Producto } = require('../src/app/database/entities/productos/producto.entity');
+
+    const prod = await ds.getRepository(Producto).save(
+      ds.getRepository(Producto).create({ nombre: 'PRODUCTO GATE', tipo: 'RETAIL', activo: true } as any),
+    );
+
+    const crearVenta = async (extra: any) => {
+      const v: any = await ds.getRepository(Venta).save(
+        ds.getRepository(Venta).create({ estado: 'ABIERTA', ...extra } as any),
+      );
+      await ds.getRepository(VentaItem).save(ds.getRepository(VentaItem).create({
+        venta: { id: v.id }, producto: { id: (prod as any).id },
+        cantidad: 1, precioVentaUnitario: 1000, precioCostoUnitario: 0, estado: 'ACTIVO',
+      } as any));
+      return v;
+    };
+
+    const mostrador = await crearVenta({});
+    const rMostrador = await printComandaInternal(ds, mostrador.id);
+    ok(rMostrador.ok && rMostrador.printed.length === 0 && rMostrador.errors.length === 0,
+       'venta de mostrador: no le corresponde comanda, sale por el early return', rMostrador);
+
+    const del: any = await ds.getRepository(Delivery).save(
+      ds.getRepository(Delivery).create({ estado: 'ABIERTO', telefono: '0981000000', fechaAbierto: new Date() } as any),
+    );
+    const conDelivery = await crearVenta({ delivery: { id: del.id } });
+    const rDelivery = await printComandaInternal(ds, conDelivery.id);
+    ok(rDelivery.errors.length > 0 || rDelivery.printed.length > 0,
+       'delivery: SÍ le corresponde comanda — pasa el gate y busca la impresora', rDelivery);
+
+    const web = await crearVenta({ canalOrigen: 'PEDIDO_ONLINE' });
+    const rWeb = await printComandaInternal(ds, web.id);
+    ok(rWeb.errors.length > 0 || rWeb.printed.length > 0,
+       'pedido de la web sin delivery (retiro): también le corresponde', rWeb);
   }
 
   await ds.destroy();

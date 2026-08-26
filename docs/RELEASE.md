@@ -97,11 +97,11 @@ Push a `develop` dispara `release.yml`:
 
    > **No** pushea cambios a `develop`/`release/beta`/`master`. La rama queda intacta. `package.json` en la rama mantiene la version anterior (irrelevante — la version real vive en el tag y se patchea en el job build).
 
-2. Job `build` matrix (win/linux):
+2. Job `build` (sólo Windows desde 2026-08-25):
    - Checkout del tag exacto (`v1.4.0-alpha.8`)
    - **Patch in-place de `package.json`** con la version del tag (sin commit)
    - Build Angular
-   - `electron-builder --publish always` → sube `.exe` + `.AppImage` + `alpha.yml` al GitHub Release
+   - `electron-builder --publish always` → sube `.exe` + `alpha.yml` al GitHub Release
 
 ### 3. Promover alpha → beta
 
@@ -154,7 +154,17 @@ git push
 
 ### Plataformas soportadas
 
-Solo se generan instaladores para **Windows** (NSIS `.exe`) y **Linux** (`.AppImage`). macOS está dropeado del pipeline (no se requieren releases para Mac). Si en el futuro hace falta, hay que reagregar `mac` block en `package.json` y `macos-latest` al matrix de `release.yml`.
+Solo se genera instalador para **Windows** (NSIS `.exe`).
+
+**Linux salió del release el 2026-08-25**: la flota es 100% Windows y cada
+release gastaba un runner completo en un AppImage que nadie descargaba. El
+target `linux` **sigue declarado en `package.json`**, así que `npm run
+electron:build` local lo puede generar; lo que se retiró es el build
+automático. Para volver a publicarlo, agregar `ubuntu-latest` al matrix `os`
+de `release.yml`.
+
+macOS nunca estuvo en el pipeline. Si hiciera falta, hay que agregar el bloque
+`mac` en `package.json` y `macos-latest` al matrix.
 
 ### Windows — opciones (de menor a mayor esfuerzo)
 
@@ -196,7 +206,7 @@ Da una firma reconocida y elimina SmartScreen tras un rato (reputation building)
 
 Microsoft mismo provee firma cloud-based desde 2024. ~$9.99/mes. Reputación inmediata con SmartScreen. Requiere validación de identidad. Reemplaza el modelo viejo de comprar EV cert ($300/año).
 
-### Linux (AppImage)
+### Linux (AppImage) — fuera del release automático
 
 No requiere firma. AppImage corre directo si tiene permiso de ejecución (`chmod +x`).
 
@@ -322,7 +332,8 @@ Path B (con SignPath, solo Windows):
             → gh release upload (assets firmados)
 ```
 
-Linux siempre va por Path A. Windows usa Path B solo cuando los secrets estan presentes; sino fallback a Path A unsigned.
+Con Linux fuera de la matriz, Path A queda sólo para Windows sin secrets de
+firma. La condición del workflow se dejó intacta por si Linux vuelve.
 
 ### Por que el script regenera el manifest
 

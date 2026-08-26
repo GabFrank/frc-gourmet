@@ -85,6 +85,15 @@ export class Venta extends BaseModel {
   fechaCierre?: Date;
 
   // Comanda (tarjeta de cuenta individual)
+  /**
+   * De dónde vino la venta: `LOCAL` (mostrador/mesa), `WEB` (pedido online
+   * PICKUP/DELIVERY) o `QR_MESA` (autoservicio en mesa). Además de alimentar
+   * los reportes por canal, es lo que hace que un pedido online sin mesa llegue
+   * a la cocina: los hooks de KDS/impresión se saltean las ventas de mostrador.
+   */
+  @Column({ name: 'canal_origen', type: 'varchar', length: 20, default: 'LOCAL' })
+  canalOrigen!: 'LOCAL' | 'WEB' | 'QR_MESA';
+
   @ManyToOne('Comanda', { nullable: true })
   @JoinColumn({ name: 'comanda_id' })
   comanda?: any;

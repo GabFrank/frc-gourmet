@@ -14,7 +14,7 @@ import { registerPublicOperation } from '../server/public-routes';
  * Ver docs/arquitectura/webapp-pedidos-plan.md.
  */
 
-const PERM = 'VENTAS_PDV';
+const PERM = 'PEDIDOS_ONLINE_CONFIGURAR';
 
 /** Get-or-create de la fila única de config. */
 export async function getTiendaConfig(dataSource: DataSource): Promise<TiendaOnlineConfig> {

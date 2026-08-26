@@ -2345,6 +2345,9 @@ contextBridge.exposeInMainWorld('api', {
   vincularVentaPedidoOnline: async (pedidoId: number, ventaId: number): Promise<any> => {
     return await ipcRenderer.invoke('vincular-venta-pedido-online', pedidoId, ventaId);
   },
+  getDetalleVariacionItems: async (itemIds: number[]): Promise<any> => {
+    return await ipcRenderer.invoke('get-detalle-variacion-items', itemIds);
+  },
   getTiendaOnlineConfig: async (): Promise<any> => {
     return await ipcRenderer.invoke('get-tienda-online-config');
   },

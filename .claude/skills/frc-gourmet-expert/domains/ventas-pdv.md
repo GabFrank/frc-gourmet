@@ -2,6 +2,34 @@
 
 El módulo más visible y operativamente más usado. Ventas, mesas, comandas, delivery, atajos, multi-sabor, descuento de stock automático.
 
+
+## Qué venta va a cocina (cambió el 2026-08-24)
+
+Los hooks `crearComandaItemsSiCorresponde` y `autoPrintComandaIfNeeded`
+(`ventas.handler.ts`) deciden si una venta genera `ComandaItem` — y sin
+`ComandaItem` no hay KDS ni ruteo a la impresora del sector del producto.
+
+El gate era `mesa || comanda`. Eso dejaba afuera **al delivery**: una venta creada
+por `delivery-crear` no tiene mesa ni comanda, así que sus ítems **nunca se
+imprimían en la impresora asignada al producto**. Lo único que salía era el ticket
+único del reparto (`printDeliveryTicketInternal`, rol `TICKET_VENTA`), que es otra
+cosa. Era un bug, no una limitación de diseño.
+
+Hoy el gate es:
+
+```ts
+mesa || comanda || delivery || canalOrigen !== 'LOCAL'
+```
+
+O sea: **van a cocina mesa, comanda, delivery y los pedidos de la web; la única
+que no va es la venta rápida de mostrador.** `ventas.canal_origen` es la columna
+nueva (`LOCAL` por default, así que ninguna venta histórica cambia de
+comportamiento) y además sirve para separar el canal en los reportes.
+
+⚠️ Si tocás esos hooks, acordate de cargar las relaciones: el chequeo de
+`venta.delivery?.id` da siempre falso si la consulta no la trae.
+
+
 ## Estado de la mesa: quién la ocupa y quién la libera (2026-08)
 
 **El estado de la mesa lo maneja el backend, junto con la venta.** Antes el
@@ -575,8 +603,34 @@ Una sola fila. Campos:
 | `deliveryTiempoRojo` | 60 | min para color rojo |
 | `deliveryPrecioDefaultId` | null | Zona preseleccionada al crear (null = la de menor valor) |
 | `deliveryCobroAnticipadoDefault` | false | Estado inicial del toggle COBRO ANTICIPADO |
-| `deliveryRequiereDireccion` | true | Dirección obligatoria para dar de alta |
-| `deliveryRequiereRepartidor` | true | Repartidor obligatorio para pasar a EN_CAMINO |
+> ### Delivery y retiro son el mismo registro (2026-08-25)
+>
+> `Delivery.modo` vale `DELIVERY` (se reparte) o `RETIRO` (el cliente lo pasa a
+> buscar). Comparten cliente, ítems, cocina, cobro y cancelación; el retiro se
+> diferencia sólo en las tres cosas que dependen de que alguien lo lleve:
+> **dirección, costo de envío y repartidor**.
+>
+> Consecuencias que hay que respetar al tocar el módulo:
+>
+> - El alta es **un solo formulario** con un toggle. El cajero atiende el
+>   teléfono sin saber qué va a pedir el cliente.
+> - En modo RETIRO el **nombre pasa a ser obligatorio** (reemplaza a la
+>   dirección como lo que identifica la bolsa en el mostrador) y se valida en el
+>   backend, no sólo en el diálogo.
+> - **`EN_CAMINO` no existe** para un retiro: `transicionesDe(modo)` en
+>   `delivery.handler.ts` tiene su propia tabla, espejada en el front.
+> - **El candado del repartidor no aplica**: nadie lo lleva.
+> - El **único botón del footer** que un retiro no puede usar es REPARTIDOR.
+>   Cobra, edita ítems, imprime y se cancela por los mismos botones — el cobro
+>   nunca fue distinto, es el mismo diálogo con el envío en cero.
+> - El **reloj se congela** al marcar `PARA_ENTREGA`: de ahí en más falta que
+>   venga el cliente, que no depende del local. Sin eso un retiro se ponía rojo
+>   a las horas y el rojo dejaba de significar «hay que apurarse» en toda la
+>   lista.
+
+| `deliveryRequiereDireccion` | **false** desde 2026-08-25 | Dirección obligatoria para dar de alta. El default era `true`; se invirtió porque el mostrador toma pedidos por teléfono y la dirección suele llegar después. La migración `DireccionDeliveryOpcional` también pone en `false` la fila existente |
+| `deliveryRequiereRepartidor` | true | Repartidor obligatorio. La etapa en la que bloquea la define `deliveryRepartidorEtapa` |
+| `deliveryRepartidorEtapa` | `EN_CAMINO` | Cuándo exige el repartidor: `EN_CAMINO` (al enviar) o `ENTREGADO` (al finalizar). Permite que un delivery salga sin repartidor asignado y se complete después |
 | `deliveryTelefonoMinDigitos` | 4 | Mínimo de dígitos para habilitar el alta |
 | `deliveryPageSize` | 20 | Filas por página en la lista |
 | `deliveryMostrarPendientesOtrasCajas` | true | Suma a la lista los pendientes de otros turnos |

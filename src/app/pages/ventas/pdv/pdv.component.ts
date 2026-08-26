@@ -182,6 +182,17 @@ export class PdvComponent implements OnInit, OnDestroy {
   activeTab: 'MESAS' | 'COMANDAS' = 'MESAS';
   mesasOcupadasCount = 0;
   comandasOcupadasCount = 0;
+  /** Repartos vivos (ABIERTO / PARA_ENTREGA / EN_CAMINO). */
+  deliveriesPendientesCount = 0;
+  /** Pedidos de la web esperando que alguien los acepte. */
+  pedidosOnlinePendientesCount = 0;
+  /**
+   * Con la tienda online apagada no entran pedidos web, así que su badge no
+   * tiene nada que contar y el poll que lo alimenta no tiene a qué preguntarle.
+   */
+  tiendaOnlineActiva = false;
+  private pedidosOnlineInterval: any;
+  private ultimoConteoPedidosOnline = 0;
   private refreshingComandas = false;
 
   // Sector filter for tables
@@ -253,6 +264,12 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
+    // Los pedidos de la web entran solos. Sin un aviso acá, el cajero se entera
+    // recién si abre el diálogo de delivery por su cuenta: un pedido puede
+    // quedar sin mirar mientras el cliente espera.
+    this.refrescarContadoresDelivery();
+    this.pedidosOnlineInterval = setInterval(() => this.refrescarContadoresDelivery(), 15000);
+
     // Dispositivo de este PC (para el gate de cobro por dispositivo).
     this.currentDeviceId = (window as any).api?.getDeviceId ? (window as any).api.getDeviceId() : null;
 
@@ -440,6 +457,11 @@ export class PdvComponent implements OnInit, OnDestroy {
         }
       } catch (e) { /* use default */ }
 
+      try {
+        const tienda: any = await firstValueFrom(this.repositoryService.getTiendaOnlineConfig());
+        this.tiendaOnlineActiva = !!tienda?.activa;
+      } catch { /* sin config legible se asume apagada */ }
+
       // Load atajo grupos
       await this.loadAtajoGrupos();
 
@@ -460,9 +482,73 @@ export class PdvComponent implements OnInit, OnDestroy {
     }, 1000);
   }
 
+  /**
+   * Refresca los dos badges del botón DELIVERY y avisa con un sonido cuando
+   * entra un pedido nuevo. El sonido se genera con WebAudio en vez de un
+   * archivo: no hay assets de audio en el proyecto y empaquetar uno para un
+   * beep no se justifica.
+   */
+  private async refrescarContadoresDelivery(): Promise<void> {
+    if (!this.deliveryHabilitado) return;
+    if (this.tiendaOnlineActiva) {
+      try {
+        const res: any = await firstValueFrom(this.repositoryService.contarPedidosOnlinePendientes());
+        const nuevos = Number(res?.total ?? res ?? 0) || 0;
+        if (nuevos > this.ultimoConteoPedidosOnline) this.sonarAvisoPedido();
+        this.ultimoConteoPedidosOnline = nuevos;
+        this.pedidosOnlinePendientesCount = nuevos;
+      } catch {
+        /* el badge no puede romper el PdV */
+      }
+    }
+    try {
+      const caja = this.caja?.id;
+      if (caja) {
+        const r: any = await firstValueFrom(
+          this.repositoryService.deliveryListarPdv(caja, { page: 1, pageSize: 200 }),
+        );
+        const vivos = (r?.data || []).filter((d: any) =>
+          ['ABIERTO', 'PARA_ENTREGA', 'EN_CAMINO'].includes(d?.estado));
+        this.deliveriesPendientesCount = vivos.length;
+      }
+    } catch {
+      /* idem */
+    }
+  }
+
+  /** Beep de aviso. Deliberadamente distinto del resto: el local tiene ruido. */
+  private sonarAvisoPedido(): void {
+    try {
+      const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const tono = (freq: number, inicio: number, dur: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime + inicio);
+        gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + inicio + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + inicio + dur);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + inicio);
+        osc.stop(ctx.currentTime + inicio + dur + 0.02);
+      };
+      // Dos notas ascendentes: se distingue de cualquier beep de error.
+      tono(880, 0, 0.16);
+      tono(1320, 0.18, 0.22);
+      setTimeout(() => ctx.close().catch(() => {}), 900);
+    } catch {
+      /* sin audio no pasa nada */
+    }
+  }
+
   ngOnDestroy(): void {
     if (this.mesasRefreshInterval) {
       clearInterval(this.mesasRefreshInterval);
+    }
+    if (this.pedidosOnlineInterval) {
+      clearInterval(this.pedidosOnlineInterval);
     }
     if (this.focusBuscadorTimeout) {
       clearTimeout(this.focusBuscadorTimeout);

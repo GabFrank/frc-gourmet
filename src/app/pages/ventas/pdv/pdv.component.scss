@@ -1051,6 +1051,9 @@ tr.example-element-row:not(.example-expanded-row):active {
   
   .bottom-button {
     flex: 1;
+    // Ancla de los badges: sin esto se posicionan contra el contenedor de la
+    // fila y todos se apilan en la misma esquina.
+    position: relative;
     margin: 0 5px;
     background-color: #b71c1c;
     color: white;
@@ -1228,3 +1231,46 @@ tr.example-element-row:not(.example-expanded-row):active {
   .cr-pagado strong { color: #66bb6a; }
   .cr-saldo strong { color: #ffa726; }
 }
+
+
+/* Badges del botón DELIVERY, contra la esquina superior derecha del botón.
+   `.bottom-button` tiene `overflow: hidden`, así que van por dentro del borde
+   en vez de montados encima como haría matBadge. */
+.pdv-badges {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  display: flex;
+  gap: 2px;
+  // Por encima del ripple, que es el otro absolute del botón.
+  z-index: 2;
+}
+
+/* Material envuelve el contenido proyectado en `.mdc-button__label`, y ese
+   wrapper viene con `position: relative`. Sin esto los badges se anclan al
+   label —o sea al centro del botón, pegados al texto— en vez de al borde.
+
+   Va con `::ng-deep` porque el label lo genera el template de `MatButton`, no
+   el nuestro: no lleva el atributo de scope del componente y un selector
+   normal no lo alcanza. Acotado con `:host` para que no se escape al resto de
+   la app. */
+:host ::ng-deep .bottom-buttons .bottom-button .mdc-button__label {
+  position: static;
+}
+
+.pdv-badge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  color: #fff;
+}
+
+/* Rojo = pide una decisión ahora (aceptar o rechazar).
+   Naranja = trabajo en curso, no bloquea a nadie. */
+.pdv-badge-web { background-color: var(--error-color); }
+.pdv-badge-repartos { background-color: var(--warning-color); }

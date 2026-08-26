@@ -30,6 +30,9 @@
   border-bottom: 1px solid var(--divider-color, rgba(255,255,255,0.12));
 
   .filtro-estado { width: 160px; }
+
+  // El aviso de pedidos web se va al extremo derecho de la fila.
+  .aviso-pedidos { margin-left: auto; }
 }
 
 // Content
@@ -40,7 +43,13 @@
 }
 
 .delivery-lista {
-  flex: 7;
+  // Base 0, no `auto`: con `flex: 7` a secas el reparto depende del ancho
+  // intrínseco del contenido, y el panel de la cola —tarjetas con dos botones
+  // adentro— empujaba hasta quedarse con casi la mitad de la pantalla en vez
+  // del 30% que ocupa el detalle. Con base 0 el 70/30 es exacto y los dos
+  // paneles caen siempre en el mismo lugar.
+  flex: 7 1 0;
+  min-width: 0;
   overflow: hidden;
   border-right: 1px solid var(--divider-color, rgba(255,255,255,0.12));
   display: flex;
@@ -115,7 +124,8 @@ tr.mat-mdc-row {
 
 // Detalle panel
 .delivery-detalle {
-  flex: 3;
+  flex: 3 1 0;
+  min-width: 0;
   overflow-y: auto;
   padding: 10px;
   display: flex;
@@ -135,106 +145,40 @@ tr.mat-mdc-row {
 }
 
 // Detalle cards
-.detalle-card {
-  border-radius: 6px;
-  overflow: hidden;
-  background-color: var(--surface-hover, rgba(255,255,255,0.04));
-
-  .detalle-card-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
-    background-color: rgba(33, 150, 243, 0.1);
-    font-size: 11px;
-    font-weight: 600;
-    color: #2196f3;
-
-    mat-icon {
-      font-size: 14px;
-      width: 14px;
-      height: 14px;
-    }
-  }
-
-  .detalle-card-body {
-    padding: 8px 10px;
-  }
-}
-
-.detalle-card-total {
-  background-color: rgba(33, 150, 243, 0.06);
-  border: 1px solid rgba(33, 150, 243, 0.15);
-}
-
-.detalle-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  padding: 1px 0;
-}
-
-.detalle-label {
-  font-weight: 600;
-  opacity: 0.7;
-}
-
-.total-row {
-  font-weight: 700;
-  font-size: 14px;
-  padding-top: 4px;
-  color: #2196f3;
-}
-
-.item-row {
-  margin-bottom: 4px;
-  font-size: 12px;
-}
-
-.item-main {
-  display: flex;
-  justify-content: space-between;
-}
-
-.item-sub {
-  padding-left: 12px;
-  opacity: 0.6;
-  font-size: 11px;
-}
-
-.item-cancelado {
-  opacity: 0.4;
-  text-decoration: line-through;
-}
-
-.empty-items {
-  text-align: center;
-  opacity: 0.4;
-  padding: 8px;
-  font-size: 12px;
-}
-
 // Footer
+/* Footer de acciones ~15% más grande que el default de Material. Son los
+   botones que el cajero toca con el pedido en la mano y a veces en una pantalla
+   táctil: a 36px de alto y 12px de texto se erraba el objetivo. */
 .delivery-footer {
-  padding: 8px 16px;
+  padding: 10px 16px;
   border-top: 1px solid var(--divider-color, rgba(255,255,255,0.12));
 
   .footer-actions {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     align-items: center;
     flex-wrap: wrap;
   }
 
   .footer-separator {
     width: 1px;
-    height: 24px;
+    height: 28px;
     background-color: var(--divider-color, rgba(255,255,255,0.12));
-    margin: 0 4px;
+    margin: 0 6px;
   }
 
   button {
-    font-size: 12px;
+    font-size: 14px;
+    min-height: 42px;
+    padding: 0 16px;
+    letter-spacing: .02em;
+
+    mat-icon {
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+      margin-right: 4px;
+    }
   }
 }
 
@@ -259,4 +203,392 @@ tr.mat-mdc-row {
   vertical-align: middle;
   margin-left: 4px;
   color: var(--text-secondary);
+}
+
+/* ── Cola de pedidos online (panel derecho, sin delivery seleccionado) ─── */
+.cola-online {
+  gap: 10px;
+}
+
+.cola-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--text-secondary);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--divider-color, rgba(255,255,255,0.12));
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+  .cola-count {
+    margin-left: auto;
+    background: var(--warning-color);
+    color: #fff;
+    border-radius: 10px;
+    padding: 1px 8px;
+    font-size: 12px;
+  }
+}
+
+.cola-item {
+  border: 1px solid var(--divider-color, rgba(255,255,255,0.12));
+  border-left: 3px solid var(--warning-color);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cola-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cola-numero { font-weight: 700; color: var(--text-primary); font-size: 13px; }
+
+.cola-tipo {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  padding: 2px 7px;
+  border-radius: 10px;
+  border: 1px solid var(--info-color);
+  color: var(--info-color);
+
+  /* El retiro se distingue del delivery de un vistazo: no lleva repartidor. */
+  &.retiro { border-color: var(--success-color); color: var(--success-color); }
+}
+
+.cola-espera {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  &.verde { color: var(--success-color); }
+  &.amarillo { color: var(--warning-color); }
+  &.rojo { color: var(--error-color); }
+}
+
+.cola-cliente { color: var(--text-primary); font-size: 13px; }
+.cola-dir, .cola-items { color: var(--text-secondary); font-size: 12px; }
+
+.cola-total {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--text-primary);
+  .cola-envio { font-weight: 400; font-size: 12px; color: var(--text-secondary); }
+}
+
+.cola-acciones {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  button { flex: 1; font-size: 12px; }
+}
+
+/* Aviso de pedidos web en el subheader: visible aunque haya un delivery abierto. */
+.aviso-pedidos {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  line-height: 30px;
+  padding: 0 12px;
+
+  mat-icon {
+    font-size: 17px;
+    width: 17px;
+    height: 17px;
+    margin-right: 4px;
+    vertical-align: -3px;
+  }
+}
+
+/* El borde izquierdo distingue el retiro de un vistazo, sin leer el chip. */
+.cola-item.retiro-item { border-left-color: var(--success-color); }
+.cola-envio.pagado { color: var(--success-color); font-weight: 700; }
+
+/* ── Chips de la lista ─────────────────────────────────────────────────── */
+
+/* Canal de origen, al lado del estado. El LOCAL va sin relleno a propósito:
+   es el caso normal y resaltarlo en todas las filas no distingue nada. */
+.canal-chip {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  border: 1px solid var(--divider-color, rgba(255,255,255,0.24));
+  color: var(--text-secondary);
+  vertical-align: middle;
+
+  &.canal-web {
+    border-color: var(--info-color);
+    color: var(--info-color);
+    background: color-mix(in srgb, var(--info-color) 14%, transparent);
+  }
+}
+
+/* En la columna DELIVERY, para el pedido que el cliente pasa a buscar. */
+.retirar-chip {
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  border: 1px solid var(--success-color);
+  color: var(--success-color);
+}
+
+
+
+/* ── Detalle de un ítem, igual que el ticket del cliente ───────────────── */
+
+/* La variación es parte del nombre del plato, no una nota al pie: va en el
+   mismo color que el producto y sólo un punto más chica. */
+.item-sub.item-removido { color: var(--error-color); }
+.item-sub.item-cambio { color: var(--warning-color); }
+.item-sub.item-adicional { color: var(--success-color); }
+.item-sub.item-observacion { font-style: italic; }
+
+/* Totales en las otras monedas: subordinados al principal, no compitiendo. */
+.detalle-row.moneda-row {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.detalle-row.estado-cobro {
+  justify-content: flex-end;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--warning-color);
+  padding-top: 4px;
+
+  &.cobrado { color: var(--success-color); }
+}
+
+/* Chips del encabezado del detalle: a la derecha, sin empujar el título. */
+.detalle-card-header .header-chips {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   RESUMEN DEL PEDIDO CON FORMA DE COMPROBANTE
+
+   Único bloque del diálogo con colores fijos en vez de variables de tema, y
+   es a propósito: el destino de esto es una FOTO que el cajero le manda al
+   cliente por WhatsApp. Una captura de UI oscura, recortada de una pantalla
+   más grande, se lee como un pedazo de pantalla; ésta se lee como un
+   comprobante. Los colores del tema harían que el mismo pedido llegue
+   distinto según cómo tenga configurada la app quien lo mande.
+
+   Ancho de ticket y no de panel: es la proporción que la gente reconoce como
+   recibo, y la que mejor entra en la pantalla de un teléfono.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.recibo-wrap {
+  // El panel sigue el tema; el papel de adentro, no.
+  align-items: center;
+  padding: 12px 10px;
+}
+
+.recibo {
+  width: 100%;
+  max-width: 320px;
+  background: #ffffff;
+  color: #1a1a1a;
+  border-radius: 6px;
+  padding: 16px 18px 14px;
+  // Sombra suave: despega el papel del fondo y hace evidente dónde recortar.
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.recibo-header {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.recibo-local {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.recibo-contacto {
+  font-size: 11px;
+  color: #555;
+}
+
+.recibo-titulo {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  padding: 5px 0;
+  border-top: 1px solid #1a1a1a;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.recibo-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #555;
+  padding: 5px 0;
+}
+
+/* Línea de guiones, como la de un ticket térmico. */
+.recibo-sep {
+  border-top: 1px dashed #999;
+  margin: 8px 0;
+}
+
+.recibo-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+
+  > span:first-child {
+    color: #555;
+    white-space: nowrap;
+  }
+  > span:last-child {
+    text-align: right;
+    word-break: break-word;
+  }
+}
+
+/* La dirección va en su propia línea a ancho completo: en 320px, partida en
+   dos columnas se corta justo donde importa. */
+.recibo-dir {
+  margin-top: 4px;
+
+  > span {
+    color: #555;
+    font-size: 11px;
+  }
+  > div {
+    word-break: break-word;
+  }
+}
+
+.recibo-item {
+  margin-bottom: 7px;
+
+  &.anulado {
+    text-decoration: line-through;
+    opacity: .5;
+  }
+}
+
+.recibo-item-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.recibo-item-nombre { word-break: break-word; }
+.recibo-item-total { white-space: nowrap; }
+
+/* La variación es parte del plato, no una nota al pie: mismo color que el
+   nombre, apenas más chica. */
+.recibo-item-var {
+  padding-left: 12px;
+  font-size: 11px;
+}
+
+.recibo-item-mod {
+  padding-left: 12px;
+  font-size: 11px;
+  color: #555;
+
+  /* En papel el color no siempre sobrevive a la foto, así que la distinción
+     se apoya también en la palabra («sin …», «+ …»). */
+  &.quitado { color: #b00020; }
+  &.extra { color: #1b5e20; }
+  &.cambio { color: #8a5a00; }
+  &.nota { font-style: italic; }
+}
+
+.recibo-vacio {
+  text-align: center;
+  color: #777;
+  padding: 6px 0;
+}
+
+.recibo-total {
+  display: flex;
+  justify-content: space-between;
+  font-size: 16px;
+  font-weight: 700;
+  padding-top: 6px;
+  margin-top: 4px;
+  border-top: 1px solid #1a1a1a;
+}
+
+.recibo-moneda {
+  font-size: 11px;
+  color: #555;
+}
+
+/* Lo primero que se mira en la foto: si está pago o no. */
+.recibo-sello {
+  margin: 10px auto 4px;
+  width: fit-content;
+  padding: 3px 14px;
+  border: 2px solid #b00020;
+  border-radius: 4px;
+  color: #b00020;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: .14em;
+  transform: rotate(-3deg);
+
+  &.pagado {
+    border-color: #1b5e20;
+    color: #1b5e20;
+  }
+}
+
+.recibo-pagos {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #999;
+  font-size: 11px;
+  color: #555;
+}
+
+.recibo-pie {
+  text-align: center;
+  font-size: 11px;
+  color: #555;
+  margin-top: 10px;
+}
+
+/* Cantidad y x en anchos fijos: alineadas entre líneas, igual que en el papel. */
+.recibo-cant {
+  display: inline-block;
+  min-width: 1.6em;
+}
+
+.recibo-x {
+  display: inline-block;
+  width: 1.4em;
+  text-align: center;
+  color: #777;
 }

@@ -37,7 +37,7 @@ Config en raíz del repo: `.releaserc.json`. Branches y reglas de release ahí.
 - `npm run build:prod` (Angular + Electron TS).
 - `npx electron-builder --publish always` → empaqueta (config en `package.json:build`, no hay `electron-builder.json` separado):
   - **Windows:** NSIS installer `.exe` (`x64`, `artifactName: FRC-Gourmet-Setup-${version}.${ext}` → `FRC-Gourmet-Setup-X.Y.Z.exe`)
-  - **Linux:** AppImage (`x64`, `artifactName: FRC-Gourmet-${version}-${arch}.${ext}` → `FRC-Gourmet-X.Y.Z-x64.AppImage`)
+  - **Linux:** ⚠️ **fuera del release automático desde 2026-08-25** — la flota es 100% Windows. El target sigue en `package.json` (`npm run electron:build` local lo genera), pero `release.yml` ya no lo buildea. Para reactivarlo: agregar `ubuntu-latest` al matrix `os`.
   - **macOS:** no se buildea (`package.json:build` solo tiene targets `win` + `linux`)
 - Sube los artifacts + manifests (`latest.yml`, `alpha.yml`, `beta.yml`) al GitHub Release.
 

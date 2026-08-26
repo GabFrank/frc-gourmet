@@ -12,6 +12,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatAutocompleteModule, MatAutocompleteTrigger } from '@angular/material/autocomplete';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
@@ -44,6 +45,7 @@ export interface CrearDeliveryDialogData {
     MatProgressSpinnerModule,
     MatAutocompleteModule,
     MatTooltipModule,
+    MatButtonToggleModule,
   ],
 })
 export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
@@ -52,7 +54,11 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
   @ViewChild('direccionInput') direccionInput!: ElementRef<HTMLTextAreaElement>;
   @ViewChild('precioSelect') precioSelect!: MatSelect;
   @ViewChild('observacionInput') observacionInput!: ElementRef<HTMLTextAreaElement>;
-  @ViewChild('confirmarBtn') confirmarBtn!: ElementRef<HTMLButtonElement>;
+  // `read: ElementRef` no es opcional: `MatButton` es un *componente* en el
+  // Material MDC de Angular 15, así que un `#ref` pelado devuelve la instancia
+  // de la directiva y no el elemento. Sin esto `nativeElement` era `undefined`
+  // y el Enter en OBSERVACIÓN no movía el foco a ningún lado, en silencio.
+  @ViewChild('confirmarBtn', { read: ElementRef }) confirmarBtn!: ElementRef<HTMLButtonElement>;
   @ViewChild(MatAutocompleteTrigger) autoTrigger!: MatAutocompleteTrigger;
 
   telefono = '';
@@ -60,6 +66,8 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
   direccion = '';
   observacion = '';
   precioDeliveryId: number | null = null;
+  /** La zona con la que arrancó el form, para reponerla al volver de RETIRO. */
+  private precioDeliveryDefaultId: number | null = null;
   cobroAnticipado = false;
 
   preciosDelivery: PrecioDelivery[] = [];
@@ -73,6 +81,18 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
   // Configuración del PdV (antes eran constantes en este archivo).
   telefonoMinDigitos = 4;
   requiereDireccion = true;
+
+  /**
+   * `DELIVERY` (se reparte) o `RETIRO` (el cliente lo pasa a buscar).
+   *
+   * El alta es la misma para los dos porque el cajero no sabe de antemano qué
+   * va a pedir el cliente: atiende el teléfono y se entera en la conversación.
+   * Elegir RETIRO saca del form la dirección y el precio de envío, que dejan de
+   * existir, y hace obligatorio el nombre, que pasa a ser lo que identifica la
+   * bolsa en el mostrador.
+   */
+  modo: 'DELIVERY' | 'RETIRO' = 'DELIVERY';
+  esRetiro = false;
 
   // Pre-computados: la vista no llama funciones ni getters.
   puedeConfirmar = false;
@@ -115,6 +135,11 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
         this.precioDeliveryId = d.precioDelivery?.id ?? null;
         this.precioDeliveryOriginalId = this.precioDeliveryId;
         this.cobroAnticipado = !!d.cobroAnticipado;
+        // El modo no se cambia al editar: convertir un reparto en retiro (o al
+        // revés) implicaría rehacer el costo de envío y el repartidor ya
+        // asignado. Se muestra, no se toca.
+        this.modo = d.modo === 'RETIRO' ? 'RETIRO' : 'DELIVERY';
+        this.esRetiro = this.modo === 'RETIRO';
         this.clienteEncontrado = d.cliente || null;
         this.zonaBloqueada = !!d.venta && d.venta.estado !== 'ABIERTA';
       } else {
@@ -123,6 +148,7 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
           ? this.preciosDelivery.find((p) => p.id === config.deliveryPrecioDefaultId)
           : null;
         this.precioDeliveryId = preferida?.id ?? this.preciosDelivery[0]?.id ?? null;
+        this.precioDeliveryDefaultId = this.precioDeliveryId;
       }
     } catch (error) {
       this.mostrarError(error, 'No se pudo cargar la configuración de delivery');
@@ -166,12 +192,34 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
   /** Recalcula todo lo que la vista consume como propiedad. */
   private recalcular(): void {
     const telefonoOk = this.telefono.replace(/\D/g, '').length >= this.telefonoMinDigitos;
-    const direccionOk = !this.requiereDireccion || this.direccion.trim().length > 0;
-    this.puedeConfirmar = telefonoOk && direccionOk && !this.processing;
+    // En un retiro no hay dirección que exigir; a cambio el nombre pasa a ser
+    // obligatorio: sin él nadie sabe de quién es la bolsa.
+    const direccionOk = this.esRetiro || !this.requiereDireccion || this.direccion.trim().length > 0;
+    const nombreOk = !this.esRetiro || this.nombre.trim().length > 0;
+    this.puedeConfirmar = telefonoOk && direccionOk && nombreOk && !this.processing;
     this.precioDeliveryCambio = this.isEditMode && this.precioDeliveryId !== this.precioDeliveryOriginalId;
   }
 
   onCampoChange(): void {
+    this.recalcular();
+  }
+
+  /** Cambio entre reparto y retiro. */
+  onModoChange(modo: 'DELIVERY' | 'RETIRO'): void {
+    this.modo = modo;
+    this.esRetiro = modo === 'RETIRO';
+    if (this.esRetiro) {
+      // La dirección se limpia: si el cajero se equivoca de modo y vuelve, es
+      // preferible que la reescriba a que se guarde una que nadie pidió. Y
+      // como el campo es obligatorio en DELIVERY, la ausencia se nota.
+      this.direccion = '';
+      this.precioDeliveryId = null;
+    } else {
+      // La zona, en cambio, se RESTAURA. `null` es un valor válido —«SIN
+      // CARGO»— así que nada avisaría de que se perdió: el delivery saldría
+      // con envío 0 y el cajero se enteraría al cerrar la caja.
+      this.precioDeliveryId = this.precioDeliveryDefaultId;
+    }
     this.recalcular();
   }
 
@@ -217,8 +265,17 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
     this.observacionInput?.nativeElement?.focus();
   }
 
+  /**
+   * Enter en OBSERVACIÓN lleva al botón CREAR.
+   *
+   * `recalcular()` antes de enfocar no es de más: un botón `[disabled]` no
+   * acepta foco, así que si `puedeConfirmar` quedó desactualizado el Enter no
+   * hacía nada visible y el cajero se quedaba escribiendo en la observación.
+   * El `setTimeout` espera a que Angular aplique el cambio al DOM.
+   */
   focusConfirmar(): void {
-    this.confirmarBtn?.nativeElement?.focus();
+    this.recalcular();
+    setTimeout(() => this.confirmarBtn?.nativeElement?.focus(), 0);
   }
 
   abrirBuscarCliente(): void {
@@ -253,9 +310,10 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
         clienteId: cliente?.id ?? null,
         nombre: this.nombre || cliente?.persona?.nombre || '',
         telefono: this.telefono,
-        direccion: this.direccion,
+        direccion: this.esRetiro ? '' : this.direccion,
         observacion: this.observacion,
         cobroAnticipado: this.cobroAnticipado,
+        modo: this.modo,
       };
 
       if (this.isEditMode) {
