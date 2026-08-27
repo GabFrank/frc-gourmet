@@ -74,9 +74,14 @@ export class PagoDetalle extends BaseModel {
   // sobrevivir a la recarga. Nullable: la enorme mayoría de las líneas
   // (efectivo) no tiene destino de acreditación, y las líneas históricas
   // quedan en null sin cambiar de significado.
-  @Column({ name: 'maquina_pos_id', nullable: true })
+  //
+  // `type: 'int'` explícito: sobre un tipo unión (`number | null`) TypeORM no
+  // puede inferir el tipo de columna y falla al arrancar con
+  // "Data type Object ... is not supported". Es el pitfall registrado en la
+  // skill; `cobroParcialId` de arriba se salva sólo porque es `number` a secas.
+  @Column({ name: 'maquina_pos_id', type: 'int', nullable: true })
   maquinaPosId?: number | null;
 
-  @Column({ name: 'cuenta_bancaria_id', nullable: true })
+  @Column({ name: 'cuenta_bancaria_id', type: 'int', nullable: true })
   cuentaBancariaId?: number | null;
 }
