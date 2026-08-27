@@ -262,6 +262,27 @@ function buildExplicit(): Record<string, unknown> {
     windowMaximizeToggle: undefined,
     windowClose: undefined,
     onWindowStateChanged: undefined,
+    // Chrome de ventana + herramientas (zoom/devtools/fullscreen): en el
+    // browser las provee el navegador, no la app. `windowGetChrome` devuelve
+    // 'none' para que el header no dibuje botones ni el menú de herramientas.
+    windowGetChrome: async (): Promise<{ platform: string; controlsMode: 'none'; overlay: false; toolbarHeight: number }> => ({
+      platform: 'web',
+      controlsMode: 'none',
+      overlay: false,
+      toolbarHeight: 64,
+    }),
+    windowSetTitleBarOverlay: undefined,
+    windowZoomGet: undefined,
+    windowZoomSet: undefined,
+    windowZoomStep: undefined,
+    windowZoomReset: undefined,
+    windowReload: undefined,
+    windowToggleDevTools: undefined,
+    windowToggleFullscreen: undefined,
+    windowIsFullscreen: undefined,
+    onWindowZoomChanged: undefined,
+    onWindowFullscreenChanged: undefined,
+    onWindowDevToolsRequested: undefined,
     // Auto-update (electron-updater): no aplica a la app web.
     autoUpdateGetConfig: undefined,
     // Push IPC de impresora / comandas: en web se usa el fallback SSE/poll.

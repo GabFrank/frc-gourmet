@@ -33,6 +33,7 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { ensurePermission } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { crearDeliveryEnTx } from '../utils/delivery-alta.utils';
+import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import {
   cancelarVentaCompletaEnTx,
   verificarVentaCancelable,
@@ -290,7 +291,12 @@ export function registerDeliveryHandlers(
     });
 
     if (config?.deliveryAutoImprimirAlCrear) {
-      dispararImpresion(dataSource, resultado.delivery.id, 'delivery-crear');
+      dispararImpresion(
+        dataSource,
+        resultado.delivery.id,
+        'delivery-crear',
+        resolveRequestDeviceId(_event) ?? undefined,
+      );
     }
 
     return resultado;
@@ -471,7 +477,12 @@ export function registerDeliveryHandlers(
       if (nuevoEstado === DeliveryEstado.EN_CAMINO && config?.deliveryAutoImprimirAlEnviar) {
         // Fuera de la transacción en la práctica: `setImmediate` corre después
         // del commit, y si la impresora falla no revierte el cambio de estado.
-        dispararImpresion(dataSource, id, 'delivery-cambiar-estado');
+        dispararImpresion(
+          dataSource,
+          id,
+          'delivery-cambiar-estado',
+          resolveRequestDeviceId(_event) ?? undefined,
+        );
       }
 
       return guardado;
@@ -555,7 +566,11 @@ export function registerDeliveryHandlers(
 
   ipcMain.handle('delivery-imprimir-ticket', async (_event: any, id: number, printerId?: number) => {
     await ensurePermission(dataSource, getCurrentUser, ['VENTAS_PDV', 'DOCUMENTOS_IMPRIMIR_TICKET']);
-    return await printDeliveryTicketInternal(dataSource, id, { printerId });
+    // Sin el dispositivo, `getPrinterByRol` no puede llegar a
+    // `Dispositivo.printerTicket` y el ticket sale siempre por la impresora
+    // marcada isDefault — el pedido de una caja se imprimía en la otra.
+    const dispositivoId = resolveRequestDeviceId(_event) ?? undefined;
+    return await printDeliveryTicketInternal(dataSource, id, { printerId, dispositivoId });
   });
 }
 
@@ -584,10 +599,20 @@ function aplicarTimestamps(delivery: Delivery, nuevoEstado: DeliveryEstado): voi
   (delivery as any).motivoCancelacion = null;
 }
 
-/** Impresión best-effort: nunca bloquea ni revierte la operación que la disparó. */
-function dispararImpresion(dataSource: DataSource, deliveryId: number, origen: string): void {
+/**
+ * Impresión best-effort: nunca bloquea ni revierte la operación que la disparó.
+ *
+ * `dispositivoId` viene resuelto por el caller: acá ya estamos dentro de un
+ * `setImmediate` y no hay `_event` del que sacarlo.
+ */
+function dispararImpresion(
+  dataSource: DataSource,
+  deliveryId: number,
+  origen: string,
+  dispositivoId?: number,
+): void {
   setImmediate(() => {
-    printDeliveryTicketInternal(dataSource, deliveryId, {})
+    printDeliveryTicketInternal(dataSource, deliveryId, { dispositivoId })
       .catch((e) => console.warn(`[${origen}] auto-impresión del delivery ${deliveryId} falló:`, e));
   });
 }

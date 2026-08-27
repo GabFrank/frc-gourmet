@@ -305,8 +305,24 @@
   }
 }
 
+// Windows: los botones de ventana los dibuja el SO ENCIMA de la toolbar
+// (Window Controls Overlay). Hay que dejarles el hueco a la derecha, sino
+// tapan el menú de usuario. `env(titlebar-area-*)` lo publica Electron; el
+// fallback de 140px cubre el ancho típico de los tres botones de Windows.
+.app-toolbar.with-titlebar-overlay {
+  padding-right: calc(
+    100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 140px))
+  );
+}
+
+// Botón del menú de herramientas de ventana (zoom / recargar / devtools).
+.herramientas-btn {
+  margin-right: 4px;
+}
+
 // Botones de minimizar/maximizar/cerrar — estilo plano sin border-radius,
-// estilo Windows. Alto = alto del toolbar para que llenen visualmente.
+// estilo Windows. Sólo se renderizan en Linux frameless (modo 'custom').
+// Alto = alto del toolbar para que llenen visualmente.
 .window-controls {
   display: inline-flex;
   align-items: stretch;
@@ -351,6 +367,31 @@
     &:active {
       background-color: #c50e1f;
     }
+  }
+}
+
+// Barra mínima de la pantalla de login (sólo Linux frameless): la toolbar de
+// la app vive dentro del *ngIf de autenticación, así que antes de loguearse no
+// habría ningún control de ventana. Se apoya sobre el fondo del login, por eso
+// usa variables de tema y no los colores de la toolbar.
+.login-titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  display: flex;
+  justify-content: flex-end;
+  z-index: 100;
+  color: var(--text-primary);
+
+  .window-controls {
+    height: 40px;
+    margin-left: 0;
+  }
+
+  .window-ctrl-btn:hover {
+    background-color: var(--hover-bg-light);
   }
 }
 

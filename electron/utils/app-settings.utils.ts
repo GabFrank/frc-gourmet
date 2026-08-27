@@ -166,6 +166,16 @@ export interface MusicaAvanzado {
   // PKCE no usa client_secret: no se guarda en ningún lado.
 }
 
+export interface UiSettings {
+  /**
+   * Factor de zoom del renderer (`webContents.setZoomFactor`). Es por PC:
+   * la app corre en cajas, tablets y monitores de cocina con densidades muy
+   * distintas, y la ventana es frameless (sin menú nativo con Zoom), así que
+   * el ajuste se hace desde el menú de herramientas del header y se recuerda.
+   */
+  zoomFactor: number;
+}
+
 export interface AppSettings {
   mode: AppMode;
   database: DatabaseSettings;
@@ -174,6 +184,7 @@ export interface AppSettings {
   backup: BackupSettings;
   ia: IaSettings;
   musica: MusicaSettings;
+  ui: UiSettings;
   /**
    * F5 paso 3: dispositivo "fisico" identificado para este proceso.
    * - standalone/server: el PC donde corre la app (selección manual).
@@ -227,6 +238,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
       permitirExplicit: false,
       reccobeatsUrl: 'https://api.reccobeats.com/v1',
     },
+  },
+  ui: {
+    zoomFactor: 1,
   },
   deviceId: null,
   timezone: 'America/Asuncion',

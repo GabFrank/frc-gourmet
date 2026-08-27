@@ -3,7 +3,7 @@
  * AUTO-GENERADO por scripts/generate-mobile-api-map.js — NO editar a mano.
  * Mapa método de window.api → canal IPC (extraído de preload.ts).
  * Regenerar tras tocar preload.ts: `node scripts/generate-mobile-api-map.js`.
- * Total: 850 métodos.
+ * Total: 860 métodos.
  */
 export const API_CHANNEL_MAP: Record<string, string> = {
   "abrirCajaDesdeConteo": "abrir-caja-desde-conteo",
@@ -852,10 +852,20 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "vincularVentaPedidoOnline": "vincular-venta-pedido-online",
   "volverBorradorLiquidacionSueldo": "volver-borrador-liquidacion-sueldo",
   "windowClose": "window:close",
+  "windowGetChrome": "window:chrome",
+  "windowIsFullscreen": "window:is-fullscreen",
   "windowIsMaximized": "window:is-maximized",
   "windowMaximizeToggle": "window:maximize-toggle",
   "windowMinimize": "window:minimize",
   "windowPlatform": "window:platform",
+  "windowReload": "window:reload",
+  "windowSetTitleBarOverlay": "window:set-titlebar-overlay",
+  "windowToggleDevTools": "window:toggle-devtools",
+  "windowToggleFullscreen": "window:toggle-fullscreen",
+  "windowZoomGet": "window:zoom-get",
+  "windowZoomReset": "window:zoom-reset",
+  "windowZoomSet": "window:zoom-set",
+  "windowZoomStep": "window:zoom-step",
 };
 
 /**

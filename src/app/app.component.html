@@ -11,7 +11,8 @@
   <!-- class "drag-region" hace que el toolbar sea draggable (mover ventana
        arrastrándolo, como las barras nativas). Los botones internos se
        marcan "no-drag" en CSS para que sigan siendo clickeables. -->
-  <mat-toolbar color="primary" class="app-toolbar drag-region">
+  <mat-toolbar color="primary" class="app-toolbar drag-region"
+               [class.with-titlebar-overlay]="hasTitleBarOverlay">
     <button
       type="button"
       aria-label="Toggle sidenav"
@@ -92,6 +93,51 @@
       <mat-icon>search</mat-icon>
     </button>
 
+    <!--
+      Herramientas de ventana. La app es frameless: no hay menú nativo de
+      Electron, así que Zoom / Recargar / DevTools / Pantalla completa viven
+      acá. Los mismos atajos de teclado funcionan sin abrir este menú
+      (Ctrl +/-/0, F5, F12, F11) — los maneja main.ts.
+    -->
+    <button mat-icon-button class="no-drag herramientas-btn"
+            *ngIf="showWindowTools"
+            [matMenuTriggerFor]="windowToolsMenu"
+            matTooltip="Herramientas de ventana"
+            aria-label="Herramientas de ventana">
+      <mat-icon>tune</mat-icon>
+    </button>
+    <mat-menu #windowToolsMenu="matMenu" class="window-tools-menu">
+      <!-- Fila de zoom: los clicks NO cierran el menú para poder repetir. El
+           panel de mat-menu emite `closed` ante cualquier click propio. -->
+      <div class="zoom-row" (click)="$event.stopPropagation()">
+        <button mat-icon-button (click)="zoomOut($event)" [matTooltip]="atajoZoomOut" aria-label="Alejar">
+          <mat-icon>remove</mat-icon>
+        </button>
+        <button mat-button class="zoom-valor" (click)="zoomReset($event)"
+                [matTooltip]="atajoZoomReset" aria-label="Restablecer zoom">
+          {{ zoomLabel }}
+        </button>
+        <button mat-icon-button (click)="zoomIn($event)" [matTooltip]="atajoZoomIn" aria-label="Acercar">
+          <mat-icon>add</mat-icon>
+        </button>
+      </div>
+      <mat-divider></mat-divider>
+      <button mat-menu-item (click)="togglePantallaCompleta()">
+        <mat-icon>{{ isFullScreen ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+        <span>{{ isFullScreen ? 'Salir de pantalla completa' : 'Pantalla completa' }}</span>
+      </button>
+      <button mat-menu-item (click)="recargarVentana()">
+        <mat-icon>refresh</mat-icon>
+        <span>Recargar</span>
+        <span class="atajo">{{ atajoRecargar }}</span>
+      </button>
+      <button mat-menu-item (click)="toggleDevTools()" *ngIf="puedeAbrirDevTools">
+        <mat-icon>code</mat-icon>
+        <span>Herramientas de desarrollo</span>
+        <span class="atajo">F12</span>
+      </button>
+    </mat-menu>
+
     <!-- Usuario activo: nombre + dropdown con tema, actualizaciones, perfil y logout -->
     <button mat-button [matMenuTriggerFor]="userMenu" class="user-button">
       <app-user-avatar
@@ -140,10 +186,11 @@
       </button>
     </mat-menu>
 
-    <!-- Window controls (custom titlebar). Solo Win/Linux en Electron — en macOS
-         los semáforos nativos quedan visibles (titleBarStyle:hiddenInset) y en la
-         versión web (/admin) no hay ventana que controlar. -->
-    <div class="window-controls" *ngIf="!isMacOS && !isWeb">
+    <!-- Window controls dibujados por el header: SÓLO en Linux frameless, donde
+         no hay Window Controls Overlay soportado. En Windows los dibuja el SO
+         sobre la toolbar (titleBarOverlay), en macOS son los semáforos nativos,
+         y en la versión web (/admin) no hay ventana que controlar. -->
+    <div class="window-controls" *ngIf="showCustomWindowControls">
       <button type="button" class="window-ctrl-btn"
               (click)="minimizeWindow()"
               aria-label="Minimizar"
@@ -235,5 +282,32 @@
 
 <!-- Template for login router outlet -->
 <ng-template #loginRouter>
+  <!-- Barra mínima de ventana para la pantalla de login. Sólo donde los
+       botones los dibuja el header (Linux frameless): la toolbar de la app vive
+       dentro del *ngIf de autenticación, así que sin esto el usuario no tendría
+       forma de cerrar ni minimizar antes de loguearse. En Windows y macOS los
+       dibuja el SO desde que abre la ventana, autenticado o no. -->
+  <div class="login-titlebar drag-region" *ngIf="showCustomWindowControls">
+    <div class="window-controls">
+      <button type="button" class="window-ctrl-btn"
+              (click)="minimizeWindow()"
+              aria-label="Minimizar"
+              matTooltip="Minimizar">
+        <mat-icon>remove</mat-icon>
+      </button>
+      <button type="button" class="window-ctrl-btn"
+              (click)="toggleMaximize()"
+              [attr.aria-label]="isWindowMaximized ? 'Restaurar' : 'Maximizar'"
+              [matTooltip]="isWindowMaximized ? 'Restaurar' : 'Maximizar'">
+        <mat-icon>{{ isWindowMaximized ? 'filter_none' : 'crop_square' }}</mat-icon>
+      </button>
+      <button type="button" class="window-ctrl-btn window-ctrl-close"
+              (click)="closeWindow()"
+              aria-label="Cerrar"
+              matTooltip="Cerrar">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+  </div>
   <router-outlet></router-outlet>
 </ng-template>

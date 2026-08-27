@@ -1798,12 +1798,18 @@ export async function printDeliveryTicketInternal(
 
   const venta = await dataSource.getRepository(Venta).findOne({
     where: { delivery: { id: deliveryId } },
-    relations: ['pago'],
+    relations: ['pago', 'dispositivo'],
   });
+
+  // Igual que `printVentaTicketInternal`: gana el dispositivo del request, y si
+  // el caller no lo pasó se cae al de la venta. Sin ninguno de los dos,
+  // `getPrinterByRol` no puede resolver `Dispositivo.printerTicket` y termina
+  // imprimiendo por la impresora isDefault.
+  const dispositivoId = opts.dispositivoId ?? (venta as any)?.dispositivo?.id;
 
   const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, {
     printerId: opts.printerId,
-    dispositivoId: opts.dispositivoId,
+    dispositivoId,
   });
   if (!printer) {
     return { ok: false, printed: [], errors: [{ message: 'No hay impresora configurada para tickets de venta' }] };
