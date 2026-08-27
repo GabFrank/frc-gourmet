@@ -188,11 +188,47 @@ ser el camino normal.
 
 ---
 
+## Parte 4 — Integridad de las líneas de cobro
+
+Estos casos no dependen de tener dos terminales: son guards de backend.
+
+| # | Paso | Esperado |
+|---|---|---|
+| 1 | Cobrar parcialmente una venta (cargar una línea y usar **Cobro Parcial**) | La ronda se registra |
+| 2 | Abrir el menú ⋮ de esa línea e intentar **Eliminar** | **Deshabilitado**, con tooltip *"está imputada a una ronda de cobro parcial"* |
+| 3 | Finalizar la venta. Volver a abrir el cobro desde Últimas Ventas | No se puede anular la ronda: la venta ya no está abierta |
+| 4 | Cerrar la caja e imprimir el cierre | El total no cambió respecto de lo que mostraba el PdV |
+
+## Parte 5 — Acreditaciones (POS y transferencias)
+
+| # | Paso | Esperado |
+|---|---|---|
+| 1 | **Cobro mixto a crédito:** cliente con crédito, cuenta de Gs. 500.000. Cargar Gs. 300.000 con una forma de pago vinculada a **máquina POS** y cerrar el resto con **Cobrar a crédito** | Se crea la CPC por 200.000 **y** la `AcreditacionPos` por 300.000. Antes la acreditación no se creaba nunca |
+| 2 | Verificar en *Financiero → Acreditaciones POS* | Aparece el movimiento |
+| 3 | **Moneda cruzada:** elegir una máquina POS de una cuenta en guaraníes, apretar **F2** (cambia a dólares) y cargar `40` | La acreditación se **rechaza** y aparece el aviso "N acreditación(es) no se registraron". Antes acreditaba 40 guaraníes |
+| 4 | **Atajos F4–F7:** elegir una forma de pago con POS, apretar F5 para cambiar a otra sin POS, y cargar la línea | La máquina POS se limpia. Antes quedaba la anterior y la plata iba a otra cuenta |
+| 5 | **Delivery ya cobrado:** con un delivery EN_CAMINO cuya venta está CONCLUIDA, abrir el diálogo de delivery | El botón **PAGO** está deshabilitado. Antes se podía re-finalizar y **duplicaba** la acreditación |
+
+## Parte 6 — Aritmética (verificar en Postgres si se puede)
+
+| # | Paso | Esperado |
+|---|---|---|
+| 1 | Con la app en **modo servidor sobre Postgres**, hacer 3–4 ventas en efectivo y cerrar la caja | El resumen y el ticket de cierre muestran números, **no `NaN`** |
+| 2 | Verificar el "esperado" contra la suma a mano | Coincide |
+| 3 | **Cobro rápido sobre un delivery:** abrir un delivery, editar ítems (queda como venta rápida) y apretar **F2** | El total cobrado **incluye el envío**. Antes se regalaba |
+| 4 | **Sin cotización:** desactivar la cotización del dólar, registrar un adelanto en USD en un delivery e imprimir | El ticket dice `VERIFICAR EN CAJA` y el motivo. **No** imprime un saldo ni dice PAGADO |
+| 5 | **Sobrepago:** cobrar de más sin registrar vuelto e imprimir | Dice `VUELTO A ENTREGAR` con el monto. Antes decía PAGADO y el vuelto desaparecía |
+| 6 | Imprimir un cierre de caja con una forma de pago de nombre largo en una impresora de 58 mm | El importe queda en la misma línea |
+
+---
+
 ## Tests automáticos
 
 ```bash
-npm run test:terminal-caja            # 27 asserts — la matriz del gate
-npm run test:ticket-delivery-pagos    # 39 asserts — contenido de los tickets
+npm run test:terminal-caja            # 30 asserts — la matriz del gate
+npm run test:ticket-delivery-pagos    # 50 asserts — contenido de los tickets
+npm run test:integridad-cobro         # 21 asserts — guards de las líneas de pago
+npm run test:resumen-caja-numeros     #  8 asserts — aritmética del arqueo en Postgres
 npm run test:delivery                 # regresión
 npm run test:ticket-venta             # regresión
 npm run test:cobro-parcial            # regresión
