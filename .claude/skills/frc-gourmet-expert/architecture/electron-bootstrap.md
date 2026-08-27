@@ -168,6 +168,8 @@ Handlers: `window:zoom-get|set|step|reset`, `window:reload`, `window:toggle-devt
 
 El **zoom se persiste por PC** en `app-settings.json` (`ui.zoomFactor`, escritura con debounce de 400ms — `updateAppSettings` es `readFileSync`+`writeFileSync` en el main) y se reaplica en cada `did-finish-load` (un reload resetea el factor del `webContents`). El `zoom-changed` de Chromium (Ctrl+rueda) también se persiste y se notifica al header.
 
+**DevTools con permiso (`SISTEMA_DEVTOOLS`):** es la única herramienta gateada — abre la consola y con ella `window.api` desde una caja. El ítem del menú va con `*ngIf="puedeAbrirDevTools"` y el atajo NO se resuelve en el main (que en modo cliente no tiene BD para evaluar permisos): `main.ts` emite `window:devtools-requested` y el renderer, que sí conoce los permisos, decide y llama de vuelta. El rol ADMINISTRADOR lo recibe solo (`syncAdminPermissions` corre en cada arranque).
+
 **Seguridad:** `window:*` está en `BLOCKED_PREFIXES` del `rpc-router` — `/api/rpc` es default-allow, y sin ese bloqueo cualquier cliente HTTP autenticado (PWA de un mozo, nodo cliente) podía cerrar, recargar o abrir DevTools **en la ventana física del nodo servidor**.
 
 > **Gotcha:** los handlers `window:*` se registran con un guard de una sola vez (`registerWindowChromeHandlers`). Antes vivían sueltos dentro de `createWindow()`, que en macOS puede volver a correr en el evento `activate` → `ipcMain.handle` tira si el canal ya existe.

@@ -1118,6 +1118,16 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('window:zoom-changed', listener);
     return () => ipcRenderer.removeListener('window:zoom-changed', listener);
   },
+  /**
+   * Suscribe al pedido de abrir DevTools por atajo de teclado (F12 /
+   * Ctrl+Shift+I). El main no puede evaluar permisos —en modo cliente no hay
+   * BD local—, así que delega la decisión al renderer. Devuelve unsubscribe.
+   */
+  onWindowDevToolsRequested: (handler: () => void) => {
+    const listener = () => handler();
+    ipcRenderer.on('window:devtools-requested', listener);
+    return () => ipcRenderer.removeListener('window:devtools-requested', listener);
+  },
   /** Suscribe a entrar/salir de pantalla completa. Devuelve unsubscribe. */
   onWindowFullscreenChanged: (handler: (state: { isFullScreen: boolean }) => void) => {
     const listener = (_event: any, state: { isFullScreen: boolean }) => handler(state);

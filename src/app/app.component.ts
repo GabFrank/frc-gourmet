@@ -227,6 +227,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   private fullscreenUnsub: (() => void) | null = null;
   private overlaySyncTimer: any = null;
   private resizeSub: Subscription | null = null;
+  private devToolsReqUnsub: (() => void) | null = null;
+  /** El ítem de DevTools del menú se muestra sólo con permiso. */
+  puedeAbrirDevTools = false;
+  private permisosSub: Subscription | null = null;
   /** Etiquetas de atajo del menú: en macOS el modificador es Cmd, no Ctrl. */
   atajoZoomIn = 'Acercar (Ctrl +)';
   atajoZoomOut = 'Alejar (Ctrl -)';
@@ -437,6 +441,13 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     // suscribirse a cambios maximize/unmaximize emitidos desde main.ts.
     this.initWindowControls();
 
+    // DevTools es la única herramienta de ventana con permiso: da acceso a la
+    // consola (y a `window.api`) desde una caja. Zoom, pantalla completa y
+    // recargar quedan abiertos — son inofensivos.
+    this.permisosSub = this.permissionService.codigos$.subscribe((codigos) => {
+      this.puedeAbrirDevTools = codigos.has('SISTEMA_DEVTOOLS');
+    });
+
     // Datos enriquecidos del header: version, modo de operación,
     // reloj cada 1s, cotizaciones del día con refresh cada 5 min.
     this.initHeaderEnriched();
@@ -597,6 +608,13 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
         }) || null;
       }
 
+      // Atajo F12 / Ctrl+Shift+I: el main no evalúa permisos, sólo avisa.
+      this.devToolsReqUnsub = api.onWindowDevToolsRequested?.(() => {
+        this.ngZone.run(() => {
+          if (this.puedeAbrirDevTools) this.toggleDevTools();
+        });
+      }) || null;
+
       // El alto de la toolbar baja a 56px por debajo de 600px de ancho: el
       // overlay nativo tiene que seguirlo o los botones quedan desalineados.
       if (this.hasTitleBarOverlay) {
@@ -753,6 +771,12 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (this.resizeSub) {
       this.resizeSub.unsubscribe();
+    }
+    if (this.permisosSub) {
+      this.permisosSub.unsubscribe();
+    }
+    if (this.devToolsReqUnsub) {
+      this.devToolsReqUnsub();
     }
     if (this.clockInterval) {
       clearInterval(this.clockInterval);

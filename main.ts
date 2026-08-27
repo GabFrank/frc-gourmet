@@ -657,6 +657,13 @@ function createWindow(): void {
     );
     if (!accion) return;
     event.preventDefault();
+    if (accion === 'toggle-devtools') {
+      // El main no sabe qué permisos tiene el usuario logueado (en modo cliente
+      // ni siquiera hay BD local). Se le pide al renderer, que sí los conoce:
+      // si corresponde, él llama de vuelta a `window:toggle-devtools`.
+      win?.webContents.send('window:devtools-requested');
+      return;
+    }
     ejecutarAccionVentana(accion);
   });
 

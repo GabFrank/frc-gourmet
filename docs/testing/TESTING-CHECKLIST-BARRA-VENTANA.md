@@ -59,6 +59,10 @@ controles (`tune`) y tooltip *Herramientas de ventana*.
 - [ ] Cancelá la confirmación: no pasa nada.
 - [ ] *Herramientas de desarrollo*: abre el inspector en una ventana aparte;
       volver a tocarlo lo cierra.
+- [ ] Con un usuario **sin** el permiso `SISTEMA_DEVTOOLS` (un cajero, por
+      ejemplo) el ítem **no aparece** y **F12 / Ctrl+Shift+I no hacen nada**.
+      El resto del menú (zoom, pantalla completa, recargar) sí funciona.
+      *(El ADMINISTRADOR recibe el permiso solo, en el seed de cada arranque.)*
 
 ## 4. El zoom se recuerda
 

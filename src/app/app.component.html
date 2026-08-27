@@ -131,7 +131,7 @@
         <span>Recargar</span>
         <span class="atajo">{{ atajoRecargar }}</span>
       </button>
-      <button mat-menu-item (click)="toggleDevTools()">
+      <button mat-menu-item (click)="toggleDevTools()" *ngIf="puedeAbrirDevTools">
         <mat-icon>code</mat-icon>
         <span>Herramientas de desarrollo</span>
         <span class="atajo">F12</span>

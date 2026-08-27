@@ -282,6 +282,7 @@ function buildExplicit(): Record<string, unknown> {
     windowIsFullscreen: undefined,
     onWindowZoomChanged: undefined,
     onWindowFullscreenChanged: undefined,
+    onWindowDevToolsRequested: undefined,
     // Auto-update (electron-updater): no aplica a la app web.
     autoUpdateGetConfig: undefined,
     // Push IPC de impresora / comandas: en web se usa el fallback SSE/poll.
