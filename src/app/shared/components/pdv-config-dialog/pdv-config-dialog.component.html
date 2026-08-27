@@ -247,6 +247,41 @@
       </div>
     </div>
 
+    <mat-divider></mat-divider>
+
+    <!-- Sección: Caja compartida entre terminales -->
+    <div class="config-section">
+      <div class="section-title">
+        <mat-icon>devices</mat-icon>
+        CAJA COMPARTIDA ENTRE TERMINALES
+      </div>
+
+      <div class="config-row">
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="permitirPagosTerminalAjena" color="primary">
+            Permitir registrar pagos en terminales que no abrieron la caja
+          </mat-checkbox>
+        </div>
+
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="permitirFinalizarTerminalAjena" color="primary">
+            Permitir finalizar ventas en terminales que no abrieron la caja
+          </mat-checkbox>
+        </div>
+      </div>
+
+      <div class="config-row config-hint-row">
+        <mat-icon class="hint-icon">info</mat-icon>
+        <span>Una caja se abre en una terminal, pero cualquier otra puede unirse
+          para lanzar items. Por defecto el cobro queda reservado a la terminal
+          que la abrió. Son dos permisos separados: se puede habilitar que el
+          mozo registre las formas de pago y que el cajero sea el único que
+          finaliza. El dinero se acredita siempre a la caja abierta, sin importar
+          qué terminal cobró. <strong>Se aplica al volver a abrir el PdV o al
+          próximo cobro.</strong></span>
+      </div>
+    </div>
+
   </div>
 </mat-dialog-content>
 

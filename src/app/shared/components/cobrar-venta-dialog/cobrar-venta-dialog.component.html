@@ -18,6 +18,13 @@
     </div>
   </div>
 
+  <!-- Aviso de caja abierta en otra terminal. Explica QUÉ se puede hacer acá,
+       que es lo que el cajero necesita saber antes de empezar a cargar. -->
+  <div class="aviso-terminal" *ngIf="avisoTerminal">
+    <mat-icon>devices</mat-icon>
+    <span>{{ avisoTerminal }}</span>
+  </div>
+
   <mat-dialog-content>
     <!-- Cliente asignado -->
     <div class="cliente-bar">
@@ -167,17 +174,17 @@
             <th mat-header-cell *matHeaderCellDef style="width: 40px"></th>
             <td mat-cell *matCellDef="let row" class="actions-cell">
               <mat-menu #detalleMenu="matMenu">
-                <button mat-menu-item (click)="editObservacion(row)">
+                <button mat-menu-item (click)="editObservacion(row)" [disabled]="!puedeAgregarPagos">
                   <mat-icon>comment</mat-icon> Observación
                 </button>
-                <button mat-menu-item (click)="duplicarDetalle(row)">
+                <button mat-menu-item (click)="duplicarDetalle(row)" [disabled]="!puedeAgregarPagos">
                   <mat-icon>content_copy</mat-icon> Duplicar
                 </button>
-                <button mat-menu-item (click)="editValor(row)">
+                <button mat-menu-item (click)="editValor(row)" [disabled]="!puedeAgregarPagos">
                   <mat-icon>edit</mat-icon> Editar valor
                 </button>
                 <mat-divider></mat-divider>
-                <button mat-menu-item (click)="deleteDetalle(row)" class="menu-delete">
+                <button mat-menu-item (click)="deleteDetalle(row)" class="menu-delete" [disabled]="!puedeAgregarPagos">
                   <mat-icon>delete_outline</mat-icon> Eliminar
                 </button>
               </mat-menu>
@@ -312,10 +319,10 @@
           {{ currentLineType }}
         </span>
         <button mat-mini-fab color="primary" (click)="addDetalle()"
-          [disabled]="!selectedMoneda || !selectedFormaPago || valorInput <= 0 || addingLine
+          [disabled]="!puedeAgregarPagos || !selectedMoneda || !selectedFormaPago || valorInput <= 0 || addingLine
             || (currentLineType === 'PAGO' && requiereSeleccionMaquinaPos && !selectedMaquinaPosId)
             || (currentLineType === 'PAGO' && requiereSeleccionCuentaBancaria && !selectedCuentaBancariaId)"
-          matTooltip="Agregar (Enter)">
+          [matTooltip]="tooltipAgregarPago || 'Agregar (Enter)'">
           <mat-icon>check</mat-icon>
         </button>
       </div>
@@ -366,15 +373,15 @@
   <!-- Action buttons -->
   <mat-dialog-actions>
     <div class="action-buttons-row">
-      <button mat-raised-button class="btn-finalizar" [disabled]="!canFinalizar" (click)="finalizar()" matTooltip="Finalizar sin imprimir ticket (F10)">
+      <button mat-raised-button class="btn-finalizar" [disabled]="!canFinalizar" (click)="finalizar()" [matTooltip]="tooltipFinalizar || 'Finalizar sin imprimir ticket (F10)'">
         <mat-icon>check</mat-icon>
         Finalizar (F10)
       </button>
-      <button mat-raised-button class="btn-finalizar-ticket" [disabled]="!canFinalizar" (click)="finalizarConTicket()" matTooltip="Finalizar e imprimir ticket (F11)">
+      <button mat-raised-button class="btn-finalizar-ticket" [disabled]="!canFinalizar" (click)="finalizarConTicket()" [matTooltip]="tooltipFinalizar || 'Finalizar e imprimir ticket (F11)'">
         <mat-icon>receipt_long</mat-icon>
         Finalizar + Ticket (F11)
       </button>
-      <button mat-raised-button class="btn-parcial" [disabled]="!canCobroParcial" (click)="cobroParcial()">
+      <button mat-raised-button class="btn-parcial" [disabled]="!canCobroParcial" (click)="cobroParcial()" [matTooltip]="tooltipAgregarPago">
         <mat-icon>timelapse</mat-icon>
         Cobro Parcial
       </button>
@@ -383,7 +390,7 @@
         <mat-icon>credit_card</mat-icon>
         Cobrar a crédito
       </button>
-      <button mat-raised-button class="btn-descuento" (click)="openAjusteDialog()" [disabled]="!selectedMoneda" matTooltip="Descuento/Aumento (F9)">
+      <button mat-raised-button class="btn-descuento" (click)="openAjusteDialog()" [disabled]="!puedeAgregarPagos || !selectedMoneda" [matTooltip]="tooltipAgregarPago || 'Descuento/Aumento (F9)'">
         <mat-icon>{{ saldoPrincipal > 0 ? 'discount' : 'add_circle' }}</mat-icon>
         {{ saldoPrincipal > 0 ? 'Descuento (F9)' : 'Aumento (F9)' }}
       </button>

@@ -21,6 +21,7 @@ import { ensureObservacionNotaLibreId } from '../utils/observacion-libre.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
+import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
 import { Not, IsNull, In, EntityManager } from 'typeorm';
 import { DeepPartial } from 'typeorm';
 import { Reserva } from '../../src/app/database/entities/ventas/reserva.entity';
@@ -819,7 +820,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   });
 
   // --- Cerrar todas las ventas abiertas de una mesa ---
-  ipcMain.handle('cerrarVentasAbiertasMesa', async (_event: any, mesaId: number, estado: string) => {
+  ipcMain.handle('cerrarVentasAbiertasMesa', async (_event: any, mesaId: number, estado: string, opts?: { validarDispositivoCaja?: boolean }) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Venta);
@@ -827,7 +828,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // vinculadas a la mesa se cierran/liberan desde su propio flujo.
       const ventasAbiertas = await repo.find({
         where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
+        relations: ['caja'],
       });
+      // Este handler pone CONCLUIDA con `repo.save` directo, sin pasar por
+      // `updateVenta`: es un tercer camino de finalización y necesita el mismo
+      // gate de terminal ajena. Sólo aplica al cierre por cobro (CONCLUIDA); la
+      // cancelación de una mesa no es finalizar un cobro.
+      if (opts?.validarDispositivoCaja && estado === VentaEstado.CONCLUIDA) {
+        for (const v of ventasAbiertas) {
+          await assertTerminalPuedeOperar(dataSource, _event, (v.caja as any)?.id ?? null, 'FINALIZAR');
+        }
+      }
       for (const v of ventasAbiertas) {
         v.estado = estado as VentaEstado;
         await repo.save(v);
@@ -1151,13 +1162,40 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         delete data.__imprimirTicketVenta;
       }
 
+      // Gate de terminal ajena para la FINALIZACION de la venta. Igual que
+      // `__imprimirTicketVenta`, se extrae antes del merge para que no intente
+      // persistirse como columna.
+      //
+      // Se activa sólo con el flag explícito, y no derivando la caja siempre,
+      // porque `updateVenta` es genérico: lo usan pedidos online, delivery, la
+      // cancelación desde el historial y varios flujos server-side que no son
+      // "el cajero cobrando". Sólo el cobro del PdV lo manda.
+      let validarDispositivoCaja = false;
+      if (data && Object.prototype.hasOwnProperty.call(data, '__validarDispositivoCaja')) {
+        validarDispositivoCaja = data.__validarDispositivoCaja === true;
+        delete data.__validarDispositivoCaja;
+      }
+
       const estadoAnterior = entity.estado;
 
-      // `findOneBy` no trae la relacion `mesa`: se lee la FK cruda ANTES del
-      // merge, para poder resincronizar el cache de esa mesa si la venta cierra.
-      const mesaDeLaVenta: number | null = (
-        await dataSource.query(`SELECT mesa_id AS m FROM ventas WHERE id = $1`.replace('$1', String(Number(id))))
-      )?.[0]?.m ?? null;
+      // `findOneBy` no trae las relaciones `mesa` ni `caja`: se leen las FK
+      // crudas ANTES del merge, para poder resincronizar el cache de esa mesa si
+      // la venta cierra y para resolver el gate por dispositivo.
+      const filaVenta: any = (
+        await dataSource.query(`SELECT mesa_id AS m, caja_id AS c FROM ventas WHERE id = $1`.replace('$1', String(Number(id))))
+      )?.[0] ?? null;
+      const mesaDeLaVenta: number | null = filaVenta?.m ?? null;
+
+      // Sólo la transición ABIERTA → CONCLUIDA es "finalizar un cobro".
+      // `rehabilitarVenta()` (CANCELADA → CONCLUIDA, desde el historial) queda
+      // deliberadamente fuera: no es un cobro en el PdV.
+      if (
+        validarDispositivoCaja
+        && data?.estado === VentaEstado.CONCLUIDA
+        && estadoAnterior === VentaEstado.ABIERTA
+      ) {
+        await assertTerminalPuedeOperar(dataSource, _event, filaVenta?.c ?? null, 'FINALIZAR');
+      }
 
       // A-01: al cancelar una venta a crédito hay que revertir la Cuenta Por
       // Cobrar y el saldoActual del cliente; antes quedaban vivos (cobros

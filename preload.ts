@@ -1828,8 +1828,8 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // Cerrar ventas abiertas de una mesa
-  cerrarVentasAbiertasMesa: async (mesaId: number, estado: string): Promise<number> => {
-    return await ipcRenderer.invoke('cerrarVentasAbiertasMesa', mesaId, estado);
+  cerrarVentasAbiertasMesa: async (mesaId: number, estado: string, opts?: { validarDispositivoCaja?: boolean }): Promise<number> => {
+    return await ipcRenderer.invoke('cerrarVentasAbiertasMesa', mesaId, estado, opts);
   },
 
   // Venta methods

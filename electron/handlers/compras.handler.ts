@@ -26,6 +26,7 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { aplicarPagoCpoCuota } from './cuentas-por-pagar.handler';
 import { ensurePermission } from '../utils/auth.utils';
+import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
 
 // ===== Helpers internos =====
 
@@ -1376,26 +1377,15 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('createPago', async (_event: any, data: any) => {
     await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR']);
-    // Cobro de venta: solo el dispositivo donde se abrio la caja puede cobrar.
-    // El flag `validarDispositivoCaja` lo envia unicamente el flujo de cobro de
-    // venta (cobrar-venta-dialog). Los pagos de compra no lo mandan, asi que no
-    // se ven afectados. Se descarta el flag antes de persistir el Pago.
+    // Cobro de venta: por default sólo la terminal donde se abrió la caja puede
+    // registrar pagos, salvo que `PdvConfig.permitirPagosTerminalAjena` lo
+    // habilite. El flag `validarDispositivoCaja` lo envía únicamente el flujo de
+    // cobro de venta (cobrar-venta-dialog / cobro rápido). Los pagos de compra
+    // no lo mandan, así que no se ven afectados. Se descarta antes de persistir.
     const { validarDispositivoCaja, ...pagoData } = data ?? {};
     if (validarDispositivoCaja) {
       const cajaId = pagoData?.caja?.id ?? pagoData?.caja ?? null;
-      const cajaRepo = dataSource.getRepository(Caja);
-      const caja = cajaId
-        ? await cajaRepo.findOne({ where: { id: cajaId }, relations: ['dispositivo'] })
-        : null;
-      const dispositivoCajaId = caja?.dispositivo?.id ?? null;
-      const deviceActual = resolveRequestDeviceId(_event);
-      // Bloquea SOLO cuando se puede determinar positivamente que el dispositivo
-      // actual difiere del dueño de la caja. Si el dispositivo actual no se puede
-      // resolver (standalone sin device configurado), no se bloquea para no
-      // romper el cobro en instalaciones de un solo equipo.
-      if (deviceActual != null && dispositivoCajaId != null && deviceActual !== dispositivoCajaId) {
-        throw new Error('COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO');
-      }
+      await assertTerminalPuedeOperar(dataSource, _event, cajaId, 'PAGO');
     }
     const repo = dataSource.getRepository(Pago);
     const entity = repo.create(pagoData);
@@ -1427,13 +1417,35 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('getPagoDetalles', async (_event: any, pagoId: number) => {
     const repo = dataSource.getRepository(PagoDetalle);
+    // `maquinaPosId` / `cuentaBancariaId` son columnas escalares de la entidad:
+    // vienen en el select sin relación extra, y son las que permiten reconstruir
+    // el destino de acreditación al reabrir el diálogo de cobro.
     return await repo.find({ where: { pago: { id: pagoId } as any }, relations: ['moneda', 'formaPago'], order: { id: 'ASC' } });
   });
 
   ipcMain.handle('createPagoDetalle', async (_event: any, data: any) => {
     await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR']);
+    // Mismo gate que `createPago`: sin esto, una terminal ajena que encuentra el
+    // `Pago` ya creado (cobro anticipado de delivery, diálogo reabierto) podía
+    // seguir agregando líneas de dinero aunque el gate de creación la hubiera
+    // rechazado.
+    //
+    // La caja se resuelve SIEMPRE server-side desde el id del pago: el payload
+    // del renderer trae el `pago` tal como lo devolvió `getVenta`, que no carga
+    // `pago.caja`, así que confiar en `data.pago.caja` dejaría el gate en no-op.
+    const { validarDispositivoCaja, ...detalleData } = data ?? {};
+    if (validarDispositivoCaja) {
+      const pagoId = detalleData?.pago?.id ?? detalleData?.pago ?? null;
+      const pago = pagoId
+        ? await dataSource.getRepository(Pago).findOne({
+            where: { id: Number(pagoId) },
+            relations: ['caja'],
+          })
+        : null;
+      await assertTerminalPuedeOperar(dataSource, _event, (pago?.caja as any)?.id ?? null, 'PAGO');
+    }
     const repo = dataSource.getRepository(PagoDetalle);
-    return await repo.save(repo.create(data));
+    return await repo.save(repo.create(detalleData));
   });
 
   ipcMain.handle('updatePagoDetalle', async (_event: any, id: number, data: any) => {

@@ -31,6 +31,13 @@ export interface DeliveryDialogData {
   principalMoneda: Moneda;
   exchangeRates: MonedaCambio[];
   filteredMonedas: Moneda[];
+  /**
+   * Gate de terminal ajena, resuelto por el PdV que abre este diálogo. Se
+   * propaga tal cual al diálogo de cobro. `undefined ⇒ permitido`.
+   */
+  puedeAgregarPagos?: boolean;
+  puedeFinalizar?: boolean;
+  terminalDeLaCaja?: string;
 }
 
 /**
@@ -177,6 +184,15 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   ) {}
 
   async ngOnInit(): Promise<void> {
+    // Si esta terminal no puede ni registrar pagos ni finalizar, el botón PAGO
+    // no tiene nada que ofrecer. Se computa antes de la primera carga para que
+    // `recomputarEstadoBotones` ya lo tenga en cuenta.
+    const puedePagos = this.data.puedeAgregarPagos !== false;
+    const puedeFin = this.data.puedeFinalizar !== false;
+    this.cobroBloqueadoPorTerminal = !puedePagos && !puedeFin;
+    this.tooltipPago = this.cobroBloqueadoPorTerminal
+      ? `El cobro se realiza en ${this.data.terminalDeLaCaja || 'la terminal donde se abrió la caja'}`
+      : '';
     try {
       const config = await firstValueFrom(this.repositoryService.getPdvConfig());
       if (config) {
@@ -532,7 +548,17 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   }
 
   /** Habilitación de los botones del footer. Pre-computados: sin getters. */
-  puedeCobrar = false;
+  /**
+   * "Hay un delivery seleccionado y no está en estado terminal". NO tiene que
+   * ver con el gate por terminal de la caja: ese llega desde el PdV en
+   * `data.puedeAgregarPagos` / `data.puedeFinalizar` y se propaga al diálogo de
+   * cobro. Se llama así desde que el PdV ganó un `puedeCobrar` con otro
+   * significado.
+   */
+  puedeEditarPago = false;
+  /** Ningún permiso de cobro en esta terminal: el botón PAGO no hace nada. */
+  cobroBloqueadoPorTerminal = false;
+  tooltipPago = '';
   puedeCambiarEstado = false;
   puedeAsignarRepartidor = false;
   esRetiroSeleccionado = false;
@@ -552,7 +578,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       : DeliveryDialogComponent.TRANSICIONES;
     this.estadosDisponibles = estado ? (tabla[estado] ?? []) : [];
 
-    this.puedeCobrar = !!this.selectedDelivery && !this.isTerminal;
+    this.puedeEditarPago = !!this.selectedDelivery && !this.isTerminal && !this.cobroBloqueadoPorTerminal;
     this.puedeCambiarEstado = !!this.selectedDelivery && this.estadosDisponibles.length > 0;
 
     // El repartidor es quien LLEVA el pedido. En un retiro nadie lo lleva:
@@ -743,6 +769,12 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
 
   editarPago(): void {
     if (!this.selectedDelivery?.venta) return;
+    // También cubre el camino `finalizar()` → `editarPago()` (botón ENTREGADO
+    // sobre un delivery sin cobrar), que no pasa por el botón PAGO.
+    if (this.cobroBloqueadoPorTerminal) {
+      this.snackBar.open(this.tooltipPago, 'CERRAR', { duration: 5000 });
+      return;
+    }
 
     const dialogData: CobrarVentaDialogData = {
       venta: this.selectedDelivery.venta,
@@ -752,6 +784,9 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       principalMoneda: this.data.principalMoneda,
       caja: this.data.caja,
       costoDelivery: this.detalleEnvio,
+      puedeAgregarPagos: this.data.puedeAgregarPagos,
+      puedeFinalizar: this.data.puedeFinalizar,
+      terminalDeLaCaja: this.data.terminalDeLaCaja,
     };
 
     const dialogRef = this.dialog.open(CobrarVentaDialogComponent, {

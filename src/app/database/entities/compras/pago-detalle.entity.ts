@@ -60,4 +60,23 @@ export class PagoDetalle extends BaseModel {
   // Permite anular una ronda desactivando sus PagoDetalle y recomputar saldo.
   @Column({ name: 'cobro_parcial_id', nullable: true })
   cobroParcialId?: number;
+
+  // ─── Destino de la acreditación (POS / banco) ───────────────────────────
+  // Al finalizar el cobro se crea una `AcreditacionPos` por cada línea con
+  // máquina POS y se acredita la cuenta bancaria de cada transferencia. Hasta
+  // 2026-08 ese vínculo vivía SOLO en memoria del diálogo de cobro: no se
+  // persistía, así que al reabrir el diálogo (`loadExistingPago`) se perdía y
+  // la acreditación no se creaba nunca — en silencio, porque el bloque que la
+  // genera está en un try/catch no bloqueante.
+  //
+  // Con el cobro repartido entre terminales (una carga las líneas, otra
+  // finaliza) ese camino pasa a ser el normal, así que el vínculo tiene que
+  // sobrevivir a la recarga. Nullable: la enorme mayoría de las líneas
+  // (efectivo) no tiene destino de acreditación, y las líneas históricas
+  // quedan en null sin cambiar de significado.
+  @Column({ name: 'maquina_pos_id', nullable: true })
+  maquinaPosId?: number | null;
+
+  @Column({ name: 'cuenta_bancaria_id', nullable: true })
+  cuentaBancariaId?: number | null;
 }
