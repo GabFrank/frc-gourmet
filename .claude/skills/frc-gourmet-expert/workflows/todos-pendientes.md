@@ -221,7 +221,10 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
 - [ ] **Dialog de "Marcar asistencia individual"** en `list-asistencias`: actualmente solo flujo masivo. Agregar botón "Nueva asistencia" con: funcionario (autocomplete), fecha, estado, turno (auto-cargar turno vigente), hora entrada/salida, observación.
 - [ ] **Integrar emisión de Vale en dialog Egresos de Caja Mayor**: opción "Vale a funcionario" en `registrar-egreso-dialog`. Reusar handlers `crear-vale` + `confirmar-vale`.
 - [ ] **Tasa de interés en préstamo a funcionario**: dialog `crear-prestamo-funcionario-dialog` debe permitir `tasaInteresPorcentaje` (default 0). Calcular monto_total con interés simple (preferido) o compuesto. Extender `CuentaPorPagar` con `tasaInteres` decimal nullable y `tipoCalculoInteres` enum.
-- [ ] **Cobrar cuota préstamo func. desde dialog Egresos** (acceso rápido). Análogo TODO para CPC en dialog Ingresos.
+- [ ] **Cobrar cuota préstamo func. desde dialog Egresos** (acceso rápido).
+- [x] ~~Cobro de CPC desde el diálogo de Ingresos~~ — hecho 2026-08: la tarjeta *Cobrar a Cliente* abre el wizard consolidado (`concepto = COBRO_CLIENTE`), multi-cuota, multi-moneda y con descuento.
+- [ ] **Ofrecer el cobro multi-cuota desde `cuenta-por-cobrar-detalle` y `cliente-detalle`** con `origenIdsPreseleccionados` (el wizard ya soporta ese dato). Hoy esas dos pantallas siguen cobrando de a una cuota por `cobrar-cuota-dialog`, que es donde un cajero parado en la ficha del cliente naturalmente intenta cobrarle todo junto.
+- [ ] **Lock pesimista en `cobrar-cpc-cuota`** (el camino viejo, que usa la PWA). El cobro consolidado sí lockea cuota → CPC → cliente; el viejo no, así que dos cobros simultáneos del mismo cliente por caminos distintos pueden pisarse `saldoActual` en modo server.
 
 ## Comisiones
 

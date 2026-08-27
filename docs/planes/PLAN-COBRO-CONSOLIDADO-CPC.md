@@ -322,7 +322,8 @@ Mismo componente, mismas dos etapas. Cambia:
   (`src/app/shared/components/descuento-dialog/`, hoy usado por el PdV): radio
   porcentaje/monto, motivo obligatorio, y resumen vivo "Descuento: −X / Total: Y".
   Se lo extiende con dos entradas opcionales — `maxPorcentaje` (el tope configurado, que
-  se muestra y se clampea en la UI, además de validarse en backend) y `decimales` — sin
+  se muestra y **bloquea** el botón con un mensaje si se pasa —avisar es mejor que
+  recortar en silencio—, además de validarse en backend) y `decimales` — sin
   romper al PdV. Al aceptar, el componente crea o reemplaza **una** línea `DESCUENTO`
   interna (moneda de la deuda, cotización 1) que aparece en la tabla de líneas como
   "Descuento — <motivo>" con su acción de quitar.
@@ -429,6 +430,6 @@ fallar); anular un evento con descuento y verificar que **las dos** filas de
 |---|---|
 | Reordenar las líneas para el reparto desalinea los índices de `grupos`/`detalles` | `ordenarLineasParaReparto` devuelve el mapeo de índices; el handler lo aplica al construir los detalles, y el test unitario compara contra el reparto sin reordenar |
 | Un descuento del 100% deja la cuota COBRADA sin que entre un guaraní | Rechazado en backend: para eso está `cancelar-cuenta-por-cobrar` |
-| El tope se lee de la config de una caja que no participa del cobro (líneas 100% banco) | El wizard siempre manda `cajaMayorContextoId` (la caja desde la que se abrió); el tope es una regla operativa de esa caja |
+| El tope se lee de la config de una caja que no participa del cobro (líneas 100% banco) | **Resuelto en la implementación, no como se planeó**: confiar en que "el wizard siempre lo manda" no era un control — bastaba omitir el campo. El contexto es obligatorio y tiene que existir, y el tope aplicado es el **más restrictivo** entre el del contexto y el de cada caja por la que realmente entra plata |
 | `cliente.saldoActual` desincronizado si se mezclan cobro viejo y consolidado | Ambos caminos lo mueven por el mismo delta; además existe `recalcular-saldo-cliente`. La guarda cruzada evita la doble reversa, que es el caso que sí corrompía |
 | Postgres rechaza columnas de entidad sin `type` explícito | Todas las columnas nuevas declaran `type` (pitfall del PR #234) |

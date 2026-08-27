@@ -330,12 +330,54 @@ eran 3 movimientos sueltos.
 
 | Regla | Por qué |
 |---|---|
-| **Un pago = un concepto** | El movimiento conserva el `TipoMovimiento` real (`EGRESO_GASTO`, `EGRESO_VALE`, `EGRESO_SALARIO`, `EGRESO_CUOTA_COMPRA`), así los reportes por tipo siguen cuadrando |
-| **Una sola moneda de deuda** por evento | Para que "total a pagar" sea un número |
-| **Un solo proveedor** en compras | Igual que la referencia de frc-comercial |
-| **Sólo compras admite pago parcial** | Un gasto/vale/liquidación se paga entero |
+| **Un evento = un concepto** | El movimiento conserva el `TipoMovimiento` real (`EGRESO_GASTO`, `EGRESO_VALE`, `EGRESO_SALARIO`, `EGRESO_CUOTA_COMPRA`, `INGRESO_COBRO_CLIENTE`), así los reportes por tipo siguen cuadrando |
+| **Una sola moneda de deuda** por evento | Para que "total a pagar/cobrar" sea un número |
+| **Un solo beneficiario** en compras y en cobros | Un pago = un proveedor; un cobro = un cliente (`CONCEPTO_BENEFICIARIO_UNICO`) |
+| **Sólo las cuotas admiten pago/cobro parcial** | Compras y cobro a cliente sí; un gasto/vale/liquidación va entero |
 | **Una liquidación por vez** | Su neteo tiene que quedar atado a un evento propio |
-| Fuentes: `CAJA_MAYOR` y `CUENTA_BANCARIA` | Cheque sigue por `emitir-cheque` |
+| Fuentes: `CAJA_MAYOR`, `CUENTA_BANCARIA` y `DESCUENTO` | Cheque sigue por `emitir-cheque`. `DESCUENTO` sólo en el cobro a cliente |
+
+### Los 5 conceptos y la dirección del dinero (2026-08)
+
+`PagoConcepto` tiene 5 valores. Cuatro son **egresos**; `COBRO_CLIENTE` es el
+único **ingreso**: sus obligaciones son cuotas de `CuentaPorCobrar` y su
+movimiento es `INGRESO_COBRO_CLIENTE`.
+
+En `pagos_consolidados`, "pago" significa **evento de liquidación de deuda**; la
+dirección la da el concepto, no la tabla. El motor casi no necesitó cambios: el
+asiento de caja ya derivaba el signo de `esIngreso(tipoMovimiento)` y la
+anulación del lado caja también. Lo que estaba a fuego en dirección egreso era
+**el tramo bancario**, que ahora acredita/debita según la dirección.
+
+⚠️ **`CONCEPTO_ES_INGRESO` es un espejo de `esIngreso(adapter.tipoMovimiento)`.**
+Existe aparte porque el renderer no puede importar `electron/caja-mayor-utils`.
+Si se agrega un concepto, las dos tienen que coincidir —
+`scripts/test-pago-consolidado.ts` lo verifica para los 5.
+
+### Descuento (sólo en el cobro a cliente)
+
+Una línea de `fuente: 'DESCUENTO'` **condona deuda sin mover plata**: cubre parte
+del total para que la cuota quede saldada, pero no genera movimiento de caja ni
+de banco. Sí genera fila de `PagoConsolidadoDetalle`, que es lo que permite
+responder después "de esta cuota, cuánto entró y cuánto se perdonó".
+
+- Va **siempre última en el reparto FIFO** (`ordenarLineasParaReparto`): el
+  efectivo imputa primero y lo condonado cae sobre el remanente.
+- Va en la **moneda de la deuda con cotización 1**: perdonar deuda en otra moneda
+  no significa nada.
+- En la cuenta corriente del cliente se registra como **`AJUSTE_NEGATIVO`**, no
+  como `PAGO`: los dos bajan la deuda, pero el estado de cuenta tiene que poder
+  decir cuánto pagó y cuánto se le perdonó.
+- Controles: permiso **`CPC_DESCUENTO`** (no está en ningún rol plantilla — lo
+  asigna el ADMIN), **motivo obligatorio**, **nunca el 100%** (para eso está
+  `cancelar-cuenta-por-cobrar`), y **tope %** por caja
+  (`CajaMayorConfiguracion.descuentoCpcMaxPorcentaje`, null = sin tope).
+
+⚠️ El tope **no puede depender de un campo omitible**: `cajaMayorContextoId` es
+obligatorio cuando hay descuento y tiene que existir, y el tope aplicado es el
+**más restrictivo** entre el del contexto y el de cada caja por la que realmente
+entra plata. Con un `if (cajaCtxId)` alcanzaba con no mandarlo para quedar sin
+límite, y `/api/rpc` es default-allow.
 
 ### Handler y adaptadores
 
@@ -343,8 +385,8 @@ eran 3 movimientos sueltos.
 (`get-obligaciones-pendientes`, `registrar-pago-consolidado`,
 `get-pago-consolidado-detalle`, `anular-pago-consolidado`). **Permiso por
 concepto**: `COMPRAS_GESTIONAR` / `CAJA_MAYOR_OPERAR` / `RRHH_VALE_CONFIRMAR` /
-`RRHH_LIQUIDACION_PAGAR`, también en los `get-*` (el listado de liquidaciones
-expone la nómina).
+`RRHH_LIQUIDACION_PAGAR` / `CPC_COBRAR`, también en los `get-*` (el listado de
+liquidaciones expone la nómina). El descuento suma `CPC_DESCUENTO` aparte.
 
 `pago-consolidado-adapters.ts` — un adaptador por concepto con `listarPendientes`,
 `leerYBloquear`, `aplicar`, `revertir` y `columnaReferencia`. **Ninguno toca
@@ -352,13 +394,27 @@ caja**: el asiento vive sólo en el handler.
 
 Orden del `registrar`, todo en una transacción:
 1. Releer cada obligación **con lock pesimista** (Postgres) y validar contra el
-   saldo real — nunca contra el que mandó el cliente.
-2. Resolver cotizaciones faltantes (bidireccional); si no hay, error.
-3. Validar que las líneas cubran la deuda (tolerancia por moneda).
-4. Crear la cabecera.
-5. **Un asiento por grupo** `(fuente, caja|cuenta, moneda, formaPago)`.
-6. Reparto FIFO → filas de detalle.
-7. `aplicar` de cada adaptador con lo **realmente imputado**.
+   saldo real — nunca contra el que mandó el cliente. El adaptador de cobro
+   lockea en orden total **cuota → CPC → cliente**: `cpc.montoCobrado` y
+   `cliente.saldoActual` son read-modify-write sobre agregados compartidos.
+   `validarSeleccion` además rechaza la misma obligación **repetida** en `items`.
+2. Validar el descuento (permiso, motivo, 100%, tope) — antes de las cotizaciones.
+3. Resolver cotizaciones faltantes (bidireccional); si no hay, error.
+4. Validar que las líneas cubran la deuda (tolerancia por moneda).
+5. Crear la cabecera.
+6. **Un asiento por grupo** `(fuente, caja|cuenta, moneda, formaPago)`. Las
+   líneas `DESCUENTO` se excluyen: no hay movimiento que crear.
+7. Reordenar las líneas (descuento último) y repartir FIFO → filas de detalle.
+8. `aplicar` de cada adaptador con lo **realmente imputado**, y cuánto de eso
+   fue descuento.
+
+⚠️ El reordenamiento se hace **reasignando la variable**
+(`lineas = ordenarLineasParaReparto(lineas)`) antes de repartir. `FilaReparto.lineaIdx`
+es una posición dentro del array que recibió `repartirFifo`, y se usa después
+para construir el detalle y el desglose por fuente: repartir sobre un array e
+indexar sobre otro no rompe nada visible, **miente** sobre cuánto pagó el cliente
+y cuánto se le perdonó. `grupos` está indexado por contenido (`claveGrupo`), así
+que reordenar no lo afecta.
 
 > Si el evento cubre **una sola** obligación, el movimiento además setea la
 > columna de referencia clásica (`gasto`, `valeId`, `cuentaPorPagarCuotaId`,
@@ -377,7 +433,8 @@ TS puro (re-exportado en `electron/utils/`), lo comparten handler y componente.
 El residuo entre "líneas convertidas" y "obligaciones" se absorbe **antes** de
 repartir, ajustando la capacidad de la última línea. Sin eso, pagar 99,99 USD con
 una línea de 250.000 Gs deja una obligación PARCIAL por un centavo. Trabaja en
-unidades mínimas enteras. Test: `npm run test:pago-consolidado` (64 asserts).
+unidades mínimas enteras. Tests: `npm run test:pago-consolidado` (90 asserts) y
+`npm run test:cobro-cpc-consolidado` (63, E2E del concepto de ingreso).
 
 ### Anulación
 
@@ -394,18 +451,31 @@ adaptador.
 | `anular-vale` | primera sentencia. Un vale pagado por el evento tiene `movimientoId` en **null**: sin el bloqueo quedaría ANULADO sin devolver un guaraní |
 | `anular-gasto` | ídem |
 | `anular-liquidacion-sueldo` | ídem: su reversa de caja va por `liq.movimientoId`, que queda null |
+| `anular-cobro-cpc-cuota` | ídem, con `PagoOrigenTipo.CPC_CUOTA` |
 
 Los bloqueos **se liberan** al anular el evento.
 
 ### UI
 
 - `pagar-obligaciones-dialog/` — wizard de 3 pasos (seleccionar / formas de pago /
-  revisar), híbrido tab-dialog, parametrizado por `concepto`.
+  revisar), híbrido tab-dialog, parametrizado por `concepto`. Sirve **pagos y
+  cobros**: las etiquetas salen de una tabla `ETIQUETAS` por dirección
+  (`Monto a cobrar`, `Confirmar cobro`, …), no de ifs sueltos.
+  El **descuento va en un botón propio** que abre el `descuento-dialog` del PdV
+  (% o monto + motivo + resumen, extendido con tope): no es una opción del select
+  *Fuente*, porque condonar deuda no es una fuente de fondos y ahí "Completar"
+  se volvería un botón de perdonar todo de un clic. Cambiar la selección
+  **descarta el descuento** con aviso: se calculó sobre un total que ya no existe.
+  El permiso se precomputa suscribiéndose a `codigos$`, nunca se llama desde el
+  template. En un cobro no corre `confirmarSaldosNegativos` (entra plata); sí
+  corre al **anular** uno, desde el diálogo de detalle.
 - `detalle-pago-consolidado-dialog/` — qué obligaciones cubrió y con qué líneas;
   desde ahí se anula. Se abre desde el menú ⋮ del movimiento.
 - `registrar-egreso-dialog` — tarjetas nuevas **Pagar Gastos**, **Pagar Vales**,
   **Pagar Salarios**; **Pagar Compras** ahora abre el genérico.
-- `pagar-compras-dialog/` **fue eliminado**.
+- `registrar-ingreso-dialog` — la tarjeta **Cobrar a Cliente** abre el mismo
+  wizard con `concepto = COBRO_CLIENTE`.
+- `pagar-compras-dialog/` y `cobrar-cpc-rapido-dialog/` **fueron eliminados**.
 
 Ninguno necesita hoja en `MENU_TREE`: son diálogos contextuales.
 
@@ -595,11 +665,11 @@ Manual de pruebas: [`docs/testing/TESTING-CHECKLIST-OPERACIONES-FINANCIERAS.md`]
 - `list-cajas-mayor/` — listar abiertas/cerradas.
 - `create-edit-caja-mayor/` — CRUD.
 - `caja-mayor-detalle/` — vista operativa.
-- `registrar-ingreso-dialog/` — entrada varia o retiro caja.
-- `registrar-egreso-dialog/` — hub de EGRESOS, en **grid** de tarjetas. Lanza: `CreateEditGastoDialogComponent` (alta diferida, gasto PENDIENTE), `CrearCompraSimplificadaDialogComponent` (sin pago), `CreateEditValeDialogComponent` (alta, vale SOLICITADO), `PagarObligacionesDialogComponent` (los 4 conceptos de pago), `EmitirChequeDialogComponent`, `CreateOperacionFinancieraDialogComponent`, `EgresoCajaInicialDialogComponent`, y el ajuste de saldo resuelto en el propio diálogo.
+- `registrar-ingreso-dialog/` — hub de INGRESOS: retiro de caja, entrada varia, operación financiera, **cobrar a cliente** (abre el wizard consolidado) y ajuste de saldo.
+- `registrar-egreso-dialog/` — hub de EGRESOS, en **grid** de tarjetas. Lanza: `CreateEditGastoDialogComponent` (alta diferida, gasto PENDIENTE), `CrearCompraSimplificadaDialogComponent` (sin pago), `CreateEditValeDialogComponent` (alta, vale SOLICITADO), `PagarObligacionesDialogComponent` (los 4 conceptos de pago; el 5º, el cobro, se abre desde el hub de ingresos), `EmitirChequeDialogComponent`, `CreateOperacionFinancieraDialogComponent`, `EgresoCajaInicialDialogComponent`, y el ajuste de saldo resuelto en el propio diálogo.
 - `edit-movimiento-dialog/` — editar/anular movimiento.
-- `configurar-caja-mayor-dialog/` — qué FPs y cuentas mostrar (M:M).
-- `pagar-obligaciones-dialog/` — **wizard único de pago** (compras/gastos/vales/salarios).
+- `configurar-caja-mayor-dialog/` — qué FPs y cuentas mostrar (M:M) + tope de descuento al cobrar CPC.
+- `pagar-obligaciones-dialog/` — **wizard único de pago y cobro** (compras/gastos/vales/salarios/cobro a cliente).
 - `detalle-pago-consolidado-dialog/` — desglose de un pago consolidado.
 - `egreso-caja-inicial-dialog/` — sembrar efectivo a la apertura de una caja PdV (EGRESO_CAJA_INICIAL).
 - `abrir-caja-desde-conteo-dialog/` — abrir caja reutilizando el conteo del egreso inicial.
