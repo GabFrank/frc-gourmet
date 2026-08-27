@@ -729,6 +729,8 @@ export abstract class RepositoryService {
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;
+      /** Tope de descuento al cobrar CPC, en % del cobro. null = sin tope. */
+      descuentoCpcMaxPorcentaje?: number | null;
     }): Observable<any>;
   abstract getCuentaBancariaResumen(cuentaBancariaId: number): Observable<any>;
   abstract getCuentasBancariasResumenes(ids: number[]): Observable<any[]>;

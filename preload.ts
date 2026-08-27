@@ -2907,6 +2907,8 @@ contextBridge.exposeInMainWorld('api', {
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;
+      /** Tope de descuento al cobrar CPC, en % del cobro. null = sin tope. */
+      descuentoCpcMaxPorcentaje?: number | null;
     }
   ): Promise<any> => {
     return await ipcRenderer.invoke('save-caja-mayor-configuracion', cajaMayorId, data);

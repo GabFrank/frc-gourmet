@@ -1,4 +1,4 @@
-import { Component, Inject, OnInit, Optional, ViewChild } from '@angular/core';
+import { Component, Inject, OnDestroy, OnInit, Optional, ViewChild } from '@angular/core';
 import { CommonModule, DecimalPipe, DatePipe } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, FormsModule } from '@angular/forms';
 import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
@@ -27,12 +27,20 @@ import {
   CONCEPTO_PERMITE_PARCIAL,
   CONCEPTO_SELECCION_UNICA,
   CONCEPTO_BENEFICIARIO_UNICO,
+  CONCEPTO_PERMITE_DESCUENTO,
+  CONCEPTO_ES_INGRESO,
 } from 'src/app/database/entities/financiero/pago-consolidado-enums';
 import {
   redondear,
   toleranciaDe,
   convertirLinea,
 } from 'src/app/shared/utils/pago-consolidado.util';
+import { PermissionService } from 'src/app/services/permission.service';
+import {
+  DescuentoDialogComponent,
+  DescuentoDialogData,
+} from 'src/app/shared/components/descuento-dialog/descuento-dialog.component';
+import { Subscription } from 'rxjs';
 
 export interface PagarObligacionesDialogData {
   concepto: PagoConcepto;
@@ -66,7 +74,7 @@ interface ObligacionRow {
 }
 
 interface LineaRow {
-  fuente: 'CAJA_MAYOR' | 'CUENTA_BANCARIA';
+  fuente: 'CAJA_MAYOR' | 'CUENTA_BANCARIA' | 'DESCUENTO';
   monedaId: number;
   monedaSimbolo: string;
   decimales: number;
@@ -82,6 +90,7 @@ interface LineaRow {
   etiqueta: string;
   montoTexto: string;
   convertidoTexto: string;
+  icono: string;
 }
 
 /** Etiquetas por concepto. El wizard es uno solo; sólo cambia qué lista. */
@@ -90,6 +99,64 @@ const TITULOS: Record<PagoConcepto, { titulo: string; nuevo: string | null; colu
   [PagoConcepto.GASTO]: { titulo: 'Pagar gastos', nuevo: 'Nuevo gasto', columnaItem: 'Gasto' },
   [PagoConcepto.VALE]: { titulo: 'Pagar vales', nuevo: 'Nuevo vale', columnaItem: 'Vale' },
   [PagoConcepto.LIQUIDACION_SUELDO]: { titulo: 'Pagar salarios', nuevo: null, columnaItem: 'Liquidación' },
+  [PagoConcepto.COBRO_CLIENTE]: { titulo: 'Cobrar a cliente', nuevo: null, columnaItem: 'Cuota' },
+};
+
+/**
+ * Textos que cambian con la DIRECCIÓN del evento, no con el concepto. Están en una
+ * tabla y no en `*ngIf` sueltos porque son una docena repartidos por el template:
+ * cambiar la mitad deja una pantalla de "Cobrar a Cliente" que dice "Confirmar pago".
+ */
+interface EtiquetasDireccion {
+  columnaMonto: string;
+  columnaBeneficiario: string;
+  filtroBeneficiario: string;
+  destinatarioPrefijo: string;
+  totalDeuda: string;
+  totalLineas: string;
+  bloqueItems: string;
+  bloqueLineas: string;
+  pasoLineas: string;
+  confirmar: string;
+  iconoConfirmar: string;
+  fuenteCaja: string;
+  sinLineas: string;
+  sinPendientes: string;
+}
+
+const ETIQUETAS: Record<'EGRESO' | 'INGRESO', EtiquetasDireccion> = {
+  EGRESO: {
+    columnaMonto: 'Monto a pagar',
+    columnaBeneficiario: 'Beneficiario',
+    filtroBeneficiario: 'Filtrar por beneficiario',
+    destinatarioPrefijo: 'Pagar a',
+    totalDeuda: 'Total a pagar',
+    totalLineas: 'Total formas de pago',
+    bloqueItems: 'Se paga',
+    bloqueLineas: 'Formas de pago',
+    pasoLineas: 'Formas de pago',
+    confirmar: 'Confirmar pago',
+    iconoConfirmar: 'payments',
+    fuenteCaja: 'Efectivo (caja mayor)',
+    sinLineas: 'Agregá al menos una forma de pago.',
+    sinPendientes: 'No hay nada pendiente de pago.',
+  },
+  INGRESO: {
+    columnaMonto: 'Monto a cobrar',
+    columnaBeneficiario: 'Cliente',
+    filtroBeneficiario: 'Filtrar por cliente',
+    destinatarioPrefijo: 'Cobrar a',
+    totalDeuda: 'Total a cobrar',
+    totalLineas: 'Total formas de cobro',
+    bloqueItems: 'Se cobra',
+    bloqueLineas: 'Formas de cobro',
+    pasoLineas: 'Formas de cobro',
+    confirmar: 'Confirmar cobro',
+    iconoConfirmar: 'savings',
+    fuenteCaja: 'Efectivo (caja mayor)',
+    sinLineas: 'Agregá al menos una forma de cobro.',
+    sinPendientes: 'No hay cuotas de clientes pendientes de cobro.',
+  },
 };
 
 @Component({
@@ -105,7 +172,7 @@ const TITULOS: Record<PagoConcepto, { titulo: string; nuevo: string | null; colu
     DecimalPipe, DatePipe, CurrencyInputDirective,
   ],
 })
-export class PagarObligacionesDialogComponent implements OnInit {
+export class PagarObligacionesDialogComponent implements OnInit, OnDestroy {
   @ViewChild('stepper') stepper?: MatStepper;
 
   /**
@@ -130,6 +197,28 @@ export class PagarObligacionesDialogComponent implements OnInit {
   seleccionUnica = false;
   beneficiarioUnico = false;
   esTab = false;
+
+  /** Dirección del evento: en un cobro entra plata, no sale. */
+  esIngresoConcepto = false;
+  txt: EtiquetasDireccion = ETIQUETAS.EGRESO;
+
+  // ── Descuento ──
+  /** El concepto admite condonar deuda (hoy sólo el cobro a cliente). */
+  permiteDescuento = false;
+  /**
+   * `permiteDescuento` Y el usuario tiene `CPC_DESCUENTO`. Se precomputa acá y no
+   * se consulta desde el template: `PermissionService.has()` es un método, y las
+   * reglas del repo prohíben llamadas y getters en la vista.
+   */
+  puedeAplicarDescuento = false;
+  /** Tope de descuento de la caja desde la que se abrió, en %. null = sin tope. */
+  topeDescuentoPct: number | null = null;
+  motivoDescuento = '';
+  descuentoTexto = '';
+  private permisosSub?: Subscription;
+
+  /** Filtro de texto del paso 1 (con botón, sin live filtering). */
+  filtroTexto = '';
 
   loading = true;
   saving = false;
@@ -173,9 +262,14 @@ export class PagarObligacionesDialogComponent implements OnInit {
     private repo: RepositoryService,
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
+    private permissionService: PermissionService,
     @Optional() private dialogRef: MatDialogRef<PagarObligacionesDialogComponent>,
     @Optional() @Inject(MAT_DIALOG_DATA) public data: PagarObligacionesDialogData,
   ) {}
+
+  ngOnDestroy(): void {
+    this.permisosSub?.unsubscribe();
+  }
 
   ngOnInit(): void {
     this.concepto = this.data?.concepto || PagoConcepto.GASTO;
@@ -186,7 +280,16 @@ export class PagarObligacionesDialogComponent implements OnInit {
     this.permiteParcial = CONCEPTO_PERMITE_PARCIAL[this.concepto];
     this.seleccionUnica = CONCEPTO_SELECCION_UNICA[this.concepto];
     this.beneficiarioUnico = CONCEPTO_BENEFICIARIO_UNICO[this.concepto];
+    this.permiteDescuento = CONCEPTO_PERMITE_DESCUENTO[this.concepto];
+    this.esIngresoConcepto = CONCEPTO_ES_INGRESO[this.concepto];
+    this.txt = ETIQUETAS[this.esIngresoConcepto ? 'INGRESO' : 'EGRESO'];
     this.esTab = !!this.data?.isTab || !this.dialogRef;
+
+    // Los permisos se recargan al cambiar de usuario: se escucha el stream en vez
+    // de leer una vez, para que el botón desaparezca si el permiso se revoca.
+    this.permisosSub = this.permissionService.codigos$.subscribe(() => {
+      this.puedeAplicarDescuento = this.permiteDescuento && this.permissionService.has('CPC_DESCUENTO');
+    });
 
     this.draft = this.fb.group({
       fuente: ['CAJA_MAYOR'],
@@ -239,6 +342,18 @@ export class PagarObligacionesDialogComponent implements OnInit {
         .map(([id, nombre]) => ({ id, nombre }))
         .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
+      // Tope de descuento de la caja desde la que se abrió el wizard. El backend lo
+      // vuelve a validar: esto es para mostrarlo y acotarlo antes de confirmar.
+      if (this.permiteDescuento && this.data?.cajaMayorId) {
+        try {
+          const cfg: any = await firstValueFrom(this.repo.getCajaMayorConfiguracion(this.data.cajaMayorId));
+          const pct = cfg?.descuentoCpcMaxPorcentaje;
+          this.topeDescuentoPct = pct == null ? null : Number(pct);
+        } catch {
+          this.topeDescuentoPct = null;
+        }
+      }
+
       const cajaPre = preselectSingleOrPrincipal(this.cajasMayor);
       if (cajaPre && !this.draft.get('cajaMayorId')!.value) {
         this.draft.patchValue({ cajaMayorId: cajaPre.id }, { emitEvent: false });
@@ -257,13 +372,17 @@ export class PagarObligacionesDialogComponent implements OnInit {
   }
 
   aplicarFiltro(): void {
-    this.obligacionesFiltradas = this.filtroBeneficiarioId == null
-      ? [...this.obligaciones]
-      : this.obligaciones.filter((o) => o.beneficiarioId === this.filtroBeneficiarioId);
+    const texto = (this.filtroTexto || '').trim().toUpperCase();
+    this.obligacionesFiltradas = this.obligaciones.filter((o) => {
+      if (this.filtroBeneficiarioId != null && o.beneficiarioId !== this.filtroBeneficiarioId) return false;
+      if (!texto) return true;
+      return `${o.beneficiario || ''} ${o.descripcion || ''}`.toUpperCase().includes(texto);
+    });
   }
 
   limpiarFiltro(): void {
     this.filtroBeneficiarioId = null;
+    this.filtroTexto = '';
     this.aplicarFiltro();
   }
 
@@ -275,6 +394,7 @@ export class PagarObligacionesDialogComponent implements OnInit {
     }
     row.selected = !row.selected;
     if (row.selected && row.montoAPagar <= 0) row.montoAPagar = row.saldoPendiente;
+    this.descartarDescuentoPorCambio();
     this.recalcular();
   }
 
@@ -285,11 +405,25 @@ export class PagarObligacionesDialogComponent implements OnInit {
       o.selected = marcar;
       if (marcar && o.montoAPagar <= 0) o.montoAPagar = o.saldoPendiente;
     }
+    this.descartarDescuentoPorCambio();
     this.recalcular();
   }
 
   onMontoChange(): void {
+    this.descartarDescuentoPorCambio();
     this.recalcular();
+  }
+
+  /**
+   * Un descuento se calcula contra un total. Si la selección o los montos cambian,
+   * ese total ya no existe: se descarta con aviso en vez de dejar en silencio un
+   * importe que se refería a otra cosa.
+   */
+  private descartarDescuentoPorCambio(): void {
+    if (!this.lineas.some((l) => l.fuente === 'DESCUENTO')) return;
+    this.lineas = this.lineas.filter((l) => l.fuente !== 'DESCUENTO');
+    this.motivoDescuento = '';
+    this.snackBar.open('Se quitó el descuento: cambió el total sobre el que se calculó.', 'Cerrar', { duration: 5000 });
   }
 
   /**
@@ -334,6 +468,11 @@ export class PagarObligacionesDialogComponent implements OnInit {
     this.cuadra = this.lineas.length > 0 && this.totalDeuda > 0 && Math.abs(dif) <= tol;
     this.diferenciaTexto = dif === 0 ? '' :
       (dif > 0 ? `Sobran ${this.formatear(dif, this.decimalesDeuda)}` : `Faltan ${this.formatear(-dif, this.decimalesDeuda)}`);
+
+    const lineaDesc = this.lineas.find((l) => l.fuente === 'DESCUENTO');
+    this.descuentoTexto = lineaDesc
+      ? `${this.monedaDeudaSimbolo} ${this.formatear(lineaDesc.monto, this.decimalesDeuda)}`.trim()
+      : '';
 
     this.errores = this.validar();
     this.puedeAvanzarSeleccion = this.cantidadSeleccionada > 0 && this.errores.length === 0;
@@ -440,7 +579,7 @@ export class PagarObligacionesDialogComponent implements OnInit {
       monto,
       cotizacion,
       necesitaCotizacion: this.draftNecesitaCotizacion,
-      etiqueta: '', montoTexto: '', convertidoTexto: '',
+      etiqueta: '', montoTexto: '', convertidoTexto: '', icono: '',
     };
     this.actualizarLinea(linea);
     this.lineas = [...this.lineas, linea];
@@ -462,16 +601,100 @@ export class PagarObligacionesDialogComponent implements OnInit {
   }
 
   private actualizarLinea(l: LineaRow): void {
-    l.necesitaCotizacion = this.monedaDeudaId != null && l.monedaId !== this.monedaDeudaId;
+    // El descuento va 1 a 1 contra la deuda: nunca lleva cotización.
+    l.necesitaCotizacion = l.fuente !== 'DESCUENTO'
+      && this.monedaDeudaId != null && l.monedaId !== this.monedaDeudaId;
     if (!l.necesitaCotizacion) l.cotizacion = 1;
-    l.etiqueta = l.fuente === 'CAJA_MAYOR'
-      ? `${l.formaPagoNombre || 'Efectivo'} (caja mayor)`
-      : `Cuenta ${l.cuentaNombre || ''}`.trim();
+    if (l.fuente === 'DESCUENTO') {
+      l.icono = 'discount';
+      l.etiqueta = `Descuento${this.motivoDescuento ? ` — ${this.motivoDescuento}` : ''}`;
+    } else if (l.fuente === 'CAJA_MAYOR') {
+      l.icono = 'payments';
+      l.etiqueta = `${l.formaPagoNombre || 'Efectivo'} (caja mayor)`;
+    } else {
+      l.icono = 'account_balance';
+      l.etiqueta = `Cuenta ${l.cuentaNombre || ''}`.trim();
+    }
     l.montoTexto = `${l.monedaSimbolo} ${this.formatear(l.monto, l.decimales)}`.trim();
     const conv = convertirLinea(l.monto, l.cotizacion, this.decimalesDeuda);
     l.convertidoTexto = l.necesitaCotizacion
       ? `${this.monedaDeudaSimbolo} ${this.formatear(conv, this.decimalesDeuda)}`.trim()
       : '';
+  }
+
+  /**
+   * Condonar deuda no es una forma de cobro: no sale de ninguna caja ni cuenta.
+   * Por eso va en un botón propio y no como una opción más del select "Fuente" —
+   * ahí le enseñaría al usuario una categoría falsa, y convertiría "Completar" en
+   * un botón de perdonar todo lo que falta de un clic.
+   *
+   * Se reusa el diálogo de descuento del PdV (% o monto fijo + motivo obligatorio
+   * + resumen), extendido con el tope de la caja.
+   */
+  async aplicarDescuento(): Promise<void> {
+    if (!this.puedeAplicarDescuento || this.monedaDeudaId == null) return;
+    if (!(this.totalDeuda > 0)) {
+      this.snackBar.open('Elegí primero qué cuotas cobrás.', 'Cerrar', { duration: 3000 });
+      return;
+    }
+    const actual = this.lineas.find((l) => l.fuente === 'DESCUENTO');
+    const data: DescuentoDialogData = {
+      subtotal: this.totalDeuda,
+      descuentoMonto: actual?.monto,
+      descuentoMotivo: this.motivoDescuento || undefined,
+      decimales: this.decimalesDeuda,
+      maxPorcentaje: this.topeDescuentoPct,
+      titulo: 'DESCUENTO SOBRE EL COBRO',
+    };
+    const ref = this.dialog.open(DescuentoDialogComponent, { width: '460px', data });
+    const res = await firstValueFrom(ref.afterClosed());
+    if (res === null || res === undefined) return;
+
+    this.lineas = this.lineas.filter((l) => l.fuente !== 'DESCUENTO');
+    const monto = res.descuentoMonto != null
+      ? Number(res.descuentoMonto)
+      : redondear(this.totalDeuda * (Number(res.descuentoPorcentaje) || 0) / 100, this.decimalesDeuda);
+    if (!(monto > 0)) {
+      this.motivoDescuento = '';
+      this.recalcular();
+      return;
+    }
+    // El backend rechaza condonar el total (para eso está cancelar la CPC). Avisarlo
+    // acá y no después de que el usuario recorra las tres pantallas del wizard.
+    if (monto >= this.totalDeuda) {
+      this.motivoDescuento = '';
+      this.snackBar.open(
+        'El descuento no puede cubrir el total del cobro. Si la deuda se perdona entera, cancelá la cuenta por cobrar.',
+        'Cerrar', { duration: 7000 },
+      );
+      this.recalcular();
+      return;
+    }
+    this.motivoDescuento = (res.descuentoMotivo || '').toUpperCase();
+    const linea: LineaRow = {
+      fuente: 'DESCUENTO',
+      monedaId: this.monedaDeudaId,
+      monedaSimbolo: this.monedaDeudaSimbolo,
+      decimales: this.decimalesDeuda,
+      formaPagoId: null,
+      formaPagoNombre: null,
+      cajaMayorId: null,
+      cuentaBancariaId: null,
+      cuentaNombre: null,
+      monto: redondear(monto, this.decimalesDeuda),
+      cotizacion: 1,
+      necesitaCotizacion: false,
+      etiqueta: '', montoTexto: '', convertidoTexto: '', icono: '',
+    };
+    this.actualizarLinea(linea);
+    this.lineas = [...this.lineas, linea];
+    this.recalcular();
+  }
+
+  quitarDescuento(): void {
+    this.lineas = this.lineas.filter((l) => l.fuente !== 'DESCUENTO');
+    this.motivoDescuento = '';
+    this.recalcular();
   }
 
   // ── Alta rápida sin salir del componente ──
@@ -502,8 +725,8 @@ export class PagarObligacionesDialogComponent implements OnInit {
     if (this.saving || !this.cuadra || this.errores.length) return;
 
     // Aviso de saldo negativo: la caja puede quedar en rojo a propósito, pero
-    // que sea una decisión y no una sorpresa.
-    const checks = this.lineas
+    // que sea una decisión y no una sorpresa. En un cobro no aplica: entra plata.
+    const checks = this.esIngresoConcepto ? [] : this.lineas
       .filter((l) => l.fuente === 'CAJA_MAYOR')
       .map((l) => {
         const caja = this.cajasMayor.find((c) => c.id === l.cajaMayorId);
@@ -533,14 +756,20 @@ export class PagarObligacionesDialogComponent implements OnInit {
           monto: l.monto,
           cotizacion: l.cotizacion,
         })),
+        motivoDescuento: this.motivoDescuento || undefined,
+        // No participa del asiento: define de qué caja se lee el tope de descuento.
+        cajaMayorContextoId: this.data?.cajaMayorId ?? null,
       };
       const res = await firstValueFrom(this.repo.registrarPagoConsolidado(payload));
-      this.snackBar.open('Pago registrado.', 'Cerrar', { duration: 3000 });
+      this.snackBar.open(this.esIngresoConcepto ? 'Cobro registrado.' : 'Pago registrado.', 'Cerrar', { duration: 3000 });
       if (this.dialogRef) this.dialogRef.close(res);
       else { this.lineas = []; await this.cargar(); }
     } catch (e: any) {
       console.error('Error registrando pago consolidado', e);
-      this.snackBar.open(e?.message || 'No se pudo registrar el pago', 'Cerrar', { duration: 6000 });
+      this.snackBar.open(
+        e?.message || (this.esIngresoConcepto ? 'No se pudo registrar el cobro' : 'No se pudo registrar el pago'),
+        'Cerrar', { duration: 6000 },
+      );
     } finally {
       this.saving = false;
     }

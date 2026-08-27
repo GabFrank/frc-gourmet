@@ -130,6 +130,39 @@ Estas las debo respetar SIEMPRE, sin que el usuario las repita:
 > Esta sección puede quedar desactualizada. Si el usuario pregunta por estado actual, **revisar `git log` y memorias antes de responder**.
 > Canal alpha en `develop` va por **`v1.21.0-alpha.98`** (2026-07). El "primer stable v1.1.0" del snapshot viejo es historia lejana.
 
+### Sesión 2026-08-27 — Cobro consolidado de CPC (multi-cuota + descuento)
+
+El motor de **pago consolidado** de Caja Mayor gana un **quinto concepto**,
+`COBRO_CLIENTE`, y con él su primer evento de sentido **INGRESO**: cobrar N cuotas
+de `CuentaPorCobrar` de un mismo cliente en un solo evento, multi-moneda ×
+multi-forma × caja/banco, con una línea opcional de `fuente: DESCUENTO` que condona
+deuda sin mover plata. La tarjeta *Ingreso → Cobrar a Cliente* abre el **mismo
+wizard** que los pagos; `cobrar-cpc-rapido-dialog` fue eliminado (quedó sin
+referencias). Permiso nuevo **`CPC_DESCUENTO`** (no está en ningún rol plantilla) +
+motivo obligatorio + tope % por caja. Detalles → [domains/financiero-caja-mayor.md](domains/financiero-caja-mayor.md),
+[domains/financiero-cpp-cpc.md](domains/financiero-cpp-cpc.md),
+`docs/planes/PLAN-COBRO-CONSOLIDADO-CPC.md`.
+
+Tres cosas que conviene no volver a aprender por las malas:
+
+- **La dirección se deriva, no se declara.** El asiento de caja ya salía bien porque
+  usa `esIngreso(tipoMovimiento)`; lo que estaba a fuego en egreso era el **tramo
+  bancario**. `CONCEPTO_ES_INGRESO` (para el renderer, que no puede importar
+  `electron/`) es un **espejo** de `esIngreso()` y `test:pago-consolidado` verifica
+  que no se separen.
+- **Un control que vive dentro de un `if (campoDelCliente)` no es un control.** El
+  tope de descuento se evadía omitiendo `cajaMayorContextoId`. Ahora el contexto es
+  obligatorio y el tope aplicado es el **más restrictivo** entre el del contexto y el
+  de cada caja por la que entra plata. `/api/rpc` es default-allow: todo lo que el
+  backend no exige, no existe.
+- **Una cuota CPC puede estar reservada por RRHH.** Al *generar el borrador* de una
+  liquidación, las cuotas del funcionario-cliente quedan con `liquidacionId` y el
+  monto congelado; cobrarlas por caja mientras tanto las cobraba dos veces. El
+  adaptador las bloquea mientras la liquidación esté en BORRADOR o APROBADA.
+
+Tests: `npm run test:cobro-cpc-consolidado` (63), `test:pago-consolidado` (90),
+`test:pagar-obligaciones-dialog` (19). Manual: `docs/testing/TESTING-CHECKLIST-COBRO-CONSOLIDADO-CPC.md`.
+
 ### Reauditoría integral 2026-07-26 (subsistemas nuevos)
 
 Auditoría de ~240 commits desde 2026-06-28. Subsistemas **nuevos completos** que ahora tienen doc propio:

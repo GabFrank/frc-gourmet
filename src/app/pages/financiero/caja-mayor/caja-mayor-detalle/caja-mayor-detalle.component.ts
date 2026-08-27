@@ -25,7 +25,6 @@ import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { confirmarSaldosNegativos, SaldoNegativoCheck } from 'src/app/shared/utils/saldo-negativo-confirm';
 import { RegistrarIngresoDialogComponent } from '../registrar-ingreso-dialog/registrar-ingreso-dialog.component';
-import { CobrarCpcRapidoDialogComponent } from '../cuentas-por-cobrar/cobrar-cpc-rapido-dialog/cobrar-cpc-rapido-dialog.component';
 import { RegistrarEgresoDialogComponent } from '../registrar-egreso-dialog/registrar-egreso-dialog.component';
 import { CreateEditGastoDialogComponent } from '../gastos/create-edit-gasto/create-edit-gasto-dialog.component';
 import { CreateEditValeDialogComponent } from '../../../rrhh/vales/create-edit-vale-dialog.component';
@@ -541,19 +540,6 @@ export class CajaMayorDetalleComponent implements OnInit {
     this.tabsService.openTab('Cuentas por Cobrar', ListCuentasPorCobrarComponent);
   }
 
-  cobrarCpcRapido(): void {
-    const dialogRef = this.dialog.open(CobrarCpcRapidoDialogComponent, {
-      width: '720px',
-      maxHeight: '90vh',
-      data: { cajaMayorId: this.cajaMayor?.id },
-      disableClose: true,
-    });
-    dialogRef.afterClosed().subscribe((result) => {
-      if (result?.success) {
-        this.loadData();
-      }
-    });
-  }
 
   registrarIngreso(): void {
     const dialogRef = this.dialog.open(RegistrarIngresoDialogComponent, {
@@ -569,7 +555,7 @@ export class CajaMayorDetalleComponent implements OnInit {
         this.detectarYEscucharSubdialog([
           CreateEditEntradaVariaDialogComponent,
           CreateOperacionFinancieraDialogComponent,
-          CobrarCpcRapidoDialogComponent,
+          PagarObligacionesDialogComponent,
         ]);
       }
     });

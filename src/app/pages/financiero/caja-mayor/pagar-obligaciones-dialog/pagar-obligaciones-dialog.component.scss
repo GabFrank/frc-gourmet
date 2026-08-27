@@ -286,3 +286,24 @@
   font-weight: 600;
   color: var(--text-primary);
 }
+
+/* Barra del descuento: separada del formulario de líneas a propósito — condonar
+   deuda no es una forma de cobro. */
+.pago-descuento-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 4px 0 12px;
+  padding: 8px 12px;
+  border: 1px dashed var(--border-color);
+  border-radius: 6px;
+  background: var(--surface-variant);
+
+  .pago-descuento-info {
+    color: var(--text-secondary);
+    font-size: 13px;
+
+    strong { color: var(--text-primary); }
+  }
+}

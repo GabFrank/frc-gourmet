@@ -163,6 +163,22 @@ CuentaPorCobrarCuotaEstado = PENDIENTE | PARCIAL | COBRADO | CANCELADO
 
 // (movimiento-cliente.entity.ts)
 MovimientoClienteTipo = CARGO | PAGO | AJUSTE_POSITIVO | AJUSTE_NEGATIVO
+// CARGO/AJUSTE_POSITIVO suben la deuda; PAGO/AJUSTE_NEGATIVO la bajan.
+// El descuento de un cobro consolidado se registra como AJUSTE_NEGATIVO, no como
+// PAGO: los dos bajan la deuda, pero el estado de cuenta tiene que poder decir
+// cuanto pago el cliente y cuanto se le perdono.
+
+// pago-consolidado-enums.ts — motor consolidado de Caja Mayor (pagos Y cobros)
+PagoConcepto = COMPRA | GASTO | VALE | LIQUIDACION_SUELDO | COBRO_CLIENTE
+PagoOrigenTipo = CPP_CUOTA | GASTO | VALE | LIQUIDACION_SUELDO | CPC_CUOTA
+PagoConsolidadoEstado = ACTIVO | ANULADO
+PagoConsolidadoFuente = CAJA_MAYOR | CUENTA_BANCARIA | DESCUENTO
+// DESCUENTO no es una fuente de fondos: condona deuda sin mover plata. Solo la
+// admite COBRO_CLIENTE, que es el unico concepto de sentido INGRESO.
+// Tablas por concepto (todas Record<PagoConcepto, ...> exhaustivas, para que el
+// compilador obligue a decidir al agregar un concepto): CONCEPTO_ORIGEN,
+// CONCEPTO_PERMITE_PARCIAL, CONCEPTO_SELECCION_UNICA, CONCEPTO_BENEFICIARIO_UNICO
+// (+ _ERROR), CONCEPTO_PERMITE_DESCUENTO, CONCEPTO_ES_INGRESO.
 ```
 
 ## RRHH

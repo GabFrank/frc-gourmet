@@ -157,7 +157,21 @@ CuentaPorCobrarCuota {
 4. `cliente.saldoActual` -= monto (el cobro reduce la deuda).
 5. Crear `MovimientoCliente` tipo PAGO (guarda `cajaMayorMovimientoId` o `cuentaBancariaId`/`montoCuentaBancaria` según la fuente).
 
-`anular-cobro-cpc-cuota` revierte el cobro (cuota/CPC/saldo cliente + contra-asiento de la fuente). Dialogs: `cobrar-cuota-dialog/` (individual) y `cobrar-cpc-rapido-dialog/` (acceso rápido desde Caja Mayor).
+`anular-cobro-cpc-cuota` revierte el cobro (cuota/CPC/saldo cliente + contra-asiento de la fuente). Dialog: `cobrar-cuota-dialog/` (una cuota; lo abren `cuenta-por-cobrar-detalle`, `cliente-detalle` y la PWA mobile).
+
+⚠️ `anular-cobro-cpc-cuota` arranca con `bloquearSiPagoConsolidado(..., CPC_CUOTA, ...)`: una cuota cobrada dentro de un **cobro consolidado** no se revierte por este camino, se anula el evento entero desde Caja Mayor.
+
+⚠️ `cobrar-cpc-cuota` (el camino viejo) **no toma lock pesimista** sobre cuota/CPC/cliente. El cobro consolidado sí. Dos cobros simultáneos del mismo cliente por caminos distintos pueden pisarse `saldoActual` en modo server (se recupera con `recalcular-saldo-cliente`).
+
+### Cobro consolidado desde Caja Mayor (2026-08)
+
+El botón **Ingreso → Cobrar a Cliente** de Caja Mayor ya no abre un diálogo propio: abre el **wizard consolidado** (`pagar-obligaciones-dialog`) con `concepto = COBRO_CLIENTE`, que es el quinto concepto del motor de pago consolidado y el único de sentido **INGRESO**. Permite cobrar **varias cuotas de un mismo cliente** en un solo evento, con N líneas (multi-moneda × multi-forma × caja/banco) y un **descuento** opcional. Detalles → [financiero-caja-mayor.md](financiero-caja-mayor.md) y `docs/planes/PLAN-COBRO-CONSOLIDADO-CPC.md`.
+
+Reglas propias del concepto:
+
+- **Un cobro = un cliente** (`CONCEPTO_BENEFICIARIO_UNICO`), y admite **cobro parcial** de una cuota.
+- **Cuota reservada por una liquidación de sueldo**: si `cuota.liquidacionId` apunta a una liquidación en `BORRADOR` o `APROBADA`, la cuota sale **bloqueada** y el backend la rechaza. La reserva se hace al *generar el borrador* y congela el monto, así que cobrarla en efectivo mientras tanto la cobraba dos veces (una por caja y otra descontada del sueldo). Con la liquidación `PAGADA` la reserva ya se consumió y el residual se cobra normal.
+- **Locks** en orden total cuota → CPC → cliente: `cpc.montoCobrado` y `cliente.saldoActual` son read-modify-write sobre agregados compartidos.
 
 ### Cobro de CPC vía liquidación de sueldo (funcionario-cliente, 2026-07)
 
@@ -255,4 +269,4 @@ Para CPP #2 "PRESTAMO DE PRUEBA" (ID 2): se agregó movimiento `EGRESO_DESEMBOLS
 - Detalle CPP con link inverso a Compra origen.
 - Tasa de interés en CPP PRESTAMO (cálculo simple/compuesto).
 
-(El cobro CPC de acceso rápido ya existe: `cobrar-cpc-rapido-dialog/`.)
+(El cobro CPC desde Caja Mayor ya existe y es multi-cuota: wizard `pagar-obligaciones-dialog` con `concepto = COBRO_CLIENTE`. Pendiente: ofrecerlo también desde `cuenta-por-cobrar-detalle` y `cliente-detalle` con `origenIdsPreseleccionados`, que hoy siguen cobrando de a una cuota.)

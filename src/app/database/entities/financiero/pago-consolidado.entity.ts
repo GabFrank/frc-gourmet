@@ -47,6 +47,19 @@ export class PagoConsolidado extends BaseModel {
   @Column({ type: 'int', name: 'cantidad_items', default: 0 })
   cantidadItems!: number;
 
+  /**
+   * Deuda condonada dentro del evento, en la moneda de la deuda. Se puede derivar
+   * sumando los detalles con `fuente = DESCUENTO`, pero se guarda aca para que un
+   * listado o un reporte pueda separar "cobrado" de "perdonado" sin join.
+   * Siempre 0 en los conceptos de egreso.
+   */
+  @Column({ type: 'decimal', precision: 18, scale: 2, name: 'monto_descuento', default: 0 })
+  montoDescuento!: number;
+
+  /** Obligatorio cuando `montoDescuento > 0`. */
+  @Column({ type: 'varchar', length: 255, name: 'motivo_descuento', nullable: true })
+  motivoDescuento?: string;
+
   @ManyToOne(() => Usuario, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'responsable_id' })
   responsable?: Usuario;
