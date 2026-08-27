@@ -17,6 +17,14 @@ import {
   CuentaPorPagarTipo,
   CuotaEstado,
 } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
+import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
+import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
+import {
+  CuentaPorCobrarEstado,
+  CuentaPorCobrarCuotaEstado,
+} from '../../src/app/database/entities/financiero/cuentas-por-cobrar-enums';
+import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
+import { LiquidacionSueldoEstado as LiqEstado } from '../../src/app/database/entities/rrhh/liquidacion-sueldo-estado.enum';
 import { Gasto } from '../../src/app/database/entities/financiero/gasto.entity';
 import { GastoEstado, TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { Vale } from '../../src/app/database/entities/rrhh/vale.entity';
@@ -34,6 +42,10 @@ import {
   aplicarEstadoPagoLiquidacion,
   revertirEstadoPagoLiquidacion,
 } from './liquidacion-sueldo.handler';
+import {
+  aplicarCobroConsolidadoCpc,
+  revertirCobroConsolidadoCpc,
+} from './cuentas-por-cobrar.handler';
 
 /** Fila normalizada de obligacion pendiente que consume el componente. */
 export interface ObligacionPendiente {
@@ -62,6 +74,8 @@ export interface AdapterCtx {
   dataSource: DataSource;
   currentUser: Usuario | null;
   userId?: number;
+  /** Id del evento en curso. Lo necesitan los adaptadores que dejan rastro propio. */
+  pagoConsolidadoId?: number;
 }
 
 export interface ConceptoAdapter {
@@ -77,8 +91,12 @@ export interface ConceptoAdapter {
    * pudo haberse saldado por otro camino.
    */
   leerYBloquear(queryRunner: any, origenId: number): Promise<{ saldoPendiente: number; monedaId: number; descripcion: string; beneficiario: string | null }>;
-  aplicar(queryRunner: any, origenId: number, monto: number, ctx: AdapterCtx): Promise<void>;
-  revertir(queryRunner: any, origenId: number, monto: number, ctx: AdapterCtx): Promise<void>;
+  /**
+   * `montoDescuento` es la porcion de `monto` condonada al deudor (solo la usa el
+   * cobro a cliente; los conceptos de egreso la ignoran).
+   */
+  aplicar(queryRunner: any, origenId: number, monto: number, ctx: AdapterCtx, montoDescuento?: number): Promise<void>;
+  revertir(queryRunner: any, origenId: number, monto: number, ctx: AdapterCtx, montoDescuento?: number): Promise<void>;
   /** Columna de referencia clasica del movimiento, cuando el evento cubre 1 solo item. */
   columnaReferencia(origenId: number): Record<string, any>;
 }
@@ -496,6 +514,160 @@ const liquidacionAdapter: ConceptoAdapter = {
   },
 };
 
+// ─────────────────────── COBRO A CLIENTE (cuotas CPC) ───────────────────────
+
+/** Nombre visible del cliente: razon social si es empresa, si no nombre + apellido. */
+function nombreCliente(cliente: any): string | null {
+  const razon = (cliente?.razon_social || '').trim();
+  if (razon) return razon;
+  const p = cliente?.persona;
+  const nombre = [p?.nombre, p?.apellido].filter(Boolean).join(' ').trim();
+  return nombre || (cliente?.id ? `CLIENTE #${cliente.id}` : null);
+}
+
+/**
+ * Motivo por el que una cuota de CPC no se puede cobrar por caja, o null si se
+ * puede.
+ *
+ * El caso no obvio es la reserva por liquidacion de sueldo: un funcionario que
+ * tambien es cliente consume a credito, y al GENERAR el borrador de su liquidacion
+ * el sistema le reserva las cuotas del periodo (`liquidacion-sueldo.handler.ts`,
+ * item CREDITO_CONSUMO + `cuota.liquidacionId`) congelando el saldo. Si mientras
+ * tanto la cuota se cobra en efectivo, al pagar la liquidacion se le vuelve a
+ * descontar del sueldo: doble cobro. Una vez PAGADA la liquidacion la reserva ya
+ * se consumio y el residual es deuda en efectivo legitima; ANULADA, la reversa ya
+ * limpio el `liquidacionId`.
+ */
+async function motivoBloqueoCuotaCpc(
+  manager: any,
+  cuota: any,
+  saldo: number,
+  sinMoneda: boolean,
+): Promise<string | undefined> {
+  if (sinMoneda) return 'La cuenta por cobrar no tiene moneda';
+  if (saldo <= 0) return 'Sin saldo pendiente';
+  const liqId = (cuota as any).liquidacionId;
+  if (liqId) {
+    const liq = await manager.findOne(LiquidacionSueldo, { where: { id: Number(liqId) } });
+    if (liq && (liq.estado === LiqEstado.BORRADOR || liq.estado === LiqEstado.APROBADA)) {
+      return `Reservada por la liquidación de sueldo #${liqId} — se cobra al pagar esa liquidación`;
+    }
+  }
+  return undefined;
+}
+
+const cobroClienteAdapter: ConceptoAdapter = {
+  concepto: PagoConcepto.COBRO_CLIENTE,
+  origenTipo: PagoOrigenTipo.CPC_CUOTA,
+  permiso: 'CPC_COBRAR',
+  tipoMovimiento: TipoMovimiento.INGRESO_COBRO_CLIENTE,
+
+  async listarPendientes(dataSource, filtros) {
+    const qb = dataSource.getRepository(CuentaPorCobrarCuota).createQueryBuilder('cuota')
+      .leftJoinAndSelect('cuota.cuentaPorCobrar', 'cpc')
+      .leftJoinAndSelect('cpc.cliente', 'cli')
+      .leftJoinAndSelect('cli.persona', 'per')
+      .leftJoinAndSelect('cpc.moneda', 'mon')
+      .where('cuota.estado IN (:...estados)', {
+        estados: [CuentaPorCobrarCuotaEstado.PENDIENTE, CuentaPorCobrarCuotaEstado.PARCIAL],
+      })
+      .andWhere('cpc.estado = :cpcEstado', { cpcEstado: CuentaPorCobrarEstado.ACTIVO });
+
+    if (filtros?.beneficiarioId) qb.andWhere('cli.id = :cid', { cid: filtros.beneficiarioId });
+    if (filtros?.monedaId) qb.andWhere('mon.id = :mid', { mid: filtros.monedaId });
+    qb.orderBy('cuota.fechaVencimiento', 'ASC').addOrderBy('cuota.id', 'ASC');
+
+    const cuotas = await qb.getMany();
+    const out: ObligacionPendiente[] = [];
+    for (const q of cuotas as any[]) {
+      const cpc: any = q.cuentaPorCobrar;
+      const monto = Number(q.monto) || 0;
+      const cobrado = Number(q.montoCobrado) || 0;
+      const saldo = round2(monto - cobrado);
+      const sinMoneda = !cpc?.moneda?.id;
+      const bloqueoMotivo = await motivoBloqueoCuotaCpc(dataSource.manager, q, saldo, sinMoneda);
+      out.push({
+        origenTipo: PagoOrigenTipo.CPC_CUOTA,
+        origenId: q.id,
+        numero: `#${q.numero}`,
+        descripcion: `CUOTA ${q.numero}/${Number(cpc?.cantidadCuotas) || 1} — CPC #${cpc?.id}`
+          + (cpc?.ventaId ? ` — VENTA #${cpc.ventaId}` : ''),
+        beneficiario: nombreCliente(cpc?.cliente),
+        beneficiarioId: cpc?.cliente?.id ?? null,
+        fecha: q.fechaVencimiento || null,
+        monedaId: sinMoneda ? null : Number(cpc.moneda.id),
+        monedaSimbolo: cpc?.moneda?.simbolo || null,
+        monedaDenominacion: cpc?.moneda?.denominacion || null,
+        decimales: dec(cpc?.moneda),
+        montoTotal: monto,
+        montoPagado: cobrado,
+        saldoPendiente: saldo,
+        bloqueado: !!bloqueoMotivo,
+        bloqueoMotivo,
+        extra: { cpcId: cpc?.id, numeroCuota: Number(q.numero), ventaId: cpc?.ventaId ?? null },
+      });
+    }
+    // Agrupar visualmente por cliente sin perder el orden por vencimiento dentro
+    // de cada uno: la seleccion es de un solo cliente, asi que verlos juntos importa.
+    out.sort((a, b) => (a.beneficiario || '').localeCompare(b.beneficiario || ''));
+    return out;
+  },
+
+  async leerYBloquear(queryRunner, origenId) {
+    // Lock en orden total cuota -> CPC -> cliente. `cpc.montoCobrado` y
+    // `cliente.saldoActual` son read-modify-write sobre agregados compartidos por
+    // varias cuotas: sin lock, dos cobros concurrentes se pisan el saldo (lost
+    // update) en modo server. El cliente va ultimo y es unico en todo el evento
+    // (beneficiario unico), asi que es un sumidero: no hay ciclo posible.
+    const cuota: any = await findConLock(queryRunner, CuentaPorCobrarCuota, origenId, ['cuentaPorCobrar']);
+    if (!cuota) throw new Error(`Cuota de cobro ${origenId} no encontrada`);
+    if (cuota.estado === CuentaPorCobrarCuotaEstado.COBRADO) {
+      throw new Error(`La cuota #${cuota.numero} ya está cobrada`);
+    }
+    if (cuota.estado === CuentaPorCobrarCuotaEstado.CANCELADO) {
+      throw new Error(`La cuota #${cuota.numero} está anulada`);
+    }
+
+    const cpc: any = await findConLock(
+      queryRunner, CuentaPorCobrar, Number(cuota.cuentaPorCobrar?.id), ['moneda', 'cliente', 'cliente.persona'],
+    );
+    if (!cpc) throw new Error('La cuenta por cobrar no existe');
+    if (cpc.estado !== CuentaPorCobrarEstado.ACTIVO) {
+      throw new Error(`La cuenta por cobrar #${cpc.id} está en estado ${cpc.estado}`);
+    }
+    if (!cpc.moneda?.id) throw new Error('La cuenta por cobrar no tiene moneda definida');
+    if (cpc.cliente?.id) await findConLock(queryRunner, Cliente, Number(cpc.cliente.id));
+
+    const saldo = round2(Number(cuota.monto) - Number(cuota.montoCobrado));
+    const bloqueo = await motivoBloqueoCuotaCpc(queryRunner.manager, cuota, saldo, false);
+    if (bloqueo) throw new Error(`Cuota #${cuota.numero}: ${bloqueo}`);
+
+    return {
+      saldoPendiente: saldo,
+      monedaId: Number(cpc.moneda.id),
+      descripcion: `CUOTA ${cuota.numero} — CPC #${cpc.id}`,
+      beneficiario: nombreCliente(cpc.cliente),
+    };
+  },
+
+  async aplicar(queryRunner, origenId, monto, ctx, montoDescuento) {
+    await aplicarCobroConsolidadoCpc(
+      queryRunner, origenId, monto, Number(montoDescuento) || 0,
+      ctx.pagoConsolidadoId!, ctx.currentUser, ctx.dataSource,
+    );
+  },
+
+  async revertir(queryRunner, origenId, monto, ctx) {
+    await revertirCobroConsolidadoCpc(
+      queryRunner, origenId, monto, ctx.pagoConsolidadoId!, ctx.currentUser, ctx.dataSource,
+    );
+  },
+
+  columnaReferencia(origenId) {
+    return { cuentaPorCobrarCuotaId: origenId };
+  },
+};
+
 // ─────────────────────────────── registro ───────────────────────────────
 
 export const ADAPTERS: Record<PagoConcepto, ConceptoAdapter> = {
@@ -503,6 +675,7 @@ export const ADAPTERS: Record<PagoConcepto, ConceptoAdapter> = {
   [PagoConcepto.GASTO]: gastoAdapter,
   [PagoConcepto.VALE]: valeAdapter,
   [PagoConcepto.LIQUIDACION_SUELDO]: liquidacionAdapter,
+  [PagoConcepto.COBRO_CLIENTE]: cobroClienteAdapter,
 };
 
 export function getAdapter(concepto: PagoConcepto): ConceptoAdapter {

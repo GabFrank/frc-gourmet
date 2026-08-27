@@ -34,6 +34,15 @@ export class MovimientoCliente extends BaseModel {
   @Column({ name: 'caja_mayor_movimiento_id', type: 'int', nullable: true })
   cajaMayorMovimientoId?: number;
 
+  /**
+   * Evento de cobro consolidado que genero este movimiento. Un cobro con
+   * descuento deja DOS filas por cuota (PAGO por el efectivo, AJUSTE_NEGATIVO por
+   * lo condonado); la reversa las busca por esta columna y las marca todas, que es
+   * lo que la hace exacta e idempotente.
+   */
+  @Column({ name: 'pago_consolidado_id', type: 'int', nullable: true })
+  pagoConsolidadoId?: number;
+
   // Si el cobro se acreditó a una cuenta bancaria (en vez de Caja Mayor), se
   // guarda aquí para revertir el saldo al anular. Cuando está seteada, no hay
   // cajaMayorMovimientoId asociado al cobro.

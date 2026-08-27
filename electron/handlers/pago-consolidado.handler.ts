@@ -25,7 +25,11 @@ import {
   PagoConcepto,
   PagoConsolidadoEstado,
   PagoConsolidadoFuente,
+  CONCEPTO_BENEFICIARIO_UNICO,
+  CONCEPTO_BENEFICIARIO_UNICO_ERROR,
+  CONCEPTO_PERMITE_DESCUENTO,
 } from '../../src/app/database/entities/financiero/pago-consolidado-enums';
+import { CajaMayorConfiguracion } from '../../src/app/database/entities/financiero/caja-mayor-configuracion.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 
 import { ensurePermission } from '../utils/auth.utils';
@@ -36,7 +40,8 @@ import { getCotizacionBidireccional } from '../utils/moneda.utils';
 import { getAdapter, AdapterCtx } from './pago-consolidado-adapters';
 import {
   descripcionEvento,
-  imputadoPorItem,
+  imputadoPorItemPorFuente,
+  ordenarLineasParaReparto,
   redondear,
   repartirFifo,
   validarCobertura,
@@ -46,7 +51,7 @@ import {
 } from '../utils/pago-consolidado.util';
 
 interface LineaPayload {
-  fuente?: 'CAJA_MAYOR' | 'CUENTA_BANCARIA';
+  fuente?: 'CAJA_MAYOR' | 'CUENTA_BANCARIA' | 'DESCUENTO';
   monedaId: number;
   formaPagoId?: number | null;
   cajaMayorId?: number | null;
@@ -60,6 +65,13 @@ interface PagoPayload {
   items: Array<{ origenId: number; monto: number }>;
   lineas: LineaPayload[];
   observacion?: string;
+  /** Motivo del descuento. Obligatorio si viene una linea `DESCUENTO`. */
+  motivoDescuento?: string;
+  /**
+   * Caja mayor desde la que se registra el evento. No participa del asiento (para
+   * eso estan las lineas): define de que configuracion se lee el tope de descuento.
+   */
+  cajaMayorContextoId?: number | null;
 }
 
 /** Clave de consolidacion fisica: un asiento por grupo. */
@@ -102,6 +114,9 @@ export function registerPagoConsolidadoHandlers(
     const userId = currentUser?.id;
     const ctx: AdapterCtx = { dataSource, currentUser, userId };
     const observacion = (payload?.observacion || '').toUpperCase();
+    // Sentido del dinero del evento. Se deriva del TipoMovimiento del concepto en
+    // vez de declararse aparte: una segunda fuente de verdad podria contradecirlo.
+    const esIngresoEvento = esIngreso(adapter.tipoMovimiento);
 
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -146,18 +161,23 @@ export function registerPagoConsolidadoHandlers(
         // con el que mandó el cliente.
         items[i].monto = redondear(Number(itemsOrdenados[i].monto), decDeuda);
       }
-      if (adapter.concepto === PagoConcepto.COMPRA) {
-        // Para compras, el proveedor unico se valida contra lo releido.
-        const provs = new Set(meta.map((m) => m.beneficiario || ''));
-        if (provs.size > 1) throw new Error('Un pago de compras cubre a un solo proveedor.');
+      if (CONCEPTO_BENEFICIARIO_UNICO[concepto]) {
+        // El beneficiario unico (proveedor en compras, cliente en cobros) se valida
+        // contra lo releido, no contra lo que mando el cliente.
+        const benes = new Set(meta.map((m) => m.beneficiario || ''));
+        if (benes.size > 1) throw new Error(CONCEPTO_BENEFICIARIO_UNICO_ERROR[concepto]);
       }
 
       const erroresSeleccion = validarSeleccion(concepto, items, decDeuda);
       if (erroresSeleccion.length) throw new Error(erroresSeleccion.join(' '));
 
+      // El total se necesita ANTES de las cotizaciones porque el tope del descuento
+      // se mide contra el.
+      const totalDeuda = redondear(items.reduce((s, i) => s + i.monto, 0), decDeuda);
+
       // ── 2. Resolver cotizaciones faltantes. Si no hay, se corta: no se asume 1.
       const decimalesPorMoneda = new Map<number, number>([[monedaDeudaId, decDeuda]]);
-      const lineas: LineaDePago[] = [];
+      let lineas: LineaDePago[] = [];
       for (const l of lineasPayload) {
         const monedaLineaId = Number(l.monedaId);
         if (!decimalesPorMoneda.has(monedaLineaId)) {
@@ -165,7 +185,9 @@ export function registerPagoConsolidadoHandlers(
           if (!m) throw new Error(`No se encontró la moneda de una de las formas de pago.`);
           decimalesPorMoneda.set(monedaLineaId, (m as any).decimales == null ? 2 : Number((m as any).decimales));
         }
-        let cotizacion = l.cotizacion != null ? Number(l.cotizacion) : null;
+        const esDescuento = l.fuente === 'DESCUENTO';
+        // El descuento no se convierte: lo que se perdona es deuda, y va 1 a 1.
+        let cotizacion = esDescuento ? 1 : (l.cotizacion != null ? Number(l.cotizacion) : null);
         if (cotizacion == null) {
           const c = await getCotizacionBidireccional(dataSource, monedaLineaId, monedaDeudaId);
           cotizacion = c?.tasa ?? null;
@@ -174,14 +196,51 @@ export function registerPagoConsolidadoHandlers(
           throw new Error('Falta la cotización para convertir una de las formas de pago a la moneda de la deuda.');
         }
         lineas.push({
-          fuente: l.fuente === 'CUENTA_BANCARIA' ? 'CUENTA_BANCARIA' : 'CAJA_MAYOR',
+          fuente: esDescuento ? 'DESCUENTO' : (l.fuente === 'CUENTA_BANCARIA' ? 'CUENTA_BANCARIA' : 'CAJA_MAYOR'),
           monedaId: monedaLineaId,
-          formaPagoId: l.formaPagoId ?? null,
-          cajaMayorId: l.cajaMayorId ?? null,
-          cuentaBancariaId: l.cuentaBancariaId ?? null,
+          formaPagoId: esDescuento ? null : (l.formaPagoId ?? null),
+          cajaMayorId: esDescuento ? null : (l.cajaMayorId ?? null),
+          cuentaBancariaId: esDescuento ? null : (l.cuentaBancariaId ?? null),
           monto: redondear(Number(l.monto), decimalesPorMoneda.get(monedaLineaId)!),
           cotizacion,
         });
+      }
+
+      // ── 2.b Descuento: condonar deuda es una decision aparte de cobrar, con su
+      // propio permiso, su motivo y su tope. Todo se valida aca porque `/api/rpc`
+      // es default-allow: el gate de la UI no cuenta.
+      const lineasDescuento = lineas.filter((l) => l.fuente === 'DESCUENTO');
+      const montoDescuento = redondear(
+        lineasDescuento.reduce((acc, l) => acc + l.monto, 0), decDeuda,
+      );
+      const motivoDescuento = (payload?.motivoDescuento || '').trim().toUpperCase();
+      if (lineasDescuento.length) {
+        if (!CONCEPTO_PERMITE_DESCUENTO[concepto]) {
+          throw new Error('Este concepto no admite descuentos.');
+        }
+        await ensurePermission(dataSource, getCurrentUser, 'CPC_DESCUENTO');
+        if (!motivoDescuento) throw new Error('El descuento necesita un motivo.');
+        if (!(montoDescuento > 0)) throw new Error('El descuento tiene que ser mayor a 0.');
+        // Perdonar el 100% no es cobrar: es cancelar la cuenta, que tiene su propio
+        // handler y su propio permiso.
+        if (montoDescuento >= totalDeuda) {
+          throw new Error('El descuento no puede cubrir el total: para eso se cancela la cuenta por cobrar.');
+        }
+        const cajaCtxId = Number(payload?.cajaMayorContextoId) || null;
+        if (cajaCtxId) {
+          const cfg = await queryRunner.manager.findOne(CajaMayorConfiguracion, {
+            where: { cajaMayor: { id: cajaCtxId } as any },
+          });
+          const topePct = cfg?.descuentoCpcMaxPorcentaje;
+          if (topePct != null && Number(topePct) >= 0) {
+            const maximo = redondear(totalDeuda * (Number(topePct) / 100), decDeuda);
+            if (montoDescuento > maximo) {
+              throw new Error(
+                `El descuento supera el tope de esta caja (${Number(topePct)}% = ${maximo}).`,
+              );
+            }
+          }
+        }
       }
 
       // ── 3. Las formas de pago tienen que cubrir la deuda.
@@ -189,7 +248,6 @@ export function registerPagoConsolidadoHandlers(
       if (erroresCobertura.length) throw new Error(erroresCobertura.join(' '));
 
       // ── 4. Cabecera del evento.
-      const totalDeuda = redondear(items.reduce((s, i) => s + i.monto, 0), decDeuda);
       const beneficiarioComun = meta.length && meta.every((m) => m.beneficiario === meta[0].beneficiario)
         ? meta[0].beneficiario
         : null;
@@ -203,6 +261,8 @@ export function registerPagoConsolidadoHandlers(
         monedaDeuda: { id: monedaDeudaId } as any,
         monedaDeudaId,
         montoTotal: totalDeuda,
+        montoDescuento,
+        motivoDescuento: motivoDescuento || undefined,
         cantidadItems: items.length,
         responsable: userEntity || undefined,
         observacion: observacion || undefined,
@@ -210,12 +270,15 @@ export function registerPagoConsolidadoHandlers(
       } as any);
       await setEntityUserTracking(dataSource, pago, userId, false);
       const pagoGuardado = await queryRunner.manager.save(PagoConsolidado, pago);
+      ctx.pagoConsolidadoId = pagoGuardado.id;
 
       // ── 5. Un asiento por grupo fisico (fuente, caja/cuenta, moneda, forma).
       // Consolidar es justamente el punto: 3 gastos pagados con un billete son
       // UN egreso de caja, no tres.
       const grupos = new Map<string, { linea: LineaDePago; monto: number; movimientoId?: number }>();
       for (const l of lineas) {
+        // El descuento no mueve plata: no tiene asiento que agrupar.
+        if (l.fuente === 'DESCUENTO') continue;
         const k = claveGrupo(l);
         const g = grupos.get(k);
         if (g) g.monto = redondear(g.monto + l.monto, decimalesPorMoneda.get(l.monedaId)!);
@@ -273,11 +336,12 @@ export function registerPagoConsolidadoHandlers(
               `La cuenta "${cb.nombre}" está en otra moneda: una forma de pago bancaria se debita en la moneda de la cuenta.`,
             );
           }
-          cb.saldo = redondear(Number(cb.saldo) - g.monto, 2);
+          // Direccional: en un cobro la cuenta se acredita, no se debita.
+          cb.saldo = redondear(Number(cb.saldo) + (esIngresoEvento ? g.monto : -g.monto), 2);
           await queryRunner.manager.save(CuentaBancaria, cb);
           const movBanco = await registrarMovimientoBancario(queryRunner.manager, dataSource, {
             cuentaBancariaId: Number(l.cuentaBancariaId),
-            tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
+            tipo: esIngresoEvento ? MovimientoBancarioTipo.ENTRADA_MANUAL : MovimientoBancarioTipo.SALIDA_MANUAL,
             monto: g.monto,
             observacion: obsMov,
             responsable: userEntity,
@@ -287,10 +351,18 @@ export function registerPagoConsolidadoHandlers(
       }
 
       // ── 6. Reparto FIFO y filas de detalle.
+      //
+      // El descuento va ultimo para que el efectivo impute primero. `lineaIdx` es
+      // una posicion DENTRO del array que recibio `repartirFifo`, y abajo se usa
+      // para reconstruir cada fila de detalle y el desglose por fuente: por eso se
+      // reasigna `lineas` y no se vuelve a tocar el orden. `grupos` esta indexado
+      // por contenido (`claveGrupo`), asi que reordenar no lo afecta.
+      lineas = ordenarLineasParaReparto(lineas);
       const filas = repartirFifo(items, lineas, decDeuda, (mid) => decimalesPorMoneda.get(mid) ?? 2);
       for (const f of filas) {
         const l = lineas[f.lineaIdx];
-        const g = grupos.get(claveGrupo(l))!;
+        // La linea de descuento no esta en `grupos`: no genero movimiento fisico.
+        const g = l.fuente === 'DESCUENTO' ? undefined : grupos.get(claveGrupo(l));
         const det = queryRunner.manager.create(PagoConsolidadoDetalle, {
           pagoConsolidadoId: pagoGuardado.id,
           pagoConsolidado: { id: pagoGuardado.id } as any,
@@ -310,8 +382,8 @@ export function registerPagoConsolidadoHandlers(
           montoOrigen: f.montoOrigen,
           cotizacion: l.cotizacion,
           montoImputado: f.montoImputado,
-          cajaMayorMovimientoId: l.fuente === 'CAJA_MAYOR' ? g.movimientoId ?? null : null,
-          movimientoBancarioId: l.fuente === 'CUENTA_BANCARIA' ? g.movimientoId ?? null : null,
+          cajaMayorMovimientoId: l.fuente === 'CAJA_MAYOR' ? g?.movimientoId ?? null : null,
+          movimientoBancarioId: l.fuente === 'CUENTA_BANCARIA' ? g?.movimientoId ?? null : null,
           anulado: false,
         } as any);
         await setEntityUserTracking(dataSource, det, userId, false);
@@ -319,13 +391,21 @@ export function registerPagoConsolidadoHandlers(
       }
 
       // ── 7. Estado de dominio de cada obligacion, con lo REALMENTE imputado.
-      const imputado = imputadoPorItem(filas, items.length, decDeuda);
+      // Se pasa tambien cuanto de eso fue descuento: el adaptador de cobro lo
+      // necesita para separar el PAGO del AJUSTE_NEGATIVO en la cuenta corriente.
+      const imputado = imputadoPorItemPorFuente(filas, lineas, items.length, decDeuda);
       for (let i = 0; i < items.length; i++) {
-        await adapter.aplicar(queryRunner, items[i].origenId, imputado[i], ctx);
+        await adapter.aplicar(queryRunner, items[i].origenId, imputado[i].total, ctx, imputado[i].descuento);
       }
 
       await queryRunner.commitTransaction();
-      return { id: pagoGuardado.id, descripcion: pagoGuardado.descripcion, montoTotal: totalDeuda, items: items.length };
+      return {
+        id: pagoGuardado.id,
+        descripcion: pagoGuardado.descripcion,
+        montoTotal: totalDeuda,
+        montoDescuento,
+        items: items.length,
+      };
     } catch (e) {
       await queryRunner.rollbackTransaction();
       console.error('Error registrar-pago-consolidado:', e);
@@ -399,6 +479,9 @@ export function registerPagoConsolidadoHandlers(
         fechaAnulacion: pago.fechaAnulacion || null,
         observacion: pago.observacion || null,
         montoTotal: Number(pago.montoTotal),
+        montoDescuento: Number((pago as any).montoDescuento) || 0,
+        motivoDescuento: (pago as any).motivoDescuento || null,
+        esIngreso: esIngreso(getAdapter(pago.concepto).tipoMovimiento),
         cantidadItems: pago.cantidadItems,
         monedaSimbolo: (pago.monedaDeuda as any)?.simbolo || null,
         monedaDenominacion: (pago.monedaDeuda as any)?.denominacion || null,
@@ -421,7 +504,8 @@ export function registerPagoConsolidadoHandlers(
 
     const currentUser = getCurrentUser();
     const userId = currentUser?.id;
-    const ctx: AdapterCtx = { dataSource, currentUser, userId };
+    const ctx: AdapterCtx = { dataSource, currentUser, userId, pagoConsolidadoId: pagoId };
+    const esIngresoEvento = esIngreso(adapter.tipoMovimiento);
 
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -497,24 +581,32 @@ export function registerPagoConsolidadoHandlers(
       for (const [cuentaId, monto] of porCuenta) {
         const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: cuentaId } });
         if (!cb) continue;
-        cb.saldo = +(Number(cb.saldo) + monto).toFixed(2);
+        // Direccional, como el tramo de caja: anular un COBRO acreditado al banco
+        // debita la cuenta, no la vuelve a acreditar.
+        cb.saldo = +(Number(cb.saldo) + (esIngresoEvento ? -monto : monto)).toFixed(2);
         await queryRunner.manager.save(CuentaBancaria, cb);
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId: cuentaId,
-          tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
+          tipo: esIngresoEvento ? MovimientoBancarioTipo.AJUSTE_NEGATIVO : MovimientoBancarioTipo.AJUSTE_POSITIVO,
           monto,
-          observacion: `ANULACION PAGO #${pago.id}${motivoTxt ? ` - ${motivoTxt}` : ''}`,
+          observacion: `ANULACION ${esIngresoEvento ? 'COBRO' : 'PAGO'} #${pago.id}${motivoTxt ? ` - ${motivoTxt}` : ''}`,
           responsable: userEntity,
         });
       }
 
-      // ── 2. Reabrir cada obligacion por lo que efectivamente recibio.
-      const porItem = new Map<number, number>();
+      // ── 2. Reabrir cada obligacion por lo que efectivamente recibio, separando
+      // cuanto de eso habia sido descuento.
+      const porItem = new Map<number, { total: number; descuento: number }>();
       for (const d of detalles) {
-        porItem.set(d.origenId, +((porItem.get(d.origenId) || 0) + Number(d.montoImputado)).toFixed(2));
+        const acc = porItem.get(d.origenId) || { total: 0, descuento: 0 };
+        acc.total = +(acc.total + Number(d.montoImputado)).toFixed(2);
+        if (d.fuente === PagoConsolidadoFuente.DESCUENTO) {
+          acc.descuento = +(acc.descuento + Number(d.montoImputado)).toFixed(2);
+        }
+        porItem.set(d.origenId, acc);
       }
-      for (const [origenId, monto] of porItem) {
-        await adapter.revertir(queryRunner, origenId, monto, ctx);
+      for (const [origenId, montos] of porItem) {
+        await adapter.revertir(queryRunner, origenId, montos.total, ctx, montos.descuento);
       }
 
       // ── 3. Marcar el evento y su detalle.

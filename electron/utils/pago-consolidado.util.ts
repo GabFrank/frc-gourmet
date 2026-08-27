@@ -14,6 +14,8 @@ export {
   validarCobertura,
   repartirFifo,
   imputadoPorItem,
+  imputadoPorItemPorFuente,
+  ordenarLineasParaReparto,
   origenPorLinea,
   descripcionEvento,
 } from '../../src/app/shared/utils/pago-consolidado.util';

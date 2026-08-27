@@ -28,11 +28,175 @@ import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.e
 import { ensurePermission } from '../utils/auth.utils';
 import { printVentaTicketInternal, printPagareCpcTicketInternal } from './documentos-tickets.handler';
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
+import { PagoOrigenTipo } from '../../src/app/database/entities/financiero/pago-consolidado-enums';
+import { bloquearSiPagoConsolidado } from './pago-consolidado-guard';
 
 function calcularEstadoCuota(monto: number, montoCobrado: number): CuentaPorCobrarCuotaEstado {
   if (montoCobrado >= monto) return CuentaPorCobrarCuotaEstado.COBRADO;
   if (montoCobrado > 0) return CuentaPorCobrarCuotaEstado.PARCIAL;
   return CuentaPorCobrarCuotaEstado.PENDIENTE;
+}
+
+const round2 = (v: number) => +Number(v).toFixed(2);
+
+/**
+ * Aplica un cobro a una cuota de CPC dentro de un cobro consolidado.
+ *
+ * NO toca caja ni banco: el asiento fisico vive en `pago-consolidado.handler.ts`,
+ * que es el punto del motor consolidado. Aca vive solo el estado de dominio de la
+ * deuda: cuota, CPC, saldo del cliente y cuenta corriente.
+ *
+ * `montoDescuento` es la porcion de `monto` que se condono (no entro plata por
+ * ella). Se registra como un `AJUSTE_NEGATIVO` aparte del `PAGO` para que el
+ * estado de cuenta pueda decir cuanto pago el cliente y cuanto se le perdono: los
+ * dos bajan la deuda, pero no son lo mismo.
+ *
+ * Las filas de cuota / CPC / cliente ya vienen lockeadas por
+ * `cobroClienteAdapter.leerYBloquear` en el orden cuota -> CPC -> cliente.
+ */
+export async function aplicarCobroConsolidadoCpc(
+  queryRunner: any,
+  cuotaId: number,
+  monto: number,
+  montoDescuento: number,
+  pagoConsolidadoId: number,
+  currentUser: Usuario | null,
+  dataSource: DataSource,
+): Promise<void> {
+  const cuota = await queryRunner.manager.findOne(CuentaPorCobrarCuota, {
+    where: { id: cuotaId },
+    relations: ['cuentaPorCobrar'],
+  });
+  if (!cuota) throw new Error(`Cuota de cobro ${cuotaId} no encontrada`);
+
+  cuota.montoCobrado = round2(Number(cuota.montoCobrado) + monto);
+  cuota.estado = calcularEstadoCuota(Number(cuota.monto), Number(cuota.montoCobrado));
+  if (cuota.estado === CuentaPorCobrarCuotaEstado.COBRADO) cuota.fechaCobro = new Date();
+  await setEntityUserTracking(dataSource, cuota, currentUser?.id, true);
+  await queryRunner.manager.save(CuentaPorCobrarCuota, cuota);
+
+  const cpc = await queryRunner.manager.findOne(CuentaPorCobrar, {
+    where: { id: cuota.cuentaPorCobrar.id },
+    relations: ['cuotas', 'cliente'],
+  });
+  if (!cpc) throw new Error('CuentaPorCobrar no encontrada');
+  cpc.montoCobrado = round2(Number(cpc.montoCobrado) + monto);
+  const todasCobradas = (cpc.cuotas || []).every((c: any) =>
+    c.id === cuota.id
+      ? cuota.estado === CuentaPorCobrarCuotaEstado.COBRADO
+      : Number(c.montoCobrado) >= Number(c.monto) - 0.005,
+  );
+  if (todasCobradas) cpc.estado = CuentaPorCobrarEstado.COBRADO;
+  await setEntityUserTracking(dataSource, cpc, currentUser?.id, true);
+  await queryRunner.manager.save(CuentaPorCobrar, cpc);
+
+  const clienteId = cpc.cliente?.id;
+  if (clienteId) {
+    const cliente = await queryRunner.manager.findOne(Cliente, { where: { id: clienteId } });
+    if (cliente) {
+      // La deuda baja por el total: lo cobrado Y lo condonado.
+      cliente.saldoActual = round2(Number(cliente.saldoActual) - monto);
+      await queryRunner.manager.save(Cliente, cliente);
+    }
+
+    const efectivo = round2(monto - montoDescuento);
+    const crearMov = async (tipo: MovimientoClienteTipo, m: number, obs: string) => {
+      const mov = queryRunner.manager.create(MovimientoCliente, {
+        cliente: { id: clienteId } as any,
+        tipo,
+        monto: m,
+        fecha: new Date(),
+        cuentaPorCobrarId: cpc.id,
+        cuentaPorCobrarCuotaId: cuota.id,
+        pagoConsolidadoId,
+        observacion: obs.slice(0, 255),
+        registradoPor: currentUser || undefined,
+      } as any);
+      await setEntityUserTracking(dataSource, mov, currentUser?.id, false);
+      await queryRunner.manager.save(MovimientoCliente, mov);
+    };
+    if (efectivo > 0) {
+      await crearMov(MovimientoClienteTipo.PAGO, efectivo, `COBRO #${cuota.numero} - CPC #${cpc.id}`);
+    }
+    if (montoDescuento > 0) {
+      await crearMov(
+        MovimientoClienteTipo.AJUSTE_NEGATIVO,
+        montoDescuento,
+        `DESCUENTO CUOTA #${cuota.numero} - CPC #${cpc.id}`,
+      );
+    }
+  }
+}
+
+/**
+ * Deshace lo que hizo `aplicarCobroConsolidadoCpc` para una cuota.
+ *
+ * Marca como anulados TODOS los movimientos de cuenta corriente del evento para
+ * esa cuota — son dos cuando hubo descuento (PAGO + AJUSTE_NEGATIVO), y el patron
+ * `findOne(order: id DESC)` que usa la anulacion vieja revertiria uno solo — y
+ * agrega un `AJUSTE_POSITIVO` compensatorio, porque el estado de cuenta suma
+ * movimientos sin filtrar `anulado` y tiene que cuadrar con `cliente.saldoActual`.
+ */
+export async function revertirCobroConsolidadoCpc(
+  queryRunner: any,
+  cuotaId: number,
+  monto: number,
+  pagoConsolidadoId: number,
+  currentUser: Usuario | null,
+  dataSource: DataSource,
+): Promise<void> {
+  const cuota = await queryRunner.manager.findOne(CuentaPorCobrarCuota, {
+    where: { id: cuotaId },
+    relations: ['cuentaPorCobrar'],
+  });
+  if (!cuota) return;
+
+  cuota.montoCobrado = round2(Math.max(0, Number(cuota.montoCobrado) - monto));
+  cuota.estado = calcularEstadoCuota(Number(cuota.monto), Number(cuota.montoCobrado));
+  if (cuota.montoCobrado <= 0) (cuota as any).fechaCobro = null;
+  await setEntityUserTracking(dataSource, cuota, currentUser?.id, true);
+  await queryRunner.manager.save(CuentaPorCobrarCuota, cuota);
+
+  const cpc = await queryRunner.manager.findOne(CuentaPorCobrar, {
+    where: { id: cuota.cuentaPorCobrar.id },
+    relations: ['cliente'],
+  });
+  if (!cpc) return;
+  cpc.montoCobrado = round2(Math.max(0, Number(cpc.montoCobrado) - monto));
+  if (cpc.estado === CuentaPorCobrarEstado.COBRADO) cpc.estado = CuentaPorCobrarEstado.ACTIVO;
+  await setEntityUserTracking(dataSource, cpc, currentUser?.id, true);
+  await queryRunner.manager.save(CuentaPorCobrar, cpc);
+
+  const clienteId = cpc.cliente?.id;
+  if (!clienteId) return;
+
+  const cliente = await queryRunner.manager.findOne(Cliente, { where: { id: clienteId } });
+  if (cliente) {
+    cliente.saldoActual = round2(Number(cliente.saldoActual) + monto);
+    await queryRunner.manager.save(Cliente, cliente);
+  }
+
+  const originales = await queryRunner.manager.find(MovimientoCliente, {
+    where: { pagoConsolidadoId, cuentaPorCobrarCuotaId: cuotaId, anulado: false },
+  });
+  for (const mov of originales) {
+    mov.anulado = true;
+    await queryRunner.manager.save(MovimientoCliente, mov);
+  }
+
+  const compensacion = queryRunner.manager.create(MovimientoCliente, {
+    cliente: { id: clienteId } as any,
+    tipo: MovimientoClienteTipo.AJUSTE_POSITIVO,
+    monto,
+    fecha: new Date(),
+    cuentaPorCobrarId: cpc.id,
+    cuentaPorCobrarCuotaId: cuotaId,
+    pagoConsolidadoId,
+    observacion: `ANULACION COBRO #${pagoConsolidadoId} - CUOTA #${cuota.numero}`.slice(0, 255),
+    registradoPor: currentUser || undefined,
+  } as any);
+  await setEntityUserTracking(dataSource, compensacion, currentUser?.id, false);
+  await queryRunner.manager.save(MovimientoCliente, compensacion);
 }
 
 export function registerCuentasPorCobrarHandlers(
@@ -436,6 +600,12 @@ export function registerCuentasPorCobrarHandlers(
 
   ipcMain.handle('anular-cobro-cpc-cuota', async (_event, payload: any) => {
     await ensurePermission(dataSource, getCurrentUser, 'CPC_CANCELAR');
+    // Una cuota cobrada dentro de un cobro consolidado no se revierte por este
+    // camino: la reversa tiene que deshacer el evento entero (todas las cuotas y
+    // todos los movimientos). Si no, la misma plata vuelve dos veces.
+    await bloquearSiPagoConsolidado(
+      dataSource, PagoOrigenTipo.CPC_CUOTA, Number(payload?.cuotaId), `La cuota #${payload?.cuotaId}`,
+    );
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();

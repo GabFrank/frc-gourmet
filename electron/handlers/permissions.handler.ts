@@ -50,6 +50,7 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'CPC_GESTIONAR', descripcion: 'Gestionar cuentas por cobrar (crear/editar)', modulo: 'FINANCIERO' },
   { codigo: 'CPC_COBRAR', descripcion: 'Registrar cobros de cuotas de clientes', modulo: 'FINANCIERO' },
   { codigo: 'CPC_ANULAR', descripcion: 'Anular cobros de cuotas de clientes', modulo: 'FINANCIERO' },
+  { codigo: 'CPC_DESCUENTO', descripcion: 'Conceder descuentos al cobrar cuentas por cobrar', modulo: 'FINANCIERO' },
   { codigo: 'CPC_CANCELAR', descripcion: 'Cancelar cuentas por cobrar', modulo: 'FINANCIERO' },
   // RRHH Fase 8 - Dashboard, Notificaciones y Reportes
   { codigo: 'RRHH_DASHBOARD_VER', descripcion: 'Ver dashboard de RRHH con KPIs', modulo: 'RRHH' },

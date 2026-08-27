@@ -16,6 +16,8 @@ import {
   PagoConcepto,
   PagoOrigenTipo,
   CONCEPTO_BENEFICIARIO_UNICO,
+  CONCEPTO_BENEFICIARIO_UNICO_ERROR,
+  CONCEPTO_ES_INGRESO,
   CONCEPTO_PERMITE_PARCIAL,
   CONCEPTO_SELECCION_UNICA,
 } from '../../database/entities/financiero/pago-consolidado-enums';
@@ -66,7 +68,12 @@ export interface ItemAPagar {
 }
 
 export interface LineaDePago {
-  fuente: 'CAJA_MAYOR' | 'CUENTA_BANCARIA';
+  /**
+   * `DESCUENTO` no es una fuente de fondos: no mueve plata. Cubre deuda para que
+   * la obligacion quede saldada, y por eso participa del reparto como una linea
+   * mas, pero no genera movimiento fisico.
+   */
+  fuente: 'CAJA_MAYOR' | 'CUENTA_BANCARIA' | 'DESCUENTO';
   monedaId: number;
   formaPagoId?: number | null;
   cajaMayorId?: number | null;
@@ -121,7 +128,7 @@ export function validarSeleccion(
   if (CONCEPTO_BENEFICIARIO_UNICO[concepto]) {
     const benes = new Set(items.map((i) => i.beneficiarioId ?? null));
     if (benes.size > 1) {
-      errores.push('Un pago de compras cubre a un solo proveedor.');
+      errores.push(CONCEPTO_BENEFICIARIO_UNICO_ERROR[concepto]);
     }
   }
 
@@ -157,6 +164,10 @@ export function validarCobertura(
     errores.push('Agregá al menos una forma de pago.');
     return errores;
   }
+  // La moneda de la deuda sale de los items: `validarSeleccion` ya garantizo que
+  // sea unica, asi que no hace falta pasarla por separado.
+  const monedaDeudaId = items.length ? Number(items[0].monedaId) : null;
+  let descuentos = 0;
   for (const l of lineas) {
     if (!(Number(l.monto) > 0)) errores.push('Cada forma de pago tiene que tener un monto mayor a 0.');
     if (!(Number(l.cotizacion) > 0)) errores.push('Falta la cotización de una de las formas de pago.');
@@ -166,7 +177,22 @@ export function validarCobertura(
     if (l.fuente === 'CUENTA_BANCARIA' && !l.cuentaBancariaId) {
       errores.push('Una forma de pago bancaria necesita la cuenta.');
     }
+    if (l.fuente === 'DESCUENTO') {
+      descuentos++;
+      // Un descuento en otra moneda no significa nada: lo que se perdona es deuda,
+      // y la deuda esta denominada en una sola moneda.
+      if (monedaDeudaId != null && Number(l.monedaId) !== monedaDeudaId) {
+        errores.push('El descuento tiene que estar en la moneda de la deuda.');
+      }
+      if (Number(l.cotizacion) !== 1) {
+        errores.push('El descuento no lleva cotización: va 1 a 1 contra la deuda.');
+      }
+      if (l.cajaMayorId || l.cuentaBancariaId || l.formaPagoId) {
+        errores.push('El descuento no sale de ninguna caja ni cuenta.');
+      }
+    }
   }
+  if (descuentos > 1) errores.push('Se admite un solo descuento por evento.');
   if (errores.length) return errores;
 
   const totalDeuda = sumar(items.map((i) => Number(i.monto)), decimalesDeuda);
@@ -289,6 +315,51 @@ export function repartirFifo(
   return filas;
 }
 
+/**
+ * Devuelve un array NUEVO con las lineas de descuento al final y el resto en su
+ * orden original. El descuento va ultimo para que el efectivo impute primero: la
+ * obligacion que termina "perdonada" es la ultima de la seleccion, no una del
+ * medio elegida por el azar del orden en que el usuario cargo las lineas.
+ *
+ * ⚠️ El handler tiene que REASIGNAR su variable con el resultado
+ * (`lineas = ordenarLineasParaReparto(lineas)`) ANTES de llamar a `repartirFifo`,
+ * y usar esa misma referencia en todo lo que despues indexe por `FilaReparto.lineaIdx`
+ * (construccion del detalle, desglose por fuente). `lineaIdx` es una posicion
+ * dentro del array que recibio `repartirFifo`: si se reparte sobre un array y se
+ * indexa sobre otro, el desglose "cuanto pago / cuanto se le perdono" sale mal sin
+ * lanzar ningun error. No se devuelve una tabla de traduccion de indices a
+ * proposito: seria mas superficie para el mismo bug.
+ */
+export function ordenarLineasParaReparto(lineas: LineaDePago[]): LineaDePago[] {
+  const pagos = lineas.filter((l) => l.fuente !== 'DESCUENTO');
+  const descuentos = lineas.filter((l) => l.fuente === 'DESCUENTO');
+  return [...pagos, ...descuentos];
+}
+
+/**
+ * Total imputado a cada item, separando lo que entro como plata de lo que se
+ * condono. Siempre devuelve una entrada por item (con ceros), nunca claves
+ * ausentes: el adaptador lo usa para decidir cuanto registra como PAGO y cuanto
+ * como AJUSTE_NEGATIVO en la cuenta corriente del cliente.
+ */
+export function imputadoPorItemPorFuente(
+  filas: FilaReparto[],
+  lineas: LineaDePago[],
+  cantidadItems: number,
+  decimalesDeuda: number,
+): Array<{ total: number; descuento: number }> {
+  const total = new Array(cantidadItems).fill(0);
+  const descuento = new Array(cantidadItems).fill(0);
+  for (const f of filas) {
+    total[f.itemIdx] += f.montoImputado;
+    if (lineas[f.lineaIdx]?.fuente === 'DESCUENTO') descuento[f.itemIdx] += f.montoImputado;
+  }
+  return total.map((v, i) => ({
+    total: redondear(v, decimalesDeuda),
+    descuento: redondear(descuento[i], decimalesDeuda),
+  }));
+}
+
 /** Total imputado a cada item, en la moneda de la deuda. Lo que recibe el adaptador. */
 export function imputadoPorItem(
   filas: FilaReparto[],
@@ -318,6 +389,7 @@ const PLURAL: Record<PagoConcepto, [string, string]> = {
   [PagoConcepto.GASTO]: ['gasto', 'gastos'],
   [PagoConcepto.VALE]: ['vale', 'vales'],
   [PagoConcepto.LIQUIDACION_SUELDO]: ['liquidación de sueldo', 'liquidaciones de sueldo'],
+  [PagoConcepto.COBRO_CLIENTE]: ['cuota de cliente', 'cuotas de cliente'],
 };
 
 /**
@@ -331,11 +403,14 @@ export function descripcionEvento(
   descripcionUnica?: string | null,
 ): string {
   const [sing, plur] = PLURAL[concepto];
+  // Un evento de ingreso es un COBRO: llamarlo "pago" en el movimiento de caja
+  // confunde a quien despues lee la planilla.
+  const verbo = CONCEPTO_ES_INGRESO[concepto] ? 'COBRO' : 'PAGO';
   if (cantidad === 1 && descripcionUnica) {
-    return `PAGO DE ${descripcionUnica}`.toUpperCase();
+    return `${verbo} DE ${descripcionUnica}`.toUpperCase();
   }
   const base = cantidad === 1
-    ? `PAGO DE 1 ${sing}`
-    : `PAGO CONSOLIDADO DE ${cantidad} ${plur}`;
+    ? `${verbo} DE 1 ${sing}`
+    : `${verbo} CONSOLIDADO DE ${cantidad} ${plur}`;
   return (beneficiario ? `${base} — ${beneficiario}` : base).toUpperCase();
 }
