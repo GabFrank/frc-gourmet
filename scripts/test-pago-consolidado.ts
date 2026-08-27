@@ -16,6 +16,8 @@ import {
   validarCobertura,
   repartirFifo,
   imputadoPorItem,
+  imputadoPorItemPorFuente,
+  ordenarLineasParaReparto,
   origenPorLinea,
   descripcionEvento,
   ItemAPagar,
@@ -24,7 +26,10 @@ import {
 import {
   PagoConcepto,
   PagoOrigenTipo,
+  CONCEPTO_ES_INGRESO,
 } from '../src/app/database/entities/financiero/pago-consolidado-enums';
+import { ADAPTERS } from '../electron/handlers/pago-consolidado-adapters';
+import { esIngreso } from '../electron/handlers/caja-mayor-utils';
 
 let passed = 0, failed = 0;
 function ok(cond: boolean, name: string, extra?: any) {
@@ -191,6 +196,70 @@ ok(descripcionEvento(PagoConcepto.COMPRA, 4, 'DISTRIBUIDORA CAMPOS') ===
   'PAGO CONSOLIDADO DE 4 CUOTAS DE COMPRA — DISTRIBUIDORA CAMPOS', 'K: incluye al proveedor');
 ok(descripcionEvento(PagoConcepto.GASTO, 1, null, 'GASTO #7 (ALQUILER)') === 'PAGO DE GASTO #7 (ALQUILER)',
   'K: con un solo item usa su descripcion');
+
+console.log('\n[L] Direccion del concepto: el espejo del frontend no puede mentir');
+{
+  // `CONCEPTO_ES_INGRESO` existe porque el renderer no puede importar
+  // `caja-mayor-utils`. Si las dos se separan, el wizard muestra "Pagar" en un
+  // cobro y no valida el saldo negativo donde corresponde.
+  for (const concepto of Object.values(PagoConcepto)) {
+    const adapter = ADAPTERS[concepto];
+    ok(!!adapter, `L: hay adaptador para ${concepto}`);
+    ok(CONCEPTO_ES_INGRESO[concepto] === esIngreso(adapter.tipoMovimiento),
+      `L: ${concepto} coincide con esIngreso(${adapter.tipoMovimiento})`,
+      { tabla: CONCEPTO_ES_INGRESO[concepto], real: esIngreso(adapter.tipoMovimiento) });
+  }
+  ok(CONCEPTO_ES_INGRESO[PagoConcepto.COBRO_CLIENTE] === true, 'L: el cobro a cliente es un ingreso');
+}
+
+console.log('\n[M] Linea de descuento');
+{
+  const descuento = (monto: number, monedaId = PYG, cotizacion = 1): LineaDePago =>
+    ({ fuente: 'DESCUENTO', monedaId, monto, cotizacion });
+  const items = [item(1, 100000), item(2, 50000)];
+
+  ok(validarCobertura(items, [linea(120000), descuento(30000)], 0).length === 0,
+    'M: efectivo + descuento cubren la deuda');
+  ok(validarCobertura(items, [linea(120000), descuento(30000, USD)], 0)
+    .some((e) => /moneda de la deuda/.test(e)), 'M: rechaza descuento en otra moneda');
+  ok(validarCobertura(items, [linea(120000), descuento(30000, PYG, 7500)], 0)
+    .some((e) => /cotización/.test(e)), 'M: el descuento no lleva cotizacion');
+  ok(validarCobertura(items, [linea(120000), { ...descuento(30000), cajaMayorId: 1 }], 0)
+    .some((e) => /no sale de ninguna caja/.test(e)), 'M: el descuento no sale de una caja');
+  ok(validarCobertura(items, [linea(90000), descuento(30000), descuento(30000)], 0)
+    .some((e) => /un solo descuento/.test(e)), 'M: un solo descuento por evento');
+
+  // El descuento se manda primero a proposito: tiene que terminar ultimo.
+  const desordenadas = [descuento(30000), linea(120000)];
+  const ordenadas = ordenarLineasParaReparto(desordenadas);
+  ok(ordenadas.length === 2 && ordenadas[0].fuente === 'CAJA_MAYOR' && ordenadas[1].fuente === 'DESCUENTO',
+    'M: ordenarLineasParaReparto manda el descuento al final');
+  ok(desordenadas[0].fuente === 'DESCUENTO', 'M: no muta el array original');
+  ok(ordenarLineasParaReparto([linea(1), linea(2), linea(3)]).map((l) => l.monto).join(',') === '1,2,3',
+    'M: preserva el orden relativo de las lineas de plata');
+
+  // El efectivo imputa primero: el item 1 se cubre entero con plata, y el
+  // descuento cae sobre el remanente del item 2.
+  const filas = repartirFifo(items, ordenadas, 0, decDe);
+  const porFuente = imputadoPorItemPorFuente(filas, ordenadas, items.length, 0);
+  ok(porFuente.length === 2, 'M: una entrada por item, siempre');
+  ok(porFuente[0].total === 100000 && porFuente[0].descuento === 0,
+    'M: el primer item se cobra entero en efectivo', porFuente[0]);
+  ok(porFuente[1].total === 50000 && porFuente[1].descuento === 30000,
+    'M: el descuento cae sobre el remanente del ultimo item', porFuente[1]);
+  const totales = imputadoPorItem(filas, items.length, 0);
+  ok(totales[0] === porFuente[0].total && totales[1] === porFuente[1].total,
+    'M: imputadoPorItem y el desglose por fuente dan el mismo total');
+  // Invariante 2 sigue valiendo con una linea que no mueve plata.
+  const porLinea = origenPorLinea(filas, ordenadas.length, (i) => decDe(ordenadas[i].monedaId));
+  ok(porLinea[0] === 120000 && porLinea[1] === 30000, 'M: cada linea entrega exactamente su monto', porLinea);
+}
+
+console.log('\n[N] Etiqueta de un evento de cobro');
+ok(descripcionEvento(PagoConcepto.COBRO_CLIENTE, 3, 'JUAN PEREZ') ===
+  'COBRO CONSOLIDADO DE 3 CUOTAS DE CLIENTE — JUAN PEREZ', 'N: un cobro se llama cobro, no pago');
+ok(descripcionEvento(PagoConcepto.COBRO_CLIENTE, 1, null, 'CUOTA 2 — CPC #7') === 'COBRO DE CUOTA 2 — CPC #7',
+  'N: con una sola cuota usa su descripcion');
 
 console.log(`\n${failed === 0 ? '✅' : '❌'} pago-consolidado: ${passed} pasaron, ${failed} fallaron\n`);
 process.exit(failed === 0 ? 0 : 1);
