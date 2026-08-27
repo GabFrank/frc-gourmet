@@ -644,18 +644,28 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
    * toolbar, para que sigan al tema claro/oscuro en vez de quedar fijos.
    * No-op en macOS/Linux/web.
    */
-  private syncTitleBarOverlay(intentos = 3): void {
+  private syncTitleBarOverlay(intentos = 3, demora = 120): void {
     if (!this.hasTitleBarOverlay) return;
     const api: any = (window as any).api;
     if (!api?.windowSetTitleBarOverlay) return;
+    // Coalescido: un Ctrl+rueda sostenido dispara muchos `zoom-changed` seguidos
+    // y cada uno haría getComputedStyle + reflow + IPC nativo. Con la demora,
+    // una ráfaga termina en una sola llamada.
+    if (this.overlaySyncTimer) clearTimeout(this.overlaySyncTimer);
+    this.overlaySyncTimer = setTimeout(() => {
+      this.overlaySyncTimer = null;
+      this.aplicarTitleBarOverlay(intentos);
+    }, demora);
+  }
+
+  /** Parte efectiva de `syncTitleBarOverlay` (ya coalescida). */
+  private aplicarTitleBarOverlay(intentos: number): void {
+    const api: any = (window as any).api;
     // La toolbar vive dentro del *ngIf de autenticación: si todavía no está en
     // el DOM (pantalla de login), reintentar en breve.
     const toolbar = document.querySelector('.app-toolbar') as HTMLElement | null;
     if (!toolbar) {
-      if (this.overlaySyncTimer) clearTimeout(this.overlaySyncTimer);
-      if (intentos > 0) {
-        this.overlaySyncTimer = setTimeout(() => this.syncTitleBarOverlay(intentos - 1), 400);
-      }
+      if (intentos > 0) this.syncTitleBarOverlay(intentos - 1, 400);
       return;
     }
     const estilos = getComputedStyle(toolbar);

@@ -1,5 +1,5 @@
 // Use ES Module import syntax
-import { app, BrowserWindow, protocol, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, protocol, ipcMain, dialog, Menu } from 'electron';
 import * as path from 'path';
 import * as url from 'url';
 import * as fs from 'fs';
@@ -388,6 +388,34 @@ function closeSplashIfOpen(): void {
  */
 const TOOLBAR_HEIGHT = 64;
 
+/**
+ * Reemplaza el menú por defecto de Electron.
+ *
+ * Ese menú sigue existiendo aunque la ventana sea frameless y no se dibuje, y
+ * trae *View → Toggle Developer Tools*, *Reload* y *Zoom* con sus accelerators
+ * nativos. En macOS además la barra del SO lo muestra siempre. Dejarlo puesto
+ * significa: (a) DevTools abrible con `⌥⌘I` salteando el permiso
+ * `SISTEMA_DEVTOOLS`, y (b) zoom y reload por caminos que no pasan por nuestros
+ * handlers (no se persisten, no piden confirmación).
+ *
+ * En Windows/Linux se quita del todo: Chromium maneja copiar/pegar por su
+ * cuenta. En macOS NO se puede quitar —sin menú se rompen Cmd+C/V/Q/W— así que
+ * se arma uno mínimo con los roles del sistema y SIN el menú *View*.
+ */
+function configurarMenuNativo(): void {
+  if (process.platform !== 'darwin') {
+    Menu.setApplicationMenu(null);
+    return;
+  }
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      { role: 'appMenu' },
+      { role: 'editMenu' },
+      { role: 'windowMenu' },
+    ]),
+  );
+}
+
 /** Alto válido para el overlay: cae al alto de la toolbar si viene basura. */
 function clampOverlayHeight(height?: number): number {
   const h = Number(height);
@@ -564,6 +592,9 @@ function registerWindowChromeHandlers(): void {
 }
 
 function createWindow(): void {
+  // Antes que nada: sacar el menú por defecto de Electron (ver docstring).
+  configurarMenuNativo();
+
   // Splash primero — visible mientras Angular hace bootstrap.
   createSplashWindow();
 
