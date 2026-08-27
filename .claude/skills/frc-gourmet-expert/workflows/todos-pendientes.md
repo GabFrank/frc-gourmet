@@ -114,6 +114,8 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
 
 ## Refactor técnico
 
+- [ ] **Unificar los botones de ventana en Linux cuando se actualice Electron.** Desde 2026-08-27 los botones de min/max/cerrar los dibuja el SO (overlay en Windows, semáforos en macOS); Linux sigue siendo la excepción porque Electron 24 no soporta Window Controls Overlay ahí, y arrastra el único código de botones custom que queda (`.window-controls` en `app.component.html` + la barra propia de la pantalla de login). Al subir a un Electron con WCO en Linux, pasar Linux a `controlsMode: 'native'` en `resolveControlsMode()` y borrar ese camino. Ver [architecture/electron-bootstrap.md](../architecture/electron-bootstrap.md).
+
 - [ ] **Modo headless para el servidor (`--headless` en `main.ts`)**. Hoy el Fastify server vive dentro del proceso Electron (los handlers se registran con `ipcMain`), y `app.on('ready')` llama a `createWindow()` incondicionalmente. No hay forma de levantar sólo el server: para probar la web `/admin` en un navegador, o para correr un nodo `mode=server` en una máquina sin monitor, igual se abre una ventana ociosa. Un flag que saltee `createWindow()` cuando `mode === 'server'` es chico y desbloquea las dos cosas. Detectado el 2026-08-19 probando dashboards en Chrome.
 
 - [ ] **`--prefer-ts-exts` en el resto de los `npm run test:*`**. Sólo `test:dashboard-rangos` lo tiene. Sin el flag, ts-node resuelve el `.js` compilado antes que el `.ts` y el test corre la versión del último commit en vez del working tree — pasa en verde con el bug adentro. Ver el pitfall correspondiente en `conventions/pitfalls-typeorm-electron.md`.
