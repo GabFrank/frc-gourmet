@@ -139,6 +139,7 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'SISTEMA_BACKUP', descripcion: 'Crear y restaurar backups de la base de datos', modulo: 'SISTEMA' },
   { codigo: 'SISTEMA_BD_CONFIGURAR', descripcion: 'Configurar base de datos (SQLite/Postgres)', modulo: 'SISTEMA' },
   { codigo: 'SISTEMA_MODO_CONFIGURAR', descripcion: 'Configurar modo de operacion (standalone/server/client)', modulo: 'SISTEMA' },
+  { codigo: 'SISTEMA_DEVTOOLS', descripcion: 'Abrir las herramientas de desarrollo (consola) de la app', modulo: 'SISTEMA' },
   { codigo: 'NOTIFICACIONES_CONFIGURAR', descripcion: 'Configurar notificaciones por Email/WhatsApp (canales, receptores, eventos)', modulo: 'SISTEMA' },
 
   // Musica ambiental (Spotify Connect)

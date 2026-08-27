@@ -720,7 +720,13 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
       }
 
       const seEstaCerrando = data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO;
-      repo.merge(entity, data);
+      // `dispositivo` fuera del merge: es el dueño de la caja y lo único que
+      // sostiene el gate de cobro por terminal. Aceptarlo dejaba que cualquier
+      // terminal se apropiara de una caja ajena con un update, desarmando el
+      // gate para siempre y rompiendo el invariante "una caja abierta por
+      // dispositivo", que sólo se verifica al crear. Ningún llamador lo manda.
+      const { dispositivo: _dispositivoIgnorado, ...cajaData } = data ?? {};
+      repo.merge(entity, cajaData);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
 

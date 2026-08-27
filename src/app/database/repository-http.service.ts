@@ -644,7 +644,7 @@ export class RepositoryHttpService extends RepositoryService {
   crearClienteRapido(data: { telefono: string; nombre?: string; direccion?: string }): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.crearClienteRapido() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  cerrarVentasAbiertasMesa(mesaId: number, estado: string): Observable<number> {
+  cerrarVentasAbiertasMesa(mesaId: number, estado: string, _opts?: { validarDispositivoCaja?: boolean }): Observable<number> {
     return throwError(() => new Error(`RepositoryHttpService.cerrarVentasAbiertasMesa() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getVentas(): Observable<Venta[]> {

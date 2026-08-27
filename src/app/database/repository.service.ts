@@ -362,7 +362,7 @@ export abstract class RepositoryService {
   abstract buscarClientePorTelefono(telefono: string): Observable<any>;
   abstract buscarClientesPorTelefono(telefono: string): Observable<any[]>;
   abstract crearClienteRapido(data: { telefono: string; nombre?: string; direccion?: string }): Observable<any>;
-  abstract cerrarVentasAbiertasMesa(mesaId: number, estado: string): Observable<number>;
+  abstract cerrarVentasAbiertasMesa(mesaId: number, estado: string, opts?: { validarDispositivoCaja?: boolean }): Observable<number>;
   abstract getVentas(): Observable<Venta[]>;
   abstract getVentasByDateRange(desde: string, hasta: string, filtros?: any): Observable<{ data: Venta[], total: number }>;
   abstract getBuffetMetricas(filtros?: any): Observable<any>;

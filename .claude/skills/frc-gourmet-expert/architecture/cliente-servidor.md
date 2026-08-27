@@ -60,6 +60,7 @@ Memoria `feedback_preload_monkey_patch_gotchas.md`. Los 4 patrones:
 2. Nombres de canal: usar el mismo string que `ipcMain.handle` (sin prefijo `client-` ni nada).
 3. Timing: el override de modo debe leerse antes del primer `invoke`, no en lazy init.
 4. Factory: la decisión IPC vs HTTP se evalúa una sola vez al arranque del Angular, no por llamada.
+5. **Lo que es local debe quedarse local.** Todo canal que actúe sobre ESTE proceso —no sobre los datos— tiene que estar en `ALWAYS_LOCAL_CHANNELS` (impresoras, diálogos de archivo, config de modo, backups) o cubierto por una regla de prefijo. Se agregó `esCanalDeVentana()`: cualquier canal `window:*` (botones de la titlebar, zoom, DevTools, pantalla completa) es **siempre IPC directo**. Antes salían por HTTP: en modo cliente los botones de ventana no hacían nada y, peor, apuntaban a la ventana del servidor. Síntoma típico de este bug: "el botón no hace nada, sólo en los clientes".
 
 ## Smoke server para testing E2E
 

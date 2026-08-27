@@ -30,6 +30,7 @@ import { printVentaTicketInternal, printPagareCpcTicketInternal } from './docume
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
 import { PagoOrigenTipo } from '../../src/app/database/entities/financiero/pago-consolidado-enums';
 import { bloquearSiPagoConsolidado } from './pago-consolidado-guard';
+import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
 
 function calcularEstadoCuota(monto: number, montoCobrado: number): CuentaPorCobrarCuotaEstado {
   if (montoCobrado >= monto) return CuentaPorCobrarCuotaEstado.COBRADO;
@@ -817,6 +818,21 @@ export function registerCuentasPorCobrarHandlers(
   // Recibe: { ventaId, clienteId, montoTotal, monedaId, cantidadCuotas?, frecuenciaDias?, fechaInicio?, descripcion?, forzar? }
   ipcMain.handle('cobrar-venta-credito', async (_event, data: any) => {
     await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+    // Concluir una venta a crédito es un cuarto camino de finalización, así que
+    // lleva el mismo gate de terminal ajena que `updateVenta`.
+    //
+    // Se pide sólo 'FINALIZAR' y no también 'PAGO', aunque más abajo se cree un
+    // `PagoDetalle`: esa línea usa la forma de pago CREDITO, que tiene
+    // `movimentaCaja: false`. Es el artefacto contable de cerrar la venta, no
+    // plata entrando al cajón — que es justamente lo que el flag de pagos
+    // controla.
+    if (data?.__validarDispositivoCaja === true) {
+      const ventaCaja = await dataSource.getRepository(Venta).findOne({
+        where: { id: data?.ventaId },
+        relations: ['caja'],
+      });
+      await assertTerminalPuedeOperar(dataSource, _event, (ventaCaja?.caja as any)?.id ?? null, 'FINALIZAR');
+    }
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();

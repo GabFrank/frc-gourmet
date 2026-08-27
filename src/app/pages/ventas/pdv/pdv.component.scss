@@ -84,6 +84,26 @@
     gap: 10px;
   }
 
+  /* Caja abierta en otra terminal. Naranja de aviso desde las variables de
+     tema, no el rojo de marca del resto de los iconos de esta barra: acá no hay
+     nada roto, es una condición operativa que el cajero tiene que tener
+     presente. */
+  .caja-info-row.terminal-ajena-row {
+    border-left: 3px solid var(--warning-color);
+    background: rgba(255, 152, 0, 0.12);
+    border-radius: 4px;
+    padding: 4px 8px;
+
+    .caja-info-item mat-icon {
+      color: var(--warning-color);
+    }
+
+    .info-value {
+      white-space: normal;
+      line-height: 1.3;
+    }
+  }
+
   .caja-info-item, .mesa-info-item {
     display: flex;
     align-items: center;

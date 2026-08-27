@@ -36,7 +36,8 @@
 - **Logo + nombre de empresa** (si configurados) + versión + chip de modo (`SERVIDOR`/`CLIENTE`, oculto en standalone).
 - **Bloque central:** cotizaciones USD/BRL y reloj en vivo.
 - **User menu** (dropdown): header de usuario, **Mi Perfil** (inerte), **Tema claro/oscuro** (`toggleTheme()` — el toggle de tema vive ACÁ, no como botón suelto en el toolbar), **Actualizaciones** (`UpdateChannelDialogComponent`), **Cerrar Sesión**.
-- **Controles de ventana custom** (minimizar/maximizar/cerrar, solo Win/Linux, vía IPC `window:*`).
+- **Menú Herramientas de ventana** (icono `tune`, sólo Electron): zoom −/%/+ (la fila de zoom no cierra el menú), pantalla completa, recargar y DevTools. Repone lo que se pierde por ser una ventana frameless sin menú nativo; los mismos atajos (`Ctrl +/-/0`, `F5`, `F12`, `F11`) los maneja `main.ts`.
+- **Controles de ventana**: los dibuja el SO (overlay en Windows, semáforos en macOS). El header sólo los renderiza en **Linux** (`showCustomWindowControls`, IPC `window:*`). Ver [electron-bootstrap.md](electron-bootstrap.md#titlebar-frameless-quién-dibuja-los-botones-de-ventana-2026-08-27).
 - El botón de **notificaciones con badge** está **comentado** en el template; el badge real de notificaciones RRHH está en el item "Notificaciones" del sidenav.
 
 ### Sidenav

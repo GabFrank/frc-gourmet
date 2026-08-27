@@ -48,6 +48,7 @@
     "test:resumen-multimoneda": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-resumen-multimoneda-e2e.ts",
     "test:operacion-financiera": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-operacion-financiera-validacion-e2e.ts",
     "test:fichaje-facial": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-fichaje-facial.ts",
+    "test:delivery-impresora": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-impresora-ruteo.ts",
     "test:delivery": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-e2e.ts",
     "test:menu-tree": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-menu-tree.ts",
     "test:permisos": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-permissions-e2e.ts",
@@ -71,6 +72,7 @@
     "test:reporte-ventas": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-reporte-ventas-e2e.ts",
     "test:reporte-finanzas": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-reporte-finanzas-e2e.ts",
     "test:config-caja-mayor": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-config-caja-mayor-e2e.ts",
+    "test:window-chrome": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-window-chrome.ts",
     "test:reportes-periodo": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-reportes-periodo.ts",
     "test:pg-backup": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pg-backup-e2e.ts",
     "test:locks-pg": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-locks-postgres-e2e.ts",
@@ -97,7 +99,11 @@
     "seed:dev-roles": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/seed-dev-roles.ts",
     "test:dashboard-rangos": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-dashboard-rangos.ts",
     "test:pedido-online-materializacion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedido-online-materializacion-e2e.ts",
-    "test:zonas-poligono": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-zonas-poligono-e2e.ts"
+    "test:zonas-poligono": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-zonas-poligono-e2e.ts",
+    "test:terminal-caja": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-terminal-caja-e2e.ts",
+    "test:ticket-delivery-pagos": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-ticket-delivery-pagos-e2e.ts",
+    "test:integridad-cobro": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-integridad-cobro-e2e.ts",
+    "test:resumen-caja-numeros": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-resumen-caja-numeros.ts"
   },
   "private": true,
   "dependencies": {

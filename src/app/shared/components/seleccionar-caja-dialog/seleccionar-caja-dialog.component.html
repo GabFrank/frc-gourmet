@@ -1,7 +1,7 @@
 <h2 mat-dialog-title>Seleccionar caja abierta</h2>
 
 <mat-dialog-content>
-  <p class="hint">Hay varias cajas abiertas. Elegí a cuál querés unirte para lanzar items.</p>
+  <p class="hint">Hay varias cajas abiertas. Elegí a cuál querés unirte.</p>
 
   <mat-list class="cajas-list">
     <button
@@ -12,7 +12,11 @@
       <mat-icon matListItemIcon>point_of_sale</mat-icon>
       <div matListItemTitle class="caja-titulo">
         {{ vm.titulo }}
-        <span class="badge" *ngIf="vm.esEsteDispositivo">ESTE DISPOSITIVO · COBRA</span>
+        <!-- Sin el sufijo "· COBRA": desde 2026-08 la configuración del PdV
+             puede habilitar el cobro en terminales ajenas, así que afirmarlo
+             acá sería mentir la mitad de las veces. Qué se puede hacer en cada
+             caja lo dice el aviso del PdV, que sí lee esa configuración. -->
+        <span class="badge" *ngIf="vm.esEsteDispositivo">ESTE DISPOSITIVO</span>
       </div>
       <div matListItemLine class="caja-sub">
         {{ vm.dispositivo }} · {{ vm.usuario }}

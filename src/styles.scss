@@ -1736,3 +1736,45 @@ input.mat-input-element {
 .dark-theme .icon-muted.mat-icon {
   color: rgba(255, 255, 255, 0.38) !important;
 }
+
+
+// =============================================================================
+// Menú de herramientas de ventana (header). El panel se renderiza en un overlay
+// fuera del componente, así que los estilos van acá (globales), no en
+// app.component.scss.
+// =============================================================================
+.window-tools-menu {
+  .zoom-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    padding: 4px 12px 8px;
+
+    .zoom-valor {
+      min-width: 72px;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-primary);
+    }
+
+    .mat-mdc-icon-button {
+      color: var(--text-primary);
+    }
+  }
+
+  // Atajo de teclado a la derecha del ítem, en gris. El contenido proyectado
+  // de `mat-menu-item` va dentro de `.mdc-list-item__primary-text` (Material
+  // 15/MDC) y no es flex por defecto: sin esto el `margin-left:auto` no empuja.
+  .mat-mdc-menu-item .mdc-list-item__primary-text {
+    display: flex;
+    align-items: center;
+    width: 100%;
+  }
+
+  .mat-mdc-menu-item .atajo {
+    margin-left: auto;
+    padding-left: 24px;
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+}

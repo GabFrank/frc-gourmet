@@ -99,10 +99,20 @@ async function refreshAccessIfPossible(): Promise<boolean> {
   }
 }
 
+/**
+ * Canales que NUNCA deben salir a la red: el "chrome" de la ventana local
+ * (`window:minimize`, `window:zoom-step`, ...). Rutearlos por HTTP en modo
+ * cliente hacía que los botones de la titlebar no hicieran nada — y, peor,
+ * apuntaban a la ventana del server. Son operaciones del proceso local.
+ */
+function esCanalDeVentana(channel: string): boolean {
+  return channel.startsWith('window:');
+}
+
 async function invokeRouter(channel: string, ...args: any[]): Promise<any> {
   // Local channels o cualquier modo no-cliente → IPC directo (referencia
   // original, no la reemplazada — sino recursion infinita)
-  if (APP_MODE !== 'client' || ALWAYS_LOCAL_CHANNELS.has(channel)) {
+  if (APP_MODE !== 'client' || ALWAYS_LOCAL_CHANNELS.has(channel) || esCanalDeVentana(channel)) {
     return _originalInvoke(channel, ...args);
   }
 
@@ -1078,6 +1088,53 @@ contextBridge.exposeInMainWorld('api', {
   windowIsMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:is-maximized'),
   windowPlatform: (): Promise<NodeJS.Platform> => ipcRenderer.invoke('window:platform'),
   /**
+   * Describe el chrome de la ventana: qué botones dibuja el SO y cuáles debe
+   * dibujar el header. `controlsMode`: 'native' (overlay de Windows) |
+   * 'none' (semáforos de macOS) | 'custom' (Linux frameless).
+   */
+  windowGetChrome: (): Promise<{
+    platform: NodeJS.Platform;
+    controlsMode: 'native' | 'none' | 'custom';
+    overlay: boolean;
+    toolbarHeight: number;
+  }> => ipcRenderer.invoke('window:chrome'),
+  /** Tiñe los botones nativos del overlay (Windows) según el tema activo. */
+  windowSetTitleBarOverlay: (opts: { color?: string; symbolColor?: string }): Promise<boolean> =>
+    ipcRenderer.invoke('window:set-titlebar-overlay', opts),
+
+  // --- Herramientas de ventana (reemplazan al menú nativo, que no existe en
+  // una ventana frameless): zoom, recargar, devtools y pantalla completa. ---
+  windowZoomGet: (): Promise<number> => ipcRenderer.invoke('window:zoom-get'),
+  windowZoomSet: (factor: number): Promise<number> => ipcRenderer.invoke('window:zoom-set', factor),
+  windowZoomStep: (direction: 1 | -1): Promise<number> => ipcRenderer.invoke('window:zoom-step', direction),
+  windowZoomReset: (): Promise<number> => ipcRenderer.invoke('window:zoom-reset'),
+  windowReload: (): Promise<void> => ipcRenderer.invoke('window:reload'),
+  windowToggleDevTools: (): Promise<boolean> => ipcRenderer.invoke('window:toggle-devtools'),
+  windowToggleFullscreen: (): Promise<boolean> => ipcRenderer.invoke('window:toggle-fullscreen'),
+  windowIsFullscreen: (): Promise<boolean> => ipcRenderer.invoke('window:is-fullscreen'),
+  /** Suscribe a cambios de zoom (atajo de teclado o menú). Devuelve unsubscribe. */
+  onWindowZoomChanged: (handler: (state: { factor: number }) => void) => {
+    const listener = (_event: any, state: { factor: number }) => handler(state);
+    ipcRenderer.on('window:zoom-changed', listener);
+    return () => ipcRenderer.removeListener('window:zoom-changed', listener);
+  },
+  /**
+   * Suscribe al pedido de abrir DevTools por atajo de teclado (F12 /
+   * Ctrl+Shift+I). El main no puede evaluar permisos —en modo cliente no hay
+   * BD local—, así que delega la decisión al renderer. Devuelve unsubscribe.
+   */
+  onWindowDevToolsRequested: (handler: () => void) => {
+    const listener = () => handler();
+    ipcRenderer.on('window:devtools-requested', listener);
+    return () => ipcRenderer.removeListener('window:devtools-requested', listener);
+  },
+  /** Suscribe a entrar/salir de pantalla completa. Devuelve unsubscribe. */
+  onWindowFullscreenChanged: (handler: (state: { isFullScreen: boolean }) => void) => {
+    const listener = (_event: any, state: { isFullScreen: boolean }) => handler(state);
+    ipcRenderer.on('window:fullscreen-changed', listener);
+    return () => ipcRenderer.removeListener('window:fullscreen-changed', listener);
+  },
+  /**
    * Suscribe a cambios de maximize/unmaximize. Devuelve un unsubscribe.
    * El handler recibe `{ isMaximized: boolean }` enviado por main.ts.
    */
@@ -1828,8 +1885,8 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // Cerrar ventas abiertas de una mesa
-  cerrarVentasAbiertasMesa: async (mesaId: number, estado: string): Promise<number> => {
-    return await ipcRenderer.invoke('cerrarVentasAbiertasMesa', mesaId, estado);
+  cerrarVentasAbiertasMesa: async (mesaId: number, estado: string, opts?: { validarDispositivoCaja?: boolean }): Promise<number> => {
+    return await ipcRenderer.invoke('cerrarVentasAbiertasMesa', mesaId, estado, opts);
   },
 
   // Venta methods

@@ -171,6 +171,191 @@ Canal único: **`transferir-venta-pdv`** en `ventas.handler.ts`. Una transacció
 
 **Test:** `npm run test:transferencia-pdv` (65 asserts: las 8 celdas, las reglas de dinero, la mesa fantasma de la cadena mesa→comanda→mesa, el FK de la comanda al cerrarse, la CPC y los permisos).
 
+## Caja compartida: qué puede hacer una terminal ajena (2026-08)
+
+Una caja se abre en **una** terminal (`Caja.dispositivo`, columna NOT NULL) y
+cualquier otra puede unirse a ella para lanzar ítems. Hasta 2026-08 el cobro
+estaba reservado a la terminal dueña, sin excepción posible. Hoy lo decide el
+local, con **dos flags de `PdvConfig`**:
+
+| Flag | Controla | Default |
+|---|---|---|
+| `permitirPagosTerminalAjena` | registrar líneas de cobro (`Pago`, `PagoDetalle`, ajustes) | `false` |
+| `permitirFinalizarTerminalAjena` | concluir la venta, por cualquier vía | `false` |
+
+**Son dos y no uno a propósito.** El caso más pedido es habilitar el primero y
+no el segundo: el mozo o el repartidor registra lo que cobró, y el cajero revisa
+y finaliza. Ambos default `false` = conducta previa, así que actualizar no
+cambia el comportamiento de ninguna instalación.
+
+⚠️ **El dinero se acredita siempre a la caja abierta**, sin importar qué terminal
+cobró. Estos flags no mueven plata de caja, sólo dicen quién puede operar.
+
+### Los CUATRO caminos que hay que gatear
+
+El gate vive en `electron/utils/terminal-caja.utils.ts`
+(`evaluarTerminalCaja` / `assertTerminalPuedeOperar`). Antes existía un solo
+chequeo, en `createPago`, y **por eso se podía saltear de tres maneras
+distintas**:
+
+| Camino | Archivo | Acción |
+|---|---|---|
+| `createPago` | `compras.handler.ts` | `PAGO` |
+| `createPagoDetalle` | `compras.handler.ts` | `PAGO` |
+| `updateVenta` `ABIERTA → CONCLUIDA` | `ventas.handler.ts` | `FINALIZAR` |
+| `cerrarVentasAbiertasMesa` (`CONCLUIDA`) | `ventas.handler.ts` | `FINALIZAR` |
+| `cobrar-venta-credito` | `cuentas-por-cobrar.handler.ts` | `FINALIZAR` |
+
+- **`createPagoDetalle` resuelve la caja server-side** desde el id del pago. El
+  payload del renderer trae el `pago` tal como lo devolvió `getVenta`, que **no
+  carga `pago.caja`**: confiar en `data.pago.caja` deja el gate en no-op. Este
+  era el hueco del cobro anticipado de delivery — con el `Pago` ya creado por la
+  dueña, la ajena seguía agregando líneas.
+- **`cerrarVentasAbiertasMesa`** concluye con `repo.save()` directo, sin pasar
+  por `updateVenta`. Es un camino de finalización propio y lo llama el PdV justo
+  después de cobrar.
+- **`cobrar-venta-credito`** pide sólo `FINALIZAR`, aunque cree un
+  `PagoDetalle`: esa línea usa la forma de pago CREDITO, con
+  `movimentaCaja: false`. Es el artefacto contable de cerrar la venta, no plata
+  entrando al cajón — que es lo que el flag de pagos controla.
+- **`registrarCobroParcial` NO se gatea.** No crea dinero: taguea `PagoDetalle`
+  que ya existen y actualiza `montoCubierto`. El gate real es `createPagoDetalle`.
+  Gatearlo además rompía en silencio la "ronda final" de `finalizar()`, que lo
+  llama dentro de un `try/catch` no bloqueante.
+
+### Cómo se activa
+
+Todos los gates se disparan **sólo con un flag explícito en el payload**
+(`validarDispositivoCaja`, `__validarDispositivoCaja`, `opts.validarDispositivoCaja`),
+que manda únicamente el cobro del PdV. `updateVenta` es genérico: lo usan pedidos
+online, delivery, la cancelación desde el historial y varios flujos server-side
+que no son "el cajero cobrando", y un gate incondicional los rompería.
+
+⚠️ **Esto NO es una frontera de seguridad.** La frontera real es
+`ensurePermission`, que ya está en los cinco handlers. `/api/rpc` es
+default-allow, así que un cliente puede omitir el flag. Es un candado
+operativo — evita cobrar sin querer desde la terminal equivocada.
+
+### Cuándo NO bloquea
+
+Se considera terminal dueña, y no se bloquea nada, cuando **no se puede
+determinar positivamente lo contrario**: el dispositivo del request no se
+resuelve, o la caja no se puede leer. Es la regla que ya tenía `createPago` y
+existe para no romper el cobro en instalaciones de un solo equipo, donde nadie
+configuró un `deviceId`.
+
+⚠️ **El device del gate NO se hereda del proceso servidor** (corregido
+2026-08-27). `resolveRequestDeviceId` —que los create handlers usan para poblar
+`dispositivo_id`— cae al dispositivo local del proceso cuando el request llega
+por HTTP sin `device_id` en el JWT. Para persistir la columna está bien; para
+decidir permisos, no: una sesión de `/admin` o de la PWA se hacía pasar por la
+terminal del servidor. Producía las dos cosas malas: falso permitir si la caja
+era del servidor, y **falso bloqueo** en cualquier otro caso, con el frontend
+habilitando los botones (calcula `currentDeviceId = null`) y el backend
+rechazándolos. El gate usa `resolveGateDeviceId`, que resuelve `null`
+("indeterminado", no bloquea).
+
+⚠️ **Los egresos del cajón NO usan estos flags.** Vales, compras y gastos pagados
+con efectivo (`pdv-egresos.handler.ts`) tienen su propio gate, fijo. Es
+deliberado: registrar un pago es anotar plata que el cliente entregó, y eso puede
+pasar en la mesa o en la puerta; pagar un vale es sacar billetes del cajón, y eso
+sólo puede ocurrir donde el cajón está.
+
+⚠️ **`create-gasto-caja` no se gatea, a propósito.** Su único llamador es el
+ajuste de una caja **ya cerrada**, desde la pantalla del gerente (que corre en
+otro dispositivo). Exigirle caja abierta + dispositivo dueño deshabilitaría el
+100% del flujo.
+
+### Frontend
+
+- El gate arranca **fail-closed** en `aplicarCajaSeleccionada()` (síncrono, con
+  el criterio histórico) y `recomputarGateTerminal()` sólo puede **ampliarlo**
+  tras leer la config, en un `finally`. Si la lectura falla, la terminal dueña
+  nunca se queda sin cobrar.
+- La config se **relee antes de cada cobro** (`refrescarGateTerminal()`): el
+  diálogo de configuración del PdV no se abre desde el PdV (va por el menú, el
+  home o el dashboard), así que sin esto un cambio no surtía efecto hasta cerrar
+  y reabrir la pestaña.
+- Aviso persistente en la barra de caja + banner en el diálogo de cobro, con los
+  tres estados posibles. Los rechazos del backend se traducen a snackbar: antes
+  eran `console.error` y el cajero veía que "no pasaba nada".
+- ⚠️ `delivery-dialog` tiene un `puedeEditarPago` que significa otra cosa ("hay
+  delivery seleccionado y no está en estado terminal"). Se llamaba `puedeCobrar`
+  y colisionaba con el del PdV.
+
+**Huecos preexistentes que este cambio cerró**: `openAjusteDialog` creaba el
+`Pago` **sin** el flag (o sea servía para saltear el gate por completo, también
+vía F9), y `cobroRapido` (F2) no tenía ningún gate — en una terminal ajena
+cobraba completo aunque el botón COBRAR estuviera bloqueado.
+
+**Test:** `npm run test:terminal-caja` (27 asserts: la matriz de 2×2 flags, los
+cinco caminos, el device indeterminado, y que los pagos de compra no se vean
+afectados).
+
+### Integridad de las líneas de pago (2026-08-27)
+
+El gate por terminal es un **candado operativo**, no una frontera. Estos guards
+sí son de integridad: valen con o sin flag, y contra `/api/rpc` directo.
+
+| Invariante | Dónde | Por qué |
+|---|---|---|
+| Una ronda de cobro parcial sólo taguea líneas de **su propio pago** | `registrarCobroParcial` | Filtraba sólo por id. Con ids de otras ventas + `anularCobroParcial` se desactivaba plata de **otra caja, incluso cerrada**. |
+| Una ronda sólo se anula con la **venta abierta** | `anularCobroParcial` | Anular sobre una venta cerrada saca plata del arqueo y deja viva la `AcreditacionPos`. |
+| Una línea **imputada a una ronda** no se borra suelta | `deletePagoDetalle` | El borrado se llevaba la plata y dejaba vivos el `CobroParcialItem` y el `montoCubierto`: ítem PAGADO y bloqueado, saldo del ticket subiendo. |
+| `Pago.caja` **no se reasigna** | `updatePago` | Es lo **único** que lee el gate de `createPagoDetalle`: `{ caja: null }` lo desactivaba para todas las líneas siguientes. El gate era auto-derrotable. |
+| `Venta.caja` **no se reasigna** | `updateVenta` | Movía una venta CONCLUIDA con todo su cobro a otra caja, sin gate ni transición de estado. |
+| `Caja.dispositivo` **no se reasigna** | `update-caja` | Una terminal se apropiaba de una caja ajena y desarmaba el gate para siempre. |
+
+⚠️ **`anularCobroParcial` no tiene llamador en el frontend.** Existe sólo como
+canal de `/api/rpc`. Mientras siga así, una ronda registrada no se puede deshacer
+desde la UI — por eso el botón de borrar línea se deshabilita con tooltip en vez
+de fallar.
+
+**Gate derivado, sin flag, en las mutaciones de líneas.** `updatePagoDetalle`,
+`deletePagoDetalle` y `deletePago` resuelven la caja **server-side** y aplican el
+gate sin necesidad de que el cliente mande nada. El discriminador es
+**positivo** — el `Pago` cuelga de una `Venta` —, no "no es de compra": el diálogo
+de compras crea el `Pago` **antes** de vincularlo a la `Compra`, así que en esa
+ventana un pago de compra legítimo se habría visto como pago de venta y habría
+quedado bloqueado.
+
+**Test:** `npm run test:integridad-cobro` (21 asserts).
+
+### Acreditaciones: los tres caminos por los que se perdía plata
+
+1. **El cobro a crédito no las creaba.** Estaban embebidas en `finalizar()`. Un
+   cobro mixto (300.000 con tarjeta + 200.000 a crédito) cerraba la venta, creaba
+   la CPC por 200.000, y **los 300.000 de tarjeta nunca entraban al ledger
+   bancario**. Hoy viven en `registrarAcreditaciones()` y las llaman los dos
+   caminos.
+2. **Un solo `try` envolvía el bucle.** Si fallaba la 2ª de 3, la 3ª ni se
+   intentaba y el cobro se veía exitoso. Hoy es un `try` por línea y se avisa
+   cuántas quedaron sin registrar.
+3. **Se acreditaba el número sin su moneda.** Los atajos de moneda del diálogo
+   cambian la línea **sin** tocar la máquina POS elegida, así que 40 dólares se
+   acreditaban como 40 guaraníes. `create-acreditacion-pos` y
+   `acreditar-transferencia-bancaria` reciben `monedaId` y rechazan si difiere de
+   la moneda de la cuenta destino — **fallando abierto** si la cuenta no tiene
+   moneda cargada (la columna es nullable y bloquear ahí dejaría sin acreditar a
+   media instalación).
+
+Y dos formas de mandar la plata al banco equivocado: **F4–F7** asignaban la forma
+de pago sin llamar `onFormaPagoChange()`, dejando la máquina POS de la forma
+anterior; y **re-finalizar una venta ya CONCLUIDA** (delivery EN_CAMINO con cobro
+anticipado) duplicaba la acreditación, porque `updateVenta` no frena
+CONCLUIDA→CONCLUIDA y `acreditar-transferencia-bancaria` no es idempotente.
+
+### `PagoDetalle` ahora persiste el destino de acreditación
+
+`maquina_pos_id` / `cuenta_bancaria_id` son columnas desde 2026-08. El vínculo
+línea→destino vivía **sólo en memoria** del diálogo de cobro (en `DetalleRow`),
+así que al reabrirlo `loadExistingPago` lo perdía y, al finalizar, la
+`AcreditacionPos` y la acreditación de la transferencia **no se creaban nunca**
+— sin error visible, porque ese bloque corre en un `try/catch` no bloqueante.
+
+Ya era un bug antes; con el cobro repartido entre terminales pasaba a ser
+pérdida de plata silenciosa por el camino normal.
+
 ## Entidades clave (24 archivos `*.entity.ts` en `entities/ventas/`)
 
 ```
@@ -745,7 +930,7 @@ Soporta:
 
 **Factura**: botón abre `FacturarDialogComponent` (facturación electrónica precargada con cliente e items). NO finaliza el cobro.
 
-**Gate por dispositivo (caja compartida multi-dispositivo)**: `createPago` con `validarDispositivoCaja:true` valida que el dispositivo actual sea dueño de la caja; si difiere lanza `COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO`. El PdV además desactiva el botón Cobrar (`puedeCobrar`) en dispositivos que no son dueños de la caja: pueden lanzar items pero no cobrar.
+**Gate por dispositivo**: ver [Caja compartida: qué puede hacer una terminal ajena](#caja-compartida-qué-puede-hacer-una-terminal-ajena). Desde 2026-08 **ya no es una regla fija**: lo deciden dos flags de `PdvConfig`.
 
 **Cobro rápido (F2, en `pdv.component`)**: cobra total en moneda + forma de pago principal con un click (crea Pago/PagoDetalle "COBRO RAPIDO", concluye la venta, procesa stock).
 
@@ -902,11 +1087,103 @@ Patrón: master con 2 paneles. Izq: totales/saldos por moneda → tarjeta de con
 
 **UI:** panel de ítems como **tab** dentro del panel izquierdo del `cobrar-venta-dialog` (Pagos | Items) para no ensanchar; footer fijo. En `pdv.component.ts`: chips PAGADO (verde)/PARCIAL (naranja); `bloqueadoPorCobro(item)` impide editar/cancelar/mover ítems con `montoCubierto > 0.5` ("Anulá el cobro parcial primero").
 
-> **El ticket impreso NO conoce el cobro parcial.** `buildVentaTicketLines` no resta `montoCubierto`, así que una pre-cuenta reimpresa después de una ronda muestra el total del pedido y no el saldo (el PdV sí lo muestra en pantalla). Decisión de producto pendiente en el issue [#241](https://github.com/GabFrank/frc-gourmet/issues/241).
+> **El ticket impreso NO conoce el cobro parcial** — salvo en delivery. `buildVentaTicketLines` no resta `montoCubierto`, así que una pre-cuenta reimpresa después de una ronda muestra el total del pedido y no el saldo (el PdV sí lo muestra en pantalla). Decisión de producto pendiente en el issue [#241](https://github.com/GabFrank/frc-gourmet/issues/241). **En los tickets de delivery esto sí se resolvió** (2026-08): ver abajo.
+
+## Pagos ya registrados en los tickets de delivery (2026-08)
+
+Un delivery puede tener plata cargada **antes** de que el ticket se imprima:
+cobro anticipado, una ronda de cobro parcial, o un pedido de la web pagado
+online. El papel no decía nada de eso — el repartidor salía con un
+`A COBRAR <total>` que ya estaba pago a medias, y el cajero que finalizaba no
+tenía cómo saber qué se había registrado antes.
+
+### Qué tickets lo llevan, y cuáles no
+
+| Ticket | Builder | ¿Lleva el desglose? |
+|---|---|---|
+| Reparto / retiro | `buildDeliveryTicketLines` | **Sí** |
+| Comprobante de venta | `buildVentaTicketLines` | **Sí**, si la venta tiene delivery |
+| Pre-cuenta | `buildVentaTicketLines` (`isPrecuenta`) | **Sí**, si la venta tiene delivery |
+| Comanda de cocina | `printComandaInternal` | No — cocina no cobra |
+| Pagaré CPC | `printPagareCpcTicketInternal` | No — es el papel de la deuda |
+
+Una venta **sin** delivery no cambia: sigue con la línea única `FORMA PAGO`. Ahí
+el cobro ocurre de una sola vez y frente al cajero, así que el desglose no
+agrega nada y alarga el ticket.
+
+### El layout es el mismo que el del cierre de caja
+
+Es lo que se pidió explícitamente, y no se reimplementó: el helper
+`ticketRubroMultimoneda` (`ticket.utils.ts`) **se extrajo de**
+`printCierreCajaInternal`, donde vivía embebido, y ahora lo comparten los dos.
+
+```
+EFECTIVO                       ← 2 monedas: el nombre encabeza, sin importe
+  Gs. ................ 50.000
+  $ ...................... 4
+TRANSFERENCIA ....... 20.000   ← 1 moneda: nombre e importe en la misma línea
+```
+
+Detalles que importan:
+
+- **Símbolo ASCII obligatorio** (`monedaSimboloAscii`): el `₲` crudo sale como
+  `?` en una térmica.
+- **La clave se trunca** (`anchoClave`). `ticketKv` **no** trunca, así que
+  `TRANSFERENCIA BANCARIA BBVA CONTINENTAL` desbordaba las 32 columnas de una
+  impresora de 58mm y dejaba el importe huérfano en la línea siguiente.
+- **`DESCUENTO`/`AUMENTO` quedan fuera** del desglose: no son plata entregada
+  por el cliente y ya están dentro del TOTAL. Siguen saliendo en sus líneas
+  propias del bloque de totales.
+- **El `VUELTO` no se netea contra su forma de pago**, va como línea propia.
+  Cobrar con tarjeta y dar vuelto en efectivo produciría una fila
+  `EFECTIVO -20.000`. Sí se resta del total cobrado, que es lo que define el
+  saldo. (El resumen de cierre tampoco lo netea en su desglose.)
+- **Venta a crédito**: genera un `PagoDetalle` **tipo PAGO** por el total con
+  forma de pago CREDITO (`movimentaCaja: false`). Se marca `(A CREDITO)` para
+  que el ticket no afirme que entró plata.
+
+### El número grande pasa a ser el SALDO
+
+Con pagos registrados y saldo pendiente, el cierre del ticket imprime
+`TOTAL` / `YA PAGADO` / **`SALDO A COBRAR`** en grande, más el saldo convertido
+a las demás monedas. Dejar el total en grande con la mitad ya cobrada hace que
+el repartidor cobre de más. Sin pagos, el ticket es idéntico al anterior
+(`A COBRAR <total>`); con saldo ≤ 0, `PAGADO — NO COBRAR`.
+
+**Sin cotización vigente, el ticket NO afirma un saldo.** `montoAPrincipal` cae a
+"1 a 1" cuando no encuentra tasa, así que 60 USD contarían como 60 guaraníes. El
+bloque imprime `VERIFICAR EN CAJA` y el motivo. ⚠️ **El orden de las ramas
+importa**: `sinCotizacion` se evalúa **antes** que el chequeo de saldo, porque con
+un adelanto grande en divisa el saldo daba 0 y el ticket salía
+`PAGADO — NO COBRAR`, que es el desenlace más caro posible. Un local que sólo
+opera en guaraníes nunca entra acá (la comparación es contra la moneda principal).
+
+**Sobrepago:** el saldo ya no se aplasta con `Math.max(0, …)`. Un pago de más sin
+línea de VUELTO hacía que el ticket dijera `PAGADO` y **el vuelto que hay que
+devolverle al cliente desaparecía del papel**. Hoy imprime `VUELTO A ENTREGAR`.
+
+⚠️ **Bug preexistente que hubo que arreglar para que ese saldo sea correcto:**
+el ticket de delivery calculaba `total = ítems − descuentoItems + envío`,
+**ignorando** los ajustes de nivel pago que `buildVentaTicketLines` sí aplica.
+El mismo pedido salía impreso con dos totales distintos. Sobre esa base, un
+descuento global ya otorgado reaparecía como saldo a cobrar.
+
+### `buildDeliveryTicketLines` vs `printDeliveryTicketInternal`
+
+Se partieron: el primero arma las líneas (builder puro, testeable sin
+hardware, igual que `buildVentaTicketLines`); el segundo resuelve la impresora y
+manda a imprimir. Antes era una sola función y cortaba en
+`'No hay impresora configurada'` **antes** de armar una sola línea, así que el
+contenido no se podía testear.
+
+**Test:** `npm run test:ticket-delivery-pagos` (39 asserts: el layout de una y
+varias monedas, el vuelto, el descuento global, el crédito, las 32 columnas, el
+comprobante/pre-cuenta, y la regresión del delivery sin pagos y de la venta de
+mostrador).
 
 ### Cajas
 
-- **Compartida multi-dispositivo** (`0ac7868`): `get-cajas-abiertas` (todas las ABIERTO). El cobro se restringe: el flujo de venta manda `validarDispositivoCaja:true` y `createPago` rechaza con `COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO` si el dispositivo del request ≠ `caja.dispositivo.id`. (Repo HTTP de `getCajasAbiertas` aún NO implementado — pendiente client mode.)
+- **Compartida multi-dispositivo** (`0ac7868`): `get-cajas-abiertas` (todas las ABIERTO). El cobro se restringía al dispositivo dueño; desde 2026-08 es **configurable** — ver [Caja compartida: qué puede hacer una terminal ajena](#caja-compartida-qué-puede-hacer-una-terminal-ajena). (Repo HTTP de `getCajasAbiertas` aún NO implementado — pendiente client mode.)
 - **Auto-retiro del cierre** (`5c0f068`): `generarRetiroDelCierre(ds, cajaId, userId)` (`retiro-cierre.util.ts`) crea un `RetiroCaja` origen=CIERRE estado=FLOTANTE con el efectivo por moneda del conteo (idempotente por `conteoCierre.id`). Se dispara automáticamente en `update-caja` al cerrar.
 - **Ajustar caja cerrada** (`34015ca`): `puede-ajustar-caja` (editable solo si CERRADA y el retiro no está INGRESADO en Caja Mayor) + `finalizar-ajuste-caja(cajaId, motivo)` (permiso **`FINANCIERO_CAJA_AJUSTAR`**; regenera el retiro, marca `revisado`/`motivoAjuste`). Migración `AddMotivoAjusteToCaja`.
 - **Guard anti-huérfanas** (`d90867b`): `update-caja` rechaza el cierre si hay ventas ABIERTAS en esa caja (chequeo en backend, inmune a la carrera multi-dispositivo). También "solo quien abrió la caja puede cerrarla".

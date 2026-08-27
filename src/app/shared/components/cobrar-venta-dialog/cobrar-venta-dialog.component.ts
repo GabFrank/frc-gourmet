@@ -51,6 +51,19 @@ export interface CobrarVentaDialogData {
    * Si no viene, se lee de `venta.costoDelivery`.
    */
   costoDelivery?: number;
+
+  /**
+   * Gate de "terminal ajena". Cuando esta caja se abrió en OTRA terminal, la
+   * configuración del PdV decide por separado si acá se pueden registrar pagos
+   * y si se puede finalizar la venta.
+   *
+   * `undefined` ⇒ permitido: el diálogo se abre desde dos lugares y ninguno
+   * tenía estos campos antes.
+   */
+  puedeAgregarPagos?: boolean;
+  puedeFinalizar?: boolean;
+  /** Nombre de la terminal dueña de la caja, para explicar el bloqueo. */
+  terminalDeLaCaja?: string;
 }
 
 interface DetalleRow {
@@ -66,6 +79,15 @@ interface DetalleRow {
   maquinaPosNombre?: string;
   cuentaBancariaId?: number; // cuenta bancaria elegida (transferencia / PIX). Acreditacion instantanea.
   cuentaBancariaNombre?: string;
+  /**
+   * Ronda de cobro parcial que imputó esta línea. Si está seteada, la línea NO
+   * se puede borrar suelta: deshacerla es anular la ronda, que además recomputa
+   * la cobertura por ítem. El backend lo rechaza; acá se deshabilita el botón
+   * para no ofrecer una acción que va a fallar.
+   */
+  cobroParcialId?: number | null;
+  /** Pre-computado para el template (regla 4: sin funciones ni getters). */
+  puedeEliminarse?: boolean;
 }
 
 interface ItemCobroRow {
@@ -200,6 +222,24 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
   clienteChipColor: 'success' | 'info' = 'info';
   savingCliente = false;
 
+  // ─── Gate de terminal ajena ─────────────────────────────────────────────
+  // Pre-computados (nada de getters ni funciones en el template, regla 4).
+  puedeAgregarPagos = true;
+  puedeFinalizar = true;
+  /** Texto del aviso superior. Vacío = no se muestra el banner. */
+  avisoTerminal = '';
+  tooltipAgregarPago = '';
+  tooltipFinalizar = '';
+  /** Ambos ejes bloqueados: el diálogo queda en modo consulta. */
+  soloLectura = false;
+
+  // `canFinalizar` / `canCobroParcial` eran getters usados en el template.
+  // Pasan a propiedades recomputadas (mismo patrón que `canCobrarCredito`), que
+  // es hacia donde el repo ya venía migrando, y además permite colgarles un
+  // tooltip explicativo sin agregar más llamadas en el HTML.
+  canFinalizar = false;
+  canCobroParcial = false;
+
   constructor(
     public dialogRef: MatDialogRef<CobrarVentaDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: CobrarVentaDialogData,
@@ -209,6 +249,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
   ) {}
 
   async ngOnInit(): Promise<void> {
+    this.aplicarGateTerminal();
     this.activeItems = this.data.items.filter(i => i.estado === EstadoVentaItem.ACTIVO);
     this.calculateTotals();
     await this.loadFormasPago();
@@ -357,6 +398,13 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
               tipoLabel: d.tipo as string,
               observacion: d.observacion,
               valorDisplay: this.formatValor(Number(d.valor), moneda),
+              // El destino de acreditación ahora se persiste. Antes se perdía al
+              // recargar y la `AcreditacionPos` / la transferencia no se creaban
+              // nunca, en silencio (el bloque que las genera no bloquea).
+              maquinaPosId: d.maquinaPosId ?? undefined,
+              cuentaBancariaId: d.cuentaBancariaId ?? undefined,
+              cobroParcialId: d.cobroParcialId ?? null,
+              puedeEliminarse: d.cobroParcialId == null,
             };
           });
         this.updateCurrencyDisplays();
@@ -742,6 +790,10 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
         vueltoDisplay: fmt(vuelto),
       };
     });
+
+    // Único punto por el que pasan todos los cambios de líneas y de saldo, así
+    // que es donde se recalculan los habilitadores de los botones de cierre.
+    this.recomputeAcciones();
   }
 
   autoFillValor(): void {
@@ -798,6 +850,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
   // --- Payment line management ---
 
   async addDetalle(): Promise<void> {
+    if (!this.puedeAgregarPagos) return;
     if (!this.selectedMoneda || !this.selectedFormaPago || this.valorInput <= 0 || this.addingLine) return;
 
     const tipo = this.currentLineType === 'VUELTO' ? TipoDetalle.VUELTO : TipoDetalle.PAGO;
@@ -849,13 +902,21 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
         formaPago: this.selectedFormaPago,
         activo: true,
         observacion: obs,
-      }));
+        // El destino de la acreditación se persiste: al reabrir el diálogo (o al
+        // finalizar desde otra terminal) tiene que seguir estando, si no la
+        // AcreditacionPos / la transferencia no se generan nunca.
+        maquinaPosId: tipo === TipoDetalle.PAGO ? (this.selectedMaquinaPosId || null) : null,
+        cuentaBancariaId: tipo === TipoDetalle.PAGO ? (this.selectedCuentaBancariaId || null) : null,
+        // El backend valida que esta terminal pueda registrar pagos en la caja.
+        validarDispositivoCaja: true,
+      } as any));
 
       const maquinaSeleccionada = this.maquinasPosDisponibles.find(m => m.id === this.selectedMaquinaPosId);
       const cuentaSeleccionada = this.cuentasBancariasDisponibles.find(c => c.id === this.selectedCuentaBancariaId);
 
       this.detalleRows = [...this.detalleRows, {
         id: detalle.id,
+        puedeEliminarse: true,
         moneda: this.selectedMoneda,
         formaPago: this.selectedFormaPago,
         valor: this.valorInput,
@@ -880,12 +941,15 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       }, 100);
     } catch (error) {
       console.error('Error al agregar línea de pago:', error);
+      this.mostrarErrorCobro(error, 'No se pudo agregar la línea de pago');
     } finally {
       this.addingLine = false;
     }
   }
 
   async deleteDetalle(row: DetalleRow): Promise<void> {
+    if (!this.puedeAgregarPagos) return;
+    if (row.puedeEliminarse === false) return;
     try {
       await firstValueFrom(this.repositoryService.deletePagoDetalle(row.id));
       this.detalleRows = this.detalleRows.filter(d => d.id !== row.id);
@@ -893,10 +957,12 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       this.autoFillValor();
     } catch (error) {
       console.error('Error al eliminar línea de pago:', error);
+      this.mostrarErrorCobro(error, 'No se pudo eliminar la línea de pago');
     }
   }
 
   editObservacion(row: DetalleRow): void {
+    if (!this.puedeAgregarPagos) return;
     const dialogRef = this.dialog.open(EditDetalleDialogComponent, {
       width: '400px',
       data: { modo: 'observacion', observacionActual: row.observacion },
@@ -910,6 +976,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
   }
 
   async duplicarDetalle(row: DetalleRow): Promise<void> {
+    if (!this.puedeAgregarPagos) return;
     if (!this.pago) return;
     try {
       const detalle = await firstValueFrom(this.repositoryService.createPagoDetalle({
@@ -921,19 +988,26 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
         formaPago: row.formaPago,
         activo: true,
         observacion: row.observacion,
-      }));
+        maquinaPosId: row.maquinaPosId ?? null,
+        cuentaBancariaId: row.cuentaBancariaId ?? null,
+        validarDispositivoCaja: true,
+      } as any));
       this.detalleRows = [...this.detalleRows, {
         ...row,
         id: detalle.id,
+        cobroParcialId: null,
+        puedeEliminarse: true,
       }];
       this.updateCurrencyDisplays();
       this.autoFillValor();
     } catch (error) {
       console.error('Error al duplicar detalle:', error);
+      this.mostrarErrorCobro(error, 'No se pudo duplicar la línea de pago');
     }
   }
 
   editValor(row: DetalleRow): void {
+    if (!this.puedeAgregarPagos) return;
     const dialogRef = this.dialog.open(EditDetalleDialogComponent, {
       width: '400px',
       data: { modo: 'valor', valorActual: row.valor, monedaSimbolo: row.moneda.simbolo },
@@ -950,6 +1024,10 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
   }
 
   openAjusteDialog(): void {
+    // Un descuento/aumento es una línea de pago más: mismo gate. Era el agujero
+    // más grande del gate por terminal — este camino creaba el `Pago` sin el
+    // flag `validarDispositivoCaja`, así que servía para saltearlo por completo.
+    if (!this.puedeAgregarPagos) return;
     // Siempre trabajar en moneda principal para ajustes
     const monedaPrincipal = this.data.principalMoneda;
     if (!monedaPrincipal) return;
@@ -984,7 +1062,8 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
             estado: PagoEstado.ABIERTO,
             caja: this.data.caja,
             activo: true,
-          }));
+            validarDispositivoCaja: true,
+          } as any));
           await firstValueFrom(this.repositoryService.updateVenta(this.data.venta.id, {
             pago: this.pago!,
           }));
@@ -998,10 +1077,12 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
           moneda: monedaPrincipal,
           formaPago: fpPrincipal!,
           activo: true,
-        }));
+          validarDispositivoCaja: true,
+        } as any));
 
         this.detalleRows = [...this.detalleRows, {
           id: detalle.id,
+          puedeEliminarse: true,
           moneda: monedaPrincipal,
           formaPago: fpPrincipal!,
           valor,
@@ -1014,6 +1095,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
         this.autoFillValor();
       } catch (error) {
         console.error('Error al agregar ajuste:', error);
+        this.mostrarErrorCobro(error, 'No se pudo registrar el ajuste');
       }
     });
   }
@@ -1069,21 +1151,118 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
 
   // --- Finalize ---
 
-  get canFinalizar(): boolean {
-    // Saldo must be 0: fully paid with no unresolved vuelto
-    return this.detalleRows.length > 0 && this.saldoPrincipal <= 0 && this.vueltoPrincipal === 0 && !this.processing;
+  /**
+   * Recalcula los habilitadores de los botones de cierre.
+   *
+   * Se llama desde `calculateTotals()` (que es lo que corre después de cada
+   * cambio de líneas) y desde `aplicarGateTerminal()`.
+   */
+  /**
+   * `processing` deshabilita los botones de cierre. Antes eran getters y se
+   * reevaluaban solos; como propiedades hay que recomputar al tocarlo.
+   */
+  private setProcessing(v: boolean): void {
+    this.processing = v;
+    this.recomputeAcciones();
   }
 
-  get canCobroParcial(): boolean {
-    return this.detalleRows.length > 0 && this.saldoPrincipal > 0 && !this.processing;
+  private recomputeAcciones(): void {
+    this.recomputeCobrarCredito();
+    // Saldo en 0: pagado completo y sin vuelto pendiente de resolver.
+    this.canFinalizar = this.detalleRows.length > 0
+      && this.saldoPrincipal <= 0
+      && this.vueltoPrincipal === 0
+      && !this.processing
+      && this.puedeFinalizar;
+
+    this.canCobroParcial = this.detalleRows.length > 0
+      && this.saldoPrincipal > 0
+      && !this.processing
+      && this.puedeAgregarPagos;
+  }
+
+  /**
+   * Traduce el gate de terminal ajena que mandó el llamador a los flags y
+   * textos que usa el template.
+   *
+   * `undefined ⇒ true`: el diálogo se abre desde el PdV y desde el diálogo de
+   * delivery, y hasta 2026-08 ninguno de los dos mandaba estos campos.
+   */
+  private aplicarGateTerminal(): void {
+    this.puedeAgregarPagos = this.data.puedeAgregarPagos !== false;
+    this.puedeFinalizar = this.data.puedeFinalizar !== false;
+    this.soloLectura = !this.puedeAgregarPagos && !this.puedeFinalizar;
+
+    const terminal = this.data.terminalDeLaCaja || 'la terminal donde se abrió la caja';
+    if (this.puedeAgregarPagos && this.puedeFinalizar) {
+      this.avisoTerminal = '';
+      this.tooltipAgregarPago = '';
+      this.tooltipFinalizar = '';
+      this.recomputeAcciones();
+      return;
+    }
+    if (this.soloLectura) {
+      this.avisoTerminal = `Esta caja se abrió en ${terminal}. Desde acá el cobro es solo de consulta.`;
+    } else if (!this.puedeFinalizar) {
+      this.avisoTerminal = `Esta caja se abrió en ${terminal}. Podés registrar los pagos; la venta la finaliza esa terminal.`;
+    } else {
+      this.avisoTerminal = `Esta caja se abrió en ${terminal}. Podés finalizar, pero no cargar formas de pago desde acá.`;
+    }
+    this.tooltipAgregarPago = this.puedeAgregarPagos ? '' : `Solo se registran pagos en ${terminal}`;
+    this.tooltipFinalizar = this.puedeFinalizar ? '' : `Solo se finaliza la venta en ${terminal}`;
+    this.recomputeAcciones();
+  }
+
+  /**
+   * Mensaje legible para los rechazos del gate por terminal. El backend
+   * devuelve códigos; hasta 2026-08 el `catch` solo hacía `console.error` y el
+   * cajero veía que "no pasaba nada".
+   */
+  private mostrarErrorCobro(error: any, fallback: string): void {
+    const msg = String(error?.message || error || '');
+    let texto = fallback;
+    if (msg.includes('COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO')) {
+      texto = `No se pueden registrar pagos desde esta terminal: la caja se abrió en ${this.data.terminalDeLaCaja || 'otra terminal'}.`;
+    } else if (msg.includes('FINALIZACION_NO_PERMITIDA_EN_ESTE_DISPOSITIVO')) {
+      texto = `La venta solo se finaliza en ${this.data.terminalDeLaCaja || 'la terminal donde se abrió la caja'}.`;
+    }
+    this.snackBar.open(texto, 'CERRAR', { duration: 6000 });
   }
 
   /** Finaliza sin imprimir el ticket de venta (comportamiento por defecto). */
   async finalizar(imprimirTicket = false): Promise<void> {
     if (!this.canFinalizar) return;
-    this.processing = true;
+    // Una venta ya concluida no se vuelve a finalizar. El diálogo se puede abrir
+    // sobre una (delivery EN_CAMINO con cobro anticipado: las líneas ya están y
+    // el saldo da 0, así que `canFinalizar` es true), y `updateVenta` no frena
+    // la transición CONCLUIDA→CONCLUIDA. El resultado era una SEGUNDA
+    // `AcreditacionPos` y una segunda suma al saldo bancario: `acreditar-
+    // transferencia-bancaria` no es idempotente.
+    if ((this.data.venta as any)?.estado === VentaEstado.CONCLUIDA) {
+      this.snackBar.open('Esta venta ya fue cobrada.', 'CERRAR', { duration: 4000 });
+      return;
+    }
+    this.setProcessing(true);
 
     try {
+      // Con la caja compartida, otra terminal pudo cargar líneas mientras este
+      // diálogo estaba abierto: el saldo que se ve acá quedaría viejo y se
+      // cerraría la venta con una cuenta que no cierra. Se relee antes de tocar
+      // nada y, si cambió, se aborta para que el cajero mire el detalle nuevo.
+      if (this.pago?.id) {
+        const firmaPrevia = this.firmaDetalles();
+        await this.loadExistingPago();
+        if (this.firmaDetalles() !== firmaPrevia) {
+          this.setProcessing(false);
+          this.snackBar.open(
+            'Otra terminal modificó los pagos de esta venta. Se actualizó el detalle: revisalo y volvé a finalizar.',
+            'CERRAR',
+            { duration: 8000 },
+          );
+          return;
+        }
+      }
+
       // Ronda final de cobro por ítems: cubre TODO lo pendiente (queda PAGADO)
       // y taguea las líneas de esta sesión. No bloquea el cierre si falla.
       try {
@@ -1105,11 +1284,10 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
         .filter(d => d.tipo === TipoDetalle.PAGO)
         .sort((a, b) => this.convertToPrincipal(b.valor, b.moneda.id) - this.convertToPrincipal(a.valor, a.moneda.id))[0]?.formaPago;
 
-      // Actualizar pago a PAGADO
-      await firstValueFrom(this.repositoryService.updatePago(this.pago!.id, {
-        estado: PagoEstado.PAGADO,
-      }));
-
+      // La venta se cierra PRIMERO y el pago después. El orden inverso dejaba
+      // el `Pago` en PAGADO con la `Venta` todavía ABIERTA si el cierre fallaba
+      // — y con el gate por terminal, fallar es un desenlace normal, no una
+      // rareza.
       await firstValueFrom(this.repositoryService.updateVenta(this.data.venta.id, {
         estado: VentaEstado.CONCLUIDA,
         formaPago: principalFp || this.selectedFormaPago!,
@@ -1119,41 +1297,16 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
         // por encima del config global. "Finalizar" no imprime; "Finalizar +
         // Ticket" sí.
         __imprimirTicketVenta: imprimirTicket,
+        // El backend valida que esta terminal pueda finalizar en esta caja.
+        __validarDispositivoCaja: true,
       } as any));
 
-      // 1) Crear AcreditacionPos por cada detalle con maquina POS elegida (tipo=PAGO).
-      //    Las acreditaciones se procesan al cumplir los minutos configurados.
-      try {
-        const pagosConMaquina = this.detalleRows.filter(
-          (d) => d.tipo === TipoDetalle.PAGO && d.maquinaPosId,
-        );
-        for (const det of pagosConMaquina) {
-          await firstValueFrom(this.repositoryService.createAcreditacionPos({
-            maquinaPosId: det.maquinaPosId!,
-            montoOriginal: det.valor,
-            ventaId: this.data.venta.id,
-            fechaTransaccion: new Date(),
-          }));
-        }
-      } catch (e) {
-        console.error('Error creando acreditacion(es) POS (no-blocking):', e);
-      }
+      // Actualizar pago a PAGADO
+      await firstValueFrom(this.repositoryService.updatePago(this.pago!.id, {
+        estado: PagoEstado.PAGADO,
+      }));
 
-      // 2) Acreditar instantaneamente cada detalle con cuenta bancaria elegida (transferencia/PIX).
-      //    Sin comision, sin demora.
-      try {
-        const transferencias = this.detalleRows.filter(
-          (d) => d.tipo === TipoDetalle.PAGO && d.cuentaBancariaId,
-        );
-        for (const det of transferencias) {
-          await firstValueFrom(this.repositoryService.acreditarTransferenciaBancaria({
-            cuentaBancariaId: det.cuentaBancariaId!,
-            monto: det.valor,
-          }));
-        }
-      } catch (e) {
-        console.error('Error acreditando transferencia(s) bancaria(s) (no-blocking):', e);
-      }
+      await this.registrarAcreditaciones();
 
       // Procesar stock (fire-and-forget, no bloquea la venta)
       this.repositoryService.procesarStockVenta(this.data.venta.id).subscribe({
@@ -1164,8 +1317,87 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       this.dialogRef.close({ success: true, pago: this.pago });
     } catch (error) {
       console.error('Error al finalizar cobro:', error);
-      this.processing = false;
+      this.mostrarErrorCobro(error, 'No se pudo finalizar el cobro');
+      this.setProcessing(false);
     }
+  }
+
+  /** Atajo F4–F7: elige la n-ésima forma de pago y reinicia su destino. */
+  private seleccionarFormaPagoRapida(indice: number): void {
+    const fp = this.formasPago[indice];
+    if (!fp) return;
+    this.selectedFormaPago = fp;
+    this.onFormaPagoChange();
+  }
+
+  /**
+   * Crea la `AcreditacionPos` de cada línea pagada con máquina POS y acredita la
+   * cuenta bancaria de cada transferencia.
+   *
+   * Vivía embebido en `finalizar()`, y por eso el **cobro a crédito no lo
+   * ejecutaba nunca**: en un cobro mixto (parte con tarjeta, el resto a crédito)
+   * la CPC se creaba bien y la plata de la tarjeta no entraba al ledger
+   * bancario, no se conciliaba y no descontaba comisión. Desaparecía.
+   *
+   * Cada línea va en su propio try: antes un solo `try` envolvía el bucle, así
+   * que si fallaba la segunda de tres, la tercera **ni se intentaba** y el
+   * usuario veía un cobro exitoso. Ahora se sigue de largo y se avisa cuántas
+   * quedaron sin registrar — que es lo mínimo para que alguien las cargue a
+   * mano.
+   */
+  private async registrarAcreditaciones(): Promise<void> {
+    let fallidas = 0;
+
+    // POS: se procesan al cumplir los minutos configurados.
+    for (const det of this.detalleRows.filter(d => d.tipo === TipoDetalle.PAGO && d.maquinaPosId)) {
+      try {
+        await firstValueFrom(this.repositoryService.createAcreditacionPos({
+          maquinaPosId: det.maquinaPosId!,
+          montoOriginal: det.valor,
+          // La moneda de la línea: el backend rechaza si no coincide con la de
+          // la cuenta destino, para no acreditar 40 dólares como 40 guaraníes.
+          monedaId: det.moneda?.id,
+          ventaId: this.data.venta.id,
+          fechaTransaccion: new Date(),
+        } as any));
+      } catch (e) {
+        fallidas++;
+        console.error('Error creando acreditacion POS (no-blocking):', e);
+      }
+    }
+
+    // Transferencia / PIX: acreditación instantánea, sin comisión ni demora.
+    for (const det of this.detalleRows.filter(d => d.tipo === TipoDetalle.PAGO && d.cuentaBancariaId)) {
+      try {
+        await firstValueFrom(this.repositoryService.acreditarTransferenciaBancaria({
+          cuentaBancariaId: det.cuentaBancariaId!,
+          monto: det.valor,
+          monedaId: det.moneda?.id,
+        } as any));
+      } catch (e) {
+        fallidas++;
+        console.error('Error acreditando transferencia bancaria (no-blocking):', e);
+      }
+    }
+
+    if (fallidas > 0) {
+      this.snackBar.open(
+        `${fallidas} acreditación(es) no se registraron. Revisá Bancos y cargalas a mano.`,
+        'CERRAR',
+        { duration: 10000 },
+      );
+    }
+  }
+
+  /**
+   * Huella del detalle de pago actual, para detectar que otra terminal lo tocó
+   * mientras este diálogo estaba abierto.
+   */
+  private firmaDetalles(): string {
+    return this.detalleRows
+      .map(d => `${d.id}:${d.tipo}:${d.valor}:${d.moneda?.id}`)
+      .sort()
+      .join('|');
   }
 
   /** Finaliza e imprime el ticket de venta. */
@@ -1174,6 +1406,14 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
   }
 
   private recomputeCobrarCredito(): void {
+    // Cerrar la venta como crédito ES finalizarla, así que responde al mismo
+    // eje que el botón FINALIZAR.
+    if (!this.puedeFinalizar) {
+      this.canCobrarCredito = false;
+      this.cobrarCreditoTooltip = this.tooltipFinalizar
+        || 'Esta terminal no puede finalizar ventas de esta caja';
+      return;
+    }
     const cliente: any = this.data.venta?.cliente;
     if (!cliente?.id) {
       this.canCobrarCredito = false;
@@ -1229,8 +1469,13 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       disableClose: true,
     });
 
-    ref.afterClosed().subscribe((result) => {
+    ref.afterClosed().subscribe(async (result) => {
       if (result?.success) {
+        // Un cobro mixto cierra parte con tarjeta/transferencia y el resto a
+        // crédito. Esas líneas también tienen que llegar al ledger bancario: el
+        // camino del crédito no pasa por `finalizar()`, así que sin esto la
+        // plata cobrada por POS se perdía en silencio.
+        await this.registrarAcreditaciones();
         // Stock fire-and-forget (igual que finalizar())
         this.repositoryService.procesarStockVenta(this.data.venta.id!).subscribe({
           next: (r) => console.log('Stock procesado:', r),
@@ -1244,6 +1489,11 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
   /**
    * Abre el dialogo de emision de factura precargado con el cliente y los
    * items del cobro. El usuario puede ajustar/vincular productos y emitir.
+   */
+  /**
+   * Emitir factura es un acto post-cobro sobre una venta ya cerrada: no
+   * registra pagos ni concluye nada, así que no responde al gate por terminal.
+   * Queda documentado para que no se lo bloquee de más por analogía.
    */
   facturar(): void {
     const ref = this.dialog.open(FacturarDialogComponent, {
@@ -1268,7 +1518,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
 
   async cobroParcial(): Promise<void> {
     if (!this.canCobroParcial) return;
-    this.processing = true;
+    this.setProcessing(true);
     try {
       // Registrar la ronda: imputa la plata de esta sesión a los ítems elegidos
       // (derivado de cash/factor → coherente con el dinero). Las líneas ya están
@@ -1288,7 +1538,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     } catch (e) {
       console.error('Error en cobro parcial:', e);
       this.snackBar.open('No se pudo registrar el cobro parcial', 'Cerrar', { duration: 3500 });
-      this.processing = false;
+      this.setProcessing(false);
     }
   }
 
@@ -1322,21 +1572,27 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
         event.preventDefault();
         if (this.data.monedas[2]) { this.selectedMoneda = this.data.monedas[2]; this.autoFillValor(); }
         break;
+      // F4–F7 eligen forma de pago. Van por `seleccionarFormaPagoRapida` y no
+      // asignando `selectedFormaPago` a mano: el atajo se salteaba
+      // `onFormaPagoChange()`, así que la máquina POS / cuenta bancaria de la
+      // forma ANTERIOR quedaba seleccionada. El guard de `addDetalle` sólo mira
+      // que haya una elegida, así que la línea se persistía apuntando a la
+      // cuenta equivocada y la plata se acreditaba en otro banco.
       case 'F4':
         event.preventDefault();
-        if (this.formasPago[0]) this.selectedFormaPago = this.formasPago[0];
+        this.seleccionarFormaPagoRapida(0);
         break;
       case 'F5':
         event.preventDefault();
-        if (this.formasPago[1]) this.selectedFormaPago = this.formasPago[1];
+        this.seleccionarFormaPagoRapida(1);
         break;
       case 'F6':
         event.preventDefault();
-        if (this.formasPago[2]) this.selectedFormaPago = this.formasPago[2];
+        this.seleccionarFormaPagoRapida(2);
         break;
       case 'F7':
         event.preventDefault();
-        if (this.formasPago[3]) this.selectedFormaPago = this.formasPago[3];
+        this.seleccionarFormaPagoRapida(3);
         break;
       case 'F9':
         event.preventDefault();
