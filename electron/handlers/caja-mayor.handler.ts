@@ -2655,6 +2655,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         cuentaBancariaIds: number[];
         mostrarCuentasPorPagar?: boolean;
         mostrarCuentasPorCobrar?: boolean;
+        /** Tope de descuento al cobrar CPC, en % del cobro. null = sin tope. */
+        descuentoCpcMaxPorcentaje?: number | null;
       }
     ) => {
       await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
@@ -2695,6 +2697,12 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         config.cuentasBancariasOrden = JSON.stringify(cbIds);
         config.mostrarCuentasPorPagar = data?.mostrarCuentasPorPagar === true;
         config.mostrarCuentasPorCobrar = data?.mostrarCuentasPorCobrar === true;
+        // Vacío = sin tope. Se acota a [0, 100]: un tope de 150% no significa nada
+        // y uno negativo bloquearía cualquier descuento sin decirlo.
+        const topeRaw = data?.descuentoCpcMaxPorcentaje;
+        config.descuentoCpcMaxPorcentaje = topeRaw == null || topeRaw === ('' as any)
+          ? null
+          : Math.min(100, Math.max(0, Number(topeRaw)));
 
         const saved = await queryRunner.manager.save(CajaMayorConfiguracion, config);
         await queryRunner.commitTransaction();

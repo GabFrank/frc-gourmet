@@ -570,6 +570,7 @@ export class CajaMayorDetalleComponent implements OnInit {
           CreateEditEntradaVariaDialogComponent,
           CreateOperacionFinancieraDialogComponent,
           CobrarCpcRapidoDialogComponent,
+          PagarObligacionesDialogComponent,
         ]);
       }
     });

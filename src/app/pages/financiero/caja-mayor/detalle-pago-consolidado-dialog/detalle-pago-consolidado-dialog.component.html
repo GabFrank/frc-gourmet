@@ -21,14 +21,14 @@
     </div>
 
     <div class="detalle-bloque">
-      <span class="detalle-label">Obligaciones pagadas ({{ pago.cantidadItems }})</span>
+      <span class="detalle-label">{{ labelItems }} ({{ pago.cantidadItems }})</span>
       <table mat-table [dataSource]="items" class="detalle-tabla">
         <ng-container matColumnDef="descripcion">
           <th mat-header-cell *matHeaderCellDef>Detalle</th>
           <td mat-cell *matCellDef="let it">{{ it.descripcion }}</td>
         </ng-container>
         <ng-container matColumnDef="beneficiario">
-          <th mat-header-cell *matHeaderCellDef>Beneficiario</th>
+          <th mat-header-cell *matHeaderCellDef>{{ labelBeneficiario }}</th>
           <td mat-cell *matCellDef="let it">{{ it.beneficiario || '—' }}</td>
         </ng-container>
         <ng-container matColumnDef="imputado">
@@ -41,6 +41,10 @@
         <tr mat-row *matRowDef="let row; columns: columnasItems"></tr>
       </table>
       <mat-divider></mat-divider>
+      <div class="detalle-total" *ngIf="descuentoTexto">
+        <span>Descuento concedido<ng-container *ngIf="motivoDescuento"> — {{ motivoDescuento }}</ng-container></span>
+        <span class="detalle-num">{{ descuentoTexto }}</span>
+      </div>
       <div class="detalle-total">
         <span>Total</span>
         <span class="detalle-num">{{ totalTexto }}</span>
@@ -48,9 +52,9 @@
     </div>
 
     <div class="detalle-bloque">
-      <span class="detalle-label">Formas de pago</span>
+      <span class="detalle-label">{{ labelLineas }}</span>
       <div class="detalle-linea" *ngFor="let l of lineas">
-        <mat-icon>{{ l.fuente === 'CAJA_MAYOR' ? 'payments' : 'account_balance' }}</mat-icon>
+        <mat-icon>{{ l.icono }}</mat-icon>
         <span class="detalle-linea-etiqueta">{{ l.etiqueta }}</span>
         <span class="detalle-linea-monto">{{ l.montoTexto }}</span>
         <span class="detalle-linea-conv" *ngIf="l.convertidoTexto">= {{ l.convertidoTexto }}</span>
@@ -62,7 +66,7 @@
     <button mat-button (click)="cerrar()">Cerrar</button>
     <span class="detalle-spacer"></span>
     <button mat-flat-button color="warn" *ngIf="!estaAnulado" [disabled]="anulando" (click)="anular()">
-      <mat-icon>undo</mat-icon> Anular pago
+      <mat-icon>undo</mat-icon> {{ labelAnular }}
     </button>
   </div>
 </div>

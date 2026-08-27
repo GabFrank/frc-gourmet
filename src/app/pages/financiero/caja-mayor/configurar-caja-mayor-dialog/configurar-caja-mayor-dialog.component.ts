@@ -5,6 +5,8 @@ import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/materia
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
@@ -33,6 +35,8 @@ interface OpcionCb {
     MatButtonModule,
     MatIconModule,
     MatCheckboxModule,
+    MatFormFieldModule,
+    MatInputModule,
     MatProgressSpinnerModule,
     MatDividerModule,
     MatSnackBarModule,
@@ -45,6 +49,8 @@ export class ConfigurarCajaMayorDialogComponent implements OnInit {
   cuentasBancarias: OpcionCb[] = [];
   mostrarCuentasPorPagar = false;
   mostrarCuentasPorCobrar = false;
+  /** Tope de descuento al cobrar CPC (%). null/vacío = sin tope. */
+  descuentoCpcMaxPorcentaje: number | null = null;
 
   constructor(
     public dialogRef: MatDialogRef<ConfigurarCajaMayorDialogComponent>,
@@ -84,6 +90,8 @@ export class ConfigurarCajaMayorDialogComponent implements OnInit {
 
       this.mostrarCuentasPorPagar = !!config?.mostrarCuentasPorPagar;
       this.mostrarCuentasPorCobrar = !!config?.mostrarCuentasPorCobrar;
+      const tope = config?.descuentoCpcMaxPorcentaje;
+      this.descuentoCpcMaxPorcentaje = tope == null ? null : Number(tope);
     } catch (error: any) {
       console.error('Error cargando configuracion de caja mayor:', error);
       this.snackBar.open('Error al cargar configuracion', 'Cerrar', { duration: 3000 });
@@ -139,6 +147,7 @@ export class ConfigurarCajaMayorDialogComponent implements OnInit {
           cuentaBancariaIds,
           mostrarCuentasPorPagar: this.mostrarCuentasPorPagar,
           mostrarCuentasPorCobrar: this.mostrarCuentasPorCobrar,
+          descuentoCpcMaxPorcentaje: this.descuentoCpcMaxPorcentaje,
         }),
       );
       this.snackBar.open('Configuracion guardada', 'Cerrar', { duration: 2500 });

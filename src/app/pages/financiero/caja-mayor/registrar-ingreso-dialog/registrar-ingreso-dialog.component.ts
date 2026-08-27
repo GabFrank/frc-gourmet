@@ -15,7 +15,8 @@ import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CreateEditEntradaVariaDialogComponent } from '../entradas-varias/create-edit-entrada-varia/create-edit-entrada-varia-dialog.component';
-import { CobrarCpcRapidoDialogComponent } from '../cuentas-por-cobrar/cobrar-cpc-rapido-dialog/cobrar-cpc-rapido-dialog.component';
+import { PagarObligacionesDialogComponent } from '../pagar-obligaciones-dialog/pagar-obligaciones-dialog.component';
+import { PagoConcepto } from 'src/app/database/entities/financiero/pago-consolidado-enums';
 import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financieras/create-operacion-financiera/create-operacion-financiera-dialog.component';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
@@ -84,7 +85,7 @@ export class RegistrarIngresoDialogComponent implements OnInit {
     {
       tipo: 'COBRO_CLIENTE' as IngresoTipo,
       titulo: 'Cobrar a Cliente',
-      descripcion: 'Cobrar una cuota pendiente de un cliente (cuentas por cobrar)',
+      descripcion: 'Cobrar una o varias cuotas pendientes de un cliente, con descuento opcional',
       icono: 'payments',
       color: '#00695c',
     },
@@ -196,12 +197,13 @@ export class RegistrarIngresoDialogComponent implements OnInit {
 
   seleccionarTipo(tipo: IngresoTipo): void {
     if (tipo === 'COBRO_CLIENTE') {
+      // Mismo wizard consolidado que los pagos: un cobro es el quinto concepto del
+      // motor, no un diálogo aparte.
       this.dialogRef?.close(false);
-      this.dialog.open(CobrarCpcRapidoDialogComponent, {
-        width: '720px',
-        maxHeight: '90vh',
-        data: { cajaMayorId: this.cajaMayorId },
-        disableClose: true,
+      this.dialog.open(PagarObligacionesDialogComponent, {
+        width: '1000px',
+        maxWidth: '96vw',
+        data: { concepto: PagoConcepto.COBRO_CLIENTE, cajaMayorId: this.cajaMayorId },
       });
       return;
     }

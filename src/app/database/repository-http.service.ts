@@ -1588,6 +1588,8 @@ export class RepositoryHttpService extends RepositoryService {
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;
+      /** Tope de descuento al cobrar CPC, en % del cobro. null = sin tope. */
+      descuentoCpcMaxPorcentaje?: number | null;
     }): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.saveCajaMayorConfiguracion() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

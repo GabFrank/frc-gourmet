@@ -710,6 +710,8 @@ interface ElectronAPI {
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;
+      /** Tope de descuento al cobrar CPC, en % del cobro. null = sin tope. */
+      descuentoCpcMaxPorcentaje?: number | null;
     }
   ) => Promise<any>;
   getCuentaBancariaResumen: (cuentaBancariaId: number) => Promise<any>;
@@ -3248,6 +3250,8 @@ export class RepositoryIpcService extends RepositoryService {
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;
+      /** Tope de descuento al cobrar CPC, en % del cobro. null = sin tope. */
+      descuentoCpcMaxPorcentaje?: number | null;
     }
   ): Observable<any> {
     return from(this.api.saveCajaMayorConfiguracion(cajaMayorId, data));
