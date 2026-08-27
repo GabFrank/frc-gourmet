@@ -27,6 +27,7 @@ import { MatExpansionModule } from '@angular/material/expansion';
 import { ThemeService } from './services/theme.service';
 import { MatDialog } from '@angular/material/dialog';
 import { PrinterSettingsComponent } from './components/printer-settings/printer-settings.component';
+import { ConfirmationDialogComponent } from './shared/components/confirmation-dialog/confirmation-dialog.component';
 import { SectoresImpresorasSettingsComponent } from './components/sectores-impresoras-settings/sectores-impresoras-settings.component';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
@@ -224,6 +225,13 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   isFullScreen = false;
   private zoomUnsub: (() => void) | null = null;
   private fullscreenUnsub: (() => void) | null = null;
+  private overlaySyncTimer: any = null;
+  private resizeSub: Subscription | null = null;
+  /** Etiquetas de atajo del menú: en macOS el modificador es Cmd, no Ctrl. */
+  atajoZoomIn = 'Acercar (Ctrl +)';
+  atajoZoomOut = 'Alejar (Ctrl -)';
+  atajoZoomReset = 'Restablecer zoom (Ctrl 0)';
+  atajoRecargar = 'Ctrl R';
   // true cuando el frontend desktop corre servido como web (/admin) en vez de
   // dentro de Electron. Lo marca el shim HTTP (main.web.ts). Sirve para ocultar
   // UI que solo tiene sentido en la ventana nativa (controles de titlebar).
@@ -306,6 +314,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       // Al autenticar, recargar los datos de la empresa (handler requiere user
       // context para tracking). Sin user, dejamos el cache previo / fallback.
       if (this.isAuthenticated) {
+        // La toolbar recién existe en el DOM al autenticar: es el momento de
+        // teñir el overlay nativo con su color real (en el login no había de
+        // dónde leerlo y quedaba con el color inicial de main.ts).
+        setTimeout(() => this.syncTitleBarOverlay(), 0);
         this.empresaService.load();
         // Cargar overrides del menú (config del ADMIN) para armar el sidenav.
         this.menuService.loadOverrides().subscribe();
@@ -568,6 +580,12 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
         this.ngZone.run(() => { this.isWindowMaximized = !!state?.isMaximized; });
       }) || null;
 
+      const mod = this.isMacOS ? 'Cmd' : 'Ctrl';
+      this.atajoZoomIn = `Acercar (${mod} +)`;
+      this.atajoZoomOut = `Alejar (${mod} -)`;
+      this.atajoZoomReset = `Restablecer zoom (${mod} 0)`;
+      this.atajoRecargar = `${mod} R`;
+
       if (this.showWindowTools) {
         this.setZoomFactor(await api.windowZoomGet());
         this.isFullScreen = !!(await api.windowIsFullscreen?.());
@@ -577,6 +595,14 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
         this.fullscreenUnsub = api.onWindowFullscreenChanged?.((state: { isFullScreen: boolean }) => {
           this.ngZone.run(() => { this.isFullScreen = !!state?.isFullScreen; });
         }) || null;
+      }
+
+      // El alto de la toolbar baja a 56px por debajo de 600px de ancho: el
+      // overlay nativo tiene que seguirlo o los botones quedan desalineados.
+      if (this.hasTitleBarOverlay) {
+        this.resizeSub = fromEvent(window, 'resize')
+          .pipe(debounceTime(200))
+          .subscribe(() => this.syncTitleBarOverlay());
       }
 
       this.syncTitleBarOverlay();
@@ -590,6 +616,9 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     const f = Number(factor);
     this.zoomFactor = Number.isFinite(f) && f > 0 ? f : 1;
     this.zoomLabel = `${Math.round(this.zoomFactor * 100)}%`;
+    // La toolbar cambió de alto en pantalla: el overlay nativo tiene que
+    // seguirla, sino los botones de Windows quedan desalineados.
+    this.syncTitleBarOverlay();
   }
 
   /**
@@ -605,13 +634,20 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     // el DOM (pantalla de login), reintentar en breve.
     const toolbar = document.querySelector('.app-toolbar') as HTMLElement | null;
     if (!toolbar) {
-      if (intentos > 0) setTimeout(() => this.syncTitleBarOverlay(intentos - 1), 400);
+      if (this.overlaySyncTimer) clearTimeout(this.overlaySyncTimer);
+      if (intentos > 0) {
+        this.overlaySyncTimer = setTimeout(() => this.syncTitleBarOverlay(intentos - 1), 400);
+      }
       return;
     }
     const estilos = getComputedStyle(toolbar);
     api.windowSetTitleBarOverlay({
       color: estilos.backgroundColor,
       symbolColor: estilos.color,
+      // El alto del overlay va en píxeles de la ventana, no del documento: con
+      // zoom, la toolbar mide `alto CSS × zoom` en pantalla. Sin esto, al
+      // agrandar la app los botones nativos quedaban chicos contra la barra.
+      height: Math.round(toolbar.getBoundingClientRect().height * this.zoomFactor),
     });
   }
 
@@ -655,9 +691,24 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     this.setZoomFactor(f);
   }
 
-  /** Recarga la ventana (equivale a F5). */
+  /**
+   * Recarga la ventana. Pide confirmación porque recargar tira todo el estado
+   * en memoria: una venta a medio armar en el PdV se pierde sin aviso. El
+   * atajo Ctrl+R sigue siendo directo (es lo esperable de un atajo).
+   */
   recargarVentana(): void {
-    (window as any).api?.windowReload?.();
+    const ref = this.dialog.open(ConfirmationDialogComponent, {
+      width: '420px',
+      data: {
+        title: 'Recargar la aplicación',
+        message: 'Se va a recargar la aplicación. Se pierde lo que esté a medio cargar en las pestañas abiertas (por ejemplo, una venta sin cobrar).\n\n¿Continuar?',
+        confirmText: 'Recargar',
+        cancelText: 'Cancelar',
+      },
+    });
+    ref.afterClosed().subscribe((confirmado) => {
+      if (confirmado) (window as any).api?.windowReload?.();
+    });
   }
 
   /** Abre/cierra las herramientas de desarrollo (equivale a F12). */
@@ -696,6 +747,12 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (this.fullscreenUnsub) {
       this.fullscreenUnsub();
+    }
+    if (this.overlaySyncTimer) {
+      clearTimeout(this.overlaySyncTimer);
+    }
+    if (this.resizeSub) {
+      this.resizeSub.unsubscribe();
     }
     if (this.clockInterval) {
       clearInterval(this.clockInterval);

@@ -160,11 +160,15 @@ El renderer pregunta por IPC **`window:chrome`** → `{ platform, controlsMode, 
 Una ventana frameless **no tiene menú nativo**, así que se perdían Zoom, Recargar y DevTools. Se repusieron por dos vías:
 
 - **Menú en el header** (botón `tune`, *Herramientas de ventana*): zoom −/%/+, pantalla completa, recargar, DevTools.
-- **Atajos en `main.ts`** vía `webContents.on('before-input-event')`, porque sin menú no hay accelerators: `Ctrl +/-/0`, `Ctrl+R`, `F5`, `F12`, `Ctrl+Shift+I`, `F11` (en macOS, Cmd). El mapeo vive en `resolveShortcut()`.
+- **Atajos en `main.ts`** vía `webContents.on('before-input-event')`, porque sin menú no hay accelerators: `Ctrl +/-/0`, `Ctrl+R`, `F12`, `Ctrl+Shift+I` (en macOS, Cmd). El mapeo vive en `resolveShortcut()`.
+
+> **Gotcha grande: `F5` y `F11` NO se interceptan.** `preventDefault()` en `before-input-event` mata el keydown **antes del DOM**, así que un atajo global le roba la tecla a toda la app. F5 imprime la precuenta en el PdV y elige forma de pago en el diálogo de cobro; F11 finaliza con ticket. Antes de agregar cualquier tecla al mapeo global, grepear los `@HostListener('document:keydown')` del repo.
 
 Handlers: `window:zoom-get|set|step|reset`, `window:reload`, `window:toggle-devtools`, `window:toggle-fullscreen`, `window:is-fullscreen`, más los eventos `window:zoom-changed` y `window:fullscreen-changed`.
 
-El **zoom se persiste por PC** en `app-settings.json` (`ui.zoomFactor`) y se reaplica en cada `did-finish-load` (un reload resetea el factor del `webContents`).
+El **zoom se persiste por PC** en `app-settings.json` (`ui.zoomFactor`, escritura con debounce de 400ms — `updateAppSettings` es `readFileSync`+`writeFileSync` en el main) y se reaplica en cada `did-finish-load` (un reload resetea el factor del `webContents`). El `zoom-changed` de Chromium (Ctrl+rueda) también se persiste y se notifica al header.
+
+**Seguridad:** `window:*` está en `BLOCKED_PREFIXES` del `rpc-router` — `/api/rpc` es default-allow, y sin ese bloqueo cualquier cliente HTTP autenticado (PWA de un mozo, nodo cliente) podía cerrar, recargar o abrir DevTools **en la ventana física del nodo servidor**.
 
 > **Gotcha:** los handlers `window:*` se registran con un guard de una sola vez (`registerWindowChromeHandlers`). Antes vivían sueltos dentro de `createWindow()`, que en macOS puede volver a correr en el evento `activate` → `ipcMain.handle` tira si el canal ya existe.
 

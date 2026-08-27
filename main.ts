@@ -388,6 +388,13 @@ function closeSplashIfOpen(): void {
  */
 const TOOLBAR_HEIGHT = 64;
 
+/** Alto válido para el overlay: cae al alto de la toolbar si viene basura. */
+function clampOverlayHeight(height?: number): number {
+  const h = Number(height);
+  if (!Number.isFinite(h) || h <= 0) return TOOLBAR_HEIGHT;
+  return Math.round(Math.min(200, Math.max(32, h)));
+}
+
 /** Guard: los handlers `window:*` se registran una sola vez por proceso. */
 let windowChromeHandlersRegistrados = false;
 
@@ -404,15 +411,26 @@ function leerZoomGuardado(): number {
   }
 }
 
+/**
+ * Persiste el zoom con debounce. `updateAppSettings` lee+escribe el JSON de
+ * forma SÍNCRONA en el proceso main: sin debounce, mantener Ctrl+= apretado
+ * (autorepeat del SO) dispara decenas de ciclos read/parse/write por segundo
+ * en el mismo proceso que atiende IPC y BD.
+ */
+let zoomPersistTimer: NodeJS.Timeout | null = null;
 function guardarZoom(factor: number): void {
-  try {
-    updateAppSettings(getUserDataPath(), (curr) => ({
-      ...curr,
-      ui: { ...curr.ui, zoomFactor: factor },
-    }));
-  } catch (e) {
-    console.warn('[window] no se pudo persistir el zoom:', e);
-  }
+  if (zoomPersistTimer) clearTimeout(zoomPersistTimer);
+  zoomPersistTimer = setTimeout(() => {
+    zoomPersistTimer = null;
+    try {
+      updateAppSettings(getUserDataPath(), (curr) => ({
+        ...curr,
+        ui: { ...curr.ui, zoomFactor: factor },
+      }));
+    } catch (e) {
+      console.warn('[window] no se pudo persistir el zoom:', e);
+    }
+  }, 400);
 }
 
 /** Aplica el zoom persistido al renderer y avisa al header. */
@@ -506,7 +524,7 @@ function registerWindowChromeHandlers(): void {
    * Re-tiñe los botones nativos del overlay (Windows) para que sigan al tema
    * claro/oscuro. El renderer manda el color computado real de la toolbar.
    */
-  ipcMain.handle('window:set-titlebar-overlay', (_e, opts: { color?: string; symbolColor?: string }) => {
+  ipcMain.handle('window:set-titlebar-overlay', (_e, opts: { color?: string; symbolColor?: string; height?: number }) => {
     if (!win || win.isDestroyed() || !soportaTitleBarOverlay(process.platform)) return false;
     const color = normalizeOverlayColor(opts?.color);
     const symbolColor = normalizeOverlayColor(opts?.symbolColor);
@@ -515,7 +533,10 @@ function registerWindowChromeHandlers(): void {
       win.setTitleBarOverlay({
         ...(color ? { color } : {}),
         ...(symbolColor ? { symbolColor } : {}),
-        height: TOOLBAR_HEIGHT,
+        // El alto viene del renderer (alto real de la toolbar × zoom): con el
+        // zoom al 150% la barra crece y los botones nativos tienen que crecer
+        // con ella. Se acota por las dudas — un alto absurdo rompe la ventana.
+        height: clampOverlayHeight(opts?.height),
       });
       return true;
     } catch (e) {
@@ -611,6 +632,19 @@ function createWindow(): void {
 
   // Zoom persistido: se aplica en cada carga (un reload resetea el factor).
   win.webContents.on('did-finish-load', () => aplicarZoomGuardado());
+
+  // Ctrl+rueda / pinch: Chromium cambia el zoom por su cuenta. Sin esto, ese
+  // zoom no se guardaba (lo pisaba el valor viejo en el próximo arranque) y el
+  // porcentaje del menú quedaba mintiendo. El evento avisa ANTES de aplicar el
+  // nuevo factor, por eso se lee en el tick siguiente.
+  win.webContents.on('zoom-changed', () => {
+    setTimeout(() => {
+      if (!win || win.isDestroyed()) return;
+      const factor = zoomActual();
+      guardarZoom(factor);
+      win.webContents.send('window:zoom-changed', { factor });
+    }, 0);
+  });
 
   // Atajos de teclado de ventana. La ventana es frameless y no tiene menú
   // nativo, así que los accelerators estándar (Ctrl +/-/0, F5, F12, F11) no

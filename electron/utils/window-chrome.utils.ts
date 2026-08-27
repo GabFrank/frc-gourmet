@@ -134,16 +134,21 @@ export interface ShortcutInput {
  * (que en una ventana frameless no existe).
  *
  * En macOS el modificador es Cmd; en Windows/Linux, Ctrl.
+ *
+ * **F5 y F11 NO se interceptan a propósito.** `before-input-event` con
+ * `preventDefault()` mata el keydown antes de que llegue al DOM, y esas dos
+ * teclas ya están tomadas por la operación diaria: F5 imprime la precuenta en
+ * el PdV (`pdv.component.ts`) y elige forma de pago en el diálogo de cobro, y
+ * F11 finaliza con ticket en ese mismo diálogo. Recargar tiene Ctrl+R y ambas
+ * acciones están en el menú de herramientas del header.
  */
 export function resolveShortcut(input: ShortcutInput, platform: string): WindowShortcutAction | null {
   const mod = platform === 'darwin' ? input.meta : input.control;
   const key = (input.key || '').toLowerCase();
 
-  // Teclas de función: sin modificadores.
+  // Teclas de función: sin modificadores. Sólo F12 — ver docstring.
   if (!input.control && !input.meta && !input.alt) {
-    if (key === 'f5' && !input.shift) return 'reload';
     if (key === 'f12' && !input.shift) return 'toggle-devtools';
-    if (key === 'f11' && !input.shift) return 'toggle-fullscreen';
   }
 
   if (!mod) return null;

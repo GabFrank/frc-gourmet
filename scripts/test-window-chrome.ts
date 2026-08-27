@@ -83,10 +83,18 @@ function main() {
   ok(resolveShortcut(key('-', { control: true }), 'win32') === 'zoom-out', 'Ctrl+- aleja');
   ok(resolveShortcut(key('0', { control: true }), 'win32') === 'zoom-reset', 'Ctrl+0 restablece');
   ok(resolveShortcut(key('r', { control: true }), 'win32') === 'reload', 'Ctrl+R recarga');
-  ok(resolveShortcut(key('F5'), 'win32') === 'reload', 'F5 recarga');
   ok(resolveShortcut(key('F12'), 'win32') === 'toggle-devtools', 'F12 abre devtools');
   ok(resolveShortcut(key('i', { control: true, shift: true }), 'win32') === 'toggle-devtools', 'Ctrl+Shift+I abre devtools');
-  ok(resolveShortcut(key('F11'), 'win32') === 'toggle-fullscreen', 'F11 pantalla completa');
+
+  console.log('\n── teclas de la operación diaria que NO se pueden robar ──\n');
+  // `before-input-event` + preventDefault mata el keydown antes del DOM: si
+  // interceptáramos estas, el PdV y el diálogo de cobro perderían sus atajos.
+  ok(resolveShortcut(key('F5'), 'win32') === null, 'F5 queda para imprimir precuenta (PdV)');
+  ok(resolveShortcut(key('F11'), 'win32') === null, 'F11 queda para finalizar con ticket (cobro)');
+  ok(resolveShortcut(key('F1'), 'win32') === null, 'F1 queda para cobrar (PdV)');
+  ok(resolveShortcut(key('F4'), 'win32') === null, 'F4 queda para cancelar venta (PdV)');
+  ok(resolveShortcut(key('F10'), 'win32') === null, 'F10 queda para finalizar (cobro)');
+  ok(resolveShortcut(key('Escape'), 'win32') === null, 'Escape queda libre');
 
   console.log('\n── atajos de teclado (macOS usa Cmd) ──\n');
   ok(resolveShortcut(key('=', { meta: true }), 'darwin') === 'zoom-in', 'Cmd+= acerca');

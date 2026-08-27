@@ -1762,9 +1762,10 @@ input.mat-input-element {
     }
   }
 
-  // Atajo de teclado a la derecha del ítem, en gris. El wrapper de texto de
-  // MDC no es flex por defecto: sin esto el `margin-left:auto` no empuja nada.
-  .mat-mdc-menu-item .mat-mdc-menu-item-text {
+  // Atajo de teclado a la derecha del ítem, en gris. El contenido proyectado
+  // de `mat-menu-item` va dentro de `.mdc-list-item__primary-text` (Material
+  // 15/MDC) y no es flex por defecto: sin esto el `margin-left:auto` no empuja.
+  .mat-mdc-menu-item .mdc-list-item__primary-text {
     display: flex;
     align-items: center;
     width: 100%;

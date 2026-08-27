@@ -47,14 +47,16 @@ En el header, a la izquierda del nombre de usuario, hay un botón con el icono d
 controles (`tune`) y tooltip *Herramientas de ventana*.
 
 - [ ] Se abre el menú y muestra: fila de zoom (`−  100%  +`), *Pantalla
-      completa* (F11), *Recargar* (F5) y *Herramientas de desarrollo* (F12).
+      completa*, *Recargar* (Ctrl R) y *Herramientas de desarrollo* (F12).
 - [ ] Tocá **+** varias veces: la app se agranda y el porcentaje sube
       (110%, 125%, 150%…). **El menú no se cierra** entre clics.
 - [ ] Tocá **−** varias veces: baja hasta 50% y ahí se detiene.
 - [ ] Tocá el **porcentaje**: vuelve a 100%.
 - [ ] *Pantalla completa*: la ventana ocupa toda la pantalla y el ítem pasa a
       decir *Salir de pantalla completa*. Volvé a tocarlo para salir.
-- [ ] *Recargar*: la app se recarga y **mantiene el zoom** que habías dejado.
+- [ ] *Recargar*: **pide confirmación** primero (recargar tira lo que esté a
+      medio cargar). Al confirmar, la app se recarga y **mantiene el zoom**.
+- [ ] Cancelá la confirmación: no pasa nada.
 - [ ] *Herramientas de desarrollo*: abre el inspector en una ventana aparte;
       volver a tocarlo lo cierra.
 
@@ -70,14 +72,24 @@ controles (`tune`) y tooltip *Herramientas de ventana*.
 
 - [ ] **Ctrl +** y **Ctrl −** cambian el zoom (en macOS, Cmd).
 - [ ] **Ctrl 0** vuelve a 100%.
-- [ ] **F5** y **Ctrl+R** recargan.
+- [ ] **Ctrl+rueda del mouse** también cambia el zoom, y el menú muestra el
+      porcentaje correcto (no se queda en 100%).
+- [ ] **Ctrl+R** recarga (sin confirmación: es el atajo, va directo).
 - [ ] **F12** y **Ctrl+Shift+I** abren/cierran DevTools.
-- [ ] **F11** entra y sale de pantalla completa.
 - [ ] El porcentaje que muestra el menú **queda sincronizado** con lo que
       hiciste por teclado.
 
+> **F5 y F11 NO son atajos de ventana a propósito**: ya los usa la operación
+> diaria (F5 imprime la precuenta en el PdV y elige forma de pago en el cobro;
+> F11 finaliza con ticket). Interceptarlos los mataría antes de que lleguen a la
+> pantalla. Pantalla completa y recargar están en el menú, y recargar además en
+> Ctrl+R.
+
 ## 6. Que los atajos no molesten al trabajo diario
 
+- [ ] En el PdV, **F5 sigue imprimiendo la precuenta** (no recarga la app).
+- [ ] En el diálogo de cobro, **F11 sigue finalizando con ticket** y **F5 sigue
+      eligiendo forma de pago**.
 - [ ] En el PdV, escribí en el buscador de productos un texto con **guiones** y
       con **ceros** (`0`, `-`, `COCA-COLA 500`): se escriben normal, no cambian
       el zoom.
@@ -96,6 +108,14 @@ a otro PC servidor:
 - [ ] Con el **servidor apagado**, minimizar/cerrar/zoom siguen funcionando
       (no dependen de la red).
 
+## 7b. Modo servidor — la ventana del servidor no se controla desde la red
+
+En el PC **servidor**, con un cliente (o la PWA de un mozo) conectado:
+
+- [ ] La ventana del servidor **no** se minimiza, cierra ni recarga por acciones
+      de un cliente. *(Los canales `window:*` están bloqueados en `/api/rpc`: un
+      cliente autenticado no puede tocar la ventana física de la caja.)*
+
 ## 8. macOS
 
 - [ ] Los **semáforos** de macOS siguen arriba a la izquierda y funcionan.
@@ -107,6 +127,8 @@ a otro PC servidor:
 
 - [ ] Se ven los botones del header (minimizar / maximizar / cerrar) y
       **funcionan**: sin ellos no habría forma de cerrar la ventana.
+- [ ] **En la pantalla de login** (antes de entrar, y después de cerrar sesión)
+      también se ven arriba a la derecha y funcionan.
 - [ ] El menú de herramientas funciona igual que en Windows.
 
 ## 10. Web `/admin` y PWA mobile

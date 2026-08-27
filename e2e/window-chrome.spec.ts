@@ -72,9 +72,20 @@ test('chrome de ventana: modo de controles, zoom persistido y pantalla completa'
   expect(await page.evaluate(() => window.devicePixelRatio)).toBeCloseTo(1.5, 2);
 
   // ── Persistencia ──
+  // La escritura del JSON tiene debounce (400ms) para no golpear el disco en
+  // cada repetición de Ctrl+=: hay que esperarla, no leer el archivo de una.
   await page.evaluate(() => (window as any).api.windowZoomSet(1.25));
-  const settings = JSON.parse(fs.readFileSync(path.join(tmpUserData, 'app-settings.json'), 'utf-8'));
-  expect(settings.ui.zoomFactor).toBeCloseTo(1.25, 5);
+  const settingsPath = path.join(tmpUserData, 'app-settings.json');
+  let persistido: number | undefined;
+  const limitePersist = Date.now() + 5_000;
+  while (Date.now() < limitePersist) {
+    try {
+      persistido = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'))?.ui?.zoomFactor;
+      if (typeof persistido === 'number' && Math.abs(persistido - 1.25) < 1e-5) break;
+    } catch { /* todavía no se escribió */ }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  expect(persistido).toBeCloseTo(1.25, 5);
   await page.evaluate(() => (window as any).api.windowZoomReset());
 
   // ── Pantalla completa ──

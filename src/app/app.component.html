@@ -107,15 +107,17 @@
       <mat-icon>tune</mat-icon>
     </button>
     <mat-menu #windowToolsMenu="matMenu" class="window-tools-menu">
-      <!-- Fila de zoom: los clicks NO cierran el menú para poder repetir. -->
+      <!-- Fila de zoom: los clicks NO cierran el menú para poder repetir. El
+           panel de mat-menu emite `closed` ante cualquier click propio. -->
       <div class="zoom-row" (click)="$event.stopPropagation()">
-        <button mat-icon-button (click)="zoomOut($event)" matTooltip="Alejar (Ctrl -)" aria-label="Alejar">
+        <button mat-icon-button (click)="zoomOut($event)" [matTooltip]="atajoZoomOut" aria-label="Alejar">
           <mat-icon>remove</mat-icon>
         </button>
-        <button mat-button class="zoom-valor" (click)="zoomReset($event)" matTooltip="Restablecer (Ctrl 0)">
+        <button mat-button class="zoom-valor" (click)="zoomReset($event)"
+                [matTooltip]="atajoZoomReset" aria-label="Restablecer zoom">
           {{ zoomLabel }}
         </button>
-        <button mat-icon-button (click)="zoomIn($event)" matTooltip="Acercar (Ctrl +)" aria-label="Acercar">
+        <button mat-icon-button (click)="zoomIn($event)" [matTooltip]="atajoZoomIn" aria-label="Acercar">
           <mat-icon>add</mat-icon>
         </button>
       </div>
@@ -123,12 +125,11 @@
       <button mat-menu-item (click)="togglePantallaCompleta()">
         <mat-icon>{{ isFullScreen ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
         <span>{{ isFullScreen ? 'Salir de pantalla completa' : 'Pantalla completa' }}</span>
-        <span class="atajo">F11</span>
       </button>
       <button mat-menu-item (click)="recargarVentana()">
         <mat-icon>refresh</mat-icon>
         <span>Recargar</span>
-        <span class="atajo">F5</span>
+        <span class="atajo">{{ atajoRecargar }}</span>
       </button>
       <button mat-menu-item (click)="toggleDevTools()">
         <mat-icon>code</mat-icon>
@@ -281,5 +282,32 @@
 
 <!-- Template for login router outlet -->
 <ng-template #loginRouter>
+  <!-- Barra mínima de ventana para la pantalla de login. Sólo donde los
+       botones los dibuja el header (Linux frameless): la toolbar de la app vive
+       dentro del *ngIf de autenticación, así que sin esto el usuario no tendría
+       forma de cerrar ni minimizar antes de loguearse. En Windows y macOS los
+       dibuja el SO desde que abre la ventana, autenticado o no. -->
+  <div class="login-titlebar drag-region" *ngIf="showCustomWindowControls">
+    <div class="window-controls">
+      <button type="button" class="window-ctrl-btn"
+              (click)="minimizeWindow()"
+              aria-label="Minimizar"
+              matTooltip="Minimizar">
+        <mat-icon>remove</mat-icon>
+      </button>
+      <button type="button" class="window-ctrl-btn"
+              (click)="toggleMaximize()"
+              [attr.aria-label]="isWindowMaximized ? 'Restaurar' : 'Maximizar'"
+              [matTooltip]="isWindowMaximized ? 'Restaurar' : 'Maximizar'">
+        <mat-icon>{{ isWindowMaximized ? 'filter_none' : 'crop_square' }}</mat-icon>
+      </button>
+      <button type="button" class="window-ctrl-btn window-ctrl-close"
+              (click)="closeWindow()"
+              aria-label="Cerrar"
+              matTooltip="Cerrar">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+  </div>
   <router-outlet></router-outlet>
 </ng-template>
