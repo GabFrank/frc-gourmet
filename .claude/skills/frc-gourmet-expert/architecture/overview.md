@@ -5,7 +5,7 @@
 | Capa | Tecnología | Notas |
 |---|---|---|
 | Frontend | Angular 15 (`15.2.9`) | Mix de standalone components + AppModule. Material Design 15. |
-| Desktop shell | Electron 24 (`^24.3.0`) | `nodeIntegration: false`, `contextIsolation: true`. Una sola ventana frameless (titlebar custom) que arranca maximizada, con splash window. |
+| Desktop shell | Electron 24 (`^24.3.0`) | `nodeIntegration: false`, `contextIsolation: true`. Una sola ventana frameless que arranca maximizada, con splash window. Los botones de ventana los dibuja el SO (overlay en Windows, semáforos en macOS); sólo en Linux los pinta el header. |
 | Servidor cliente/servidor | Fastify 4.10 | Modo `server` expone los handlers IPC vía HTTP (`/api/*`). Ver [cliente-servidor.md](cliente-servidor.md). |
 | Database | SQLite 5 (`sqlite3` ^5.1.6) **o** Postgres (`pg`) | Driver seleccionable en runtime. SQLite default = `frc-gourmet.db` en `app.getPath('userData')`. La app crea la BD Postgres (rol + database) automáticamente. |
 | ORM | TypeORM 0.3.21 | `synchronize: false` — migraciones obligatorias, corren al arranque. Dual baseline SQLite + Postgres en `migrations/` (`getMigrations(driver)` elige). |
@@ -149,7 +149,7 @@ npm run test:e2e           # Playwright
 7. `startAcreditacionesScheduler(dataSource, 5)` corre cada 5 min en main process.
 8. Seeds idempotentes (en orden): `seedInitialData`, `seedPermissions`, `seedConfiguracionRrhh`, `seedLiquidacionConceptos`, `seedSystemData` (crea admin `admin/admin` + rol ADMINISTRADOR con todos los permisos).
 9. `generarNotificacionesRrhh()` al startup + cada 24h.
-10. `createWindow()`: splash window primero, luego BrowserWindow `1200×800` frameless (`frame:false` en Win/Linux con controles custom; `titleBarStyle:'hiddenInset'` en macOS) que se `maximize()` y se muestra al `did-finish-load`. Carga `http://localhost:4201` si `--serve`, sino `dist/index.html`.
+10. `createWindow()`: splash window primero, luego BrowserWindow `1200×800` frameless (`titleBarStyle:'hidden'` + `titleBarOverlay` en Windows, `'hiddenInset'` en macOS, `frame:false` puro en Linux) que se `maximize()` y se muestra al `did-finish-load`. Carga `http://localhost:4201` si `--serve`, sino `dist/index.html`.
 11. Custom protocol `app://` registrado en `app.on('ready')`: sirve `profile-images/` y `producto-images/` desde `userData`.
 
 Detalle completo → [electron-bootstrap.md](electron-bootstrap.md).
