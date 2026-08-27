@@ -204,11 +204,26 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   private musicaUnsub: (() => void) | null = null;
   private musicaInterval: any = null;
 
-  // Window controls (custom titlebar). En macOS los semáforos nativos
-  // quedan a la izquierda por `titleBarStyle:hiddenInset` en main.ts, así
-  // que ocultamos los controles custom para no duplicar.
+  // Window controls. Los botones de minimizar/maximizar/cerrar los dibuja
+  // SIEMPRE el sistema operativo (semáforos en macOS, Window Controls Overlay
+  // en Windows). El header sólo los renderiza en 'custom' — Linux frameless,
+  // donde no hay overlay soportado y sin ellos no habría forma de cerrar.
   isWindowMaximized = false;
   isMacOS = false;
+  /** 'native' = overlay del SO | 'none' = semáforos del SO | 'custom' = los pinta el header. */
+  windowControlsMode: 'native' | 'none' | 'custom' = 'none';
+  /** true sólo en Linux/Electron: el header dibuja sus propios botones. */
+  showCustomWindowControls = false;
+  /** true en Windows: hay que reservar el ancho del overlay a la derecha. */
+  hasTitleBarOverlay = false;
+  /** Menú de herramientas de ventana (zoom/recargar/devtools). Sólo Electron. */
+  showWindowTools = false;
+  /** Factor de zoom del renderer y su etiqueta ya formateada para el menú. */
+  zoomFactor = 1;
+  zoomLabel = '100%';
+  isFullScreen = false;
+  private zoomUnsub: (() => void) | null = null;
+  private fullscreenUnsub: (() => void) | null = null;
   // true cuando el frontend desktop corre servido como web (/admin) en vez de
   // dentro de Electron. Lo marca el shim HTTP (main.web.ts). Sirve para ocultar
   // UI que solo tiene sentido en la ventana nativa (controles de titlebar).
@@ -538,17 +553,66 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private async initWindowControls(): Promise<void> {
     const api: any = (window as any).api;
-    if (!api?.windowPlatform) return; // dev sin preload o fallback
+    if (!api?.windowGetChrome) return; // dev sin preload, o build web sin shim
     try {
-      const platform: string = await api.windowPlatform();
+      const chrome = await api.windowGetChrome();
+      const platform: string = chrome?.platform || '';
       this.isMacOS = platform === 'darwin';
-      this.isWindowMaximized = await api.windowIsMaximized();
+      this.windowControlsMode = chrome?.controlsMode || 'none';
+      this.showCustomWindowControls = this.windowControlsMode === 'custom' && !this.isWeb;
+      this.hasTitleBarOverlay = !!chrome?.overlay && !this.isWeb;
+      this.showWindowTools = !this.isWeb && !!api.windowZoomGet;
+
+      this.isWindowMaximized = await api.windowIsMaximized?.();
       this.windowStateUnsub = api.onWindowStateChanged?.((state: { isMaximized: boolean }) => {
         this.ngZone.run(() => { this.isWindowMaximized = !!state?.isMaximized; });
       }) || null;
+
+      if (this.showWindowTools) {
+        this.setZoomFactor(await api.windowZoomGet());
+        this.isFullScreen = !!(await api.windowIsFullscreen?.());
+        this.zoomUnsub = api.onWindowZoomChanged?.((state: { factor: number }) => {
+          this.ngZone.run(() => this.setZoomFactor(state?.factor));
+        }) || null;
+        this.fullscreenUnsub = api.onWindowFullscreenChanged?.((state: { isFullScreen: boolean }) => {
+          this.ngZone.run(() => { this.isFullScreen = !!state?.isFullScreen; });
+        }) || null;
+      }
+
+      this.syncTitleBarOverlay();
     } catch (e) {
       console.warn('[app] No se pudieron inicializar window controls:', e);
     }
+  }
+
+  /** Guarda el factor y precomputa la etiqueta (no se calcula en el template). */
+  private setZoomFactor(factor: number | null | undefined): void {
+    const f = Number(factor);
+    this.zoomFactor = Number.isFinite(f) && f > 0 ? f : 1;
+    this.zoomLabel = `${Math.round(this.zoomFactor * 100)}%`;
+  }
+
+  /**
+   * Tiñe los botones nativos del overlay de Windows con el color real de la
+   * toolbar, para que sigan al tema claro/oscuro en vez de quedar fijos.
+   * No-op en macOS/Linux/web.
+   */
+  private syncTitleBarOverlay(intentos = 3): void {
+    if (!this.hasTitleBarOverlay) return;
+    const api: any = (window as any).api;
+    if (!api?.windowSetTitleBarOverlay) return;
+    // La toolbar vive dentro del *ngIf de autenticación: si todavía no está en
+    // el DOM (pantalla de login), reintentar en breve.
+    const toolbar = document.querySelector('.app-toolbar') as HTMLElement | null;
+    if (!toolbar) {
+      if (intentos > 0) setTimeout(() => this.syncTitleBarOverlay(intentos - 1), 400);
+      return;
+    }
+    const estilos = getComputedStyle(toolbar);
+    api.windowSetTitleBarOverlay({
+      color: estilos.backgroundColor,
+      symbolColor: estilos.color,
+    });
   }
 
   /** Minimiza la ventana. */
@@ -564,6 +628,47 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   /** Cierra la ventana (dispara el flujo normal de cierre de Electron). */
   closeWindow(): void {
     (window as any).api?.windowClose?.();
+  }
+
+  // ── Herramientas de ventana (reemplazan al menú nativo, ausente en una
+  // ventana frameless). Los mismos atajos existen en main.ts:
+  // Ctrl +/-/0, F5, F12, F11. ──────────────────────────────────────────────
+
+  /** Acerca un paso. `stopPropagation` para no cerrar el menú al repetir. */
+  async zoomIn(event?: Event): Promise<void> {
+    event?.stopPropagation();
+    const f = await (window as any).api?.windowZoomStep?.(1);
+    this.setZoomFactor(f);
+  }
+
+  /** Aleja un paso. */
+  async zoomOut(event?: Event): Promise<void> {
+    event?.stopPropagation();
+    const f = await (window as any).api?.windowZoomStep?.(-1);
+    this.setZoomFactor(f);
+  }
+
+  /** Vuelve al 100%. */
+  async zoomReset(event?: Event): Promise<void> {
+    event?.stopPropagation();
+    const f = await (window as any).api?.windowZoomReset?.();
+    this.setZoomFactor(f);
+  }
+
+  /** Recarga la ventana (equivale a F5). */
+  recargarVentana(): void {
+    (window as any).api?.windowReload?.();
+  }
+
+  /** Abre/cierra las herramientas de desarrollo (equivale a F12). */
+  toggleDevTools(): void {
+    (window as any).api?.windowToggleDevTools?.();
+  }
+
+  /** Entra/sale de pantalla completa (equivale a F11). */
+  async togglePantallaCompleta(): Promise<void> {
+    const estado = await (window as any).api?.windowToggleFullscreen?.();
+    this.isFullScreen = !!estado;
   }
 
   ngAfterViewInit(): void {
@@ -585,6 +690,12 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (this.windowStateUnsub) {
       this.windowStateUnsub();
+    }
+    if (this.zoomUnsub) {
+      this.zoomUnsub();
+    }
+    if (this.fullscreenUnsub) {
+      this.fullscreenUnsub();
     }
     if (this.clockInterval) {
       clearInterval(this.clockInterval);
@@ -1358,6 +1469,10 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       document.body.classList.remove('dark-theme');
       document.body.classList.add('light-theme');
     }
+    // Los botones nativos del overlay (Windows) no cambian solos de color:
+    // hay que reenviarles el color nuevo de la toolbar. setTimeout para leerlo
+    // recién cuando el navegador aplicó la clase de tema.
+    setTimeout(() => this.syncTitleBarOverlay(), 0);
   }
 
   // Setup sidenav open/close event listeners

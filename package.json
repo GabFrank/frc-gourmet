@@ -70,6 +70,7 @@
     "test:reporte-ventas": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-reporte-ventas-e2e.ts",
     "test:reporte-finanzas": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-reporte-finanzas-e2e.ts",
     "test:config-caja-mayor": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-config-caja-mayor-e2e.ts",
+    "test:window-chrome": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-window-chrome.ts",
     "test:reportes-periodo": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-reportes-periodo.ts",
     "test:pg-backup": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pg-backup-e2e.ts",
     "test:locks-pg": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-locks-postgres-e2e.ts",

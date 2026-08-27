@@ -36,7 +36,16 @@ import { seedInitialData } from './electron/utils/seed-data';
 import { runBootstrapMigrations } from './electron/utils/db-migrations-bootstrap';
 import { seedSystemData } from './electron/utils/seed-system';
 import { migratePlaintextPasswords } from './electron/utils/migrate-passwords';
-import { readAppSettings } from './electron/utils/app-settings.utils';
+import { readAppSettings, updateAppSettings } from './electron/utils/app-settings.utils';
+import {
+  ZOOM_DEFAULT,
+  clampZoom,
+  nextZoom,
+  normalizeOverlayColor,
+  resolveControlsMode,
+  resolveShortcut,
+  soportaTitleBarOverlay,
+} from './electron/utils/window-chrome.utils';
 import { setCurrentDevice } from './electron/utils/current-device.utils';
 import { Dispositivo } from './src/app/database/entities/financiero/dispositivo.entity';
 import { getDbPassword } from './electron/utils/db-password.utils';
@@ -372,24 +381,196 @@ function closeSplashIfOpen(): void {
   splashWin = null;
 }
 
+/**
+ * Alto de la toolbar de la app (`.app-toolbar` en app.component.scss). Se usa
+ * como alto del Window Controls Overlay en Windows para que los botones
+ * nativos queden alineados con nuestra barra.
+ */
+const TOOLBAR_HEIGHT = 64;
+
+/** Guard: los handlers `window:*` se registran una sola vez por proceso. */
+let windowChromeHandlersRegistrados = false;
+
+function getUserDataPath(): string {
+  return app.getPath('userData');
+}
+
+/** Zoom guardado en app-settings (por PC). Default 1. */
+function leerZoomGuardado(): number {
+  try {
+    return clampZoom(readAppSettings(getUserDataPath()).ui?.zoomFactor ?? ZOOM_DEFAULT);
+  } catch {
+    return ZOOM_DEFAULT;
+  }
+}
+
+function guardarZoom(factor: number): void {
+  try {
+    updateAppSettings(getUserDataPath(), (curr) => ({
+      ...curr,
+      ui: { ...curr.ui, zoomFactor: factor },
+    }));
+  } catch (e) {
+    console.warn('[window] no se pudo persistir el zoom:', e);
+  }
+}
+
+/** Aplica el zoom persistido al renderer y avisa al header. */
+function aplicarZoomGuardado(): void {
+  if (!win || win.isDestroyed()) return;
+  const factor = leerZoomGuardado();
+  try {
+    win.webContents.setZoomFactor(factor);
+    win.webContents.send('window:zoom-changed', { factor });
+  } catch (e) {
+    console.warn('[window] no se pudo aplicar el zoom guardado:', e);
+  }
+}
+
+/** Setea, persiste y notifica un factor de zoom. Devuelve el aplicado. */
+function aplicarZoom(factor: number): number {
+  const clamped = clampZoom(factor);
+  if (!win || win.isDestroyed()) return clamped;
+  win.webContents.setZoomFactor(clamped);
+  guardarZoom(clamped);
+  win.webContents.send('window:zoom-changed', { factor: clamped });
+  return clamped;
+}
+
+function zoomActual(): number {
+  if (!win || win.isDestroyed()) return leerZoomGuardado();
+  return clampZoom(win.webContents.getZoomFactor());
+}
+
+/** Ejecuta una acción de ventana (desde atajo de teclado o desde el menú). */
+function ejecutarAccionVentana(accion: string): void {
+  if (!win || win.isDestroyed()) return;
+  switch (accion) {
+    case 'zoom-in':
+      aplicarZoom(nextZoom(zoomActual(), 1));
+      break;
+    case 'zoom-out':
+      aplicarZoom(nextZoom(zoomActual(), -1));
+      break;
+    case 'zoom-reset':
+      aplicarZoom(ZOOM_DEFAULT);
+      break;
+    case 'reload':
+      win.webContents.reload();
+      break;
+    case 'toggle-devtools':
+      if (win.webContents.isDevToolsOpened()) win.webContents.closeDevTools();
+      else win.webContents.openDevTools({ mode: 'detach' });
+      break;
+    case 'toggle-fullscreen':
+      win.setFullScreen(!win.isFullScreen());
+      break;
+    default:
+      break;
+  }
+}
+
+/**
+ * Handlers IPC del "chrome" de la ventana: botones, zoom, recargar, devtools y
+ * pantalla completa. En una ventana frameless no hay menú nativo que los
+ * provea, así que el header de Angular los invoca por IPC.
+ *
+ * OJO: se registran una sola vez (createWindow puede correr de nuevo en el
+ * `activate` de macOS y `ipcMain.handle` tira si el canal ya existe). Los
+ * handlers referencian `win` en el momento de la llamada, no al registrarse.
+ */
+function registerWindowChromeHandlers(): void {
+  if (windowChromeHandlersRegistrados) return;
+  windowChromeHandlersRegistrados = true;
+
+  ipcMain.handle('window:minimize', () => { win?.minimize(); });
+  ipcMain.handle('window:maximize-toggle', () => {
+    if (!win) return false;
+    if (win.isMaximized()) { win.unmaximize(); return false; }
+    win.maximize();
+    return true;
+  });
+  ipcMain.handle('window:close', () => { win?.close(); });
+  ipcMain.handle('window:is-maximized', () => win?.isMaximized() ?? false);
+  ipcMain.handle('window:platform', () => process.platform);
+
+  /** Qué botones de ventana debe (o no) dibujar el header. */
+  ipcMain.handle('window:chrome', () => ({
+    platform: process.platform,
+    controlsMode: resolveControlsMode(process.platform),
+    overlay: soportaTitleBarOverlay(process.platform),
+    toolbarHeight: TOOLBAR_HEIGHT,
+  }));
+
+  /**
+   * Re-tiñe los botones nativos del overlay (Windows) para que sigan al tema
+   * claro/oscuro. El renderer manda el color computado real de la toolbar.
+   */
+  ipcMain.handle('window:set-titlebar-overlay', (_e, opts: { color?: string; symbolColor?: string }) => {
+    if (!win || win.isDestroyed() || !soportaTitleBarOverlay(process.platform)) return false;
+    const color = normalizeOverlayColor(opts?.color);
+    const symbolColor = normalizeOverlayColor(opts?.symbolColor);
+    if (!color && !symbolColor) return false;
+    try {
+      win.setTitleBarOverlay({
+        ...(color ? { color } : {}),
+        ...(symbolColor ? { symbolColor } : {}),
+        height: TOOLBAR_HEIGHT,
+      });
+      return true;
+    } catch (e) {
+      console.warn('[window] setTitleBarOverlay falló:', e);
+      return false;
+    }
+  });
+
+  ipcMain.handle('window:zoom-get', () => zoomActual());
+  ipcMain.handle('window:zoom-set', (_e, factor: number) => aplicarZoom(Number(factor)));
+  ipcMain.handle('window:zoom-step', (_e, direction: number) => aplicarZoom(nextZoom(zoomActual(), direction >= 0 ? 1 : -1)));
+  ipcMain.handle('window:zoom-reset', () => aplicarZoom(ZOOM_DEFAULT));
+  ipcMain.handle('window:reload', () => { win?.webContents.reload(); });
+  ipcMain.handle('window:toggle-devtools', () => {
+    ejecutarAccionVentana('toggle-devtools');
+    return win?.webContents.isDevToolsOpened() ?? false;
+  });
+  ipcMain.handle('window:toggle-fullscreen', () => {
+    if (!win) return false;
+    const next = !win.isFullScreen();
+    win.setFullScreen(next);
+    return next;
+  });
+  ipcMain.handle('window:is-fullscreen', () => win?.isFullScreen() ?? false);
+}
+
 function createWindow(): void {
   // Splash primero — visible mientras Angular hace bootstrap.
   createSplashWindow();
 
   // Create the browser window.
-  // En Win/Linux usamos frame:false para tener controles de ventana custom
-  // (minimizar/maximizar/cerrar) integrados al toolbar de la app, estilo
-  // VSCode/Slack/Discord. En macOS dejamos titleBarStyle:'hiddenInset' para
-  // mantener los semáforos nativos en su posición esperada por el usuario
-  // y ocultar los controles custom desde el renderer.
+  // La app es frameless en las tres plataformas, pero los botones de ventana
+  // los dibuja SIEMPRE el sistema operativo — nunca el header de Angular:
+  //  - macOS:   `titleBarStyle:'hiddenInset'` → semáforos nativos.
+  //  - Windows: `titleBarStyle:'hidden'` + `titleBarOverlay` → Windows dibuja
+  //             minimizar/maximizar/cerrar sobre nuestra toolbar (Window
+  //             Controls Overlay). Siempre funcionan y respetan el SO.
+  //  - Linux:   `frame:false` puro; ahí no hay overlay soportado, así que el
+  //             header renderiza sus propios botones (modo 'custom').
+  // El renderer consulta `window:chrome` para saber cuál de los tres le tocó.
   const isMac = process.platform === 'darwin';
+  const usaOverlay = soportaTitleBarOverlay(process.platform);
   const iconPath = resolveAppIconPath();
   win = new BrowserWindow({
     width: 1200,
     height: 800,
     show: false, // se muestra cuando termina did-finish-load (cerrando el splash)
-    frame: isMac ? true : false,
-    titleBarStyle: isMac ? 'hiddenInset' : 'default',
+    frame: isMac,
+    titleBarStyle: isMac ? 'hiddenInset' : (usaOverlay ? 'hidden' : 'default'),
+    // Colores iniciales = primary del tema (#db392e / blanco). El renderer los
+    // re-sincroniza con el color real de la toolbar apenas arranca y en cada
+    // cambio de tema (handler `window:set-titlebar-overlay`).
+    ...(usaOverlay
+      ? { titleBarOverlay: { color: '#db392e', symbolColor: '#ffffff', height: TOOLBAR_HEIGHT } }
+      : {}),
     icon: iconPath,
     webPreferences: {
       nodeIntegration: false,
@@ -414,25 +595,38 @@ function createWindow(): void {
   }, 8000);
 
   // Emitir cambios de estado maximize/unmaximize al renderer para que el
-  // toolbar pueda alternar entre el icono "maximize" y "restore".
+  // toolbar pueda alternar entre el icono "maximize" y "restore" (modo custom).
   win.on('maximize', () => {
     win?.webContents.send('window:state-changed', { isMaximized: true });
   });
   win.on('unmaximize', () => {
     win?.webContents.send('window:state-changed', { isMaximized: false });
   });
-
-  // Handlers IPC de control de ventana (consumidos desde el toolbar Angular).
-  ipcMain.handle('window:minimize', () => { win?.minimize(); });
-  ipcMain.handle('window:maximize-toggle', () => {
-    if (!win) return false;
-    if (win.isMaximized()) { win.unmaximize(); return false; }
-    win.maximize();
-    return true;
+  win.on('enter-full-screen', () => {
+    win?.webContents.send('window:fullscreen-changed', { isFullScreen: true });
   });
-  ipcMain.handle('window:close', () => { win?.close(); });
-  ipcMain.handle('window:is-maximized', () => win?.isMaximized() ?? false);
-  ipcMain.handle('window:platform', () => process.platform);
+  win.on('leave-full-screen', () => {
+    win?.webContents.send('window:fullscreen-changed', { isFullScreen: false });
+  });
+
+  // Zoom persistido: se aplica en cada carga (un reload resetea el factor).
+  win.webContents.on('did-finish-load', () => aplicarZoomGuardado());
+
+  // Atajos de teclado de ventana. La ventana es frameless y no tiene menú
+  // nativo, así que los accelerators estándar (Ctrl +/-/0, F5, F12, F11) no
+  // existen: los reponemos acá.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    const accion = resolveShortcut(
+      { key: input.key, control: input.control, meta: input.meta, shift: input.shift, alt: input.alt },
+      process.platform,
+    );
+    if (!accion) return;
+    event.preventDefault();
+    ejecutarAccionVentana(accion);
+  });
+
+  registerWindowChromeHandlers();
 
   // Load the app
   if (process.argv.indexOf('--serve') !== -1) {
