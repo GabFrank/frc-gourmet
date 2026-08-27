@@ -302,10 +302,37 @@ async function main() {
       lineas: [{ fuente: 'DESCUENTO', monedaId: pyg.id, monto: 1, cotizacion: 1 }],
     }), /.+/, 'B2: un concepto de egreso no admite descuento');
 
+    // Item repetido: sin dedupe, la misma cuota se procesaria dos veces y
+    // `montoCobrado` terminaria por encima del monto de la cuota.
+    await esperaError(() => invokeHandler('registrar-pago-consolidado', {
+      concepto: 'COBRO_CLIENTE',
+      items: [{ origenId: cuotas[0].id, monto: 500_000 }, { origenId: cuotas[0].id, monto: 500_000 }],
+      lineas: [linea(1_000_000)],
+      cajaMayorContextoId: caja.id,
+    }), /repetida/i, 'B2: rechaza la misma cuota dos veces en la seleccion');
+
     // Tope por caja: 5% de 1.000.000 = 50.000.
     await save(CajaMayorConfiguracion, { cajaMayor: caja, descuentoCpcMaxPorcentaje: 5 });
     await esperaError(() => invokeHandler('registrar-pago-consolidado', payload(880_000, 120_000)),
       /tope/i, 'B2: rechaza un descuento por encima del tope de la caja');
+
+    // El tope no puede depender de un campo que el cliente pueda omitir: sin
+    // contexto no hay descuento, y apuntar a otra caja sin tope no sirve si la
+    // plata entra por una caja que si lo tiene.
+    await esperaError(() => invokeHandler('registrar-pago-consolidado',
+      { ...payload(880_000, 120_000), cajaMayorContextoId: null }),
+      /Falta la caja/i, 'B2: sin caja de contexto el descuento se rechaza');
+    await esperaError(() => invokeHandler('registrar-pago-consolidado',
+      { ...payload(880_000, 120_000), cajaMayorContextoId: 999999 }),
+      /no encontrada/i, 'B2: una caja de contexto inexistente se rechaza');
+
+    const cajaSinTope: any = await save(CajaMayor, {
+      nombre: 'CM SIN TOPE', estado: 'ABIERTA', fechaApertura: new Date(), responsable: admin, activo: true,
+    });
+    await esperaError(() => invokeHandler('registrar-pago-consolidado',
+      { ...payload(880_000, 120_000), cajaMayorContextoId: cajaSinTope.id }),
+      /tope/i, 'B2: apuntar el contexto a una caja sin tope no evade el de la caja que cobra');
+
     const okRes: any = await invokeHandler('registrar-pago-consolidado', payload(960_000, 40_000));
     ok(okRes?.montoDescuento === 40_000, 'B2: acepta un descuento dentro del tope');
     await invokeHandler('anular-pago-consolidado', okRes.id, 'limpieza');

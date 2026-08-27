@@ -120,6 +120,19 @@ export function validarSeleccion(
     errores.push('La liquidación de sueldo se paga de a una por vez.');
   }
 
+  // Sin esto, mandar la misma obligacion dos veces en `items` la procesa dos
+  // veces: `montoCobrado` supera al monto de la cuota y el saldo del deudor queda
+  // mal. El wizard nunca lo genera, pero `/api/rpc` acepta el payload crudo.
+  const ids = new Set<string>();
+  for (const i of items) {
+    const k = `${i.origenTipo}|${i.origenId}`;
+    if (ids.has(k)) {
+      errores.push(`La obligación ${i.descripcion || `#${i.origenId}`} está repetida en la selección.`);
+      break;
+    }
+    ids.add(k);
+  }
+
   const monedas = new Set(items.map((i) => i.monedaId));
   if (monedas.size > 1) {
     errores.push('Todas las obligaciones del pago tienen que estar en la misma moneda.');
@@ -360,15 +373,19 @@ export function imputadoPorItemPorFuente(
   }));
 }
 
-/** Total imputado a cada item, en la moneda de la deuda. Lo que recibe el adaptador. */
+/**
+ * Total imputado a cada item, en la moneda de la deuda.
+ *
+ * Envuelve a `imputadoPorItemPorFuente` en vez de repetir la suma: dos
+ * implementaciones paralelas de la misma aritmetica se desincronizan sin que
+ * nadie se entere.
+ */
 export function imputadoPorItem(
   filas: FilaReparto[],
   cantidadItems: number,
   decimalesDeuda: number,
 ): number[] {
-  const acum = new Array(cantidadItems).fill(0);
-  for (const f of filas) acum[f.itemIdx] += f.montoImputado;
-  return acum.map((v) => redondear(v, decimalesDeuda));
+  return imputadoPorItemPorFuente(filas, [], cantidadItems, decimalesDeuda).map((x) => x.total);
 }
 
 /** Total que sale por cada linea fisica, en la moneda de la linea. */

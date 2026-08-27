@@ -47,6 +47,36 @@ describe('PagarObligacionesDialogComponent', () => {
       montoTotal: 200_000, montoPagado: 0, saldoPendiente: 200_000, bloqueado: false,
     },
   ];
+  /** Dos cuotas de proveedores DISTINTOS: COMPRA agrupa por beneficiario. */
+  const CUOTAS_CPP = [
+    {
+      origenTipo: 'CPP_CUOTA', origenId: 201, numero: 'NOTA 1', descripcion: 'CUOTA 1/1 — NOTA 1',
+      beneficiario: 'DISTRIBUIDORA CAMPOS', beneficiarioId: 11, fecha: '2026-08-01',
+      monedaId: 1, monedaSimbolo: 'Gs', decimales: 0,
+      montoTotal: 400_000, montoPagado: 0, saldoPendiente: 400_000, bloqueado: false,
+    },
+    {
+      origenTipo: 'CPP_CUOTA', origenId: 202, numero: 'NOTA 2', descripcion: 'CUOTA 1/1 — NOTA 2',
+      beneficiario: 'OTRO PROVEEDOR', beneficiarioId: 12, fecha: '2026-08-02',
+      monedaId: 1, monedaSimbolo: 'Gs', decimales: 0,
+      montoTotal: 100_000, montoPagado: 0, saldoPendiente: 100_000, bloqueado: false,
+    },
+  ];
+  /** Dos liquidaciones: la nómina se paga de a una por vez. */
+  const LIQUIDACIONES = [
+    {
+      origenTipo: 'LIQUIDACION_SUELDO', origenId: 301, numero: '#301', descripcion: 'LIQUIDACION 2026-08 #301',
+      beneficiario: 'ANA GOMEZ', beneficiarioId: 21, fecha: '2026-08-31',
+      monedaId: 1, monedaSimbolo: 'Gs', decimales: 0,
+      montoTotal: 2_500_000, montoPagado: 0, saldoPendiente: 2_500_000, bloqueado: false,
+    },
+    {
+      origenTipo: 'LIQUIDACION_SUELDO', origenId: 302, numero: '#302', descripcion: 'LIQUIDACION 2026-08 #302',
+      beneficiario: 'LUIS DIAZ', beneficiarioId: 22, fecha: '2026-08-31',
+      monedaId: 1, monedaSimbolo: 'Gs', decimales: 0,
+      montoTotal: 1_800_000, montoPagado: 0, saldoPendiente: 1_800_000, bloqueado: false,
+    },
+  ];
   const GASTOS = [
     {
       origenTipo: 'GASTO', origenId: 7, numero: '#7', descripcion: 'GASTO #7',
@@ -184,6 +214,67 @@ describe('PagarObligacionesDialogComponent', () => {
     });
   });
 
+  // Las dos ramas que este cambio generalizó (antes hardcodeadas a `=== COMPRA` y
+  // a la liquidación) no las ejercita GASTO: van con test propio.
+  describe('regresión de los conceptos de egreso', () => {
+    it('COMPRA sigue agrupando por proveedor: tildar uno bloquea al resto', async () => {
+      await crear(PagoConcepto.COMPRA, CUOTAS_CPP, []);
+      expect(component.beneficiarioUnico).toBeTrue();
+      seleccionar(201);
+
+      const otro = component.obligaciones.find((o) => o.origenId === 202)!;
+      expect(otro.incompatible).toBeTrue();
+
+      agregarEfectivo(400_000);
+      await component.confirmar();
+      const payload = repo.registrarPagoConsolidado.calls.mostRecent().args[0];
+      expect(payload.concepto).toBe(PagoConcepto.COMPRA);
+      expect(payload.items).toEqual([{ origenId: 201, monto: 400_000 }]);
+    });
+
+    it('COMPRA admite pago parcial y COBRO_CLIENTE también; GASTO no', async () => {
+      await crear(PagoConcepto.COMPRA, CUOTAS_CPP, []);
+      expect(component.permiteParcial).toBeTrue();
+      await crear(PagoConcepto.COBRO_CLIENTE, CUOTAS_CPC);
+      expect(component.permiteParcial).toBeTrue();
+      await crear(PagoConcepto.GASTO, GASTOS, []);
+      expect(component.permiteParcial).toBeFalse();
+    });
+
+    // La nómina se paga de a una: con una tildada, el resto queda deshabilitado y
+    // hay que destildar primero. No se reemplaza la selección de un clic.
+    it('LIQUIDACION_SUELDO se paga de a una: con una tildada el resto se bloquea', async () => {
+      await crear(PagoConcepto.LIQUIDACION_SUELDO, LIQUIDACIONES, []);
+      expect(component.seleccionUnica).toBeTrue();
+      seleccionar(301);
+      expect(component.cantidadSeleccionada).toBe(1);
+      expect(component.obligaciones.find((o) => o.origenId === 302)!.incompatible).toBeTrue();
+
+      seleccionar(302); // no hace nada: está incompatible
+      expect(component.cantidadSeleccionada).toBe(1);
+      expect(component.seleccionadas[0].origenId).toBe(301);
+
+      seleccionar(301); // destildar libera al resto
+      expect(component.cantidadSeleccionada).toBe(0);
+      expect(component.obligaciones.find((o) => o.origenId === 302)!.incompatible).toBeFalse();
+
+      seleccionar(302);
+      agregarEfectivo(1_800_000);
+      await component.confirmar();
+      const payload = repo.registrarPagoConsolidado.calls.mostRecent().args[0];
+      expect(payload.items).toEqual([{ origenId: 302, monto: 1_800_000 }]);
+    });
+
+    it('ningún concepto de egreso ofrece descuento ni manda motivo', async () => {
+      for (const c of [PagoConcepto.COMPRA, PagoConcepto.VALE, PagoConcepto.LIQUIDACION_SUELDO]) {
+        await crear(c, GASTOS, ['CPC_DESCUENTO']);
+        expect(component.permiteDescuento).withContext(c).toBeFalse();
+        expect(component.puedeAplicarDescuento).withContext(c).toBeFalse();
+        expect(component.esIngresoConcepto).withContext(c).toBeFalse();
+      }
+    });
+  });
+
   describe('descuento', () => {
     it('sólo se ofrece con el permiso, aunque el concepto lo admita', async () => {
       await crear(PagoConcepto.COBRO_CLIENTE, CUOTAS_CPC, []);
@@ -260,6 +351,19 @@ describe('PagarObligacionesDialogComponent', () => {
       expect(component.lineas.some((l) => l.fuente === 'DESCUENTO')).toBeTrue();
 
       seleccionar(102); // destilda una cuota
+
+      expect(component.lineas.some((l) => l.fuente === 'DESCUENTO')).toBeFalse();
+      expect(component.motivoDescuento).toBe('');
+    });
+
+    // El backend rechaza condonar el total; el wizard tiene que decirlo antes de
+    // que el usuario recorra las tres pantallas.
+    it('un descuento por el total del cobro se rechaza en el acto', async () => {
+      await crear(PagoConcepto.COBRO_CLIENTE, CUOTAS_CPC);
+      seleccionar(101, 102); // 500.000
+      responderDescuento({ descuentoMonto: 500_000, descuentoMotivo: 'todo' });
+
+      await component.aplicarDescuento();
 
       expect(component.lineas.some((l) => l.fuente === 'DESCUENTO')).toBeFalse();
       expect(component.motivoDescuento).toBe('');

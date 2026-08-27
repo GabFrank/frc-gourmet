@@ -155,7 +155,7 @@ const ETIQUETAS: Record<'EGRESO' | 'INGRESO', EtiquetasDireccion> = {
     iconoConfirmar: 'savings',
     fuenteCaja: 'Efectivo (caja mayor)',
     sinLineas: 'Agregá al menos una forma de cobro.',
-    sinPendientes: 'Este cliente no tiene cuotas pendientes.',
+    sinPendientes: 'No hay cuotas de clientes pendientes de cobro.',
   },
 };
 
@@ -656,6 +656,17 @@ export class PagarObligacionesDialogComponent implements OnInit, OnDestroy {
       : redondear(this.totalDeuda * (Number(res.descuentoPorcentaje) || 0) / 100, this.decimalesDeuda);
     if (!(monto > 0)) {
       this.motivoDescuento = '';
+      this.recalcular();
+      return;
+    }
+    // El backend rechaza condonar el total (para eso está cancelar la CPC). Avisarlo
+    // acá y no después de que el usuario recorra las tres pantallas del wizard.
+    if (monto >= this.totalDeuda) {
+      this.motivoDescuento = '';
+      this.snackBar.open(
+        'El descuento no puede cubrir el total del cobro. Si la deuda se perdona entera, cancelá la cuenta por cobrar.',
+        'Cerrar', { duration: 7000 },
+      );
       this.recalcular();
       return;
     }

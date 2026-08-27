@@ -657,6 +657,9 @@ const cobroClienteAdapter: ConceptoAdapter = {
     );
   },
 
+  // `montoDescuento` no se usa a proposito: la reversa no necesita que le digan
+  // cuanto fue descuento, lo reconstruye de los `MovimientoCliente` del evento —
+  // que es la fuente de verdad de lo que efectivamente se escribio.
   async revertir(queryRunner, origenId, monto, ctx) {
     await revertirCobroConsolidadoCpc(
       queryRunner, origenId, monto, ctx.pagoConsolidadoId!, ctx.currentUser, ctx.dataSource,

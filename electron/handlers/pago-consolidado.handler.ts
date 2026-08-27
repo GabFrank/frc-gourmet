@@ -30,6 +30,7 @@ import {
   CONCEPTO_PERMITE_DESCUENTO,
 } from '../../src/app/database/entities/financiero/pago-consolidado-enums';
 import { CajaMayorConfiguracion } from '../../src/app/database/entities/financiero/caja-mayor-configuracion.entity';
+import { CajaMayor } from '../../src/app/database/entities/financiero/caja-mayor.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 
 import { ensurePermission } from '../utils/auth.utils';
@@ -175,7 +176,66 @@ export function registerPagoConsolidadoHandlers(
       // se mide contra el.
       const totalDeuda = redondear(items.reduce((s, i) => s + i.monto, 0), decDeuda);
 
-      // ── 2. Resolver cotizaciones faltantes. Si no hay, se corta: no se asume 1.
+      // ── 2. Descuento: condonar deuda es una decision aparte de cobrar, con su
+      // propio permiso, su motivo y su tope. Todo se valida aca porque `/api/rpc`
+      // es default-allow: el gate de la UI no cuenta.
+      const lineasDescuento = lineasPayload.filter((l) => l.fuente === 'DESCUENTO');
+      const montoDescuento = redondear(
+        lineasDescuento.reduce((acc, l) => acc + (Number(l.monto) || 0), 0), decDeuda,
+      );
+      const motivoDescuento = (payload?.motivoDescuento || '').trim().toUpperCase();
+      if (lineasDescuento.length) {
+        if (!CONCEPTO_PERMITE_DESCUENTO[concepto]) {
+          throw new Error('Este concepto no admite descuentos.');
+        }
+        await ensurePermission(dataSource, getCurrentUser, 'CPC_DESCUENTO');
+        if (!motivoDescuento) throw new Error('El descuento necesita un motivo.');
+        if (!(montoDescuento > 0)) throw new Error('El descuento tiene que ser mayor a 0.');
+        // Perdonar el 100% no es cobrar: es cancelar la cuenta, que tiene su propio
+        // handler y su propio permiso.
+        if (montoDescuento >= totalDeuda) {
+          throw new Error('El descuento no puede cubrir el total: para eso se cancela la cuenta por cobrar.');
+        }
+        // ── Tope ──
+        //
+        // El tope NO puede depender de un campo que el cliente pueda omitir: con
+        // `if (cajaMayorContextoId)` alcanzaba con no mandarlo para quedar sin
+        // limite, y `/api/rpc` es default-allow. Asi que:
+        //
+        //  1. el contexto es OBLIGATORIO cuando hay descuento, y tiene que existir;
+        //  2. el tope aplicado es el MAS RESTRICTIVO entre el del contexto y el de
+        //     cada caja por la que realmente entra plata. Asi apuntar el contexto a
+        //     una caja permisiva no sirve de nada si el cobro pasa por una estricta.
+        const cajaCtxId = Number(payload?.cajaMayorContextoId) || null;
+        if (!cajaCtxId) {
+          throw new Error('Falta la caja desde la que se registra el cobro: sin ella no se puede aplicar el tope de descuento.');
+        }
+        const cajaCtx = await queryRunner.manager.findOne(CajaMayor, { where: { id: cajaCtxId } });
+        if (!cajaCtx) throw new Error(`Caja mayor ${cajaCtxId} no encontrada`);
+
+        const cajasInvolucradas = new Set<number>([cajaCtxId]);
+        for (const l of lineasPayload) {
+          const id = Number(l?.cajaMayorId);
+          if (l?.fuente !== 'DESCUENTO' && id) cajasInvolucradas.add(id);
+        }
+        let topePct: number | null = null;
+        for (const cajaId of cajasInvolucradas) {
+          const cfg = await queryRunner.manager.findOne(CajaMayorConfiguracion, {
+            where: { cajaMayor: { id: cajaId } as any },
+          });
+          const pct = cfg?.descuentoCpcMaxPorcentaje;
+          if (pct == null || !(Number(pct) >= 0)) continue;
+          topePct = topePct == null ? Number(pct) : Math.min(topePct, Number(pct));
+        }
+        if (topePct != null) {
+          const maximo = redondear(totalDeuda * (topePct / 100), decDeuda);
+          if (montoDescuento > maximo) {
+            throw new Error(`El descuento supera el tope configurado (${topePct}% = ${maximo}).`);
+          }
+        }
+      }
+
+      // ── 2.b Resolver cotizaciones faltantes. Si no hay, se corta: no se asume 1.
       const decimalesPorMoneda = new Map<number, number>([[monedaDeudaId, decDeuda]]);
       let lineas: LineaDePago[] = [];
       for (const l of lineasPayload) {
@@ -204,43 +264,6 @@ export function registerPagoConsolidadoHandlers(
           monto: redondear(Number(l.monto), decimalesPorMoneda.get(monedaLineaId)!),
           cotizacion,
         });
-      }
-
-      // ── 2.b Descuento: condonar deuda es una decision aparte de cobrar, con su
-      // propio permiso, su motivo y su tope. Todo se valida aca porque `/api/rpc`
-      // es default-allow: el gate de la UI no cuenta.
-      const lineasDescuento = lineas.filter((l) => l.fuente === 'DESCUENTO');
-      const montoDescuento = redondear(
-        lineasDescuento.reduce((acc, l) => acc + l.monto, 0), decDeuda,
-      );
-      const motivoDescuento = (payload?.motivoDescuento || '').trim().toUpperCase();
-      if (lineasDescuento.length) {
-        if (!CONCEPTO_PERMITE_DESCUENTO[concepto]) {
-          throw new Error('Este concepto no admite descuentos.');
-        }
-        await ensurePermission(dataSource, getCurrentUser, 'CPC_DESCUENTO');
-        if (!motivoDescuento) throw new Error('El descuento necesita un motivo.');
-        if (!(montoDescuento > 0)) throw new Error('El descuento tiene que ser mayor a 0.');
-        // Perdonar el 100% no es cobrar: es cancelar la cuenta, que tiene su propio
-        // handler y su propio permiso.
-        if (montoDescuento >= totalDeuda) {
-          throw new Error('El descuento no puede cubrir el total: para eso se cancela la cuenta por cobrar.');
-        }
-        const cajaCtxId = Number(payload?.cajaMayorContextoId) || null;
-        if (cajaCtxId) {
-          const cfg = await queryRunner.manager.findOne(CajaMayorConfiguracion, {
-            where: { cajaMayor: { id: cajaCtxId } as any },
-          });
-          const topePct = cfg?.descuentoCpcMaxPorcentaje;
-          if (topePct != null && Number(topePct) >= 0) {
-            const maximo = redondear(totalDeuda * (Number(topePct) / 100), decDeuda);
-            if (montoDescuento > maximo) {
-              throw new Error(
-                `El descuento supera el tope de esta caja (${Number(topePct)}% = ${maximo}).`,
-              );
-            }
-          }
-        }
       }
 
       // ── 3. Las formas de pago tienen que cubrir la deuda.
