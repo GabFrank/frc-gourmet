@@ -91,6 +91,47 @@ La web sirve el mismo bundle de Angular con `base-href /admin/`.
 | 2 | Recargar con F5 estando logueado | Sigue logueado (ese shim persiste sus tokens en `localStorage`) |
 | 3 | Cerrar sesión | Va al login, sin quedar en blanco |
 
+## Parte 7 — Concurrencia (los dos casos que no cubre ningún test)
+
+Viven en `preload.ts`, que arranca con `contextBridge` y no se puede instanciar
+fuera de Electron. Se verifican a mano.
+
+### 7.1 — Login mientras hay una rehidratación en vuelo
+
+El caso peligroso: la app arranca, empieza a rehidratar la sesión anterior, y el
+operador se loguea con **otro usuario** antes de que ese refresh termine. Si la
+respuesta tardía pisara los tokens, la UI mostraría a una persona y el bearer
+token sería el de otra: todo quedaría auditado a nombre equivocado.
+
+| # | Paso | Esperado |
+|---|---|---|
+| 1 | Dejar una sesión persistida del usuario A. Cerrar la app | — |
+| 2 | Desconectar la red o poner el servidor lento, y abrir la app | La rehidratación queda en vuelo |
+| 3 | Sin esperar, loguearse como usuario **B** | Entra como B |
+| 4 | Restablecer la red y hacer cualquier acción que grabe (una venta, un gasto) | El registro queda a nombre de **B**, no de A |
+| 5 | Cerrar y reabrir la app | Rehidrata la sesión de **B** |
+
+### 7.2 — Varios 401 simultáneos
+
+El refresh token es de un solo uso y el servidor lo rota. Si varias llamadas
+paralelas lo intentan a la vez, sólo una puede ganar.
+
+| # | Paso | Esperado |
+|---|---|---|
+| 1 | Loguearse y abrir un dashboard que dispare varias consultas en paralelo | — |
+| 2 | Esperar a que venza el access token (15 min) sin cerrar la app | — |
+| 3 | Refrescar el dashboard, para que varias llamadas den 401 a la vez | Todas se resuelven y los datos cargan |
+| 4 | ⚠️ Verificar que **no** se cierre la sesión sola | Ese sería el bug: los refrescos perdedores nulificando los tokens del ganador |
+| 5 | Mirar `refresh_tokens` en el servidor | Una sola rotación, no varias fallidas |
+
+## Parte 8 — Cambio de modo
+
+| # | Paso | Esperado |
+|---|---|---|
+| 1 | En modo cliente con sesión persistida, ir a *Sistema → Modo de operación* y pasar a **standalone** | El token persistido se borra del keychain / archivo |
+| 2 | Volver a modo cliente apuntando a **otro** servidor | Idem: no queda la credencial del servidor viejo |
+| 3 | Cambiar de modo cliente a cliente con **el mismo** servidor | El token se conserva (no hay razón para pedir contraseña de nuevo) |
+
 ---
 
 ## Tests automáticos

@@ -64,15 +64,29 @@ const ALWAYS_LOCAL_CHANNELS = new Set<string>([
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
 
-async function httpFetch(path: string, body: any, withAuth = true): Promise<any> {
+async function httpFetch(path: string, body: any, withAuth = true, timeoutMs?: number): Promise<any> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (withAuth && accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
   const url = `${SERVER_URL}${path}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  // `timeoutMs` sólo lo usa la rehidratación del arranque: si el servidor
+  // configurado quedó inalcanzable de forma silenciosa (IP caída detrás de un
+  // firewall que dropea el SYN, VPN abajo), el fetch puede tardar minutos en
+  // fallar, y el login se queda esperando sin decir nada. El resto de las
+  // llamadas no lleva timeout: cortar una operación de negocio a mitad es peor
+  // que esperar.
+  const ctrl = timeoutMs ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      ...(ctrl ? { signal: ctrl.signal } : {}),
+    });
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
     const err: any = new Error(`HTTP ${res.status}: ${txt}`);
@@ -100,6 +114,30 @@ async function persistRefreshToken(token: string | null): Promise<void> {
 }
 
 /**
+ * Generación de sesión.
+ *
+ * Toda operación asíncrona que vaya a escribir `accessToken`/`refreshToken`
+ * captura este número antes de suspenderse y sólo aplica su resultado si sigue
+ * siendo el mismo. Sin esto, una rehidratación lenta que empezó ANTES de un
+ * login podía terminar DESPUÉS y pisar los tokens del usuario recién logueado
+ * con los de la sesión anterior: la UI mostraba a una persona y el bearer token
+ * era el de otra, así que todo quedaba autenticado y auditado a nombre
+ * equivocado. Y si ese refresh viejo fallaba, dejaba los tokens en null y
+ * rompía la sesión recién iniciada.
+ *
+ * Reemplazar la referencia de la promesa memoizada no alcanzaba: la corrida
+ * vieja seguía viva.
+ */
+let sessionGeneration = 0;
+
+/** Marca todo trabajo asíncrono en vuelo como obsoleto. */
+function invalidarSesionEnCurso(): void {
+  sessionGeneration++;
+  rehydratePromise = Promise.resolve();
+  refreshPromise = null;
+}
+
+/**
  * Rehidrata la sesión del modo cliente al arrancar.
  *
  * El access token y el refresh token viven en memoria de este módulo, así que
@@ -118,52 +156,90 @@ async function persistRefreshToken(token: string | null): Promise<void> {
  */
 let rehydratePromise: Promise<void> | null = null;
 function ensureRehydrated(): Promise<void> {
-  if (!rehydratePromise) {
-    rehydratePromise = (async () => {
-      if (refreshToken) return; // ya hay sesión viva en esta corrida
-      let guardado: string | null = null;
-      try {
-        guardado = await _originalInvoke('client-refresh-token-read');
-      } catch (e) {
-        console.warn('[preload] no se pudo leer el refresh token persistido:', e);
-        return;
-      }
-      if (!guardado) return;
-      refreshToken = guardado;
-      const ok = await refreshAccessIfPossible();
-      if (!ok) {
-        // Vencido (30 días), revocado desde el servidor, o servidor caído. Se
-        // borra para no reintentar con una credencial muerta en cada arranque;
-        // `refreshAccessIfPossible` ya dejó los tokens en null y el frontend
-        // cae en la red de seguridad de `AuthService`.
-        await persistRefreshToken(null);
-        console.log('[preload] refresh token persistido no sirve: sesión no rehidratada.');
-      } else {
-        console.log('[preload] sesión rehidratada desde el refresh token persistido.');
-      }
-    })();
-  }
-  return rehydratePromise;
+  if (rehydratePromise) return rehydratePromise;
+  const gen = sessionGeneration;
+  const p = (async () => {
+    if (refreshToken) return; // ya hay sesión viva en esta corrida
+    let guardado: string | null = null;
+    try {
+      guardado = await _originalInvoke('client-refresh-token-read');
+    } catch (e) {
+      console.warn('[preload] no se pudo leer el refresh token persistido:', e);
+      return;
+    }
+    if (!guardado) return;
+    // Un login pudo haber ocurrido mientras se leía el disco: en ese caso esta
+    // rehidratación quedó obsoleta y no debe tocar nada.
+    if (gen !== sessionGeneration) return;
+    refreshToken = guardado;
+    const ok = await refreshAccessIfPossible(REHIDRATACION_TIMEOUT_MS);
+    if (gen !== sessionGeneration) return;
+    if (!ok) {
+      // Vencido (30 días), revocado desde el servidor, o servidor caído. Se
+      // borra para no reintentar con una credencial muerta en cada arranque;
+      // `refreshAccessIfPossible` ya dejó los tokens en null y el frontend
+      // cae en la red de seguridad de `AuthService`.
+      await persistRefreshToken(null);
+      console.log('[preload] refresh token persistido no sirve: sesión no rehidratada.');
+    } else {
+      console.log('[preload] sesión rehidratada desde el refresh token persistido.');
+    }
+  })();
+  rehydratePromise = p;
+  return p;
 }
 
-async function refreshAccessIfPossible(): Promise<boolean> {
+/** Corte para el refresh del arranque. Ver el comentario de `httpFetch`. */
+const REHIDRATACION_TIMEOUT_MS = 8000;
+
+/**
+ * Renueva el access token. **Single-flight**: si ya hay un refresh en vuelo,
+ * todos los llamadores esperan el mismo.
+ *
+ * No es una optimización, es corrección. El refresh token es de un solo uso y
+ * el servidor lo rota: si un dashboard dispara cinco RPC en paralelo y todas
+ * reciben 401 al vencer el access token de 15 minutos, cada una arrancaba su
+ * propio refresh. La primera rotaba bien; las demás reenviaban un token ya
+ * invalidado, fallaban, y su rama de error pisaba con `null` los tokens que la
+ * primera acababa de escribir. Con este PR eso además borraba el token
+ * persistido y emitía `frc-web-auth-expired`: una sesión sana se deslogueaba
+ * sola por el orden de llegada de dos refrescos simultáneos.
+ */
+let refreshPromise: Promise<boolean> | null = null;
+async function refreshAccessIfPossible(timeoutMs?: number): Promise<boolean> {
   if (!refreshToken) return false;
-  try {
-    // F5 paso 3: reenvio deviceId para que el JWT nuevo lo siga llevando.
-    const body: any = { refreshToken };
-    if (CLIENT_DEVICE_ID != null) body.deviceId = CLIENT_DEVICE_ID;
-    const data = await httpFetch('/api/auth/refresh', body, false);
-    accessToken = data.accessToken;
-    refreshToken = data.refreshToken || refreshToken;
-    // El servidor rota el refresh token en cada uso: hay que persistir el
-    // nuevo, o el próximo arranque intentaría con uno ya revocado.
-    await persistRefreshToken(refreshToken);
-    return true;
-  } catch {
-    accessToken = null;
-    refreshToken = null;
-    return false;
-  }
+  if (refreshPromise) return refreshPromise;
+
+  const gen = sessionGeneration;
+  // Declarada antes de asignarse: el `finally` de abajo la referencia para no
+  // limpiar una corrida que ya no es la suya.
+  let enVuelo: Promise<boolean>;
+  enVuelo = (async () => {
+    try {
+      // F5 paso 3: reenvio deviceId para que el JWT nuevo lo siga llevando.
+      const body: any = { refreshToken };
+      if (CLIENT_DEVICE_ID != null) body.deviceId = CLIENT_DEVICE_ID;
+      const data = await httpFetch('/api/auth/refresh', body, false, timeoutMs);
+      // Si mientras tanto hubo login o logout, esta respuesta es de una sesión
+      // que ya no es la vigente: se descarta en vez de pisar la nueva.
+      if (gen !== sessionGeneration) return false;
+      accessToken = data.accessToken;
+      refreshToken = data.refreshToken || refreshToken;
+      // El servidor rota el refresh token en cada uso: hay que persistir el
+      // nuevo, o el próximo arranque intentaría con uno ya revocado.
+      await persistRefreshToken(refreshToken);
+      return true;
+    } catch {
+      if (gen !== sessionGeneration) return false;
+      accessToken = null;
+      refreshToken = null;
+      return false;
+    } finally {
+      if (refreshPromise === enVuelo) refreshPromise = null;
+    }
+  })();
+  refreshPromise = enVuelo;
+  return enVuelo;
 }
 
 /**
@@ -202,10 +278,12 @@ async function invokeRouter(channel: string, ...args: any[]): Promise<any> {
     const data = await httpFetch('/api/auth/login', loginData, false);
     accessToken = data.accessToken;
     refreshToken = data.refreshToken;
-    // Un login exitoso deja la sesión rehidratable en el próximo arranque, y
-    // marca la rehidratación como resuelta para que nadie la vuelva a intentar.
+    // Un login exitoso deja la sesión rehidratable en el próximo arranque.
+    // `invalidarSesionEnCurso()` va ANTES de persistir: marca obsoleta
+    // cualquier rehidratación o refresh en vuelo de la sesión anterior, para
+    // que su respuesta tardía no pise estos tokens ni este archivo.
+    invalidarSesionEnCurso();
     await persistRefreshToken(refreshToken);
-    rehydratePromise = Promise.resolve();
     // El renderer espera el shape de la IPC (success/usuario/token/sessionId/message)
     return {
       success: data.success,
@@ -222,8 +300,8 @@ async function invokeRouter(channel: string, ...args: any[]): Promise<any> {
     refreshToken = null;
     // El servidor ya revocó el token; borrarlo también de disco, o el próximo
     // arranque rehidrataría una sesión que el usuario cerró a propósito.
+    invalidarSesionEnCurso();
     await persistRefreshToken(null);
-    rehydratePromise = Promise.resolve();
     return true;
   }
 
@@ -1418,8 +1496,8 @@ contextBridge.exposeInMainWorld('api', {
       // la app. Ojo que el device grant firma `device_id: null`
       // (`device-auth-routes.ts`), pero la primera rotación por
       // `refreshAccessIfPossible` reenvía el `deviceId` y lo corrige.
+      invalidarSesionEnCurso();
       await persistRefreshToken(refreshToken);
-      rehydratePromise = Promise.resolve();
     }
     return data;
   },

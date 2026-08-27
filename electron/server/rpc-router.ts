@@ -69,6 +69,16 @@ const BLOCKED_CHANNELS = new Set<string>([
 
   // Secretos / credenciales
   'set-notif-secret',   // secreto de notificaciones (WhatsApp/email)
+  // Refresh token persistido del modo cliente. Hoy estos canales NO llegan al
+  // registry —se registran en `app.on('ready')`, antes de que
+  // `installHandlerRegistry()` monkey-patchee `ipcMain.handle`—, así que el
+  // bloqueo es defensa en profundidad: si alguna vez se reordena el arranque,
+  // quedarían expuestos por HTTP y cualquier cliente autenticado podría leer,
+  // sobrescribir o borrar la credencial de 30 días de la máquina que corre el
+  // nodo servidor.
+  'client-refresh-token-read',
+  'client-refresh-token-write',
+  'client-refresh-token-clear',
   'ia-config-set',      // API keys de IA/OCR
 
   // Seeds (se ejecutan internamente en el arranque, no vía HTTP)

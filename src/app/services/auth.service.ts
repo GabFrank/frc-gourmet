@@ -230,9 +230,11 @@ export class AuthService {
       // tokens en localStorage y los recarga al arrancar.
       await this.esperarRehidratacionCliente();
       if (!this.transporteTieneCredenciales()) {
+        // No hace falta navegar: `clearSession()` deja el `BehaviorSubject` en
+        // null y `app.component` ya reacciona a eso yendo al login. Un segundo
+        // navigate a la misma URL sería un no-op.
         console.warn('[auth] sesión cacheada sin tokens en el transporte: se limpia.');
         this.clearSession();
-        this.router.navigate(['/login']);
         return;
       }
       try {
