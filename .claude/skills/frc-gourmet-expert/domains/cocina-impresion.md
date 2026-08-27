@@ -96,6 +96,8 @@ Cada handler `print-*` retorna `{ ok, printed: [...], errors: [...] }` y **nunca
 
 Resolución de impresora por rol (`getPrinterByRol`): 1) `printerId` explícito; 2) `dispositivoId` + rol TICKET_VENTA/PRECUENTA → `Dispositivo.printerTicket` (impresora local del PdV); 3) `sectorId` → M2M `SectorImpresora`; 4) fallback global `Printer.rol`; 5) `Printer.isDefault`.
 
+> **Gotcha del paso 2 — el más fácil de romper.** El `dispositivoId` no aparece solo: cada handler IPC de impresión tiene que resolverlo con **`resolveRequestDeviceId(_event)`** (de `electron/utils/current-device.utils`) y pasárselo a la función `printXxxInternal`. Si el caller no lo hace, el paso 2 está guardado por `if (opts.dispositivoId && esRolTicket)` y **nunca entra**: el ticket cae hasta el paso 5 y sale por la impresora `isDefault`. En un local con dos cajas eso significa que el pedido de una se imprime en la otra, sin ningún error a la vista. Le pasó a `delivery.handler.ts` hasta 2026-08-27 (0 usos de `resolveRequestDeviceId` en todo el archivo). Al agregar un handler de impresión de tickets: resolverlo en el handler, y si la impresión se dispara en un `setImmediate` (auto-impresión best-effort), resolverlo **antes** y pasarlo como parámetro — ahí adentro ya no hay `_event`. Cubierto por `npm run test:delivery-impresora`.
+
 ### Ruteo por sector (ABM)
 - `electron/handlers/producto-sectores.handler.ts`: `get-producto-sectores(productoId)`, `set-producto-sectores(productoId, sectorIds[])`.
 - `electron/handlers/sectores-impresoras.handler.ts`: `get-sectores-impresoras`, `get-sector-impresoras-by-sector(sectorId)`, `create-sector-impresora`, `update-sector-impresora`, `delete-sector-impresora`.

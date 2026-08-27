@@ -129,6 +129,9 @@ para el repartidor.
 | 5.3 | Sin impresora configurada | Snackbar con el motivo, no un error mudo. |
 | 5.4 | Configuración de PdV → DELIVERY → tildar *Imprimir el ticket al enviar* | Al pasar a EN_CAMINO el ticket sale solo. Si la impresora está apagada, **el cambio de estado igual se completa** (la impresión es best-effort). |
 | 5.5 | Ticket de venta normal (comprobante al cobrar) de un delivery | Tiene una línea **ENVIO** y el TOTAL la incluye. |
+| 5.6 | **Multi-caja (2026-08-27).** Dos cajas, cada una con su térmica: en *Dispositivos*, asignar a cada una su impresora de tickets. Tomar un delivery desde la **caja 2** e IMPRIMIR. | El ticket sale por la impresora **de la caja 2**. *(El bug: salía siempre por la marcada como predeterminada, así que el pedido de una caja se imprimía en la otra.)* |
+| 5.7 | Misma prueba con la impresión automática (5.4), creando y enviando desde la caja 2. | Igual: sale por la impresora de la caja 2. |
+| 5.8 | Una caja **sin** impresora de tickets asignada | Sigue cayendo a la impresora predeterminada (comportamiento de siempre). |
 
 ---
 
@@ -198,8 +201,15 @@ Configuración de PdV → **DELIVERY**. Cada opción debe surtir efecto sin toca
 
 ```
 npm run test:delivery
+npm run test:delivery-impresora
 ```
 
-46 asserts contra SQLite con las migraciones reales: alta atómica, máquina de
-estados, guard de `updateDelivery`, costo del envío en la deuda, cancelación
-transaccional con reversa de cobro/stock, permisos y lista multi-caja.
+`test:delivery`: 53 asserts contra SQLite con las migraciones reales — alta
+atómica, máquina de estados, guard de `updateDelivery`, costo del envío en la
+deuda, cancelación transaccional con reversa de cobro/stock, permisos y lista
+multi-caja.
+
+`test:delivery-impresora`: 6 asserts sobre el ruteo del ticket por dispositivo
+(pasos 5.6–5.8). Las impresoras del test apuntan a puertos donde no escucha
+nadie, así que el intento falla al instante y el resultado dice **cuál** eligió
+— que es lo que se quiere afirmar. Verificado que sin el fix se pone rojo.
