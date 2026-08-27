@@ -161,6 +161,9 @@ export class CobrarCreditoDialogComponent implements OnInit {
       descripcion: v.descripcion?.trim() || null,
       imprimirPagare: this.imprimirPagare,
       forzar,
+      // Cerrar la venta a crédito la concluye, así que pasa por el mismo gate de
+      // terminal ajena que el botón FINALIZAR.
+      __validarDispositivoCaja: true,
     };
     try {
       const res: any = await firstValueFrom(this.repositoryService.cobrarVentaCredito(payload));
@@ -186,9 +189,12 @@ export class CobrarCreditoDialogComponent implements OnInit {
       this.dialogRef.close({ success: true, ventaId: res?.ventaId, cpcId: res?.cpcId });
     } catch (e: any) {
       console.error('Error cobrarVentaCredito:', e);
-      const msg = e?.message?.includes('Error invoking remote method')
-        ? 'Error al registrar la venta a crédito'
-        : e?.message || 'Error al registrar la venta a crédito';
+      const raw = String(e?.message || '');
+      const msg = raw.includes('FINALIZACION_NO_PERMITIDA_EN_ESTE_DISPOSITIVO')
+        ? 'La venta solo se finaliza en la terminal donde se abrió la caja'
+        : raw.includes('Error invoking remote method')
+          ? 'Error al registrar la venta a crédito'
+          : raw || 'Error al registrar la venta a crédito';
       this.snackBar.open(msg, 'Cerrar', { duration: 4000 });
     } finally {
       this.saving = false;

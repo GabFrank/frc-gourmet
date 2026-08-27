@@ -289,7 +289,7 @@ interface ElectronAPI {
   buscarClientePorTelefono: (telefono: string) => Promise<any>;
   buscarClientesPorTelefono: (telefono: string) => Promise<any[]>;
   crearClienteRapido: (data: { telefono: string; nombre?: string; direccion?: string }) => Promise<any>;
-  cerrarVentasAbiertasMesa: (mesaId: number, estado: string) => Promise<number>;
+  cerrarVentasAbiertasMesa: (mesaId: number, estado: string, opts?: { validarDispositivoCaja?: boolean }) => Promise<number>;
   // Venta operations
   getVentas: () => Promise<Venta[]>;
   getVentasByDateRange: (desde: string, hasta: string, filtros?: any) => Promise<{ data: Venta[], total: number }>;
@@ -1997,8 +1997,8 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.crearClienteRapido(data));
   }
 
-  cerrarVentasAbiertasMesa(mesaId: number, estado: string): Observable<number> {
-    return from(this.api.cerrarVentasAbiertasMesa(mesaId, estado));
+  cerrarVentasAbiertasMesa(mesaId: number, estado: string, opts?: { validarDispositivoCaja?: boolean }): Observable<number> {
+    return from(this.api.cerrarVentasAbiertasMesa(mesaId, estado, opts));
   }
 
   // Venta methods

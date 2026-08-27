@@ -60,4 +60,28 @@ export class PagoDetalle extends BaseModel {
   // Permite anular una ronda desactivando sus PagoDetalle y recomputar saldo.
   @Column({ name: 'cobro_parcial_id', nullable: true })
   cobroParcialId?: number;
+
+  // ─── Destino de la acreditación (POS / banco) ───────────────────────────
+  // Al finalizar el cobro se crea una `AcreditacionPos` por cada línea con
+  // máquina POS y se acredita la cuenta bancaria de cada transferencia. Hasta
+  // 2026-08 ese vínculo vivía SOLO en memoria del diálogo de cobro: no se
+  // persistía, así que al reabrir el diálogo (`loadExistingPago`) se perdía y
+  // la acreditación no se creaba nunca — en silencio, porque el bloque que la
+  // genera está en un try/catch no bloqueante.
+  //
+  // Con el cobro repartido entre terminales (una carga las líneas, otra
+  // finaliza) ese camino pasa a ser el normal, así que el vínculo tiene que
+  // sobrevivir a la recarga. Nullable: la enorme mayoría de las líneas
+  // (efectivo) no tiene destino de acreditación, y las líneas históricas
+  // quedan en null sin cambiar de significado.
+  //
+  // `type: 'int'` explícito: sobre un tipo unión (`number | null`) TypeORM no
+  // puede inferir el tipo de columna y falla al arrancar con
+  // "Data type Object ... is not supported". Es el pitfall registrado en la
+  // skill; `cobroParcialId` de arriba se salva sólo porque es `number` a secas.
+  @Column({ name: 'maquina_pos_id', type: 'int', nullable: true })
+  maquinaPosId?: number | null;
+
+  @Column({ name: 'cuenta_bancaria_id', type: 'int', nullable: true })
+  cuentaBancariaId?: number | null;
 }

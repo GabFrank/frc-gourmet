@@ -21,6 +21,7 @@ import { ensureObservacionNotaLibreId } from '../utils/observacion-libre.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
+import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
 import { Not, IsNull, In, EntityManager } from 'typeorm';
 import { DeepPartial } from 'typeorm';
 import { Reserva } from '../../src/app/database/entities/ventas/reserva.entity';
@@ -819,7 +820,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   });
 
   // --- Cerrar todas las ventas abiertas de una mesa ---
-  ipcMain.handle('cerrarVentasAbiertasMesa', async (_event: any, mesaId: number, estado: string) => {
+  ipcMain.handle('cerrarVentasAbiertasMesa', async (_event: any, mesaId: number, estado: string, opts?: { validarDispositivoCaja?: boolean }) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Venta);
@@ -827,7 +828,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // vinculadas a la mesa se cierran/liberan desde su propio flujo.
       const ventasAbiertas = await repo.find({
         where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
+        relations: ['caja'],
       });
+      // Este handler pone CONCLUIDA con `repo.save` directo, sin pasar por
+      // `updateVenta`: es un tercer camino de finalización y necesita el mismo
+      // gate de terminal ajena. Sólo aplica al cierre por cobro (CONCLUIDA); la
+      // cancelación de una mesa no es finalizar un cobro.
+      if (opts?.validarDispositivoCaja && estado === VentaEstado.CONCLUIDA) {
+        for (const v of ventasAbiertas) {
+          await assertTerminalPuedeOperar(dataSource, _event, (v.caja as any)?.id ?? null, 'FINALIZAR');
+        }
+      }
       for (const v of ventasAbiertas) {
         v.estado = estado as VentaEstado;
         await repo.save(v);
@@ -1151,13 +1162,40 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         delete data.__imprimirTicketVenta;
       }
 
+      // Gate de terminal ajena para la FINALIZACION de la venta. Igual que
+      // `__imprimirTicketVenta`, se extrae antes del merge para que no intente
+      // persistirse como columna.
+      //
+      // Se activa sólo con el flag explícito, y no derivando la caja siempre,
+      // porque `updateVenta` es genérico: lo usan pedidos online, delivery, la
+      // cancelación desde el historial y varios flujos server-side que no son
+      // "el cajero cobrando". Sólo el cobro del PdV lo manda.
+      let validarDispositivoCaja = false;
+      if (data && Object.prototype.hasOwnProperty.call(data, '__validarDispositivoCaja')) {
+        validarDispositivoCaja = data.__validarDispositivoCaja === true;
+        delete data.__validarDispositivoCaja;
+      }
+
       const estadoAnterior = entity.estado;
 
-      // `findOneBy` no trae la relacion `mesa`: se lee la FK cruda ANTES del
-      // merge, para poder resincronizar el cache de esa mesa si la venta cierra.
-      const mesaDeLaVenta: number | null = (
-        await dataSource.query(`SELECT mesa_id AS m FROM ventas WHERE id = $1`.replace('$1', String(Number(id))))
-      )?.[0]?.m ?? null;
+      // `findOneBy` no trae las relaciones `mesa` ni `caja`: se leen las FK
+      // crudas ANTES del merge, para poder resincronizar el cache de esa mesa si
+      // la venta cierra y para resolver el gate por dispositivo.
+      const filaVenta: any = (
+        await dataSource.query(`SELECT mesa_id AS m, caja_id AS c FROM ventas WHERE id = $1`.replace('$1', String(Number(id))))
+      )?.[0] ?? null;
+      const mesaDeLaVenta: number | null = filaVenta?.m ?? null;
+
+      // Sólo la transición ABIERTA → CONCLUIDA es "finalizar un cobro".
+      // `rehabilitarVenta()` (CANCELADA → CONCLUIDA, desde el historial) queda
+      // deliberadamente fuera: no es un cobro en el PdV.
+      if (
+        validarDispositivoCaja
+        && data?.estado === VentaEstado.CONCLUIDA
+        && estadoAnterior === VentaEstado.ABIERTA
+      ) {
+        await assertTerminalPuedeOperar(dataSource, _event, filaVenta?.c ?? null, 'FINALIZAR');
+      }
 
       // A-01: al cancelar una venta a crédito hay que revertir la Cuenta Por
       // Cobrar y el saldoActual del cliente; antes quedaban vivos (cobros
@@ -1178,7 +1216,13 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         }
       }
 
-      repo.merge(entity, data);
+      // La caja de una venta se fija al crearla y no cambia nunca. Aceptarla en
+      // el merge permitía mover una venta CONCLUIDA —con todo su cobro— a otra
+      // caja, sin gate y sin transición de estado: la palanca más directa para
+      // descuadrar dos arqueos de una sola llamada. Ningún llamador la setea
+      // (el PdV manda la venta entera, con su misma caja).
+      const { caja: _cajaIgnorada, ...ventaData } = data ?? {};
+      repo.merge(entity, ventaData);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
 
@@ -4023,7 +4067,10 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      const venta = await queryRunner.manager.findOne(Venta, { where: { id: ventaId } });
+      const venta = await queryRunner.manager.findOne(Venta, {
+        where: { id: ventaId },
+        relations: ['pago'],
+      });
       if (!venta) throw new Error(`Venta ${ventaId} no encontrada`);
       if (venta.estado !== VentaEstado.ABIERTA) throw new Error('VENTA_NO_ABIERTA');
 
@@ -4060,7 +4107,30 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const rondaSaved = await queryRunner.manager.save(CobroParcial, ronda);
 
       // Taguear las líneas de pago de esta ronda.
+      //
+      // ⚠️ Se valida que TODAS pertenezcan al pago de ESTA venta antes de tocar
+      // nada. El update filtraba sólo por id, así que un cliente podía mandar
+      // ids de líneas de otras ventas —de otras cajas, incluso ya cerradas— y
+      // atarlas a su ronda; después `anularCobroParcial` las ponía `activo=false`
+      // y esa plata desaparecía del arqueo ajeno de forma retroactiva. Alcanzaba
+      // con VENTAS_PDV + VENTAS_COBRAR.
+      //
+      // La verificación va con `find` + comparación y no como condición del
+      // `update`: `PagoDetalle` no expone `pagoId` escalar (sólo el JoinColumn),
+      // así que una condición de relación anidada en un UpdateQueryBuilder es
+      // terreno resbaladizo. Y además permite fallar explícito en vez de taguear
+      // de a pedazos.
       if (pagoDetalleIds.length) {
+        const pagoVentaId = (venta.pago as any)?.id ?? null;
+        const lineas = await queryRunner.manager.find(PagoDetalle, {
+          where: { id: In(pagoDetalleIds) },
+          relations: ['pago'],
+        });
+        const todasPropias = pagoVentaId != null
+          && lineas.length === pagoDetalleIds.length
+          && lineas.every((l) => ((l.pago as any)?.id ?? null) === pagoVentaId);
+        if (!todasPropias) throw new Error('PAGO_DETALLE_AJENO');
+
         await queryRunner.manager.update(
           PagoDetalle,
           { id: In(pagoDetalleIds) },
@@ -4110,6 +4180,19 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       });
       if (!ronda) throw new Error(`CobroParcial ${cobroParcialId} no encontrado`);
       const ventaId = (ronda.venta as any)?.id;
+
+      // Anular una ronda desactiva sus `PagoDetalle`, o sea saca plata del
+      // arqueo. Sobre una venta ya cerrada eso cambia el resultado de una caja
+      // que puede estar cerrada, con su retiro generado y su ticket impreso — y
+      // encima deja viva la AcreditacionPos que ese cobro creó. Sólo tiene
+      // sentido mientras la cuenta sigue abierta.
+      const ventaDeLaRonda = ventaId
+        ? await queryRunner.manager.findOne(Venta, { where: { id: ventaId } })
+        : null;
+      if (!ventaDeLaRonda) throw new Error(`Venta de la ronda ${cobroParcialId} no encontrada`);
+      if (ventaDeLaRonda.estado !== VentaEstado.ABIERTA) {
+        throw new Error('COBRO_PARCIAL_VENTA_NO_ABIERTA');
+      }
 
       // Ítems que tocaba esta ronda.
       const impsRonda = await queryRunner.manager.find(CobroParcialItem, {

@@ -217,7 +217,24 @@ export class PdvComponent implements OnInit, OnDestroy {
   currentDeviceId: number | null = null;
   // Gate de cobro por dispositivo: true solo en el dispositivo donde se abrio
   // la caja. Otros dispositivos (y la PWA) pueden lanzar items pero no cobrar.
+  /**
+   * Gate de terminal ajena. Se computa en dos etapas a propósito:
+   *
+   *  1. `aplicarCajaSeleccionada()` lo fija **síncrono** al unirse a la caja,
+   *     con el criterio histórico (sólo la terminal dueña opera). Fail-closed.
+   *  2. `recomputarGateTerminal()` lo **amplía** una vez leída la config del
+   *     PdV, si el local habilitó alguno de los dos permisos.
+   *
+   * Si la lectura de config falla, quedan los valores de (1): la terminal dueña
+   * nunca puede quedarse sin cobrar por un error de red.
+   */
+  esTerminalDeLaCaja = true;
   puedeCobrar = false;
+  puedeFinalizarVenta = false;
+  /** Texto del chip informativo en la barra de caja. Vacío = no se muestra. */
+  avisoTerminal = '';
+  tooltipCobrar = 'Cobrar (F1)';
+  tooltipCobroRapido = 'Cobro rápido (F2)';
   // Nombre del dispositivo dueno de la caja (para el mensaje al usuario).
   dispositivoCajaNombre = '';
 
@@ -389,15 +406,78 @@ export class PdvComponent implements OnInit, OnDestroy {
     // dueño de la caja; si el dispositivo local no está identificado (ej.
     // standalone sin device configurado) no se bloquea, para no romper el cobro
     // en instalaciones de un solo equipo.
-    this.puedeCobrar = this.currentDeviceId == null || dispositivoCajaId == null || this.currentDeviceId === dispositivoCajaId;
-    if (!this.puedeCobrar) {
-      this.snackBar.open(
-        `Unido a la caja #${caja.id}. El cobro solo se realiza en ${this.dispositivoCajaNombre || 'el dispositivo donde se abrió la caja'}.`,
-        'OK',
-        { duration: 6000 }
-      );
-    }
+    this.esTerminalDeLaCaja =
+      this.currentDeviceId == null || dispositivoCajaId == null || this.currentDeviceId === dispositivoCajaId;
+    // Arranque fail-closed: la conducta histórica. `recomputarGateTerminal()`
+    // sólo puede ampliar esto, nunca restringirlo.
+    this.puedeCobrar = this.esTerminalDeLaCaja;
+    this.puedeFinalizarVenta = this.esTerminalDeLaCaja;
+    this.actualizarTextosTerminal(caja.id);
     this.loadInitialData();
+  }
+
+  /**
+   * Amplía el gate según la configuración del PdV, una vez leída.
+   *
+   * `PdvConfig` puede habilitar por separado registrar pagos y finalizar ventas
+   * desde una terminal que no abrió la caja. Nunca restringe: si la config no
+   * se pudo leer o no habilita nada, quedan los valores fail-closed que fijó
+   * `aplicarCajaSeleccionada`.
+   */
+  private recomputarGateTerminal(): void {
+    if (this.esTerminalDeLaCaja) return;
+    this.puedeCobrar = this.pdvConfig?.permitirPagosTerminalAjena === true;
+    this.puedeFinalizarVenta = this.pdvConfig?.permitirFinalizarTerminalAjena === true;
+    this.actualizarTextosTerminal(this.caja?.id);
+  }
+
+  /**
+   * Textos del aviso y de los tooltips. Pre-computados: la regla 4 prohíbe
+   * funciones y getters en el template.
+   */
+  private actualizarTextosTerminal(cajaId?: number | null): void {
+    const terminal = this.dispositivoCajaNombre || 'la terminal donde se abrió la caja';
+    if (this.esTerminalDeLaCaja) {
+      this.avisoTerminal = '';
+      this.tooltipCobrar = 'Cobrar (F1)';
+      this.tooltipCobroRapido = 'Cobro rápido (F2)';
+      return;
+    }
+    const ref = cajaId ? `Caja #${cajaId}` : 'Caja';
+    if (this.puedeCobrar && this.puedeFinalizarVenta) {
+      this.avisoTerminal = `${ref} abierta en ${terminal} · cobro habilitado desde acá`;
+    } else if (this.puedeCobrar) {
+      this.avisoTerminal = `${ref} abierta en ${terminal} · podés cargar pagos, no finalizar`;
+    } else if (this.puedeFinalizarVenta) {
+      this.avisoTerminal = `${ref} abierta en ${terminal} · podés finalizar, no cargar pagos`;
+    } else {
+      this.avisoTerminal = `${ref} abierta en ${terminal} · el cobro se hace allá`;
+    }
+    this.tooltipCobrar = this.puedeCobrar || this.puedeFinalizarVenta
+      ? 'Cobrar (F1)'
+      : `El cobro solo se realiza en ${terminal}`;
+    // El cobro rápido hace las dos cosas de una: cargar el pago y cerrar la
+    // venta. Necesita los dos permisos.
+    this.tooltipCobroRapido = this.puedeCobrar && this.puedeFinalizarVenta
+      ? 'Cobro rápido (F2)'
+      : `El cobro rápido registra y finaliza: solo se hace en ${terminal}`;
+  }
+
+  /**
+   * Relee la config del PdV justo antes de cobrar.
+   *
+   * El diálogo de configuración no se abre desde el PdV (va por el menú, el
+   * home o el dashboard), así que sin esto un cambio de los flags no surtía
+   * efecto hasta cerrar y reabrir la pestaña. Es una sola fila.
+   */
+  private async refrescarGateTerminal(): Promise<void> {
+    if (this.esTerminalDeLaCaja) return;
+    try {
+      const cfg = await firstValueFrom(this.repositoryService.getPdvConfig());
+      const config = Array.isArray(cfg) ? cfg[0] : cfg;
+      if (config) this.pdvConfig = config;
+    } catch { /* se mantiene lo que ya estaba */ }
+    this.recomputarGateTerminal();
   }
 
   /**
@@ -456,6 +536,11 @@ export class PdvComponent implements OnInit, OnDestroy {
           this.deliveryHabilitado = config?.deliveryHabilitado !== false;
         }
       } catch (e) { /* use default */ }
+      finally {
+        // En `finally`: si la lectura falla, el gate se queda en fail-closed y
+        // el aviso sigue siendo el correcto.
+        this.recomputarGateTerminal();
+      }
 
       try {
         const tienda: any = await firstValueFrom(this.repositoryService.getTiendaOnlineConfig());
@@ -2038,11 +2123,16 @@ export class PdvComponent implements OnInit, OnDestroy {
     return this.ventaItemsDataSource.data.some(i => i.estado === EstadoVentaItem.ACTIVO);
   }
 
-  cobrarVenta(): void {
+  async cobrarVenta(): Promise<void> {
     if (!this.hasActiveVenta || !this.hasActiveItems) return;
 
-    // El cobro solo se permite en el dispositivo donde se abrió la caja.
-    if (!this.puedeCobrar) {
+    // La config puede haber cambiado desde que se abrió la pestaña: el diálogo
+    // de configuración del PdV no se abre desde acá.
+    await this.refrescarGateTerminal();
+
+    // Sin ninguno de los dos permisos el diálogo no tiene nada que ofrecer. Con
+    // uno solo sí se abre: adentro se deshabilita lo que corresponda.
+    if (!this.puedeCobrar && !this.puedeFinalizarVenta) {
       this.snackBar.open(
         `El cobro solo se realiza en ${this.dispositivoCajaNombre || 'el dispositivo donde se abrió la caja'}.`,
         'OK',
@@ -2063,6 +2153,9 @@ export class PdvComponent implements OnInit, OnDestroy {
       caja: this.caja!,
       // Cobrando un delivery desde el PdV, el envio es parte del total.
       costoDelivery: Number((venta as any)?.costoDelivery ?? 0) || 0,
+      puedeAgregarPagos: this.puedeCobrar,
+      puedeFinalizar: this.puedeFinalizarVenta,
+      terminalDeLaCaja: this.esTerminalDeLaCaja ? undefined : this.dispositivoCajaNombre,
     };
 
     const dialogRef = this.dialog.open(CobrarVentaDialogComponent, {
@@ -2082,7 +2175,7 @@ export class PdvComponent implements OnInit, OnDestroy {
         // Liberar mesa y limpiar estado completamente
         if (this.selectedMesa) {
           // Cerrar cualquier venta huérfana abierta en esta mesa
-          await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CONCLUIDA));
+          await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CONCLUIDA, { validarDispositivoCaja: true }));
           this.updateMesaEstado(this.selectedMesa, PdvMesaEstado.DISPONIBLE);
           this.selectedMesa.venta = null as any;
         this.estamparMesa(this.selectedMesa as any);
@@ -2194,12 +2287,35 @@ export class PdvComponent implements OnInit, OnDestroy {
   async cobroRapido(): Promise<void> {
     if (!this.hasActiveVenta || !this.hasActiveItems) return;
 
+    // El cobro rápido registra el pago Y cierra la venta de un saque, así que
+    // necesita los dos permisos. Este camino no tenía ningún gate: en una
+    // terminal ajena F2 cobraba completo aunque el botón COBRAR estuviera
+    // bloqueado.
+    await this.refrescarGateTerminal();
+    if (!this.puedeCobrar || !this.puedeFinalizarVenta) {
+      this.snackBar.open(this.tooltipCobroRapido, 'OK', { duration: 5000 });
+      return;
+    }
+
     const venta = this.ventaRapidaActual || this.selectedComanda?.venta || this.selectedMesa?.venta;
     if (!venta) return;
 
     const items = this.ventaItemsDataSource.data.filter(i => i.estado === EstadoVentaItem.ACTIVO);
-    const total = items.reduce((sum, i) => sum + (i.precioVentaUnitario + (i.precioAdicionales || 0) - (i.descuentoUnitario || 0)) * i.cantidad, 0);
-    if (total <= 0) return;
+    // `Number()` en los cuatro términos: son columnas `decimal` y en Postgres
+    // llegan como string. Sin esto la suma concatena y da NaN — y el guard de
+    // abajo NO lo atrapaba (`NaN <= 0` es false), así que seguía y persistía un
+    // `PagoDetalle` con `valor: NaN`. Es el mismo arreglo que ya tiene
+    // `calculateTotals()` del diálogo de cobro.
+    const total = items.reduce((sum, i) => sum + (
+      Number(i.precioVentaUnitario || 0)
+      + Number(i.precioAdicionales || 0)
+      - Number(i.descuentoUnitario || 0)
+    ) * Number(i.cantidad || 0), 0)
+      // El envío es un cargo de la venta, no un ítem. F2 es alcanzable sobre un
+      // delivery (editar ítems desde el diálogo deja el delivery como venta
+      // rápida), así que sin esto el cobro rápido regalaba el costo de envío.
+      + (Number((venta as any)?.costoDelivery ?? 0) || 0);
+    if (!Number.isFinite(total) || total <= 0) return;
 
     try {
       const formasPago = await firstValueFrom(this.repositoryService.getFormasPago());
@@ -2210,7 +2326,8 @@ export class PdvComponent implements OnInit, OnDestroy {
         estado: PagoEstado.PAGADO,
         caja: this.caja!,
         activo: true,
-      }));
+        validarDispositivoCaja: true,
+      } as any));
 
       await firstValueFrom(this.repositoryService.createPagoDetalle({
         valor: total,
@@ -2220,14 +2337,16 @@ export class PdvComponent implements OnInit, OnDestroy {
         moneda: this.principalMoneda,
         formaPago: fpPrincipal,
         activo: true,
-      }));
+        validarDispositivoCaja: true,
+      } as any));
 
       await firstValueFrom(this.repositoryService.updateVenta(venta.id, {
         estado: VentaEstado.CONCLUIDA,
         formaPago: fpPrincipal,
         pago,
         fechaCierre: new Date(),
-      }));
+        __validarDispositivoCaja: true,
+      } as any));
 
       // Procesar stock (fire-and-forget)
       this.repositoryService.procesarStockVenta(venta.id).subscribe({
@@ -2241,7 +2360,7 @@ export class PdvComponent implements OnInit, OnDestroy {
       }
       if (this.selectedMesa) {
         // Cerrar cualquier venta huérfana abierta en esta mesa
-        await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CONCLUIDA));
+        await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CONCLUIDA, { validarDispositivoCaja: true }));
         await firstValueFrom(this.repositoryService.setPdvMesaEstado(this.selectedMesa.id!, PdvMesaEstado.DISPONIBLE));
         this.selectedMesa.venta = null as any;
         this.estamparMesa(this.selectedMesa as any);
@@ -2257,6 +2376,14 @@ export class PdvComponent implements OnInit, OnDestroy {
       await this.loadMesas();
     } catch (error) {
       console.error('Error al realizar cobro rápido:', error);
+      const msg = String((error as any)?.message || '');
+      this.snackBar.open(
+        msg.includes('_NO_PERMITID') || msg.includes('NO_PERMITIDA')
+          ? this.tooltipCobroRapido
+          : 'No se pudo completar el cobro rápido',
+        'CERRAR',
+        { duration: 5000 },
+      );
     }
   }
 
@@ -2297,8 +2424,12 @@ export class PdvComponent implements OnInit, OnDestroy {
     });
   }
 
-  openDelivery(): void {
+  async openDelivery(): Promise<void> {
     if (!this.caja) return;
+
+    // El cobro de un delivery sale por el mismo diálogo, así que necesita el
+    // gate al día.
+    await this.refrescarGateTerminal();
 
     const dialogData: DeliveryDialogData = {
       caja: this.caja,
@@ -2306,6 +2437,9 @@ export class PdvComponent implements OnInit, OnDestroy {
       principalMoneda: this.principalMoneda!,
       exchangeRates: this.exchangeRates,
       filteredMonedas: this.filteredMonedas,
+      puedeAgregarPagos: this.puedeCobrar,
+      puedeFinalizar: this.puedeFinalizarVenta,
+      terminalDeLaCaja: this.esTerminalDeLaCaja ? undefined : this.dispositivoCajaNombre,
     };
 
     const dialogRef = this.dialog.open(DeliveryDialogComponent, {

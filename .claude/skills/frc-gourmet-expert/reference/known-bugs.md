@@ -4,6 +4,244 @@ Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo
 
 ## Ventas / PdV
 
+### ✅ RESUELTO — Se podían desactivar líneas de pago de otra caja, incluso cerrada (2026-08-27)
+
+**Síntoma:** el arqueo de una caja ya cerrada cambiaba retroactivamente, después
+de impreso el cierre y generado el retiro.
+
+**Causa:** `registrarCobroParcial` tagueaba `PagoDetalle` filtrando **sólo por
+id**, sin exigir que pertenecieran al pago de esa venta. Encadenado con
+`anularCobroParcial` —que **no tiene ningún llamador en el frontend**, sólo la
+plomería del repositorio— las ponía `activo = false`. Como el resumen de caja
+filtra por `activo`, esa plata desaparecía del arqueo ajeno. Alcanzaba con
+`VENTAS_PDV` + `VENTAS_COBRAR`, por `/api/rpc` directo.
+
+**Resuelto:** se valida la pertenencia de **todas** las líneas antes de tocar
+nada (`PAGO_DETALLE_AJENO`), y `anularCobroParcial` exige la venta ABIERTA.
+Test: `npm run test:integridad-cobro`.
+
+### ✅ RESUELTO — El gate de cobro era auto-derrotable con `updatePago` (2026-08-27)
+
+`Pago.caja` es lo **único** que lee el gate de `createPagoDetalle`, y el merge de
+`updatePago` la aceptaba: `updatePago(id, { caja: null })` desactivaba el gate
+para todas las líneas siguientes, con una llamada de apariencia inocente. Lo
+mismo con `updateVenta` (movía una venta CONCLUIDA con todo su cobro a otra caja)
+y `update-caja` (una terminal se apropiaba de una caja ajena). **Resuelto**
+descartando esas propiedades del merge en los tres handlers.
+
+### ✅ RESUELTO — El cobro a crédito nunca creaba las acreditaciones (2026-08-27)
+
+**Síntoma:** ninguno. La venta cerraba, la CPC se creaba bien, y la plata cobrada
+con tarjeta o transferencia **no entraba al ledger bancario**: no se conciliaba,
+no descontaba comisión, desaparecía del banco.
+
+**Causa:** `AcreditacionPos` y `acreditarTransferenciaBancaria` estaban embebidas
+en `finalizar()`, y el cobro a crédito cierra la venta por otro camino. En un
+cobro mixto (300.000 con tarjeta + 200.000 a crédito) se perdían los 300.000.
+
+**Resuelto:** extraído a `registrarAcreditaciones()`, llamado desde los dos
+caminos. De paso, el bucle pasó a tener un `try` **por línea** (antes uno solo
+envolvía el `for`, así que si fallaba la 2ª de 3 la 3ª ni se intentaba) y avisa
+cuántas quedaron sin registrar.
+
+### ✅ RESUELTO — Se acreditaba el monto sin su moneda (2026-08-27)
+
+`create-acreditacion-pos` y `acreditar-transferencia-bancaria` recibían un monto
+desnudo y lo sumaban al saldo de la cuenta, que tiene su propia moneda. Los
+atajos F1/F2/F3 del diálogo de cobro cambian la moneda de la línea **sin** tocar
+la máquina POS elegida, así que 40 dólares se acreditaban como **40 guaraníes**.
+Sumado a que **F4–F7** asignaban la forma de pago sin llamar `onFormaPagoChange()`
+(dejando la máquina POS de la forma anterior), la plata terminaba en otro banco.
+**Resuelto**: los dos handlers reciben `monedaId` y rechazan si difiere,
+**fallando abierto** cuando la cuenta no tiene moneda cargada.
+
+### ✅ RESUELTO — El resumen de caja concatenaba strings en Postgres (2026-08-27)
+
+`PagoDetalle.valor` es `decimal` y el driver de Postgres lo devuelve como
+**string** (no hay `pg.types.setTypeParser(1700)` en el repo). Las 7
+acumulaciones de `computeResumenCaja` y los 2 totales de conteo usaban `+=` sin
+castear: dos pagos de 150.000 y 50.000 daban `"0150000.0050000.00"`, el esperado
+salía `NaN`, y tanto el ticket de cierre como el semáforo de diferencia de caja
+imprimían `NaN`. **Resuelto** con `Number()` en los 9 puntos.
+Test: `npm run test:resumen-caja-numeros` (usa un `Proxy` sobre el `DataSource`
+porque SQLite aplica NUMERIC affinity y por la base es imposible reproducirlo).
+
+### ✅ RESUELTO — El cobro rápido (F2) daba NaN y regalaba el envío (2026-08-27)
+
+Misma causa que el anterior, sin `Number()`, y encima el guard `if (total <= 0)`
+**no atrapa `NaN`**, así que seguía y persistía un `PagoDetalle` con `valor: NaN`.
+Además ignoraba `costoDelivery`, y F2 **sí es alcanzable sobre un delivery**
+(editar ítems desde el diálogo deja el delivery como venta rápida): el envío se
+regalaba. Es el mismo bug que la auditoría de delivery dio por cerrado,
+sobreviviendo por otro camino.
+
+### ✅ RESUELTO — El ticket afirmaba un saldo sin cotización, y escondía el vuelto (2026-08-27)
+
+`montoAPrincipal` cuenta una divisa 1 a 1 con el guaraní cuando no encuentra
+tasa. Un delivery de 500.000 con 60 USD adelantados y la cotización vencida
+imprimía `SALDO A COBRAR 499.940` — el cliente pagaba dos veces. Con un adelanto
+grande el saldo daba 0 y salía **`PAGADO — NO COBRAR`**, peor todavía. **Resuelto**
+con el flag `sinCotizacion`, evaluado **antes** que el chequeo de saldo.
+
+Y un sobrepago sin línea de VUELTO se aplastaba con `Math.max(0, …)`: el papel
+decía `PAGADO` y el vuelto a devolver desaparecía. Hoy imprime
+`VUELTO A ENTREGAR`.
+
+### ✅ RESUELTO — Re-finalizar una venta ya cobrada duplicaba la acreditación (2026-08-27)
+
+Un delivery EN_CAMINO con cobro anticipado abría el diálogo con las líneas
+cargadas y saldo 0, así que FINALIZAR quedaba habilitado. `updateVenta` no frena
+la transición CONCLUIDA→CONCLUIDA y `acreditar-transferencia-bancaria` **no es
+idempotente**: se creaba una segunda `AcreditacionPos` y se sumaba de nuevo al
+saldo bancario. **Resuelto** con un guard en `finalizar()` y deshabilitando el
+botón PAGO sobre una venta ya cobrada.
+
+### ✅ RESUELTO — El gate se hacía pasar por la terminal del servidor (2026-08-27)
+
+Reemplaza a la limitación que este mismo archivo daba por "abierta y aceptable".
+`resolveRequestDeviceId` heredaba el dispositivo del proceso servidor para
+requests HTTP sin `device_id` (sólo el modo cliente lo manda). Producía **falso
+bloqueo** en `/admin` y la PWA: el frontend calcula `currentDeviceId = null`,
+habilita los botones, y el backend los rechaza. **Resuelto** con
+`resolveGateDeviceId`, que resuelve `null` (indeterminado ⇒ no bloquea) y se usa
+sólo para el gate, no para persistir `dispositivo_id`.
+
+### El chip del PdV muestra saldo BRUTO y el ticket muestra dinero — ABIERTO
+
+**Síntoma:** para el mismo delivery, la pantalla dice `Saldo 50.000` y el papel
+`SALDO 45.000`.
+
+**Causa:** son dos fuentes distintas. El chip sale de `getEstadoCobroVentaInternal`
+→ `pendienteBruto`, que mide **cobertura por ítem en bruto** (pre-descuento
+global, sin conversión de moneda, y con el envío contado como deuda que ningún
+ítem puede cubrir). El ticket sale de `PagoDetalle`, que es **dinero**. Divergen
+con descuento global, con cobro rápido F2 y con venta a crédito (que no imputan),
+y con el envío siempre.
+
+**La del ticket es la correcta** para "cuánta plata falta". `montoCubierto` es un
+cache para bloquear la edición de ítems ya cobrados, no una respuesta de caja.
+**Fix propuesto:** que `getEstadoCobroVentaInternal` devuelva también
+`pendienteDinero` y que el PdV muestre ese.
+
+### La cotización se busca sin dirección — ABIERTO
+
+`tasaVsPrincipal` (ticket) acepta la fila `MonedaCambio` **en cualquier sentido**
+y devuelve `compraLocal` crudo, mientras `moneda.utils.ts:getCotizacionBidireccional`
+sí invierte. Con las dos filas cargadas, `.find()` toma la más reciente, que puede
+ser la inversa: un `TOTAL USD` de 13,70 sale 729.927.007.
+
+**Por qué sigue abierto:** el mismo criterio literal está en
+`cobrar-venta-dialog` (`getExchangeRate`), `pdv.component` y `delivery-dialog`.
+Arreglar sólo el ticket haría que imprima un número distinto del que el cajero ve
+en pantalla — peor que el bug. **Fix propuesto:** normalizar en el **punto de
+escritura** (`create-edit-moneda-cambio-dialog`: que `monedaDestino` sea siempre
+la principal, o invertir al guardar) y después migrar los cuatro consumidores en
+un solo movimiento. Ojo que el fixture de `test-ticket-delivery-pagos-e2e.ts`
+carga la fila en el sentido contrario al de `moneda.utils.ts` y pasa **sólo**
+porque la función es simétrica: hay que corregirlo junto con el resto.
+
+### Otros descuadres de la misma familia — ABIERTOS (menores)
+
+- `calculateTotals()` del PdV: sin `Number()` y sin `costoDelivery`, el footer
+  muestra para un delivery un total menor que el que el cobro va a cobrar.
+- `detalleTotal` del diálogo de delivery: no resta `descPago` ni suma `aumPago`
+  (el mismo bug que se arregló en el ticket, vivo en el panel y en la grilla).
+- `getVentasTotalByCaja` agrupa por moneda y el frontend se queda **sólo con la
+  fila de la principal**: una caja con ventas en USD/BRL muestra un total
+  subvaluado, sin ninguna señal.
+- Falta de cotización: los dashboards la descartan (`|| 0`), los tickets y el
+  diálogo la cuentan como PYG, `moneda.utils` devuelve `null`. Tres convenciones
+  para el mismo faltante.
+- `procesarStockVenta` y la ronda final de cobro son fire-and-forget con
+  `console.error`: si fallan, nadie se entera. Necesitan reintento, no un parche.
+- `deletePagoDetalle` sigue siendo hard delete (sin rastro de auditoría);
+  convertirlo en soft-delete exige que `getPagoDetalles` filtre `activo`, si no
+  el diálogo de compras mostraría líneas borradas.
+- `delivery-cancelar` y `rechazar-pedido-online` revierten el cobro **sin
+  chequear que la caja esté abierta** (misma clase que `anularCobroParcial`, otra
+  superficie).
+- `anularCobroParcial` no tiene llamador en la UI: una ronda registrada no se
+  puede deshacer desde el PdV.
+
+### ✅ RESUELTO — El gate de cobro por dispositivo se podía saltear de tres maneras (2026-08-27)
+
+**Síntoma:** en una terminal unida a una caja abierta en otra, el botón COBRAR
+estaba bloqueado, pero el cobro se completaba igual por otros caminos.
+
+**Causa:** el gate existía en un solo punto (`createPago` con
+`validarDispositivoCaja`) y tres caminos no pasaban por ahí:
+
+1. **`openAjusteDialog`** (botón Descuento/Aumento, y **F9**) creaba el `Pago`
+   **sin** el flag. Con el `Pago` creado por esa vía, todo lo demás pasaba.
+2. **`cobroRapido` (F2)** no chequeaba nada ni mandaba el flag: cobraba completo
+   y concluía la venta.
+3. **`createPagoDetalle` no estaba gateado.** Si el `Pago` ya existía —cobro
+   anticipado de un delivery, diálogo reabierto— la terminal ajena podía seguir
+   agregando líneas de dinero.
+
+Y dos caminos de finalización no tenían gate en absoluto:
+**`cerrarVentasAbiertasMesa`** (concluye con `repo.save()` directo, sin pasar
+por `updateVenta`) y **`cobrar-venta-credito`**.
+
+**Resuelto** al hacer el cobro configurable: el gate vive ahora en
+`electron/utils/terminal-caja.utils.ts` y se aplica en los cinco caminos.
+`createPagoDetalle` resuelve la caja **server-side** desde el id del pago —
+hacerlo desde el payload lo habría dejado en no-op, porque `getVenta` no carga
+`pago.caja`. Test: `npm run test:terminal-caja`.
+
+### ✅ RESUELTO — Los rechazos del cobro se tragaban en `console.error` (2026-08-27)
+
+**Síntoma:** *"aprieto agregar y no pasa nada"*. El backend rechazaba con
+`COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO` y el `catch` del diálogo sólo hacía
+`console.error`. Sin devtools abiertas, el cajero no tenía forma de saber por
+qué. **Resuelto**: los cinco `catch` traducen el código a un snackbar en
+español.
+
+### ✅ RESUELTO — El destino de acreditación (POS / banco) se perdía al recargar el cobro (2026-08-27)
+
+**Síntoma:** ninguno visible. Al finalizar no se creaba la `AcreditacionPos` ni
+se acreditaba la transferencia bancaria, en silencio — el bloque que las genera
+corre en un `try/catch` no bloqueante.
+
+**Causa:** `pagos_detalles` no tenía dónde guardar la máquina POS ni la cuenta
+bancaria elegidas: el vínculo vivía **sólo en memoria** del diálogo de cobro (en
+`DetalleRow`). Bastaba cerrar y reabrir el diálogo para que `loadExistingPago`
+reconstruyera las filas desde la base y el destino desapareciera.
+
+**Resuelto** con las columnas `maquina_pos_id` / `cuenta_bancaria_id`
+(migración `PagoDetalleDestinoAcreditacion`). Era un bug preexistente; el cobro
+repartido entre terminales lo convertía en el camino normal.
+
+### ✅ RESUELTO — El ticket de delivery imprimía un total distinto al del comprobante (2026-08-27)
+
+**Síntoma:** un delivery con descuento global (F9) salía impreso con un total
+mayor en el ticket de reparto que en su propio comprobante de venta.
+
+**Causa:** `printDeliveryTicketInternal` calculaba
+`total = ítems − descuentoItems + envío`, ignorando los `PagoDetalle` de tipo
+DESCUENTO/AUMENTO que `buildVentaTicketLines` sí aplica. Era cosmético hasta que
+el ticket empezó a imprimir el saldo: sobre esa base, el repartidor cobraba un
+descuento que el cajero ya había otorgado.
+
+**Resuelto** alineando el cálculo. Test: `npm run test:ticket-delivery-pagos`,
+bloque «Descuento de nivel pago».
+
+### El gate por dispositivo no distingue una sesión web de la terminal del servidor — ABIERTO (menor)
+
+**Síntoma:** una sesión web o de la PWA móvil contra un nodo `server` se ve
+como "la terminal del servidor" a efectos del gate de cobro.
+
+**Causa:** `resolveRequestDeviceId` cae al dispositivo local del proceso cuando
+el request llega por HTTP **sin** `device_id` en el JWT. El modo cliente sí lo
+manda (`auth-routes.ts`); el login web y el de la PWA, no.
+
+**Por qué no se arregló:** resolverlo a `null` **afloja** el gate en vez de
+apretarlo — un device indeterminado no bloquea, a propósito, para no romper las
+instalaciones de un solo equipo. Apretarlo de verdad exigiría decidir qué pasa
+con el cobro desde `/admin`, que hoy funciona. Hoy no tiene impacto real: la PWA
+móvil **no cobra** (`mesa-detalle.page.ts` lo dice explícito). Revisar cuando el
+mobile gane cobro.
+
 ### `createVentaItem` acepta el precio que le mande el cliente — ABIERTO
 
 **Síntoma:** ninguno visible. El handler hace `repo.create(data)` y guarda el

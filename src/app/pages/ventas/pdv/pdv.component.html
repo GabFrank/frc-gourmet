@@ -627,10 +627,10 @@
         mat-raised-button
         color="primary"
         class="action-button"
-        [disabled]="!hasActiveVenta || !hasActiveItems"
+        [disabled]="!hasActiveVenta || !hasActiveItems || (!puedeCobrar && !puedeFinalizarVenta)"
         (click)="cobrarVenta()"
         data-testid="pdv-btn-cobrar"
-        matTooltip="Cobrar (F1)"
+        [matTooltip]="tooltipCobrar"
       >
         <mat-icon>paid</mat-icon>
         <span>COBRAR</span>
@@ -640,10 +640,10 @@
         mat-raised-button
         color="primary"
         class="action-button"
-        [disabled]="!hasActiveVenta || !hasActiveItems"
+        [disabled]="!hasActiveVenta || !hasActiveItems || !puedeCobrar || !puedeFinalizarVenta"
         (click)="cobroRapido()"
         data-testid="pdv-btn-cobro-rapido"
-        matTooltip="Cobro rápido (F2)"
+        [matTooltip]="tooltipCobroRapido"
       >
         <mat-icon>flash_on</mat-icon>
         <span>COBRO RÁPIDO</span>
@@ -693,6 +693,18 @@
     <!-- display selected caja data, caja id, fecha apertura, estado -->
     <mat-card class="caja-data-card">
       <mat-card-content>
+        <!-- Caja abierta en otra terminal: aviso persistente. El snackbar de
+             bienvenida dura 6s y hay tres estados posibles; esto queda a la
+             vista todo el turno. -->
+        <div class="caja-info-row terminal-ajena-row" *ngIf="avisoTerminal">
+          <div class="caja-info-item">
+            <mat-icon>devices</mat-icon>
+            <div class="caja-info-content">
+              <span class="info-label">Terminal</span>
+              <span class="info-value">{{ avisoTerminal }}</span>
+            </div>
+          </div>
+        </div>
         <div class="caja-info-row">
           <div class="caja-info-item">
             <mat-icon>point_of_sale</mat-icon>

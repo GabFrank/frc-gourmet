@@ -48,7 +48,10 @@ import {
   ticketLineasFirma, ticketHeaderEmpresa,
   ticketFmtMonto, ticketFmtFecha, ticketFmtFechaHora,
   printTicketSpec, printerWidthToChars, monedaSimboloAscii,
+  crearFormateadorMonedas, ticketRubroMultimoneda, FormateadorMonedas,
+  tasaVsPrincipal, montoAPrincipal,
 } from '../utils/ticket.utils';
+import { obtenerPagosRegistrados, buildBloquePagosRegistrados } from '../utils/pagos-ticket.utils';
 import { broadcastPrinterEvent, PrinterEventPayload } from '../utils/printer-events.utils';
 import { computeResumenCaja } from '../utils/resumen-caja.utils';
 
@@ -733,20 +736,10 @@ async function getSectorNombre(dataSource: DataSource, sectorId: number): Promis
  * cuántos principal vale 1 unidad de la otra moneda. Toma la más reciente
  * (`cambios` viene ordenado por createdAt DESC). 0 si no hay.
  */
-function buscarCotizacion(cambios: any[], principal: any, moneda: any): number {
-  if (!principal || !moneda) return 0;
-  const c = (cambios || []).find((x: any) =>
-    (x.monedaOrigen?.id === principal.id && x.monedaDestino?.id === moneda.id) ||
-    (x.monedaOrigen?.id === moneda.id && x.monedaDestino?.id === principal.id));
-  return c ? Number(c.compraLocal || 0) : 0;
-}
+const buscarCotizacion = tasaVsPrincipal;
 
 /** Convierte un valor expresado en `moneda` a la moneda principal. */
-function convertirAPrincipal(valor: number, moneda: any, principal: any, cambios: any[]): number {
-  if (!moneda || !principal || moneda.id === principal.id) return valor;
-  const rate = buscarCotizacion(cambios, principal, moneda);
-  return rate > 0 ? valor * rate : valor; // 1 moneda = rate principal
-}
+const convertirAPrincipal = montoAPrincipal;
 
 /**
  * Adicionales/extras **activos** de cada ítem, ya formateados (`2x TOCINO` /
@@ -818,7 +811,7 @@ export async function buildVentaTicketLines(
 ): Promise<VentaTicketBuild | null> {
   const venta = await dataSource.getRepository(Venta).findOne({
     where: { id: ventaId },
-    relations: ['cliente', 'cliente.persona', 'mesa', 'comanda', 'formaPago', 'pago'],
+    relations: ['cliente', 'cliente.persona', 'mesa', 'comanda', 'formaPago', 'pago', 'delivery'],
   });
   if (!venta) return null;
 
@@ -1012,7 +1005,32 @@ export async function buildVentaTicketLines(
     lines.push(...totalesMonedaLines);
   }
 
-  if (!opts.isPrecuenta && venta.formaPago) {
+  // Formas de pago.
+  //
+  // En un DELIVERY se imprime el desglose completo, con la misma organización
+  // (forma de pago agrupando, moneda adentro) que el resumen de cierre de caja:
+  // el pedido puede tener plata cargada de antemano y tanto el que entrega como
+  // el cajero que finaliza necesitan ver qué se registró antes. Va también en la
+  // pre-cuenta, que es justamente el papel que mira el cajero antes de cerrar.
+  //
+  // En el resto de las ventas se mantiene la línea única histórica: acá el cobro
+  // ocurre de una sola vez y frente al cajero, así que el desglose no agrega
+  // nada y alarga el ticket.
+  const esDelivery = !!(venta as any).delivery?.id;
+  let bloquePagos: TicketLine[] = [];
+  if (esDelivery) {
+    const todasLasMonedas = await monedaRepo.find();
+    const pagos = await obtenerPagosRegistrados(dataSource, ventaId, principalMoneda, cambios);
+    bloquePagos = buildBloquePagosRegistrados(
+      pagos,
+      crearFormateadorMonedas(todasLasMonedas),
+      width,
+      opts.isPrecuenta ? 'PAGOS REGISTRADOS' : 'FORMAS DE PAGO',
+    );
+  }
+  if (bloquePagos.length) {
+    lines.push(...bloquePagos);
+  } else if (!opts.isPrecuenta && venta.formaPago) {
     lines.push(ticketKv('FORMA PAGO', (venta.formaPago as any).nombre || (venta.formaPago as any).descripcion || ''));
   }
 
@@ -1579,38 +1597,25 @@ export async function printCierreCajaInternal(
   if (!printer) return { ok: false, printed: [], errors: [{ message: 'Sin impresora' }] };
   const width = printerWidthToChars(printer.width);
 
-  // Mapa moneda → { decimales, simbolo ASCII } para formateo correcto por moneda.
+  // Formateo por moneda (símbolo ASCII + decimales). El armado del rubro
+  // multimoneda vive en `ticket.utils` desde 2026-08: lo comparte con el bloque
+  // de pagos registrados de los tickets de delivery, para que las dos vistas de
+  // "forma de pago + moneda" no puedan divergir.
   const monedas = await dataSource.getRepository(Moneda).find();
-  const monedaInfo: { [id: number]: { decimales: number; simbolo: string } } = {};
-  for (const m of monedas) {
-    monedaInfo[m.id] = { decimales: Number((m as any).decimales) || 0, simbolo: monedaSimboloAscii(m) };
-  }
-  const fmtMoneda = (monedaId: number, monto: number): string => {
-    const info = monedaInfo[monedaId] || { decimales: 0, simbolo: '' };
-    return `${info.simbolo} ${ticketFmtMonto(monto, info.decimales)}`.trim();
-  };
-  const simboloMoneda = (monedaId: number): string => (monedaInfo[monedaId]?.simbolo || '');
-  const fmtMontoMoneda = (monedaId: number, monto: number): string =>
-    ticketFmtMonto(monto, monedaInfo[monedaId]?.decimales ?? 0);
+  const fmtMonedas = crearFormateadorMonedas(monedas);
+  const fmtMoneda = (monedaId: number, monto: number): string => fmtMonedas.fmt(monedaId, monto);
 
-  // Renderiza un total/rubro etiquetado que puede tener varias monedas:
-  //  - 1 moneda  → una sola línea "ETIQUETA .......... Gs 5.300.000"
-  //  - N monedas → la ETIQUETA va como encabezado y cada moneda indentada
-  //    debajo (sin repetir la etiqueta), igual que el bloque de ARQUEO.
+  // `anchoClave`: las etiquetas de este ticket son nombres de forma de pago y de
+  // categoría de gasto, o sea texto libre. Sin truncar, uno largo desborda las
+  // 32 columnas de una 58mm y deja el importe huérfano en la línea siguiente —
+  // el mismo problema que ya se resolvía en el bloque de delivery.
+  const anchoClaveCierre = Math.max(8, width - 14);
   const pushTotalMultimoneda = (
     label: string,
     montos: { monedaId: number; total: number }[],
     bold = false,
   ): void => {
-    if (montos.length === 0) return;
-    if (montos.length === 1) {
-      lines.push(ticketKv(label, fmtMoneda(montos[0].monedaId, montos[0].total), bold));
-      return;
-    }
-    lines.push(ticketText(label, { bold }));
-    for (const m of montos) {
-      lines.push(ticketKv(`  ${simboloMoneda(m.monedaId)}`, fmtMontoMoneda(m.monedaId, m.total), bold));
-    }
+    lines.push(...ticketRubroMultimoneda(label, montos, fmtMonedas, { bold, anchoClave: anchoClaveCierre }));
   };
 
   const caja = resumen.caja as any;
@@ -1739,13 +1744,13 @@ export async function printCierreCajaInternal(
     lines.push(ticketText('Sin datos de conteo', { align: 'C' }));
   } else {
     for (const id of arqueoMonedaIds) {
-      const info = monedaInfo[id];
+      const simbolo = fmtMonedas.simbolo(id);
       const apertura = resumen.conteoApertura.find(c => c.monedaId === id)?.total || 0;
       const cierre = resumen.conteoCierre.find(c => c.monedaId === id)?.total || 0;
       const esperado = resumen.esperadoPorMoneda[id] || 0;
       const diferencia = resumen.diferenciaPorMoneda[id] || 0;
       lines.push(ticketSeparador('.'));
-      lines.push(ticketText((info?.simbolo || `MONEDA ${id}`).toUpperCase(), { bold: true }));
+      lines.push(ticketText((simbolo || `MONEDA ${id}`).toUpperCase(), { bold: true }));
       lines.push(ticketKv('  MONTO APERTURA', fmtMoneda(id, apertura)));
       lines.push(ticketKv('  MONTO CIERRE', fmtMoneda(id, cierre)));
       lines.push(ticketKv('  ESPERADO', fmtMoneda(id, esperado)));
@@ -1776,12 +1781,34 @@ export async function printCierreCajaInternal(
  * El costo del envío sale como línea propia: es un cargo de la venta
  * (`Venta.costoDelivery`, congelado al asignar la zona), no un ítem del
  * pedido, así que no puede ir mezclado con los productos.
+ *
+ * Desde 2026-08 imprime además **lo que ya se cobró** (cobro anticipado, rondas
+ * de cobro parcial, un pedido de la web pagado online) y, si queda algo
+ * pendiente, el número grande pasa a ser el SALDO en vez del total.
  */
-export async function printDeliveryTicketInternal(
+export interface DeliveryTicketBuild {
+  lines: TicketLine[];
+  /** Total a pagar por el pedido, ya con descuentos/aumentos y envío. */
+  total: number;
+  /** Neto ya cobrado (PAGO − VUELTO), en moneda principal. */
+  yaPagado: number;
+  /** Lo que falta cobrar. Negativo = sobrepago, hay vuelto que entregar. */
+  saldo: number;
+  itemsImpresos: number;
+}
+
+/**
+ * Arma las líneas del ticket de reparto/retiro.
+ *
+ * Separado de `printDeliveryTicketInternal` (que sólo resuelve la impresora y
+ * manda a imprimir) para poder testear el contenido sin hardware, igual que
+ * `buildVentaTicketLines`. Devuelve `null` si el delivery no existe.
+ */
+export async function buildDeliveryTicketLines(
   dataSource: DataSource,
   deliveryId: number,
-  opts: { printerId?: number; dispositivoId?: number } = {},
-): Promise<ImpresionResultado> {
+  opts: { width: number },
+): Promise<DeliveryTicketBuild | null> {
   const delivery = await dataSource.getRepository(Delivery).findOne({
     where: { id: deliveryId },
     relations: [
@@ -1792,30 +1819,16 @@ export async function printDeliveryTicketInternal(
       'entregadoPorFuncionario.persona',
     ],
   });
-  if (!delivery) {
-    return { ok: false, printed: [], errors: [{ message: `Delivery ${deliveryId} no encontrado` }] };
-  }
+  if (!delivery) return null;
 
+  // El builder no resuelve la impresora: eso quedó en
+  // `printDeliveryTicketInternal`, que es donde vive el ruteo por dispositivo.
   const venta = await dataSource.getRepository(Venta).findOne({
     where: { delivery: { id: deliveryId } },
-    relations: ['pago', 'dispositivo'],
+    relations: ['pago'],
   });
 
-  // Igual que `printVentaTicketInternal`: gana el dispositivo del request, y si
-  // el caller no lo pasó se cae al de la venta. Sin ninguno de los dos,
-  // `getPrinterByRol` no puede resolver `Dispositivo.printerTicket` y termina
-  // imprimiendo por la impresora isDefault.
-  const dispositivoId = opts.dispositivoId ?? (venta as any)?.dispositivo?.id;
-
-  const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, {
-    printerId: opts.printerId,
-    dispositivoId,
-  });
-  if (!printer) {
-    return { ok: false, printed: [], errors: [{ message: 'No hay impresora configurada para tickets de venta' }] };
-  }
-
-  const width = printerWidthToChars(printer.width);
+  const width = opts.width;
   const headerLines = await ticketHeaderEmpresa(dataSource, width, { showTimbrado: false });
 
   const items = venta
@@ -1828,6 +1841,21 @@ export async function printDeliveryTicketInternal(
     adicionalesByItem, observacionesByItem, removidosByItem, cambiosByItem, pizzaByItem,
   } = await cargarDetalleDeItems(dataSource, items.map((i) => i.id));
 
+  // Monedas + cotizaciones: se cargan una sola vez y sirven tanto para los
+  // totales en otras monedas como para convertir los pagos ya registrados.
+  const monedaRepo = dataSource.getRepository(Moneda);
+  const [principalMoneda, monedasActivas, todasLasMonedas, cambios] = await Promise.all([
+    monedaRepo.findOne({ where: { principal: true } as any }),
+    monedaRepo.find({ where: { activo: true } as any }),
+    monedaRepo.find(),
+    dataSource.getRepository(MonedaCambio).find({
+      where: { activo: true } as any,
+      relations: ['monedaOrigen', 'monedaDestino'],
+      order: { createdAt: 'DESC' } as any,
+    }),
+  ]);
+  const fmtMonedas = crearFormateadorMonedas(todasLasMonedas);
+
   let bruto = 0;
   let descuentoItems = 0;
   for (const it of items) {
@@ -1835,10 +1863,46 @@ export async function printDeliveryTicketInternal(
     bruto += qty * (Number(it.precioVentaUnitario || 0) + Number(it.precioAdicionales || 0));
     descuentoItems += qty * Number(it.descuentoUnitario || 0);
   }
+
+  // Ajustes a nivel de pago (descuento/aumento global del cobro). El ticket de
+  // delivery los ignoraba y el comprobante de venta sí los aplica: el mismo
+  // pedido salía impreso con dos totales distintos. Con el saldo a cobrar esa
+  // diferencia deja de ser cosmética — el repartidor cobraría un descuento que
+  // el cajero ya otorgó.
+  let descPago = 0;
+  let aumPago = 0;
+  const pagoId = (venta as any)?.pago?.id;
+  if (pagoId) {
+    try {
+      const ajustes = await dataSource.getRepository(PagoDetalle).find({
+        where: { pago: { id: pagoId } as any, activo: true },
+        relations: ['moneda'],
+      });
+      for (const d of ajustes) {
+        const valP = convertirAPrincipal(Number((d as any).valor || 0), (d as any).moneda, principalMoneda, cambios);
+        if ((d as any).tipo === TipoDetalle.DESCUENTO) descPago += valP;
+        else if ((d as any).tipo === TipoDetalle.AUMENTO) aumPago += valP;
+      }
+    } catch (e) {
+      console.warn('[buildDeliveryTicketLines] no se pudieron cargar ajustes del pago:', e);
+    }
+  }
+
   // `costoDelivery` es `decimal`: en Postgres llega como string. Sin `Number()`
   // se concatenaría en vez de sumarse.
   const costoEnvio = Number(venta?.costoDelivery ?? 0) || 0;
-  const total = bruto - descuentoItems + costoEnvio;
+  const total = bruto - descuentoItems - descPago + aumPago + costoEnvio;
+
+  // Pagos ya registrados: cobro anticipado, rondas de cobro parcial, o un
+  // pedido de la web ya pagado.
+  const pagos = venta
+    ? await obtenerPagosRegistrados(dataSource, venta.id, principalMoneda, cambios)
+    : { lineas: [], vueltos: [], totalEnPrincipal: 0, hayPagos: false, sinCotizacion: false };
+  const yaPagado = pagos.totalEnPrincipal;
+  // Sin `Math.max(0, …)`: un sobrepago sin línea de VUELTO da saldo negativo, y
+  // eso NO es "pagado", es plata que hay que devolverle al cliente. Aplastarlo a
+  // cero lo hacía desaparecer del papel.
+  const saldo = total - yaPagado;
 
   const cobrada = venta?.estado === 'CONCLUIDA';
   const nombreCliente = (delivery.nombre
@@ -1930,10 +1994,12 @@ export async function printDeliveryTicketInternal(
   }
 
   lines.push(ticketSeparador('-'));
-  if (descuentoItems > 0 || costoEnvio > 0) {
+  if (descuentoItems > 0 || descPago > 0 || aumPago > 0 || costoEnvio > 0) {
     lines.push(ticketKv('SUBTOTAL', `Gs. ${ticketFmtMonto(bruto)}`));
   }
-  if (descuentoItems > 0) lines.push(ticketKv('DESCUENTO', `Gs. -${ticketFmtMonto(descuentoItems)}`));
+  const descuentoTotal = descuentoItems + descPago;
+  if (descuentoTotal > 0) lines.push(ticketKv('DESCUENTO', `Gs. -${ticketFmtMonto(descuentoTotal)}`));
+  if (aumPago > 0) lines.push(ticketKv('AUMENTO', `Gs. ${ticketFmtMonto(aumPago)}`));
   if (costoEnvio > 0) lines.push(ticketKv('ENVIO', `Gs. ${ticketFmtMonto(costoEnvio)}`));
   lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(total)}`, true));
 
@@ -1943,36 +2009,64 @@ export async function printDeliveryTicketInternal(
   // sistema y sin nadie a quien preguntarle. Si el cliente paga en reales,
   // tener el número ya convertido en el papel es la diferencia entre cobrar
   // bien y sacar la cuenta de memoria en la vereda.
-  const monedaRepo = dataSource.getRepository(Moneda);
-  const [principalMoneda, monedasActivas, cambios] = await Promise.all([
-    monedaRepo.findOne({ where: { principal: true } as any }),
-    monedaRepo.find({ where: { activo: true } as any }),
-    dataSource.getRepository(MonedaCambio).find({
-      where: { activo: true } as any,
-      relations: ['monedaOrigen', 'monedaDestino'],
-      order: { createdAt: 'DESC' } as any,
-    }),
-  ]);
-  const totalesOtras: TicketLine[] = [];
-  for (const m of (monedasActivas || [])) {
-    if ((m as any).id === (principalMoneda as any)?.id) continue;
-    const rate = buscarCotizacion(cambios, principalMoneda, m);
-    if (!rate || rate <= 0) continue;
-    const label = String((m as any).denominacion || (m as any).simbolo || '').toUpperCase();
-    totalesOtras.push(ticketKv(
-      `TOTAL ${label}`,
-      ticketFmtMonto(total / rate, Number((m as any).decimales) || 0),
-    ));
-  }
+  //
+  // Cuando hay algo cobrado de antemano, lo que se convierte es el SALDO: es el
+  // número que el repartidor va a pedir en la puerta.
+  const montoEnOtrasMonedas = (montoPrincipal: number, etiqueta: string): TicketLine[] => {
+    const out: TicketLine[] = [];
+    for (const m of (monedasActivas || [])) {
+      if ((m as any).id === (principalMoneda as any)?.id) continue;
+      const rate = buscarCotizacion(cambios, principalMoneda, m);
+      if (!rate || rate <= 0) continue;
+      const label = String((m as any).denominacion || (m as any).simbolo || '').toUpperCase();
+      out.push(ticketKv(
+        `${etiqueta} ${label}`,
+        ticketFmtMonto(montoPrincipal / rate, Number((m as any).decimales) || 0),
+      ));
+    }
+    return out;
+  };
+  const totalesOtras = montoEnOtrasMonedas(total, 'TOTAL');
   if (totalesOtras.length) {
     lines.push(ticketSeparador('-'));
     lines.push(...totalesOtras);
   }
 
-  // Lo más importante del ticket: si el repartidor cobra o no.
+  // Desglose de lo ya cobrado, con la misma organización (forma de pago
+  // agrupando, moneda adentro) que el resumen de cierre de caja.
+  lines.push(...buildBloquePagosRegistrados(pagos, fmtMonedas, width));
+
+  // Lo más importante del ticket: si el repartidor cobra o no, y cuánto.
+  //
+  // ⚠️ El ORDEN de las ramas importa. `sinCotizacion` va antes que el chequeo de
+  // saldo: sin tasa, `yaPagado` cuenta las divisas 1 a 1 con el guaraní, así que
+  // un adelanto de USD 500 sobre un pedido de Gs. 500.000 daba saldo 0 y el
+  // ticket salía "PAGADO — NO COBRAR". Que es el desenlace más caro posible.
   lines.push(ticketSeparador('='));
   if (cobrada) {
     lines.push(ticketText('PAGADO — NO COBRAR', { align: 'C', bold: true, size: 'tall' }));
+  } else if (pagos.sinCotizacion) {
+    lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(total)}`));
+    lines.push(ticketText('VERIFICAR EN CAJA', { align: 'C', bold: true, size: 'tall' }));
+    lines.push(ticketText('HAY PAGOS EN OTRA MONEDA', { align: 'C' }));
+    lines.push(ticketText('SIN COTIZACION VIGENTE', { align: 'C' }));
+  } else if (saldo < -0.5) {
+    // Sobrepago: no hay nada que cobrar y sí algo que devolver.
+    lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(total)}`));
+    lines.push(ticketKv('YA PAGADO', `Gs. -${ticketFmtMonto(yaPagado)}`));
+    lines.push(ticketText('VUELTO A ENTREGAR', { align: 'C', bold: true }));
+    lines.push(ticketText(`Gs. ${ticketFmtMonto(-saldo)}`, { align: 'C', bold: true, size: 'tall' }));
+  } else if (saldo <= 0.5) {
+    lines.push(ticketText('PAGADO — NO COBRAR', { align: 'C', bold: true, size: 'tall' }));
+  } else if (pagos.hayPagos) {
+    // Con plata ya cobrada, el número grande NO puede ser el total: el
+    // repartidor cobraría de más. Se imprimen los tres números para que la
+    // cuenta sea verificable en la puerta.
+    lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(total)}`));
+    lines.push(ticketKv('YA PAGADO', `Gs. -${ticketFmtMonto(yaPagado)}`));
+    lines.push(ticketText('SALDO A COBRAR', { align: 'C', bold: true }));
+    lines.push(ticketText(`Gs. ${ticketFmtMonto(saldo)}`, { align: 'C', bold: true, size: 'tall' }));
+    for (const l of montoEnOtrasMonedas(saldo, 'SALDO')) lines.push(l);
   } else {
     lines.push(ticketText('A COBRAR', { align: 'C', bold: true }));
     lines.push(ticketText(`Gs. ${ticketFmtMonto(total)}`, { align: 'C', bold: true, size: 'tall' }));
@@ -1983,7 +2077,41 @@ export async function printDeliveryTicketInternal(
   lines.push(ticketSeparador('='));
   lines.push(ticketBlank());
 
-  const res = await printTicketSpec(printer, { printerWidth: width, lines, cutAtEnd: true });
+  return { lines, total, yaPagado, saldo, itemsImpresos: items.length };
+}
+
+export async function printDeliveryTicketInternal(
+  dataSource: DataSource,
+  deliveryId: number,
+  opts: { printerId?: number; dispositivoId?: number } = {},
+): Promise<ImpresionResultado> {
+  const venta = await dataSource.getRepository(Venta).findOne({
+    where: { delivery: { id: deliveryId } },
+    relations: ['dispositivo'],
+  });
+
+  // Igual que `printVentaTicketInternal`: gana el dispositivo del request, y si
+  // el caller no lo pasó se cae al de la venta. Sin ninguno de los dos,
+  // `getPrinterByRol` no puede resolver `Dispositivo.printerTicket` y termina
+  // imprimiendo por la impresora isDefault — en un local con dos cajas, el
+  // ticket salía por la de la otra.
+  const dispositivoId = opts.dispositivoId ?? (venta as any)?.dispositivo?.id;
+
+  const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, {
+    printerId: opts.printerId,
+    dispositivoId,
+  });
+  if (!printer) {
+    return { ok: false, printed: [], errors: [{ message: 'No hay impresora configurada para tickets de venta' }] };
+  }
+
+  const width = printerWidthToChars(printer.width);
+  const build = await buildDeliveryTicketLines(dataSource, deliveryId, { width });
+  if (!build) {
+    return { ok: false, printed: [], errors: [{ message: `Delivery ${deliveryId} no encontrado` }] };
+  }
+
+  const res = await printTicketSpec(printer, { printerWidth: width, lines: build.lines, cutAtEnd: true });
   if (!res.ok) {
     broadcastPrinterEvent({
       level: 'error',

@@ -178,4 +178,32 @@ export class PdvConfig extends BaseModel {
   // Número internacional (ej. 595991123456) o JID de grupo (…@g.us).
   @Column({ name: 'whatsapp_cierre_caja_destino', type: 'varchar', length: 120, nullable: true })
   whatsappCierreCajaDestino?: string | null;
+
+  // ─── Caja compartida entre terminales ───────────────────────────────────
+  // Una caja se abre en UNA terminal (`Caja.dispositivo`), pero cualquier otra
+  // puede unirse a ella para lanzar ítems. Históricamente el cobro quedaba
+  // reservado a la terminal dueña, sin excepción. Estos dos flags devuelven esa
+  // decisión al local: hay negocios donde el mozo cobra en la tablet y el
+  // arqueo lo hace el cajero, y otros donde eso es exactamente lo que se quiere
+  // impedir.
+  //
+  // Son independientes a propósito: "cargar las formas de pago" y "cerrar la
+  // venta" son dos actos distintos, y el caso real más pedido es justamente
+  // permitir el primero y no el segundo (el repartidor registra lo que cobró,
+  // el cajero revisa y finaliza).
+  //
+  // Ambos default `false` = conducta previa a 2026-08, así que actualizar no
+  // cambia el comportamiento de ninguna instalación.
+  //
+  // ⚠️ El dinero se acredita SIEMPRE a la caja abierta, sin importar qué
+  // terminal cobró: estos flags no mueven plata de caja, sólo dicen quién puede
+  // operar sobre ella.
+
+  /** Permitir registrar líneas de cobro desde terminales que no abrieron la caja. */
+  @Column({ name: 'permitir_pagos_terminal_ajena', type: 'boolean', default: false })
+  permitirPagosTerminalAjena!: boolean;
+
+  /** Permitir finalizar (concluir) ventas desde terminales que no abrieron la caja. */
+  @Column({ name: 'permitir_finalizar_terminal_ajena', type: 'boolean', default: false })
+  permitirFinalizarTerminalAjena!: boolean;
 }

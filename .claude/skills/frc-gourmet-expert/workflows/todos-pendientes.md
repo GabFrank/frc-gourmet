@@ -436,8 +436,11 @@ El módulo se cerró para poder usarse en producción
 (`docs/DIAGNOSTICO-DELIVERY.md`). Quedó fuera de alcance, a propósito:
 
 - **`Delivery.cobroAnticipado` no lo lee nadie.** Decidir qué debe hacer: ¿forzar
-  el cobro al crear? ¿mostrarlo en el ticket y en la lista? Hoy es un toggle que
-  se guarda y nada más.
+  el cobro al crear? Hoy es un toggle que se guarda y nada más. **Parcialmente
+  cubierto (2026-08-27)**: aunque el flag siga sin leerse, si efectivamente se
+  cobró algo por anticipado el ticket **ya lo muestra** (bloque
+  `PAGOS REGISTRADOS` + `SALDO A COBRAR`), que era la mitad de lo que este ítem
+  pedía. Lo que falta es decidir si el toggle debe *forzar* el cobro.
 - **Comisiones por entrega.** El repartidor ya es un `Funcionario`, que es lo que
   habilita engancharlo a `comisiones/`. Falta la regla.
 - **Reusar `venta-reversa.utils.ts` en Últimas Ventas**, que sigue cancelando una

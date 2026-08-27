@@ -333,7 +333,7 @@
       <button mat-stroked-button (click)="editarItems()" [disabled]="!selectedDelivery || isTerminal">
         <mat-icon>edit</mat-icon> ITEMS
       </button>
-      <button mat-stroked-button (click)="editarPago()" [disabled]="!puedeCobrar">
+      <button mat-stroked-button (click)="editarPago()" [disabled]="!puedeEditarPago" [matTooltip]="tooltipPago">
         <mat-icon>payments</mat-icon> PAGO
       </button>
       <!-- Reasignar sin cambiar de estado: el pedido ya salió y lo termina

@@ -83,6 +83,11 @@ export class PdvConfigDialogComponent implements OnInit {
       deliveryAutoImprimirAlEnviar: [false],
       whatsappCierreCajaActivo: [false],
       whatsappCierreCajaDestino: [''],
+      // --- Caja compartida entre terminales ---
+      // Default false = conducta previa: sólo la terminal que abrió la caja
+      // opera sobre ella.
+      permitirPagosTerminalAjena: [false],
+      permitirFinalizarTerminalAjena: [false],
     });
   }
 
@@ -130,6 +135,10 @@ export class PdvConfigDialogComponent implements OnInit {
           deliveryAutoImprimirAlEnviar: cfg.deliveryAutoImprimirAlEnviar || false,
           whatsappCierreCajaActivo: cfg.whatsappCierreCajaActivo || false,
           whatsappCierreCajaDestino: cfg.whatsappCierreCajaDestino || '',
+          // `|| false` y no `??`: el default es false, así que una base sin
+          // migrar (undefined) tiene que caer en false igual.
+          permitirPagosTerminalAjena: cfg.permitirPagosTerminalAjena || false,
+          permitirFinalizarTerminalAjena: cfg.permitirFinalizarTerminalAjena || false,
         });
       }
     } catch (error) {
