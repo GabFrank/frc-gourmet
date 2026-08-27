@@ -16,6 +16,7 @@ import { DataSource } from 'typeorm';
 
 import { getDataSourceOptions } from '../src/app/database/database.config';
 import { invokeHandlerWithContext } from '../electron/utils/handler-registry';
+import { setCurrentDevice } from '../electron/utils/current-device.utils';
 import { registerVentasHandlers } from '../electron/handlers/ventas.handler';
 import { registerComprasHandlers } from '../electron/handlers/compras.handler';
 import { registerCuentasPorCobrarHandlers } from '../electron/handlers/cuentas-por-cobrar.handler';
@@ -297,6 +298,35 @@ async function main() {
     await setFlags(false, true);
     await permite('con permiso de finalizar, la ajena cierra a crédito',
       () => comoTerminal(A, 'cobrar-venta-credito', payload()));
+  }
+
+  // ── 10. El gate NO hereda el dispositivo del proceso servidor ────────────
+  // Una sesión de /admin o de la PWA llega por HTTP sin `device_id` en el JWT.
+  // Antes caía al device local del nodo servidor y se hacía pasar por esa
+  // terminal: falso permitir si la caja era del servidor, y falso BLOQUEO en
+  // cualquier otro caso — con el frontend habilitando los botones (calcula
+  // `currentDeviceId = null`) y el backend rechazándolos.
+  console.log('\n[10] Request HTTP sin device: no hereda el device del servidor');
+  await setFlags(false, false);
+  try {
+    // El proceso servidor tiene su propio dispositivo configurado.
+    setCurrentDevice({ id: A });
+    {
+      const caja = await nuevaCaja(D);
+      const venta = await nuevaVenta(caja.id);
+      await permite('HTTP sin device no se bloquea aunque el servidor sea otra terminal',
+        () => abrirPago(null, caja.id));
+      await permite('…y tampoco al finalizar', () => finalizarVenta(null, venta.id));
+    }
+    {
+      // El modo cliente legítimo SÍ manda su device: ahí el gate sigue vivo.
+      const caja = await nuevaCaja(D);
+      await rechaza('COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO',
+        'un cliente que sí manda su device sigue gateado',
+        () => abrirPago(A, caja.id));
+    }
+  } finally {
+    setCurrentDevice(null);
   }
 
   console.log(`\n[terminal-caja] ${passed} OK, ${failed} fallidos`);

@@ -578,7 +578,16 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       : DeliveryDialogComponent.TRANSICIONES;
     this.estadosDisponibles = estado ? (tabla[estado] ?? []) : [];
 
-    this.puedeEditarPago = !!this.selectedDelivery && !this.isTerminal && !this.cobroBloqueadoPorTerminal;
+    // `!ventaCobrada`: sobre una venta ya CONCLUIDA (cobro anticipado, delivery
+    // todavía EN_CAMINO) el diálogo de cobro abría con las líneas cargadas y
+    // saldo 0, así que FINALIZAR quedaba habilitado y volvía a crear las
+    // acreditaciones. `acreditar-transferencia-bancaria` no es idempotente.
+    // Se lee del delivery y no de `this.ventaCobrada`: ese lo setea
+    // `recalcularTotalesDetalle`, y el orden entre los dos no está garantizado
+    // en todos los caminos que refrescan la selección.
+    const yaCobrada = this.selectedDelivery?.venta?.estado === 'CONCLUIDA';
+    this.puedeEditarPago = !!this.selectedDelivery && !this.isTerminal
+      && !this.cobroBloqueadoPorTerminal && !yaCobrada;
     this.puedeCambiarEstado = !!this.selectedDelivery && this.estadosDisponibles.length > 0;
 
     // El repartidor es quien LLEVA el pedido. En un retiro nadie lo lleva:

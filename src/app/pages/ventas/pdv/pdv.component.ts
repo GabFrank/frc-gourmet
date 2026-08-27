@@ -2301,8 +2301,21 @@ export class PdvComponent implements OnInit, OnDestroy {
     if (!venta) return;
 
     const items = this.ventaItemsDataSource.data.filter(i => i.estado === EstadoVentaItem.ACTIVO);
-    const total = items.reduce((sum, i) => sum + (i.precioVentaUnitario + (i.precioAdicionales || 0) - (i.descuentoUnitario || 0)) * i.cantidad, 0);
-    if (total <= 0) return;
+    // `Number()` en los cuatro términos: son columnas `decimal` y en Postgres
+    // llegan como string. Sin esto la suma concatena y da NaN — y el guard de
+    // abajo NO lo atrapaba (`NaN <= 0` es false), así que seguía y persistía un
+    // `PagoDetalle` con `valor: NaN`. Es el mismo arreglo que ya tiene
+    // `calculateTotals()` del diálogo de cobro.
+    const total = items.reduce((sum, i) => sum + (
+      Number(i.precioVentaUnitario || 0)
+      + Number(i.precioAdicionales || 0)
+      - Number(i.descuentoUnitario || 0)
+    ) * Number(i.cantidad || 0), 0)
+      // El envío es un cargo de la venta, no un ítem. F2 es alcanzable sobre un
+      // delivery (editar ítems desde el diálogo deja el delivery como venta
+      // rápida), así que sin esto el cobro rápido regalaba el costo de envío.
+      + (Number((venta as any)?.costoDelivery ?? 0) || 0);
+    if (!Number.isFinite(total) || total <= 0) return;
 
     try {
       const formasPago = await firstValueFrom(this.repositoryService.getFormasPago());

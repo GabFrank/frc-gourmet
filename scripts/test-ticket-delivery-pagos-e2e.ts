@@ -271,6 +271,54 @@ async function main() {
       txt.split('\n').filter((l) => l.includes('TRANSFER')));
   }
 
+  // ── 7b. Sin cotización: no se puede afirmar un saldo ─────────────────────
+  console.log('\n[7b] Pago en divisa sin cotización vigente');
+  {
+    // Se desactivan las cotizaciones: es lo que pasa cuando nadie las actualizó
+    // hoy, o cuando la fila quedó `activo = false`.
+    await ds.getRepository(MonedaCambio).update({}, { activo: false } as any);
+    const { deliveryId } = await armarDelivery({
+      totalItem: 500000,
+      pagos: [{ fp: fpEfectivo, moneda: usd, valor: 60 }],
+    });
+    const build = (await buildDeliveryTicketLines(ds, deliveryId, { width: WIDTH }))!;
+    const txt = render(build.lines);
+    // Sin el fix: `montoAPrincipal` cuenta 60 USD como 60 Gs → saldo 499.940 y
+    // el cliente paga dos veces. O peor, con un adelanto grande el saldo daba 0
+    // e imprimía PAGADO — NO COBRAR.
+    ok(txt.includes('VERIFICAR EN CAJA'), 'no se imprime un saldo que no se puede sostener');
+    ok(txt.includes('SIN COTIZACION VIGENTE'), 'y se dice por qué');
+    ok(!txt.includes('SALDO A COBRAR'), 'no hay SALDO A COBRAR');
+    ok(!txt.includes('PAGADO'), 'y tampoco dice PAGADO');
+    ok(txt.includes('$ 60'), 'el desglose sí muestra la línea en su moneda');
+
+    // Un local que sólo opera en guaraníes NO puede verse afectado por esto.
+    const soloGs = await armarDelivery({
+      totalItem: 100000,
+      pagos: [{ fp: fpEfectivo, moneda: gs, valor: 40000 }],
+    });
+    const txtGs = render((await buildDeliveryTicketLines(ds, soloGs.deliveryId, { width: WIDTH }))!.lines);
+    ok(txtGs.includes('SALDO A COBRAR'), 'sin divisas, el saldo se imprime normal');
+    ok(!txtGs.includes('VERIFICAR EN CAJA'), 'y no aparece el aviso');
+
+    await ds.getRepository(MonedaCambio).update({}, { activo: true } as any);
+  }
+
+  // ── 7c. Sobrepago: hay vuelto que entregar ───────────────────────────────
+  console.log('\n[7c] Sobrepago sin línea de VUELTO');
+  {
+    const { deliveryId } = await armarDelivery({
+      totalItem: 100000,
+      pagos: [{ fp: fpEfectivo, moneda: gs, valor: 150000 }],
+    });
+    const build = (await buildDeliveryTicketLines(ds, deliveryId, { width: WIDTH }))!;
+    const txt = render(build.lines);
+    ok(build.saldo === -50000, 'el saldo queda negativo, no aplastado a cero', build.saldo);
+    ok(txt.includes('VUELTO A ENTREGAR'), 'el ticket avisa que hay que devolver');
+    ok(txt.includes('50.000'), 'con el monto a devolver');
+    ok(!txt.includes('NO COBRAR'), 'no dice PAGADO — NO COBRAR, que escondía el vuelto');
+  }
+
   // ── 8. Comprobante y pre-cuenta ───────────────────────────────────────────
   console.log('\n[8] Comprobante y pre-cuenta');
   {

@@ -838,9 +838,13 @@ export function ticketRubroMultimoneda(
 ): TicketLine[] {
   if (!montos || montos.length === 0) return [];
   const bold = opts.bold === true;
-  const etiqueta = opts.anchoClave && label.length > opts.anchoClave
-    ? label.slice(0, opts.anchoClave)
-    : label;
+  // Se sanea ANTES de truncar: `sanitizarParaTicket` puede EXPANDIR (`→` → `->`,
+  // `…` → `...`), así que truncar sobre el label crudo dejaba pasar etiquetas que
+  // después del saneo volvían a desbordar la línea.
+  const limpio = sanitizarParaTicket(label);
+  const etiqueta = opts.anchoClave && limpio.length > opts.anchoClave
+    ? limpio.slice(0, opts.anchoClave)
+    : limpio;
 
   if (montos.length === 1) {
     return [ticketKv(etiqueta, fmt.fmt(montos[0].monedaId, montos[0].total), bold)];

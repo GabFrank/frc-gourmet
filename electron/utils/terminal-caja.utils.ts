@@ -23,13 +23,22 @@ import { resolveRequestDeviceId } from './current-device.utils';
  * candado operativo — evita que el cajero cobre sin querer desde la terminal
  * equivocada —, no un control de acceso.
  *
- * ⚠️ **Limitación conocida del device en modo HTTP.** `resolveRequestDeviceId`
- * cae al dispositivo local del proceso servidor cuando el request llega por
- * HTTP sin `device_id` en el JWT (el modo cliente sí lo manda; la PWA móvil y
- * el login web no). O sea: una sesión web contra un nodo servidor se ve como
- * "la terminal del servidor". Se deja así a propósito — resolverlo a `null`
- * aflojaría el gate en vez de apretarlo, porque un device indeterminado no
- * bloquea (ver abajo).
+ * ⚠️ **El device del gate NO se hereda del proceso servidor.** `resolveRequestDeviceId`
+ * (que usan los create handlers para poblar `dispositivo_id`) cae al dispositivo
+ * local del proceso cuando el request llega por HTTP sin `device_id` en el JWT.
+ * Para persistir la columna eso está bien; para decidir permisos, no: una sesión
+ * de `/admin` o de la PWA —que nunca mandan `device_id`— se hacía pasar por la
+ * terminal del servidor. Producía las dos cosas malas a la vez: falso permitir
+ * si la caja era del servidor, y **falso bloqueo** en cualquier otro caso, con
+ * el frontend habilitando los botones (calcula `currentDeviceId = null`) y el
+ * backend rechazándolos. Acá se resuelve a `null`, que es "indeterminado" y por
+ * lo tanto no bloquea.
+ *
+ * ⚠️ **Los egresos del cajón NO usan estos flags.** Vales, compras y gastos
+ * pagados con efectivo (`pdv-egresos.handler.ts`) tienen su propio gate, fijo.
+ * Es deliberado: registrar un pago es anotar plata que el cliente entregó, y eso
+ * puede pasar en la mesa o en la puerta; pagar un vale es sacar billetes del
+ * cajón, y eso sólo puede ocurrir donde el cajón está.
  */
 
 export type AccionTerminal = 'PAGO' | 'FINALIZAR';
@@ -57,13 +66,27 @@ export const ERROR_FINALIZAR_TERMINAL_AJENA = 'FINALIZACION_NO_PERMITIDA_EN_ESTE
  * tenía `createPago` y existe para no romper el cobro en instalaciones de un
  * solo equipo, donde nadie configuró un `deviceId`.
  */
+/**
+ * Dispositivo del request **a efectos del gate**.
+ *
+ * Igual que `resolveRequestDeviceId` salvo en un punto: un request HTTP sin
+ * `device_id` en el JWT resuelve `null` en vez de heredar el dispositivo del
+ * proceso servidor. Ver la nota del encabezado.
+ */
+export function resolveGateDeviceId(event: any): number | null {
+  if (event?._http === true) {
+    return typeof event._deviceId === 'number' ? event._deviceId : null;
+  }
+  return resolveRequestDeviceId(event);
+}
+
 export async function evaluarTerminalCaja(
   dataSource: DataSource,
   event: any,
   cajaId: number | null | undefined,
 ): Promise<EstadoTerminalCaja> {
   const idCaja = Number(cajaId) || null;
-  const deviceActual = resolveRequestDeviceId(event);
+  const deviceActual = resolveGateDeviceId(event);
 
   let dispositivoCajaId: number | null = null;
   if (idCaja) {

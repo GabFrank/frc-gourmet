@@ -184,7 +184,9 @@
                   <mat-icon>edit</mat-icon> Editar valor
                 </button>
                 <mat-divider></mat-divider>
-                <button mat-menu-item (click)="deleteDetalle(row)" class="menu-delete" [disabled]="!puedeAgregarPagos">
+                <button mat-menu-item (click)="deleteDetalle(row)" class="menu-delete"
+                        [disabled]="!puedeAgregarPagos || row.puedeEliminarse === false"
+                        [matTooltip]="row.puedeEliminarse === false ? 'Esta línea está imputada a una ronda de cobro parcial' : ''">
                   <mat-icon>delete_outline</mat-icon> Eliminar
                 </button>
               </mat-menu>

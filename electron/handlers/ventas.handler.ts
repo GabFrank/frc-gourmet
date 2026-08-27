@@ -1216,7 +1216,13 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         }
       }
 
-      repo.merge(entity, data);
+      // La caja de una venta se fija al crearla y no cambia nunca. Aceptarla en
+      // el merge permitía mover una venta CONCLUIDA —con todo su cobro— a otra
+      // caja, sin gate y sin transición de estado: la palanca más directa para
+      // descuadrar dos arqueos de una sola llamada. Ningún llamador la setea
+      // (el PdV manda la venta entera, con su misma caja).
+      const { caja: _cajaIgnorada, ...ventaData } = data ?? {};
+      repo.merge(entity, ventaData);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
 
@@ -4061,7 +4067,10 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      const venta = await queryRunner.manager.findOne(Venta, { where: { id: ventaId } });
+      const venta = await queryRunner.manager.findOne(Venta, {
+        where: { id: ventaId },
+        relations: ['pago'],
+      });
       if (!venta) throw new Error(`Venta ${ventaId} no encontrada`);
       if (venta.estado !== VentaEstado.ABIERTA) throw new Error('VENTA_NO_ABIERTA');
 
@@ -4098,7 +4107,30 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const rondaSaved = await queryRunner.manager.save(CobroParcial, ronda);
 
       // Taguear las líneas de pago de esta ronda.
+      //
+      // ⚠️ Se valida que TODAS pertenezcan al pago de ESTA venta antes de tocar
+      // nada. El update filtraba sólo por id, así que un cliente podía mandar
+      // ids de líneas de otras ventas —de otras cajas, incluso ya cerradas— y
+      // atarlas a su ronda; después `anularCobroParcial` las ponía `activo=false`
+      // y esa plata desaparecía del arqueo ajeno de forma retroactiva. Alcanzaba
+      // con VENTAS_PDV + VENTAS_COBRAR.
+      //
+      // La verificación va con `find` + comparación y no como condición del
+      // `update`: `PagoDetalle` no expone `pagoId` escalar (sólo el JoinColumn),
+      // así que una condición de relación anidada en un UpdateQueryBuilder es
+      // terreno resbaladizo. Y además permite fallar explícito en vez de taguear
+      // de a pedazos.
       if (pagoDetalleIds.length) {
+        const pagoVentaId = (venta.pago as any)?.id ?? null;
+        const lineas = await queryRunner.manager.find(PagoDetalle, {
+          where: { id: In(pagoDetalleIds) },
+          relations: ['pago'],
+        });
+        const todasPropias = pagoVentaId != null
+          && lineas.length === pagoDetalleIds.length
+          && lineas.every((l) => ((l.pago as any)?.id ?? null) === pagoVentaId);
+        if (!todasPropias) throw new Error('PAGO_DETALLE_AJENO');
+
         await queryRunner.manager.update(
           PagoDetalle,
           { id: In(pagoDetalleIds) },
@@ -4148,6 +4180,19 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       });
       if (!ronda) throw new Error(`CobroParcial ${cobroParcialId} no encontrado`);
       const ventaId = (ronda.venta as any)?.id;
+
+      // Anular una ronda desactiva sus `PagoDetalle`, o sea saca plata del
+      // arqueo. Sobre una venta ya cerrada eso cambia el resultado de una caja
+      // que puede estar cerrada, con su retiro generado y su ticket impreso — y
+      // encima deja viva la AcreditacionPos que ese cobro creó. Sólo tiene
+      // sentido mientras la cuenta sigue abierta.
+      const ventaDeLaRonda = ventaId
+        ? await queryRunner.manager.findOne(Venta, { where: { id: ventaId } })
+        : null;
+      if (!ventaDeLaRonda) throw new Error(`Venta de la ronda ${cobroParcialId} no encontrada`);
+      if (ventaDeLaRonda.estado !== VentaEstado.ABIERTA) {
+        throw new Error('COBRO_PARCIAL_VENTA_NO_ABIERTA');
+      }
 
       // Ítems que tocaba esta ronda.
       const impsRonda = await queryRunner.manager.find(CobroParcialItem, {

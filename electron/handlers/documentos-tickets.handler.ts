@@ -1605,12 +1605,17 @@ export async function printCierreCajaInternal(
   const fmtMonedas = crearFormateadorMonedas(monedas);
   const fmtMoneda = (monedaId: number, monto: number): string => fmtMonedas.fmt(monedaId, monto);
 
+  // `anchoClave`: las etiquetas de este ticket son nombres de forma de pago y de
+  // categoría de gasto, o sea texto libre. Sin truncar, uno largo desborda las
+  // 32 columnas de una 58mm y deja el importe huérfano en la línea siguiente —
+  // el mismo problema que ya se resolvía en el bloque de delivery.
+  const anchoClaveCierre = Math.max(8, width - 14);
   const pushTotalMultimoneda = (
     label: string,
     montos: { monedaId: number; total: number }[],
     bold = false,
   ): void => {
-    lines.push(...ticketRubroMultimoneda(label, montos, fmtMonedas, { bold }));
+    lines.push(...ticketRubroMultimoneda(label, montos, fmtMonedas, { bold, anchoClave: anchoClaveCierre }));
   };
 
   const caja = resumen.caja as any;
@@ -1787,7 +1792,7 @@ export interface DeliveryTicketBuild {
   total: number;
   /** Neto ya cobrado (PAGO − VUELTO), en moneda principal. */
   yaPagado: number;
-  /** Lo que falta cobrar. Nunca negativo. */
+  /** Lo que falta cobrar. Negativo = sobrepago, hay vuelto que entregar. */
   saldo: number;
   itemsImpresos: number;
 }
@@ -1890,9 +1895,12 @@ export async function buildDeliveryTicketLines(
   // pedido de la web ya pagado.
   const pagos = venta
     ? await obtenerPagosRegistrados(dataSource, venta.id, principalMoneda, cambios)
-    : { lineas: [], vueltos: [], totalEnPrincipal: 0, hayPagos: false };
+    : { lineas: [], vueltos: [], totalEnPrincipal: 0, hayPagos: false, sinCotizacion: false };
   const yaPagado = pagos.totalEnPrincipal;
-  const saldo = Math.max(0, total - yaPagado);
+  // Sin `Math.max(0, …)`: un sobrepago sin línea de VUELTO da saldo negativo, y
+  // eso NO es "pagado", es plata que hay que devolverle al cliente. Aplastarlo a
+  // cero lo hacía desaparecer del papel.
+  const saldo = total - yaPagado;
 
   const cobrada = venta?.estado === 'CONCLUIDA';
   const nombreCliente = (delivery.nombre
@@ -2027,8 +2035,26 @@ export async function buildDeliveryTicketLines(
   lines.push(...buildBloquePagosRegistrados(pagos, fmtMonedas, width));
 
   // Lo más importante del ticket: si el repartidor cobra o no, y cuánto.
+  //
+  // ⚠️ El ORDEN de las ramas importa. `sinCotizacion` va antes que el chequeo de
+  // saldo: sin tasa, `yaPagado` cuenta las divisas 1 a 1 con el guaraní, así que
+  // un adelanto de USD 500 sobre un pedido de Gs. 500.000 daba saldo 0 y el
+  // ticket salía "PAGADO — NO COBRAR". Que es el desenlace más caro posible.
   lines.push(ticketSeparador('='));
-  if (cobrada || saldo <= 0.5) {
+  if (cobrada) {
+    lines.push(ticketText('PAGADO — NO COBRAR', { align: 'C', bold: true, size: 'tall' }));
+  } else if (pagos.sinCotizacion) {
+    lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(total)}`));
+    lines.push(ticketText('VERIFICAR EN CAJA', { align: 'C', bold: true, size: 'tall' }));
+    lines.push(ticketText('HAY PAGOS EN OTRA MONEDA', { align: 'C' }));
+    lines.push(ticketText('SIN COTIZACION VIGENTE', { align: 'C' }));
+  } else if (saldo < -0.5) {
+    // Sobrepago: no hay nada que cobrar y sí algo que devolver.
+    lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(total)}`));
+    lines.push(ticketKv('YA PAGADO', `Gs. -${ticketFmtMonto(yaPagado)}`));
+    lines.push(ticketText('VUELTO A ENTREGAR', { align: 'C', bold: true }));
+    lines.push(ticketText(`Gs. ${ticketFmtMonto(-saldo)}`, { align: 'C', bold: true, size: 'tall' }));
+  } else if (saldo <= 0.5) {
     lines.push(ticketText('PAGADO — NO COBRAR', { align: 'C', bold: true, size: 'tall' }));
   } else if (pagos.hayPagos) {
     // Con plata ya cobrada, el número grande NO puede ser el total: el

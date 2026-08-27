@@ -3,7 +3,7 @@ import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compra
 import { Venta } from '../../src/app/database/entities/ventas/venta.entity';
 import {
   TicketLine, ticketText, ticketSeparador,
-  FormateadorMonedas, ticketRubroMultimoneda, montoAPrincipal,
+  FormateadorMonedas, ticketRubroMultimoneda, montoAPrincipal, tasaVsPrincipal,
 } from './ticket.utils';
 
 /**
@@ -38,9 +38,23 @@ export interface PagosRegistrados {
   /** Neto ya cobrado (PAGO − VUELTO), convertido a la moneda principal. */
   totalEnPrincipal: number;
   hayPagos: boolean;
+  /**
+   * Alguna línea está en una moneda distinta de la principal y **no hay
+   * cotización vigente** para convertirla.
+   *
+   * `totalEnPrincipal` no sirve para calcular un saldo en ese caso:
+   * `montoAPrincipal` cae a "1 a 1" cuando no encuentra tasa, así que 60 USD
+   * cuentan como 60 guaraníes. Con un adelanto en dólares y la cotización
+   * vencida, el saldo impreso quedaba prácticamente igual al total y el cliente
+   * pagaba dos veces. El ticket usa este flag para NO imprimir un número que no
+   * puede sostener.
+   */
+  sinCotizacion: boolean;
 }
 
-const VACIO: PagosRegistrados = { lineas: [], vueltos: [], totalEnPrincipal: 0, hayPagos: false };
+const VACIO: PagosRegistrados = {
+  lineas: [], vueltos: [], totalEnPrincipal: 0, hayPagos: false, sinCotizacion: false,
+};
 
 /**
  * Lee las líneas del `Pago` de una venta y las agrupa.
@@ -79,12 +93,22 @@ export async function obtenerPagosRegistrados(
   const porClave = new Map<string, PagoRegistradoLinea>();
   const porMonedaVuelto = new Map<number, number>();
   let totalEnPrincipal = 0;
+  let sinCotizacion = false;
 
   for (const d of detalles) {
     const moneda: any = (d as any).moneda;
     if (!moneda?.id) continue;
     const valor = Number((d as any).valor || 0);
     if (!valor) continue;
+    // Sólo es "sin cotización" si hay una moneda principal identificada y esta
+    // línea es de otra. Un local que opera únicamente en guaraníes nunca entra
+    // acá, así que su ticket no pierde el saldo. Si NO hay moneda principal
+    // marcada tampoco se marca: no habría con qué comparar y bloquearíamos el
+    // saldo de todos los tickets.
+    if (principal?.id != null && moneda.id !== principal.id
+        && tasaVsPrincipal(cambios, principal, moneda) <= 0) {
+      sinCotizacion = true;
+    }
     const enPrincipal = montoAPrincipal(valor, moneda, principal, cambios);
 
     if (d.tipo === TipoDetalle.PAGO) {
@@ -119,6 +143,7 @@ export async function obtenerPagosRegistrados(
     vueltos,
     totalEnPrincipal,
     hayPagos: lineas.length > 0 || vueltos.length > 0,
+    sinCotizacion,
   };
 }
 

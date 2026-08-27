@@ -79,6 +79,15 @@ interface DetalleRow {
   maquinaPosNombre?: string;
   cuentaBancariaId?: number; // cuenta bancaria elegida (transferencia / PIX). Acreditacion instantanea.
   cuentaBancariaNombre?: string;
+  /**
+   * Ronda de cobro parcial que imputó esta línea. Si está seteada, la línea NO
+   * se puede borrar suelta: deshacerla es anular la ronda, que además recomputa
+   * la cobertura por ítem. El backend lo rechaza; acá se deshabilita el botón
+   * para no ofrecer una acción que va a fallar.
+   */
+  cobroParcialId?: number | null;
+  /** Pre-computado para el template (regla 4: sin funciones ni getters). */
+  puedeEliminarse?: boolean;
 }
 
 interface ItemCobroRow {
@@ -394,6 +403,8 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
               // nunca, en silencio (el bloque que las genera no bloquea).
               maquinaPosId: d.maquinaPosId ?? undefined,
               cuentaBancariaId: d.cuentaBancariaId ?? undefined,
+              cobroParcialId: d.cobroParcialId ?? null,
+              puedeEliminarse: d.cobroParcialId == null,
             };
           });
         this.updateCurrencyDisplays();
@@ -905,6 +916,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
 
       this.detalleRows = [...this.detalleRows, {
         id: detalle.id,
+        puedeEliminarse: true,
         moneda: this.selectedMoneda,
         formaPago: this.selectedFormaPago,
         valor: this.valorInput,
@@ -937,6 +949,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
 
   async deleteDetalle(row: DetalleRow): Promise<void> {
     if (!this.puedeAgregarPagos) return;
+    if (row.puedeEliminarse === false) return;
     try {
       await firstValueFrom(this.repositoryService.deletePagoDetalle(row.id));
       this.detalleRows = this.detalleRows.filter(d => d.id !== row.id);
@@ -982,6 +995,8 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       this.detalleRows = [...this.detalleRows, {
         ...row,
         id: detalle.id,
+        cobroParcialId: null,
+        puedeEliminarse: true,
       }];
       this.updateCurrencyDisplays();
       this.autoFillValor();
@@ -1067,6 +1082,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
 
         this.detalleRows = [...this.detalleRows, {
           id: detalle.id,
+          puedeEliminarse: true,
           moneda: monedaPrincipal,
           formaPago: fpPrincipal!,
           valor,
@@ -1216,6 +1232,16 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
   /** Finaliza sin imprimir el ticket de venta (comportamiento por defecto). */
   async finalizar(imprimirTicket = false): Promise<void> {
     if (!this.canFinalizar) return;
+    // Una venta ya concluida no se vuelve a finalizar. El diálogo se puede abrir
+    // sobre una (delivery EN_CAMINO con cobro anticipado: las líneas ya están y
+    // el saldo da 0, así que `canFinalizar` es true), y `updateVenta` no frena
+    // la transición CONCLUIDA→CONCLUIDA. El resultado era una SEGUNDA
+    // `AcreditacionPos` y una segunda suma al saldo bancario: `acreditar-
+    // transferencia-bancaria` no es idempotente.
+    if ((this.data.venta as any)?.estado === VentaEstado.CONCLUIDA) {
+      this.snackBar.open('Esta venta ya fue cobrada.', 'CERRAR', { duration: 4000 });
+      return;
+    }
     this.setProcessing(true);
 
     try {
@@ -1280,39 +1306,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
         estado: PagoEstado.PAGADO,
       }));
 
-      // 1) Crear AcreditacionPos por cada detalle con maquina POS elegida (tipo=PAGO).
-      //    Las acreditaciones se procesan al cumplir los minutos configurados.
-      try {
-        const pagosConMaquina = this.detalleRows.filter(
-          (d) => d.tipo === TipoDetalle.PAGO && d.maquinaPosId,
-        );
-        for (const det of pagosConMaquina) {
-          await firstValueFrom(this.repositoryService.createAcreditacionPos({
-            maquinaPosId: det.maquinaPosId!,
-            montoOriginal: det.valor,
-            ventaId: this.data.venta.id,
-            fechaTransaccion: new Date(),
-          }));
-        }
-      } catch (e) {
-        console.error('Error creando acreditacion(es) POS (no-blocking):', e);
-      }
-
-      // 2) Acreditar instantaneamente cada detalle con cuenta bancaria elegida (transferencia/PIX).
-      //    Sin comision, sin demora.
-      try {
-        const transferencias = this.detalleRows.filter(
-          (d) => d.tipo === TipoDetalle.PAGO && d.cuentaBancariaId,
-        );
-        for (const det of transferencias) {
-          await firstValueFrom(this.repositoryService.acreditarTransferenciaBancaria({
-            cuentaBancariaId: det.cuentaBancariaId!,
-            monto: det.valor,
-          }));
-        }
-      } catch (e) {
-        console.error('Error acreditando transferencia(s) bancaria(s) (no-blocking):', e);
-      }
+      await this.registrarAcreditaciones();
 
       // Procesar stock (fire-and-forget, no bloquea la venta)
       this.repositoryService.procesarStockVenta(this.data.venta.id).subscribe({
@@ -1325,6 +1319,73 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       console.error('Error al finalizar cobro:', error);
       this.mostrarErrorCobro(error, 'No se pudo finalizar el cobro');
       this.setProcessing(false);
+    }
+  }
+
+  /** Atajo F4–F7: elige la n-ésima forma de pago y reinicia su destino. */
+  private seleccionarFormaPagoRapida(indice: number): void {
+    const fp = this.formasPago[indice];
+    if (!fp) return;
+    this.selectedFormaPago = fp;
+    this.onFormaPagoChange();
+  }
+
+  /**
+   * Crea la `AcreditacionPos` de cada línea pagada con máquina POS y acredita la
+   * cuenta bancaria de cada transferencia.
+   *
+   * Vivía embebido en `finalizar()`, y por eso el **cobro a crédito no lo
+   * ejecutaba nunca**: en un cobro mixto (parte con tarjeta, el resto a crédito)
+   * la CPC se creaba bien y la plata de la tarjeta no entraba al ledger
+   * bancario, no se conciliaba y no descontaba comisión. Desaparecía.
+   *
+   * Cada línea va en su propio try: antes un solo `try` envolvía el bucle, así
+   * que si fallaba la segunda de tres, la tercera **ni se intentaba** y el
+   * usuario veía un cobro exitoso. Ahora se sigue de largo y se avisa cuántas
+   * quedaron sin registrar — que es lo mínimo para que alguien las cargue a
+   * mano.
+   */
+  private async registrarAcreditaciones(): Promise<void> {
+    let fallidas = 0;
+
+    // POS: se procesan al cumplir los minutos configurados.
+    for (const det of this.detalleRows.filter(d => d.tipo === TipoDetalle.PAGO && d.maquinaPosId)) {
+      try {
+        await firstValueFrom(this.repositoryService.createAcreditacionPos({
+          maquinaPosId: det.maquinaPosId!,
+          montoOriginal: det.valor,
+          // La moneda de la línea: el backend rechaza si no coincide con la de
+          // la cuenta destino, para no acreditar 40 dólares como 40 guaraníes.
+          monedaId: det.moneda?.id,
+          ventaId: this.data.venta.id,
+          fechaTransaccion: new Date(),
+        } as any));
+      } catch (e) {
+        fallidas++;
+        console.error('Error creando acreditacion POS (no-blocking):', e);
+      }
+    }
+
+    // Transferencia / PIX: acreditación instantánea, sin comisión ni demora.
+    for (const det of this.detalleRows.filter(d => d.tipo === TipoDetalle.PAGO && d.cuentaBancariaId)) {
+      try {
+        await firstValueFrom(this.repositoryService.acreditarTransferenciaBancaria({
+          cuentaBancariaId: det.cuentaBancariaId!,
+          monto: det.valor,
+          monedaId: det.moneda?.id,
+        } as any));
+      } catch (e) {
+        fallidas++;
+        console.error('Error acreditando transferencia bancaria (no-blocking):', e);
+      }
+    }
+
+    if (fallidas > 0) {
+      this.snackBar.open(
+        `${fallidas} acreditación(es) no se registraron. Revisá Bancos y cargalas a mano.`,
+        'CERRAR',
+        { duration: 10000 },
+      );
     }
   }
 
@@ -1408,8 +1469,13 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       disableClose: true,
     });
 
-    ref.afterClosed().subscribe((result) => {
+    ref.afterClosed().subscribe(async (result) => {
       if (result?.success) {
+        // Un cobro mixto cierra parte con tarjeta/transferencia y el resto a
+        // crédito. Esas líneas también tienen que llegar al ledger bancario: el
+        // camino del crédito no pasa por `finalizar()`, así que sin esto la
+        // plata cobrada por POS se perdía en silencio.
+        await this.registrarAcreditaciones();
         // Stock fire-and-forget (igual que finalizar())
         this.repositoryService.procesarStockVenta(this.data.venta.id!).subscribe({
           next: (r) => console.log('Stock procesado:', r),
@@ -1506,21 +1572,27 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
         event.preventDefault();
         if (this.data.monedas[2]) { this.selectedMoneda = this.data.monedas[2]; this.autoFillValor(); }
         break;
+      // F4–F7 eligen forma de pago. Van por `seleccionarFormaPagoRapida` y no
+      // asignando `selectedFormaPago` a mano: el atajo se salteaba
+      // `onFormaPagoChange()`, así que la máquina POS / cuenta bancaria de la
+      // forma ANTERIOR quedaba seleccionada. El guard de `addDetalle` sólo mira
+      // que haya una elegida, así que la línea se persistía apuntando a la
+      // cuenta equivocada y la plata se acreditaba en otro banco.
       case 'F4':
         event.preventDefault();
-        if (this.formasPago[0]) this.selectedFormaPago = this.formasPago[0];
+        this.seleccionarFormaPagoRapida(0);
         break;
       case 'F5':
         event.preventDefault();
-        if (this.formasPago[1]) this.selectedFormaPago = this.formasPago[1];
+        this.seleccionarFormaPagoRapida(1);
         break;
       case 'F6':
         event.preventDefault();
-        if (this.formasPago[2]) this.selectedFormaPago = this.formasPago[2];
+        this.seleccionarFormaPagoRapida(2);
         break;
       case 'F7':
         event.preventDefault();
-        if (this.formasPago[3]) this.selectedFormaPago = this.formasPago[3];
+        this.seleccionarFormaPagoRapida(3);
         break;
       case 'F9':
         event.preventDefault();
