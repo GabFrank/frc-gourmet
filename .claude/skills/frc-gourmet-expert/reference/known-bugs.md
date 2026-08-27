@@ -4,6 +4,85 @@ Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo
 
 ## Ventas / PdV
 
+### ✅ RESUELTO — El gate de cobro por dispositivo se podía saltear de tres maneras (2026-08-27)
+
+**Síntoma:** en una terminal unida a una caja abierta en otra, el botón COBRAR
+estaba bloqueado, pero el cobro se completaba igual por otros caminos.
+
+**Causa:** el gate existía en un solo punto (`createPago` con
+`validarDispositivoCaja`) y tres caminos no pasaban por ahí:
+
+1. **`openAjusteDialog`** (botón Descuento/Aumento, y **F9**) creaba el `Pago`
+   **sin** el flag. Con el `Pago` creado por esa vía, todo lo demás pasaba.
+2. **`cobroRapido` (F2)** no chequeaba nada ni mandaba el flag: cobraba completo
+   y concluía la venta.
+3. **`createPagoDetalle` no estaba gateado.** Si el `Pago` ya existía —cobro
+   anticipado de un delivery, diálogo reabierto— la terminal ajena podía seguir
+   agregando líneas de dinero.
+
+Y dos caminos de finalización no tenían gate en absoluto:
+**`cerrarVentasAbiertasMesa`** (concluye con `repo.save()` directo, sin pasar
+por `updateVenta`) y **`cobrar-venta-credito`**.
+
+**Resuelto** al hacer el cobro configurable: el gate vive ahora en
+`electron/utils/terminal-caja.utils.ts` y se aplica en los cinco caminos.
+`createPagoDetalle` resuelve la caja **server-side** desde el id del pago —
+hacerlo desde el payload lo habría dejado en no-op, porque `getVenta` no carga
+`pago.caja`. Test: `npm run test:terminal-caja`.
+
+### ✅ RESUELTO — Los rechazos del cobro se tragaban en `console.error` (2026-08-27)
+
+**Síntoma:** *"aprieto agregar y no pasa nada"*. El backend rechazaba con
+`COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO` y el `catch` del diálogo sólo hacía
+`console.error`. Sin devtools abiertas, el cajero no tenía forma de saber por
+qué. **Resuelto**: los cinco `catch` traducen el código a un snackbar en
+español.
+
+### ✅ RESUELTO — El destino de acreditación (POS / banco) se perdía al recargar el cobro (2026-08-27)
+
+**Síntoma:** ninguno visible. Al finalizar no se creaba la `AcreditacionPos` ni
+se acreditaba la transferencia bancaria, en silencio — el bloque que las genera
+corre en un `try/catch` no bloqueante.
+
+**Causa:** `pagos_detalles` no tenía dónde guardar la máquina POS ni la cuenta
+bancaria elegidas: el vínculo vivía **sólo en memoria** del diálogo de cobro (en
+`DetalleRow`). Bastaba cerrar y reabrir el diálogo para que `loadExistingPago`
+reconstruyera las filas desde la base y el destino desapareciera.
+
+**Resuelto** con las columnas `maquina_pos_id` / `cuenta_bancaria_id`
+(migración `PagoDetalleDestinoAcreditacion`). Era un bug preexistente; el cobro
+repartido entre terminales lo convertía en el camino normal.
+
+### ✅ RESUELTO — El ticket de delivery imprimía un total distinto al del comprobante (2026-08-27)
+
+**Síntoma:** un delivery con descuento global (F9) salía impreso con un total
+mayor en el ticket de reparto que en su propio comprobante de venta.
+
+**Causa:** `printDeliveryTicketInternal` calculaba
+`total = ítems − descuentoItems + envío`, ignorando los `PagoDetalle` de tipo
+DESCUENTO/AUMENTO que `buildVentaTicketLines` sí aplica. Era cosmético hasta que
+el ticket empezó a imprimir el saldo: sobre esa base, el repartidor cobraba un
+descuento que el cajero ya había otorgado.
+
+**Resuelto** alineando el cálculo. Test: `npm run test:ticket-delivery-pagos`,
+bloque «Descuento de nivel pago».
+
+### El gate por dispositivo no distingue una sesión web de la terminal del servidor — ABIERTO (menor)
+
+**Síntoma:** una sesión web o de la PWA móvil contra un nodo `server` se ve
+como "la terminal del servidor" a efectos del gate de cobro.
+
+**Causa:** `resolveRequestDeviceId` cae al dispositivo local del proceso cuando
+el request llega por HTTP **sin** `device_id` en el JWT. El modo cliente sí lo
+manda (`auth-routes.ts`); el login web y el de la PWA, no.
+
+**Por qué no se arregló:** resolverlo a `null` **afloja** el gate en vez de
+apretarlo — un device indeterminado no bloquea, a propósito, para no romper las
+instalaciones de un solo equipo. Apretarlo de verdad exigiría decidir qué pasa
+con el cobro desde `/admin`, que hoy funciona. Hoy no tiene impacto real: la PWA
+móvil **no cobra** (`mesa-detalle.page.ts` lo dice explícito). Revisar cuando el
+mobile gane cobro.
+
 ### `createVentaItem` acepta el precio que le mande el cliente — ABIERTO
 
 **Síntoma:** ninguno visible. El handler hace `repo.create(data)` y guarda el
