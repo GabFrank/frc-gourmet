@@ -302,6 +302,32 @@ en [domains/cocina-impresion.md](../domains/cocina-impresion.md).
 Si una relación no se carga, el gate lee `undefined` y volvés al mismo bug mudo.
 Tests en `scripts/test-ticket-venta-e2e.ts`, bloque «gate cocina».
 
+### El ticket de delivery salía siempre por la impresora default — RESUELTO (2026-08-27)
+
+**Síntoma:** en un local con dos cajas, el ticket del pedido tomado en una salía
+por la impresora de la otra. Sin error, sin log: imprimía, pero en el lugar
+equivocado. `Dispositivo.printerTicket` estaba configurado y se ignoraba.
+
+**Causa:** `delivery.handler.ts` no usaba `resolveRequestDeviceId` en ningún
+lado (0 ocurrencias). `printDeliveryTicketInternal` sí acepta
+`opts.dispositivoId` y se lo pasa a `getPrinterByRol`, pero ningún caller se lo
+daba, y el paso 2 de la resolución está guardado por
+`if (opts.dispositivoId && esRolTicket)`: nunca entraba y caía hasta el paso 5,
+`Printer.isDefault`. Los otros handlers de impresión (`print-venta-ticket`,
+`print-precuenta`, `print-pagare-cpc-ticket`) sí lo resolvían; éste quedó afuera.
+
+**Fix:** los tres callers lo resuelven — el handler `delivery-imprimir-ticket` y
+las dos auto-impresiones (`delivery-crear`, `delivery-cambiar-estado`), que como
+corren en `setImmediate` lo reciben ya resuelto por parámetro (ahí adentro no
+hay `_event`). Además `printDeliveryTicketInternal` cae a
+`venta.dispositivo?.id` si el caller se olvida, igual que
+`printVentaTicketInternal`.
+
+**Cómo no repetirlo:** ver el gotcha del paso 2 en
+[domains/cocina-impresion.md](../domains/cocina-impresion.md). Tests en
+`scripts/test-delivery-impresora-ruteo.ts` (`npm run test:delivery-impresora`):
+verificado que sin el fix el test se pone rojo.
+
 ### Un pedido rechazado podía resucitar — RESUELTO (2026-08-25)
 
 **Síntoma (teórico, encontrado en auditoría, no reportado en producción):** con

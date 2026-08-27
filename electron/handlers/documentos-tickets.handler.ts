@@ -1821,6 +1821,8 @@ export async function buildDeliveryTicketLines(
   });
   if (!delivery) return null;
 
+  // El builder no resuelve la impresora: eso quedó en
+  // `printDeliveryTicketInternal`, que es donde vive el ruteo por dispositivo.
   const venta = await dataSource.getRepository(Venta).findOne({
     where: { delivery: { id: deliveryId } },
     relations: ['pago'],
@@ -2083,9 +2085,21 @@ export async function printDeliveryTicketInternal(
   deliveryId: number,
   opts: { printerId?: number; dispositivoId?: number } = {},
 ): Promise<ImpresionResultado> {
+  const venta = await dataSource.getRepository(Venta).findOne({
+    where: { delivery: { id: deliveryId } },
+    relations: ['dispositivo'],
+  });
+
+  // Igual que `printVentaTicketInternal`: gana el dispositivo del request, y si
+  // el caller no lo pasó se cae al de la venta. Sin ninguno de los dos,
+  // `getPrinterByRol` no puede resolver `Dispositivo.printerTicket` y termina
+  // imprimiendo por la impresora isDefault — en un local con dos cajas, el
+  // ticket salía por la de la otra.
+  const dispositivoId = opts.dispositivoId ?? (venta as any)?.dispositivo?.id;
+
   const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, {
     printerId: opts.printerId,
-    dispositivoId: opts.dispositivoId,
+    dispositivoId,
   });
   if (!printer) {
     return { ok: false, printed: [], errors: [{ message: 'No hay impresora configurada para tickets de venta' }] };
@@ -2096,11 +2110,6 @@ export async function printDeliveryTicketInternal(
   if (!build) {
     return { ok: false, printed: [], errors: [{ message: `Delivery ${deliveryId} no encontrado` }] };
   }
-
-  const venta = await dataSource.getRepository(Venta).findOne({
-    where: { delivery: { id: deliveryId } },
-    select: { id: true } as any,
-  });
 
   const res = await printTicketSpec(printer, { printerWidth: width, lines: build.lines, cutAtEnd: true });
   if (!res.ok) {

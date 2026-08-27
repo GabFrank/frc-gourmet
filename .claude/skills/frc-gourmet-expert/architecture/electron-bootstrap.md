@@ -119,11 +119,14 @@ setInterval(() => generarNotificacionesRrhh(), 24 * 60 * 60 * 1000);
 ### BrowserWindow
 
 ```typescript
+const usaOverlay = soportaTitleBarOverlay(process.platform);  // sólo win32
 new BrowserWindow({
   width: 1200, height: 800,
   show: false,                                // se muestra en did-finish-load (cierra splash)
-  frame: isMac ? true : false,                // Win/Linux: frameless con controles custom
-  titleBarStyle: isMac ? 'hiddenInset' : 'default',
+  frame: isMac,                               // Win/Linux: frameless
+  titleBarStyle: isMac ? 'hiddenInset' : (usaOverlay ? 'hidden' : 'default'),
+  // Windows: el SO dibuja min/max/close SOBRE la toolbar (Window Controls Overlay)
+  ...(usaOverlay ? { titleBarOverlay: { color: '#db392e', symbolColor: '#ffffff', height: 64 } } : {}),
   icon: iconPath,
   webPreferences: {
     nodeIntegration: false,         // Renderer no tiene acceso a Node directo
@@ -136,7 +139,42 @@ win.maximize();                     // arranca maximizada (NO fullscreen)
 
 **Una sola ventana principal** + un **splash window** (`520×360`, `frame:false`) que se cierra al `did-finish-load`. No hay multi-window. `win.on('closed') => win = null`.
 
-**Titlebar custom:** en Win/Linux la ventana es frameless y el toolbar de Angular dibuja los controles (minimizar / maximizar-restaurar / cerrar), conectados por IPC (`window:minimize`, `window:maximize`, `window:close`, evento `window:state-changed`). En macOS se usa `titleBarStyle:'hiddenInset'`.
+### Titlebar frameless: quién dibuja los botones de ventana (2026-08-27)
+
+La app es frameless en las tres plataformas, pero **los botones de ventana los dibuja el SO siempre que se pueda** — el header de Angular sólo los pinta donde no hay alternativa:
+
+| Plataforma | `controlsMode` | Quién dibuja min/max/close |
+|---|---|---|
+| Windows | `native` | El SO, con `titleBarStyle:'hidden'` + `titleBarOverlay` |
+| macOS | `none` | El SO (semáforos, `titleBarStyle:'hiddenInset'`) |
+| Linux | `custom` | El header (`.window-controls` en `app.component.html`) — Electron 24 no soporta WCO en Linux |
+
+El renderer pregunta por IPC **`window:chrome`** → `{ platform, controlsMode, overlay, toolbarHeight }` y decide qué renderizar (`showCustomWindowControls`, `hasTitleBarOverlay`). Lógica pura en **`electron/utils/window-chrome.utils.ts`** (testeada con `npm run test:window-chrome`).
+
+**Por qué se cambió:** los botones custom estaban en las tres plataformas y **no funcionaban en modo cliente** — el monkey-patch de `preload.ts` ruteaba `window:minimize` y compañía por HTTP al servidor. Ahora `invokeRouter` deja **siempre local** todo canal que empiece con `window:`.
+
+**Overlay y tema:** los botones nativos de Windows no cambian de color solos. El renderer lee el color computado real de `.app-toolbar` y lo manda por `window:set-titlebar-overlay` en cada `applyTheme()`; `normalizeOverlayColor` convierte el `rgb(...)` de `getComputedStyle` al `#rrggbb` que exige Electron. La toolbar reserva el hueco del overlay con `env(titlebar-area-*)` (clase `.with-titlebar-overlay`).
+
+### Herramientas de ventana (zoom / recargar / DevTools)
+
+Una ventana frameless **no tiene menú nativo**, así que se perdían Zoom, Recargar y DevTools. Se repusieron por dos vías:
+
+- **Menú en el header** (botón `tune`, *Herramientas de ventana*): zoom −/%/+, pantalla completa, recargar, DevTools.
+- **Atajos en `main.ts`** vía `webContents.on('before-input-event')`, porque sin menú no hay accelerators: `Ctrl +/-/0`, `Ctrl+R`, `F12`, `Ctrl+Shift+I` (en macOS, Cmd). El mapeo vive en `resolveShortcut()`.
+
+> **Gotcha grande: `F5` y `F11` NO se interceptan.** `preventDefault()` en `before-input-event` mata el keydown **antes del DOM**, así que un atajo global le roba la tecla a toda la app. F5 imprime la precuenta en el PdV y elige forma de pago en el diálogo de cobro; F11 finaliza con ticket. Antes de agregar cualquier tecla al mapeo global, grepear los `@HostListener('document:keydown')` del repo.
+
+Handlers: `window:zoom-get|set|step|reset`, `window:reload`, `window:toggle-devtools`, `window:toggle-fullscreen`, `window:is-fullscreen`, más los eventos `window:zoom-changed` y `window:fullscreen-changed`.
+
+El **zoom se persiste por PC** en `app-settings.json` (`ui.zoomFactor`, escritura con debounce de 400ms — `updateAppSettings` es `readFileSync`+`writeFileSync` en el main) y se reaplica en cada `did-finish-load` (un reload resetea el factor del `webContents`). El `zoom-changed` de Chromium (Ctrl+rueda) también se persiste y se notifica al header.
+
+**El menú nativo de Electron se reemplaza (`configurarMenuNativo`).** El menú por defecto existe aunque la ventana sea frameless y no se dibuje, y trae *View → Toggle Developer Tools*, *Reload* y *Zoom* con sus accelerators; en macOS la barra del SO lo muestra siempre. Dejarlo puesto significaba DevTools abrible con `⌥⌘I` **salteando el permiso**, y zoom/reload por caminos que no persisten ni piden confirmación. En Windows/Linux se hace `Menu.setApplicationMenu(null)`; en macOS **no se puede** (sin menú se rompen Cmd+C/V/Q/W), así que se arma uno mínimo con `appMenu`/`editMenu`/`windowMenu` y sin *View*.
+
+**DevTools con permiso (`SISTEMA_DEVTOOLS`):** es la única herramienta gateada — abre la consola y con ella `window.api` desde una caja. El ítem del menú va con `*ngIf="puedeAbrirDevTools"` y el atajo NO se resuelve en el main (que en modo cliente no tiene BD para evaluar permisos): `main.ts` emite `window:devtools-requested` y el renderer, que sí conoce los permisos, decide y llama de vuelta. El rol ADMINISTRADOR lo recibe solo (`syncAdminPermissions` corre en cada arranque).
+
+**Seguridad:** `window:*` está en `BLOCKED_PREFIXES` del `rpc-router` — `/api/rpc` es default-allow, y sin ese bloqueo cualquier cliente HTTP autenticado (PWA de un mozo, nodo cliente) podía cerrar, recargar o abrir DevTools **en la ventana física del nodo servidor**.
+
+> **Gotcha:** los handlers `window:*` se registran con un guard de una sola vez (`registerWindowChromeHandlers`). Antes vivían sueltos dentro de `createWindow()`, que en macOS puede volver a correr en el evento `activate` → `ipcMain.handle` tira si el canal ya existe.
 
 **Dev vs prod load:**
 - Dev: `--serve` → `win.loadURL('http://localhost:4201')` + `openDevTools()`.
