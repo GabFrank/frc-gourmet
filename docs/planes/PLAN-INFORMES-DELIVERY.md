@@ -1,7 +1,7 @@
 # Plan — Delivery y Retiro en los informes de venta
 
 > Branch: `claude/sales-reports-delivery-ihwnbi` · base `develop`
-> Estado: **propuesto, pendiente de aprobación**
+> Estado: **aprobado, en ejecución** · Fase 0 hecha
 
 ## 1. Diagnóstico
 
@@ -133,7 +133,7 @@ lista compacta. **No requiere backend nuevo** — reusa los mismos canales vía
 
 Cada fase cierra con commit + push. Todo va a **un solo PR** contra `develop`.
 
-### Fase 0 — Zona del pedido online (corrección de datos)
+### Fase 0 — Zona del pedido online (corrección de datos) · ✅ HECHA
 
 - `materializar-pedido-online-en-venta` pasa
   `precioDeliveryId: pedido.zonaDelivery?.precioDelivery?.id ?? null` a
@@ -143,6 +143,13 @@ Cada fase cierra con commit + push. Todo va a **un solo PR** contra `develop`.
   `deliveries.precio_delivery_id` desde `pedidos_online` para las filas que hoy
   quedaron sin zona.
 - Sin esto, "Envíos por zona" muestra todo lo web como SIN ZONA.
+
+**Entregado:** el alta carga `zonaDelivery.precioDelivery` y lo sella (el costo
+sigue viniendo congelado del pedido); migración
+`1787877249492-BackfillZonaDeliveryPedidosOnline`, aditiva y reejecutable, que no
+pisa zonas ya asignadas ni le inventa zona a un retiro. Test nuevo
+`npm run test:zona-delivery-online` (11 asserts) — verificado que **falla sin el
+fix**. Regresión: `test:delivery` 53/53, `test:pedidos-online` 73/73, `npm run check` OK.
 
 ### Fase 1 — Motor de métricas (backend)
 
@@ -207,7 +214,8 @@ skill y backlog, PR a `develop`, CI en verde.
 
 | Script | Qué cubre |
 |---|---|
-| `npm run test:reporte-delivery` (nuevo, e2e SQLite) | KPIs de envíos/retiros, mix por canal, zonas, repartidores, SLA, cancelaciones, multimoneda, exclusión de anuladas, comparativo. Incluye el caso de regresión de la Fase 0: pedido web con zona → **no** cae en SIN ZONA. |
+| `npm run test:zona-delivery-online` (nuevo, e2e SQLite) · **hecho** | Fase 0: el alta sella la zona sin recalcular el costo; RETIRO sin zona; zona sin tarifa compartida; y el backfill de la migración (recupera, no pisa, es idempotente). |
+| `npm run test:reporte-delivery` (nuevo, e2e SQLite) | KPIs de envíos/retiros, mix por canal, zonas, repartidores, SLA, cancelaciones, multimoneda, exclusión de anuladas, comparativo. El caso de regresión de la zona vive en `test:zona-delivery-online`. |
 | `npm run test:canal-venta` (nuevo, unit) | Clasificación de canal para las 6 combinaciones (mesa, mostrador, delivery, retiro, web, QR mesa). |
 | `npm run test:resumen-caja-numeros` (existente, se amplía) | El bloque delivery del cierre no rompe el arqueo ni concatena decimales en Postgres. |
 | `npm run test:reporte-ventas` (existente, se amplía) | El payload nuevo no altera los KPIs que ya se calculaban. |
@@ -234,6 +242,7 @@ Manual: `docs/testing/TESTING-CHECKLIST-INFORMES-DELIVERY.md`.
 electron/handlers/reportes-delivery.helper.ts
 electron/utils/canal-venta.utils.ts
 src/app/database/migrations/<epoch-ms>-BackfillZonaDeliveryPedidosOnline.ts
+scripts/test-zona-delivery-online-e2e.ts   (hecho)
 scripts/test-reporte-delivery-e2e.ts
 scripts/test-canal-venta.ts
 docs/testing/TESTING-CHECKLIST-INFORMES-DELIVERY.md

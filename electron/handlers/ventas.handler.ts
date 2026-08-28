@@ -196,9 +196,12 @@ export async function materializarPedidoOnlineEnVenta(
     : <T,>(fn: () => Promise<T>) => withPedidoLock(pedidoId, fn);
 
   return conLock(async () => {
+    // `zonaDelivery.precioDelivery` se carga para poder sellar la zona en el
+    // `Delivery` (ver el alta más abajo). Sin la relación anidada el pedido web
+    // nace sin zona y desaparece de cualquier agrupación por zona.
     const pedido = await dataSource.getRepository(PedidoOnline).findOne({
       where: { id: pedidoId },
-      relations: ['items'],
+      relations: ['items', 'zonaDelivery', 'zonaDelivery.precioDelivery'],
     });
     if (!pedido) throw new Error(`Pedido online ${pedidoId} no encontrado`);
     // Idempotencia autoritativa BAJO lock: evita doble materialización del mismo pedido.
@@ -301,8 +304,18 @@ export async function materializarPedidoOnlineEnVenta(
                 .filter(Boolean).join(' · ') || undefined,
           observacion: pedido.notas,
           modo: esRetiro ? DeliveryModo.RETIRO : DeliveryModo.DELIVERY,
-          // El costo ya viene congelado en el pedido: no se re-resuelve por zona,
-          // que podría haber cambiado de precio entre el pedido y la aceptación.
+          // La ZONA sí se sella; el COSTO no se recalcula a partir de ella.
+          //
+          // El costo viene congelado del pedido porque la tarifa pudo cambiar
+          // entre el checkout y la aceptación, y el cliente vio la vieja. La
+          // zona, en cambio, es la identidad del reparto, y hasta acá no
+          // llegaba al PdV: quedaba sólo en `pedidos_online`, así que todo el
+          // canal web caía en "SIN ZONA" al agrupar por zona.
+          //
+          // `ZonaDelivery.precioDelivery` es la tarifa compartida entre los dos
+          // canales; es null en las zonas anteriores a esa unificación, y ahí
+          // no hay zona que sellar.
+          precioDeliveryId: esRetiro ? null : (pedido.zonaDelivery?.precioDelivery?.id ?? null),
           cobroAnticipado: false,
         }, userId);
         venta.delivery = delivery as any;
