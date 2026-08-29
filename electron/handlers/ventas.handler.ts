@@ -732,9 +732,12 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         'estado', 'fechaAbierto', 'fechaParaEntrega', 'fechaEnCamino',
         'fechaEntregado', 'fechaCancelacion', 'motivoCancelacion',
         'precioDelivery', 'precioDeliveryId', 'entregadoPorFuncionario',
-        // `modo` se fija al dar de alta y no se cambia después: convertir un
-        // reparto en curso en retiro dejaría un registro con repartidor y
-        // costo de envío disfrazado de algo que nadie lleva.
+        // `modo` tiene su propio canal (`delivery-convertir-modo`): convertir
+        // mueve el costo de envío de la venta, desasigna al repartidor,
+        // sincroniza el pedido de la tienda y cambia la tabla de transiciones
+        // que rige el pedido. Un `merge` crudo no hace nada de eso y dejaría un
+        // registro con dirección y envío cobrado disfrazado de algo que nadie
+        // lleva.
         'modo',
       ].filter((c) => data && Object.prototype.hasOwnProperty.call(data, c));
       if (camposReservados.length > 0) {
@@ -4243,8 +4246,13 @@ function computeNetoBrutoItem(item: any): number {
  * Estado de cobro de una venta (en bruto). Devuelve por ítem el neto bruto,
  * lo cubierto y su estado (PENDIENTE/PARCIAL/PAGADO), más totales en bruto y el
  * descuento/aumento global vigente (referencia para el front).
+ *
+ * Exportada: `delivery-convertir-modo` la usa para avisar si lo ya cobrado
+ * quedó por encima del total nuevo. Es matemática de plata (tolerancias,
+ * `Number()` sobre los `decimal` que Postgres devuelve como string) y tener dos
+ * copias es la forma más segura de que diverjan.
  */
-async function getEstadoCobroVentaInternal(dataSource: DataSource, ventaId: number) {
+export async function getEstadoCobroVentaInternal(dataSource: DataSource, ventaId: number) {
   const TOL = 0.5;
   const items = await dataSource.getRepository(VentaItem).find({
     where: { venta: { id: ventaId }, estado: EstadoVentaItem.ACTIVO },
