@@ -28,6 +28,7 @@ import { ProveedorProducto } from './entities/compras/proveedor-producto.entity'
 import { FormasPago } from './entities/compras/forma-pago.entity';
 import { PrecioDelivery } from './entities/ventas/precio-delivery.entity';
 import { Delivery, DeliveryEstado } from './entities/ventas/delivery.entity';
+import { ConvertirModoDeliveryPayload } from './convertir-modo-delivery.types';
 import { Venta, VentaEstado } from './entities/ventas/venta.entity';
 import { VentaItem } from './entities/ventas/venta-item.entity';
 import { PdvGrupoCategoria } from './entities/ventas/pdv-grupo-categoria.entity';
@@ -284,6 +285,7 @@ interface ElectronAPI {
   deliveryCambiarEstado: (deliveryId: number, nuevoEstado: string, opts?: any) => Promise<any>;
   deliveryAsignarRepartidor: (deliveryId: number, funcionarioId: number | null) => Promise<any>;
   deliveryCancelar: (deliveryId: number, motivo: string) => Promise<any>;
+  deliveryConvertirModo: (deliveryId: number, payload: any) => Promise<any>;
   deliveryImprimirTicket: (deliveryId: number, printerId?: number) => Promise<any>;
   getDeliveriesByCaja: (cajaId: number, filtros?: any) => Promise<{ data: any[], total: number }>;
   buscarClientePorTelefono: (telefono: string) => Promise<any>;
@@ -1977,6 +1979,10 @@ export class RepositoryIpcService extends RepositoryService {
 
   deliveryCancelar(deliveryId: number, motivo: string): Observable<any> {
     return from(this.api.deliveryCancelar(deliveryId, motivo));
+  }
+
+  deliveryConvertirModo(deliveryId: number, payload: ConvertirModoDeliveryPayload): Observable<any> {
+    return from(this.api.deliveryConvertirModo(deliveryId, payload));
   }
 
   deliveryImprimirTicket(deliveryId: number, printerId?: number): Observable<any> {
