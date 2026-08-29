@@ -398,11 +398,22 @@ export function registerDeliveryHandlers(
         ? await resolverCostoDelivery(dataSource, payload.precioDeliveryId)
         : undefined;
 
+      // El nombre CAE AL QUE YA TENÍA si el payload no trae uno, y en un retiro
+      // además es obligatorio. Es lo único que identifica la bolsa en el
+      // mostrador (la dirección no existe ahí), así que un payload con el
+      // nombre vacío dejaría un pedido que nadie puede reclamar. Mismo criterio
+      // que el alta y que la conversión; acá faltaba, y con el `null` de abajo
+      // pasó de ser un no-op silencioso a borrar de verdad.
+      const nombreNuevo = upper(payload?.nombre) ?? upper(delivery.nombre);
+      if (esRetiro && !nombreNuevo) {
+        throw new Error('El nombre del cliente es obligatorio en un pedido para retirar.');
+      }
+
       // `null` y no `undefined`: TypeORM no emite UPDATE para una propiedad
-      // `undefined`, así que con el `?? undefined` de antes vaciar la
-      // dirección (o el nombre, o la observación) desde el diálogo no hacía
-      // absolutamente nada y el dato viejo quedaba pegado.
-      (delivery as any).nombre = upper(payload?.nombre);
+      // `undefined`, así que con el `?? undefined` de antes vaciar la dirección
+      // o la observación desde el diálogo no hacía absolutamente nada y el dato
+      // viejo quedaba pegado.
+      (delivery as any).nombre = nombreNuevo;
       delivery.telefono = String(payload?.telefono ?? delivery.telefono ?? '').trim();
       (delivery as any).direccion = esRetiro ? null : direccion;
       (delivery as any).observacion = upper(payload?.observacion);
@@ -429,7 +440,6 @@ export function registerDeliveryHandlers(
           (venta as any).costoDelivery = costoDelivery;
           ventaCambia = true;
         }
-        const nombreNuevo = upper(payload?.nombre);
         if (nombreNuevo && nombreNuevo !== venta.nombreCliente) {
           venta.nombreCliente = nombreNuevo;
           ventaCambia = true;
@@ -827,7 +837,10 @@ export function registerDeliveryHandlers(
     // acá revertiría una conversión concurrente.
     const previo = await dataSource.getRepository(Delivery).findOne({ where: { id } });
     if (!previo) throw new Error(`Delivery ${id} no encontrado`);
-    if (previo.estado === DeliveryEstado.CANCELADO) return previo; // idempotente
+    // Idempotente, y con la MISMA forma que el camino normal: reintentar tras
+    // un error de red no puede devolver a veces un `Delivery` pelado y a veces
+    // el sobre con la reversa.
+    if (previo.estado === DeliveryEstado.CANCELADO) return { delivery: previo, reversa: null };
 
     const ventaPrevia = await dataSource.getRepository(Venta).findOne({ where: { delivery: { id } } });
 
@@ -846,9 +859,17 @@ export function registerDeliveryHandlers(
       if (delivery.estado === DeliveryEstado.CANCELADO) return { delivery, reversa: null };
 
       // Se relee ya con el lock tomado: entre el pre-chequeo y acá la venta
-      // pudo concluirse en otra terminal, y el permiso extra se pide sobre lo
-      // que realmente se va a revertir.
+      // pudo concluirse en otra terminal.
       const venta = await manager.getRepository(Venta).findOne({ where: { delivery: { id } } });
+
+      // Y el permiso extra se vuelve a pedir SOBRE ESTA LECTURA. El pre-chequeo
+      // de arriba sirve para rechazar temprano con un mensaje claro, pero
+      // decidir con él es un TOCTOU: si la venta se cobra en otra terminal
+      // entre aquella lectura y este lock, un usuario sin
+      // VENTAS_DELIVERY_CANCELAR_COBRADO revertía igual un cobro real.
+      if (venta?.estado === VentaEstado.CONCLUIDA) {
+        await ensurePermission(dataSource, getCurrentUser, 'VENTAS_DELIVERY_CANCELAR_COBRADO');
+      }
 
       let reversa = null;
       if (venta) {

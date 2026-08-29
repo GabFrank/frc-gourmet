@@ -466,6 +466,54 @@ async function main() {
     ok(d.direccion === null, 'J: vaciar la dirección la borra de verdad', d.direccion);
     ok(d.observacion === null, 'J: y la observación también', d.observacion);
   }
+  {
+    // El nombre NO: es lo único que identifica la bolsa de un retiro en el
+    // mostrador. Poder borrarlo es el precio que casi se paga por hacer que el
+    // resto de los campos se puedan vaciar de verdad.
+    const res: any = await crearDelivery({ modo: 'RETIRO', direccion: '', nombre: 'ROSA' });
+    await invokeHandler('delivery-actualizar-datos', res.delivery.id, {
+      nombre: '', telefono: '0981123456',
+    });
+    const d = await leerDelivery(res.delivery.id);
+    ok(d.nombre === 'ROSA', 'J: mandar el nombre vacío NO borra el del retiro', d.nombre);
+  }
+  {
+    // Y el backstop, para el retiro que ya está sin nombre: el backfill de la
+    // migración inserta `nombre_cliente` tal cual venía del pedido web, que
+    // puede ser null. Sobre ese registro el fallback no tiene de dónde agarrarse
+    // y el candado tiene que hablar.
+    const res: any = await crearDelivery({ modo: 'RETIRO', direccion: '', nombre: 'SIN NOMBRE AUN' });
+    await ds.getRepository(Delivery).update({ id: res.delivery.id } as any, { nombre: null } as any);
+    const e = await err(() => invokeHandler('delivery-actualizar-datos', res.delivery.id, {
+      nombre: '', telefono: '0981123456',
+    }));
+    ok(/nombre del cliente es obligatorio/.test(e),
+      'J: un retiro sin nombre no se puede guardar así', e);
+  }
+  {
+    // En un delivery el nombre es opcional, pero omitirlo del payload no puede
+    // borrarlo: cae al que ya tenía.
+    const res: any = await crearDelivery({ nombre: 'CARLOS' });
+    await invokeHandler('delivery-actualizar-datos', res.delivery.id, {
+      telefono: '0981123456', direccion: 'AVDA SIEMPRE VIVA 742',
+    });
+    const d = await leerDelivery(res.delivery.id);
+    ok(d.nombre === 'CARLOS', 'J: un payload sin nombre conserva el que había', d.nombre);
+  }
+
+  // ═══════ [K] Cancelar dos veces devuelve siempre lo mismo ═══════
+  console.log('\n[K] La cancelación es idempotente Y con una sola forma de respuesta');
+  {
+    const res: any = await crearDelivery();
+    const primera: any = await invokeHandler('delivery-cancelar', res.delivery.id, 'se arrepintió');
+    const segunda: any = await invokeHandler('delivery-cancelar', res.delivery.id, 'se arrepintió');
+    ok(primera?.delivery?.estado === 'CANCELADO', 'K: la primera cancela', primera?.delivery?.estado);
+    ok(segunda?.delivery?.estado === 'CANCELADO', 'K: la segunda no rompe', segunda?.delivery?.estado);
+    // Antes el camino idempotente devolvía un `Delivery` pelado y el normal el
+    // sobre con la reversa: dos formas para lo mismo.
+    ok(Object.prototype.hasOwnProperty.call(segunda ?? {}, 'reversa'),
+      'K: y devuelve la misma forma que el camino normal', Object.keys(segunda ?? {}));
+  }
 
   await ds.destroy();
   console.log(`\n${failed === 0 ? '✅' : '❌'} delivery-conversion: ${passed} pasaron, ${failed} fallaron`);

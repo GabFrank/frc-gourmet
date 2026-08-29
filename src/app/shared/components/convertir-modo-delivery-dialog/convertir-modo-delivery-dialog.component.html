@@ -104,6 +104,13 @@
     </div>
   </div>
 
+  <!-- Plata ya cobrada que queda por encima del total nuevo. Va abajo de los
+       totales, que es donde el cajero acaba de ver el número que cambia. -->
+  <div class="aviso aviso-plata" *ngIf="avisoExcedente">
+    <mat-icon>report_problem</mat-icon>
+    <span>{{ avisoExcedente }}</span>
+  </div>
+
   <!-- El papel que ya se imprimió miente después de convertir: dice DELIVERY
        con una dirección que dejó de existir, o al revés. -->
   <mat-checkbox [(ngModel)]="reimprimir" class="reimprimir">

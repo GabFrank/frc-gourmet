@@ -97,12 +97,24 @@ export class ConvertirModoDeliveryDialogComponent implements OnInit {
   // Totales. Pre-computados: la vista no llama funciones ni getters.
   envioActual = 0;
   envioNuevo = 0;
+  /** Lo ya cobrado contra esta venta (rondas de cobro parcial). */
+  private totalCubierto = 0;
   subtotalVenta = 0;
   totalActual = 0;
   totalNuevo = 0;
 
   puedeConfirmar = false;
   procesando = false;
+
+  /**
+   * Aviso de que lo ya cobrado queda por encima del total nuevo, calculado
+   * ANTES de confirmar.
+   *
+   * El backend devuelve el mismo dato después de convertir, pero enterarse
+   * después no sirve de mucho: la plata ya quedó cobrada de más y la
+   * conversión ya está hecha. Acá el cajero todavía puede no convertir.
+   */
+  avisoExcedente = '';
 
   constructor(
     public dialogRef: MatDialogRef<ConvertirModoDeliveryDialogComponent>,
@@ -135,6 +147,25 @@ export class ConvertirModoDeliveryDialogComponent implements OnInit {
     this.envioActual = Number(d?.venta?.costoDelivery ?? 0) || 0;
     this.subtotalVenta = this.calcSubtotal(d);
     this.totalActual = this.subtotalVenta + this.envioActual;
+
+    // Los totales de la fila alcanzan para pintar la pantalla, pero no para
+    // decidir: `getEstadoCobroVenta` es la misma cuenta que usa el diálogo de
+    // cobro (y la que el backend usará para el aviso), así que si está
+    // disponible manda ella. Si falla, quedan los números de la fila: es mejor
+    // un total aproximado que una pantalla en blanco.
+    if (d?.venta?.id) {
+      try {
+        const estado: any = await firstValueFrom(this.repositoryService.getEstadoCobroVenta(d.venta.id));
+        if (estado) {
+          this.subtotalVenta = Number(estado.deudaItems) || 0;
+          this.envioActual = Number(estado.costoDelivery) || 0;
+          this.totalActual = this.subtotalVenta + this.envioActual;
+          this.totalCubierto = Number(estado.totalCubierto) || 0;
+        }
+      } catch (e) {
+        console.warn('No se pudo leer el estado de cobro de la venta:', e);
+      }
+    }
 
     if (!this.esRetiroDestino) {
       try {
@@ -186,6 +217,15 @@ export class ConvertirModoDeliveryDialogComponent implements OnInit {
     const zona = this.preciosDelivery.find((p) => p.id === this.precioDeliveryId);
     this.envioNuevo = this.esRetiroDestino ? 0 : (Number(zona?.valor ?? 0) || 0);
     this.totalNuevo = this.subtotalVenta + this.envioNuevo;
+
+    // El aviso no bloquea: convertir puede ser justo lo que hay que hacer, y
+    // devolverle la diferencia al cliente es una decisión del mostrador. Lo que
+    // no puede pasar es que la diferencia aparezca recién después.
+    const excedente = this.totalCubierto - this.totalNuevo;
+    this.avisoExcedente = excedente > 0.5
+      ? `Ya hay ${this.totalCubierto.toLocaleString('es-PY')} cobrados contra este pedido:`
+        + ` ${Math.round(excedente).toLocaleString('es-PY')} por encima del total nuevo.`
+      : '';
 
     const direccionOk = this.esRetiroDestino || !this.requiereDireccion || this.direccion.trim().length > 0;
     const nombreOk = !this.pideNombre || this.nombre.trim().length > 0;

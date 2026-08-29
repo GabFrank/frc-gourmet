@@ -154,6 +154,16 @@ mat-dialog-content {
   }
 }
 
+/* Rojo: es plata cobrada de más, no una advertencia de trámite. */
+.aviso-plata {
+  background-color: rgba(244, 67, 54, 0.12);
+  color: var(--text-primary);
+
+  mat-icon {
+    color: #f44336;
+  }
+}
+
 .reimprimir {
   font-size: 13px;
 }
