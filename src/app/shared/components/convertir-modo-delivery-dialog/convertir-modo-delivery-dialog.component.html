@@ -1,0 +1,120 @@
+<h2 mat-dialog-title>
+  <mat-icon class="titulo-icon">{{ iconoDestino }}</mat-icon>
+  {{ titulo }}
+</h2>
+
+<mat-dialog-content>
+  <p class="subtitulo">{{ subtitulo }}</p>
+
+  <!-- El pedido ya salió a la calle. Convertirlo se permite, pero no en
+       silencio: es la única situación donde el estado y el modo se contradicen
+       mientras dura la corrección. -->
+  <div class="aviso aviso-atencion" *ngIf="estaEnCamino">
+    <mat-icon>warning</mat-icon>
+    <span>
+      Este pedido está EN CAMINO.
+      <ng-container *ngIf="esRetiroDestino && repartidorActual">
+        Se va a desasignar a {{ repartidorActual }}.
+      </ng-container>
+    </span>
+  </div>
+
+  <!-- ── Campos del destino RETIRO ─────────────────────────────────────── -->
+  <ng-container *ngIf="esRetiroDestino">
+    <mat-form-field appearance="outline" class="full-width" *ngIf="pideNombre">
+      <mat-label>NOMBRE</mat-label>
+      <input matInput [(ngModel)]="nombre" (ngModelChange)="onCampoChange()"
+        placeholder="Nombre del cliente" />
+      <mat-hint>Obligatorio: identifica el pedido en el mostrador</mat-hint>
+    </mat-form-field>
+
+    <div class="lista-cambios">
+      <div class="cambio">
+        <mat-icon>location_off</mat-icon>
+        <span>Se quita la dirección de entrega</span>
+      </div>
+      <div class="cambio" *ngIf="envioActual > 0">
+        <mat-icon>money_off</mat-icon>
+        <span>Se deja de cobrar el envío de {{ envioActual | number:'1.0-0' }}</span>
+      </div>
+      <div class="cambio" *ngIf="repartidorActual">
+        <mat-icon>person_off</mat-icon>
+        <span>Se desasigna al repartidor {{ repartidorActual }}</span>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- ── Campos del destino DELIVERY ───────────────────────────────────── -->
+  <ng-container *ngIf="!esRetiroDestino">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>DIRECCIÓN</mat-label>
+      <textarea matInput [(ngModel)]="direccion" (ngModelChange)="onCampoChange()" rows="2"
+        placeholder="Dirección de entrega"></textarea>
+      <mat-hint *ngIf="requiereDireccion">Obligatoria</mat-hint>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>PRECIO DELIVERY</mat-label>
+      <mat-select [(value)]="precioDeliveryId" (selectionChange)="onCampoChange()">
+        <mat-option [value]="null">SIN CARGO</mat-option>
+        <mat-option *ngFor="let p of preciosDelivery" [value]="p.id">
+          {{ p.descripcion }} — {{ p.valor | number:'1.0-0' }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <!-- Última oportunidad de exigir el repartidor: un pedido que ya está
+         EN_CAMINO no vuelve a atravesar esa transición, que es donde el
+         candado dispara. -->
+    <div class="repartidor-row" *ngIf="pideRepartidor">
+      <div class="repartidor-info">
+        <mat-icon>person_pin_circle</mat-icon>
+        <span *ngIf="repartidorElegidoNombre">{{ repartidorElegidoNombre }}</span>
+        <span class="repartidor-falta" *ngIf="!repartidorElegidoNombre">
+          Falta elegir quién lo lleva
+        </span>
+      </div>
+      <button mat-stroked-button (click)="elegirRepartidor()">
+        <mat-icon>search</mat-icon> REPARTIDOR
+      </button>
+    </div>
+  </ng-container>
+
+  <!-- ── Qué pasa con la plata ─────────────────────────────────────────── -->
+  <div class="totales">
+    <div class="total-kv">
+      <span>SUBTOTAL</span>
+      <span>{{ subtotalVenta | number:'1.0-0' }}</span>
+    </div>
+    <div class="total-kv">
+      <span>ENVÍO</span>
+      <span class="valor-cambia">
+        <span class="valor-viejo" *ngIf="envioActual !== envioNuevo">{{ envioActual | number:'1.0-0' }}</span>
+        <mat-icon *ngIf="envioActual !== envioNuevo">arrow_forward</mat-icon>
+        <span>{{ envioNuevo | number:'1.0-0' }}</span>
+      </span>
+    </div>
+    <div class="total-kv total-final">
+      <span>TOTAL</span>
+      <span class="valor-cambia">
+        <span class="valor-viejo" *ngIf="totalActual !== totalNuevo">{{ totalActual | number:'1.0-0' }}</span>
+        <mat-icon *ngIf="totalActual !== totalNuevo">arrow_forward</mat-icon>
+        <span>{{ totalNuevo | number:'1.0-0' }}</span>
+      </span>
+    </div>
+  </div>
+
+  <!-- El papel que ya se imprimió miente después de convertir: dice DELIVERY
+       con una dirección que dejó de existir, o al revés. -->
+  <mat-checkbox [(ngModel)]="reimprimir" class="reimprimir">
+    Reimprimir el ticket con los datos nuevos
+  </mat-checkbox>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancelar()">VOLVER</button>
+  <button mat-raised-button color="primary" (click)="confirmar()" [disabled]="!puedeConfirmar">
+    <mat-icon>{{ iconoDestino }}</mat-icon>
+    {{ procesando ? 'CONVIRTIENDO...' : textoConfirmar }}
+  </button>
+</mat-dialog-actions>

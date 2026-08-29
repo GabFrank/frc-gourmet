@@ -164,6 +164,12 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
   subtotal = 0;
   /** Costo del envío del delivery, si la venta es de delivery. */
   costoDelivery = 0;
+  /**
+   * Último `venta.costoDelivery` leído del servidor. `null` hasta la primera
+   * lectura: sirve para distinguir «el envío cambió por debajo» de «la venta
+   * nunca tuvo la columna cargada», que son cosas distintas.
+   */
+  private envioServidor: number | null = null;
   descuentoTotal = 0;
   totalPrincipal = 0;
   saldoPrincipal = 0;
@@ -382,6 +388,27 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     try {
       // Fetch venta fresh with pago relation
       const ventaFresh = await firstValueFrom(this.repositoryService.getVenta(this.data.venta.id));
+      // El costo del envío se refresca acá aunque no sea una línea de pago: es
+      // un cargo de la venta que otra pantalla puede mover con el diálogo
+      // abierto (cambiar la zona, o convertir el pedido entre delivery y
+      // retiro), y hasta ahora `ventaFresh` se traía entero y se descartaba
+      // todo salvo `.pago`. El total se recalculaba una sola vez al abrir, así
+      // que la venta se cerraba con el envío viejo — o sin cobrarlo.
+      if (ventaFresh) {
+        const envioFresco = Number((ventaFresh as any).costoDelivery ?? 0) || 0;
+        // Se compara contra el ÚLTIMO valor leído del servidor, no contra
+        // `this.costoDelivery`. El llamador puede haber pasado un envío que la
+        // venta no tiene: los deliveries anteriores a la columna
+        // `costoDelivery` lo derivan de la zona (`precioDelivery.valor`), y
+        // pisarlo con el 0 de la primera lectura dejaría de cobrar el envío en
+        // esos pedidos viejos. Lo que interesa es el CAMBIO, no el valor.
+        if (this.envioServidor !== null && envioFresco !== this.envioServidor) {
+          (this.data.venta as any).costoDelivery = envioFresco;
+          this.data.costoDelivery = envioFresco;
+          this.calculateTotals();
+        }
+        this.envioServidor = envioFresco;
+      }
       if (ventaFresh?.pago?.id) {
         this.pago = ventaFresh.pago;
         const detalles = await firstValueFrom(this.repositoryService.getPagoDetalles(ventaFresh.pago.id));
@@ -1249,18 +1276,30 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       // diálogo estaba abierto: el saldo que se ve acá quedaría viejo y se
       // cerraría la venta con una cuenta que no cierra. Se relee antes de tocar
       // nada y, si cambió, se aborta para que el cajero mire el detalle nuevo.
-      if (this.pago?.id) {
-        const firmaPrevia = this.firmaDetalles();
-        await this.loadExistingPago();
-        if (this.firmaDetalles() !== firmaPrevia) {
-          this.setProcessing(false);
-          this.snackBar.open(
-            'Otra terminal modificó los pagos de esta venta. Se actualizó el detalle: revisalo y volvé a finalizar.',
-            'CERRAR',
-            { duration: 8000 },
-          );
-          return;
-        }
+      // La relectura va SIEMPRE, no sólo con un pago ya creado: el envío puede
+      // haber cambiado sin que exista ninguna línea de cobro todavía, y ése es
+      // justo el caso del pedido que se convierte de retiro a delivery mientras
+      // el cajero tiene esta pantalla abierta.
+      const firmaPrevia = this.firmaDetalles();
+      const envioPrevio = this.costoDelivery;
+      await this.loadExistingPago();
+      if (this.pago?.id && this.firmaDetalles() !== firmaPrevia) {
+        this.setProcessing(false);
+        this.snackBar.open(
+          'Otra terminal modificó los pagos de esta venta. Se actualizó el detalle: revisalo y volvé a finalizar.',
+          'CERRAR',
+          { duration: 8000 },
+        );
+        return;
+      }
+      if (this.costoDelivery !== envioPrevio) {
+        this.setProcessing(false);
+        this.snackBar.open(
+          'El costo de envío de este pedido cambió mientras cobrabas. Se actualizó el total: revisalo y volvé a finalizar.',
+          'CERRAR',
+          { duration: 8000 },
+        );
+        return;
       }
 
       // Ronda final de cobro por ítems: cubre TODO lo pendiente (queda PAGADO)
