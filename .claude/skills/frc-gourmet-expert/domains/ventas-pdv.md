@@ -735,10 +735,100 @@ Este era el bug A-3: el delivery pedía el motivo de cancelación con `showInput
 el diálogo no lo implementaba, la guarda `typeof result === 'string'` nunca se
 cumplía y **todos** los deliveries cancelados quedaban con `'SIN MOTIVO'`.
 
+### Convertir un pedido: DELIVERY ⇄ RETIRO (2026-08-29)
+
+Canal único: **`delivery-convertir-modo(id, payload)`**. El cliente llama de
+vuelta para decir «mejor lo paso a buscar», y antes eso era cancelar el pedido
+y cargarlo entero de nuevo.
+
+**Por qué es un canal propio y no un campo más de `delivery-actualizar-datos`.**
+El modo no es un dato del cliente: decide **si existen** la dirección, el costo
+de envío y el repartidor. Cambiarlo mueve el total de la venta, desasigna a una
+persona, cambia la tabla de transiciones que rige el pedido y sincroniza el
+`PedidoOnline` que el cliente está mirando. Un `merge` genérico no hace nada de
+eso, y por eso `modo` **sigue** en los `camposReservados` de `updateDelivery`.
+
+```ts
+{ modo: 'DELIVERY' | 'RETIRO',
+  direccion?, precioDeliveryId?, funcionarioId?,   // → DELIVERY
+  nombre? }                                        // → RETIRO
+```
+
+| Regla | Por qué |
+|---|---|
+| Cualquier estado **no terminal**; el estado **no se retrocede** | ENTREGADO y CANCELADO ya no se convierten. Un RETIRO puede quedar en EN_CAMINO: es un reparto que ya había salido y el cliente terminó pasando a buscar |
+| La venta tiene que estar **ABIERTA** | Convertir cambia lo que se cobra. Mismo criterio que el cambio de zona |
+| Se permite **con cobros parciales**, avisando el excedente | La plata no se mueve sola. El diálogo lo avisa **antes** de confirmar, con `getEstadoCobroVenta` |
+| Permiso `VENTAS_PDV` | Es una corrección de mostrador, del mismo nivel que editar datos o cambiar la zona |
+
+⚠️ **El candado del repartidor tenía un hueco y por eso el payload lleva
+`funcionarioId`.** `deliveryRequiereRepartidor` sólo dispara **en la
+transición** hacia EN_CAMINO (o ENTREGADO, según `deliveryRepartidorEtapa`). Un
+pedido que **ya está** en EN_CAMINO no vuelve a atravesarla, así que
+convertirlo a DELIVERY —lo que lo deja sin repartidor— lo dejaba llegar a
+ENTREGADO sin ninguno. El hueco es exactamente uno: `estado === EN_CAMINO` **y**
+`etapa === 'EN_CAMINO'`; ahí la conversión exige el repartidor en el payload.
+
+⚠️ **`TRANSICIONES_RETIRO[EN_CAMINO]` ahora incluye `PARA_ENTREGA`.** Sin eso,
+convertir un reparto en camino le sacaba la única salida hacia atrás que tenía:
+si el repartidor daba la vuelta, no había transición legal para reflejarlo.
+
+⚠️ **`zonaDelivery` del `PedidoOnline` no se puede reconstruir** al pasar a
+DELIVERY: la zona de la tienda (polígonos) y `PrecioDelivery` (PdV) son
+entidades distintas sin mapa entre ellas. Se limpia al pasar a RETIRO y queda
+nula al volver. La zona real vive en el delivery, que es la que se cobra.
+
+#### Lo que la conversión obligó a arreglar alrededor
+
+Hacer `modo` mutable rompió invariantes que se sostenían solos mientras era
+inmutable:
+
+- **`actualizar-datos`, `cancelar` y `asignar-repartidor` leían el `Delivery`
+  FUERA de su transacción** y después hacían `manager.save()` con la entidad
+  entera: escribían de vuelta el `modo` que habían leído y **revertían una
+  conversión concurrente en silencio**, dejando `venta.costoDelivery`
+  sincronizado con el modo equivocado. Los tres leen adentro, detrás de
+  `lockDelivery`.
+- **`lockDelivery` es un `SELECT … FOR UPDATE` a mano**, no
+  `findOne({ lock })`: Postgres rechaza `FOR UPDATE` sobre el lado anulable de
+  un outer join, y las `relations` de TypeORM son LEFT JOINs (issue #258, ver
+  `test:locks-pg`). En SQLite no hace nada — la escritura serializa la base.
+- **`updateVenta` mergeaba `costoDelivery`.** Con `/api/rpc` default-allow, una
+  llamada reescribía el envío de una venta **CONCLUIDA**, salteándose todas las
+  guardas. Va excluido del merge, como ya lo estaba `caja`.
+- **`delivery-cancelar` pedía `VENTAS_DELIVERY_CANCELAR_COBRADO` contra una
+  lectura previa al lock** (TOCTOU): si la venta se cobraba en otra terminal en
+  esa ventana, se revertía un cobro real sin el permiso. Ahora se vuelve a pedir
+  sobre la lectura de adentro.
+- **`cobrar-venta-dialog` congelaba `costoDelivery` al abrir.** Su guarda
+  anti-staleness releía la venta entera y se quedaba **sólo con `.pago`**, así
+  que un envío cambiado por debajo —convirtiendo, o con el cambio de zona, que
+  ya existía— cerraba la venta sin cobrarlo. Ahora compara también el envío, y
+  la relectura va **siempre**, no sólo con un pago ya creado. Compara contra el
+  último valor **del servidor**, no contra el de pantalla: los deliveries
+  anteriores a la columna `costoDelivery` lo derivan de la zona, y pisarlos con
+  el 0 de la primera lectura dejaría de cobrarles el envío.
+- **`actualizar-datos` exigía dirección también en un RETIRO**, y asignaba
+  `?? undefined` —que TypeORM no traduce a UPDATE—, así que vaciar la dirección
+  no hacía nada. Al arreglarlo, el **nombre** pasó a ser borrable: en un retiro
+  es lo único que identifica la bolsa, así que cae al que ya tenía y se rechaza
+  si no hay ninguno.
+
 ### Test
 
-`npm run test:delivery` — 46 asserts. Manual de pruebas:
-`docs/testing/TESTING-CHECKLIST-DELIVERY.md`.
+`npm run test:delivery` — 53 asserts. `npm run test:delivery-conversion` — 67
+asserts de la conversión. Manuales de pruebas:
+`docs/testing/TESTING-CHECKLIST-DELIVERY.md` y
+`docs/testing/TESTING-CHECKLIST-DELIVERY-CONVERSION.md`.
+
+⚠️ **La carrera de la conversión NO se prueba en SQLite.** El primer intento
+fue un `Promise.all` contra `actualizar-datos`, y **pasaba igual con el bug
+reintroducido** (verificado parcheando el handler de vuelta): sin lock real no
+hay nada que serializar y el interleaving no se puede forzar. El caso vive en
+`npm run test:locks-pg` (sección D2), donde un `lock_timeout` corto prueba que
+el segundo escritor **bloquea** en vez de pasar de largo. En SQLite queda el
+invariante determinista: el modo y el envío no se despegan tras pasar por cada
+handler.
 
 ## Sistema de Atajos PdV
 
@@ -798,7 +888,8 @@ Una sola fila. Campos:
 > Consecuencias que hay que respetar al tocar el módulo:
 >
 > - El alta es **un solo formulario** con un toggle. El cajero atiende el
->   teléfono sin saber qué va a pedir el cliente.
+>   teléfono sin saber qué va a pedir el cliente. Y desde 2026-08-29 el modo
+>   **se puede cambiar después** — ver «Convertir un pedido…» más abajo.
 > - En modo RETIRO el **nombre pasa a ser obligatorio** (reemplaza a la
 >   dirección como lo que identifica la bolsa en el mostrador) y se valida en el
 >   backend, no sólo en el diálogo.

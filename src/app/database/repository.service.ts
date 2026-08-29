@@ -27,6 +27,7 @@ import { ProveedorProducto } from './entities/compras/proveedor-producto.entity'
 import { FormasPago } from './entities/compras/forma-pago.entity';
 import { PrecioDelivery } from './entities/ventas/precio-delivery.entity';
 import { Delivery, DeliveryEstado } from './entities/ventas/delivery.entity';
+import { ConvertirModoDeliveryPayload } from './convertir-modo-delivery.types';
 import { Venta, VentaEstado } from './entities/ventas/venta.entity';
 import { VentaItem } from './entities/ventas/venta-item.entity';
 import { PdvGrupoCategoria } from './entities/ventas/pdv-grupo-categoria.entity';
@@ -358,6 +359,7 @@ export abstract class RepositoryService {
   abstract deliveryCambiarEstado(deliveryId: number, nuevoEstado: DeliveryEstado, opts?: { funcionarioId?: number }): Observable<any>;
   abstract deliveryAsignarRepartidor(deliveryId: number, funcionarioId: number | null): Observable<any>;
   abstract deliveryCancelar(deliveryId: number, motivo: string): Observable<any>;
+  abstract deliveryConvertirModo(deliveryId: number, payload: ConvertirModoDeliveryPayload): Observable<any>;
   abstract deliveryImprimirTicket(deliveryId: number, printerId?: number): Observable<any>;
   abstract buscarClientePorTelefono(telefono: string): Observable<any>;
   abstract buscarClientesPorTelefono(telefono: string): Observable<any[]>;

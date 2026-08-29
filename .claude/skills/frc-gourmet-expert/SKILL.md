@@ -59,7 +59,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | Login, sesiones, roles, permisos, `getCurrentUser` | [architecture/auth-permissions.md](architecture/auth-permissions.md) |
 | **Productos** (Familia/Subfamilia/Producto/Presentación/Precios) | [domains/productos.md](domains/productos.md) |
 | **Recetas, Sabores, Variaciones** (cada variación su propia receta desde 2026-07, multi-sabor pizza, Gestión de Sabores) | [domains/recetas-sabores-variaciones.md](domains/recetas-sabores-variaciones.md) |
-| **Ventas y PdV** (mesas, comandas, atajos, delivery, cobro parcial por ítems, cajas compartidas, utilitarios del cajón) | [domains/ventas-pdv.md](domains/ventas-pdv.md) |
+| **Ventas y PdV** (mesas, comandas, atajos, delivery/retiro **y su conversión**, cobro parcial por ítems, cajas compartidas, utilitarios del cajón) | [domains/ventas-pdv.md](domains/ventas-pdv.md) |
 | **Compras** (proveedor, finalizar, pago unificado vía CPP, compra simplificada) | [domains/compras-cpp.md](domains/compras-cpp.md) |
 | **Facturación legal** (SET/SIFEN, timbrado+numeración, emisión desde el cobro del PdV, plantillas pdfmake) | [domains/facturacion.md](domains/facturacion.md) |
 | **Pedidos Online / Storefront** (webapp pública tipo iFood, `/pub/*`, auth de cliente, bandeja PdV, pizza online) | [domains/pedidos-online.md](domains/pedidos-online.md) |
@@ -230,6 +230,25 @@ Auditoría de ~240 commits desde 2026-06-28. Subsistemas **nuevos completos** qu
 - **Plata que se perdía en silencio (2026-08-27).** El cobro **a crédito** nunca creaba las acreditaciones (estaban embebidas en `finalizar()`): en un cobro mixto, lo cobrado con tarjeta no entraba al ledger bancario. Un solo `try` envolvía el bucle, así que un fallo cortaba las siguientes. Se acreditaba el monto **sin su moneda** (40 USD → 40 Gs). F4–F7 no reseteaban la máquina POS. Re-finalizar una venta ya CONCLUIDA **duplicaba** la acreditación.
 - **Aritmética (2026-08-27).** `computeResumenCaja` concatenaba strings en Postgres (`decimal` llega como string, no hay `setTypeParser(1700)`) → esperado `NaN` en el arqueo. `cobroRapido` (F2) igual, y encima regalaba el envío. El ticket ya no afirma un saldo sin cotización vigente, y un sobrepago imprime `VUELTO A ENTREGAR` en vez de esconderlo.
 - Manual de pruebas: `docs/testing/TESTING-CHECKLIST-CAJA-COMPARTIDA.md`.
+
+### Sesión 2026-08-29 — conversión DELIVERY ⇄ RETIRO
+
+Un pedido para retirar y un reparto ya eran el mismo registro con distinto
+`modo`, pero el modo se fijaba al alta. Ahora se convierte con
+**`delivery-convertir-modo`**, botón propio en el footer de la lista y diálogo
+que muestra qué se pierde y cómo queda el total antes de confirmar.
+
+Lo que hay que saber antes de tocar el módulo: hacer `modo` mutable rompió
+invariantes que se sostenían solos mientras era inmutable — tres handlers
+vecinos leían el `Delivery` fuera de su transacción y revertían la conversión en
+silencio, `updateVenta` dejaba reescribir `costoDelivery` de una venta
+CONCLUIDA, `delivery-cancelar` pedía su permiso extra contra una lectura previa
+al lock (TOCTOU), y el diálogo de cobro congelaba el envío al abrir. Todo eso
+está cerrado y explicado en [domains/ventas-pdv.md](domains/ventas-pdv.md).
+
+⚠️ **La carrera no se puede probar en SQLite** — el `Promise.all` pasaba igual
+con el bug reintroducido. Vive en `npm run test:locks-pg`. Tests:
+`test:delivery-conversion` (67) + `test:delivery` (53).
 
 ### Sesión 2026-07 (Funcionario/Vales + Impresoras + Multimoneda)
 

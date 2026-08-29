@@ -28,6 +28,7 @@
 | **dashboard-rrhh.handler.ts** | 169 | KPIs RRHH (nómina, asistencia, cumpleaños, etc.) |
 | **dashboard-shortcuts.handler.ts** | 78 | DashboardShortcut (personalización de Home) |
 | **dashboard-ventas.handler.ts** | 249 | KPIs Ventas |
+| **delivery.handler.ts** | ~930 | Máquina de estados del delivery/retiro (`delivery-crear`, `-cambiar-estado`, `-actualizar-datos`, `-asignar-repartidor`, `-cancelar` transaccional, `-listar-pdv`, `-imprimir-ticket`) + **`delivery-convertir-modo`** (DELIVERY ⇄ RETIRO: mueve `venta.costoDelivery`, desasigna repartidor y sincroniza el `PedidoOnline`). El CRUD genérico de `ventas.handler.ts` rechaza estado, zona y `modo` |
 | **db-config.handler.ts** | 273 | Configuración de BD (sqlite path / postgres); `db-config-init-postgres` crea rol+DB |
 | **documentos-tickets.handler.ts** | 962 | Tickets térmicos (comanda multi-sector, venta, recibos, vales) |
 | **empresa.handler.ts** | 96 | Empresa singleton (datos + branding + fiscal) |

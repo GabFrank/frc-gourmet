@@ -344,6 +344,13 @@
         [matTooltip]="esRetiroSeleccionado ? 'Un retiro no tiene repartidor: lo pasa a buscar el cliente' : ''">
         <mat-icon>person_pin_circle</mat-icon> REPARTIDOR
       </button>
+      <!-- Convertir entre reparto y retiro. No cuelga del menú ESTADO a
+           propósito: ESTADO son transiciones de la máquina de estados, y esto
+           cambia qué ES el pedido, no en qué etapa está. -->
+      <button mat-stroked-button (click)="convertirModo()"
+        [disabled]="!puedeConvertirModo" [matTooltip]="tooltipConvertir">
+        <mat-icon>{{ iconoConvertir }}</mat-icon> {{ labelConvertir }}
+      </button>
       <button mat-stroked-button (click)="imprimir()" [disabled]="!selectedDelivery">
         <mat-icon>print</mat-icon> IMPRIMIR
       </button>

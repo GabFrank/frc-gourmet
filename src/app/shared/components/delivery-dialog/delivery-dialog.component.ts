@@ -24,6 +24,10 @@ import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation
 import { CobrarVentaDialogComponent, CobrarVentaDialogData } from '../cobrar-venta-dialog/cobrar-venta-dialog.component';
 import { MonedaCambio } from '../../../database/entities/financiero/moneda-cambio.entity';
 import { SeleccionarRepartidorDialogComponent } from '../seleccionar-repartidor-dialog/seleccionar-repartidor-dialog.component';
+import {
+  ConvertirModoDeliveryDialogComponent,
+  ConvertirModoDeliveryDialogResult,
+} from '../convertir-modo-delivery-dialog/convertir-modo-delivery-dialog.component';
 
 export interface DeliveryDialogData {
   caja: Caja;
@@ -535,7 +539,9 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   private static readonly TRANSICIONES_RETIRO: Record<string, DeliveryEstado[]> = {
     [DeliveryEstado.ABIERTO]: [DeliveryEstado.PARA_ENTREGA, DeliveryEstado.ENTREGADO],
     [DeliveryEstado.PARA_ENTREGA]: [DeliveryEstado.ENTREGADO, DeliveryEstado.ABIERTO],
-    [DeliveryEstado.EN_CAMINO]: [DeliveryEstado.ENTREGADO],
+    // Un retiro sólo llega a EN_CAMINO por conversión: es un reparto que ya
+    // había salido. Vuelve a PARA_ENTREGA como cualquier delivery.
+    [DeliveryEstado.EN_CAMINO]: [DeliveryEstado.ENTREGADO, DeliveryEstado.PARA_ENTREGA],
     [DeliveryEstado.ENTREGADO]: [DeliveryEstado.PARA_ENTREGA],
     [DeliveryEstado.CANCELADO]: [],
   };
@@ -562,6 +568,14 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   puedeCambiarEstado = false;
   puedeAsignarRepartidor = false;
   esRetiroSeleccionado = false;
+  /**
+   * Convertir el pedido al otro modo. Pre-computados label, icono y tooltip:
+   * la vista no llama funciones.
+   */
+  puedeConvertirModo = false;
+  labelConvertir = 'CONVERTIR';
+  iconoConvertir = 'swap_horiz';
+  tooltipConvertir = '';
 
   private updateEstadoFlags(): void {
     const estado = this.selectedDelivery?.estado;
@@ -594,6 +608,25 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     // asignarlo sería registrar a una persona que no participa.
     this.esRetiroSeleccionado = this.selectedDelivery?.modo === 'RETIRO';
     this.puedeAsignarRepartidor = !!this.selectedDelivery && !this.isTerminal && !this.esRetiroSeleccionado;
+
+    // Convertir mueve el costo del envío dentro o fuera del total, así que
+    // pide la venta ABIERTA por el mismo motivo que el cambio de zona: sobre
+    // una venta cerrada sería cambiar lo que ya se cobró.
+    this.labelConvertir = this.esRetiroSeleccionado ? 'A DELIVERY' : 'A RETIRO';
+    this.iconoConvertir = this.esRetiroSeleccionado ? 'delivery_dining' : 'shopping_bag';
+    const ventaAbierta = this.selectedDelivery?.venta?.estado === 'ABIERTA';
+    this.puedeConvertirModo = !!this.selectedDelivery && !this.isTerminal && ventaAbierta;
+    if (!this.selectedDelivery) {
+      this.tooltipConvertir = '';
+    } else if (this.isTerminal) {
+      this.tooltipConvertir = `Un pedido ${this.selectedDelivery.estado} ya no se puede convertir`;
+    } else if (!ventaAbierta) {
+      this.tooltipConvertir = 'La venta ya fue cerrada: anulá el cobro antes de convertir el pedido';
+    } else {
+      this.tooltipConvertir = this.esRetiroSeleccionado
+        ? 'Pasarlo a reparto: pide dirección y zona de envío'
+        : 'Pasarlo a retiro en el local: se quitan dirección, envío y repartidor';
+    }
   }
 
   private async loadDeliveryDetails(): Promise<void> {
@@ -988,10 +1021,64 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Convierte el pedido entre reparto y retiro.
+   *
+   * El pedido objetivo se captura ACÁ y no se vuelve a leer de
+   * `this.selectedDelivery`: entre el click y el cierre del diálogo la tabla
+   * sigue clickeable, y si el cajero elige otra fila mientras tanto la
+   * conversión (y el cambio de total) se aplicarían al pedido equivocado, en
+   * silencio. Mismo patrón que `enviar()` y `cambiarRepartidor()`.
+   */
+  convertirModo(): void {
+    if (!this.selectedDelivery || !this.puedeConvertirModo) return;
+    const objetivo = this.selectedDelivery;
+
+    const ref = this.dialog.open(ConvertirModoDeliveryDialogComponent, {
+      width: '460px',
+      maxHeight: '90vh',
+      data: { delivery: objetivo },
+    });
+
+    ref.afterClosed().subscribe(async (salida: ConvertirModoDeliveryDialogResult | null) => {
+      if (!salida?.resultado) return;
+
+      const modoNuevo = salida.resultado?.delivery?.modo === 'RETIRO' ? 'RETIRO' : 'DELIVERY';
+      this.snackBar.open(
+        `Pedido #${objetivo.id} convertido a ${modoNuevo === 'RETIRO' ? 'RETIRO EN LOCAL' : 'DELIVERY'}`,
+        'CERRAR', { duration: 3000 },
+      );
+
+      // El aviso de cobro va aparte y dura más: es plata que quedó cobrada por
+      // encima del total nuevo, y nadie la devuelve sola.
+      const aviso = salida.resultado?.advertencia;
+      if (aviso?.excedente > 0.5) {
+        this.snackBar.open(
+          `Atención: lo cobrado supera el total nuevo en ${aviso.excedente.toLocaleString('es-PY')}.`
+          + ' Revisá el cobro del pedido.',
+          'CERRAR', { duration: 9000, panelClass: ['error-snackbar'] },
+        );
+      } else if (aviso?.tienePagoRegistrado) {
+        this.snackBar.open(
+          'Este pedido ya tiene líneas de cobro registradas: revisá el detalle del pago con el total nuevo.',
+          'CERRAR', { duration: 7000 },
+        );
+      }
+
+      await this.recargarManteniendoSeleccion();
+      if (salida.reimprimir) await this.imprimirDe(objetivo.id);
+    });
+  }
+
   async imprimir(): Promise<void> {
     if (!this.selectedDelivery) return;
+    await this.imprimirDe(this.selectedDelivery.id);
+  }
+
+  /** Imprime el ticket de un pedido concreto (la selección puede haber cambiado). */
+  private async imprimirDe(deliveryId: number): Promise<void> {
     try {
-      const res = await firstValueFrom(this.repositoryService.deliveryImprimirTicket(this.selectedDelivery.id));
+      const res = await firstValueFrom(this.repositoryService.deliveryImprimirTicket(deliveryId));
       if (res?.ok) {
         this.snackBar.open('Ticket de delivery enviado a la impresora', 'CERRAR', { duration: 2500 });
       } else {

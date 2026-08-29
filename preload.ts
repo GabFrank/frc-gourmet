@@ -2061,6 +2061,9 @@ contextBridge.exposeInMainWorld('api', {
   deliveryCancelar: async (deliveryId: number, motivo: string): Promise<any> => {
     return await ipcRenderer.invoke('delivery-cancelar', deliveryId, motivo);
   },
+  deliveryConvertirModo: async (deliveryId: number, payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('delivery-convertir-modo', deliveryId, payload);
+  },
   deliveryImprimirTicket: async (deliveryId: number, printerId?: number): Promise<any> => {
     return await ipcRenderer.invoke('delivery-imprimir-ticket', deliveryId, printerId);
   },

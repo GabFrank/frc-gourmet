@@ -93,6 +93,12 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
    */
   modo: 'DELIVERY' | 'RETIRO' = 'DELIVERY';
   esRetiro = false;
+  /**
+   * Por qué el toggle está bloqueado al editar. Pre-computado: la vista no
+   * llama funciones. Sin esto el control aparecía gris y sin explicación, y el
+   * botón que sí hace la conversión está en otra pantalla.
+   */
+  tooltipModo = '';
 
   // Pre-computados: la vista no llama funciones ni getters.
   puedeConfirmar = false;
@@ -138,8 +144,14 @@ export class CrearDeliveryDialogComponent implements OnInit, OnDestroy {
         // El modo no se cambia al editar: convertir un reparto en retiro (o al
         // revés) implicaría rehacer el costo de envío y el repartidor ya
         // asignado. Se muestra, no se toca.
+        // El modo no se cambia desde acá: convertir mueve el costo de envío
+        // de la venta, desasigna al repartidor y sincroniza el pedido de la
+        // tienda. Eso vive en el botón A RETIRO / A DELIVERY de la lista.
         this.modo = d.modo === 'RETIRO' ? 'RETIRO' : 'DELIVERY';
         this.esRetiro = this.modo === 'RETIRO';
+        this.tooltipModo = this.esRetiro
+          ? 'Para pasarlo a delivery usá el botón A DELIVERY de la lista de pedidos'
+          : 'Para pasarlo a retiro usá el botón A RETIRO de la lista de pedidos';
         this.clienteEncontrado = d.cliente || null;
         this.zonaBloqueada = !!d.venta && d.venta.estado !== 'ABIERTA';
       } else {

@@ -732,9 +732,12 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         'estado', 'fechaAbierto', 'fechaParaEntrega', 'fechaEnCamino',
         'fechaEntregado', 'fechaCancelacion', 'motivoCancelacion',
         'precioDelivery', 'precioDeliveryId', 'entregadoPorFuncionario',
-        // `modo` se fija al dar de alta y no se cambia después: convertir un
-        // reparto en curso en retiro dejaría un registro con repartidor y
-        // costo de envío disfrazado de algo que nadie lleva.
+        // `modo` tiene su propio canal (`delivery-convertir-modo`): convertir
+        // mueve el costo de envío de la venta, desasigna al repartidor,
+        // sincroniza el pedido de la tienda y cambia la tabla de transiciones
+        // que rige el pedido. Un `merge` crudo no hace nada de eso y dejaría un
+        // registro con dirección y envío cobrado disfrazado de algo que nadie
+        // lleva.
         'modo',
       ].filter((c) => data && Object.prototype.hasOwnProperty.call(data, c));
       if (camposReservados.length > 0) {
@@ -1221,7 +1224,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // caja, sin gate y sin transición de estado: la palanca más directa para
       // descuadrar dos arqueos de una sola llamada. Ningún llamador la setea
       // (el PdV manda la venta entera, con su misma caja).
-      const { caja: _cajaIgnorada, ...ventaData } = data ?? {};
+      //
+      // `costoDelivery` va por el mismo camino y por el mismo motivo. Es el
+      // monto CONGELADO del envío, y sus dos dueños —el cambio de zona y la
+      // conversión entre delivery y retiro— exigen que la venta siga ABIERTA
+      // justamente porque moverlo cambia lo que se cobra. Este merge no valida
+      // nada: como `/api/rpc` es default-allow, dejarlo pasar convertía toda
+      // esa guarda en una sugerencia, con una llamada capaz de reescribir el
+      // envío de una venta ya CONCLUIDA. Ningún llamador lo setea a propósito
+      // (el PdV manda la venta entera, con su mismo envío).
+      const { caja: _cajaIgnorada, costoDelivery: _envioIgnorado, ...ventaData } = data ?? {};
       repo.merge(entity, ventaData);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
@@ -4243,8 +4255,13 @@ function computeNetoBrutoItem(item: any): number {
  * Estado de cobro de una venta (en bruto). Devuelve por ítem el neto bruto,
  * lo cubierto y su estado (PENDIENTE/PARCIAL/PAGADO), más totales en bruto y el
  * descuento/aumento global vigente (referencia para el front).
+ *
+ * Exportada: `delivery-convertir-modo` la usa para avisar si lo ya cobrado
+ * quedó por encima del total nuevo. Es matemática de plata (tolerancias,
+ * `Number()` sobre los `decimal` que Postgres devuelve como string) y tener dos
+ * copias es la forma más segura de que diverjan.
  */
-async function getEstadoCobroVentaInternal(dataSource: DataSource, ventaId: number) {
+export async function getEstadoCobroVentaInternal(dataSource: DataSource, ventaId: number) {
   const TOL = 0.5;
   const items = await dataSource.getRepository(VentaItem).find({
     where: { venta: { id: ventaId }, estado: EstadoVentaItem.ACTIVO },
