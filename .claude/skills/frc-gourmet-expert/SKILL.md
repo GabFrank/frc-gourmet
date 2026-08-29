@@ -215,6 +215,12 @@ Auditoría de ~240 commits desde 2026-06-28. Subsistemas **nuevos completos** qu
   `test:dashboard-rangos`. Manual:
   [docs/testing/TESTING-CHECKLIST-JORNADA-Y-FILTROS.md](../../../docs/testing/TESTING-CHECKLIST-JORNADA-Y-FILTROS.md).
 
+### Sesión 2026-08-27 (sesión persistente del modo cliente)
+
+- **Sesión zombi arreglada.** En `mode=client` los tokens vivían sólo en memoria del preload y morían con el proceso, mientras el estado de sesión de la UI sobrevivía en `localStorage`: al reabrir, la app se veía logueada y ningún dato cargaba. Ahora el **refresh token se persiste** (`electron/utils/client-refresh-token.utils.ts`, keytar + fallback `0600`, mismo patrón que `jwt-secret.utils.ts`) y el preload **rehidrata antes del primer RPC**. ⚠️ La rehidratación pasa siempre por `refreshAccessIfPossible()` porque reenvía el `deviceId`: por otro camino el JWT vuelve con `device_id: null` y los tickets salen por la impresora equivocada. → [architecture/cliente-servidor.md](architecture/cliente-servidor.md).
+- **`useHash: true` en el router.** Bajo `file://`, `pushState` ignora el `<base href>` y dejaba `location` en `file:///login` en silencio; el siguiente *Recargar la aplicación* moría con `ERR_FILE_NOT_FOUND`. Se llegaba ahí en cada arranque en frío y en cada logout, **en los tres modos**. Verificado empíricamente sobre Electron 24.3.0.
+- Test `npm run test:sesion-cliente`; manual en `docs/testing/TESTING-CHECKLIST-SESION-CLIENTE.md`.
+
 ### Sesión 2026-08 (caja compartida configurable + pagos en tickets de delivery)
 
 - **Cobro en terminales ajenas, configurable.** El cobro estaba reservado sin excepción a la terminal que abrió la caja; ahora lo deciden dos flags separados de `PdvConfig` (`permitirPagosTerminalAjena` / `permitirFinalizarTerminalAjena`, ambos default `false`). El gate vive en `electron/utils/terminal-caja.utils.ts` y se aplica en los **cinco** caminos que existen, no sólo en `createPago`: `createPagoDetalle` (que resuelve la caja server-side porque `getVenta` no carga `pago.caja`), `updateVenta ABIERTA→CONCLUIDA`, `cerrarVentasAbiertasMesa` y `cobrar-venta-credito`. Cerró tres huecos preexistentes: `openAjusteDialog` creaba el `Pago` sin el flag (bypass total, también vía F9), `cobroRapido` (F2) no tenía gate, y los rechazos del backend se tragaban en `console.error`. Migración `PdvConfigTerminalAjena`. Test `npm run test:terminal-caja`. → [domains/ventas-pdv.md](domains/ventas-pdv.md).
