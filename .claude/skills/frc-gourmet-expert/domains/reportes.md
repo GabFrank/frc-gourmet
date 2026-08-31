@@ -24,6 +24,7 @@ Cada pantalla trae un **control de período** común (`app-reporte-periodo-contr
 - **`reportes-periodo.util.ts`** — `resolverPeriodo(params, now?)` → `{ actual, anterior|null, label, labelAnterior }`. `variacionPct(actual, anterior)` (null si base 0). **Regla de comparación:** `month`/`prevMonth` → mes calendario anterior; `month` se recorta al mismo día (mes-a-fecha), `prevMonth` toma el **mes anterior COMPLETO**; el resto → ventana de igual longitud inmediatamente anterior.
 - **`reportes-ventas.helper.ts`** — `construirReporteVentasCierre`. Series de tendencia, día de semana, heatmap, productos, mix, combinaciones, meseros.
 - **`reportes-finanzas.helper.ts`** — `construirReporteFinanzasCierre`. Flujo de caja, composición, gastos, aging, POS, vencimientos.
+- **`reportes-delivery.helper.ts`** (2026-08-28) — motor de métricas de delivery/retiro. `construirBloqueDelivery` devuelve el bloque completo (KPIs + comparativo, mix por canal, zonas, repartidores, tiempos/SLA, cancelaciones, cobro anticipado, origen del reparto) y `construirReporteVentasCierre` lo incorpora al payload como `delivery`, más 4 KPIs (`envios`, `retiros`, `ingresoEnvios`, `ticketPromedioDelivery`) dentro de `kpis` para que el frontend los arme con el mismo `buildKpiCard` que el resto. **Lo consumen también** `get-dashboard-ventas-kpis` (chips) y `computeResumenCaja` (bloque del cierre), vía `kpisDelivery` / `deliveriesEnCamino` / `resumenDeliveryCaja`. Ver §8.
 - Reutiliza helpers **exportados** de `dashboard-ventas.handler.ts`: `getMonedaPrincipalId`, `getCotizacionMap`, `sumaVentasRango`, `desgloseVentasRango`, `filtroRango`, tipo `VentaFiltro`.
 
 ### Frontend (`src/app/pages/reportes/`)
@@ -83,6 +84,8 @@ es UTC-medianoche, que en Paraguay es el 14 a la noche. Se parsea con
 - `npm run test:reportes-periodo` — unit determinístico de `resolverPeriodo`/`variacionPct` (sin DB; cubre el recorte mes-a-fecha y el mes-completo de `prevMonth`).
 - `npm run test:reporte-ventas` — e2e SQLite: KPIs, día de semana, top productos + margen, mix, combinaciones, tendencia, comparativo.
 - `npm run test:reporte-finanzas` — e2e SQLite: KPIs, exclusión de anulaciones, composición, gastos, aging CPP, POS, vencimientos, flujo.
+- `npm run test:reporte-delivery` — e2e SQLite del motor de delivery (57 asserts): KPIs, mix por canal, zonas, repartidores, SLA, cancelaciones, multimoneda, cierre de caja, comparativo. Incluye los dos invariantes de §8.
+- `npm run test:canal-venta` — compara el `CASE` de SQL contra el clasificador de TypeScript caso por caso.
 
 ## 6. Versión mobile (PWA)
 
@@ -100,3 +103,79 @@ El mismo hub existe en la **PWA mobile** (`projects/mobile/src/app/pages/reporte
 - Modo **client** (HTTP): los 3 métodos aún lanzan error — no están portados. Si se necesita en cliente, implementar en `repository-http.service.ts`.
 - Los charts requieren `Chart.register(...registerables)` (lo hace `reporte-visual.ts` como side-effect del módulo) — sin eso, bubble y bar+line mixto no renderizan.
 - WhatsApp: `sendWhatsappMedia` solo manda imágenes → se envía el primer gráfico como PNG + caption de KPIs; reutiliza `buildEvolutionConfig()` + `getEvolutionApiKey()` + destino de cierre de caja.
+
+
+## 8. Delivery y retiro en los informes (2026-08-28)
+
+Hasta esta fecha **ninguna pantalla de informes sabía que el delivery existía**:
+cero menciones a delivery, `canal_origen`, `costo_delivery` o zona en
+`reportes-*.helper.ts`, `dashboard-ventas.handler.ts` y `resumen-caja.utils.ts`.
+Los datos estaban todos en la base; nadie los leía.
+
+### El canal es una sola definición, en dos lenguajes
+
+`src/app/shared/utils/canal-venta.util.ts` (TS puro, lo usan backend y
+renderer) define **SALÓN / MOSTRADOR / DELIVERY / RETIRO**, y
+`electron/utils/canal-venta.utils.ts` lo re-exporta agregando el `CASE` SQL
+equivalente (`canalVentaExpr`), el filtro (`condicionCanal`) y el join
+(`joinDeliveryCanal`).
+
+Son dos implementaciones de la misma regla y por eso `npm run test:canal-venta`
+las compara **fila por fila** contra la base — el mismo resguardo que
+`CONCEPTO_ES_INGRESO` / `esIngreso()` en el pago consolidado.
+
+Dos detalles que no son obvios:
+
+- **El reparto gana sobre la mesa.** Si un delivery quedara además con mesa (un
+  arrastre de datos), clasificarlo como SALÓN lo borraría de los informes de
+  delivery, que es el error caro.
+- **Un canal desconocido no abre el filtro.** `condicionCanal('DELIVERI')`
+  devuelve `1 = 0`, no "todo": un typo que muestra el universo entero parece
+  que funcionó.
+
+⚠️ **El canal NO es `Venta.canalOrigen`** (LOCAL / WEB / QR_MESA), que dice por
+qué puerta entró el pedido. Un delivery puede ser LOCAL (lo cargó el cajero por
+teléfono) o WEB. Se cruzan, no se reemplazan — `origenDeLosRepartos` es
+justamente ese cruce.
+
+### Criterios del motor (leer antes de tocar)
+
+- **La ventana es `ventas.created_at`, para todo.** Contar los envíos por
+  `fecha_entregado` sonaba mejor ("envíos entregados en el mes") pero rompe la
+  reconciliación: `envíos × ticket promedio` dejaría de dar la facturación de
+  delivery del mismo período. El label dice "envíos", no "entregados".
+- **La plata sale de `pagos_detalles`** (`PAGO − VUELTO`, `pd.activo`,
+  convertido con `cotMap`), igual que `sumaVentasRango`. **La excepción es el
+  envío**, que sale de `ventas.costo_delivery`: es un monto congelado y un pago
+  mixto no dice qué parte era el envío.
+- **Todo pasa por un `FiltroVentas`**, no por un rango: el reporte filtra por
+  período y el dashboard por **caja abierta** (la "Opción B" que evita que un
+  turno que cruza medianoche reinicie el total). Lo que varía es el filtro, no
+  la aritmética.
+- **`cancelacionesDelivery` es la única función que mira ventas CANCELADAS** —
+  `delivery-cancelar` cancela también la venta. El resto parte de `concluidas()`.
+  Hay un assert dedicado a que una cancelada no se cuele en ninguna otra métrica.
+- **Los tiempos se restan en JS**, no con date-diff de SQL: `EXTRACT(EPOCH…)` y
+  `julianday()` no se parecen, y ramificar por driver cuatro etapas es más
+  frágil que traer los timestamps.
+- **Una etapa sin sus dos extremos no cuenta como cero.** La máquina de estados
+  permite ABIERTO → EN_CAMINO sin pasar por PARA_ENTREGA; rellenar el despacho
+  con cero diría que fue instantáneo cuando no existió.
+- **Ciclo de imports:** `dashboard-ventas.handler` → `reportes-delivery.helper`,
+  nunca al revés. Por eso el helper **redeclara** `FiltroVentas` en vez de
+  importar `VentaFiltro`.
+
+### Invariantes que cubre el test
+
+1. La suma del mix por canal **es** la facturación del reporte (si un canal
+   contara de más, la dona y el KPI dirían cosas distintas).
+2. Una venta cancelada no aparece en ninguna métrica salvo la de cancelaciones.
+
+### Bloque del cierre de caja
+
+`computeResumenCaja` devuelve `delivery: ResumenDeliveryCaja` (envíos, retiros,
+cancelados, cobro de envíos, anticipados y **pendientes** al cerrar), así que
+aparece de una vez en el diálogo, el ticket impreso y la imagen de WhatsApp.
+No reusa `kpisDelivery`: el cierre no necesita facturación por canal, y
+arrastrar la conversión multimoneda obligaría al util del arqueo a depender del
+mapa de cotizaciones.

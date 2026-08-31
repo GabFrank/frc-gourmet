@@ -59,6 +59,7 @@ import { EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-it
 import { VentaItemSabor } from '../../src/app/database/entities/ventas/venta-item-sabor.entity';
 import { dbQuery } from '../utils/db-query';
 import { computeResumenCaja } from '../utils/resumen-caja.utils';
+import { condicionCanal, esCanalValido } from '../utils/canal-venta.utils';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { EstadoPedidoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
@@ -998,7 +999,13 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         .leftJoinAndSelect('cliente.persona', 'persona')
         .leftJoinAndSelect('venta.createdBy', 'createdBy')
         .leftJoinAndSelect('createdBy.persona', 'createdByPersona')
-        .leftJoinAndSelect('venta.items', 'items');
+        .leftJoinAndSelect('venta.items', 'items')
+        // El delivery entra en la lista para poder mostrar el canal, la zona y
+        // el repartidor. Va LEFT: la mayoría de las ventas no tiene reparto.
+        .leftJoinAndSelect('venta.delivery', 'delivery')
+        .leftJoinAndSelect('delivery.precioDelivery', 'deliveryZona')
+        .leftJoinAndSelect('delivery.entregadoPorFuncionario', 'repartidor')
+        .leftJoinAndSelect('repartidor.persona', 'repartidorPersona');
 
       // Date range filter (skip if cajaId is provided — caja has its own date range)
       if (!filtros?.cajaId) {
@@ -1092,10 +1099,39 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           .setParameter('mozoId', filtros.mozoId);
       }
 
+      // Canal (SALÓN / MOSTRADOR / DELIVERY / RETIRO). La condición sale del
+      // mismo util que usan los informes: si la lista clasificara por su cuenta,
+      // filtrar "DELIVERY" acá y leer "envíos" en el reporte podrían no dar el
+      // mismo conjunto de ventas. Un canal desconocido no abre el filtro: el
+      // util devuelve una condición imposible, así que un typo devuelve vacío
+      // en vez de mostrar todo como si no se hubiera filtrado.
+      if (filtros?.canal && esCanalValido(filtros.canal)) {
+        qb.andWhere(condicionCanal(filtros.canal, 'venta', 'delivery'));
+      }
+
+      // Zona de entrega y repartidor.
+      if (filtros?.zonaId) {
+        qb.andWhere('delivery.precio_delivery_id = :zonaId', { zonaId: filtros.zonaId });
+      }
+      if (filtros?.repartidorId) {
+        qb.andWhere('delivery.entregado_por_funcionario_id = :repartidorId', { repartidorId: filtros.repartidorId });
+      }
+
+      // Puerta de entrada del pedido (LOCAL / WEB / QR_MESA). Es ortogonal al
+      // canal: un delivery puede ser LOCAL (lo cargó el cajero) o WEB.
+      if (filtros?.canalOrigen) {
+        qb.andWhere('venta.canal_origen = :canalOrigen', { canalOrigen: String(filtros.canalOrigen).toUpperCase() });
+      }
+
       // F5 paso 4: filtro por dispositivo de origen (multi-PC en LAN).
       if (filtros?.dispositivoId) {
         qb.andWhere('venta.dispositivo_id = :ventaDispositivoId', { ventaDispositivoId: filtros.dispositivoId });
       }
+
+      // Totales del resultado FILTRADO (no de la página): se clona antes de
+      // paginar, porque lo que el usuario quiere saber es cuánto suma todo lo
+      // que buscó, no los 25 registros que está viendo.
+      const qbTotales = qb.clone();
 
       qb.orderBy('venta.createdAt', 'DESC');
 
@@ -1105,7 +1141,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       qb.skip((page - 1) * pageSize).take(pageSize);
 
       const [data, total] = await qb.getManyAndCount();
-      return { data, total };
+
+      // `select()` reemplaza los selects de los joins; sin eso el agregado
+      // choca con las columnas que arrastran los `leftJoinAndSelect`.
+      const rawTotales = await qbTotales
+        .select('COALESCE(SUM(venta.costo_delivery), 0)', 'costo_delivery')
+        .getRawOne();
+      // `decimal` → string en Postgres: sin `Number()` el front concatena.
+      const costoDeliveryTotal = Number(rawTotales?.costo_delivery ?? 0) || 0;
+
+      return { data, total, totales: { costoDelivery: costoDeliveryTotal } };
     } catch (error) {
       console.error('Error getting ventas by date range:', error);
       throw error;

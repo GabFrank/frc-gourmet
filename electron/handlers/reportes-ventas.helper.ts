@@ -6,17 +6,19 @@ import {
   getMonedaPrincipalId, getCotizacionMap, sumaVentasRango, desgloseVentasRango, filtroRango,
 } from './dashboard-ventas.handler';
 import { resolverPeriodo, variacionPct, RangoFechas } from './reportes-periodo.util';
+import { construirBloqueDelivery, CotizacionCtx } from './reportes-delivery.helper';
 import type { ReportePeriodoParams } from './reportes.handler';
 import { getInicioJornada } from './dashboard-ventas.handler';
 
 const DIAS_LUN_PRIMERO = [1, 2, 3, 4, 5, 6, 0]; // strftime/EXTRACT DOW: 0=Dom..6=Sáb
 const DIAS_LABEL = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
-interface CotCtx {
-  monPrincipal: number;
-  cotMap: { [id: number]: number };
-  isPg: boolean;
-}
+/**
+ * El contexto de cotización se define en `reportes-delivery.helper.ts` y se
+ * aliasea acá: las dos mitades del reporte comparten el mismo `cotMap`, y
+ * duplicar la interfaz invitaba a que una ganara un campo que la otra no.
+ */
+type CotCtx = CotizacionCtx;
 
 /** Expresiones de fecha driver-aware. created_at se guarda como se persiste
  * (ISO/UTC en SQLite, timestamp en Postgres); las franjas horarias siguen ese
@@ -289,7 +291,7 @@ export async function construirReporteVentasCierre(
   const kAct = await kpisVentas(dataSource, ctx, actual);
   const kAnt = anterior ? await kpisVentas(dataSource, ctx, anterior) : null;
 
-  const [tendencia, diaSemana, hp, prods, mix, combos, mes] = await Promise.all([
+  const [tendencia, diaSemana, hp, prods, mix, combos, mes, delivery] = await Promise.all([
     serieTendencia(dataSource, ctx, actual, anterior),
     ventasPorDiaSemana(dataSource, ctx, actual),
     horasPico(dataSource, ctx, actual),
@@ -297,6 +299,7 @@ export async function construirReporteVentasCierre(
     mixPago(dataSource, ctx, actual),
     combinaciones(dataSource, actual),
     meseros(dataSource, ctx, actual),
+    construirBloqueDelivery(dataSource, ctx, actual, anterior),
   ]);
 
   return {
@@ -309,7 +312,18 @@ export async function construirReporteVentasCierre(
       // Margen es un porcentaje: la "variación" es la diferencia en puntos.
       margenPct: { valor: kAct.margenPct, variacion: kAnt ? +(kAct.margenPct - kAnt.margenPct).toFixed(1) : null, esPuntos: true },
       mesas: conDelta(kAct.mesas, kAnt?.mesas ?? null),
+      // Los de delivery viajan en `kpis` y no colgados de `delivery` para que
+      // el frontend los arme con el mismo `buildKpiCard` que el resto — y para
+      // que entren solos al PDF y al caption de WhatsApp, que leen las cards.
+      envios: conDelta(delivery.kpis.envios, delivery.kpisAnterior?.envios ?? null),
+      retiros: conDelta(delivery.kpis.retiros, delivery.kpisAnterior?.retiros ?? null),
+      ingresoEnvios: conDelta(delivery.kpis.ingresoEnvios, delivery.kpisAnterior?.ingresoEnvios ?? null),
+      ticketPromedioDelivery: conDelta(
+        delivery.kpis.ticketPromedioDelivery,
+        delivery.kpisAnterior?.ticketPromedioDelivery ?? null,
+      ),
     },
+    delivery,
     tendencia,
     diaSemana,
     horasPico: hp,

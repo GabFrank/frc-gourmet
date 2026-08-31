@@ -1,7 +1,7 @@
 # Plan — Delivery y Retiro en los informes de venta
 
 > Branch: `claude/sales-reports-delivery-ihwnbi` · base `develop`
-> Estado: **aprobado, en ejecución** · Fase 0 hecha
+> Estado: **aprobado, en ejecución** · Fases 0 y 1 hechas
 
 ## 1. Diagnóstico
 
@@ -151,12 +151,13 @@ pisa zonas ya asignadas ni le inventa zona a un retiro. Test nuevo
 `npm run test:zona-delivery-online` (11 asserts) — verificado que **falla sin el
 fix**. Regresión: `test:delivery` 53/53, `test:pedidos-online` 73/73, `npm run check` OK.
 
-### Fase 1 — Motor de métricas (backend)
+### Fase 1 — Motor de métricas (backend) · ✅ HECHA
 
-- **`electron/handlers/reportes-delivery.helper.ts`** — nuevo. Funciones:
+- **`electron/handlers/reportes-delivery.helper.ts (hecho)`** — nuevo. Funciones:
   `kpisDelivery`, `mixPorCanal`, `enviosPorZona`, `rankingRepartidores`,
   `tiemposEntrega`, `cancelacionesDelivery`.
-- **`electron/utils/canal-venta.utils.ts`** — nuevo. Fuente única de la
+- **`electron/utils/canal-venta.utils.ts       (hecho)
+src/app/shared/utils/canal-venta.util.ts (hecho, fuente única compartida)`** — nuevo. Fuente única de la
   clasificación de canal: fragmento SQL + enum compartido con el renderer, para
   que la lista, el reporte y el dashboard no puedan clasificar distinto.
 - `construirReporteVentasCierre` incorpora el bloque `delivery` al payload.
@@ -184,6 +185,27 @@ fix**. Regresión: `test:delivery` 53/53, `test:pedidos-online` 73/73, `npm run 
   `VENTAS_DASHBOARD_VER`. **No se crean permisos nuevos.**
 - Las métricas cuentan **ventas CONCLUIDAS**, salvo la tarjeta de cancelaciones,
   que por definición mira las canceladas.
+
+**Entregado:** `canal-venta.util.ts` (shared) + `canal-venta.utils.ts` (backend,
+agrega el `CASE`, el filtro y el join) + `reportes-delivery.helper.ts` (motor
+completo). Cableado en los cuatro consumidores: `construirReporteVentasCierre`
+(bloque `delivery` + 4 KPIs con variación), `get-dashboard-ventas-kpis` (chips,
+con `enCamino` sin filtro de período), `computeResumenCaja` (bloque del cierre) y
+`getVentasByDateRange` (filtros `canal` / `zonaId` / `repartidorId` /
+`canalOrigen` + join del delivery + `totales.costoDelivery` del resultado
+filtrado, no de la página).
+
+Todo el motor recibe un `FiltroVentas` en vez de un rango: el reporte filtra por
+período y el dashboard por caja abierta, y la aritmética tiene que ser la misma.
+El helper **redeclara** `FiltroVentas` en lugar de importar `VentaFiltro` para
+que el import quede en un solo sentido.
+
+Tests: `test:reporte-delivery` (57 asserts, incluidos los dos invariantes) y
+`test:canal-venta` (25, compara SQL contra TS fila por fila). Regresión verde:
+`reporte-ventas` 21, `reporte-finanzas` 23, `kpis-filtros` 29, `reportes-periodo`
+41, `zona-delivery-online` 11, `delivery` 53, `resumen-caja-numeros` 8,
+`integridad-cobro` 21, `terminal-caja` 30, `ticket-delivery-pagos` 50,
+`cobro-parcial` 25. `npm run check` (AOT) exit 0.
 
 ### Fase 2 — Reportes · Ventas (desktop)
 
@@ -215,8 +237,8 @@ skill y backlog, PR a `develop`, CI en verde.
 | Script | Qué cubre |
 |---|---|
 | `npm run test:zona-delivery-online` (nuevo, e2e SQLite) · **hecho** | Fase 0: el alta sella la zona sin recalcular el costo; RETIRO sin zona; zona sin tarifa compartida; y el backfill de la migración (recupera, no pisa, es idempotente). |
-| `npm run test:reporte-delivery` (nuevo, e2e SQLite) | KPIs de envíos/retiros, mix por canal, zonas, repartidores, SLA, cancelaciones, multimoneda, exclusión de anuladas, comparativo. El caso de regresión de la zona vive en `test:zona-delivery-online`. |
-| `npm run test:canal-venta` (nuevo, unit) | Clasificación de canal para las 6 combinaciones (mesa, mostrador, delivery, retiro, web, QR mesa). |
+| `npm run test:reporte-delivery` (nuevo, e2e SQLite) · **hecho** | KPIs de envíos/retiros, mix por canal, zonas, repartidores, SLA, cancelaciones, multimoneda, exclusión de anuladas, comparativo. El caso de regresión de la zona vive en `test:zona-delivery-online`. |
+| `npm run test:canal-venta` (nuevo, e2e SQLite) · **hecho** | El `CASE` de SQL y `clasificarCanalVenta()` coinciden fila por fila; `condicionCanal` filtra el mismo conjunto; un canal desconocido no abre el filtro. |
 | `npm run test:resumen-caja-numeros` (existente, se amplía) | El bloque delivery del cierre no rompe el arqueo ni concatena decimales en Postgres. |
 | `npm run test:reporte-ventas` (existente, se amplía) | El payload nuevo no altera los KPIs que ya se calculaban. |
 | `npm run test:delivery`, `test:kpis-filtros`, `test:reportes-periodo`, `test:mobile` | Regresión. |
@@ -244,7 +266,7 @@ electron/utils/canal-venta.utils.ts
 src/app/database/migrations/<epoch-ms>-BackfillZonaDeliveryPedidosOnline.ts
 scripts/test-zona-delivery-online-e2e.ts   (hecho)
 scripts/test-reporte-delivery-e2e.ts
-scripts/test-canal-venta.ts
+scripts/test-canal-venta.ts               (hecho)
 docs/testing/TESTING-CHECKLIST-INFORMES-DELIVERY.md
 ```
 

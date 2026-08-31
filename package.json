@@ -51,6 +51,8 @@
     "test:delivery-impresora": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-impresora-ruteo.ts",
     "test:delivery": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-e2e.ts",
     "test:zona-delivery-online": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-zona-delivery-online-e2e.ts",
+    "test:canal-venta": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-canal-venta.ts",
+    "test:reporte-delivery": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-reporte-delivery-e2e.ts",
     "test:menu-tree": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-menu-tree.ts",
     "test:permisos": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-permissions-e2e.ts",
     "test:mobile": "ng test mobile --watch=false",
