@@ -1106,7 +1106,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // util devuelve una condición imposible, así que un typo devuelve vacío
       // en vez de mostrar todo como si no se hubiera filtrado.
       if (filtros?.canal && esCanalValido(filtros.canal)) {
-        qb.andWhere(condicionCanal(filtros.canal, 'venta', 'delivery'));
+        qb.andWhere(condicionCanal(filtros.canal, 'venta'));
       }
 
       // Zona de entrega y repartidor.

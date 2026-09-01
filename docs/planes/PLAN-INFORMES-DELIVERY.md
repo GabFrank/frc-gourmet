@@ -1,7 +1,7 @@
 # Plan — Delivery y Retiro en los informes de venta
 
 > Branch: `claude/sales-reports-delivery-ihwnbi` · base `develop`
-> Estado: **aprobado, en ejecución** · Fases 0 y 1 hechas
+> Estado: **aprobado, en ejecución** · Fases 0, 1 y 2 hechas
 
 ## 1. Diagnóstico
 
@@ -207,11 +207,22 @@ Tests: `test:reporte-delivery` (57 asserts, incluidos los dos invariantes) y
 `integridad-cobro` 21, `terminal-caja` 30, `ticket-delivery-pagos` 50,
 `cobro-parcial` 25. `npm run check` (AOT) exit 0.
 
-### Fase 2 — Reportes · Ventas (desktop)
+### Fase 2 — Reportes · Ventas (desktop) · ✅ HECHA
 
 KPIs + 5 tarjetas + toggles de tendencia y horas pico. Padrón de dashboards
 obligatorio (`<app-dash-*>`, `_dashboard.scss`, `getDashboardChartOptions()`),
 sin funciones ni getters en template, sin colores hardcodeados, `| number:'1.0-2'`.
+
+**Entregado:** 4 KPIs en fila propia (`kpisDelivery`) + `kpisExport` para el PDF y
+el caption; tarjetas Mix por canal, Envíos por zona, Repartidores, Tiempos de
+entrega (con chips de SLA) y Cancelaciones; tercera serie "Delivery" en la
+tendencia y toggle Todos / Solo delivery en el heatmap. Backend: `serieCubetas` y
+`horasPico` aceptan filtro de canal, y `condicionCanal` pasó a `EXISTS` para no
+exigir join y poder pegarse al mismo `sumaVentasRango` que los KPIs.
+
+Tests: `test:reporte-delivery` sube a 61 asserts (4 nuevos cubren las series que
+consume la pantalla: `data` es `any`, así que renombrar una clave no lo agarra el
+AOT). `npm run check` exit 0, `npm run lint` sin errores nuevos.
 
 ### Fase 3 — Dashboard desktop + PWA resumen
 
@@ -247,6 +258,12 @@ Manual: `docs/testing/TESTING-CHECKLIST-INFORMES-DELIVERY.md`.
 
 ## 5. Fuera de alcance
 
+- **Re-paletizar los gráficos para modo oscuro** — el validador de `dataviz`
+  marca dos pasos de la paleta preexistente (naranja y amarillo) fuera de la
+  banda de luminosidad contra la superficie oscura. Es la paleta compartida con
+  el mix de forma de pago; cambiarla sólo para las tarjetas nuevas dejaría dos
+  donas distintas en la misma pantalla. Pendiente aparte, para todas las
+  pantallas de Reportes a la vez.
 - **Mapa de zonas con polígonos Leaflet** — decidido: no por ahora. Sólo cubriría
   las zonas de la tienda online (las del PdV no tienen polígono) y el canvas del
   mapa no se captura bien en el export a PDF. Barras + tabla cubren la pregunta.

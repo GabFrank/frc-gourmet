@@ -179,3 +179,45 @@ aparece de una vez en el diálogo, el ticket impreso y la imagen de WhatsApp.
 No reusa `kpisDelivery`: el cierre no necesita facturación por canal, y
 arrastrar la conversión multimoneda obligaría al util del arqueo a depender del
 mapa de cotizaciones.
+
+### La pantalla (desktop)
+
+Cuatro KPIs (Envíos, Retiros, Ingreso por envíos, Ticket prom. delivery) en una
+**fila propia** debajo de la general: la grilla de arriba es de 5 columnas y
+meter 9 cards dejaba una segunda fila coja. El PDF y el caption de WhatsApp leen
+`kpisExport` (`kpis` + `kpisDelivery`), así que ven las dos filas.
+
+Cinco tarjetas entre "Ingeniería de menú" y "Combinaciones", todas bajo
+`*ngIf="hayDelivery"` — un local que no reparte no ve media pantalla vacía:
+
+| Tarjeta | Notas |
+|---|---|
+| **Mix por canal** | Dona + tabla + notas al pie con cobro anticipado y origen (WEB/LOCAL). Se pintan los 4 canales aunque alguno esté en cero: la ausencia es el dato. |
+| **Envíos por zona** | Barras + tabla (envíos, facturación, envío cobrado, tiempo prom.). Un tiempo `null` se muestra `—`, no `0`: nadie entregó, no fue instantáneo. |
+| **Repartidores** | `<app-dash-ranking>`, ordenado por entregas. |
+| **Tiempos de entrega** | Barras promedio/mediana por etapa + 3 chips de SLA con **color y etiqueta juntos** (nunca color solo). Los umbrales del chip vienen del backend, así que el texto dice los minutos reales configurados. |
+| **Cancelaciones** | Cantidad, tasa, monto no facturado y top de motivos. |
+
+Además: la **tendencia** gana una tercera serie "Delivery" (sólo si hubo alguno
+— una línea en cero le roba lectura a las otras dos), y el **heatmap** gana un
+toggle Todos / Solo delivery, porque de noche el reparto sigue y el salón baja:
+mezcladas, las dos curvas se promedian en una que no describe a ninguna.
+
+Dos cosas que costaron y conviene no repetir:
+
+- **`<app-dash-section-header>` no proyecta contenido** (no tiene `<ng-content>`).
+  Meter el toggle adentro lo hacía desaparecer en silencio; va como hermano, en
+  un `.hm-head` flex.
+- **`--primary-color` NO es un token global** en este proyecto: cada componente
+  define el suyo (`reporte-periodo-control` tiene el rojo de marca en su
+  `:host`). Un botón propio que lo usara salía transparente. El toggle reusa
+  `.dashboard-range-chip` / `.range-chip-active`, que sí es global vía
+  `styles.scss` → `@import './app/shared/styles/dashboard'` (sin guion bajo, por
+  eso no aparece grepeando `_dashboard`).
+
+La paleta categórica del repo se validó con el validador de `dataviz` para los 4
+canales: pasa en claro (con el WARN de contraste que ya cubren la leyenda con %
+y la tabla). En **oscuro**, dos pasos (naranja y amarillo) quedan fuera de la
+banda de luminosidad recomendada — es de la paleta preexistente, compartida con
+el mix de forma de pago, y cambiarla acá dejaría dos donas con paletas distintas
+en la misma pantalla. Anotado como pendiente, no tocado.

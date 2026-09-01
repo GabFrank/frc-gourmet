@@ -27,7 +27,7 @@ import {
   construirBloqueDelivery, resumenDeliveryCaja, deliveriesEnCamino, CotizacionCtx,
   ZONA_SIN_ASIGNAR,
 } from '../electron/handlers/reportes-delivery.helper';
-import { getMonedaPrincipalId, getCotizacionMap } from '../electron/handlers/dashboard-ventas.handler';
+import { getMonedaPrincipalId, getCotizacionMap, getInicioJornada } from '../electron/handlers/dashboard-ventas.handler';
 import { CanalVenta } from '../electron/utils/canal-venta.utils';
 
 let passed = 0, failed = 0;
@@ -211,7 +211,10 @@ async function main() {
   // con "hace 35 días" para que el test no dependa del día del mes en que corra:
   // a principio de mes, 35 días atrás cae DOS meses antes y la comparación
   // quedaría vacía sin que nadie se entere.
-  const periodo = resolverPeriodo({ rango: 'month', comparar: true }, ahora, 0);
+  // La jornada sale de la misma fuente que el reporte: con el default (07:00),
+  // pasar 0 acá haría que el test y el reporte miraran meses distintos entre las
+  // 00:00 y las 06:59 del día 1.
+  const periodo = resolverPeriodo({ rango: 'month', comparar: true }, ahora, await getInicioJornada(ds));
   const medioAnterior = new Date(
     (periodo.anterior!.desde.getTime() + periodo.anterior!.hasta.getTime()) / 2,
   );
@@ -337,6 +340,20 @@ async function main() {
   ok(rep.kpis.ingresoEnvios.valor === 65000, 'y el ingreso por envíos');
   ok(rep.kpis.envios.variacion === null, 'sin comparar → variación null');
   ok(!!rep.delivery?.zonas?.length, 'el bloque delivery viaja completo en el payload');
+  // Las dos series que consume la pantalla y que no existían antes. Sin estos
+  // asserts, renombrar una clave rompe la UI en silencio: `data` es `any`, así
+  // que el AOT no lo agarra.
+  ok(Array.isArray(rep.tendencia.delivery) && rep.tendencia.delivery.length === rep.tendencia.labels.length,
+    'la tendencia trae la serie de delivery, alineada con las labels',
+    { delivery: rep.tendencia.delivery?.length, labels: rep.tendencia.labels?.length });
+  ok(rep.tendencia.delivery.reduce((a: number, b: number) => a + b, 0) <= rep.kpis.facturacion.valor,
+    'la serie de delivery nunca supera la facturación total');
+  ok(!!rep.horasPicoDelivery && Array.isArray(rep.horasPicoDelivery.matriz),
+    'el heatmap tiene su variante sólo-delivery');
+  const ticketsHeatmap = (m: any) => (m?.matriz || []).reduce((s: number, f: number[]) => s + f.reduce((a, b) => a + b, 0), 0);
+  ok(ticketsHeatmap(rep.horasPicoDelivery) < ticketsHeatmap(rep.horasPico),
+    'el heatmap de delivery es un subconjunto del general',
+    { delivery: ticketsHeatmap(rep.horasPicoDelivery), todos: ticketsHeatmap(rep.horasPico) });
 
   const repComp = await construirReporteVentasCierre(ds, { rango: 'month', comparar: true });
   ok(repComp.delivery.kpisAnterior !== null, 'con comparar → hay KPIs del período anterior');

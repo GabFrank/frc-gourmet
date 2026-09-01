@@ -47,21 +47,29 @@ export function canalVentaExpr(aliasVenta = 'v', aliasDelivery = 'dcanal'): stri
 }
 
 /**
- * Fragmento `WHERE` para acotar a un canal. Devuelve SQL sin parámetros: los
- * cuatro valores son constantes del enum, no entrada del usuario, y meterlos
- * como placeholder obligaría a todos los callers a hilvanar el orden de los
- * params sólo para esto.
+ * Fragmento `WHERE` para acotar a un canal.
  *
- * El caller valida el canal contra el enum antes de llamar (ver
- * `esCanalValido`); un valor desconocido devuelve una condición imposible en
- * vez de abrir el filtro, para que un typo no muestre TODO en silencio.
+ * **No requiere el join de `joinDeliveryCanal()`**: resuelve el modo con un
+ * `EXISTS` correlacionado. Es a propósito — así se puede pegar a consultas que
+ * ya existían y no tienen (ni quieren) un join más, como las series de
+ * tendencia, que corren sobre el mismo `sumaVentasRango` que los KPIs y no
+ * pueden cambiar de forma sin desalinearse de ellos.
+ *
+ * Devuelve SQL sin parámetros: los cuatro valores son constantes del enum, no
+ * entrada del usuario, y meterlos como placeholder obligaría a cada caller a
+ * hilvanar el orden de los params sólo para esto.
+ *
+ * Un canal desconocido devuelve una condición imposible en vez de abrir el
+ * filtro: un typo que muestra el universo entero parece que funcionó. El caller
+ * puede chequear antes con `esCanalValido`.
  */
-export function condicionCanal(canal: string, aliasVenta = 'v', aliasDelivery = 'dcanal'): string {
+export function condicionCanal(canal: string, aliasVenta = 'v'): string {
+  const esRetiro = `EXISTS (SELECT 1 FROM deliveries dcond WHERE dcond.id = ${aliasVenta}.delivery_id AND dcond.modo = 'RETIRO')`;
   switch (String(canal || '').toUpperCase()) {
     case 'RETIRO':
-      return `${aliasDelivery}.modo = 'RETIRO'`;
+      return esRetiro;
     case 'DELIVERY':
-      return `(${aliasVenta}.delivery_id IS NOT NULL AND (${aliasDelivery}.modo IS NULL OR ${aliasDelivery}.modo <> 'RETIRO'))`;
+      return `(${aliasVenta}.delivery_id IS NOT NULL AND NOT ${esRetiro})`;
     case 'SALON':
       return `(${aliasVenta}.delivery_id IS NULL AND ${aliasVenta}.mesa_id IS NOT NULL)`;
     case 'MOSTRADOR':

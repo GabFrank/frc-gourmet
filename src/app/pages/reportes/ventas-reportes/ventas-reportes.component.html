@@ -46,6 +46,18 @@
       </div>
     </section>
 
+    <!-- KPIs de delivery: fila propia, la grilla de arriba es de 5 columnas -->
+    <section class="reportes-kpis kpis-delivery" *ngIf="kpisDelivery.length">
+      <div class="reportes-kpi" *ngFor="let k of kpisDelivery">
+        <div class="k-label">{{ k.label }}</div>
+        <div class="k-value">{{ k.valor }}</div>
+        <span class="k-delta" *ngIf="k.tieneDelta" [class.up]="k.buena" [class.down]="!k.buena">
+          <mat-icon>{{ k.dir === 'up' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon>{{ k.deltaTexto }}
+          <span class="vs" *ngIf="comparaLabel">vs {{ comparaLabel }}</span>
+        </span>
+      </div>
+    </section>
+
     <div class="reportes-grid">
       <!-- Tendencia -->
       <div class="col-7" data-rep-titulo="Tendencia del mes">
@@ -65,7 +77,17 @@
       <!-- Horas pico (heatmap) -->
       <div class="col-7">
         <div class="dashboard-card reportes-card">
-          <app-dash-section-header icon="grid_on" title="Horas pico"></app-dash-section-header>
+          <div class="hm-head">
+            <app-dash-section-header icon="grid_on" title="Horas pico"></app-dash-section-header>
+            <div class="hm-canal" *ngIf="hayDelivery">
+              <button type="button" class="dashboard-range-chip"
+                      [class.range-chip-active]="heatmapCanal === 'TODOS'"
+                      (click)="setHeatmapCanal('TODOS')">Todos</button>
+              <button type="button" class="dashboard-range-chip"
+                      [class.range-chip-active]="heatmapCanal === 'DELIVERY'"
+                      (click)="setHeatmapCanal('DELIVERY')">Solo delivery</button>
+            </div>
+          </div>
           <div class="reportes-card-sub">Intensidad de ventas (tickets) por día y hora</div>
           <div class="hm-wrap" *ngIf="heatmap.horas.length; else sinHoras">
             <div class="hm" [style.gridTemplateColumns]="'40px repeat(' + heatmap.horas.length + ', 1fr)'">
@@ -117,6 +139,140 @@
           [chartData]="scatterData" [chartOptions]="scatterOptions" [height]="260">
           <span class="me-hint">Popularidad × margen · tamaño = ingreso</span>
         </app-dash-chart-card>
+      </div>
+
+      <!-- ══════════════ DELIVERY Y RETIRO ══════════════ -->
+      <div class="col-12 rep-sep" *ngIf="hayDelivery">
+        <app-dash-section-header icon="two_wheeler" title="Delivery y retiro"></app-dash-section-header>
+      </div>
+
+      <!-- Mix por canal -->
+      <div class="col-5" *ngIf="hayDelivery" data-rep-titulo="Mix por canal de venta">
+        <div class="dashboard-card reportes-card">
+          <app-dash-section-header icon="donut_large" title="Mix por canal de venta"></app-dash-section-header>
+          <div class="reportes-card-sub">Cuánto pesa cada forma de entrega sobre la facturación</div>
+          <div class="mix-row">
+            <div class="mix-chart">
+              <canvas baseChart [type]="'doughnut'" [data]="canalData" [options]="canalOptions"></canvas>
+            </div>
+            <div class="mix-leyenda">
+              <div class="mix-item" *ngFor="let c of canalFilas">
+                <span class="mix-dot" [style.background]="c.color"></span>
+                <span class="mix-nombre">{{ c.label }}</span>
+                <span class="mix-pct">{{ c.pct }}</span>
+              </div>
+            </div>
+          </div>
+          <table class="reportes-tabla tabla-compacta">
+            <thead><tr><th>Canal</th><th class="num">Tickets</th><th class="num">Facturación</th><th class="num">Ticket prom.</th></tr></thead>
+            <tbody>
+              <tr *ngFor="let c of canalFilas">
+                <td><span class="mix-dot" [style.background]="c.color"></span> {{ c.label }}</td>
+                <td class="num">{{ c.tickets }}</td>
+                <td class="num">{{ c.facturacion }}</td>
+                <td class="num">{{ c.ticketPromedio }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="rep-notas">
+            <span class="rep-nota">
+              <mat-icon>schedule</mat-icon>
+              {{ cobroAnticipado.anticipado }} anticipado · {{ cobroAnticipado.contraEntrega }} contra entrega
+            </span>
+            <span class="rep-nota" *ngFor="let o of origenRepartos">
+              <mat-icon>{{ o.origen === 'WEB' ? 'language' : 'point_of_sale' }}</mat-icon>
+              {{ o.tickets }} por {{ o.origen }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Envíos por zona -->
+      <div class="col-7" *ngIf="hayDelivery" data-rep-titulo="Envíos por zona">
+        <div class="dashboard-card reportes-card">
+          <app-dash-section-header icon="map" title="Envíos por zona"></app-dash-section-header>
+          <div class="reportes-card-sub">Cantidad de envíos, lo que se cobró de envío y cuánto se tardó</div>
+          <div class="zonas-chart" *ngIf="zonasFilas.length; else sinZonas">
+            <canvas baseChart [type]="'bar'" [data]="zonasData" [options]="zonasOptions"></canvas>
+          </div>
+          <table class="reportes-tabla tabla-compacta" *ngIf="zonasFilas.length">
+            <thead>
+              <tr><th>Zona</th><th class="num">Envíos</th><th class="num">Facturación</th>
+                  <th class="num">Envío cobrado</th><th class="num">Tiempo prom.</th></tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let z of zonasFilas">
+                <td>{{ z.zona }}</td>
+                <td class="num">{{ z.envios }}</td>
+                <td class="num">{{ z.facturacion }}</td>
+                <td class="num">{{ z.envioRecaudado }}</td>
+                <td class="num">{{ z.minutos }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <ng-template #sinZonas><div class="reportes-empty">Sin envíos en el período</div></ng-template>
+        </div>
+      </div>
+
+      <!-- Repartidores -->
+      <div class="col-5" *ngIf="hayDelivery">
+        <app-dash-ranking title="Repartidores" icon="sports_motorsports"
+          [items]="repartidores" emptyText="Sin entregas asignadas en el período">
+        </app-dash-ranking>
+      </div>
+
+      <!-- Tiempos de entrega + SLA -->
+      <div class="col-7" *ngIf="hayDelivery" data-rep-titulo="Tiempos de entrega">
+        <div class="dashboard-card reportes-card">
+          <app-dash-section-header icon="timer" title="Tiempos de entrega"></app-dash-section-header>
+          <div class="reportes-card-sub">Minutos por etapa del reparto · {{ slaLeyenda }}</div>
+          <div class="tiempos-chart" *ngIf="hayTiempos; else sinTiempos">
+            <canvas baseChart [type]="'bar'" [data]="tiemposData" [options]="tiemposOptions"></canvas>
+          </div>
+          <div class="sla-chips">
+            <div class="sla-chip" *ngFor="let s of slaChips">
+              <span class="sla-dot" [style.background]="s.color"></span>
+              <span class="sla-label">{{ s.label }}</span>
+              <span class="sla-valor">{{ s.cantidad }}</span>
+              <span class="sla-pct">{{ s.pct }}</span>
+            </div>
+          </div>
+          <ng-template #sinTiempos>
+            <div class="reportes-empty">Ningún envío llegó a entregarse en el período</div>
+          </ng-template>
+        </div>
+      </div>
+
+      <!-- Cancelaciones -->
+      <div class="col-12" *ngIf="hayDelivery">
+        <div class="dashboard-card reportes-card">
+          <app-dash-section-header icon="cancel" title="Cancelaciones de delivery"
+            [badge]="cancelaciones.cantidad ? cancelaciones.tasa : null" badgeColor="warning"></app-dash-section-header>
+          <div class="reportes-card-sub">Repartos cancelados y por qué</div>
+          <div class="canc-resumen" *ngIf="cancelaciones.cantidad; else sinCanc">
+            <div class="canc-num">
+              <span class="canc-valor">{{ cancelaciones.cantidad }}</span>
+              <span class="canc-label">cancelados</span>
+            </div>
+            <div class="canc-num">
+              <span class="canc-valor">{{ cancelaciones.tasa }}</span>
+              <span class="canc-label">del total de repartos</span>
+            </div>
+            <div class="canc-num">
+              <span class="canc-valor">{{ cancelaciones.montoPerdido }}</span>
+              <span class="canc-label">no facturados</span>
+            </div>
+            <div class="canc-motivos">
+              <div class="canc-motivo" *ngFor="let m of cancelaciones.motivos">
+                <span class="canc-motivo-txt">{{ m.motivo }}</span>
+                <span class="canc-motivo-cant">{{ m.cantidad }}</span>
+              </div>
+            </div>
+          </div>
+          <ng-template #sinCanc>
+            <div class="reportes-empty">Ningún reparto cancelado en el período</div>
+          </ng-template>
+        </div>
       </div>
 
       <!-- Combinaciones -->
