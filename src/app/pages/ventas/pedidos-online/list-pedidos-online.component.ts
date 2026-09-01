@@ -15,7 +15,7 @@ import { HasPermissionDirective } from 'src/app/shared/directives/has-permission
  *
  * Lista los pedidos entrantes de la web y permite aceptar / rechazar / avanzar
  * su estado. La venta se materializa con el flujo normal del PdV; acá se maneja
- * la máquina de estados del pedido. Ver docs/arquitectura/webapp-pedidos-plan.md.
+ * la máquina de estados del pedido. Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 @Component({
   selector: 'app-list-pedidos-online',

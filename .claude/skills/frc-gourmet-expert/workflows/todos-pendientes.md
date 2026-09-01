@@ -192,12 +192,16 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
   - Auto-impresión al cobrar
   - Relación `Producto → Printer` para enrutar comandas a estaciones específicas
 - [ ] **Categorías click → agregar al carrito**: items de categoría se muestran pero no agregan productos al carrito.
+- [ ] **Retirar el árbol viejo de categorías del PdV**: `PdvGrupoCategoria` → `PdvCategoria` → `PdvCategoriaItem` → `PdvItemProducto` quedó reemplazado por los **atajos** (`PdvAtajoGrupo`/`PdvAtajoItem`/`PdvAtajoItemProducto`). Sigue con entidades, handlers y una FK en `PdvConfig`. Baja con estrategia de 2 versiones (no hay `DROP` directo).
 - [ ] **UI Precios de Delivery**: ABM visual (actualmente se gestionan desde crear-delivery dialog).
 - [ ] **UI Configuración PdV**: dialogo para editar umbrales y parámetros de `PdvConfig` (parcialmente hecho via `pdv-config-dialog`, falta refinamiento).
 - [ ] **Cancelar Caja**: cancela caja con ventas, cobros y movimientos de stock. UI parcial.
 - [ ] **Retiros de Efectivo desde PdV**: registrar retiros durante turno (entity `RetiroCaja` existe en módulo financiero, falta integración).
 - [ ] **Gastos desde PdV**: registrar gastos operativos sin salir del PdV.
 - [ ] **Bug findPrecioCosto()**: retorna 0 hardcodeado en vez de buscar el precio de costo real.
+- [ ] **`DividirCuentaDialog` quedó de facto reemplazado por el cobro parcial por ítems** (que sí persiste quién pagó qué; el diálogo viejo es informativo). Decidir si se quita o se reusa como atajo de selección de ítems.
+- [ ] **`anularCobroParcial` no tiene llamador en el frontend** — el handler existe y es transaccional, pero desde la UI no hay forma de anular una ronda. Ver `domains/ventas-pdv.md`.
+- [ ] **Comprobante por ronda de cobro parcial**: fuera del alcance original, pero el modelo ya lo habilita (`PagoDetalle.cobroParcialId` identifica la plata de cada ronda).
 
 ## Compras
 
@@ -330,6 +334,13 @@ Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `proje
 - **Onboarding task "Agregar impresora"** + **wizard de configuración LPR** (ver detalle arriba en "Acciones inmediatas").
 
 ### P3 — Sweeps de calidad / consistencia
+- **Forma de pago EFECTIVO por fuente**: 5 diálogos de Caja Mayor
+  (`create-edit-gasto`, `create-edit-entrada-varia`, `pagar-cuota` de CPP,
+  `edit-movimiento`, `create-retiro-caja`) filtran el select con un
+  `.includes('EFECTIVO')` inline. Cumplen la regla pero ignoran `activo` /
+  `movimentaCaja` y pueden quedar vacíos. Pasar a `formasPagoEfectivoDeCaja()` de
+  `shared/utils/forma-pago-efectivo.util.ts`, que es la fuente única
+  desktop + PWA. Ver `domains/financiero-caja-mayor.md`.
 - **Preselecciones** en dialogs (única opción / principal / última-usada).
 - Sweep **`appCurrencyInput`** global (inputs monetarios locale-aware).
 - **ngModel → Reactive Forms** (~35 archivos).
@@ -349,9 +360,15 @@ Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `proje
 ### P5 — Features grandes / nuevas
 - **Pago mixto** reutilizable (efectivo+banco, N líneas).
 - **Clientes F3/F4**: loyalty/puntos, direcciones múltiples, cumpleaños, import CSV, reportes avanzados.
+- **Propina digital**: al cobrar, ofrecer 10/15/20% y registrarla como línea de pago tipo PROPINA.
+- **Cupones de descuento / promo tickets**: código único, validación al cobrar, vinculados a campañas.
+- **Tótem de autoatención**: pantalla táctil donde el cliente pide sin mozo. (El QR en mesa ya existe: es el canal MESA_QR.)
+- **Agendamiento de pedidos**: pedido con hora programada de lanzamiento a cocina — eventos, pedidos anticipados, delivery programado.
+- **App web del repartidor**: hoy el reparto se sigue desde el diálogo de delivery del PdV; el repartidor no tiene pantalla propia con dirección, teléfono, ítems y monto, ni hay seguimiento en vivo.
+- **`AuditLog`**: entidad + log de acciones críticas. No existe; hoy la trazabilidad es `createdBy`/`updatedBy` de `BaseModel` y los movimientos de caja.
 - ~~**KDS** + impresión ESC/POS avanzada~~ — ✅ **HECHO** (KDS completo + impresión real). Ver sección "Reauditado 2026-07-26".
 - **Reservas** UI completa.
-- **Pedidos Online / Storefront**: base construida (Fases 0–E). Pendiente: zonas por polígono (Fase 6), pasarelas de pago reales (Bancard/UPay/PagoPar hoy son enums).
+- **Pedidos Online / Storefront**: en operación desde 2026-08 (PICKUP + DELIVERY materializan en `Venta`, zonas por polígono resueltas server-side). Pendiente: pasarelas de pago reales — Bancard/UPay/PagoPar siguen siendo enums, y el pago efectivo contra entrega es decisión cerrada. Ver `domains/pedidos-online.md`.
 
 ### Continuo (transversal)
 - Testing E2E (Producto→Receta→PdV→Venta→Stock; Compras contado/crédito; multi-moneda).
@@ -416,6 +433,12 @@ Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `proje
 - [ ] **Cheque como fuente de pago** — frc-comercial lo tiene (emite el cheque
   desde el propio pago, con chequera y hojas). Acá el cheque sigue por
   `emitir-cheque`. Se dejó fuera del alcance a propósito.
+
+- [ ] **Ofrecer el wizard consolidado desde `cuenta-por-cobrar-detalle` y
+  `cliente-detalle`** con `origenIdsPreseleccionados` (el diálogo ya soporta el
+  dato). Hoy esas dos pantallas sólo abren `cobrar-cuota-dialog`, de a una cuota:
+  el cajero parado en la ficha del cliente no llega al cobro múltiple ni al
+  descuento.
 ## PdV: mesa y cliente (2026-08)
 
 - [x] **La mesa se ocupa y se libera con permiso de mozo** — el estado viaja con

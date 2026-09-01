@@ -412,7 +412,7 @@ Export con exceljs (Excel) y pdfmake (PDF).
 
 ## Verificación end-to-end
 
-`docs/plan-rrhh-comisiones.md` § 6 — secuencia de 20 pasos:
+Secuencia de 20 pasos que recorre el módulo entero (del plan original de RRHH, 2026-05):
 
 1. Seed permisos, asignar a ADMIN.
 2. Alta Funcionario A MOZO 2.500.000.

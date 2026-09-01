@@ -8,7 +8,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *   prep-time, mínimo, aceptación automática, branding, horarios).
  * - `customer_refresh_tokens`: refresh tokens de las CuentaCliente (storefront).
  *
- * Portable SQLite/Postgres. Ver docs/arquitectura/webapp-pedidos-plan.md.
+ * Portable SQLite/Postgres. Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 export class AddTiendaConfigYCustomerRefresh1783525141550 implements MigrationInterface {
   name = 'AddTiendaConfigYCustomerRefresh1783525141550';

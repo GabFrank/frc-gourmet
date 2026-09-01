@@ -1,7 +1,7 @@
 /**
  * Namespace público `/pub/*` — superficie para la WEB APP DE PEDIDOS ONLINE.
  *
- * Fase 0 del plan `docs/arquitectura/webapp-pedidos-plan.md`.
+ * Fase 0 del plan `.claude/skills/frc-gourmet-expert/domains/pedidos-online.md`.
  *
  * REGLA NO NEGOCIABLE: el cliente final NUNCA habla con `/api/rpc` (que puede
  * invocar cualquiera de los ~700 handlers con un JWT de staff). Este namespace

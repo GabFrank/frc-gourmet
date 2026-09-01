@@ -11,7 +11,7 @@ import type { VentaItem } from './venta-item.entity';
  * imputaciones activas de un ítem = `VentaItem.montoCubierto` (cache).
  *
  * Se guarda en bruto a propósito: aplicar/cambiar el descuento global nunca toca
- * lo ya cubierto (ver `docs/PLAN-COBRO-PARCIAL-POR-ITEMS.md`).
+ * lo ya cubierto (ver `.claude/skills/frc-gourmet-expert/domains/ventas-pdv.md`).
  */
 @Entity('cobro_parcial_items')
 export class CobroParcialItem extends BaseModel {

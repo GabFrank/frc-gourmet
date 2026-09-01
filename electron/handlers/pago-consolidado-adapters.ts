@@ -7,7 +7,7 @@
  * (`pago-consolidado.handler.ts`), que es justamente el punto del refactor —
  * hoy ese bloque esta escrito cinco veces en el repo.
  *
- * Ver `docs/planes/PLAN-PAGO-CONSOLIDADO-CAJA-MAYOR.md`.
+ * Ver `.claude/skills/frc-gourmet-expert/domains/financiero-caja-mayor.md`.
  */
 import { DataSource } from 'typeorm';
 

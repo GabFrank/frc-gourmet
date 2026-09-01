@@ -14,6 +14,40 @@ Configurable desde *Sistema → Modo de operación* (`app-settings.json:mode`):
 
 Settings unificadas en `userData/app-settings.json`. Password DB en **keytar** (no en el JSON).
 
+## Por qué está hecho así (decisiones de 2026-05, siguen vigentes)
+
+Cuatro alternativas que se evaluaron y se descartaron. Están acá porque cada tanto
+alguien las vuelve a proponer:
+
+**Hub-and-spoke, no varios servidores contra una Postgres compartida en LAN.** Con
+DB compartida cada PC lleva credenciales de base: comprometer una caja es
+comprometer todo, y las reglas de negocio quedan replicadas en cada cliente
+(cualquiera puede saltearse una). Además las migraciones exigirían actualizar todas
+las PCs al mismo tiempo — con auto-update eso no se coordina. Y lo que la mata: un
+navegador **no puede** hablar Postgres, así que la PWA mobile habría requerido
+construir igual un backend HTTP. Con hub-and-spoke el cliente sólo tiene
+credenciales de usuario, toda escritura pasa por un lugar, y el server se actualiza
+primero mientras `/api/version` deja que el cliente detecte el desfasaje.
+
+**Un solo binario para los tres modos**, con el rol como configuración
+(`app-settings.json:mode`), no tres instaladores. Una sola pipeline de release, un
+solo canal de update.
+
+**Fastify + un único `/api/rpc`, no rutas REST por handler.** El endpoint único
+mapea automáticamente cada `ipcMain.handle(channel, fn)` ya existente (vía
+`handlerRegistry`); escribir ~700 rutas a mano no era viable. Se descartaron
+**tRPC** (excelente Node↔Node, pero sus typings agresivos no encajan con la forma
+de los handlers) y **GraphQL** (obliga a reescribir todo como resolvers).
+⚠️ La contracara de ese mapeo automático es que `/api/rpc` es **default-allow**:
+ver [auth-permissions.md](auth-permissions.md).
+
+**Fuera de alcance a propósito, y sigue estándolo:** sync offline-first / CRDT
+(si se cae la red el cliente se bloquea), replicación multi-sucursal (ese es el
+dominio de `frc-comercial/central` + `filial`; acá se asume UN local con varias PCs
+en LAN), microservicios (el server es monolítico y así se queda) y hosting en la
+nube (el server vive en una PC del restaurante; el patrón lo permitiría, pero no es
+el objetivo).
+
 ## Fases por orden histórico
 
 ### F1 — Dual driver SQLite/Postgres + migrations

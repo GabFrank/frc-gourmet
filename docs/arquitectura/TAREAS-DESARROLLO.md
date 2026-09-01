@@ -18,8 +18,8 @@ tracker viejo **ya están resueltas**.
 ## Ya implementado (verificado)
 
 - **Migraciones / esquema:** `synchronize: false`, migraciones driver-aware que corren al arranque.
-- **Cliente/servidor + PWA mobile:** ver [`../plan-cliente-servidor.md`](../plan-cliente-servidor.md) y
-  [`mobile-pwa-plan.md`](./mobile-pwa-plan.md).
+- **Cliente/servidor + PWA mobile:** ver `.claude/skills/frc-gourmet-expert/architecture/cliente-servidor.md` y
+  `.claude/skills/frc-gourmet-expert/architecture/mobile-pwa.md`.
 - **Entidad legacy `RecetaAdicional`:** eliminada (reemplazada por `RecetaAdicionalVinculacion`).
 - **Compras:** UI reconstruida — `list-compras` + `create-edit-compra` + categorías; importación de
   facturas con OCR/IA (`factura-import.handler.ts`).

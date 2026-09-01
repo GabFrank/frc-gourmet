@@ -1160,7 +1160,6 @@ Patrón: master con 2 paneles. Izq: totales/saldos por moneda → tarjeta de con
 
 → Detalle completo (manual funcional por función, con estado de implementación) en `docs/guia-funcionamiento-punto-de-venta.md`.
 → Buffet por kilo (venta por peso): `docs/buffet-por-kilo.md`.
-→ Plan de implementación: `docs/PLAN-IMPLEMENTACION-PDV.md`.
 → Errores conocidos: `docs/testing/ERRORES-PDV.md`; checklist de testing: `docs/testing/TESTING-CHECKLIST-PDV.md`.
 
 ---
@@ -1175,6 +1174,29 @@ Patrón: master con 2 paneles. Izq: totales/saldos por moneda → tarjeta de con
 - Cache: `VentaItem.montoCubierto` (cobertura bruta acumulada) y `PagoDetalle.cobroParcialId` (la ronda que originó la línea de pago). Migración `1783805921597-AddCobroParcialPorItems.ts`.
 
 **Handlers** (`ventas.handler.ts`, permiso `VENTAS_PDV`): `getEstadoCobroVenta(ventaId)` → por ítem `{netoBruto, montoCubierto, estado PENDIENTE/PARCIAL/PAGADO}` (tolerancia 0.5) + `pendienteBruto` + descuento/aumento global; `registrarCobroParcial(ventaId, {imputaciones, pagoDetalleIds, cashTotalPrincipal, factorAplicado})` (transaccional, tope anti-doble-cobro `ITEM_YA_CUBIERTO`); `anularCobroParcial(cobroParcialId)` (desactiva ronda + sus PagoDetalle, recomputa `montoCubierto`). `computeNetoBrutoItem = (precioVentaUnitario + precioAdicionales − descuentoUnitario) × cantidad`.
+
+**Por qué la cobertura se guarda EN BRUTO (y no al neto con descuento global).**
+Se separan dos verdades que antes estaban mezcladas: el **dinero**
+(`saldoDinero = (deudaBruta − descuentosGlobales + aumentosGlobales) − Σpagos + Σvueltos`,
+lo único que habilita Finalizar) y la **cobertura por ítem** (`montoCubierto`, siempre
+en bruto). Si la cobertura guardara el neto, aplicar o cambiar el descuento global
+después de una ronda generaría un **crédito retroactivo** sobre lo ya pagado. Guardándola
+en bruto, el descuento lo absorbe quien paga después — que es lo que pasa naturalmente en
+el salón — y el `factorAplicado` de cada ronda (`saldoDinero / pendienteBruto`) hace de
+puente.
+
+*Ejemplo:* mesa de 20.000 (A 10.000, B 10.000). Pagan A → 10.000, A queda PAGADO. Recién
+ahí se aplica 20% global (meta 16.000). Queda B con bruto 10.000 y `saldoDinero` 6.000 →
+factor 0,6 → B se cobra 6.000. Total 16.000, A no se toca. **Invariante:** al cubrir el
+bruto del último ítem, `saldoDinero` da 0 exacto sin importar cuándo se aplicó el
+descuento, porque la última ronda cobra `pendienteBruto × (saldoDinero/pendienteBruto)`.
+Por eso F9 sólo se permite mientras `saldoDinero > 0`, y por eso la tolerancia de
+redondeo (`toleranciaRedondeoPrincipal`) es imprescindible acá y no un detalle.
+
+Bordes que se resolvieron con este modelo: agregar ítems después de una ronda es válido
+(entran PENDIENTES y suben el saldo); el vuelto se registra como siempre y **no** toca la
+cobertura bruta; el stock se sigue descontando al CONCLUIR, nunca por ronda; y las líneas
+de pago siguen siendo multi-moneda — el factor opera sólo en moneda principal.
 
 **UI:** panel de ítems como **tab** dentro del panel izquierdo del `cobrar-venta-dialog` (Pagos | Items) para no ensanchar; footer fijo. En `pdv.component.ts`: chips PAGADO (verde)/PARCIAL (naranja); `bloqueadoPorCobro(item)` impide editar/cancelar/mover ítems con `montoCubierto > 0.5` ("Anulá el cobro parcial primero").
 

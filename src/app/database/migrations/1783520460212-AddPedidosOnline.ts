@@ -9,7 +9,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *   con snapshot de totales y vínculos opcionales a venta/delivery al aceptar.
  * - `pedido_online_items`: ítems con precio congelado + personalización JSON.
  *
- * Portable SQLite/Postgres. Ver docs/arquitectura/webapp-pedidos-plan.md.
+ * Portable SQLite/Postgres. Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 export class AddPedidosOnline1783520460212 implements MigrationInterface {
   name = 'AddPedidosOnline1783520460212';

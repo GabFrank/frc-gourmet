@@ -644,9 +644,17 @@ exportada por `@frc/shared-core`):
 - `formaPagoEfectivo(formas)` — la que se preselecciona / usa la PWA.
 
 Si no hay ninguna, ambas superficies muestran un aviso en vez de dejar el
-formulario muerto. La lista de pantallas que todavía no aplican esta regla está
-en [`docs/TODO-forma-pago-efectivo-desktop.md`](../../../../docs/TODO-forma-pago-efectivo-desktop.md)
-(el ítem 3, este diálogo, quedó hecho).
+formulario muerto.
+
+⚠️ **La regla se cumple en todas las pantallas, pero cinco la reimplementan a
+mano.** `create-edit-gasto-dialog`, `create-edit-entrada-varia-dialog`,
+`pagar-cuota-dialog` (CPP), `edit-movimiento-dialog` y `create-retiro-caja-dialog`
+filtran con un `.filter(f => f.nombre.includes('EFECTIVO'))` inline en vez de
+llamar al util. El select sale bien, pero **ignoran `activo` y `movimentaCaja`** y
+pueden quedar vacíos sin avisar. Migrarlos a `formasPagoEfectivoDeCaja()` está en
+el backlog. (`create-operacion-financiera-dialog` ya usa el util; los desaparecidos
+`pagar-compras-dialog` y `confirmar-vale-dialog` se fueron con el pago
+consolidado.)
 
 Manual de pruebas: [`docs/testing/TESTING-CHECKLIST-OPERACIONES-FINANCIERAS.md`](../../../../docs/testing/TESTING-CHECKLIST-OPERACIONES-FINANCIERAS.md).
 

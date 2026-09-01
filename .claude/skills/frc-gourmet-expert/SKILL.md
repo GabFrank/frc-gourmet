@@ -140,8 +140,7 @@ deuda sin mover plata. La tarjeta *Ingreso → Cobrar a Cliente* abre el **mismo
 wizard** que los pagos; `cobrar-cpc-rapido-dialog` fue eliminado (quedó sin
 referencias). Permiso nuevo **`CPC_DESCUENTO`** (no está en ningún rol plantilla) +
 motivo obligatorio + tope % por caja. Detalles → [domains/financiero-caja-mayor.md](domains/financiero-caja-mayor.md),
-[domains/financiero-cpp-cpc.md](domains/financiero-cpp-cpc.md),
-`docs/planes/PLAN-COBRO-CONSOLIDADO-CPC.md`.
+[domains/financiero-cpp-cpc.md](domains/financiero-cpp-cpc.md).
 
 Tres cosas que conviene no volver a aprender por las malas:
 

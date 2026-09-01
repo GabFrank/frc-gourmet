@@ -13,7 +13,7 @@ import { RepositoryService } from '../../../database/repository.service';
 /**
  * Config de la TIENDA ONLINE (cierre MVP). Una sola fila: apertura, tipos de
  * pedido, prep-time, mínimo, aceptación automática y branding.
- * Ver docs/arquitectura/webapp-pedidos-plan.md.
+ * Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 @Component({
   selector: 'app-tienda-online-config',

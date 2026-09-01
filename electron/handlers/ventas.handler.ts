@@ -4048,7 +4048,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   });
 
   // ─── Cobro parcial por ítems ─────────────────────────────────────────────
-  // Ver docs/PLAN-COBRO-PARCIAL-POR-ITEMS.md. El estado de cobro se maneja en
+  // Ver .claude/skills/frc-gourmet-expert/domains/ventas-pdv.md. El estado de cobro se maneja en
   // BRUTO (moneda principal, sin conversión): la cobertura por ítem
   // (`montoCubierto`) y los topes viven en bruto. El descuento/aumento global
   // se absorbe vía el `factor` que calcula el front (ya trabaja en principal).

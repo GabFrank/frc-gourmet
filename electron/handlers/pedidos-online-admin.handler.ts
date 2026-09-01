@@ -21,7 +21,7 @@ import { invokeHandler } from '../utils/handler-registry';
  * abiertas), el pedido igual queda ACEPTADO y se puede reintentar desde la
  * bandeja — nunca se pierde la aceptación por un problema de caja.
  *
- * Ver docs/arquitectura/webapp-pedidos-plan.md (Fase 4).
+ * Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 
 const PERM_VER = 'PEDIDOS_ONLINE_VER';

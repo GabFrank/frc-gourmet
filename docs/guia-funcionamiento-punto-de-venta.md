@@ -842,5 +842,5 @@ Este documento describe todas las funciones del Punto de Venta y el estado actua
 
 ---
 
-> Para el plan de implementacion detallado, ver [PLAN-IMPLEMENTACION-PDV.md](PLAN-IMPLEMENTACION-PDV.md)
+> El backlog vivo del PdV esta en `.claude/skills/frc-gourmet-expert/workflows/todos-pendientes.md`.
 > Para el checklist de testing, ver [testing/TESTING-CHECKLIST-PDV.md](testing/TESTING-CHECKLIST-PDV.md)

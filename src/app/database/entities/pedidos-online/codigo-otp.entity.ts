@@ -6,7 +6,7 @@ import { BaseModel } from '../base.entity';
  * (login/registro por WhatsApp). Se guarda el **hash** del código, nunca el
  * valor plano. Expira e invalida por intentos.
  *
- * Ver docs/arquitectura/webapp-pedidos-plan.md (Fase 2).
+ * Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 @Entity('codigos_otp')
 export class CodigoOtp extends BaseModel {

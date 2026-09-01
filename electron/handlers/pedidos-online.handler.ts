@@ -18,7 +18,7 @@ import { registerPublicOperation } from '../server/public-routes';
  * `disponibleOnline && !pausadoOnline`.
  *
  * Expuesto en `/pub/*` como `menu.get` (lectura, sin auth).
- * Ver docs/arquitectura/webapp-pedidos-plan.md.
+ * Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 
 const ONLINE_TIPO = 'ONLINE';

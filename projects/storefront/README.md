@@ -3,7 +3,7 @@
 PWA de marca (Angular 15 standalone) donde el cliente final ve la carta, arma el
 carrito, se loguea por OTP (WhatsApp) y hace pedidos (retiro / delivery). Consume
 **únicamente** la superficie pública `POST /pub/rpc` del server FRC Gourmet
-(`mode=server`), nunca `/api/rpc`. Ver `docs/arquitectura/webapp-pedidos-plan.md`.
+(`mode=server`), nunca `/api/rpc`. Ver `.claude/skills/frc-gourmet-expert/domains/pedidos-online.md`.
 
 ## Correr en dev
 

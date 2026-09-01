@@ -7,7 +7,7 @@ import { PedidoOnline } from './pedido-online.entity';
  * precio **congelado** (snapshot) al momento del pedido. La personalización
  * (adicionales, observaciones, sabores, quita de ingredientes) se guarda como
  * JSON legible; al aceptar el pedido en el PdV se traduce a `VentaItem` con sus
- * sub-entidades. Ver docs/arquitectura/webapp-pedidos-plan.md.
+ * sub-entidades. Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 @Entity('pedido_online_items')
 export class PedidoOnlineItem extends BaseModel {

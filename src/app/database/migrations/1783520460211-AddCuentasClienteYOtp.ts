@@ -8,7 +8,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *   email/password), vinculable a un `Cliente` interno.
  * - `codigos_otp`: códigos OTP de un solo uso (hash) para verificar el teléfono.
  *
- * Portable SQLite/Postgres. Ver docs/arquitectura/webapp-pedidos-plan.md.
+ * Portable SQLite/Postgres. Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 export class AddCuentasClienteYOtp1783520460211 implements MigrationInterface {
   name = 'AddCuentasClienteYOtp1783520460211';

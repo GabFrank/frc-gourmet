@@ -33,7 +33,7 @@ import {
  *
  * Todavia no hay programacion por franja ni agente: esta pantalla existe para
  * validar de punta a punta que la app controla la musica del local.
- * Ver docs/PLAN-MUSICA-SPOTIFY.md.
+ * Ver .claude/skills/frc-gourmet-expert/domains/musica-ambiental.md.
  */
 @Component({
   selector: 'app-musica',
