@@ -205,9 +205,35 @@ Cuatro cosas que conviene no volver a aprender por las malas:
   test que ubique datos por período tiene que leer `getInicioJornada()` de la
   misma fuente que el código que prueba.
 
-Tests: `test:reporte-delivery` (77), `test:canal-venta` (25),
+**La auditoría del PR encontró tres bugs ALTA que los tests no atrapaban**, y uno
+de ellos no era de la feature:
+
+- **`totales.costoDelivery` del historial se multiplicaba por la cantidad de
+  ítems.** El agregado salía de `qb.clone().select('SUM(...)')` y `qb` tenía el
+  join a `venta.items` (`@OneToMany`): `.select()` cambia las columnas pero **no
+  quita los joins**. El fixture tenía un ítem por venta —factor 1— así que el
+  test pasaba. Regla que queda: **nunca clonar un builder con joins `@OneToMany`
+  para un agregado**.
+- **`getVentasByDateRange` publicaba datos de RRHH.** `leftJoinAndSelect` del
+  `Funcionario` repartidor hidrata la entidad **entera**: sueldo, IPS y cuenta
+  bancaria, más el documento de su `Persona`. Y ese handler no tiene
+  `ensurePermission` ni está en `BLOCKED_CHANNELS`. Hidratar una entidad publica
+  todos sus campos: en un canal abierto, usar `leftJoin` + `addSelect`.
+- **En standalone, el filtro "hoy" del Historial devolvía CERO.** El límite iba
+  en ISO y `created_at` se guarda `YYYY-MM-DD HH:MM:SS`; el espacio ordena antes
+  que la `T`. Es el mismo bug que `dbQuery` ya corregía, reintroducido porque ese
+  handler arma el `WHERE` con QueryBuilder. `limiteFechaSqlite()` se exportó
+  desde `db-query.ts` como fuente única del formato. **Preexistente, no de este
+  PR.**
+
+Quedaron sin arreglar, por exceder el alcance, dos hallazgos preexistentes del
+mismo handler (el hash de password que viaja vía `createdBy`, y que cancelar
+desde el Historial deja el `Delivery` vivo) → [reference/known-bugs.md](reference/known-bugs.md).
+
+Tests: `test:reporte-delivery` (90), `test:canal-venta` (25),
 `test:zona-delivery-online` (11). Manual:
-`docs/testing/TESTING-CHECKLIST-INFORMES-DELIVERY.md`.
+`docs/testing/TESTING-CHECKLIST-INFORMES-DELIVERY.md`. Trampas de UI que costaron
+una tarde → [conventions/ui-patterns.md](conventions/ui-patterns.md).
 
 ### Reauditoría integral 2026-07-26 (subsistemas nuevos)
 

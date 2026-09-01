@@ -1,7 +1,7 @@
 # Plan — Delivery y Retiro en los informes de venta
 
 > Branch: `claude/sales-reports-delivery-ihwnbi` · base `develop`
-> Estado: **completo** · Fases 0–6 hechas
+> Estado: **completo** · Fases 0–6 hechas · auditoría corrida y hallazgos cerrados
 
 ## 1. Diagnóstico
 
@@ -352,3 +352,37 @@ package.json                                    (2 scripts de test)
 
 Doc de dominio: `domains/reportes.md`, `domains/dashboards.md`,
 `domains/ventas-pdv.md` (sección Delivery) + backlog.
+
+
+## 7. Auditoría (2026-09-01)
+
+Cuatro agentes en paralelo sobre el PR ya abierto: correctitud del motor,
+seguridad/permisos, convenciones de UI y calidad de los tests.
+
+**Tres hallazgos ALTA, todos verificados a mano antes de tocar código:**
+
+| Hallazgo | ¿De este PR? | Estado |
+|---|---|---|
+| `totales.costoDelivery` multiplicado por la cantidad de ítems (el `clone()` arrastra el join `@OneToMany` a `venta.items`) | Sí | Arreglado; test con venta de 3 ítems, verificado que falla sin el fix (120.000 vs 80.000) |
+| `getVentasByDateRange` exponía sueldo, IPS, cuenta bancaria y documento del repartidor sobre un canal sin `ensurePermission` | Sí (lo introdujo el join) | Arreglado con `leftJoin` + `addSelect`; asserts que lo fijan |
+| En SQLite el filtro "hoy" del Historial devolvía **cero** (límite ISO vs `YYYY-MM-DD HH:MM:SS`) | No, preexistente | Arreglado: `limiteFechaSqlite()` exportado desde `db-query.ts` |
+
+**Menores, también arreglados:** `envioRecaudado` no aplicaba el filtro de canal
+de sus callers (sumaba retiros; latente porque hoy su costo es 0) → constante
+`SOLO_ENVIOS`; el cierre de caja dejó de sumar retiros en "COBRO DE ENVIOS"; y
+`--hover-color`, que no existe como token, pasó a `--hover-bg`.
+
+**Huecos de test que cerró la auditoría:** la etapa DESPACHO no tenía ningún
+assert, el caso "un canal en cero igual aparece" nunca se ejercitaba (los cuatro
+canales tenían datos en el fixture) y el cableado real de
+`computeResumenCaja.delivery` no se verificaba. 83 → 90 asserts.
+
+**No arreglados, por exceder el alcance** (en `reference/known-bugs.md`): el hash
+de password que viaja vía `createdBy` en el mismo handler, y que cancelar una
+venta con delivery desde el Historial deja el `Delivery` vivo — el reparto no
+cuenta ni como envío ni como cancelación, y el cierre lo reporta como pendiente.
+
+**Hueco de cobertura que queda:** los tres scripts nuevos corren sólo contra
+SQLite. El riesgo de `decimal`-como-string de Postgres, que el propio encabezado
+del motor documenta, no lo cubre ningún test (el CI sí corre la migración contra
+Postgres, pero no las métricas).

@@ -128,6 +128,15 @@
 | 12.3 | Exportar PDF desde la PWA. | Incluye los KPIs de delivery. |
 | 12.4 | Local sin repartos. | Las secciones no aparecen. |
 
+## 12.b · Lo que corrigió la auditoría (bugs reales, verificar sí o sí)
+
+| # | Paso | Esperado |
+|---|---|---|
+| 12b.1 | **En modo standalone (SQLite)**, abrir *Ventas → Historial* con el rango por defecto ("hoy") y ventas cargadas hoy. | **Aparecen.** Antes devolvía **cero**: el límite iba en ISO (`…T03:00…Z`) y `created_at` se guarda `…​ 03:00…`; SQLite compara como texto y el espacio ordena antes que la `T`. |
+| 12b.2 | Filtrar un rango que incluya un delivery **de varios ítems** y mirar la fila de totales. | "Cobrado en envíos" cuenta el envío **una vez por venta**. Antes se multiplicaba por la cantidad de ítems (un envío de 20.000 en una venta de 3 ítems sumaba 60.000). |
+| 12b.3 | Con las DevTools abiertas, inspeccionar la respuesta de `getVentasByDateRange` en una venta con repartidor. | El repartidor trae **sólo `id` y el nombre**. No debe aparecer `salarioBase`, `numeroIps`, `cuentaBancariaPropia` ni el documento de la persona. |
+| 12b.4 | Cerrar una caja con retiros y mirar "COBRO DE ENVIOS" del ticket. | Cuenta sólo repartos. Un retiro no suma (hoy su costo es 0, así que el número no cambia — el chequeo es que siga en 0 si algún día un retiro cobra algo). |
+
 ## 13 · Multimoneda y Postgres
 
 | # | Paso | Esperado |
@@ -139,7 +148,7 @@
 ## Tests automáticos
 
 ```bash
-npm run test:reporte-delivery      # 77 asserts — motor + integración + filtros del historial
+npm run test:reporte-delivery      # 90 asserts — motor + integración + filtros del historial
 npm run test:canal-venta           # 25 — el CASE de SQL y el clasificador TS coinciden
 npm run test:zona-delivery-online  # 11 — fase 0 (alta + backfill)
 npm run test:reporte-ventas        # 21 — regresión del reporte
