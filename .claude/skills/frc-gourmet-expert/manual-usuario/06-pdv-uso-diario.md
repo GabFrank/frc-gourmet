@@ -309,6 +309,46 @@ ENTREGADO       (cliente recibió)
    o CANCELADO desde cualquier estado (con motivo).
 ```
 
+### Retiro en local
+
+El mismo botón sirve para los pedidos que el cliente **pasa a buscar**: en el
+alta hay un toggle **DELIVERY / RETIRAR**. Un retiro no tiene dirección, ni
+costo de envío, ni repartidor — a cambio el **nombre es obligatorio**, porque es
+lo que permite encontrar la bolsa en el mostrador.
+
+Un retiro tampoco pasa por EN_CAMINO: va de ABIERTO a PARA_ENTREGA («está
+pronto») y de ahí a ENTREGADO cuando el cliente se lo lleva. El **reloj se
+congela** al marcarlo PARA_ENTREGA: de ahí en más falta que venga el cliente, y
+eso no depende del local.
+
+### Convertir un pedido: de delivery a retiro y al revés
+
+El cliente llama de vuelta: *«mejor lo paso a buscar»*. Con el pedido
+seleccionado, el footer tiene un botón **A RETIRO** (o **A DELIVERY** si ya es
+un retiro).
+
+El diálogo muestra **qué cambia antes de confirmar**: qué se pierde (la
+dirección, el envío, el repartidor asignado) y el total viejo tachado al lado
+del nuevo. Al pasar a delivery pide la dirección y la zona; al pasar a retiro,
+el nombre si no lo tenía. Y ofrece **reimprimir el ticket**, porque el papel
+que ya se entregó dice otra cosa.
+
+Cuándo **no** se puede convertir:
+
+- Si la venta **ya fue cobrada**. Convertir cambia el total, así que primero hay
+  que anular el cobro. El botón queda gris y el tooltip lo explica.
+- Si el pedido está **ENTREGADO o CANCELADO**.
+
+Dos avisos que vale la pena leer:
+
+- Si el pedido **ya salió** (EN_CAMINO), el diálogo avisa en amarillo y nombra
+  al repartidor que se va a desasignar. Al volver a delivery pide elegir uno
+  antes de confirmar: el pedido ya no va a pasar de nuevo por el momento en que
+  normalmente se pregunta.
+- Si ya hay **plata cobrada** contra el pedido y el total nuevo queda por
+  debajo, avisa en rojo cuánto sobra. **No devuelve nada solo**: eso lo decide
+  el mostrador.
+
 ### Timer de espera
 
 Junto a cada delivery, un timer cuenta el tiempo desde apertura:

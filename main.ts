@@ -38,6 +38,9 @@ import { seedSystemData } from './electron/utils/seed-system';
 import { migratePlaintextPasswords } from './electron/utils/migrate-passwords';
 import { readAppSettings, updateAppSettings } from './electron/utils/app-settings.utils';
 import {
+  readClientRefreshToken, writeClientRefreshToken, clearClientRefreshToken,
+} from './electron/utils/client-refresh-token.utils';
+import {
   ZOOM_DEFAULT,
   clampZoom,
   nextZoom,
@@ -768,6 +771,30 @@ function registerAppProtocol(): void {
   });
 }
 
+/**
+ * Registra los canales de lectura/escritura del refresh token del modo cliente.
+ *
+ * Idempotente: `app.on('ready')` corre una vez, pero se protege igual por si
+ * alguna vez se llama de nuevo (relaunch tras cambiar de modo).
+ */
+let clientRefreshTokenHandlersRegistered = false;
+function registerClientRefreshTokenHandlers(): void {
+  if (clientRefreshTokenHandlersRegistered) return;
+  clientRefreshTokenHandlersRegistered = true;
+
+  ipcMain.handle('client-refresh-token-read', async () => {
+    return await readClientRefreshToken();
+  });
+  ipcMain.handle('client-refresh-token-write', async (_e: any, token: string | null) => {
+    await writeClientRefreshToken(token);
+    return { success: true };
+  });
+  ipcMain.handle('client-refresh-token-clear', async () => {
+    await clearClientRefreshToken();
+    return { success: true };
+  });
+}
+
 // Initialize the database when the app is ready
 app.on('ready', () => {
   registerAppProtocol();
@@ -805,6 +832,18 @@ app.on('ready', () => {
   } catch (e) {
     console.warn('[main] no se pudo leer app-settings temprano:', e);
   }
+
+  // Canales del refresh token persistido del modo cliente. Se registran ACA,
+  // sincronicamente y antes de createWindow(), y no dentro de
+  // registerAllAppHandlers(): esos se registran recien al final de la cadena
+  // async de initializeDatabase() —despues de migraciones y seeds— mientras la
+  // ventana ya esta cargando en paralelo. El preload rehidrata la sesion en su
+  // primer RPC, que puede llegar mucho antes; si el handler no existe todavia,
+  // la llamada muere con "No handler registered" y el usuario ve exactamente el
+  // bug que esto viene a arreglar.
+  //
+  // No necesitan la base: son keytar + filesystem.
+  registerClientRefreshTokenHandlers();
 
   initializeDatabase();
   createWindow();

@@ -22,7 +22,7 @@
  */
 
 import { ipcMain } from 'electron';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 
 import { Delivery, DeliveryEstado, DeliveryModo } from '../../src/app/database/entities/ventas/delivery.entity';
 import { PrecioDelivery } from '../../src/app/database/entities/ventas/precio-delivery.entity';
@@ -39,6 +39,9 @@ import {
   verificarVentaCancelable,
 } from '../utils/venta-reversa.utils';
 import { printDeliveryTicketInternal } from './documentos-tickets.handler';
+import { getEstadoCobroVentaInternal } from './ventas.handler';
+import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
+import { TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 
 /**
  * Transiciones legales del delivery.
@@ -71,7 +74,12 @@ const TRANSICIONES: Record<DeliveryEstado, DeliveryEstado[]> = {
 const TRANSICIONES_RETIRO: Record<DeliveryEstado, DeliveryEstado[]> = {
   [DeliveryEstado.ABIERTO]: [DeliveryEstado.PARA_ENTREGA, DeliveryEstado.ENTREGADO],
   [DeliveryEstado.PARA_ENTREGA]: [DeliveryEstado.ENTREGADO, DeliveryEstado.ABIERTO],
-  [DeliveryEstado.EN_CAMINO]: [DeliveryEstado.ENTREGADO],
+  // Un retiro sólo llega a EN_CAMINO por conversión: es un reparto que ya
+  // había salido y que el cliente terminó pasando a buscar. Ofrecerle
+  // PARA_ENTREGA —igual que a un delivery— es lo que permite reflejar que el
+  // repartidor dio la vuelta y el pedido volvió al mostrador. Sin esto, la
+  // conversión le sacaba la única salida hacia atrás que tenía.
+  [DeliveryEstado.EN_CAMINO]: [DeliveryEstado.ENTREGADO, DeliveryEstado.PARA_ENTREGA],
   [DeliveryEstado.ENTREGADO]: [DeliveryEstado.PARA_ENTREGA],
   [DeliveryEstado.CANCELADO]: [],
 };
@@ -106,6 +114,29 @@ const ORDEN_ESTADOS: DeliveryEstado[] = [
 
 async function getConfig(dataSource: DataSource): Promise<PdvConfig | null> {
   return await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+}
+
+/**
+ * Toma el lock de escritura sobre la fila del delivery, dentro de la
+ * transacción del llamador.
+ *
+ * POR QUÉ ES UN `SELECT ... FOR UPDATE` A MANO Y NO `findOne({ lock })`
+ *
+ * El lock pesimista de TypeORM y las `relations` no conviven: la búsqueda con
+ * relaciones arma LEFT JOINs y Postgres rechaza `FOR UPDATE` sobre el lado
+ * anulable de un outer join. `delivery-cambiar-estado` puede usar
+ * `findOne({ lock })` porque no carga ninguna relación; los handlers que sí
+ * las necesitan usan esto y después leen normal — la fila ya está tomada.
+ *
+ * En SQLite no hace nada: la escritura serializa la base entera.
+ */
+async function lockDelivery(
+  manager: EntityManager,
+  dataSource: DataSource,
+  id: number,
+): Promise<void> {
+  if (dataSource.options.type !== 'postgres') return;
+  await manager.query('SELECT id FROM deliveries WHERE id = $1 FOR UPDATE', [id]);
 }
 
 /**
@@ -317,42 +348,75 @@ export function registerDeliveryHandlers(
     const config = await getConfig(dataSource);
     const usuarioId = getCurrentUser()?.id;
 
-    const delivery = await dataSource.getRepository(Delivery).findOne({
-      where: { id },
-      relations: ['precioDelivery'],
-    });
-    if (!delivery) throw new Error(`Delivery ${id} no encontrado`);
-    if (delivery.estado === DeliveryEstado.CANCELADO || delivery.estado === DeliveryEstado.ENTREGADO) {
-      throw new Error(`No se pueden editar los datos de un delivery ${delivery.estado}.`);
-    }
-
-    const direccion = upper(payload?.direccion);
-    if (config?.deliveryRequiereDireccion && !direccion) {
-      throw new Error('La dirección de entrega es obligatoria.');
-    }
-
-    const venta = await dataSource.getRepository(Venta).findOne({
-      where: { delivery: { id } },
-    });
-
-    const zonaCambia = Object.prototype.hasOwnProperty.call(payload ?? {}, 'precioDeliveryId')
-      && Number(payload.precioDeliveryId ?? 0) !== Number(delivery.precioDelivery?.id ?? 0);
-
-    if (zonaCambia && venta && venta.estado !== VentaEstado.ABIERTA) {
-      throw new Error(
-        `La venta de este delivery ya está ${venta.estado}: no se puede cambiar la zona de entrega sin anular el cobro.`,
-      );
-    }
-
-    const costoDelivery = zonaCambia
-      ? await resolverCostoDelivery(dataSource, payload.precioDeliveryId)
-      : undefined;
-
+    // Todo dentro de la transacción y detrás del lock. Antes la lectura del
+    // delivery vivía afuera y el `manager.save(Delivery, delivery)` de abajo
+    // persistía la entidad ENTERA tal como se había leído — incluido `modo`.
+    // Mientras el modo era inmutable eso no se notaba; desde que
+    // `delivery-convertir-modo` existe, editar los datos en paralelo a una
+    // conversión revertía la conversión en silencio y dejaba
+    // `venta.costoDelivery` (que la conversión sí había cambiado) apuntando al
+    // modo equivocado.
     return await dataSource.transaction(async (manager) => {
-      delivery.nombre = upper(payload?.nombre) ?? undefined;
+      await lockDelivery(manager, dataSource, id);
+
+      const delivery = await manager.getRepository(Delivery).findOne({
+        where: { id },
+        relations: ['precioDelivery'],
+      });
+      if (!delivery) throw new Error(`Delivery ${id} no encontrado`);
+      if (delivery.estado === DeliveryEstado.CANCELADO || delivery.estado === DeliveryEstado.ENTREGADO) {
+        throw new Error(`No se pueden editar los datos de un delivery ${delivery.estado}.`);
+      }
+
+      const esRetiro = (delivery as any).modo === DeliveryModo.RETIRO;
+      const direccion = upper(payload?.direccion);
+      // El candado de la dirección es sobre el reparto: en un retiro no hay a
+      // dónde llevar nada, y el nombre ya cumple el papel de identificar el
+      // pedido. Sin este guard, una instalación con
+      // `deliveryRequiereDireccion = true` no podía editar NINGÚN retiro.
+      if (!esRetiro && config?.deliveryRequiereDireccion && !direccion) {
+        throw new Error('La dirección de entrega es obligatoria.');
+      }
+
+      const venta = await manager.getRepository(Venta).findOne({
+        where: { delivery: { id } },
+      });
+
+      const zonaCambia = Object.prototype.hasOwnProperty.call(payload ?? {}, 'precioDeliveryId')
+        && Number(payload.precioDeliveryId ?? 0) !== Number(delivery.precioDelivery?.id ?? 0);
+
+      if (zonaCambia && esRetiro) {
+        throw new Error('Un pedido para retirar no tiene zona de entrega. Convertilo a delivery primero.');
+      }
+      if (zonaCambia && venta && venta.estado !== VentaEstado.ABIERTA) {
+        throw new Error(
+          `La venta de este delivery ya está ${venta.estado}: no se puede cambiar la zona de entrega sin anular el cobro.`,
+        );
+      }
+
+      const costoDelivery = zonaCambia
+        ? await resolverCostoDelivery(dataSource, payload.precioDeliveryId)
+        : undefined;
+
+      // El nombre CAE AL QUE YA TENÍA si el payload no trae uno, y en un retiro
+      // además es obligatorio. Es lo único que identifica la bolsa en el
+      // mostrador (la dirección no existe ahí), así que un payload con el
+      // nombre vacío dejaría un pedido que nadie puede reclamar. Mismo criterio
+      // que el alta y que la conversión; acá faltaba, y con el `null` de abajo
+      // pasó de ser un no-op silencioso a borrar de verdad.
+      const nombreNuevo = upper(payload?.nombre) ?? upper(delivery.nombre);
+      if (esRetiro && !nombreNuevo) {
+        throw new Error('El nombre del cliente es obligatorio en un pedido para retirar.');
+      }
+
+      // `null` y no `undefined`: TypeORM no emite UPDATE para una propiedad
+      // `undefined`, así que con el `?? undefined` de antes vaciar la dirección
+      // o la observación desde el diálogo no hacía absolutamente nada y el dato
+      // viejo quedaba pegado.
+      (delivery as any).nombre = nombreNuevo;
       delivery.telefono = String(payload?.telefono ?? delivery.telefono ?? '').trim();
-      delivery.direccion = direccion ?? undefined;
-      delivery.observacion = upper(payload?.observacion) ?? undefined;
+      (delivery as any).direccion = esRetiro ? null : direccion;
+      (delivery as any).observacion = upper(payload?.observacion);
       if (Object.prototype.hasOwnProperty.call(payload ?? {}, 'cobroAnticipado')) {
         delivery.cobroAnticipado = !!payload.cobroAnticipado;
       }
@@ -376,7 +440,6 @@ export function registerDeliveryHandlers(
           (venta as any).costoDelivery = costoDelivery;
           ventaCambia = true;
         }
-        const nombreNuevo = upper(payload?.nombre);
         if (nombreNuevo && nombreNuevo !== venta.nombreCliente) {
           venta.nombreCliente = nombreNuevo;
           ventaCambia = true;
@@ -490,23 +553,265 @@ export function registerDeliveryHandlers(
     },
   );
 
+  /**
+   * Reasigna el repartidor sin tocar el estado.
+   *
+   * Va en transacción con lock aunque toque un solo campo: el `save()` persiste
+   * la entidad entera, así que corriendo en paralelo a `delivery-convertir-modo`
+   * escribía de vuelta el `modo` que había leído antes y deshacía la conversión.
+   */
   ipcMain.handle('delivery-asignar-repartidor', async (_event: any, id: number, funcionarioId: number | null) => {
     await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
-    const delivery = await dataSource.getRepository(Delivery).findOne({ where: { id } });
-    if (!delivery) throw new Error(`Delivery ${id} no encontrado`);
-    if (delivery.estado === DeliveryEstado.CANCELADO) {
-      throw new Error('No se puede asignar repartidor a un delivery cancelado.');
+    return await dataSource.transaction(async (manager) => {
+      await lockDelivery(manager, dataSource, id);
+
+      const delivery = await manager.getRepository(Delivery).findOne({ where: { id } });
+      if (!delivery) throw new Error(`Delivery ${id} no encontrado`);
+      if (delivery.estado === DeliveryEstado.CANCELADO) {
+        throw new Error('No se puede asignar repartidor a un delivery cancelado.');
+      }
+      // El repartidor es quien LLEVA el pedido. En un retiro no lo lleva nadie:
+      // asignarlo sería registrar a una persona que no participa, y el ticket y
+      // el footer lo esconden igual. El front ya lo bloquea; acá se valida
+      // porque `/api/rpc` es default-allow.
+      if ((delivery as any).modo === DeliveryModo.RETIRO && funcionarioId) {
+        throw new Error('Un pedido para retirar no tiene repartidor: lo pasa a buscar el cliente.');
+      }
+
+      if (funcionarioId) {
+        const funcionario = await manager.getRepository(Funcionario).findOneBy({ id: funcionarioId });
+        if (!funcionario) throw new Error(`Funcionario ${funcionarioId} no encontrado`);
+        delivery.entregadoPorFuncionario = funcionario;
+      } else {
+        (delivery as any).entregadoPorFuncionario = null;
+      }
+      await setEntityUserTracking(dataSource, delivery, getCurrentUser()?.id, true);
+      return await manager.save(Delivery, delivery);
+    });
+  });
+
+  // ─── Conversión de modo ─────────────────────────────────────────────────
+
+  /**
+   * Convierte un pedido de reparto en uno para retirar, y al revés.
+   *
+   * POR QUÉ ES UN CANAL PROPIO Y NO UN CAMPO MÁS DE `delivery-actualizar-datos`
+   *
+   * El modo no es un dato del cliente: es lo que decide **si existen** la
+   * dirección, el costo de envío y el repartidor. Cambiarlo mueve el total de
+   * la venta (el envío entra o sale del cobro), desasigna a una persona y
+   * cambia la tabla de transiciones que rige el pedido. Un `merge` genérico no
+   * puede hacer nada de eso, y por eso `updateDelivery` sigue teniendo `modo`
+   * entre sus campos reservados.
+   *
+   * QUÉ SE PERMITE
+   *
+   * - Cualquier estado **no terminal**: ABIERTO, PARA_ENTREGA y EN_CAMINO. Un
+   *   pedido ENTREGADO o CANCELADO ya no se convierte; el estado no se
+   *   retrocede al convertir.
+   * - Con la venta **ABIERTA**, aunque tenga cobros parciales registrados. Si
+   *   lo ya cobrado supera el total nuevo, se devuelve una advertencia con el
+   *   excedente: la plata no se mueve sola.
+   * - Con la venta CONCLUIDA o CANCELADA se rechaza: cambiar el total de una
+   *   venta cerrada es anular el cobro, y eso tiene su propio camino.
+   */
+  ipcMain.handle('delivery-convertir-modo', async (_event: any, id: number, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+    const config = await getConfig(dataSource);
+    const usuarioId = getCurrentUser()?.id;
+
+    const modoDestino = String(payload?.modo ?? '').toUpperCase();
+    if (modoDestino !== DeliveryModo.DELIVERY && modoDestino !== DeliveryModo.RETIRO) {
+      throw new Error(`Modo de pedido inválido: ${payload?.modo}. Usá DELIVERY o RETIRO.`);
+    }
+    const esRetiroDestino = modoDestino === DeliveryModo.RETIRO;
+
+    const resultado = await dataSource.transaction(async (manager) => {
+      await lockDelivery(manager, dataSource, id);
+
+      const delivery = await manager.getRepository(Delivery).findOne({
+        where: { id },
+        relations: ['precioDelivery', 'entregadoPorFuncionario', 'entregadoPorFuncionario.persona'],
+      });
+      if (!delivery) throw new Error(`Delivery ${id} no encontrado`);
+
+      const modoAnterior = ((delivery as any).modo ?? DeliveryModo.DELIVERY) as DeliveryModo;
+
+      // El estado terminal se chequea ANTES que la idempotencia: convertir "al
+      // mismo modo" un pedido CANCELADO tiene que fallar como cualquier otra
+      // conversión sobre un cancelado, no devolver un éxito silencioso.
+      if (delivery.estado === DeliveryEstado.ENTREGADO || delivery.estado === DeliveryEstado.CANCELADO) {
+        throw new Error(
+          `Un pedido ${delivery.estado} ya no se puede convertir.`
+          + (delivery.estado === DeliveryEstado.ENTREGADO
+            ? ' Si el pedido no se entregó, retrocedé el estado primero.'
+            : ' Cargá uno nuevo.'),
+        );
+      }
+
+      const venta = await manager.getRepository(Venta).findOne({ where: { delivery: { id } } });
+
+      if (modoAnterior === modoDestino) {
+        return { delivery, venta, modoAnterior, repartidorDesasignado: null, sinCambios: true };
+      }
+
+      if (venta && venta.estado !== VentaEstado.ABIERTA) {
+        throw new Error(
+          `La venta de este pedido ya está ${venta.estado}: convertirlo cambiaría el total cobrado.`
+          + ' Anulá el cobro antes de convertir.',
+        );
+      }
+
+      const repartidorPrevio = (delivery.entregadoPorFuncionario as any)?.persona?.nombre ?? null;
+      let repartidorDesasignado: string | null = null;
+      let costoDelivery = 0;
+
+      if (esRetiroDestino) {
+        // En un retiro el nombre reemplaza a la dirección como dato
+        // imprescindible: es lo que permite encontrar la bolsa entre otras
+        // cinco en el mostrador. Misma regla que el alta, validada acá porque
+        // `/api/rpc` es default-allow.
+        const nombre = upper(payload?.nombre) ?? upper(delivery.nombre);
+        if (!nombre) {
+          throw new Error('El nombre del cliente es obligatorio para un retiro.');
+        }
+        delivery.nombre = nombre;
+        // `null` y no `undefined`: TypeORM no emite UPDATE para `undefined`, y
+        // la dirección y la zona quedarían pegadas en un pedido que nadie
+        // lleva a ningún lado.
+        (delivery as any).direccion = null;
+        (delivery as any).precioDelivery = null;
+        if (delivery.entregadoPorFuncionario) {
+          repartidorDesasignado = repartidorPrevio;
+          (delivery as any).entregadoPorFuncionario = null;
+        }
+        costoDelivery = 0;
+      } else {
+        const direccion = upper(payload?.direccion) ?? upper(delivery.direccion);
+        if (config?.deliveryRequiereDireccion && !direccion) {
+          throw new Error('La dirección de entrega es obligatoria para convertir el pedido en delivery.');
+        }
+        (delivery as any).direccion = direccion;
+
+        const precioDeliveryId = payload?.precioDeliveryId ?? null;
+        (delivery as any).precioDelivery = precioDeliveryId ? ({ id: precioDeliveryId } as any) : null;
+        costoDelivery = (await resolverCostoDelivery(dataSource, precioDeliveryId)) ?? 0;
+
+        // El candado del repartidor sólo dispara EN la transición hacia
+        // EN_CAMINO (o hacia ENTREGADO, según la etapa configurada). Un pedido
+        // que YA está EN_CAMINO no vuelve a atravesar esa transición, así que
+        // convertirlo en delivery —lo que lo deja sin repartidor— lo dejaría
+        // llegar a ENTREGADO sin ninguno, con la config exigiéndolo. Es el
+        // único hueco: desde ABIERTO o PARA_ENTREGA el pedido todavía tiene que
+        // pasar por EN_CAMINO, y con la etapa en ENTREGADO el candado dispara
+        // ahí, que la conversión no alcanza porque es terminal.
+        const etapa = config?.deliveryRepartidorEtapa || 'EN_CAMINO';
+        const funcionarioId = payload?.funcionarioId ?? null;
+        if (
+          config?.deliveryRequiereRepartidor
+          && etapa === 'EN_CAMINO'
+          && delivery.estado === DeliveryEstado.EN_CAMINO
+          && !funcionarioId
+        ) {
+          throw new Error(
+            'Este pedido ya está EN CAMINO: elegí el repartidor que lo lleva antes de convertirlo en delivery.',
+          );
+        }
+        if (funcionarioId) {
+          const funcionario = await manager.getRepository(Funcionario).findOneBy({ id: funcionarioId });
+          if (!funcionario) throw new Error(`Funcionario ${funcionarioId} no encontrado`);
+          delivery.entregadoPorFuncionario = funcionario;
+        }
+      }
+
+      (delivery as any).modo = modoDestino;
+      await setEntityUserTracking(dataSource, delivery, usuarioId, true);
+      const guardado = await manager.save(Delivery, delivery);
+
+      let ventaGuardada = venta;
+      if (venta) {
+        (venta as any).costoDelivery = costoDelivery;
+        if (delivery.nombre && delivery.nombre !== venta.nombreCliente) {
+          venta.nombreCliente = delivery.nombre;
+        }
+        await setEntityUserTracking(dataSource, venta, usuarioId, true);
+        ventaGuardada = await manager.save(Venta, venta);
+      }
+
+      // El pedido de la tienda tiene su propia copia de todo esto, y es la que
+      // ve el cliente en el seguimiento. Sin sincronizarla, la pantalla del
+      // cliente seguiría diciendo "retiro en local" con el pedido ya en la
+      // calle.
+      //
+      // ⚠️ `zonaDelivery` es la zona de la TIENDA (polígonos) y `precioDelivery`
+      // la del PdV: son entidades distintas y no hay mapa entre ellas, así que
+      // al pasar a DELIVERY la zona online queda como está (normalmente nula) y
+      // al pasar a RETIRO se limpia. La zona real queda igual en el delivery.
+      const pedido = await manager.getRepository(PedidoOnline).findOne({ where: { deliveryId: id } });
+      if (pedido) {
+        pedido.tipoPedido = esRetiroDestino ? TipoPedidoOnline.PICKUP : TipoPedidoOnline.DELIVERY;
+        (pedido as any).direccionEntrega = esRetiroDestino ? null : (delivery.direccion ?? null);
+        if (esRetiroDestino) {
+          (pedido as any).referenciaDireccion = null;
+          (pedido as any).zonaDelivery = null;
+        }
+        // `subtotal` es `decimal`: en Postgres llega como string y sin
+        // `Number()` el total se concatenaría en vez de sumarse.
+        pedido.costoEnvio = costoDelivery;
+        pedido.total = (Number(pedido.subtotal) || 0) + costoDelivery;
+        await setEntityUserTracking(dataSource, pedido, usuarioId, true);
+        await manager.save(PedidoOnline, pedido);
+      }
+
+      return {
+        delivery: guardado,
+        venta: ventaGuardada,
+        modoAnterior,
+        repartidorDesasignado,
+        sinCambios: false,
+      };
+    });
+
+    if (resultado.sinCambios) {
+      return { ...resultado, advertencia: null };
     }
 
-    if (funcionarioId) {
-      const funcionario = await dataSource.getRepository(Funcionario).findOneBy({ id: funcionarioId });
-      if (!funcionario) throw new Error(`Funcionario ${funcionarioId} no encontrado`);
-      delivery.entregadoPorFuncionario = funcionario;
-    } else {
-      (delivery as any).entregadoPorFuncionario = null;
+    // La advertencia se calcula DESPUÉS del commit y con la función que ya usa
+    // el diálogo de cobro (`getEstadoCobroVentaInternal`): dentro de la
+    // transacción leería los valores viejos, y reimplementar la cuenta acá
+    // sería una segunda copia de la matemática de la plata.
+    let advertencia: {
+      excedente: number;
+      totalCubierto: number;
+      deudaBruta: number;
+      tienePagoRegistrado: boolean;
+    } | null = null;
+    const ventaId = (resultado.venta as any)?.id;
+    if (ventaId) {
+      try {
+        const estadoCobro = await getEstadoCobroVentaInternal(dataSource, ventaId);
+        const ventaConPago = await dataSource.getRepository(Venta).findOne({
+          where: { id: ventaId },
+          relations: ['pago'],
+        });
+        const excedente = estadoCobro.totalCubierto - estadoCobro.deudaBruta;
+        const tienePagoRegistrado = !!(ventaConPago as any)?.pago?.id;
+        if (excedente > 0.5 || tienePagoRegistrado) {
+          advertencia = {
+            excedente: Math.max(0, excedente),
+            totalCubierto: estadoCobro.totalCubierto,
+            deudaBruta: estadoCobro.deudaBruta,
+            tienePagoRegistrado,
+          };
+        }
+      } catch (e) {
+        // La conversión ya está confirmada: no poder calcular el aviso no la
+        // deshace ni justifica un error al cajero.
+        console.warn(`[delivery-convertir-modo] no se pudo calcular el aviso de cobro del delivery ${id}:`, e);
+      }
     }
-    await setEntityUserTracking(dataSource, delivery, getCurrentUser()?.id, true);
-    return await dataSource.getRepository(Delivery).save(delivery);
+
+    return { ...resultado, advertencia };
   });
 
   // ─── Cancelación ────────────────────────────────────────────────────────
@@ -523,25 +828,49 @@ export function registerDeliveryHandlers(
     await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
     const usuarioId = getCurrentUser()?.id;
 
-    const delivery = await dataSource.getRepository(Delivery).findOne({ where: { id } });
-    if (!delivery) throw new Error(`Delivery ${id} no encontrado`);
-    if (delivery.estado === DeliveryEstado.CANCELADO) return delivery; // idempotente
-
     const motivoNormalizado = upper(motivo);
     if (!motivoNormalizado) throw new Error('Indicá el motivo de la cancelación.');
 
-    const venta = await dataSource.getRepository(Venta).findOne({ where: { delivery: { id } } });
+    // Pre-chequeos fuera de la transacción, para poder rechazar con un mensaje
+    // claro (y pedir el permiso extra) antes de tocar nada. La lectura que se
+    // GUARDA es la de adentro: con `modo` mutable, persistir la entidad leída
+    // acá revertiría una conversión concurrente.
+    const previo = await dataSource.getRepository(Delivery).findOne({ where: { id } });
+    if (!previo) throw new Error(`Delivery ${id} no encontrado`);
+    // Idempotente, y con la MISMA forma que el camino normal: reintentar tras
+    // un error de red no puede devolver a veces un `Delivery` pelado y a veces
+    // el sobre con la reversa.
+    if (previo.estado === DeliveryEstado.CANCELADO) return { delivery: previo, reversa: null };
 
-    if (venta?.estado === VentaEstado.CONCLUIDA) {
+    const ventaPrevia = await dataSource.getRepository(Venta).findOne({ where: { delivery: { id } } });
+
+    if (ventaPrevia?.estado === VentaEstado.CONCLUIDA) {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_DELIVERY_CANCELAR_COBRADO');
     }
-    if (venta) {
-      // Pre-chequeo fuera de la transacción para poder rechazar con un mensaje
-      // claro antes de tocar nada.
-      await verificarVentaCancelable(dataSource.manager, venta.id);
+    if (ventaPrevia) {
+      await verificarVentaCancelable(dataSource.manager, ventaPrevia.id);
     }
 
     const resultado = await dataSource.transaction(async (manager) => {
+      await lockDelivery(manager, dataSource, id);
+
+      const delivery = await manager.getRepository(Delivery).findOne({ where: { id } });
+      if (!delivery) throw new Error(`Delivery ${id} no encontrado`);
+      if (delivery.estado === DeliveryEstado.CANCELADO) return { delivery, reversa: null };
+
+      // Se relee ya con el lock tomado: entre el pre-chequeo y acá la venta
+      // pudo concluirse en otra terminal.
+      const venta = await manager.getRepository(Venta).findOne({ where: { delivery: { id } } });
+
+      // Y el permiso extra se vuelve a pedir SOBRE ESTA LECTURA. El pre-chequeo
+      // de arriba sirve para rechazar temprano con un mensaje claro, pero
+      // decidir con él es un TOCTOU: si la venta se cobra en otra terminal
+      // entre aquella lectura y este lock, un usuario sin
+      // VENTAS_DELIVERY_CANCELAR_COBRADO revertía igual un cobro real.
+      if (venta?.estado === VentaEstado.CONCLUIDA) {
+        await ensurePermission(dataSource, getCurrentUser, 'VENTAS_DELIVERY_CANCELAR_COBRADO');
+      }
+
       let reversa = null;
       if (venta) {
         reversa = await cancelarVentaCompletaEnTx(manager, dataSource, venta.id, {

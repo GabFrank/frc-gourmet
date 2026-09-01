@@ -50,6 +50,7 @@
     "test:fichaje-facial": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-fichaje-facial.ts",
     "test:delivery-impresora": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-impresora-ruteo.ts",
     "test:delivery": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-e2e.ts",
+    "test:delivery-conversion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-conversion-e2e.ts",
     "test:zona-delivery-online": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-zona-delivery-online-e2e.ts",
     "test:canal-venta": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-canal-venta.ts",
     "test:reporte-delivery": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-reporte-delivery-e2e.ts",
@@ -106,7 +107,8 @@
     "test:terminal-caja": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-terminal-caja-e2e.ts",
     "test:ticket-delivery-pagos": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-ticket-delivery-pagos-e2e.ts",
     "test:integridad-cobro": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-integridad-cobro-e2e.ts",
-    "test:resumen-caja-numeros": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-resumen-caja-numeros.ts"
+    "test:resumen-caja-numeros": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-resumen-caja-numeros.ts",
+    "test:sesion-cliente": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-sesion-cliente-e2e.ts"
   },
   "private": true,
   "dependencies": {

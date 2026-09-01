@@ -136,6 +136,71 @@ async function main() {
     ok(err === '', 'D: el lock de saldo sigue limpio', err || undefined);
   }
 
+  // ═══════ [D2] El lock del delivery serializa de verdad ═══════
+  // `delivery-convertir-modo` cambia el modo del pedido y `venta.costo_delivery`
+  // a la vez, mientras `actualizar-datos`, `cancelar` y `asignar-repartidor`
+  // guardan la entidad ENTERA. Si dos de esos corren a la vez sin serializar,
+  // el que llega segundo escribe el modo que leyo antes y despega el modo del
+  // envio. El candado es un `SELECT ... FOR UPDATE` a mano justamente porque
+  // arriba quedo probado que no puede ir por `findOne({ lock, relations })`.
+  console.log('\n[D2] El lock del delivery bloquea a un segundo escritor');
+  {
+    const filas: any[] = await ds.query(`
+      INSERT INTO deliveries
+        ("created_at", "updated_at", "nombre", "telefono", "estado", "modo",
+         "fecha_abierto", "cobro_anticipado")
+      VALUES (now(), now(), 'LOCK TEST', '0981000000', 'ABIERTO', 'DELIVERY', now(), false)
+      RETURNING id
+    `);
+    const deliveryId = Number(filas?.[0]?.id);
+    ok(!!deliveryId, 'D2: se pudo crear el delivery de prueba', deliveryId);
+
+    const qrA = ds.createQueryRunner();
+    await qrA.connect();
+    await qrA.startTransaction();
+    let errA = '';
+    try {
+      // Exactamente la sentencia de `lockDelivery` en delivery.handler.ts.
+      await qrA.manager.query('SELECT id FROM deliveries WHERE id = $1 FOR UPDATE', [deliveryId]);
+    } catch (e: any) { errA = e.message; }
+    ok(errA === '', 'D2: el FOR UPDATE sin joins es valido en Postgres', errA || undefined);
+
+    // Segundo escritor: tiene que QUEDAR BLOQUEADO. Se comprueba con un
+    // `lock_timeout` corto — si no bloqueara, la consulta pasaria de largo y el
+    // test seria un no-op silencioso, que es justo el error que se quiere
+    // evitar acá.
+    const qrB = ds.createQueryRunner();
+    await qrB.connect();
+    await qrB.startTransaction();
+    let errB = '';
+    try {
+      await qrB.manager.query("SET LOCAL lock_timeout = '400ms'");
+      await qrB.manager.query('SELECT id FROM deliveries WHERE id = $1 FOR UPDATE', [deliveryId]);
+    } catch (e: any) { errB = e.message; }
+    ok(/lock timeout|tiempo de espera/i.test(errB),
+      'D2: un segundo escritor queda bloqueado mientras el primero no cierra', errB || '(no bloqueo)');
+
+    await qrB.rollbackTransaction();
+    await qrB.release();
+    await qrA.rollbackTransaction();
+    await qrA.release();
+
+    // Liberado el primero, el segundo pasa: el candado no deja nada colgado.
+    const qrC = ds.createQueryRunner();
+    await qrC.connect();
+    await qrC.startTransaction();
+    let errC = '';
+    try {
+      await qrC.manager.query("SET LOCAL lock_timeout = '400ms'");
+      await qrC.manager.query('SELECT id FROM deliveries WHERE id = $1 FOR UPDATE', [deliveryId]);
+    } catch (e: any) { errC = e.message; }
+    ok(errC === '', 'D2: con el primero cerrado, el lock se toma sin esperar', errC || undefined);
+    await qrC.rollbackTransaction();
+    await qrC.release();
+
+    await ds.query('DELETE FROM deliveries WHERE id = $1', [deliveryId]);
+  }
+
   await ds.destroy();
 
   // ═══════ [E] Barrido del codigo: ningun lock convive con relations ═══════

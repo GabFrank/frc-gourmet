@@ -2,6 +2,65 @@
 
 Snapshot **2026-06**. Verificar `git log` / el código antes de afirmar que algo sigue roto. La sección de **Seguridad** está mayormente resuelta (bcrypt, JWT en keytar, permisos en backend, must-change-password) — ver detalle abajo y [architecture/auth-permissions.md](../architecture/auth-permissions.md).
 
+## Autenticación / sesión
+
+### ✅ RESUELTO — Sesión zombi al reabrir la app en modo cliente (2026-08-27)
+
+**Síntoma:** al reabrir la app con la sesión recordada, la interfaz quedaba
+logueada —nombre, avatar, todo— pero **ningún dato cargaba**. Relogear lo
+resolvía.
+
+**Causa:** dos almacenes con vidas útiles distintas que nadie reconciliaba al
+arrancar. El access token y el refresh token eran variables de módulo de
+`preload.ts` y morían con el proceso; el estado de sesión de la UI se persistía
+en `localStorage` y sobrevivía. `AuthService` reconstruía el usuario desde ese
+caché sin mirar los tokens, y cada llamada salía sin `Authorization`.
+
+Y nada lo corregía: el evento `frc-web-auth-expired` sólo lo emitía el shim de
+la web `/admin`; en Electron el listener existía sin emisor.
+
+**Resuelto** persistiendo el refresh token (keytar + fallback `0600`),
+rehidratando antes del primer RPC, agregando una red de seguridad en
+`AuthService` y emitiendo el evento también en Electron. Detalle en
+[architecture/cliente-servidor.md](../architecture/cliente-servidor.md).
+Test: `npm run test:sesion-cliente`.
+
+### ✅ RESUELTO — `router.navigate` corrompía `location` bajo `file://` (2026-08-27)
+
+**Síntoma:** pantalla en blanco irrecuperable tras usar «Recargar la
+aplicación», con `ERR_FILE_NOT_FOUND file:///login` en `main.log`.
+
+**Causa:** el `<base href="/">` no aplica a `history.pushState`, que resuelve
+contra la URL real del documento. Con rutas por path bajo `file://`, un
+`router.navigate(['/login'])` no fallaba ni lanzaba: dejaba `location.href` en
+`file:///login` **en silencio**. La app seguía andando porque el Router lee
+`location.pathname`; el crash aparecía recién en el próximo reload real.
+
+Se llegaba ahí en cada arranque en frío y en cada logout, **en los tres modos**.
+
+**Resuelto** con `useHash: true` en `app-routing.module.ts`. Verificado
+empíricamente sobre Electron 24.3.0.
+
+### Reusar un refresh token ya rotado no revoca la cadena — ABIERTO (menor)
+
+`refresh-token.utils.ts`: reutilizar un token ya rotado devuelve 401 porque
+`revokedAt` está seteado, pero no se revoca el resto de la cadena del usuario ni
+se alerta. Es la detección de reuso que recomienda OAuth. Preexistente; ahora
+que el token se persiste en disco la superficie es un poco mayor.
+
+### No hay forma de cerrar la sesión de una terminal a distancia — ABIERTO (menor)
+
+`revokeAllForUser` existe en `refresh-token.utils.ts` pero **ningún handler lo
+expone**. Con un refresh token de 30 días en el disco de cada terminal, valdría
+la pena poder decir "cerrame la sesión de esa PC" desde Configuración.
+
+### `auth_token` en localStorage: se escribe y nunca se lee (modo cliente) — ABIERTO (cosmético)
+
+`setSession` guarda el access token en `localStorage` para los tres modos, pero
+en modo cliente el transporte usa el de memoria del preload. Queda un token
+vencido en disco que nadie consulta: una pista falsa para el próximo que
+depure esto. Se dejó como está para no tocar el camino de standalone.
+
 ## Ventas / PdV
 
 ### ✅ RESUELTO — Se podían desactivar líneas de pago de otra caja, incluso cerrada (2026-08-27)

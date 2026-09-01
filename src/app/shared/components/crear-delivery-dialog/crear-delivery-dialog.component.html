@@ -6,7 +6,8 @@
          que el alta es una sola y el modo se elige acá. RETIRAR saca del form
          la dirección y el precio de envío, que dejan de existir. -->
     <mat-button-toggle-group class="modo-toggle" [value]="modo"
-      (change)="onModoChange($event.value)" [disabled]="isEditMode">
+      (change)="onModoChange($event.value)" [disabled]="isEditMode"
+      [matTooltip]="tooltipModo">
       <mat-button-toggle value="DELIVERY">
         <mat-icon>delivery_dining</mat-icon> DELIVERY
       </mat-button-toggle>

@@ -28,6 +28,7 @@ import { ProveedorProducto } from './entities/compras/proveedor-producto.entity'
 import { FormasPago } from './entities/compras/forma-pago.entity';
 import { PrecioDelivery } from './entities/ventas/precio-delivery.entity';
 import { Delivery, DeliveryEstado } from './entities/ventas/delivery.entity';
+import { ConvertirModoDeliveryPayload } from './convertir-modo-delivery.types';
 import { Venta, VentaEstado } from './entities/ventas/venta.entity';
 import { VentaItem } from './entities/ventas/venta-item.entity';
 import { PdvGrupoCategoria } from './entities/ventas/pdv-grupo-categoria.entity';
@@ -631,6 +632,10 @@ export class RepositoryHttpService extends RepositoryService {
   }
   deliveryCancelar(deliveryId: number, motivo: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.deliveryCancelar() no esta implementado todavia.`)) as any;
+  }
+
+  deliveryConvertirModo(deliveryId: number, payload: ConvertirModoDeliveryPayload): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryConvertirModo() no esta implementado todavia.`)) as any;
   }
   deliveryImprimirTicket(deliveryId: number, printerId?: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.deliveryImprimirTicket() no esta implementado todavia.`)) as any;

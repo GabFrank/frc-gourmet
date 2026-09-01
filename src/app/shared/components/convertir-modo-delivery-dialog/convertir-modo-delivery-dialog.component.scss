@@ -1,0 +1,169 @@
+h2[mat-dialog-title] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .titulo-icon {
+    color: var(--text-secondary);
+  }
+}
+
+mat-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 8px;
+  min-width: 380px;
+}
+
+.subtitulo {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+/* Amarillo de "atención": el estado ámbar de la paleta de estados. */
+.aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.4;
+
+  mat-icon {
+    flex-shrink: 0;
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+.aviso-atencion {
+  background-color: rgba(255, 152, 0, 0.12);
+  color: var(--text-primary);
+
+  mat-icon {
+    color: #ff9800;
+  }
+}
+
+/* Qué se pierde al convertir. Es la parte que el cajero no puede deshacer. */
+.lista-cambios {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--surface-variant);
+
+  .cambio {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-primary);
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+      color: var(--text-secondary);
+    }
+  }
+}
+
+.repartidor-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+
+  .repartidor-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-primary);
+
+    mat-icon {
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+      color: var(--text-secondary);
+    }
+  }
+
+  .repartidor-falta {
+    color: #f44336;
+  }
+}
+
+.totales {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-color);
+
+  .total-kv {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .total-final {
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border-color);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  /* El valor viejo tachado al lado del nuevo: el cambio es el dato, no el
+     número final. */
+  .valor-cambia {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    mat-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+      color: var(--text-secondary);
+    }
+  }
+
+  .valor-viejo {
+    text-decoration: line-through;
+    color: var(--text-secondary);
+    font-weight: 400;
+  }
+}
+
+/* Rojo: es plata cobrada de más, no una advertencia de trámite. */
+.aviso-plata {
+  background-color: rgba(244, 67, 54, 0.12);
+  color: var(--text-primary);
+
+  mat-icon {
+    color: #f44336;
+  }
+}
+
+.reimprimir {
+  font-size: 13px;
+}
