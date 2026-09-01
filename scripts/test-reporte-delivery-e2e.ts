@@ -29,6 +29,8 @@ import {
 } from '../electron/handlers/reportes-delivery.helper';
 import { getMonedaPrincipalId, getCotizacionMap, getInicioJornada } from '../electron/handlers/dashboard-ventas.handler';
 import { CanalVenta } from '../electron/utils/canal-venta.utils';
+import { invokeHandler } from '../electron/utils/handler-registry';
+import { registerVentasHandlers } from '../electron/handlers/ventas.handler';
 
 let passed = 0, failed = 0;
 function ok(cond: boolean, name: string, extra?: any) {
@@ -374,6 +376,62 @@ async function main() {
   ok(bloque.kpis.ingresoEnvios === 65000, 'el envío de la cancelada no se cobró (sería 80.000)');
   ok(porCanal.get(CanalVenta.DELIVERY)!.facturacion === 280000,
     'la facturación de delivery no incluye la cancelada');
+
+  // ── Filtros del historial de ventas ─────────────────────────────────────
+  console.log('\n[K] Filtros del historial (getVentasByDateRange)');
+  registerVentasHandlers(ds, () => usuario as any);
+
+  const desdeISO = new Date(ahora.getTime() - 2 * 60 * MIN).toISOString();
+  const hastaISO = new Date(ahora.getTime() + 2 * 60 * MIN).toISOString();
+  const listar = (filtros: any = {}) =>
+    invokeHandler('getVentasByDateRange', desdeISO, hastaISO, { pageSize: 100, ...filtros }) as Promise<any>;
+
+  const todas = await listar();
+  ok(todas.total === 8, 'sin filtro: las 8 ventas del período (7 concluidas + 1 cancelada)', todas.total);
+
+  const soloDelivery = await listar({ canal: 'DELIVERY' });
+  ok(soloDelivery.total === 5, 'canal DELIVERY: 4 concluidos + el cancelado', soloDelivery.total);
+  const soloRetiro = await listar({ canal: 'RETIRO' });
+  ok(soloRetiro.total === 1, 'canal RETIRO: 1', soloRetiro.total);
+  const soloSalon = await listar({ canal: 'SALON' });
+  ok(soloSalon.total === 1, 'canal SALON: 1', soloSalon.total);
+  const soloMostrador = await listar({ canal: 'MOSTRADOR' });
+  ok(soloMostrador.total === 1, 'canal MOSTRADOR: 1', soloMostrador.total);
+  // Los cuatro canales particionan el total: ninguna venta se cuenta dos veces
+  // ni se pierde. Es el mismo invariante que el mix de la dona, del lado lista.
+  ok(soloDelivery.total + soloRetiro.total + soloSalon.total + soloMostrador.total === todas.total,
+    'INVARIANTE: los 4 canales particionan el resultado sin filtro');
+
+  const porZona = await listar({ zonaId: zonaCentro.id });
+  ok(porZona.total === 3, 'zona CENTRO: 2 concluidos + el cancelado', porZona.total);
+  const porRepartidor = await listar({ repartidorId: repartidor.id });
+  ok(porRepartidor.total === 2, 'repartidor JUAN PEREZ: 2', porRepartidor.total);
+  const porOrigen = await listar({ canalOrigen: 'WEB' });
+  ok(porOrigen.total === 1, 'origen WEB: 1', porOrigen.total);
+
+  // Canal y origen son ortogonales: se combinan con AND, no se pisan.
+  const webYDelivery = await listar({ canal: 'DELIVERY', canalOrigen: 'WEB' });
+  ok(webYDelivery.total === 1, 'canal + origen se combinan con AND', webYDelivery.total);
+  const webYSalon = await listar({ canal: 'SALON', canalOrigen: 'WEB' });
+  ok(webYSalon.total === 0, 'una combinación sin resultados devuelve vacío, no todo', webYSalon.total);
+
+  // Los totales son del resultado FILTRADO, no de la página.
+  ok(todas.totales?.costoDelivery === 80000,
+    'totales.costoDelivery suma todo el filtro (65.000 cobrados + 15.000 del cancelado)',
+    todas.totales?.costoDelivery);
+  ok((await listar({ canal: 'SALON' })).totales?.costoDelivery === 0,
+    'el salón no tiene costo de envío');
+  // Con paginación chica el total NO puede cambiar: es del filtro, no de la página.
+  const pagina1 = await invokeHandler('getVentasByDateRange', desdeISO, hastaISO, { pageSize: 2, page: 1 }) as any;
+  ok(pagina1.data.length === 2 && pagina1.total === 8,
+    'la paginación no altera el total del filtro', { pagina: pagina1.data.length, total: pagina1.total });
+  ok(pagina1.totales?.costoDelivery === 80000,
+    'ni el total de envíos', pagina1.totales?.costoDelivery);
+
+  // La lista trae el delivery cargado para poder pintar canal / zona / repartidor.
+  const conDelivery = soloDelivery.data.find((v: any) => v.delivery?.precioDelivery);
+  ok(!!conDelivery?.delivery?.precioDelivery?.descripcion,
+    'la fila trae la zona del reparto para la columna Canal');
 
   await ds.destroy();
 

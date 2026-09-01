@@ -1,7 +1,7 @@
 # Plan — Delivery y Retiro en los informes de venta
 
 > Branch: `claude/sales-reports-delivery-ihwnbi` · base `develop`
-> Estado: **aprobado, en ejecución** · Fases 0, 1 y 2 hechas
+> Estado: **aprobado, en ejecución** · Fases 0–4 hechas
 
 ## 1. Diagnóstico
 
@@ -224,14 +224,36 @@ Tests: `test:reporte-delivery` sube a 61 asserts (4 nuevos cubren las series que
 consume la pantalla: `data` es `any`, así que renombrar una clave no lo agarra el
 AOT). `npm run check` exit 0, `npm run lint` sin errores nuevos.
 
-### Fase 3 — Dashboard desktop + PWA resumen
+### Fase 3 — Dashboard desktop + PWA resumen · ✅ HECHA
 
 Las 4 stat-chips en las dos pantallas.
 
-### Fase 4 — Cierre de caja + Historial de ventas
+**Entregado:** fila propia de chips (Envíos, Retiros, En camino ahora, Cobrado en
+envíos) en el dashboard desktop y en el resumen de la PWA, bajo `hayDelivery` —
+cuatro ceros no informan nada. `enCamino` entra en esa condición aunque el
+período no tenga repartos: si hay pedidos en la calle el cajero tiene que verlo,
+y se resalta (`warning`).
+
+### Fase 4 — Cierre de caja + Historial de ventas · ✅ HECHA
 
 Bloque DELIVERY en el resumen/ticket/imagen WhatsApp; columna Canal, filtros y
 totales en el historial.
+
+**Entregado:** bloque DELIVERY en el ticket térmico de cierre, en la imagen de
+WhatsApp y en el diálogo de resumen — los tres salen de `computeResumenCaja`, así
+que fue un solo cambio. Va después de las ventas y antes del arqueo porque no
+mueve plata del cajón por sí mismo (el cobro del envío ya está dentro de las
+ventas por forma de pago): es informe de cierre. Si quedan repartos sin entregar,
+el ticket lo grita.
+
+Historial: columna **Canal** con chip + origen (sólo si no es LOCAL, para no
+repetir lo obvio en cada fila) + zona o repartidor en segunda línea; cuatro
+filtros nuevos (canal, zona, repartidor, origen); y fila de totales del
+**resultado filtrado**, no de la página.
+
+Tests: `test:reporte-delivery` sube a 77 asserts, con la sección [K] sobre
+`getVentasByDateRange` — incluye el invariante de que los 4 canales particionan
+el resultado sin filtro y que la paginación no altera los totales.
 
 ### Fase 5 — Reportes mobile
 
