@@ -162,6 +162,7 @@ async function envioRecaudado(
   filtro: FiltroVentas,
   grupoExpr: string | null,
   joins: string,
+  filtroExtra = '',
 ): Promise<Map<string, number>> {
   const base = concluidas(filtro);
   const select = grupoExpr ? `${grupoExpr} AS grupo, ` : '';
@@ -171,7 +172,8 @@ async function envioRecaudado(
     FROM ventas v
     ${joins}
     WHERE ${base.sql}
-      AND v.costo_delivery IS NOT NULL
+      AND v.costo_delivery IS NOT NULL${filtroExtra ? `
+      AND ${filtroExtra}` : ''}
     ${groupBy}
   `, base.params);
   const acc = new Map<string, number>();
@@ -184,6 +186,14 @@ async function envioRecaudado(
 
 /** Clave del Map cuando `envioRecaudado` corre sin agrupar. */
 const TOTAL_SIN_AGRUPAR = 'TOTAL';
+
+/**
+ * "Es un reparto, no un retiro". Requiere el join de `joinDeliveryCanal()`.
+ * Vive acá como constante única para que las cuatro métricas de envío
+ * (cantidad, facturación, envío recaudado y tiempos) acoten al mismo conjunto:
+ * cuando `envioRecaudado` no lo aplicaba, sumaba también los retiros.
+ */
+const SOLO_ENVIOS = `v.delivery_id IS NOT NULL AND (dcanal.modo IS NULL OR dcanal.modo <> 'RETIRO')`;
 
 // ─────────────────────────── KPIs ───────────────────────────
 
@@ -210,7 +220,13 @@ export async function kpisDelivery(
   const porCanal = await agrupar(ds, ctx, filtro, canalVentaExpr(), joinDeliveryCanal());
   const delivery = porCanal.get(CanalVenta.DELIVERY) || { tickets: 0, facturacion: 0 };
   const retiro = porCanal.get(CanalVenta.RETIRO) || { tickets: 0, facturacion: 0 };
-  const envios = (await envioRecaudado(ds, filtro, null, '')).get(TOTAL_SIN_AGRUPAR) || 0;
+  // Se acota a repartos igual que el resto del bloque. Hoy da lo mismo porque
+  // los tres caminos que crean un delivery fuerzan `costoDelivery = 0` en un
+  // RETIRO, pero el día que un retiro cobre algo (una tarifa de mostrador, por
+  // ejemplo) este KPI se llama "ingreso por ENVÍOS" y no debe incluirlo.
+  const envios = (await envioRecaudado(
+    ds, filtro, null, joinDeliveryCanal(), SOLO_ENVIOS,
+  )).get(TOTAL_SIN_AGRUPAR) || 0;
 
   return {
     envios: delivery.tickets,
@@ -301,10 +317,10 @@ export async function enviosPorZona(
   `;
   // Sólo repartos: un retiro no tiene zona y su fila sería siempre "SIN ZONA",
   // ensuciando el ranking con algo que no es una zona.
-  const soloEnvios = `v.delivery_id IS NOT NULL AND (dcanal.modo IS NULL OR dcanal.modo <> 'RETIRO')`;
+  const soloEnvios = SOLO_ENVIOS;
 
   const acc = await agrupar(ds, ctx, filtro, zonaExpr, joins, soloEnvios);
-  const envios = await envioRecaudado(ds, filtro, zonaExpr, joins);
+  const envios = await envioRecaudado(ds, filtro, zonaExpr, joins, soloEnvios);
   const tiempos = await minutosDeEntregaPorGrupo(ds, filtro, zonaExpr, joins, soloEnvios);
 
   return [...acc.entries()]
@@ -340,10 +356,10 @@ export async function rankingRepartidores(
     LEFT JOIN funcionarios frep ON frep.id = dcanal.entregado_por_funcionario_id
     LEFT JOIN personas perrep ON perrep.id = frep.persona_id
   `;
-  const soloEnvios = `v.delivery_id IS NOT NULL AND (dcanal.modo IS NULL OR dcanal.modo <> 'RETIRO')`;
+  const soloEnvios = SOLO_ENVIOS;
 
   const acc = await agrupar(ds, ctx, filtro, nombreExpr, joins, soloEnvios);
-  const envios = await envioRecaudado(ds, filtro, nombreExpr, joins);
+  const envios = await envioRecaudado(ds, filtro, nombreExpr, joins, soloEnvios);
   const tiempos = await minutosDeEntregaPorGrupo(ds, filtro, nombreExpr, joins, soloEnvios);
 
   return [...acc.entries()]
@@ -689,8 +705,7 @@ export async function resumenDeliveryCaja(
       r.pendientes++;
       continue;
     }
-    if (esRetiro) r.retiros++; else r.envios++;
-    r.cobroEnvios += num(f.costo);
+    if (esRetiro) { r.retiros++; } else { r.envios++; r.cobroEnvios += num(f.costo); }
     if (f.anticipado === true || f.anticipado === 1 || f.anticipado === '1') r.anticipados++;
   }
   r.cobroEnvios = Math.round(r.cobroEnvios);

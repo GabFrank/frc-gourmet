@@ -230,3 +230,35 @@ como chips y cancelaciones como texto + motivos. Se omiten, igual que el resto
 del reporte mobile, el heatmap por canal y cualquier gráfico de burbujas.
 
 Manual de pruebas: [`docs/testing/TESTING-CHECKLIST-INFORMES-DELIVERY.md`](../../../../docs/testing/TESTING-CHECKLIST-INFORMES-DELIVERY.md).
+
+
+### Lo que encontró la auditoría (2026-09-01)
+
+Cuatro bugs reales que los tests originales no atrapaban. Valen como recordatorio
+de qué mirar la próxima vez que se agregue un agregado sobre `ventas`:
+
+- **Un agregado que clona un QueryBuilder hereda sus joins.** `totales.costoDelivery`
+  del historial salía de `qb.clone().select('SUM(...)')`, y `qb` tenía
+  `leftJoinAndSelect('venta.items')` — que es `@OneToMany`. `.select()` reemplaza
+  las columnas pero **no quita los joins**, así que un envío de 15.000 en una venta
+  de 3 ítems sumaba 45.000. El fixture tenía un ítem por venta, o sea factor 1, y el
+  test pasaba. Hoy los filtros viven en una función `aplicarFiltros(builder)` que
+  comparten las dos consultas, y la de totales arma su propio builder sin ese join.
+- **`getVentasByDateRange` comparaba ISO contra el formato de SQLite.** El mismo bug
+  que `dbQuery` ya corregía, reintroducido porque este handler arma el `WHERE` con
+  QueryBuilder. En standalone, el filtro "hoy" del Historial devolvía **cero**.
+  `limiteFechaSqlite()` se exportó desde `db-query.ts` para que haya una sola
+  definición del formato.
+- **Hidratar una entidad publica todos sus campos.** `leftJoinAndSelect` del
+  `Funcionario` repartidor exponía sueldo, IPS y cuenta bancaria en la respuesta de
+  una lista de ventas, sobre un canal sin `ensurePermission`. Ahora va `leftJoin` +
+  `addSelect(['repartidor.id', 'repartidorPersona.id', 'repartidorPersona.nombre'])`.
+- **`envioRecaudado` no aplicaba el filtro de canal** que sus callers usaban para
+  todo lo demás, así que sumaba también los retiros. Inofensivo hoy (los tres
+  caminos que crean un delivery fuerzan `costoDelivery = 0` en un retiro) pero
+  latente. La condición vive ahora en la constante `SOLO_ENVIOS`.
+
+**Hueco de cobertura que queda:** los tres scripts nuevos corren sólo contra SQLite.
+El riesgo de `decimal`-como-string de Postgres (documentado en el encabezado del
+motor) no está cubierto por ningún test — el CI sí corre la migración contra
+Postgres, pero no las métricas. Ver `reference/known-bugs.md`.

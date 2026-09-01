@@ -24,9 +24,10 @@ import { getDataSourceOptions } from '../src/app/database/database.config';
 import { construirReporteVentasCierre } from '../electron/handlers/reportes-ventas.helper';
 import { resolverPeriodo } from '../electron/handlers/reportes-periodo.util';
 import {
-  construirBloqueDelivery, resumenDeliveryCaja, deliveriesEnCamino, CotizacionCtx,
-  ZONA_SIN_ASIGNAR,
+  construirBloqueDelivery, resumenDeliveryCaja, deliveriesEnCamino, mixPorCanal,
+  filtroDeRango, CotizacionCtx, ZONA_SIN_ASIGNAR,
 } from '../electron/handlers/reportes-delivery.helper';
+import { computeResumenCaja } from '../electron/utils/resumen-caja.utils';
 import { getMonedaPrincipalId, getCotizacionMap, getInicioJornada } from '../electron/handlers/dashboard-ventas.handler';
 import { CanalVenta } from '../electron/utils/canal-venta.utils';
 import { invokeHandler } from '../electron/utils/handler-registry';
@@ -122,6 +123,8 @@ async function main() {
     monto: number;
     moneda?: any;
     itemMonto?: number;
+    /** Cantidad de VentaItem. >1 destapa agregados que multiplican por el join. */
+    items?: number;
     cancelada?: boolean;
     cobroAnticipado?: boolean;
     canalOrigen?: string;
@@ -159,11 +162,13 @@ async function main() {
       caja: o.conCaja === false ? undefined : caja,
     });
 
-    await save(VentaItem, {
-      venta, producto, cantidad: 1,
-      precioVentaUnitario: o.itemMonto ?? o.monto, precioCostoUnitario: 0,
-      estado: o.cancelada ? 'CANCELADO' : 'ACTIVO',
-    });
+    for (let i = 0; i < (o.items ?? 1); i++) {
+      await save(VentaItem, {
+        venta, producto, cantidad: 1,
+        precioVentaUnitario: o.itemMonto ?? o.monto, precioCostoUnitario: 0,
+        estado: o.cancelada ? 'CANCELADO' : 'ACTIVO',
+      });
+    }
 
     // Una venta cancelada tiene sus líneas de cobro desactivadas (`activo=false`),
     // igual que las deja `cancelarVentaCompletaEnTx`. Sellarlas activas haría
@@ -196,6 +201,10 @@ async function main() {
   });
   await mkVenta({                                                                    // DELIVERY rojo (70 min), sin repartidor
     modo: 'DELIVERY', zona: zonaSur, costoDelivery: 20000, monto: 100000,
+    // TRES ítems a propósito: `venta.items` es @OneToMany, así que cualquier
+    // agregado que arrastre ese join multiplica por la cantidad de ítems. Con
+    // un ítem por venta el factor es 1 y el bug es invisible.
+    items: 3,
     etapas: { paraEntrega: 12, enCamino: 20, entregado: 70 },
   });
   // Reparto web cobrado en USD y sin zona: prueba la conversión y el "SIN ZONA".
@@ -271,6 +280,18 @@ async function main() {
   const sumaPct = bloque.mixCanal.reduce((s, c) => s + c.pct, 0);
   ok(Math.abs(sumaPct - 100) < 0.5, 'los porcentajes suman ~100', sumaPct);
 
+  // El período anterior tiene UN solo delivery y nada más. Es el caso que
+  // prueba de verdad que los canales sin ventas se devuelven en cero en vez de
+  // desaparecer: con el fixture principal los cuatro tienen datos, así que un
+  // `[...acc.keys()]` en lugar del recorrido por `CANAL_VENTA_ORDEN` habría
+  // pasado igual.
+  const mixAnterior = await mixPorCanal(ds, ctx, filtroDeRango(periodo.anterior!));
+  ok(mixAnterior.length === 4, 'el mix devuelve los 4 canales aunque 3 estén vacíos', mixAnterior.length);
+  const vacios = mixAnterior.filter((c) => c.tickets === 0);
+  ok(vacios.length === 3, 'y los vacíos vienen en cero, no ausentes', vacios.map((c) => c.canal));
+  ok(mixAnterior.find((c) => c.canal === CanalVenta.DELIVERY)?.tickets === 1,
+    'el único con datos es DELIVERY');
+
   // ── Zonas ────────────────────────────────────────────────────────────────
   console.log('\n[C] Envíos por zona');
   const zonas = new Map(bloque.zonas.map((z) => [z.zona, z]));
@@ -300,6 +321,9 @@ async function main() {
   ok(etapas.get('TOTAL')!.promedio === 43.3, 'total promedio (20+40+70)/3 = 43.3', etapas.get('TOTAL')!.promedio);
   ok(etapas.get('TOTAL')!.mediana === 40, 'total mediana = 40', etapas.get('TOTAL')!.mediana);
   ok(etapas.get('PREPARACIÓN')!.promedio === 9, 'preparación promedio (5+10+12)/3 = 9', etapas.get('PREPARACIÓN')!.promedio);
+  // DESPACHO: para_entrega -> en_camino = (8-5), (15-10), (20-12) = 3, 5, 8.
+  ok(etapas.get('DESPACHO')!.promedio === 5.3, 'despacho promedio (3+5+8)/3 = 5.3', etapas.get('DESPACHO')!.promedio);
+  ok(etapas.get('DESPACHO')!.muestras === 3, 'despacho: 3 muestras', etapas.get('DESPACHO')!.muestras);
   ok(etapas.get('EN CALLE')!.promedio === 29, 'en calle promedio (12+25+50)/3 = 29', etapas.get('EN CALLE')!.promedio);
   ok(bloque.tiempos.sla.verde === 1 && bloque.tiempos.sla.amarillo === 1 && bloque.tiempos.sla.rojo === 1,
     'SLA: uno por franja con umbrales 30/60', bloque.tiempos.sla);
@@ -335,6 +359,15 @@ async function main() {
   ok(cierre.cobroEnvios === 65000, 'cierre: 65.000 cobrados en envíos', cierre.cobroEnvios);
   ok(cierre.anticipados === 1, 'cierre: 1 cobro anticipado');
   ok(cierre.pendientes === 1, 'cierre: 1 reparto sin entregar al cerrar', cierre.pendientes);
+
+  // El enchufe real: `computeResumenCaja` es lo que consumen el diálogo, el
+  // ticket y la imagen de WhatsApp. Probar `resumenDeliveryCaja` suelto no
+  // garantiza que quedó colgado de la clave correcta.
+  const resumenCompleto: any = await computeResumenCaja(ds, caja.id);
+  ok(resumenCompleto?.delivery?.envios === 4,
+    'computeResumenCaja expone el bloque bajo la clave `delivery`', resumenCompleto?.delivery?.envios);
+  ok(resumenCompleto?.delivery?.cobroEnvios === 65000,
+    'con el cobro de envíos del turno', resumenCompleto?.delivery?.cobroEnvios);
 
   // ── Integración con el reporte ───────────────────────────────────────────
   console.log('\n[I] Integración con el reporte de ventas');
@@ -416,8 +449,11 @@ async function main() {
   ok(webYSalon.total === 0, 'una combinación sin resultados devuelve vacío, no todo', webYSalon.total);
 
   // Los totales son del resultado FILTRADO, no de la página.
+  // Una de las ventas de delivery tiene 3 ítems: si el agregado arrastrara el
+  // join a `venta_items`, su envío de 20.000 contaría 3 veces y el total daría
+  // 120.000 en vez de 80.000.
   ok(todas.totales?.costoDelivery === 80000,
-    'totales.costoDelivery suma todo el filtro (65.000 cobrados + 15.000 del cancelado)',
+    'totales.costoDelivery suma cada venta UNA vez, no una por ítem',
     todas.totales?.costoDelivery);
   ok((await listar({ canal: 'SALON' })).totales?.costoDelivery === 0,
     'el salón no tiene costo de envío');
@@ -432,6 +468,22 @@ async function main() {
   const conDelivery = soloDelivery.data.find((v: any) => v.delivery?.precioDelivery);
   ok(!!conDelivery?.delivery?.precioDelivery?.descripcion,
     'la fila trae la zona del reparto para la columna Canal');
+
+  // ── El repartidor viaja SIN sus datos de RRHH ────────────────────────────
+  // `Funcionario` tiene salario, jornal, IPS y cuenta bancaria, y su `Persona`
+  // documento, dirección y teléfono. Este canal NO tiene `ensurePermission` y
+  // `/api/rpc` es default-allow, así que hidratar la entidad entera publicaba
+  // el sueldo de cada repartidor en una lista de ventas. La lista sólo necesita
+  // el nombre; estos asserts existen para que nadie vuelva a poner
+  // `leftJoinAndSelect` sin notarlo.
+  const conRepartidor = porRepartidor.data.find((v: any) => v.delivery?.entregadoPorFuncionario);
+  ok(!!conRepartidor, 'la fila del reparto trae su repartidor');
+  const f = conRepartidor?.delivery?.entregadoPorFuncionario;
+  ok(f?.persona?.nombre === 'JUAN PEREZ', 'con el nombre, que es lo que muestra la lista', f?.persona?.nombre);
+  ok(f?.salarioBase === undefined, 'pero SIN el salario', f?.salarioBase);
+  ok(f?.numeroIps === undefined, 'sin el número de IPS', f?.numeroIps);
+  ok(f?.cuentaBancariaPropia === undefined, 'sin la cuenta bancaria', f?.cuentaBancariaPropia);
+  ok(f?.persona?.documento === undefined, 'y sin el documento de la persona', f?.persona?.documento);
 
   await ds.destroy();
 

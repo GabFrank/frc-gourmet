@@ -24,6 +24,7 @@ import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.ent
 import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
 import { Not, IsNull, In, EntityManager } from 'typeorm';
 import { DeepPartial } from 'typeorm';
+import { SelectQueryBuilder } from 'typeorm';
 import { Reserva } from '../../src/app/database/entities/ventas/reserva.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
@@ -60,6 +61,7 @@ import { VentaItemSabor } from '../../src/app/database/entities/ventas/venta-ite
 import { dbQuery } from '../utils/db-query';
 import { computeResumenCaja } from '../utils/resumen-caja.utils';
 import { condicionCanal, esCanalValido } from '../utils/canal-venta.utils';
+import { limiteFechaSqlite } from '../utils/db-query';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { EstadoPedidoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
@@ -1007,134 +1009,187 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         // el repartidor. Va LEFT: la mayoría de las ventas no tiene reparto.
         .leftJoinAndSelect('venta.delivery', 'delivery')
         .leftJoinAndSelect('delivery.precioDelivery', 'deliveryZona')
-        .leftJoinAndSelect('delivery.entregadoPorFuncionario', 'repartidor')
-        .leftJoinAndSelect('repartidor.persona', 'repartidorPersona');
+        // ⚠️ El repartidor va con `leftJoin` + `addSelect` de columnas sueltas,
+        // NO con `leftJoinAndSelect`. `Funcionario` trae `salarioBase`,
+        // `valorJornal`, `numeroIps` y `cuentaBancariaPropia`, y su `Persona`
+        // trae documento, dirección, teléfono y fecha de nacimiento. Hidratar
+        // las entidades enteras publicaba el sueldo y la cuenta bancaria de
+        // cada repartidor en la respuesta de una lista de ventas — y este canal
+        // no tiene `ensurePermission` y `/api/rpc` es default-allow, así que lo
+        // habría podido leer cualquier usuario con un JWT válido.
+        //
+        // La lista sólo necesita el nombre. El `id` de cada lado va porque sin
+        // la PK TypeORM no arma el objeto de la relación.
+        .leftJoin('delivery.entregadoPorFuncionario', 'repartidor')
+        .leftJoin('repartidor.persona', 'repartidorPersona')
+        .addSelect(['repartidor.id', 'repartidorPersona.id', 'repartidorPersona.nombre']);
 
       // Date range filter (skip if cajaId is provided — caja has its own date range)
-      if (!filtros?.cajaId) {
-        qb.where('venta.createdAt >= :desde', { desde })
-          .andWhere('venta.createdAt <= :hasta', { hasta });
-      } else {
-        qb.where('caja.id = :cajaId', { cajaId: filtros.cajaId });
-      }
+      //
+      // ⚠️ Los límites se normalizan al formato de SQLite antes de comparar.
+      // TypeORM escribe `created_at` como `YYYY-MM-DD HH:MM:SS` (sin `T` ni
+      // `Z`) y el frontend manda `toISOString()`. SQLite compara esas columnas
+      // como TEXTO, y el espacio (0x20) ordena ANTES que la `T` (0x54): una
+      // fila de HOY quedaba fuera del rango "hoy" porque
+      // '2026-09-01 13:00:00' >= '2026-09-01T03:00:00.000Z' da FALSO. No
+      // fallaba: devolvía cero. Es el mismo bug que `dbQuery` ya corrige para
+      // los handlers que usan SQL crudo; este arma su `WHERE` con QueryBuilder
+      // y quedaba afuera. Sólo afecta al modo standalone: en Postgres la
+      // columna es `timestamp` y el driver castea el ISO.
+      const esSqlite = dataSource.options.type !== 'postgres';
+      const desdeLim = esSqlite ? limiteFechaSqlite(desde) : desde;
+      const hastaLim = esSqlite ? limiteFechaSqlite(hasta) : hasta;
 
-      // Estado
-      if (filtros?.estado) {
-        qb.andWhere('venta.estado = :estado', { estado: filtros.estado });
-      }
+      /**
+       * Aplica TODOS los filtros del pedido a un builder.
+       *
+       * Existe como función y no inline porque hay dos consultas que tienen que
+       * filtrar exactamente igual: la de la página y la de los totales. Cuando
+       * los filtros vivían sólo en `qb` y los totales salían de un `clone()`,
+       * cualquier join de `qb` se colaba en el agregado — que es justo como el
+       * join de `items` terminó multiplicando el total de envíos.
+       */
+      const aplicarFiltros = (b: SelectQueryBuilder<Venta>): void => {
+        if (!filtros?.cajaId) {
+          b.where('venta.createdAt >= :desde', { desde: desdeLim })
+            .andWhere('venta.createdAt <= :hasta', { hasta: hastaLim });
+        } else {
+          b.where('caja.id = :cajaId', { cajaId: filtros.cajaId });
+        }
 
-      // Mesa
-      if (filtros?.mesaId) {
-        qb.andWhere('mesa.id = :mesaId', { mesaId: filtros.mesaId });
-      }
+        // Estado
+        if (filtros?.estado) {
+          b.andWhere('venta.estado = :estado', { estado: filtros.estado });
+        }
 
-      // Formas de pago (multi-select) — subquery en pago_detalles
-      if (filtros?.formasPagoIds?.length > 0) {
-        qb.andWhere(qb2 => {
-          const subQuery = qb2.subQuery()
-            .select('pd_fp.pago_id')
-            .from('pagos_detalles', 'pd_fp')
-            .where('pd_fp.forma_pago_id IN (:...formasPagoIds)')
-            .andWhere('pd_fp.activo')
-            .getQuery();
-          return 'pago.id IN ' + subQuery;
-        }).setParameter('formasPagoIds', filtros.formasPagoIds);
-      }
+        // Mesa
+        if (filtros?.mesaId) {
+          b.andWhere('mesa.id = :mesaId', { mesaId: filtros.mesaId });
+        }
 
-      // Monedas (multi-select) — subquery en pago_detalles
-      if (filtros?.monedaIds?.length > 0) {
-        qb.andWhere(qb2 => {
-          const subQuery = qb2.subQuery()
-            .select('pd_m.pago_id')
-            .from('pagos_detalles', 'pd_m')
-            .where('pd_m.moneda_id IN (:...monedaIds)')
-            .andWhere('pd_m.activo')
-            .getQuery();
-          return 'pago.id IN ' + subQuery;
-        }).setParameter('monedaIds', filtros.monedaIds);
-      }
+        // Formas de pago (multi-select) — subquery en pago_detalles
+        if (filtros?.formasPagoIds?.length > 0) {
+          b.andWhere(qb2 => {
+            const subQuery = qb2.subQuery()
+              .select('pd_fp.pago_id')
+              .from('pagos_detalles', 'pd_fp')
+              .where('pd_fp.forma_pago_id IN (:...formasPagoIds)')
+              .andWhere('pd_fp.activo')
+              .getQuery();
+            return 'pago.id IN ' + subQuery;
+          }).setParameter('formasPagoIds', filtros.formasPagoIds);
+        }
 
-      // Rango de valores por moneda
-      if (filtros?.monedaValorId && (filtros?.valorMin != null || filtros?.valorMax != null)) {
-        qb.andWhere(qb2 => {
-          let subQuery = qb2.subQuery()
-            .select('pd_v.pago_id')
-            .from('pagos_detalles', 'pd_v')
-            .where('pd_v.moneda_id = :monedaValorId')
-            .andWhere('pd_v.tipo = :tipoPago')
-            .andWhere('pd_v.activo')
-            .groupBy('pd_v.pago_id');
-          if (filtros.valorMin != null) {
-            subQuery = subQuery.having('SUM(pd_v.valor) >= :valorMin');
-          }
-          if (filtros.valorMax != null) {
-            subQuery = subQuery.andHaving('SUM(pd_v.valor) <= :valorMax');
-          }
-          return 'pago.id IN ' + subQuery.getQuery();
-        })
-        .setParameter('monedaValorId', filtros.monedaValorId)
-        .setParameter('tipoPago', 'PAGO');
-        if (filtros.valorMin != null) qb.setParameter('valorMin', filtros.valorMin);
-        if (filtros.valorMax != null) qb.setParameter('valorMax', filtros.valorMax);
-      }
+        // Monedas (multi-select) — subquery en pago_detalles
+        if (filtros?.monedaIds?.length > 0) {
+          b.andWhere(qb2 => {
+            const subQuery = qb2.subQuery()
+              .select('pd_m.pago_id')
+              .from('pagos_detalles', 'pd_m')
+              .where('pd_m.moneda_id IN (:...monedaIds)')
+              .andWhere('pd_m.activo')
+              .getQuery();
+            return 'pago.id IN ' + subQuery;
+          }).setParameter('monedaIds', filtros.monedaIds);
+        }
 
-      // Descuento/Aumento
-      if (filtros?.tieneDescuento === 'CON_DESCUENTO') {
-        qb.andWhere('(venta.descuento_monto > 0 OR EXISTS (SELECT 1 FROM venta_items vi_d WHERE vi_d.venta_id = venta.id AND vi_d.descuento_unitario > 0))');
-      } else if (filtros?.tieneDescuento === 'CON_AUMENTO') {
-        qb.andWhere(qb2 => {
-          const subQuery = qb2.subQuery()
-            .select('pd_a.pago_id')
-            .from('pagos_detalles', 'pd_a')
-            .where('pd_a.tipo = :tipoAumento')
-            .andWhere('pd_a.activo')
-            .getQuery();
-          return 'pago.id IN ' + subQuery;
-        }).setParameter('tipoAumento', 'AUMENTO');
-      } else if (filtros?.tieneDescuento === 'SIN_DESCUENTO') {
-        qb.andWhere('(venta.descuento_monto IS NULL OR venta.descuento_monto = 0)')
-          .andWhere('NOT EXISTS (SELECT 1 FROM venta_items vi_nd WHERE vi_nd.venta_id = venta.id AND vi_nd.descuento_unitario > 0)');
-      }
+        // Rango de valores por moneda
+        if (filtros?.monedaValorId && (filtros?.valorMin != null || filtros?.valorMax != null)) {
+          b.andWhere(qb2 => {
+            let subQuery = qb2.subQuery()
+              .select('pd_v.pago_id')
+              .from('pagos_detalles', 'pd_v')
+              .where('pd_v.moneda_id = :monedaValorId')
+              .andWhere('pd_v.tipo = :tipoPago')
+              .andWhere('pd_v.activo')
+              .groupBy('pd_v.pago_id');
+            if (filtros.valorMin != null) {
+              subQuery = subQuery.having('SUM(pd_v.valor) >= :valorMin');
+            }
+            if (filtros.valorMax != null) {
+              subQuery = subQuery.andHaving('SUM(pd_v.valor) <= :valorMax');
+            }
+            return 'pago.id IN ' + subQuery.getQuery();
+          })
+          .setParameter('monedaValorId', filtros.monedaValorId)
+          .setParameter('tipoPago', 'PAGO');
+          if (filtros.valorMin != null) b.setParameter('valorMin', filtros.valorMin);
+          if (filtros.valorMax != null) b.setParameter('valorMax', filtros.valorMax);
+        }
 
-      // Mozo (usuario que creó al menos un item)
-      if (filtros?.mozoId) {
-        qb.andWhere('EXISTS (SELECT 1 FROM venta_items vi_m WHERE vi_m.venta_id = venta.id AND vi_m.created_by = :mozoId)')
-          .setParameter('mozoId', filtros.mozoId);
-      }
+        // Descuento/Aumento
+        if (filtros?.tieneDescuento === 'CON_DESCUENTO') {
+          b.andWhere('(venta.descuento_monto > 0 OR EXISTS (SELECT 1 FROM venta_items vi_d WHERE vi_d.venta_id = venta.id AND vi_d.descuento_unitario > 0))');
+        } else if (filtros?.tieneDescuento === 'CON_AUMENTO') {
+          b.andWhere(qb2 => {
+            const subQuery = qb2.subQuery()
+              .select('pd_a.pago_id')
+              .from('pagos_detalles', 'pd_a')
+              .where('pd_a.tipo = :tipoAumento')
+              .andWhere('pd_a.activo')
+              .getQuery();
+            return 'pago.id IN ' + subQuery;
+          }).setParameter('tipoAumento', 'AUMENTO');
+        } else if (filtros?.tieneDescuento === 'SIN_DESCUENTO') {
+          b.andWhere('(venta.descuento_monto IS NULL OR venta.descuento_monto = 0)')
+            .andWhere('NOT EXISTS (SELECT 1 FROM venta_items vi_nd WHERE vi_nd.venta_id = venta.id AND vi_nd.descuento_unitario > 0)');
+        }
 
-      // Canal (SALÓN / MOSTRADOR / DELIVERY / RETIRO). La condición sale del
-      // mismo util que usan los informes: si la lista clasificara por su cuenta,
-      // filtrar "DELIVERY" acá y leer "envíos" en el reporte podrían no dar el
-      // mismo conjunto de ventas. Un canal desconocido no abre el filtro: el
-      // util devuelve una condición imposible, así que un typo devuelve vacío
-      // en vez de mostrar todo como si no se hubiera filtrado.
-      if (filtros?.canal && esCanalValido(filtros.canal)) {
-        qb.andWhere(condicionCanal(filtros.canal, 'venta'));
-      }
+        // Mozo (usuario que creó al menos un item)
+        if (filtros?.mozoId) {
+          b.andWhere('EXISTS (SELECT 1 FROM venta_items vi_m WHERE vi_m.venta_id = venta.id AND vi_m.created_by = :mozoId)')
+            .setParameter('mozoId', filtros.mozoId);
+        }
 
-      // Zona de entrega y repartidor.
-      if (filtros?.zonaId) {
-        qb.andWhere('delivery.precio_delivery_id = :zonaId', { zonaId: filtros.zonaId });
-      }
-      if (filtros?.repartidorId) {
-        qb.andWhere('delivery.entregado_por_funcionario_id = :repartidorId', { repartidorId: filtros.repartidorId });
-      }
+        // Canal (SALÓN / MOSTRADOR / DELIVERY / RETIRO). La condición sale del
+        // mismo util que usan los informes: si la lista clasificara por su cuenta,
+        // filtrar "DELIVERY" acá y leer "envíos" en el reporte podrían no dar el
+        // mismo conjunto de ventas. Un canal desconocido no abre el filtro: el
+        // util devuelve una condición imposible, así que un typo devuelve vacío
+        // en vez de mostrar todo como si no se hubiera filtrado.
+        if (filtros?.canal && esCanalValido(filtros.canal)) {
+          b.andWhere(condicionCanal(filtros.canal, 'venta'));
+        }
 
-      // Puerta de entrada del pedido (LOCAL / WEB / QR_MESA). Es ortogonal al
-      // canal: un delivery puede ser LOCAL (lo cargó el cajero) o WEB.
-      if (filtros?.canalOrigen) {
-        qb.andWhere('venta.canal_origen = :canalOrigen', { canalOrigen: String(filtros.canalOrigen).toUpperCase() });
-      }
+        // Zona de entrega y repartidor.
+        if (filtros?.zonaId) {
+          b.andWhere('delivery.precio_delivery_id = :zonaId', { zonaId: filtros.zonaId });
+        }
+        if (filtros?.repartidorId) {
+          b.andWhere('delivery.entregado_por_funcionario_id = :repartidorId', { repartidorId: filtros.repartidorId });
+        }
 
-      // F5 paso 4: filtro por dispositivo de origen (multi-PC en LAN).
-      if (filtros?.dispositivoId) {
-        qb.andWhere('venta.dispositivo_id = :ventaDispositivoId', { ventaDispositivoId: filtros.dispositivoId });
-      }
+        // Puerta de entrada del pedido (LOCAL / WEB / QR_MESA). Es ortogonal al
+        // canal: un delivery puede ser LOCAL (lo cargó el cajero) o WEB.
+        if (filtros?.canalOrigen) {
+          b.andWhere('venta.canal_origen = :canalOrigen', { canalOrigen: String(filtros.canalOrigen).toUpperCase() });
+        }
 
-      // Totales del resultado FILTRADO (no de la página): se clona antes de
-      // paginar, porque lo que el usuario quiere saber es cuánto suma todo lo
-      // que buscó, no los 25 registros que está viendo.
-      const qbTotales = qb.clone();
+        // F5 paso 4: filtro por dispositivo de origen (multi-PC en LAN).
+        if (filtros?.dispositivoId) {
+          b.andWhere('venta.dispositivo_id = :ventaDispositivoId', { ventaDispositivoId: filtros.dispositivoId });
+        }
+
+      };
+
+      aplicarFiltros(qb);
+
+      // Totales del resultado FILTRADO (no de la página): lo que el usuario
+      // quiere saber es cuánto suma todo lo que buscó, no los 25 registros que
+      // está viendo.
+      //
+      // ⚠️ NO se puede clonar `qb` para esto. `venta.items` es `@OneToMany`, así
+      // que su join multiplica una fila por cada ítem, y `.select()` reemplaza
+      // las columnas pero NO quita los joins ya registrados: un delivery de
+      // 15.000 con 3 ítems sumaba 45.000. Por eso los totales corren sobre su
+      // propio builder, con los mismos filtros pero sin ese join — todos los
+      // demás son `@ManyToOne` y no duplican filas.
+      const qbTotales = repo.createQueryBuilder('venta')
+        .leftJoin('venta.caja', 'caja')
+        .leftJoin('venta.pago', 'pago')
+        .leftJoin('venta.mesa', 'mesa')
+        .leftJoin('venta.delivery', 'delivery');
+      aplicarFiltros(qbTotales);
 
       qb.orderBy('venta.createdAt', 'DESC');
 
