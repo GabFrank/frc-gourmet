@@ -443,12 +443,41 @@ El módulo se cerró para poder usarse en producción
   cubierto (2026-08-27)**: aunque el flag siga sin leerse, si efectivamente se
   cobró algo por anticipado el ticket **ya lo muestra** (bloque
   `PAGOS REGISTRADOS` + `SALDO A COBRAR`), que era la mitad de lo que este ítem
-  pedía. Lo que falta es decidir si el toggle debe *forzar* el cobro.
+  pedía. **Y desde 2026-08-28 el flag SÍ se reporta**: aparece en el mix por
+  canal del reporte y en el bloque del cierre de caja. Lo que sigue faltando es
+  decidir si el toggle debe *forzar* el cobro.
 - **Comisiones por entrega.** El repartidor ya es un `Funcionario`, que es lo que
-  habilita engancharlo a `comisiones/`. Falta la regla.
+  habilita engancharlo a `comisiones/`. Falta la regla. **El insumo ya existe**
+  (2026-08-28): el ranking de repartidores del reporte de Ventas da entregas,
+  monto y minutos promedio por persona y período.
 - **Reusar `venta-reversa.utils.ts` en Últimas Ventas**, que sigue cancelando una
   venta cobrada sin revertir el cobro (ver `reference/known-bugs.md`).
 - **Baja lógica en `deletePrecioDelivery`** (hoy es `repo.remove`).
 - **Delivery en modo cliente (HTTP).** `repository-http.service.ts` tiene los
   ocho métodos nuevos como stubs que lanzan, igual que los otros ~769 del
   archivo.
+
+### Cerrado el 2026-08-28 (informes de delivery)
+
+- ~~El delivery no aparecía en ningún informe.~~ Hecho: reporte de cierre de mes
+  (4 KPIs + 5 tarjetas), dashboard de Ventas, resumen de la PWA, cierre de caja
+  (diálogo + ticket + WhatsApp) e historial de ventas (columna Canal + 4 filtros
+  + totales del filtro). Plan: `docs/planes/PLAN-INFORMES-DELIVERY.md`.
+- ~~El reparto que venía de la tienda online nacía sin zona.~~ Hecho: el alta la
+  sella y una migración backfillea los viejos.
+
+### Nuevo pendiente que dejó este trabajo
+
+- **Paleta de los gráficos de Reportes en modo oscuro.** El validador de la guía
+  `dataviz` marca dos pasos de la paleta categórica (naranja `#eb6834` y
+  amarillo `#eda100`) fuera de la banda de luminosidad contra la superficie
+  oscura. Contraste y separación CVD pasan; es sólo la banda. Es la paleta
+  preexistente, compartida por el mix de forma de pago y el mix por canal, así
+  que hay que re-paletizar **todas las pantallas de Reportes a la vez** — cambiar
+  sólo una deja dos donas con paletas distintas en la misma pantalla.
+- **Mapa de zonas con polígonos.** Descartado por ahora (sólo cubriría las zonas
+  de la tienda online, que son las únicas con polígono dibujado, y el canvas del
+  mapa no se captura bien en el export a PDF). Si se retoma, va junto con exigir
+  polígono también a las zonas del PdV.
+- **Rentabilidad por envío.** Requiere modelar lo que se le paga al repartidor;
+  hoy no hay entidad para eso.

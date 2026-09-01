@@ -31,6 +31,15 @@
     </div>
 
     <!-- Tendencia -->
+    <!-- KPIs de delivery -->
+    <div class="kpi-grid" *ngIf="hayDelivery">
+      <div class="kpi" *ngFor="let k of kpisDelivery">
+        <span class="kpi-label">{{ k.label }}</span>
+        <span class="kpi-valor">{{ k.valor }}</span>
+        <span class="kpi-delta" *ngIf="k.tieneDelta" [class.up]="k.buena" [class.down]="!k.buena">{{ k.deltaTexto }}</span>
+      </div>
+    </div>
+
     <section class="block" data-rep-titulo="Tendencia del período">
       <h3 class="block-title">Tendencia del período</h3>
       <div class="chart-box">
@@ -84,6 +93,70 @@
     </section>
 
     <!-- Combinaciones -->
+    <!-- ═══ DELIVERY Y RETIRO ═══ -->
+    <section class="block" *ngIf="hayDelivery" data-rep-titulo="Mix por canal">
+      <h3 class="block-title">Mix por canal</h3>
+      <div class="chart-box sm">
+        <canvas baseChart [type]="'doughnut'" [data]="canalData" [options]="doughnutOptions"></canvas>
+      </div>
+      <div class="leyenda">
+        <div class="ley-item" *ngFor="let l of canalLeyenda">
+          <span class="dot" [style.background]="l.color"></span>
+          <span class="ley-nombre">{{ l.nombre }}</span>
+          <span class="ley-pct">{{ l.pct }}%</span>
+        </div>
+      </div>
+      <p class="block-nota">{{ cobroAnticipadoTexto }}</p>
+    </section>
+
+    <section class="block" *ngIf="hayDelivery && zonas.length">
+      <h3 class="block-title">Envíos por zona</h3>
+      <div class="rank-row" *ngFor="let z of zonas">
+        <div class="rank-head">
+          <span class="rank-nombre">{{ z.zona }} <small>{{ z.envio }} · {{ z.minutos }}</small></span>
+          <span class="rank-valor">{{ z.envios }}</span>
+        </div>
+        <mat-progress-bar mode="determinate" [value]="z.pct"></mat-progress-bar>
+      </div>
+    </section>
+
+    <section class="block" *ngIf="hayDelivery && repartidores.length">
+      <h3 class="block-title">Repartidores</h3>
+      <div class="rank-row" *ngFor="let r of repartidores">
+        <div class="rank-head">
+          <span class="rank-nombre">{{ r.nombre }} <small>{{ r.detalle }}</small></span>
+          <span class="rank-valor">{{ r.valor }}</span>
+        </div>
+        <mat-progress-bar mode="determinate" [value]="r.pct"></mat-progress-bar>
+      </div>
+    </section>
+
+    <section class="block" *ngIf="hayDelivery">
+      <h3 class="block-title">Tiempos de entrega</h3>
+      <p class="block-nota">{{ slaLeyenda }}</p>
+      <div class="sla-chips">
+        <div class="sla-chip" *ngFor="let sc of slaChips">
+          <span class="dot" [style.background]="sc.color"></span>
+          <span class="sla-label">{{ sc.label }}</span>
+          <span class="sla-valor">{{ sc.cantidad }}</span>
+          <span class="sla-pct">{{ sc.pct }}</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" *ngIf="hayDelivery && cancelaciones.cantidad">
+      <h3 class="block-title">Cancelaciones</h3>
+      <p class="block-nota">
+        {{ cancelaciones.cantidad }} cancelados · {{ cancelaciones.tasa }} · {{ cancelaciones.montoPerdido }} no facturados
+      </p>
+      <div class="rank-row" *ngFor="let m of cancelaciones.motivos">
+        <div class="rank-head">
+          <span class="rank-nombre">{{ m.motivo }}</span>
+          <span class="rank-valor">{{ m.cantidad }}</span>
+        </div>
+      </div>
+    </section>
+
     <section class="block" *ngIf="combinaciones.length">
       <h3 class="block-title">Combinaciones frecuentes</h3>
       <div class="row" *ngFor="let c of combinaciones">

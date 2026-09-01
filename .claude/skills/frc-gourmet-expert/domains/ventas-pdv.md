@@ -651,6 +651,20 @@ no hay nada que sellar. La migración `BackfillZonaDeliveryPedidosOnline` recupe
 los repartos que ya se habían creado sin zona sin pisar los que sí la tienen.
 Test: `npm run test:zona-delivery-online`.
 
+### El delivery ahora alimenta los informes
+
+Desde 2026-08-28 los cinco lugares que cuentan ventas saben del reparto: el
+reporte de cierre de mes, el dashboard de Ventas, el resumen de la PWA, el
+cierre de caja (diálogo + ticket + imagen de WhatsApp) y el historial de ventas.
+Todo sale de un motor único, `electron/handlers/reportes-delivery.helper.ts`, y
+la clasificación del canal de una fuente compartida
+(`src/app/shared/utils/canal-venta.util.ts`).
+
+Si tocás `Delivery`, `venta.costoDelivery` o la máquina de estados, mirá primero
+[domains/reportes.md](reportes.md) §8: los criterios de conteo (ventana por
+`ventas.created_at`, plata desde `pagos_detalles`, cancelaciones aparte) están
+ahí y hay tests que los fijan.
+
 ### La máquina de estados es del backend
 
 `delivery.handler.ts` es el dueño. `updateDelivery` (el CRUD genérico) **rechaza**

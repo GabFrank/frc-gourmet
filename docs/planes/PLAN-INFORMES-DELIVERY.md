@@ -1,7 +1,7 @@
 # Plan — Delivery y Retiro en los informes de venta
 
 > Branch: `claude/sales-reports-delivery-ihwnbi` · base `develop`
-> Estado: **aprobado, en ejecución** · Fases 0–4 hechas
+> Estado: **completo** · Fases 0–6 hechas
 
 ## 1. Diagnóstico
 
@@ -255,15 +255,30 @@ Tests: `test:reporte-delivery` sube a 77 asserts, con la sección [K] sobre
 `getVentasByDateRange` — incluye el invariante de que los 4 canales particionan
 el resultado sin filtro y que la paginación no altera los totales.
 
-### Fase 5 — Reportes mobile
+### Fase 5 — Reportes mobile · ✅ HECHA
 
 Mismos canales vía `/api/rpc`. Regenerar el api-map
 (`npm run generate:mobile-api`) sólo si aparece un canal nuevo.
 
-### Fase 6 — Cierre
+**Entregado:** KPIs, mix por canal (dona), zonas y repartidores como listas, SLA
+como chips y cancelaciones. **No hizo falta regenerar el api-map**: todo viaja
+por los canales que ya existían (`test:api-map` en verde lo confirma).
 
-Auditoría por agentes, batería de tests, `npm run check` (AOT), documentación,
-skill y backlog, PR a `develop`, CI en verde.
+### Fase 6 — Cierre · ✅ HECHA
+
+Batería de tests, `npm run check` (AOT), documentación, skill y backlog, PR a
+`develop`, CI en verde.
+
+**Entregado:** 17 suites de backend en verde (`reporte-delivery` 77,
+`canal-venta` 25, `zona-delivery-online` 11, `reporte-ventas` 21,
+`reporte-finanzas` 23, `reportes-periodo` 41, `kpis-filtros` 29,
+`dashboard-rangos` 128, `delivery` 53, `resumen-caja-numeros` 8,
+`integridad-cobro` 21, `terminal-caja` 30, `ticket-delivery-pagos` 50,
+`cobro-parcial` 25, `pedidos-online` 73, `mesa-qr` 73, `ticket-venta` 59),
+`test:mobile` 131, `test:api-map` 9, `npm run check` y `ng build mobile` exit 0.
+Manual de pruebas en `docs/testing/TESTING-CHECKLIST-INFORMES-DELIVERY.md`.
+Docs: `domains/reportes.md` §8, `domains/dashboards.md` §7.8,
+`domains/ventas-pdv.md`.
 
 ## 4. Tests
 

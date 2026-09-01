@@ -221,3 +221,12 @@ y la tabla). En **oscuro**, dos pasos (naranja y amarillo) quedan fuera de la
 banda de luminosidad recomendada — es de la paleta preexistente, compartida con
 el mix de forma de pago, y cambiarla acá dejaría dos donas con paletas distintas
 en la misma pantalla. Anotado como pendiente, no tocado.
+
+### La pantalla (mobile / PWA)
+
+Las mismas métricas, mobile-first y sin backend nuevo: KPIs en fila propia, mix
+por canal (dona), zonas y repartidores como listas con `mat-progress-bar`, SLA
+como chips y cancelaciones como texto + motivos. Se omiten, igual que el resto
+del reporte mobile, el heatmap por canal y cualquier gráfico de burbujas.
+
+Manual de pruebas: [`docs/testing/TESTING-CHECKLIST-INFORMES-DELIVERY.md`](../../../../docs/testing/TESTING-CHECKLIST-INFORMES-DELIVERY.md).

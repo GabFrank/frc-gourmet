@@ -76,7 +76,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | **Impresoras térmicas** | [domains/cocina-impresion.md](domains/cocina-impresion.md) |
 | **Qué imprime el sistema y para qué** (catálogo de los 13 tickets, ruteo por rol de impresora, convenciones de formato) | [domains/tickets-impresos.md](domains/tickets-impresos.md) |
 | **Dashboards** (padrón unificado, componentes shared, handlers KPI) | [domains/dashboards.md](domains/dashboards.md) |
-| **Reportes de cierre de mes** (hub Ventas + Finanzas, período comparativo, presentación/PDF/WhatsApp, series por rango local) | [domains/reportes.md](domains/reportes.md) |
+| **Reportes de cierre de mes** (hub Ventas + Finanzas, período comparativo, presentación/PDF/WhatsApp, series por rango local, **bloque de delivery/retiro y canal de venta**) | [domains/reportes.md](domains/reportes.md) |
 | Reglas de código (UPPERCASE, no func en templates, colores) | [conventions/coding-rules.md](conventions/coding-rules.md) |
 | Patrones UI (mat-menu acciones, tab/dialog híbrido, full-height) | [conventions/ui-patterns.md](conventions/ui-patterns.md) |
 | Bugs comunes y workarounds (TypeORM null, fechas UTC, mat-chip) | [conventions/pitfalls-typeorm-electron.md](conventions/pitfalls-typeorm-electron.md) |
@@ -162,6 +162,52 @@ Tres cosas que conviene no volver a aprender por las malas:
 
 Tests: `npm run test:cobro-cpc-consolidado` (63), `test:pago-consolidado` (90),
 `test:pagar-obligaciones-dialog` (19). Manual: `docs/testing/TESTING-CHECKLIST-COBRO-CONSOLIDADO-CPC.md`.
+
+### Sesión 2026-08-28 — Delivery y retiro en los informes de venta
+
+El módulo de delivery estaba completo y auditado desde agosto, pero **la capa de
+informes no lo conocía**: cero menciones a delivery, `canal_origen`,
+`costo_delivery` o zona en `reportes-*.helper.ts`, `dashboard-ventas.handler.ts`
+y `resumen-caja.utils.ts`. Los datos estaban todos en la base y nadie los leía.
+
+Ahora los cinco lugares que cuentan ventas saben del reparto —reporte de cierre
+de mes (4 KPIs + 5 tarjetas: mix por canal, zonas, repartidores, SLA,
+cancelaciones), dashboard de Ventas, resumen de la PWA, cierre de caja (diálogo +
+ticket + imagen de WhatsApp) e historial (columna Canal, 4 filtros nuevos y
+totales del resultado filtrado)— y todos leen el **mismo motor**,
+`electron/handlers/reportes-delivery.helper.ts`. Detalles →
+[domains/reportes.md](domains/reportes.md) §8,
+[domains/dashboards.md](domains/dashboards.md) §7.8,
+`docs/planes/PLAN-INFORMES-DELIVERY.md`.
+
+Cuatro cosas que conviene no volver a aprender por las malas:
+
+- **El reparto que venía de la tienda online nacía sin zona.**
+  `materializarPedidoOnlineEnVenta` pasaba el costo congelado pero no
+  `precioDeliveryId`; la zona quedaba sólo en `pedidos_online`. No se notaba
+  porque nadie agrupaba por zona — al hacerlo, **todo el canal web caía en "SIN
+  ZONA"**. Un informe nuevo no sólo muestra datos: revela los que nunca se
+  estaban guardando bien.
+- **La ventana de conteo se elige por reconciliación, no por naturalidad.**
+  Contar los envíos por `fecha_entregado` suena mejor que por `created_at`, pero
+  rompe que `envíos × ticket promedio` dé la facturación de delivery del mismo
+  período. El KPI se llama "envíos", no "entregados", y eso es a propósito.
+- **El canal se define UNA vez, en dos lenguajes.**
+  `src/app/shared/utils/canal-venta.util.ts` (TS, para el renderer) y el `CASE`
+  SQL de `electron/utils/canal-venta.utils.ts` son la misma regla;
+  `npm run test:canal-venta` las compara fila por fila contra la base, igual que
+  `CONCEPTO_ES_INGRESO` / `esIngreso()` en el pago consolidado. `condicionCanal`
+  usa `EXISTS` para no exigir join y poder pegarse a consultas que ya existían.
+- **Dos tests calculaban el período con jornada 0** mientras el reporte usa la
+  jornada comercial (default 07:00). Entre las 00:00 y las 06:59 del día 1 de
+  cada mes miraban meses distintos y la variación salía `null`. Siete horas por
+  mes de rojo, y fue justo la ventana en la que se corrió la suite. Cualquier
+  test que ubique datos por período tiene que leer `getInicioJornada()` de la
+  misma fuente que el código que prueba.
+
+Tests: `test:reporte-delivery` (77), `test:canal-venta` (25),
+`test:zona-delivery-online` (11). Manual:
+`docs/testing/TESTING-CHECKLIST-INFORMES-DELIVERY.md`.
 
 ### Reauditoría integral 2026-07-26 (subsistemas nuevos)
 
