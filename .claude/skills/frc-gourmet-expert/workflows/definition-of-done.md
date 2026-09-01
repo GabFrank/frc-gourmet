@@ -13,7 +13,7 @@
 | **Feature / mejora pendiente** (backlog) | [todos-pendientes.md](todos-pendientes.md) | Fuente de verdad del backlog. Con prioridad P0–P5 al final. |
 | **Bug / defecto** | [../reference/known-bugs.md](../reference/known-bugs.md) | Síntoma + causa + ubicación + estado. |
 | **Decisión no obvia / gotcha aprendido** | memoria + la sección correspondiente de la skill | Ej. "los handlers no quedan como listeners de ipcMain". |
-| **Plan de una implementación** | `docs/planes/PLAN-<NOMBRE>.md` | Se commitea al aprobarse (paso 6 del ciclo). Es un registro: un paso no cumplido se anota, no se borra del plan. |
+| **Plan de una implementación** | `docs/planes/PLAN-<NOMBRE>.md` — **efímero** | Se commitea al aprobarse (paso 6) y **se borra en el PR final** (paso 11). Mientras vive es un registro: un paso no cumplido se anota, no se borra del plan. Nunca se enlaza desde un doc de dominio. |
 | **Manual de pruebas manuales** | `docs/testing/TESTING-CHECKLIST-<NOMBRE>.md` | Incluye los casos que habrían detectado los bugs que encontró la auditoría. |
 | **Trabajo hecho** (registro histórico) | **conventional commit + PR** | El commit etiqueta (`feat`/`fix`/…), el PR describe el qué y el porqué. No hace falta issue para esto. |
 | **Estado general del repo** | [SKILL.md](../SKILL.md) §4 | Snapshot; reauditar contra `git log` cuando quede viejo. |

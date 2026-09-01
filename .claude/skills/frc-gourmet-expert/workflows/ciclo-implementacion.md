@@ -98,6 +98,23 @@ Y el corolario, que costó caro una vez: **el plan es un registro, no un espejo 
     - **Actualizar la skill si el cambio invalida algo que ella afirma**, cambió una convención o introdujo un comportamiento no obvio. Ejemplo real: el refactor "cada variación su propia receta" dejó **falsa** la nota de "receta compartida por sabor" → hubo que corregirla, no sólo agregar.
     - **Mover el ítem en el backlog:** si estaba en `todos-pendientes.md` → marcarlo `[x]`. Si arreglaste un bug de `known-bugs.md` → marcarlo RESUELTO. Si descubriste deuda nueva → agregarla.
     - Si aprendiste un gotcha no obvio → guardarlo en **memoria** además de en la skill.
+    - **El plan muere acá.** Migrá al doc de dominio lo que del plan siga siendo
+      verdad y sirva a futuro —el porqué de las decisiones, las alternativas
+      descartadas, los gotchas— y **borrá `docs/planes/PLAN-<NOMBRE>.md` en el PR
+      final**, para que el diff muestre el cierre. Nada se pierde: queda en
+      `git log`.
+
+      El registro de lo que se hizo es **el PR y sus commits**, más los docs de
+      dominio. Un plan es una declaración de intención: una vez ejecutado
+      describe lo que alguien *pensaba* hacer, y el próximo que lo lea no va a
+      poder distinguirlo de diseño vigente. Es la misma clase de doc-rot que la
+      regla de oro combate. Si el trabajo abarca varios PRs, el plan sobrevive
+      hasta el último.
+
+      ⚠️ **Nunca enlaces un plan desde un doc de dominio.** Si un doc necesita
+      algo que está en el plan, ese contenido tiene que mudarse al doc, no
+      referenciarse — o el plan deja de ser efímero y se convierte en
+      documentación permanente por la puerta de atrás.
 
 12. **Cierre: commit, push y PR a `develop`.**
     - **Conventional commits**: `feat(modulo):` minor, `fix(modulo):` patch, y además `refactor(...)`, `docs(...)`, `perf(...)`, `test(...)`. El mensaje explica el *qué* y el *porqué*.
