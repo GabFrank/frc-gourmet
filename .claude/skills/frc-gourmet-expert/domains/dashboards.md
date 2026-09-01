@@ -416,7 +416,7 @@ Ejemplo del SCSS de Ventas (sólo lo específico):
 5. **SCSS** sólo con lo específico del componente (no duplicar lo común).
 6. **Permiso** `XXX_DASHBOARD_VER` al seed de `permissions.handler.ts`.
 7. **Abrir desde** `app.component.ts` con `openXxxDashboardTab()` y agregar al sidenav.
-8. **Testing**: `npm run build` para TS, `npm start` lo corre el usuario.
+8. **Testing**: `npm run build` para TS; `npm start` para verlo en la app (lo corre el agente, SKILL.md regla #1).
 
 ## 11. Datos disponibles por dominio (qué hay y qué no)
 
