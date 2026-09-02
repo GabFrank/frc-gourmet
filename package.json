@@ -48,6 +48,7 @@
     "test:resumen-multimoneda": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-resumen-multimoneda-e2e.ts",
     "test:operacion-financiera": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-operacion-financiera-validacion-e2e.ts",
     "test:fichaje-facial": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-fichaje-facial.ts",
+    "test:delivery-cliente": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-cliente-e2e.ts",
     "test:delivery-impresora": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-impresora-ruteo.ts",
     "test:delivery": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-e2e.ts",
     "test:delivery-conversion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-conversion-e2e.ts",

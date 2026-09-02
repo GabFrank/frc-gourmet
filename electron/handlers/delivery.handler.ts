@@ -380,6 +380,11 @@ export function registerDeliveryHandlers(
 
       const venta = await manager.getRepository(Venta).findOne({
         where: { delivery: { id } },
+        // `cliente` hace falta para no reescribirlo cuando no cambió. Sin la
+        // relación cargada la comparación de abajo daría siempre distinto
+        // (`undefined !== id`) y marcaría la venta como modificada en cada
+        // edición, aunque sólo se hubiera tocado la observación.
+        relations: ['cliente'],
       });
 
       const zonaCambia = Object.prototype.hasOwnProperty.call(payload ?? {}, 'precioDeliveryId')
@@ -442,6 +447,16 @@ export function registerDeliveryHandlers(
         }
         if (nombreNuevo && nombreNuevo !== venta.nombreCliente) {
           venta.nombreCliente = nombreNuevo;
+          ventaCambia = true;
+        }
+        // El cliente también. `delivery-crear` lo setea en la venta desde el
+        // alta, pero acá se copiaba sólo el nombre: asignarle un cliente a un
+        // delivery existente dejaba `venta.cliente` en null para siempre, y de
+        // ahí salía que el diálogo de cobro no lo mostrara y que no se pudiera
+        // vender a crédito. Se compara contra el id actual para no marcar la
+        // venta como cambiada al pedo en cada edición.
+        if (payload?.clienteId && (venta as any).cliente?.id !== payload.clienteId) {
+          (venta as any).cliente = { id: payload.clienteId } as any;
           ventaCambia = true;
         }
         if (ventaCambia) {

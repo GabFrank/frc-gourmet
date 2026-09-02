@@ -790,6 +790,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         .leftJoinAndSelect('delivery.precioDelivery', 'precioDelivery')
         .leftJoinAndSelect('delivery.cliente', 'cliente')
         .leftJoinAndSelect('cliente.persona', 'persona')
+        // El cliente de la VENTA, además del del delivery. Son la misma persona
+        // en la práctica, pero el diálogo de cobro lee `venta.cliente` y sin
+        // esto le llegaba `undefined`: no mostraba el cliente y el botón de
+        // crédito decía "Asigne un cliente a la venta" con el delivery
+        // teniéndolo. Alias propios: `cliente`/`persona` ya están tomados por el
+        // delivery y reusarlos rompe la query.
+        .leftJoinAndSelect('venta.cliente', 'ventaCliente')
+        .leftJoinAndSelect('ventaCliente.persona', 'ventaClientePersona')
         .leftJoinAndSelect('delivery.entregadoPor', 'entregadoPor')
         .leftJoinAndSelect('entregadoPor.persona', 'entregadoPorPersona')
         .leftJoinAndSelect('venta.items', 'items')
@@ -810,9 +818,22 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
       const [ventas, total] = await qb.getManyAndCount();
 
+      // ⚠️ La proyección de `venta` es explícita, así que hidratar la relación en
+      // el QueryBuilder NO alcanza: lo que no esté acá no llega al frontend.
+      // `cliente` faltaba, y de ahí salía que el diálogo de cobro no mostrara el
+      // cliente del delivery y que el botón de crédito dijera "Asigne un cliente
+      // a la venta" teniéndolo. Se manda el cliente pelado + su persona y nada
+      // más: el resto de `Cliente` (límite de crédito, saldo) no lo necesita
+      // esta lista.
       const data = ventas.map(venta => ({
         ...venta.delivery,
-        venta: { id: venta.id, estado: venta.estado, items: venta.items, pago: venta.pago },
+        venta: {
+          id: venta.id,
+          estado: venta.estado,
+          items: venta.items,
+          pago: venta.pago,
+          cliente: (venta as any).cliente ?? null,
+        },
       }));
 
       return { data, total };
