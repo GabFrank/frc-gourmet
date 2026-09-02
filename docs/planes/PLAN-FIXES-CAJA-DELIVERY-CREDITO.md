@@ -147,9 +147,22 @@ sí pasa `cajaId`, así que esa vía funciona.
   pide confirmación explícita.
 - **Backend**: `create-caja` devuelve el aviso también del lado servidor —
   informativo, no bloqueante, para que la PWA lo tenga sin duplicar la regla.
+- ⚠️ **`checkOpenCajas()` cambia de fuente: `get-cajas-abiertas`, no `get-cajas`.**
+  Hoy usa `get-cajas` (`create-caja-dialog.component.ts:1581`), que el propio repo
+  documenta como anti-patrón al lado de su definición (`financiero.handler.ts:578-581`):
+  sin `WHERE`, sin `LIMIT`, con 6 relaciones eager incluidos los dos conteos
+  completos — "en un local con dos años de operación son miles de filas con sus
+  conteos". Hacerlo correr siempre sobre esa consulta metería la query cara en el
+  camino más frecuente. `get-cajas-abiertas` (`:880-892`) ya filtra por estado y no
+  trae los conteos: es exactamente lo que hace falta.
+- **UI del banner**: color de la paleta de estados (regla dura §3 #6) — **amarillo**,
+  que es una advertencia, no un error. Variables de tema, nada hardcodeado (#5).
+- **UI de la confirmación**: segundo paso dentro del propio `create-caja-dialog`
+  (estado del formulario), **no** `confirm()` nativo ni alert custom (#8). Si en algún
+  momento hiciera falta un diálogo aparte, va `ConfirmationDialogComponent`.
 - **Extracción para test**: la decisión ("¿hay otra caja abierta? ¿qué aviso muestro?")
-  va a un util puro `src/app/shared/utils/caja-apertura.util.ts`, mismo criterio que
-  `operacion-financiera-validacion.util.ts`.
+  va a un util puro `src/app/shared/utils/caja-apertura.util.ts`. Precedente de utils
+  puros en esa carpeta: `forma-pago-efectivo.util.ts`, `mesa-estado.util.ts`.
 
 ### F2 — El pagaré sale por la impresora de la terminal
 
@@ -182,9 +195,24 @@ sí pasa `cajaId`, así que esa vía funciona.
 - El papel referencia `VENTA #N` en vez de `CPC N#`, para que el cajero pueda
   reconciliarlo al finalizar. El texto legal y el bloque de firma no cambian: el
   cliente firma un pagaré, no un borrador.
+- ⚠️ **Los montos por cuota se recalculan server-side**, con la misma fórmula que
+  `cobrar-venta-credito` (`cuentas-por-cobrar.handler.ts:984-986`):
+  `montoCuota = +(montoTotal / cantidadCuotas).toFixed(2)` y la última absorbe el
+  resto. Imprimir lo que mande el front deja un pagaré firmado con números que no
+  coinciden con la CPC que después crea el cajero — que es peor que no tener pagaré.
+- ⚠️ **`Number()` sobre todo lo que venga de una columna `decimal`.** Sin
+  `pg.types.setTypeParser(1700)` en el repo, en Postgres llegan como **string** y se
+  concatenan en vez de sumarse. El propio repo lo documenta al lado de
+  `resolverCostoDelivery` (`delivery.handler.ts:144-147`) y lo aplica sin excepción en
+  `cuentas-por-cobrar.handler.ts:868,1013`. Aplica a `montoTotal`, al saldo del
+  cliente y a los montos por cuota.
+- El `ensurePermission` va en el **wrapper IPC**, no en el builder: las funciones
+  `printXxxInternal` nunca lo llaman, por diseño (`documentos-tickets.handler.ts:14-21`).
 - UI: botón **PAGARÉ** en el footer del `delivery-dialog`, habilitado cuando el
-  delivery tiene cliente con `credito`. Abre un diálogo chico (cuotas, frecuencia,
-  fecha de inicio, monto prellenado con el saldo) y manda a imprimir.
+  delivery tiene cliente con `credito`. Abre `pagare-provisorio-dialog` (cuotas,
+  frecuencia, fecha de inicio, monto prellenado con el saldo) y manda a imprimir.
+  Archivos `.ts`/`.html`/`.scss` separados, sufijo `-dialog`, en
+  `src/app/shared/components/pagare-provisorio-dialog/`.
 - **Riesgo asumido y documentado**: queda un pagaré firmado sin CPC si al final se
   cobra en efectivo. Es papel, no dato; el cajero lo descarta.
 
@@ -194,8 +222,24 @@ sí pasa `cajaId`, así que esa vía funciona.
   documento y RUC** (`LEFT JOIN` a persona en vez de `INNER JOIN`, que hoy también
   excluye al cliente sin persona). Se le deja el nombre del canal para no romper
   llamadores; se documenta el cambio de semántica.
+  ⚠️ **La comparación va envuelta en `UPPER()`** (o el input a `.toUpperCase()`).
+  `LIKE` es case-sensitive en Postgres y no en SQLite: sin eso, buscar "juan"
+  encuentra "JUAN PEREZ" en desarrollo y **nada** en producción. El repo ya usa ese
+  patrón por portabilidad (`cuentas-por-cobrar.handler.ts:884`).
 - **D2**: `recalcular()` exige teléfono **sólo si no hay cliente seleccionado**. Con
   un cliente ya elegido, su identidad ya está resuelta y el teléfono es opcional.
+- **D3 — el gate que faltaba.** `delivery-crear` valida el teléfono **de nuevo y de
+  forma incondicional** (`delivery.handler.ts:272-276`), sin mirar si vino
+  `clienteId`. Arreglar sólo D1+D2 habilita el botón CONFIRMAR y **el alta explota
+  igual**, un paso más tarde y como toast. El backend tiene que saltear el mínimo
+  cuando hay `clienteId`, con el mismo criterio que D2. `deliveryActualizarDatos` no
+  tiene este gate, así que el síntoma es exclusivo del alta — justo el caso de D.
+- **D4** — `seleccionarCliente()` (`crear-delivery-dialog.component.ts:260`) hace
+  `this.telefono = cliente.persona?.telefono || this.telefono`: si el cliente elegido
+  no tiene teléfono **no limpia el campo** y queda lo que el cajero venía tecleando,
+  que con D1 ahora puede ser un nombre. Eso se guarda como teléfono del delivery y se
+  muestra en la lista y en el detalle. Es preexistente, pero D1 lo vuelve fácil de
+  gatillar y esta fase es exactamente sobre clientes sin teléfono.
 - ⚠️ Verificar que `crearClienteRapido` no rompa con teléfono vacío: hoy es el
   camino de alta cuando no se encontró cliente.
 
@@ -219,12 +263,21 @@ en verde sin el arreglo, no prueban nada (paso 7 del ciclo).
 | `test:delivery-impresora` | Que `cobrar-venta-credito` resuelva el dispositivo para el pagaré **y** para el ticket; que `printPagareCpcTicketInternal` caiga a `venta.dispositivo` | extender |
 | `test:pagare-provisorio` | Builder puro: incluye las cuotas propuestas y el bloque de firma; referencia `VENTA #N`; **no crea CPC ni mueve el saldo del cliente** (assert sobre la base después de imprimir) | **nueva** |
 | `test:delivery-cliente` | `getDeliveriesByCaja` hidrata `venta.cliente`; `deliveryActualizarDatos` propaga el cliente a la venta; los alias del join no pisan a `delivery.cliente` | **nueva** |
-| `test:buscar-clientes` | Un cliente **sin teléfono** aparece buscando por nombre y por documento; el que tiene teléfono sigue apareciendo por teléfono | **nueva** |
+| `test:buscar-clientes` | Un cliente **sin teléfono** aparece buscando por nombre y por documento; el que tiene teléfono sigue apareciendo por teléfono; **la búsqueda es case-insensitive** (minúsculas encuentran el dato en UPPERCASE) | **nueva** |
+| `test:delivery-sin-telefono` | `delivery-crear` **acepta** el alta sin teléfono cuando viene `clienteId`, y **sigue rechazándola** sin cliente. Es el gate D3, que ningún otro test toca | **nueva** |
+| `test:pagare-provisorio` (cont.) | Los montos por cuota los calcula el servidor y **coinciden con los que después produce `cobrar-venta-credito`** para los mismos parámetros — el assert compara las dos salidas, no un número escrito a mano | — |
 | `test:delivery`, `test:delivery-conversion`, `test:terminal-caja`, `test:ticket-delivery-pagos`, `test:pedidos-online`, `test:cobro-parcial` | Regresión de lo que se toca | existentes |
 | `npm run test:all` | Batería completa (paso 9) | — |
 
 Fuera de alcance de los ts-node: la UI de los diálogos. Por eso F1 extrae el util
-puro en vez de dejar la decisión adentro del componente.
+puro en vez de dejar la decisión adentro del componente. **D4 y el banner de F1
+quedan sin cobertura automatizada** y van al manual de pruebas de `docs/testing/`.
+
+⚠️ **El CI no corre ninguna suite `test:*`** — verificado en `.github/workflows/ci.yml`:
+sólo `tsc --noEmit`, `ng lint`, `build:prod` y `migration:run`. El paso 9
+(`npm run test:all`, local, SQLite) es la única red que existe para la batería, y el
+job de Postgres cubre **esquema, no comportamiento**. Por eso el `UPPER()` de D1 se
+verifica leyendo el SQL generado, no confiando en que algo lo agarre en CI.
 
 ---
 
@@ -235,6 +288,51 @@ puro en vez de dejar la decisión adentro del componente.
 | El join nuevo de `venta.cliente` (F3) choca con el alias `cliente` que ya usa `delivery.cliente` | Alias distintos + test que verifica que **los dos** vienen hidratados |
 | Aflojar el buscador de clientes (F5) mete ruido en el autocomplete del delivery | Se mantiene el `take(15)` y el orden por nombre; el match exacto por teléfono que autoselecciona sigue siendo por teléfono |
 | Un pagaré firmado sin CPC detrás (F4) | Decisión explícita del usuario. Referencia `VENTA #N` en el papel para reconciliar |
-| `checkOpenCajas()` corriendo siempre (F1) agrega una consulta al abrir el diálogo | `getCajas()` ya se llamaba en el otro camino; es la misma consulta |
-| Todo se verifica en SQLite | Ninguna fase toca entidades, migraciones, `decimal` ni fechas. El job de Postgres del CI es el gate igual |
+| `checkOpenCajas()` corriendo siempre (F1) agrega una consulta al camino más frecuente | **No es gratis**: hoy `get-cajas` sólo se llama cuando el usuario ya tenía una caja abierta. Por eso la fase cambia la fuente a `get-cajas-abiertas`, que está filtrada y sin conteos |
+| Búsqueda de clientes case-sensitive en Postgres (F5/D1) | `UPPER()` en la comparación. No lo cubre el CI: no corre suites `test:*` |
+| Montos `decimal` concatenados como string en Postgres (F4) | `Number()` en todo lo que salga de una columna `decimal`, patrón ya documentado en `delivery.handler.ts:144-147` |
+| El pagaré firmado no coincide con la CPC que se cree después (F4) | Los montos por cuota se recalculan server-side con la fórmula de `cobrar-venta-credito`, y el test compara las dos salidas |
+| Todo se verifica en SQLite | Ninguna fase toca entidades ni migraciones, así que el job de Postgres del CI (que valida **esquema**) no aplica. Lo que sí es driver-sensible —el `LIKE` de D1 y los `decimal` de F4— tiene su fila propia arriba y **no hay gate automático**: se verifica leyendo el SQL y el código |
 | F6 se incluyó sobre un supuesto | La fase es independiente: se quita entera sin tocar las otras cinco |
+
+---
+
+## Documentación a actualizar (regla dura §3 #24)
+
+| Doc | Qué entra |
+|---|---|
+| `reference/known-bugs.md` | **B** como resuelto, junto a la entrada hermana del ticket de delivery (`:364`) — es el mismo patrón y este caller quedó afuera de aquel barrido. **F** (caja ambigua) y **D3/D4** como resueltos |
+| `domains/ventas-pdv.md` | Que varias cajas abiertas son legítimas y cuál es el invariante real (una por terminal); el aviso nuevo al abrir; el pagaré provisorio y por qué no crea CPC |
+| `domains/financiero-caja-mayor.md` | Sólo si el aviso de apertura toca algo de su territorio; verificar al cerrar |
+| `domains/personas-clientes.md` | Que el buscador del delivery ya no es "por teléfono" y qué campos cubre |
+| `reference/handlers-index.md` | `print-pagare-provisorio-venta` |
+| `docs/testing/TESTING-CHECKLIST-CAJA-DELIVERY-CREDITO.md` | Manual nuevo. Incluye los casos sin cobertura automatizada: D4, el banner de F1, y el caso que habría detectado cada bug que encuentre el paso 8 |
+| `workflows/todos-pendientes.md` | Deuda nueva que aparezca. Anotar que `aceptarPedidoOnline` sigue stub en `repository-http.service.ts:1093`, así que F6 no alcanza al modo `client` (preexistente, no lo introduce este PR) |
+| `SKILL.md` §4 | Entrada de sesión |
+
+## Auditoría del plan (paso 5)
+
+Dos agentes, ejes separados, sin verse entre sí. **No se contradijeron**, así que no
+hay nada que arbitrar.
+
+**Alcance y convenciones** — 7 hallazgos, ninguno bloqueante: faltaba la sección de
+documentación de acá arriba, el diálogo de F4 no tenía nombre, y dos detalles de UI
+sin cerrar (color del banner, mecanismo de la confirmación). Confirmó que "sin
+migración" es correcto verificando que `Venta.cliente`, `Cliente.credito` y
+`Cliente.limite_credito` ya existen. Corrigió una cita mía: el precedente de util
+puro que yo citaba vive en `pages/`, no en `shared/utils/`.
+
+**Correctitud y riesgo** — 4 ALTA, todas verificadas contra el código y todas
+incorporadas:
+
+1. **F5 no arreglaba lo que decía arreglar** — el tercer gate de `delivery-crear`
+   (D3). El fix habría habilitado el botón y dejado el alta explotando igual.
+2. **La tabla de riesgos afirmaba en falso** que `getCajas()` ya se llamaba en el
+   camino común. No: hoy sólo corre cuando el usuario ya tenía una caja abierta, y es
+   la consulta que el propio repo marca como anti-patrón.
+3. **La tabla de riesgos afirmaba en falso** que el CI cubre Postgres. Verificado en
+   `ci.yml`: no corre ninguna suite `test:*`. De ahí salió el `UPPER()` de D1.
+4. **F4 sin `Number()`** sobre los `decimal` concatenaría en Postgres.
+
+Más dos MEDIA que también entraron: los montos por cuota recalculados server-side, y
+el teléfono basura que deja `seleccionarCliente()` (D4).
