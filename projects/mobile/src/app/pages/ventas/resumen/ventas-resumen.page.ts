@@ -164,6 +164,14 @@ export class VentasResumenPage implements OnInit {
   mesasOcupadas = 0;
   mesasTotal = 0;
 
+  // ── Delivery ── Mismo filtro que el total, salvo `enCamino`, que es estado
+  // operativo: cuántos pedidos hay en la calle ahora, sin importar el período.
+  envios = 0;
+  retiros = 0;
+  enCamino = 0;
+  ingresoEnviosFmt = '0';
+  hayDelivery = false;
+
   porMoneda: MonedaRow[] = [];
   porFormaPago: FormaPagoRow[] = [];
   topMeseros: RankItem[] = [];
@@ -301,6 +309,13 @@ export class VentasResumenPage implements OnInit {
       this.ticketFmt = fmtGs(k.ticketPromedio);
       this.mesasOcupadas = Number(k.mesasOcupadas || 0);
       this.mesasTotal = Number(k.mesasTotal || 0);
+
+      const dv = k.delivery || {};
+      this.envios = Number(dv.envios || 0);
+      this.retiros = Number(dv.retiros || 0);
+      this.enCamino = Number(dv.enCamino || 0);
+      this.ingresoEnviosFmt = fmtGs(dv.ingresoEnvios || 0);
+      this.hayDelivery = this.envios > 0 || this.retiros > 0 || this.enCamino > 0;
 
       const desg = k.desgloseVentasHoy || {};
       this.porMoneda = (desg.porMoneda || []).map((m: any) => ({

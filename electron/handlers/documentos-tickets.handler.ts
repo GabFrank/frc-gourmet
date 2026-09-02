@@ -1620,6 +1620,9 @@ export async function printCierreCajaInternal(
   const monedas = await dataSource.getRepository(Moneda).find();
   const fmtMonedas = crearFormateadorMonedas(monedas);
   const fmtMoneda = (monedaId: number, monto: number): string => fmtMonedas.fmt(monedaId, monto);
+  // `costo_delivery` se guarda en la moneda principal, así que el bloque de
+  // delivery necesita su id para formatear con los decimales correctos.
+  const monedaPrincipalTicket = Number(monedas.find((m: any) => m.principal)?.id ?? 0);
 
   // `anchoClave`: las etiquetas de este ticket son nombres de forma de pago y de
   // categoría de gasto, o sea texto libre. Sin truncar, uno largo desborda las
@@ -1725,6 +1728,27 @@ export async function printCierreCajaInternal(
       Object.keys(egresoTotalPorMoneda).map(Number).map(id => ({ monedaId: id, total: egresoTotalPorMoneda[id] })),
       true,
     );
+  }
+
+  // ── Delivery ──────────────────────────────────────────────
+  // Va después de las ventas y antes del arqueo: no mueve plata del cajón por
+  // sí mismo (el cobro del envío ya está dentro de las ventas por forma de
+  // pago), es información de cierre del turno. `pendientes` es lo que más
+  // importa acá: cuántos pedidos quedan en la calle cuando se cierra.
+  const dv = resumen.delivery;
+  if (dv && (dv.envios > 0 || dv.retiros > 0 || dv.cancelados > 0)) {
+    lines.push(ticketSeparador('-'));
+    lines.push(ticketText('DELIVERY', { align: 'C', bold: true }));
+    lines.push(ticketKv('ENVIOS', String(dv.envios)));
+    lines.push(ticketKv('RETIROS', String(dv.retiros)));
+    if (dv.cancelados > 0) lines.push(ticketKv('CANCELADOS', String(dv.cancelados)));
+    if (dv.anticipados > 0) lines.push(ticketKv('COBRO ANTICIPADO', String(dv.anticipados)));
+    // El costo del envío se congela en la moneda principal, así que no pasa por
+    // el rubro multimoneda: es un solo número.
+    lines.push(ticketKv('COBRO DE ENVIOS', fmtMoneda(monedaPrincipalTicket, dv.cobroEnvios), true));
+    if (dv.pendientes > 0) {
+      lines.push(ticketText(`ATENCION: ${dv.pendientes} SIN ENTREGAR`, { align: 'C', bold: true }));
+    }
   }
 
   // ── Retiros ───────────────────────────────────────────────

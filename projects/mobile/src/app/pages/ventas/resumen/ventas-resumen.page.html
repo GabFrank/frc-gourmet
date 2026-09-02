@@ -77,6 +77,26 @@
       </div>
     </div>
 
+    <!-- Delivery: sólo si el local reparte o tiene pedidos en la calle -->
+    <div class="stat-grid" *ngIf="hayDelivery">
+      <div class="stat-card">
+        <span class="stat-label">Envíos</span>
+        <span class="stat-value">{{ envios }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Retiros</span>
+        <span class="stat-value">{{ retiros }}</span>
+      </div>
+      <div class="stat-card" [class.stat-alerta]="enCamino > 0">
+        <span class="stat-label">En camino</span>
+        <span class="stat-value">{{ enCamino }}</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Cobrado en envíos</span>
+        <span class="stat-value">{{ ingresoEnviosFmt }} <small>Gs</small></span>
+      </div>
+    </div>
+
     <!-- Desglose por moneda -->
     <section class="block" *ngIf="porMoneda.length">
       <h3 class="block-title">Por moneda</h3>

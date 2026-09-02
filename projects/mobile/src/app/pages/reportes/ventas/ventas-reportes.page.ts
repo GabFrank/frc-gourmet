@@ -12,7 +12,7 @@ import { ReportePeriodoControlComponent } from '../reporte-periodo-control.compo
 import { ReportePeriodoParams } from '../reporte-periodo.model';
 import {
   KpiCard, buildKpiCard, buildKpiCardPct, chartOptions, fmtGs, fmtNum, fmtDec,
-  REP_ROJO, REP_GRIS, REP_CATEGORICA,
+  REP_ROJO, REP_GRIS, REP_CATEGORICA, REP_VERDE, REP_AMARILLO,
 } from '../reporte-visual.util';
 import {
   exportarReportePdf, capturarGraficos, primerGraficoBase64, captionKpis,
@@ -21,6 +21,8 @@ import {
 interface RankRow { nombre: string; detalle: string; valor: string; pct: number; }
 interface MixRow { nombre: string; pct: number; color: string; }
 interface HoraPicoRow { etiqueta: string; tickets: number; }
+interface ZonaRow { zona: string; envios: string; facturacion: string; envio: string; minutos: string; pct: number; }
+interface SlaRow { label: string; cantidad: number; pct: string; color: string; }
 
 /**
  * Reportes de Ventas — Cierre de Mes (mobile). Consume `get-reporte-ventas-cierre`
@@ -65,7 +67,88 @@ export class VentasReportesPage implements OnInit {
   horasPico: HoraPicoRow[] = [];
   combinaciones: Array<{ par: string; frecuencia: number }> = [];
 
+  // -- Delivery --
+  /** Fila propia de KPIs; `kpisExport` es la que va al PDF y al caption. */
+  kpisDelivery: KpiCard[] = [];
+  kpisExport: KpiCard[] = [];
+  hayDelivery = false;
+  canalData: ChartData<'doughnut'> = { labels: [], datasets: [] };
+  canalLeyenda: MixRow[] = [];
+  zonas: ZonaRow[] = [];
+  repartidores: RankRow[] = [];
+  slaChips: SlaRow[] = [];
+  slaLeyenda = '';
+  cancelaciones = { cantidad: 0, tasa: '0', montoPerdido: '', motivos: [] as Array<{ motivo: string; cantidad: number }> };
+  cobroAnticipadoTexto = '';
+
   ngOnInit(): void { /* la carga la dispara el control de período (autoAplicar) */ }
+
+  /**
+   * Mobile-first: KPIs, dona de canal, zonas y repartidores como listas, y el
+   * SLA como chips. El heatmap por canal y las burbujas se omiten igual que el
+   * resto de la pantalla — no rinden en pantalla chica.
+   */
+  private procesarDelivery(dv: any): void {
+    if (!dv) { this.hayDelivery = false; return; }
+    this.hayDelivery = (dv.kpis?.envios || 0) > 0 || (dv.kpis?.retiros || 0) > 0;
+
+    const canales = dv.mixCanal || [];
+    const color = (i: number) => REP_CATEGORICA[i % REP_CATEGORICA.length];
+    this.canalData = {
+      labels: canales.map((c: any) => c.label),
+      datasets: [{
+        data: canales.map((c: any) => c.facturacion),
+        backgroundColor: canales.map((_: any, i: number) => color(i)),
+        borderWidth: 0,
+      }],
+    };
+    this.canalLeyenda = canales.map((c: any, i: number) => ({ nombre: c.label, pct: c.pct, color: color(i) }));
+
+    const zonas = dv.zonas || [];
+    const maxEnvios = zonas.reduce((m: number, z: any) => Math.max(m, z.envios), 0);
+    this.zonas = zonas.map((z: any) => ({
+      zona: z.zona,
+      envios: fmtNum(z.envios),
+      facturacion: fmtGs(z.facturacion),
+      envio: fmtGs(z.envioRecaudado),
+      // null = ninguno llego a entregarse; un 0 diria que fue instantaneo.
+      minutos: z.minutosPromedio == null ? '—' : `${fmtDec(z.minutosPromedio)} min`,
+      pct: maxEnvios > 0 ? Math.round((z.envios / maxEnvios) * 100) : 0,
+    }));
+
+    const reps = dv.repartidores || [];
+    const maxEntregas = reps.reduce((m: number, r: any) => Math.max(m, r.entregas), 0);
+    this.repartidores = reps.map((r: any) => ({
+      nombre: r.nombre,
+      detalle: r.minutosPromedio == null ? '' : `${fmtDec(r.minutosPromedio)} min`,
+      valor: `${fmtNum(r.entregas)} · ${fmtGs(r.facturacion)}`,
+      pct: maxEntregas > 0 ? Math.round((r.entregas / maxEntregas) * 100) : 0,
+    }));
+
+    const sla = dv.tiempos?.sla || { verde: 0, amarillo: 0, rojo: 0, total: 0 };
+    const pct = (n: number) => (sla.total > 0 ? `${fmtDec((n / sla.total) * 100)}%` : '—');
+    const ua = dv.tiempos?.umbralAmarillo ?? 30;
+    const ur = dv.tiempos?.umbralRojo ?? 60;
+    this.slaChips = [
+      { label: `< ${ua} min`, cantidad: sla.verde, pct: pct(sla.verde), color: REP_VERDE },
+      { label: `${ua}–${ur} min`, cantidad: sla.amarillo, pct: pct(sla.amarillo), color: REP_AMARILLO },
+      { label: `≥ ${ur} min`, cantidad: sla.rojo, pct: pct(sla.rojo), color: REP_ROJO },
+    ];
+    this.slaLeyenda = sla.total > 0
+      ? `Sobre ${fmtNum(sla.total)} envíos entregados`
+      : 'Sin envíos entregados en el período';
+
+    const c = dv.cancelaciones || { cantidad: 0, tasa: 0, montoPerdido: 0, motivos: [] };
+    this.cancelaciones = {
+      cantidad: c.cantidad,
+      tasa: `${fmtDec(c.tasa)}%`,
+      montoPerdido: fmtGs(c.montoPerdido),
+      motivos: c.motivos || [],
+    };
+
+    const ca = dv.cobroAnticipado || { anticipado: 0, contraEntrega: 0 };
+    this.cobroAnticipadoTexto = `${ca.anticipado} anticipado · ${ca.contraEntrega} contra entrega`;
+  }
 
   async onAplicar(params: ReportePeriodoParams): Promise<void> {
     this.loading = true;
@@ -95,6 +178,14 @@ export class VentasReportesPage implements OnInit {
       buildKpiCardPct('Margen', d.kpis.margenPct.valor, d.kpis.margenPct.variacion),
       buildKpiCard('Mesas', fmtNum(d.kpis.mesas.valor), d.kpis.mesas.variacion),
     ];
+    this.kpisDelivery = [
+      buildKpiCard('Envíos', fmtNum(d.kpis.envios.valor), d.kpis.envios.variacion),
+      buildKpiCard('Retiros', fmtNum(d.kpis.retiros.valor), d.kpis.retiros.variacion),
+      buildKpiCard('Ingreso envíos', fmtGs(d.kpis.ingresoEnvios.valor), d.kpis.ingresoEnvios.variacion),
+      buildKpiCard('Ticket delivery', fmtGs(d.kpis.ticketPromedioDelivery.valor), d.kpis.ticketPromedioDelivery.variacion),
+    ];
+    this.kpisExport = [...this.kpis, ...this.kpisDelivery];
+    this.procesarDelivery(d.delivery);
 
     // Tendencia (línea actual + anterior punteada)
     const t = d.tendencia || { labels: [], actual: [], anterior: [] };
@@ -170,7 +261,7 @@ export class VentasReportesPage implements OnInit {
         titulo: 'Reportes de Ventas — Cierre de Mes',
         periodoLabel: this.periodoLabel,
         comparaLabel: this.comparaLabel,
-        kpis: this.kpis,
+        kpis: this.kpisExport,
         imagenes: capturarGraficos(root),
         tablas: this.combinaciones.length ? [{
           titulo: 'Combinaciones más frecuentes',
@@ -191,7 +282,7 @@ export class VentasReportesPage implements OnInit {
     this.enviandoWa = true;
     try {
       const res: any = await firstValueFrom(this.repo.enviarReporteWhatsapp({
-        base64, caption: captionKpis('Reportes de Ventas', this.periodoLabel, this.kpis), fileName: 'reporte-ventas.png',
+        base64, caption: captionKpis('Reportes de Ventas', this.periodoLabel, this.kpisExport), fileName: 'reporte-ventas.png',
       }));
       this.snack.open(res?.ok ? 'Reporte enviado por WhatsApp' : (res?.omitido || 'No se pudo enviar'), 'Cerrar', { duration: 3500 });
     } catch (e: any) {

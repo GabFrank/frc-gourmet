@@ -94,3 +94,47 @@
   padding: 40px;
   opacity: 0.7;
 }
+
+/* ── Canal de entrega ── */
+/* Chip neutro: el color de estado está reservado para el estado de la venta
+   (verde/rojo/amarillo). Un canal no es un estado. */
+.canal-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+.canal-origen {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+/* Zona o repartidor: dato secundario, en su propia línea para no ensanchar la
+   columna en las filas que no son reparto. */
+.canal-detalle {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-disabled);
+}
+
+/* ── Totales del resultado filtrado ── */
+.totales-filtro {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 16px 0;
+  border-top: 1px solid var(--border-color);
+}
+.totales-label { font-size: 12px; color: var(--text-disabled); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.totales-valor { font-size: 15px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }

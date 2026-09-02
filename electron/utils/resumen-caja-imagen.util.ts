@@ -94,8 +94,32 @@ function armarSecciones(resumen: ResumenCaja, monedaFmt: { [id: number]: MonedaF
   const ventasDesc: Section[] = [ventas];
   if (descRows.length) ventasDesc.push({ title: 'Descuentos / Aumentos', rows: descRows });
 
-  // ── Gastos ──
+  // ── Delivery ──
+  // Va con los gastos/retiros y no con las ventas: el cobro del envío ya está
+  // contado en las ventas por forma de pago, así que esto es informe de cierre,
+  // no otra línea de plata.
   const gastosRetirosArqueo: Section[] = [];
+  const dv = resumen.delivery;
+  if (dv && (dv.envios > 0 || dv.retiros > 0 || dv.cancelados > 0)) {
+    const d: Section = { title: 'Delivery', rows: [] };
+    d.rows.push({ label: 'ENVIOS', value: String(dv.envios) });
+    d.rows.push({ label: 'RETIROS', value: String(dv.retiros) });
+    if (dv.cancelados > 0) d.rows.push({ label: 'CANCELADOS', value: String(dv.cancelados) });
+    if (dv.anticipados > 0) d.rows.push({ label: 'COBRO ANTICIPADO', value: String(dv.anticipados) });
+    // `costo_delivery` está en la moneda principal.
+    // `principalId` puede ser null si no hay moneda principal configurada; en ese
+    // caso se muestra el número crudo antes que romper el formateo.
+    d.rows.push({
+      label: 'COBRO DE ENVIOS',
+      value: conversion.principalId != null ? fmt(conversion.principalId, dv.cobroEnvios) : String(dv.cobroEnvios),
+      cls: 'total',
+    });
+    if (dv.pendientes > 0) {
+      d.rows.push({ label: 'SIN ENTREGAR AL CIERRE', value: String(dv.pendientes), cls: 'total' });
+    }
+    gastosRetirosArqueo.push(d);
+  }
+
   if (resumen.gastos.length) {
     const g: Section = { title: 'Gastos', rows: [] };
     const tot: { [id: number]: number } = {};

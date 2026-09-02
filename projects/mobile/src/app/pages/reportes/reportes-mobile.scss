@@ -94,3 +94,27 @@
   height: 100vh;
   padding: 16px 18px 40px;
 }
+
+/* ── Delivery y retiro ── */
+/* Nota bajo el título de un bloque: contexto de una línea (leyenda del SLA,
+   resumen de cancelaciones), no un dato tabulable. */
+.block-nota {
+  margin: -4px 0 10px;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+/* SLA: color y etiqueta siempre juntos — nunca identidad por color solo. */
+.sla-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sla-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--surface);
+}
+.sla-label { font-size: 0.74rem; color: var(--text-secondary); }
+.sla-valor { font-size: 0.85rem; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.sla-pct { font-size: 0.7rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
