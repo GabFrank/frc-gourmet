@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatDividerModule } from '@angular/material/divider';
 import { CurrencyInputDirective } from '../../directives/currency-input.directive';
+import { redondear } from '../../utils/pago-consolidado.util';
 
 export interface DescuentoDialogData {
   subtotal: number;
@@ -71,8 +72,7 @@ export class DescuentoDialogComponent implements OnInit {
     this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
     const pctMax = this.data.maxPorcentaje;
     if (pctMax != null && Number(pctMax) >= 0) {
-      const f = Math.pow(10, this.decimalesMoneda);
-      this.maxMonto = Math.floor(Number(this.data.subtotal) * (Number(pctMax) / 100) * f) / f;
+      this.maxMonto = redondear(Number(this.data.subtotal) * (Number(pctMax) / 100), this.decimalesMoneda);
       this.topeTexto = `Tope de esta caja: ${Number(pctMax)}%`;
     }
     this.form = this.fb.group({
@@ -92,9 +92,9 @@ export class DescuentoDialogComponent implements OnInit {
   recalcular(): void {
     if (this.tipoDescuento === 'porcentaje') {
       const pct = this.form.get('porcentaje')?.value || 0;
-      this.montoDescuento = this.data.subtotal * (pct / 100);
+      this.montoDescuento = redondear(this.data.subtotal * (pct / 100), this.decimalesMoneda);
     } else {
-      this.montoDescuento = this.form.get('monto')?.value || 0;
+      this.montoDescuento = redondear(this.form.get('monto')?.value || 0, this.decimalesMoneda);
     }
     // Se avisa en vez de recortar en silencio: si el usuario escribió 100.000 y
     // el tope son 50.000, ver "50.000" sin explicación es peor que un error.
