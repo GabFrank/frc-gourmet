@@ -601,6 +601,15 @@ export abstract class RepositoryService {
     recetaIngredienteId: number;
     eliminarDeOtrasVariaciones: boolean;
   }): Observable<any>;
+  abstract agregarIngredienteMultiplesVariaciones(data: {
+    recetaIngredienteId: number;
+    variaciones: Array<{ variacionId: number; cantidad: number }>;
+  }): Observable<any>;
+  abstract getRecetasConIngrediente(data: {
+    recetaIds: number[];
+    ingredienteId?: number | null;
+    descripcion?: string | null;
+  }): Observable<number[]>;
   abstract getRecetaIngredientesActivos(recetaId: number): Observable<RecetaIngrediente[]>;
   abstract calcularCostoIngrediente(recetaIngredienteId: number): Observable<number>;
   abstract validarStockIngrediente(recetaIngredienteId: number): Observable<boolean>;

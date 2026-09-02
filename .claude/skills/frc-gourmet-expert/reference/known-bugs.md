@@ -641,6 +641,26 @@ Detalle y reglas → [../domains/ventas-pdv.md](../domains/ventas-pdv.md).
 
 ## Backend / Datos
 
+### ✅ RESUELTO — Ingrediente triplicado por el asistente multi-variación (2026-08)
+
+**Síntoma:** al agregar un ingrediente en la receta de una variación y aceptar el diálogo
+"¿agregarlo a las otras variaciones?", el ingrediente quedaba **repetido 3 veces** en la receta.
+Era real en BD (`receta_ingrediente`), no un problema de la vista.
+
+**Causa:** `SaboresVariacionesService.agregarIngredienteMultiplesVariaciones` hacía un
+`create-receta-ingrediente` suelto por variación sin validar nada. Si varias variaciones
+**compartían receta** (datos previos al refactor 2026-07-11), las N inserciones caían en la MISMA
+receta; y volver a correr el asistente desde otra variación insertaba de nuevo donde ya estaba.
+Bonus: la copia guardaba `unidad = unidadOriginal` con la cantidad sin convertir → costo 1000×.
+
+**Fix:** handler transaccional `agregar-ingrediente-multiples-variaciones` (deduplica, excluye la
+receta de origen, omite las que ya lo tienen, normaliza la unidad) + `get-recetas-con-ingrediente`
+para que el diálogo muestre las variaciones bloqueadas. Ver
+[../domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
+
+**Pendiente por decisión del usuario:** los duplicados **ya existentes** en la base no se limpian
+automáticamente (se borran a mano), y no hay índice único `(receta_id, ingrediente_id)`.
+
 ### ✅ RESUELTO — El ticket/pre-cuenta imprimía y cobraba los ítems cancelados (2026-08-17)
 
 **Síntoma:** se cancelaba un ítem en el PdV (quedaba tachado, el cobro lo descontaba

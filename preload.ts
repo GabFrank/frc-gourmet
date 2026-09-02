@@ -2790,6 +2790,19 @@ contextBridge.exposeInMainWorld('api', {
   }): Promise<any> => {
     return await ipcRenderer.invoke('delete-receta-ingrediente-multiples-variaciones', data);
   },
+  agregarIngredienteMultiplesVariaciones: async (data: {
+    recetaIngredienteId: number;
+    variaciones: Array<{ variacionId: number; cantidad: number }>;
+  }): Promise<any> => {
+    return await ipcRenderer.invoke('agregar-ingrediente-multiples-variaciones', data);
+  },
+  getRecetasConIngrediente: async (data: {
+    recetaIds: number[];
+    ingredienteId?: number | null;
+    descripcion?: string | null;
+  }): Promise<number[]> => {
+    return await ipcRenderer.invoke('get-recetas-con-ingrediente', data);
+  },
 
   // RecetaIngrediente additional methods
   getRecetaIngredientesActivos: async (recetaId: number): Promise<RecetaIngrediente[]> => {

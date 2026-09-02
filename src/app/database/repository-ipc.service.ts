@@ -616,6 +616,15 @@ interface ElectronAPI {
     recetaIngredienteId: number;
     eliminarDeOtrasVariaciones: boolean;
   }) => Promise<any>;
+  agregarIngredienteMultiplesVariaciones: (data: {
+    recetaIngredienteId: number;
+    variaciones: Array<{ variacionId: number; cantidad: number }>;
+  }) => Promise<any>;
+  getRecetasConIngrediente: (data: {
+    recetaIds: number[];
+    ingredienteId?: number | null;
+    descripcion?: string | null;
+  }) => Promise<number[]>;
   // RecetaIngrediente additional methods
   getRecetaIngredientesActivos: (recetaId: number) => Promise<RecetaIngrediente[]>;
   calcularCostoIngrediente: (recetaIngredienteId: number) => Promise<number>;
@@ -2850,6 +2859,21 @@ export class RepositoryIpcService extends RepositoryService {
     eliminarDeOtrasVariaciones: boolean;
   }): Observable<any> {
     return from(this.api.deleteRecetaIngredienteMultiplesVariaciones(data));
+  }
+
+  agregarIngredienteMultiplesVariaciones(data: {
+    recetaIngredienteId: number;
+    variaciones: Array<{ variacionId: number; cantidad: number }>;
+  }): Observable<any> {
+    return from(this.api.agregarIngredienteMultiplesVariaciones(data));
+  }
+
+  getRecetasConIngrediente(data: {
+    recetaIds: number[];
+    ingredienteId?: number | null;
+    descripcion?: string | null;
+  }): Observable<number[]> {
+    return from(this.api.getRecetasConIngrediente(data));
   }
 
   // RecetaIngrediente additional methods
