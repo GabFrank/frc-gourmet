@@ -20,7 +20,7 @@ import { RecetaPresentacion } from '../../src/app/database/entities/productos/re
 import { Presentacion } from '../../src/app/database/entities/productos/presentacion.entity';
 import { TipoPrecio } from '../../src/app/database/entities/financiero/tipo-precio.entity';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
-import { Like, IsNull, Not } from 'typeorm';
+import { Like, IsNull, Not, In } from 'typeorm';
 import { ensurePermission } from '../utils/auth.utils';
 import { recalcularNombresDeVariacion } from '../utils/nombre-variacion.utils';
 import { desduplicarRecetasCompartidas } from '../utils/receta-clone.utils';
