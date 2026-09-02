@@ -100,7 +100,7 @@ frc-gourmet/
 ## Comandos NPM
 
 ```bash
-# Verificar compilación (USAR ESTE en lugar de npm start)
+# Verificar sólo compilación (más rápido que levantar la app)
 npm run build              # Compila electron + Angular
 
 # Solo Angular (sin Electron)
@@ -119,8 +119,11 @@ npm run lint
 npm run test
 npm run test:e2e           # Playwright
 
-# ⚠️ NUNCA correr desde Claude Code:
-# npm start                # El usuario lo corre manualmente
+npm start                  # App completa (Angular 4201 + Electron).
+                           # Desde 2026-08-11 la corre y monitorea el AGENTE
+                           # (SKILL.md regla #1). Al relanzar, matar lo
+                           # anterior: el Electron viejo retiene el 7070
+                           # aunque se cierre la ventana (lsof -ti:7070).
 ```
 
 ## Datos cuantitativos (snapshot 2026-06)

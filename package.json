@@ -35,6 +35,7 @@
     "electron:build": "npm run build:prod && electron-builder build",
     "electron:publish": "npm run build:prod && electron-builder build --publish always",
     "test": "ng test",
+    "test:all": "node scripts/run-all-tests.js",
     "test:e2e": "npm run electron:serve-tsc && npx playwright test",
     "test:e2e:dev": "npm run electron:serve-tsc && npx playwright test",
     "test:pedidos-online": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-e2e.ts",

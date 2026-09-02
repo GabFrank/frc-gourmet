@@ -25,7 +25,7 @@ return { type: 'sqlite', database: dbPath, ...shared };
   - `1778380893207-BaselinePostgres.ts` → clase `BaselinePostgres1778380893207` (Postgres)
   - `getMigrations(driver)` devuelve la baseline del driver correcto + las migraciones incrementales (compartidas, deben ser portables a ambos drivers, ver patterns en [conventions/pitfalls-typeorm-electron.md](../conventions/pitfalls-typeorm-electron.md)).
 - **Las migraciones corren al arranque** dentro de `DatabaseService.runMigrations` (tras backup pre-migrate).
-- **Naming de migración nueva:** `<epoch-millis>-<Descripcion>.ts` con clase `Descripcion<epoch-millis>`. El timestamp debe ser **epoch-ms real** (`date +%s%3N`), nunca un número redondeado a mano. (Las migraciones incrementales ya existentes usan números redondeados — son legacy, no imitarlas.)
+- **Naming de migración nueva:** `<epoch-millis>-<Descripcion>.ts` con clase `Descripcion<epoch-millis>`. El timestamp debe ser **epoch-ms real** (`date +%s%3N` en Linux; en macOS `python3 -c "import time;print(int(time.time()*1000))"`, porque `%3N` es GNU — ver [conventions/pitfalls-typeorm-electron.md](../conventions/pitfalls-typeorm-electron.md)), nunca un número redondeado a mano. (Las migraciones incrementales ya existentes usan números redondeados — son legacy, no imitarlas.)
 
 ### SQLite default
 - Path: `app.getPath('userData') + '/frc-gourmet.db'`. macOS: `~/Library/Application Support/frc-gourmet/`.
