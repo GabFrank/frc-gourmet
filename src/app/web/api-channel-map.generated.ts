@@ -3,7 +3,7 @@
  * AUTO-GENERADO por scripts/generate-mobile-api-map.js — NO editar a mano.
  * Mapa método de window.api → canal IPC (extraído de preload.ts).
  * Regenerar tras tocar preload.ts: `node scripts/generate-mobile-api-map.js`.
- * Total: 833 métodos.
+ * Total: 863 métodos.
  */
 export const API_CHANNEL_MAP: Record<string, string> = {
   "abrirCajaDesdeConteo": "abrir-caja-desde-conteo",
@@ -31,6 +31,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "anularLiquidacionComision": "anular-liquidacion-comision",
   "anularLiquidacionSueldo": "anular-liquidacion-sueldo",
   "anularOperacionFinanciera": "anular-operacion-financiera",
+  "anularPagoConsolidado": "anular-pago-consolidado",
   "anularPagoMixtoCuota": "anular-pago-mixto-cuota",
   "anularPenalizacion": "anular-penalizacion",
   "anularVale": "anular-vale",
@@ -293,8 +294,18 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "deleteVentaItemIngredienteModificacion": "deleteVentaItemIngredienteModificacion",
   "deleteVentaItemObservacion": "deleteVentaItemObservacion",
   "deleteVentaItemSaboresByItem": "deleteVentaItemSaboresByItem",
+  "deliveryActualizarDatos": "delivery-actualizar-datos",
+  "deliveryAsignarRepartidor": "delivery-asignar-repartidor",
+  "deliveryCambiarEstado": "delivery-cambiar-estado",
+  "deliveryCancelar": "delivery-cancelar",
+  "deliveryConvertirModo": "delivery-convertir-modo",
+  "deliveryCrear": "delivery-crear",
+  "deliveryImprimirTicket": "delivery-imprimir-ticket",
+  "deliveryListarPdv": "delivery-listar-pdv",
+  "deliveryListarRepartidores": "delivery-listar-repartidores",
   "desasignarFuncionarioRegla": "desasignar-funcionario-regla",
   "desasignarReglaEquipo": "desasignar-regla-equipo",
+  "desvincularRecetaDeProducto": "desvincular-receta-de-producto",
   "downloadFaceModels": "download-face-models",
   "editCajaMayorMovimiento": "edit-caja-mayor-movimiento",
   "editGasto": "edit-gasto",
@@ -371,6 +382,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getCajasAbiertas": "get-cajas-abiertas",
   "getCajasMayor": "get-cajas-mayor",
   "getCajasMonedas": "get-cajas-monedas",
+  "getCajasSelector": "get-cajas-selector",
   "getCargo": "get-cargo",
   "getCargos": "get-cargos",
   "getCategories": "get-categories",
@@ -439,6 +451,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getDeliveriesByCaja": "getDeliveriesByCaja",
   "getDeliveriesByEstado": "getDeliveriesByEstado",
   "getDelivery": "getDelivery",
+  "getDetalleVariacionItems": "get-detalle-variacion-items",
   "getDispositivo": "get-dispositivo",
   "getDispositivos": "get-dispositivos",
   "getEgresosCaja": "get-egresos-caja",
@@ -499,6 +512,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getMovimientosClienteStats": "get-movimientos-cliente-stats",
   "getMovimientosCuentaBancaria": "get-movimientos-cuenta-bancaria",
   "getNotificacionesRrhh": "get-notificaciones-rrhh",
+  "getObligacionesPendientes": "get-obligaciones-pendientes",
   "getObservacion": "getObservacion",
   "getObservaciones": "getObservaciones",
   "getObservacionesByProducto": "get-observaciones-by-producto",
@@ -511,6 +525,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getOrderDetails": "get-order-details",
   "getOrders": "get-orders",
   "getPago": "getPago",
+  "getPagoConsolidadoDetalle": "get-pago-consolidado-detalle",
   "getPagoDetalles": "getPagoDetalles",
   "getPagos": "getPagos",
   "getPdvAtajoGrupo": "getPdvAtajoGrupo",
@@ -575,6 +590,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getRecetaIngredientesIntercambiables": "get-receta-ingredientes-intercambiables",
   "getRecetaMateriales": "get-receta-materiales",
   "getRecetas": "get-recetas",
+  "getRecetasAsignables": "get-recetas-asignables",
   "getRecetasByEstado": "get-recetas-by-estado",
   "getRecetasConIngrediente": "get-recetas-con-ingrediente",
   "getRecetasIdsPorVariacionIds": "get-recetas-ids-por-variacion-ids",
@@ -701,6 +717,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "rechazarPedidoOnline": "rechazar-pedido-online",
   "registrarCobroConsolidado": "registrar-cobro-consolidado",
   "registrarCobroParcial": "registrarCobroParcial",
+  "registrarPagoConsolidado": "registrar-pago-consolidado",
   "removeAtajoItemFromGrupo": "removeAtajoItemFromGrupo",
   "removeProductoFromAtajoItem": "removeProductoFromAtajoItem",
   "removeRoleFromUsuario": "remove-role-from-usuario",
@@ -728,11 +745,13 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "seedPermissions": "seed-permissions",
   "setCompraCuotas": "set-compra-cuotas",
   "setConvenioClientes": "set-convenio-clientes",
+  "setPdvMesaEstado": "set-pdv-mesa-estado",
   "setPresentacionPrincipal": "set-presentacion-principal",
   "setRecetaFaseIngredientes": "set-receta-fase-ingredientes",
   "setRolePermissions": "set-role-permissions",
   "testPrinterConnection": "test-printer-connection",
   "togglePresentacionActivo": "toggle-presentacion-activo",
+  "transferirVentaPdv": "transferir-venta-pdv",
   "updateAdicional": "update-adicional",
   "updateAdjunto": "update-adjunto",
   "updateAsistencia": "update-asistencia",
@@ -832,11 +851,40 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "validateCredentials": "validate-credentials",
   "venderDiasVacacion": "vender-dias-vacacion",
   "verificarAcreditacionPos": "verificar-acreditacion-pos",
+  "vincularRecetaAProducto": "vincular-receta-a-producto",
   "vincularVentaPedidoOnline": "vincular-venta-pedido-online",
   "volverBorradorLiquidacionSueldo": "volver-borrador-liquidacion-sueldo",
   "windowClose": "window:close",
+  "windowGetChrome": "window:chrome",
+  "windowIsFullscreen": "window:is-fullscreen",
   "windowIsMaximized": "window:is-maximized",
   "windowMaximizeToggle": "window:maximize-toggle",
   "windowMinimize": "window:minimize",
   "windowPlatform": "window:platform",
+  "windowReload": "window:reload",
+  "windowSetTitleBarOverlay": "window:set-titlebar-overlay",
+  "windowToggleDevTools": "window:toggle-devtools",
+  "windowToggleFullscreen": "window:toggle-fullscreen",
+  "windowZoomGet": "window:zoom-get",
+  "windowZoomReset": "window:zoom-reset",
+  "windowZoomSet": "window:zoom-set",
+  "windowZoomStep": "window:zoom-step",
+};
+
+/**
+ * Metodos donde preload empaqueta sus parametros posicionales en UN objeto
+ * antes de invocar el canal. El shim HTTP tiene que hacer lo mismo o el handler
+ * recibe el primer argumento suelto. Total: 10.
+ */
+export const API_ARG_SHAPE: Record<string, string[]> = {
+  "changePassword": ["usuarioId","currentPassword","newPassword"],
+  "deleteFile": ["url"],
+  "openBase64File": ["base64","fileName"],
+  "openFileWithSystem": ["url"],
+  "qrUploadClose": ["sessionId"],
+  "qrUploadEnableRemote": ["sessionId"],
+  "qrUploadPoll": ["sessionId"],
+  "readFileBase64": ["url"],
+  "restoreSession": ["sessionId","token"],
+  "saveProfileImage": ["base64Data","fileName"],
 };

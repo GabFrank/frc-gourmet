@@ -1024,7 +1024,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
     descripcion?: string | null;
   }) => {
     try {
-      const recetaIds = (data?.recetaIds || []).filter((id) => Number.isInteger(id));
+      const recetaIds = (data?.recetaIds || []).filter((id: any) => Number.isInteger(id));
       if (recetaIds.length === 0) return [];
 
       const descripcion = (data?.descripcion || '').trim().toUpperCase() || null;
@@ -1079,7 +1079,7 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       throw new Error('agregar-ingrediente-multiples-variaciones: recetaIngredienteId inválido');
     }
     const solicitadas = (data?.variaciones || []).filter(
-      (v) => Number.isInteger(v?.variacionId) && Number(v?.cantidad) > 0
+      (v: any) => Number.isInteger(v?.variacionId) && Number(v?.cantidad) > 0
     );
     if (solicitadas.length === 0) {
       return { success: true, agregadas: 0, recetasAfectadas: [], omitidasPorDuplicado: [], omitidasPorRecetaCompartida: [], omitidasSinReceta: [] };
@@ -1095,10 +1095,10 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
 
     // Recetas destino de cada variación solicitada.
     const variaciones = await dataSource.getRepository(RecetaPresentacion).find({
-      where: { id: In(solicitadas.map((v) => v.variacionId)) },
+      where: { id: In(solicitadas.map((v: any) => v.variacionId)) },
       relations: ['receta']
     });
-    const porVariacion = new Map<number, RecetaPresentacion>(variaciones.map((v) => [v.id, v]));
+    const porVariacion = new Map<number, RecetaPresentacion>(variaciones.map((v: RecetaPresentacion) => [v.id, v]));
 
     const omitidasSinReceta: string[] = [];
     const omitidasPorRecetaCompartida: string[] = [];
