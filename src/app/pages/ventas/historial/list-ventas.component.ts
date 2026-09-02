@@ -22,6 +22,7 @@ import { Venta, VentaEstado } from '../../../database/entities/ventas/venta.enti
 import { Caja } from '../../../database/entities/financiero/caja.entity';
 import { DetalleVentaDialogComponent } from '../../../shared/components/detalle-venta-dialog/detalle-venta-dialog.component';
 import { FiltrosVentasDialogComponent, FiltrosAvanzados } from '../../../shared/components/filtros-ventas-dialog/filtros-ventas-dialog.component';
+import { canalDeVenta, CANAL_VENTA_LABEL, ORIGEN_VENTA_LABEL } from '../../../shared/utils/canal-venta.util';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
@@ -30,6 +31,12 @@ export interface VentaRow {
   total: number;
   duracion: string;
   formaPago: string;
+  /** SALÓN / MOSTRADOR / DELIVERY / RETIRO — se calcula con la fuente única. */
+  canal: string;
+  /** Chip extra cuando el pedido no lo cargó el cajero (WEB / QR MESA). */
+  origen: string | null;
+  /** Zona del reparto, o el repartidor si no hay zona. Vacío si no es reparto. */
+  detalleCanal: string;
 }
 
 @Component({
@@ -59,7 +66,7 @@ export interface VentaRow {
 })
 export class ListVentasComponent implements OnInit {
   ventaRows: VentaRow[] = [];
-  displayedColumns = ['id', 'fecha', 'mesa', 'cajero', 'formaPago', 'estado', 'total', 'duracion', 'acciones'];
+  displayedColumns = ['id', 'fecha', 'canal', 'mesa', 'cajero', 'formaPago', 'estado', 'total', 'duracion', 'acciones'];
 
   // Filtros básicos
   fechaDesde: Date = new Date();
@@ -73,6 +80,10 @@ export class ListVentasComponent implements OnInit {
   // Filtros avanzados (estado persistente)
   filtrosAvanzados: FiltrosAvanzados = {};
   filtrosAvanzadosCount = 0;
+
+  /** Total de envío cobrado en TODO el resultado filtrado, no en la página. */
+  totalCostoDelivery = 0;
+  hayCostoDelivery = false;
 
   // Paginación
   totalVentas = 0;
@@ -130,6 +141,10 @@ export class ListVentasComponent implements OnInit {
     if (this.filtrosAvanzados.valorMax != null) filtros.valorMax = this.filtrosAvanzados.valorMax;
     if (this.filtrosAvanzados.tieneDescuento) filtros.tieneDescuento = this.filtrosAvanzados.tieneDescuento;
     if (this.filtrosAvanzados.dispositivoId) filtros.dispositivoId = this.filtrosAvanzados.dispositivoId;
+    if (this.filtrosAvanzados.canal) filtros.canal = this.filtrosAvanzados.canal;
+    if (this.filtrosAvanzados.zonaId) filtros.zonaId = this.filtrosAvanzados.zonaId;
+    if (this.filtrosAvanzados.repartidorId) filtros.repartidorId = this.filtrosAvanzados.repartidorId;
+    if (this.filtrosAvanzados.canalOrigen) filtros.canalOrigen = this.filtrosAvanzados.canalOrigen;
 
     const result = await firstValueFrom(
       this.repositoryService.getVentasByDateRange(
@@ -140,12 +155,31 @@ export class ListVentasComponent implements OnInit {
     );
 
     this.totalVentas = result.total;
+    this.totalCostoDelivery = Number((result as any)?.totales?.costoDelivery ?? 0) || 0;
+    this.hayCostoDelivery = this.totalCostoDelivery > 0;
     this.ventaRows = result.data.map(v => ({
       venta: v,
       total: this.calcTotal(v),
       duracion: this.calcDuracion(v),
       formaPago: (v.formaPago as any)?.nombre || '-',
+      canal: CANAL_VENTA_LABEL[canalDeVenta(v)],
+      // Sólo se muestra si NO lo cargó el cajero: en un local normal la enorme
+      // mayoría es LOCAL y repetirlo en cada fila es ruido.
+      origen: ((v as any).canalOrigen && (v as any).canalOrigen !== 'LOCAL')
+        ? (ORIGEN_VENTA_LABEL[(v as any).canalOrigen] || (v as any).canalOrigen)
+        : null,
+      detalleCanal: this.detalleDelReparto(v),
     }));
+  }
+
+  /** Zona del reparto; si no tiene, el repartidor. Vacío si no es un reparto. */
+  private detalleDelReparto(venta: any): string {
+    const d = venta?.delivery;
+    if (!d) return '';
+    const zona = d.precioDelivery?.descripcion;
+    if (zona) return String(zona).toUpperCase();
+    const rep = d.entregadoPorFuncionario?.persona?.nombre;
+    return rep ? String(rep).toUpperCase() : '';
   }
 
   private calcTotal(venta: Venta): number {
@@ -211,6 +245,8 @@ export class ListVentasComponent implements OnInit {
     this.fechasDeshabilitadas = false;
     this.filtrosAvanzados = {};
     this.filtrosAvanzadosCount = 0;
+    this.totalCostoDelivery = 0;
+    this.hayCostoDelivery = false;
     this.pageIndex = 0;
     this.filtrar();
   }
@@ -240,6 +276,10 @@ export class ListVentasComponent implements OnInit {
     if (f.tieneDescuento) count++;
     if (f.monedaValorId && (f.valorMin != null || f.valorMax != null)) count++;
     if (f.dispositivoId) count++;
+    if (f.canal) count++;
+    if (f.zonaId) count++;
+    if (f.repartidorId) count++;
+    if (f.canalOrigen) count++;
     return count;
   }
 

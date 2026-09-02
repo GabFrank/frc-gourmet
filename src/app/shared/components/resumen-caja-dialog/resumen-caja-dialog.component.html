@@ -101,6 +101,42 @@
     </div>
 
     <!-- Card: Retiros -->
+    <!-- Card: Delivery del turno -->
+    <div class="resumen-card" *ngIf="hayDelivery">
+      <div class="resumen-card-header">
+        <mat-icon>two_wheeler</mat-icon>
+        <h3>DELIVERY</h3>
+      </div>
+      <div class="resumen-card-body">
+        <div class="tile-grid">
+          <div class="tile">
+            <span class="tile-label">Envíos</span>
+            <span class="tile-value">{{ resumen.delivery.envios | number:'1.0-2' }}</span>
+          </div>
+          <div class="tile">
+            <span class="tile-label">Retiros</span>
+            <span class="tile-value">{{ resumen.delivery.retiros | number:'1.0-2' }}</span>
+          </div>
+          <div class="tile" *ngIf="resumen.delivery.cancelados">
+            <span class="tile-label">Cancelados</span>
+            <span class="tile-value">{{ resumen.delivery.cancelados | number:'1.0-2' }}</span>
+          </div>
+          <div class="tile" *ngIf="resumen.delivery.anticipados">
+            <span class="tile-label">Cobro anticipado</span>
+            <span class="tile-value">{{ resumen.delivery.anticipados | number:'1.0-2' }}</span>
+          </div>
+          <div class="tile">
+            <span class="tile-label">Cobrado en envíos</span>
+            <span class="tile-value">{{ resumen.delivery.cobroEnvios | number:'1.0-2' }}</span>
+          </div>
+          <div class="tile" *ngIf="resumen.delivery.pendientes">
+            <span class="tile-label">Sin entregar al cierre</span>
+            <span class="tile-value">{{ resumen.delivery.pendientes | number:'1.0-2' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="resumen-card">
       <div class="resumen-card-header">
         <mat-icon>money_off</mat-icon>

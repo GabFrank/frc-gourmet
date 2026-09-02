@@ -43,6 +43,35 @@
     </app-dash-stat-chip>
   </div>
 
+  <!-- Delivery: fila propia, sólo si el local reparte o tiene pedidos en la calle -->
+  <div class="dashboard-stats-row" *ngIf="hayDelivery">
+    <app-dash-stat-chip
+      icon="two_wheeler"
+      [value]="enviosHoy"
+      label="Envíos"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="shopping_bag"
+      [value]="retirosHoy"
+      label="Retiros"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="local_shipping"
+      [value]="enCaminoAhora"
+      label="En camino ahora"
+      [color]="enCaminoAhora > 0 ? 'warning' : 'primary'"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="delivery_dining"
+      [value]="ingresoEnviosTexto"
+      label="Cobrado en envíos"
+      [loading]="loading">
+    </app-dash-stat-chip>
+  </div>
+
   <!-- Quick actions -->
   <div class="dashboard-quick-actions">
     <app-dash-quick-action *ngFor="let a of quickActions"

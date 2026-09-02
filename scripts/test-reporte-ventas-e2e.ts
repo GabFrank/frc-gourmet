@@ -17,6 +17,7 @@ import { DataSource } from 'typeorm';
 import { getDataSourceOptions } from '../src/app/database/database.config';
 import { construirReporteVentasCierre } from '../electron/handlers/reportes-ventas.helper';
 import { resolverPeriodo } from '../electron/handlers/reportes-periodo.util';
+import { getInicioJornada } from '../electron/handlers/dashboard-ventas.handler';
 
 let passed = 0, failed = 0;
 function ok(cond: boolean, name: string, extra?: any) {
@@ -123,7 +124,14 @@ async function main() {
 
   // ── Comparativo: sembrar una venta en el período anterior ──
   console.log('\n[G] Comparativo vs período anterior');
-  const periodo = resolverPeriodo({ rango: 'month', comparar: true });
+  // La jornada comercial tiene que salir de la MISMA fuente que usa el reporte.
+  // Con el default (07:00) y sin pasarla acá, entre las 00:00 y las 06:59 del
+  // día 1 el test ubicaba la venta "del mes anterior" un mes más adelante que
+  // donde el reporte la busca: `anterior` quedaba vacío y la variación en null.
+  // Es una ventana de 7 h por mes — poco frecuente, pero real, y el test no
+  // fallaba por el producto sino por mirar un calendario distinto.
+  const inicioJornada = await getInicioJornada(ds);
+  const periodo = resolverPeriodo({ rango: 'month', comparar: true }, new Date(), inicioJornada);
   const medioAnterior = new Date((periodo.anterior!.desde.getTime() + periodo.anterior!.hasta.getTime()) / 2);
   await mkVenta(medioAnterior, [{ prod: lomito, cant: 1, pv: 30000, pc: 12000 }]); // 30000 el mes anterior
   const rep2 = await construirReporteVentasCierre(ds, { rango: 'month', comparar: true });
