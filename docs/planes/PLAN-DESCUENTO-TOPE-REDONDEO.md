@@ -141,7 +141,7 @@ if (this.tipoDescuento === 'porcentaje') {
 ### Fase 2: Test del caso tope no entero
 
 **Archivo:**
-- `src/app/pages/financiero/caja-mayor/pagar-obligaciones-dialog/pagar-obligaciones-dialog.component.spec.ts`
+- `src/app/shared/components/descuento-dialog/descuento-dialog.component.spec.ts` (crear)
 
 **Caso de prueba nuevo:**
 
@@ -152,14 +152,16 @@ it('debe habilitar APLICAR cuando el descuento es exactamente el tope (caso no e
   const topePct = 5;
   const esperado = 878; // redondear(17550 * 0.05, 0)
   
-  // Abrir diálogo con tope
-  const dialogRef = fixture.componentInstance.openDescuentoDialog({
-    subtotal,
-    decimales: 0,
-    maxPorcentaje: topePct,
+  const dialogRef = TestBed.inject(MatDialog).open(DescuentoDialogComponent, {
+    data: {
+      subtotal,
+      decimales: 0,
+      maxPorcentaje: topePct,
+    },
   });
   
   const instance = dialogRef.componentInstance;
+  fixture.detectChanges();
   
   // Act: pedir exactamente el 5%
   instance.form.patchValue({ tipoDescuento: 'porcentaje', porcentaje: 5, motivo: 'PRUEBA' });
@@ -169,11 +171,12 @@ it('debe habilitar APLICAR cuando el descuento es exactamente el tope (caso no e
   expect(instance.montoDescuento).toBe(esperado);
   expect(instance.excedeTope).toBe(false);
   expect(instance.form.valid).toBe(true);
-  expect(instance.montoDescuento.toString()).not.toContain('.'); // sin decimales
 });
 ```
 
-**Comando:** `npm run test:pagar-obligaciones-dialog`
+**Comando:** `ng test frc-gourmet --watch=false --include='**/descuento-dialog.component.spec.ts'`
+
+**Nota:** Los pipes visuales (`| number`) quedan fuera de alcance del fix. El test verifica la lógica de validación, no el formato mostrado en el template.
 
 **Commit:** `test(financiero): caso tope de descuento no entero (#272)`
 
