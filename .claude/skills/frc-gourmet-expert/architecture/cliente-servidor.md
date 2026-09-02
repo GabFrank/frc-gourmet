@@ -14,6 +14,40 @@ Configurable desde *Sistema → Modo de operación* (`app-settings.json:mode`):
 
 Settings unificadas en `userData/app-settings.json`. Password DB en **keytar** (no en el JSON).
 
+## Por qué está hecho así (decisiones de 2026-05, siguen vigentes)
+
+Cuatro alternativas que se evaluaron y se descartaron. Están acá porque cada tanto
+alguien las vuelve a proponer:
+
+**Hub-and-spoke, no varios servidores contra una Postgres compartida en LAN.** Con
+DB compartida cada PC lleva credenciales de base: comprometer una caja es
+comprometer todo, y las reglas de negocio quedan replicadas en cada cliente
+(cualquiera puede saltearse una). Además las migraciones exigirían actualizar todas
+las PCs al mismo tiempo — con auto-update eso no se coordina. Y lo que la mata: un
+navegador **no puede** hablar Postgres, así que la PWA mobile habría requerido
+construir igual un backend HTTP. Con hub-and-spoke el cliente sólo tiene
+credenciales de usuario, toda escritura pasa por un lugar, y el server se actualiza
+primero mientras `/api/version` deja que el cliente detecte el desfasaje.
+
+**Un solo binario para los tres modos**, con el rol como configuración
+(`app-settings.json:mode`), no tres instaladores. Una sola pipeline de release, un
+solo canal de update.
+
+**Fastify + un único `/api/rpc`, no rutas REST por handler.** El endpoint único
+mapea automáticamente cada `ipcMain.handle(channel, fn)` ya existente (vía
+`handlerRegistry`); escribir ~700 rutas a mano no era viable. Se descartaron
+**tRPC** (excelente Node↔Node, pero sus typings agresivos no encajan con la forma
+de los handlers) y **GraphQL** (obliga a reescribir todo como resolvers).
+⚠️ La contracara de ese mapeo automático es que `/api/rpc` es **default-allow**:
+ver [auth-permissions.md](auth-permissions.md).
+
+**Fuera de alcance a propósito, y sigue estándolo:** sync offline-first / CRDT
+(si se cae la red el cliente se bloquea), replicación multi-sucursal (ese es el
+dominio de `frc-comercial/central` + `filial`; acá se asume UN local con varias PCs
+en LAN), microservicios (el server es monolítico y así se queda) y hosting en la
+nube (el server vive en una PC del restaurante; el patrón lo permitiría, pero no es
+el objetivo).
+
 ## Fases por orden histórico
 
 ### F1 — Dual driver SQLite/Postgres + migrations
@@ -34,7 +68,7 @@ Settings unificadas en `userData/app-settings.json`. Password DB en **keytar** (
 - **Handler registry global** vía monkey-patch de `ipcMain.handle` — cada canal IPC queda registrado en `handlerRegistry` y el RPC router puede invocarlo por nombre. Resultado: los 700+ handlers IPC originales son automáticamente accesibles por HTTP sin duplicar código.
 
 ### F4 — UI modo + cliente HTTP
-- F4.1: Preload monkey-patchea `ipcRenderer.invoke` en `mode=client` para rutear a HTTP. Auth flow (login → JWT en memoria → refresh).
+- F4.1: Preload monkey-patchea `ipcRenderer.invoke` en `mode=client` para rutear a HTTP. Auth flow (login → JWT en memoria → refresh). **El refresh token SÍ se persiste desde 2026-08** — ver «La sesión sobrevive al cierre de la app» abajo.
 - F4.2: Wizard `Sistema → Modo de operación` (standalone/server/cliente con URL servidor).
 - F4 images: archivos `app://*` proxean por `/api/files/by-url` en `mode=client`.
 
@@ -60,6 +94,7 @@ Memoria `feedback_preload_monkey_patch_gotchas.md`. Los 4 patrones:
 2. Nombres de canal: usar el mismo string que `ipcMain.handle` (sin prefijo `client-` ni nada).
 3. Timing: el override de modo debe leerse antes del primer `invoke`, no en lazy init.
 4. Factory: la decisión IPC vs HTTP se evalúa una sola vez al arranque del Angular, no por llamada.
+5. **Lo que es local debe quedarse local.** Todo canal que actúe sobre ESTE proceso —no sobre los datos— tiene que estar en `ALWAYS_LOCAL_CHANNELS` (impresoras, diálogos de archivo, config de modo, backups) o cubierto por una regla de prefijo. Se agregó `esCanalDeVentana()`: cualquier canal `window:*` (botones de la titlebar, zoom, DevTools, pantalla completa) es **siempre IPC directo**. Antes salían por HTTP: en modo cliente los botones de ventana no hacían nada y, peor, apuntaban a la ventana del servidor. Síntoma típico de este bug: "el botón no hace nada, sólo en los clientes".
 
 ## Smoke server para testing E2E
 
@@ -95,3 +130,80 @@ Fixes de reapertura de navegador: **single-flight del refresh token** (un burst 
 
 - **Evolution API** (self-hosted Baileys, `electron/services/whatsapp.service.ts`) — URL+instancia como config normal, **apikey en keytar** (`notif-evolution-apikey`; canal `set-notif-secret` bloqueado en `/api/rpc`). Usos: notificaciones RRHH y **resumen de cierre de caja como imagen** (`resumen-caja-imagen.util.ts`, `BrowserWindow` offscreen → PNG; hook en `update-caja`, best-effort; handler manual `enviar-resumen-cierre-whatsapp` + botón "Reenviar" en `list-cajas`).
 - **WhatsApp Cloud API (Meta)** (`electron/utils/whatsapp-sender.ts`) — **solo el OTP de pedidos online**; config por env (`WHATSAPP_CLOUD_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID`); sin credenciales usa `provider='dev-log'` (loguea el código y lo devuelve en la respuesta para pruebas).
+
+
+## La sesión sobrevive al cierre de la app (2026-08-27)
+
+### Qué estaba roto
+
+El access token y el refresh token eran **variables de módulo de `preload.ts`**:
+morían con el proceso. Pero el estado de sesión de la UI se persiste en
+`localStorage` (`current_user`, `session_id`) y sobrevivía.
+
+Al reabrir, `AuthService` reconstruía el usuario desde ese caché **sin mirar los
+tokens**, y el transporte HTTP arrancaba sin credenciales. Resultado: la app
+mostraba el nombre y el avatar leídos del disco, y cada llamada salía sin
+`Authorization` y volvía rechazada. **Sesión zombi.** Relogear lo resolvía.
+
+Nada la corregía sola: el evento `frc-web-auth-expired`, que dispara el logout
+automático, sólo lo emitía el shim de la web `/admin`. En Electron el listener
+existía sin que nada lo disparara nunca.
+
+### Cómo funciona ahora
+
+1. **El refresh token se persiste** (`electron/utils/client-refresh-token.utils.ts`):
+   keytar y, si no hay keyring, archivo `0600` en `userData`. Mismo patrón que
+   `jwt-secret.utils.ts`. Se escribe en el login, en el login por QR y **en cada
+   rotación**; se borra en el logout y cuando el servidor lo rechaza.
+2. **Se rehidrata antes del primer RPC** (`preload.ensureRehydrated()`,
+   memoizada, esperada dentro de `invokeRouter`).
+3. **Red de seguridad** en `AuthService`: si tras la rehidratación el transporte
+   sigue sin credenciales, limpia la sesión y va al login.
+4. **Una sola vía de expiración**: el preload emite `frc-web-auth-expired`
+   también en Electron.
+
+### Cuatro cosas no obvias
+
+- **⚠️ La rehidratación pasa SIEMPRE por `refreshAccessIfPossible()`**, que
+  reenvía el `deviceId`. Por otro camino el JWT vuelve con `device_id: null` y
+  `resolveRequestDeviceId` no puede identificar la terminal: **los tickets salen
+  por la impresora equivocada**.
+- **Los canales van por `_originalInvoke`, no por `ipcRenderer.invoke`.** En
+  modo cliente está monkey-patcheado y la llamada saldría a `/api/rpc` contra un
+  canal que el servidor no registra, fallando en silencio.
+- **Los handlers se registran en `app.on('ready')`, sincrónicamente y antes de
+  `createWindow()`** — no dentro de `registerAllAppHandlers()`, que corre al
+  final de la cadena async de `initializeDatabase()` (después de migraciones y
+  seeds) mientras la ventana ya carga en paralelo. El primer RPC puede llegar
+  antes. No necesitan la base: son keytar + filesystem.
+- **La rehidratación se memoiza y se espera dentro de `invokeRouter`**, no en el
+  top level del preload: el módulo es CommonJS (sin top-level await) y bloquear
+  su carga congelaría la ventana.
+
+### `useHash: true` en el router (el bug que venía de arriba)
+
+En la build empaquetada la ventana carga `file://.../index.html`. El
+`<base href="/">` **no aplica a `history.pushState`**, que resuelve contra la URL
+real del documento: un `router.navigate(['/login'])` no fallaba ni lanzaba —
+dejaba `location.href` en `file:///login`, la raíz del filesystem, en silencio.
+La app seguía andando porque el Router lee `location.pathname`, pero el
+siguiente **reload real** (el botón «Recargar la aplicación») moría con
+`ERR_FILE_NOT_FOUND` y dejaba la pantalla en blanco hasta reiniciar el proceso.
+
+Se llegaba ahí en **cada arranque en frío** (el `BehaviorSubject` de sesión
+emite `null` antes de que termine la restauración async, y `app.component`
+navega al login) y en **cada logout**, en los tres modos. Era preexistente y
+transversal, no un efecto del arreglo del autologin.
+
+Verificado empíricamente sobre Electron 24.3.0, no por inspección.
+
+### Lo que el informe original decía y no era
+
+Un diagnóstico previo listaba como defecto que **el usuario cacheado no trae
+roles**. No es un problema: `PermissionService` se suscribe a `currentUser$` y
+pide los permisos al servidor (`getPermissionsByUser`) en cada cambio, y **nada
+lee `usuario.roles`** — la entidad ni tiene esa propiedad. El sidenav aparecía
+vacío por la sesión zombi (esa llamada también salía sin token), no por el caché.
+
+**Test:** `npm run test:sesion-cliente` (18 asserts). Manual:
+`docs/testing/TESTING-CHECKLIST-SESION-CLIENTE.md`.

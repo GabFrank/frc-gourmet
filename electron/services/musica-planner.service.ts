@@ -25,7 +25,7 @@ import {
   TipoVeto,
   VarianteEnergia,
 } from '../../src/app/database/entities/musica/musica-enums';
-import { spotifyApi } from './spotify.service';
+import { estaConectado, spotifyApi } from './spotify.service';
 import { readAppSettings } from '../utils/app-settings.utils';
 import { planificarDia, aplicarAjustes } from './musica-agente.service';
 import { getMezcla } from './musica-estilos.service';
@@ -414,6 +414,100 @@ async function escribirItems(
     const lote = uris.slice(i, i + MAX_URIS_POR_REQUEST);
     await spotifyApi(userDataPath, 'POST', `/playlists/${playlistId}/items`, { uris: lote });
   }
+}
+
+/**
+ * Fecha de hoy en hora LOCAL, `YYYY-MM-DD`.
+ *
+ * Nunca `toISOString()`: en Paraguay (UTC-3) el plan de las 21:00 del sabado se
+ * guardaria como domingo y el local sonaria con la grilla equivocada toda la
+ * noche.
+ */
+export function fechaLocalHoy(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+export interface ResultadoAsegurarPlan {
+  /** true = se genero uno nuevo en esta corrida. */
+  generado: boolean;
+  fecha: string;
+  /** Por que no se genero, cuando no se genero. Vacio si se genero. */
+  motivo?: string;
+  plan?: ResultadoPlan;
+}
+
+/**
+ * Se asegura de que exista el plan de hoy, y si no, lo genera.
+ *
+ * POR QUE EXISTE: ya habia generacion automatica, pero PEREZOSA — dentro de
+ * `getPlanBloque`, o sea recien cuando el runtime necesita reproducir y estando
+ * dentro de un bloque horario. Consecuencia real: si el local abre a las 09:00
+ * y el primer bloque arranca a las 11:00, el plan se generaba a las 11:00, que
+ * es justo cuando ya tiene que sonar. Y `generarPlanDelDia` llama a OpenAI y
+ * crea o sobreescribe hasta 15 playlists en Spotify: tarda minutos. El primer
+ * bloque del dia arrancaba tarde o directamente con error.
+ *
+ * IDEMPOTENTE: si ya hay plan para la fecha no lo toca. Regenerar pisaria las
+ * playlists de un dia que quiza ya empezo a sonar.
+ *
+ * Las guardas se chequean ANTES de gastar una llamada a OpenAI, y devuelven el
+ * motivo en vez de tirar: que no haya repertorio no es un error del sistema,
+ * es que el local todavia no termino de configurarse.
+ */
+export async function asegurarPlanDelDia(
+  dataSource: DataSource,
+  userDataPath: string,
+  fecha = fechaLocalHoy(),
+): Promise<ResultadoAsegurarPlan> {
+  const { musica } = readAppSettings(userDataPath);
+  if (!musica?.habilitado) {
+    return { generado: false, fecha, motivo: 'EL MODULO DE MUSICA ESTA DESHABILITADO.' };
+  }
+
+  const planRepo = dataSource.getRepository(PlanProgramacion);
+  if (await planRepo.findOne({ where: { fecha } })) {
+    return { generado: false, fecha, motivo: 'YA HAY PLAN PARA HOY.' };
+  }
+
+  // Las guardas de base van ANTES que la de Spotify: son las que fallan durante
+  // la configuracion inicial, y preguntarle al keychain si no hay ni un bloque
+  // cargado es trabajo al pedo.
+  const diaSemana = new Date(`${fecha}T12:00:00`).getDay();
+  const bloques = await dataSource.getRepository(BloqueProgramacion).count({
+    where: [
+      { activo: true, diaSemana },
+      { activo: true, diaSemana: -1 },
+    ],
+  });
+  if (!bloques) {
+    return { generado: false, fecha, motivo: 'NO HAY BLOQUES PROGRAMADOS PARA HOY.' };
+  }
+
+  const aprobados = await dataSource
+    .getRepository(MusicaTrack)
+    .count({ where: { estado: EstadoTrack.APROBADO } });
+  if (!aprobados) {
+    return { generado: false, fecha, motivo: 'EL REPERTORIO NO TIENE NINGUN TEMA APROBADO.' };
+  }
+
+  // Las DOS mitades de "conectado": el client id vive en app-settings y el
+  // refresh token en keytar, y se pierden por separado. `estaConectado()` solo
+  // mira el token, asi que con un token viejo y sin client id esta funcion
+  // tiraba una excepcion desde el fondo de `spotifyApi` en vez de devolver un
+  // motivo — y el arranque de la app se llenaba de un error que en realidad es
+  // "faltan datos de configuracion".
+  if (!(musica.spotifyClientId || '').trim()) {
+    return { generado: false, fecha, motivo: 'FALTA EL CLIENT ID DE SPOTIFY.' };
+  }
+  if (!(await estaConectado())) {
+    return { generado: false, fecha, motivo: 'SPOTIFY NO ESTA CONECTADO.' };
+  }
+
+  const plan = await generarPlanDelDia(dataSource, userDataPath, fecha);
+  return { generado: true, fecha, plan };
 }
 
 /**

@@ -6,7 +6,7 @@ import { BaseModel } from '../base.entity';
  * hacer el cliente en el storefront: apertura, tipos de pedido, prep-time,
  * mínimo de pedido, aceptación automática y branding.
  *
- * Ver docs/arquitectura/webapp-pedidos-plan.md (Fase 2 — config de tienda).
+ * Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 @Entity('tienda_online_config')
 export class TiendaOnlineConfig extends BaseModel {

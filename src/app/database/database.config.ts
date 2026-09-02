@@ -153,6 +153,8 @@ import { CuentaPorCobrar } from './entities/financiero/cuenta-por-cobrar.entity'
 import { CuentaPorCobrarCuota } from './entities/financiero/cuenta-por-cobrar-cuota.entity';
 import { CobroConsolidado } from './entities/financiero/cobro-consolidado.entity';
 import { CobroConsolidadoDetalle } from './entities/financiero/cobro-consolidado-detalle.entity';
+import { PagoConsolidado } from './entities/financiero/pago-consolidado.entity';
+import { PagoConsolidadoDetalle } from './entities/financiero/pago-consolidado-detalle.entity';
 import { PagoCuotaCppDetalle } from './entities/financiero/pago-cuota-cpp-detalle.entity';
 import { MovimientoCliente } from './entities/financiero/movimiento-cliente.entity';
 
@@ -230,6 +232,18 @@ import { AddPrinterTicketToDispositivo1779200000000 } from './migrations/1779200
 import { AddDestinoToGasto1779300000000 } from './migrations/1779300000000-AddDestinoToGasto';
 import { AddCuentaBancariaToLiquidacionSueldo1779400000000 } from './migrations/1779400000000-AddCuentaBancariaToLiquidacionSueldo';
 import { AddConveniosCobroConsolidado1779500000000 } from './migrations/1779500000000-AddConveniosCobroConsolidado';
+import { AddPagoConsolidado1787169888415 } from './migrations/1787169888415-AddPagoConsolidado';
+import { DeliveryCostoRepartidorYConfig1787564255118 } from './migrations/1787564255118-DeliveryCostoRepartidorYConfig';
+import { DeliveryRepartidorEtapa1787602817736 } from './migrations/1787602817736-DeliveryRepartidorEtapa';
+import { VentaCanalOrigen1787603993308 } from './migrations/1787603993308-VentaCanalOrigen';
+import { ZonaDeliveryPoligono1787605293739 } from './migrations/1787605293739-ZonaDeliveryPoligono';
+import { MostrarEnNombreVariacion1787616860074 } from './migrations/1787616860074-MostrarEnNombreVariacion';
+import { DireccionDeliveryOpcional1787668984617 } from './migrations/1787668984617-DireccionDeliveryOpcional';
+import { DeliveryModoRetiro1787677459724 } from './migrations/1787677459724-DeliveryModoRetiro';
+import { PdvConfigTerminalAjena1787842650376 } from './migrations/1787842650376-PdvConfigTerminalAjena';
+import { PagoDetalleDestinoAcreditacion1787842699124 } from './migrations/1787842699124-PagoDetalleDestinoAcreditacion';
+import { CobroConsolidadoCpc1787848148246 } from './migrations/1787848148246-CobroConsolidadoCpc';
+import { BackfillZonaDeliveryPedidosOnline1787877249492 } from './migrations/1787877249492-BackfillZonaDeliveryPedidosOnline';
 import { AddPagoCuotaCppDetalle1785320463398 } from './migrations/1785320463398-AddPagoCuotaCppDetalle';
 import { AddEgresoCajaToPagoCuotaDetalle1785335253817 } from './migrations/1785335253817-AddEgresoCajaToPagoCuotaDetalle';
 import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVacacionVentas';
@@ -273,6 +287,10 @@ import { MusicaAmbiental1786378422682 } from './migrations/1786378422682-MusicaA
 import { MusicaOpcionesAvanzadas1786383979096 } from './migrations/1786383979096-MusicaOpcionesAvanzadas';
 import { MusicaCatalogoEstilos1786475808081 } from './migrations/1786475808081-MusicaCatalogoEstilos';
 import { MusicaClasificacionSemantica1786563231306 } from './migrations/1786563231306-MusicaClasificacionSemantica';
+import { MusicaPreferenciaEstilo1786804287491 } from './migrations/1786804287491-MusicaPreferenciaEstilo';
+import { ProductoConfigVariacion1787063450518 } from './migrations/1787063450518-ProductoConfigVariacion';
+import { IndicesRucYReconciliarMesas1787255528889 } from './migrations/1787255528889-IndicesRucYReconciliarMesas';
+import { InicioJornadaHora1787563118200 } from './migrations/1787563118200-InicioJornadaHora';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -486,6 +504,8 @@ function getEntitiesList(): any[] {
       CuentaPorCobrarCuota,
       CobroConsolidado,
       CobroConsolidadoDetalle,
+      PagoConsolidado,
+      PagoConsolidadoDetalle,
       PagoCuotaCppDetalle,
       MovimientoCliente,
       // Entradas Varias + Operaciones Financieras + Chequeras + Cheques
@@ -678,8 +698,24 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     MusicaOpcionesAvanzadas1786383979096,
     MusicaCatalogoEstilos1786475808081,
     MusicaClasificacionSemantica1786563231306,
+    MusicaPreferenciaEstilo1786804287491,
+    ProductoConfigVariacion1787063450518,
     AddPagoCuotaCppDetalle1785320463398,
     AddEgresoCajaToPagoCuotaDetalle1785335253817,
+    AddPagoConsolidado1787169888415,
+    IndicesRucYReconciliarMesas1787255528889,
+    InicioJornadaHora1787563118200,
+    DeliveryCostoRepartidorYConfig1787564255118,
+    DeliveryRepartidorEtapa1787602817736,
+    VentaCanalOrigen1787603993308,
+    ZonaDeliveryPoligono1787605293739,
+    MostrarEnNombreVariacion1787616860074,
+    DireccionDeliveryOpcional1787668984617,
+    DeliveryModoRetiro1787677459724,
+    PdvConfigTerminalAjena1787842650376,
+    PagoDetalleDestinoAcreditacion1787842699124,
+    CobroConsolidadoCpc1787848148246,
+    BackfillZonaDeliveryPedidosOnline1787877249492,
   ];
 }
 

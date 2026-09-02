@@ -25,6 +25,7 @@ import { DashQuickActionComponent } from 'src/app/shared/components/dashboard/qu
 import { DashSectionHeaderComponent } from 'src/app/shared/components/dashboard/section-header/dash-section-header.component';
 import { DashChartCardComponent } from 'src/app/shared/components/dashboard/chart-card/dash-chart-card.component';
 import { getDashboardChartOptions, DASHBOARD_CHART_COLORS, buildLineDataset } from 'src/app/shared/utils/dashboard-chart-theme';
+import { Rango, RangoChip, RANGO_LABEL, buildRangoChips } from 'src/app/shared/utils/dashboard-rangos.util';
 import { OnboardingService, OnboardingStatus } from 'src/app/services/onboarding.service';
 import {
   OnboardingActionEvent,
@@ -94,6 +95,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   totalBasadoEnCajas = false;
   labelVentas = 'Ventas hoy';
   labelTotal = 'Total hoy';
+  /** Precomputado: el template no llama funciones. */
+  totalHoyTexto = '0 Gs';
 
   alertas: { tipo: string; titulo: string; detalle: string; color: 'error' | 'warning' | 'info' }[] = [];
 
@@ -107,6 +110,12 @@ export class HomeComponent implements OnInit, OnDestroy {
   remoteBusy = false;
   remoteUrl: string | null = null;
   remoteQr: string | null = null;
+
+  // --- Rango --- El Home es la vista de un vistazo: subset corto de rangos,
+  // arrancando en la semana. Manda el chart de ventas y la serie de caja mayor.
+  rangoSeleccionado: Rango = 'week';
+  rangosChips: RangoChip[] = buildRangoChips(['today', 'week', 'month', '3months'], 'week');
+  chartTitle = `Ventas · ${RANGO_LABEL['week']}`;
 
   chartData: ChartData<'line'> = { labels: [], datasets: [] };
   chartOptions: ChartConfiguration<'line'>['options'] = getDashboardChartOptions('line');
@@ -157,9 +166,9 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.loading = true;
     try {
       const [ventasKpi, comprasKpi, cmKpi] = await Promise.all([
-        firstValueFrom(this.repositoryService.getDashboardVentasKpis('week')).catch(() => null),
-        firstValueFrom(this.repositoryService.getDashboardComprasKpis()).catch(() => null),
-        firstValueFrom(this.repositoryService.getDashboardCajaMayorKpis()).catch(() => null),
+        firstValueFrom(this.repositoryService.getDashboardVentasKpis(this.rangoSeleccionado)).catch(() => null),
+        firstValueFrom(this.repositoryService.getDashboardComprasKpis(this.rangoSeleccionado)).catch(() => null),
+        firstValueFrom(this.repositoryService.getDashboardCajaMayorKpis(this.rangoSeleccionado)).catch(() => null),
       ]);
 
       if (ventasKpi) {
@@ -170,6 +179,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.totalBasadoEnCajas = !!ventasKpi.totalBasadoEnCajas;
         this.labelVentas = this.totalBasadoEnCajas ? 'Ventas en caja' : 'Ventas hoy';
         this.labelTotal = this.totalBasadoEnCajas ? 'Total en caja' : 'Total hoy';
+        this.totalHoyTexto = `${this.formatPYG(this.totalHoyPYG)} Gs`;
 
         const periodo = ventasKpi.ventasPorPeriodo || { labels: [], ventas: [] };
         this.chartData = {
@@ -221,6 +231,15 @@ export class HomeComponent implements OnInit, OnDestroy {
     } finally {
       this.loading = false;
     }
+  }
+
+  selectRango(chip: RangoChip): void {
+    if (chip.selected) return;
+    this.rangosChips.forEach(c => c.selected = false);
+    chip.selected = true;
+    this.rangoSeleccionado = chip.value;
+    this.chartTitle = `Ventas · ${RANGO_LABEL[chip.value]}`;
+    this.cargarKpis();
   }
 
   formatPYG(v: number): string {

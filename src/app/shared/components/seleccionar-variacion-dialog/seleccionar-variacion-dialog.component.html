@@ -51,7 +51,7 @@
     <!-- PASO 2: Seleccionar sabores -->
     <div class="step-content" *ngIf="pasoActual === 1">
       <div class="step-header">
-        <div class="step-title">Seleccionar {{ labels.variations | lowercase }} <span class="hint">(max {{ maxSabores }})</span></div>
+        <div class="step-title">Seleccionar {{ labels.variations | lowercase }} <span class="hint" *ngIf="permiteMultiple">(max {{ maxSabores }})</span></div>
         <div class="selected-size-badge" (click)="irAPaso(0)">
           <mat-icon>straighten</mat-icon>
           {{ selectedPresentacion?.nombre }}

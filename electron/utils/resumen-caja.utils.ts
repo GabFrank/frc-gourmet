@@ -17,6 +17,7 @@ import { EgresoCaja } from '../../src/app/database/entities/financiero/egreso-ca
 import { RetiroCaja } from '../../src/app/database/entities/financiero/retiro-caja.entity';
 import { RetiroCajaOrigen } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { dbQuery } from './db-query';
+import { resumenDeliveryCaja, ResumenDeliveryCaja } from '../handlers/reportes-delivery.helper';
 
 export interface ResumenCajaConteoMoneda {
   monedaId: number;
@@ -40,6 +41,12 @@ export interface ResumenCaja {
   gastos: any[];
   egresos: any[];
   retiros: any[];
+  /**
+   * Envíos y retiros del turno. Se calcula con el mismo motor que los informes
+   * (`reportes-delivery.helper`) para que el cierre del cajero y el reporte del
+   * gerente no cuenten los envíos distinto.
+   */
+  delivery: ResumenDeliveryCaja;
 }
 
 /**
@@ -66,7 +73,7 @@ export async function computeResumenCaja(dataSource: DataSource, cajaId: number)
       GROUP BY mb.moneda_id, m.simbolo, m.denominacion
     `, [caja.conteoApertura.id]);
     for (const r of rows) {
-      conteoApertura.push({ monedaId: r.moneda_id, monedaSimbolo: r.simbolo, monedaDenominacion: r.denominacion, total: r.total || 0 });
+      conteoApertura.push({ monedaId: r.moneda_id, monedaSimbolo: r.simbolo, monedaDenominacion: r.denominacion, total: Number(r.total) || 0 });
     }
   }
 
@@ -82,7 +89,7 @@ export async function computeResumenCaja(dataSource: DataSource, cajaId: number)
       GROUP BY mb.moneda_id, m.simbolo, m.denominacion
     `, [caja.conteoCierre.id]);
     for (const r of rows) {
-      conteoCierre.push({ monedaId: r.moneda_id, monedaSimbolo: r.simbolo, monedaDenominacion: r.denominacion, total: r.total || 0 });
+      conteoCierre.push({ monedaId: r.moneda_id, monedaSimbolo: r.simbolo, monedaDenominacion: r.denominacion, total: Number(r.total) || 0 });
     }
   }
 
@@ -109,6 +116,11 @@ export async function computeResumenCaja(dataSource: DataSource, cajaId: number)
       where: { pago: { id: venta.pago.id }, activo: true },
       relations: ['moneda', 'formaPago'],
     });
+    // `Number()` en cada acumulación: `PagoDetalle.valor` es `decimal` y en
+    // Postgres el driver lo devuelve como STRING (no hay
+    // `pg.types.setTypeParser(1700)` en el repo). Sin el cast, `+=` concatena:
+    // dos pagos de 150.000 y 50.000 daban "0150000.0050000.00", el esperado
+    // salía NaN y el ticket de cierre imprimía NaN.
     for (const d of detalles) {
       if (!d.moneda) continue;
       const monedaId = d.moneda.id;
@@ -120,31 +132,31 @@ export async function computeResumenCaja(dataSource: DataSource, cajaId: number)
         if (!ventasPorFormaPagoMap[fpKey]) {
           ventasPorFormaPagoMap[fpKey] = { formaPago: d.formaPago.nombre, monedaId, monedaSimbolo: simbolo, total: 0 };
         }
-        ventasPorFormaPagoMap[fpKey].total += d.valor || 0;
+        ventasPorFormaPagoMap[fpKey].total += Number(d.valor) || 0;
 
         const mKey = `${monedaId}`;
         if (!ventasTotalPorMonedaMap[mKey]) {
           ventasTotalPorMonedaMap[mKey] = { monedaId, monedaSimbolo: simbolo, total: 0 };
         }
-        ventasTotalPorMonedaMap[mKey].total += d.valor || 0;
+        ventasTotalPorMonedaMap[mKey].total += Number(d.valor) || 0;
 
         if ((d.formaPago as any).movimentaCaja) {
-          efectivoPorMoneda[monedaId] = (efectivoPorMoneda[monedaId] || 0) + (d.valor || 0);
+          efectivoPorMoneda[monedaId] = (efectivoPorMoneda[monedaId] || 0) + (Number(d.valor) || 0);
         }
       } else if (d.tipo === TipoDetalle.VUELTO) {
         const mKey = `${monedaId}`;
         if (!ventasTotalPorMonedaMap[mKey]) {
           ventasTotalPorMonedaMap[mKey] = { monedaId, monedaSimbolo: simbolo, total: 0 };
         }
-        ventasTotalPorMonedaMap[mKey].total -= d.valor || 0;
+        ventasTotalPorMonedaMap[mKey].total -= Number(d.valor) || 0;
 
         if ((d.formaPago as any)?.movimentaCaja) {
-          efectivoPorMoneda[monedaId] = (efectivoPorMoneda[monedaId] || 0) - (d.valor || 0);
+          efectivoPorMoneda[monedaId] = (efectivoPorMoneda[monedaId] || 0) - (Number(d.valor) || 0);
         }
       } else if (d.tipo === TipoDetalle.DESCUENTO) {
-        descuentosPorMoneda[monedaId] = (descuentosPorMoneda[monedaId] || 0) + (d.valor || 0);
+        descuentosPorMoneda[monedaId] = (descuentosPorMoneda[monedaId] || 0) + (Number(d.valor) || 0);
       } else if (d.tipo === TipoDetalle.AUMENTO) {
-        aumentosPorMoneda[monedaId] = (aumentosPorMoneda[monedaId] || 0) + (d.valor || 0);
+        aumentosPorMoneda[monedaId] = (aumentosPorMoneda[monedaId] || 0) + (Number(d.valor) || 0);
       }
     }
   }
@@ -274,5 +286,6 @@ export async function computeResumenCaja(dataSource: DataSource, cajaId: number)
     gastos,
     egresos,
     retiros,
+    delivery: await resumenDeliveryCaja(dataSource, cajaId),
   };
 }

@@ -64,15 +64,29 @@ const ALWAYS_LOCAL_CHANNELS = new Set<string>([
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
 
-async function httpFetch(path: string, body: any, withAuth = true): Promise<any> {
+async function httpFetch(path: string, body: any, withAuth = true, timeoutMs?: number): Promise<any> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (withAuth && accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
   const url = `${SERVER_URL}${path}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  // `timeoutMs` sólo lo usa la rehidratación del arranque: si el servidor
+  // configurado quedó inalcanzable de forma silenciosa (IP caída detrás de un
+  // firewall que dropea el SYN, VPN abajo), el fetch puede tardar minutos en
+  // fallar, y el login se queda esperando sin decir nada. El resto de las
+  // llamadas no lleva timeout: cortar una operación de negocio a mitad es peor
+  // que esperar.
+  const ctrl = timeoutMs ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      ...(ctrl ? { signal: ctrl.signal } : {}),
+    });
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
     const err: any = new Error(`HTTP ${res.status}: ${txt}`);
@@ -82,28 +96,176 @@ async function httpFetch(path: string, body: any, withAuth = true): Promise<any>
   return res.json();
 }
 
-async function refreshAccessIfPossible(): Promise<boolean> {
-  if (!refreshToken) return false;
+/**
+ * Persiste el refresh token en el proceso principal (keytar, con fallback a un
+ * archivo 0600). Se usa `_originalInvoke` a propósito: en modo cliente
+ * `ipcRenderer.invoke` está monkey-patcheado y cualquier llamada saldría a
+ * `/api/rpc`, contra un canal que el servidor no registra.
+ *
+ * Best-effort: si la persistencia falla, la sesión de esta corrida sigue
+ * funcionando; lo que se pierde es poder rehidratarla en el próximo arranque.
+ */
+async function persistRefreshToken(token: string | null): Promise<void> {
   try {
-    // F5 paso 3: reenvio deviceId para que el JWT nuevo lo siga llevando.
-    const body: any = { refreshToken };
-    if (CLIENT_DEVICE_ID != null) body.deviceId = CLIENT_DEVICE_ID;
-    const data = await httpFetch('/api/auth/refresh', body, false);
-    accessToken = data.accessToken;
-    refreshToken = data.refreshToken || refreshToken;
-    return true;
-  } catch {
-    accessToken = null;
-    refreshToken = null;
-    return false;
+    await _originalInvoke('client-refresh-token-write', token);
+  } catch (e) {
+    console.warn('[preload] no se pudo persistir el refresh token:', e);
   }
+}
+
+/**
+ * Generación de sesión.
+ *
+ * Toda operación asíncrona que vaya a escribir `accessToken`/`refreshToken`
+ * captura este número antes de suspenderse y sólo aplica su resultado si sigue
+ * siendo el mismo. Sin esto, una rehidratación lenta que empezó ANTES de un
+ * login podía terminar DESPUÉS y pisar los tokens del usuario recién logueado
+ * con los de la sesión anterior: la UI mostraba a una persona y el bearer token
+ * era el de otra, así que todo quedaba autenticado y auditado a nombre
+ * equivocado. Y si ese refresh viejo fallaba, dejaba los tokens en null y
+ * rompía la sesión recién iniciada.
+ *
+ * Reemplazar la referencia de la promesa memoizada no alcanzaba: la corrida
+ * vieja seguía viva.
+ */
+let sessionGeneration = 0;
+
+/** Marca todo trabajo asíncrono en vuelo como obsoleto. */
+function invalidarSesionEnCurso(): void {
+  sessionGeneration++;
+  rehydratePromise = Promise.resolve();
+  refreshPromise = null;
+}
+
+/**
+ * Rehidrata la sesión del modo cliente al arrancar.
+ *
+ * El access token y el refresh token viven en memoria de este módulo, así que
+ * mueren con el proceso. El estado de sesión de la UI, en cambio, sobrevive en
+ * `localStorage`. Sin este paso la app reabría mostrando al usuario logueado
+ * mientras cada request salía sin `Authorization`: sesión zombi.
+ *
+ * ⚠️ Rehidrata SIEMPRE por `refreshAccessIfPossible()`, nunca por otro camino:
+ * esa función reenvía el `deviceId` para que el JWT nuevo lo conserve. Un JWT
+ * con `device_id: null` hace que los tickets salgan por la impresora
+ * equivocada, porque `resolveRequestDeviceId` no puede identificar la terminal.
+ *
+ * Memoizada: la promesa se crea una sola vez y todas las llamadas esperan la
+ * misma. No se hace en el top level porque el módulo es CommonJS (sin
+ * top-level await) y bloquear la carga del preload congelaría la ventana.
+ */
+let rehydratePromise: Promise<void> | null = null;
+function ensureRehydrated(): Promise<void> {
+  if (rehydratePromise) return rehydratePromise;
+  const gen = sessionGeneration;
+  const p = (async () => {
+    if (refreshToken) return; // ya hay sesión viva en esta corrida
+    let guardado: string | null = null;
+    try {
+      guardado = await _originalInvoke('client-refresh-token-read');
+    } catch (e) {
+      console.warn('[preload] no se pudo leer el refresh token persistido:', e);
+      return;
+    }
+    if (!guardado) return;
+    // Un login pudo haber ocurrido mientras se leía el disco: en ese caso esta
+    // rehidratación quedó obsoleta y no debe tocar nada.
+    if (gen !== sessionGeneration) return;
+    refreshToken = guardado;
+    const ok = await refreshAccessIfPossible(REHIDRATACION_TIMEOUT_MS);
+    if (gen !== sessionGeneration) return;
+    if (!ok) {
+      // Vencido (30 días), revocado desde el servidor, o servidor caído. Se
+      // borra para no reintentar con una credencial muerta en cada arranque;
+      // `refreshAccessIfPossible` ya dejó los tokens en null y el frontend
+      // cae en la red de seguridad de `AuthService`.
+      await persistRefreshToken(null);
+      console.log('[preload] refresh token persistido no sirve: sesión no rehidratada.');
+    } else {
+      console.log('[preload] sesión rehidratada desde el refresh token persistido.');
+    }
+  })();
+  rehydratePromise = p;
+  return p;
+}
+
+/** Corte para el refresh del arranque. Ver el comentario de `httpFetch`. */
+const REHIDRATACION_TIMEOUT_MS = 8000;
+
+/**
+ * Renueva el access token. **Single-flight**: si ya hay un refresh en vuelo,
+ * todos los llamadores esperan el mismo.
+ *
+ * No es una optimización, es corrección. El refresh token es de un solo uso y
+ * el servidor lo rota: si un dashboard dispara cinco RPC en paralelo y todas
+ * reciben 401 al vencer el access token de 15 minutos, cada una arrancaba su
+ * propio refresh. La primera rotaba bien; las demás reenviaban un token ya
+ * invalidado, fallaban, y su rama de error pisaba con `null` los tokens que la
+ * primera acababa de escribir. Con este PR eso además borraba el token
+ * persistido y emitía `frc-web-auth-expired`: una sesión sana se deslogueaba
+ * sola por el orden de llegada de dos refrescos simultáneos.
+ */
+let refreshPromise: Promise<boolean> | null = null;
+async function refreshAccessIfPossible(timeoutMs?: number): Promise<boolean> {
+  if (!refreshToken) return false;
+  if (refreshPromise) return refreshPromise;
+
+  const gen = sessionGeneration;
+  // Declarada antes de asignarse: el `finally` de abajo la referencia para no
+  // limpiar una corrida que ya no es la suya.
+  let enVuelo: Promise<boolean>;
+  enVuelo = (async () => {
+    try {
+      // F5 paso 3: reenvio deviceId para que el JWT nuevo lo siga llevando.
+      const body: any = { refreshToken };
+      if (CLIENT_DEVICE_ID != null) body.deviceId = CLIENT_DEVICE_ID;
+      const data = await httpFetch('/api/auth/refresh', body, false, timeoutMs);
+      // Si mientras tanto hubo login o logout, esta respuesta es de una sesión
+      // que ya no es la vigente: se descarta en vez de pisar la nueva.
+      if (gen !== sessionGeneration) return false;
+      accessToken = data.accessToken;
+      refreshToken = data.refreshToken || refreshToken;
+      // El servidor rota el refresh token en cada uso: hay que persistir el
+      // nuevo, o el próximo arranque intentaría con uno ya revocado.
+      await persistRefreshToken(refreshToken);
+      return true;
+    } catch {
+      if (gen !== sessionGeneration) return false;
+      accessToken = null;
+      refreshToken = null;
+      return false;
+    } finally {
+      if (refreshPromise === enVuelo) refreshPromise = null;
+    }
+  })();
+  refreshPromise = enVuelo;
+  return enVuelo;
+}
+
+/**
+ * Canales que NUNCA deben salir a la red: el "chrome" de la ventana local
+ * (`window:minimize`, `window:zoom-step`, ...). Rutearlos por HTTP en modo
+ * cliente hacía que los botones de la titlebar no hicieran nada — y, peor,
+ * apuntaban a la ventana del server. Son operaciones del proceso local.
+ */
+function esCanalDeVentana(channel: string): boolean {
+  return channel.startsWith('window:');
 }
 
 async function invokeRouter(channel: string, ...args: any[]): Promise<any> {
   // Local channels o cualquier modo no-cliente → IPC directo (referencia
   // original, no la reemplazada — sino recursion infinita)
-  if (APP_MODE !== 'client' || ALWAYS_LOCAL_CHANNELS.has(channel)) {
+  if (APP_MODE !== 'client' || ALWAYS_LOCAL_CHANNELS.has(channel) || esCanalDeVentana(channel)) {
     return _originalInvoke(channel, ...args);
+  }
+
+  // Antes de la PRIMERA llamada que sale a la red, intentar recuperar la sesión
+  // del arranque anterior. Va acá y no en el top level del módulo porque así
+  // sólo se paga cuando realmente hay una llamada que autenticar, y porque el
+  // login no debe esperarla (abajo se saltea). `_originalInvoke` y `httpFetch`
+  // no pasan por esta función, así que no hay recursión.
+  if (channel !== 'login') {
+    await ensureRehydrated();
   }
 
   // Login special case
@@ -116,6 +278,12 @@ async function invokeRouter(channel: string, ...args: any[]): Promise<any> {
     const data = await httpFetch('/api/auth/login', loginData, false);
     accessToken = data.accessToken;
     refreshToken = data.refreshToken;
+    // Un login exitoso deja la sesión rehidratable en el próximo arranque.
+    // `invalidarSesionEnCurso()` va ANTES de persistir: marca obsoleta
+    // cualquier rehidratación o refresh en vuelo de la sesión anterior, para
+    // que su respuesta tardía no pise estos tokens ni este archivo.
+    invalidarSesionEnCurso();
+    await persistRefreshToken(refreshToken);
     // El renderer espera el shape de la IPC (success/usuario/token/sessionId/message)
     return {
       success: data.success,
@@ -130,6 +298,10 @@ async function invokeRouter(channel: string, ...args: any[]): Promise<any> {
     try { await httpFetch('/api/auth/logout', { refreshToken }, false); } catch {}
     accessToken = null;
     refreshToken = null;
+    // El servidor ya revocó el token; borrarlo también de disco, o el próximo
+    // arranque rehidrataría una sesión que el usuario cerró a propósito.
+    invalidarSesionEnCurso();
+    await persistRefreshToken(null);
     return true;
   }
 
@@ -139,12 +311,28 @@ async function invokeRouter(channel: string, ...args: any[]): Promise<any> {
     const data = await doRpc();
     return data.result;
   } catch (err: any) {
-    if (err?.status === 401 && refreshToken) {
+    // Sin `&& refreshToken`: `ensureRehydrated()` ya corrió arriba, así que si
+    // hay token persistido ya está en memoria; y si no hay,
+    // `refreshAccessIfPossible` devuelve false igual.
+    if (err?.status === 401) {
       const ok = await refreshAccessIfPossible();
       if (ok) {
         const data = await doRpc();
         return data.result;
       }
+      // No se pudo renovar: la sesión murió de verdad. Avisar al frontend para
+      // que cierre sesión y vaya al login.
+      //
+      // Hasta 2026-08 este evento sólo lo emitía el shim de la web `/admin`, y
+      // en Electron el listener de `AuthService` existía sin que nada lo
+      // disparara nunca — de ahí que la sesión zombi no se corrigiera sola. Con
+      // esto hay UNA vía de expiración, no dos que divergen por plataforma.
+      // `dispatchEvent` cruza el aislamiento de contexto porque opera sobre el
+      // DOM compartido, no sobre el realm JS.
+      await persistRefreshToken(null);
+      try {
+        window.dispatchEvent(new CustomEvent('frc-web-auth-expired'));
+      } catch { /* sin window (tests): nada que avisar */ }
     }
     throw err;
   }
@@ -1078,6 +1266,53 @@ contextBridge.exposeInMainWorld('api', {
   windowIsMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:is-maximized'),
   windowPlatform: (): Promise<NodeJS.Platform> => ipcRenderer.invoke('window:platform'),
   /**
+   * Describe el chrome de la ventana: qué botones dibuja el SO y cuáles debe
+   * dibujar el header. `controlsMode`: 'native' (overlay de Windows) |
+   * 'none' (semáforos de macOS) | 'custom' (Linux frameless).
+   */
+  windowGetChrome: (): Promise<{
+    platform: NodeJS.Platform;
+    controlsMode: 'native' | 'none' | 'custom';
+    overlay: boolean;
+    toolbarHeight: number;
+  }> => ipcRenderer.invoke('window:chrome'),
+  /** Tiñe los botones nativos del overlay (Windows) según el tema activo. */
+  windowSetTitleBarOverlay: (opts: { color?: string; symbolColor?: string }): Promise<boolean> =>
+    ipcRenderer.invoke('window:set-titlebar-overlay', opts),
+
+  // --- Herramientas de ventana (reemplazan al menú nativo, que no existe en
+  // una ventana frameless): zoom, recargar, devtools y pantalla completa. ---
+  windowZoomGet: (): Promise<number> => ipcRenderer.invoke('window:zoom-get'),
+  windowZoomSet: (factor: number): Promise<number> => ipcRenderer.invoke('window:zoom-set', factor),
+  windowZoomStep: (direction: 1 | -1): Promise<number> => ipcRenderer.invoke('window:zoom-step', direction),
+  windowZoomReset: (): Promise<number> => ipcRenderer.invoke('window:zoom-reset'),
+  windowReload: (): Promise<void> => ipcRenderer.invoke('window:reload'),
+  windowToggleDevTools: (): Promise<boolean> => ipcRenderer.invoke('window:toggle-devtools'),
+  windowToggleFullscreen: (): Promise<boolean> => ipcRenderer.invoke('window:toggle-fullscreen'),
+  windowIsFullscreen: (): Promise<boolean> => ipcRenderer.invoke('window:is-fullscreen'),
+  /** Suscribe a cambios de zoom (atajo de teclado o menú). Devuelve unsubscribe. */
+  onWindowZoomChanged: (handler: (state: { factor: number }) => void) => {
+    const listener = (_event: any, state: { factor: number }) => handler(state);
+    ipcRenderer.on('window:zoom-changed', listener);
+    return () => ipcRenderer.removeListener('window:zoom-changed', listener);
+  },
+  /**
+   * Suscribe al pedido de abrir DevTools por atajo de teclado (F12 /
+   * Ctrl+Shift+I). El main no puede evaluar permisos —en modo cliente no hay
+   * BD local—, así que delega la decisión al renderer. Devuelve unsubscribe.
+   */
+  onWindowDevToolsRequested: (handler: () => void) => {
+    const listener = () => handler();
+    ipcRenderer.on('window:devtools-requested', listener);
+    return () => ipcRenderer.removeListener('window:devtools-requested', listener);
+  },
+  /** Suscribe a entrar/salir de pantalla completa. Devuelve unsubscribe. */
+  onWindowFullscreenChanged: (handler: (state: { isFullScreen: boolean }) => void) => {
+    const listener = (_event: any, state: { isFullScreen: boolean }) => handler(state);
+    ipcRenderer.on('window:fullscreen-changed', listener);
+    return () => ipcRenderer.removeListener('window:fullscreen-changed', listener);
+  },
+  /**
    * Suscribe a cambios de maximize/unmaximize. Devuelve un unsubscribe.
    * El handler recibe `{ isMaximized: boolean }` enviado por main.ts.
    */
@@ -1137,6 +1372,15 @@ contextBridge.exposeInMainWorld('api', {
    * `${SERVER_URL}/api/files/by-url?url=...&token=...` y que el `<img src>`
    * lo cargue del server. Si aun no hay sesion, devuelve null.
    */
+  /**
+   * Espera a que termine la rehidratación de la sesión del modo cliente.
+   * `AuthService` la llama antes de decidir si la sesión cacheada sirve, para
+   * no limpiar una sesión que sí era recuperable.
+   */
+  ensureSessionRehydrated: async (): Promise<void> => {
+    if (APP_MODE !== 'client') return;
+    await ensureRehydrated();
+  },
   getAccessToken: (): string | null => {
     return accessToken;
   },
@@ -1248,6 +1492,12 @@ contextBridge.exposeInMainWorld('api', {
     if (data?.status === 'approved') {
       accessToken = data.accessToken;
       refreshToken = data.refreshToken;
+      // Igual que el login normal: la sesión tiene que sobrevivir al cierre de
+      // la app. Ojo que el device grant firma `device_id: null`
+      // (`device-auth-routes.ts`), pero la primera rotación por
+      // `refreshAccessIfPossible` reenvía el `deviceId` y lo corrige.
+      invalidarSesionEnCurso();
+      await persistRefreshToken(refreshToken);
     }
     return data;
   },
@@ -1786,6 +2036,37 @@ contextBridge.exposeInMainWorld('api', {
   deleteDelivery: async (deliveryId: number): Promise<any> => {
     return await ipcRenderer.invoke('deleteDelivery', deliveryId);
   },
+
+  // Delivery del PdV — maquina de estados y operaciones transaccionales.
+  // Los CRUD genericos de arriba quedan para lectura y datos sueltos: el
+  // estado, la cancelacion y el alta van SIEMPRE por estos canales.
+  deliveryListarPdv: async (cajaId: number, filtros?: any): Promise<{ data: any[]; total: number }> => {
+    return await ipcRenderer.invoke('delivery-listar-pdv', cajaId, filtros);
+  },
+  deliveryListarRepartidores: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('delivery-listar-repartidores');
+  },
+  deliveryCrear: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('delivery-crear', payload);
+  },
+  deliveryActualizarDatos: async (deliveryId: number, payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('delivery-actualizar-datos', deliveryId, payload);
+  },
+  deliveryCambiarEstado: async (deliveryId: number, nuevoEstado: string, opts?: any): Promise<any> => {
+    return await ipcRenderer.invoke('delivery-cambiar-estado', deliveryId, nuevoEstado, opts);
+  },
+  deliveryAsignarRepartidor: async (deliveryId: number, funcionarioId: number | null): Promise<any> => {
+    return await ipcRenderer.invoke('delivery-asignar-repartidor', deliveryId, funcionarioId);
+  },
+  deliveryCancelar: async (deliveryId: number, motivo: string): Promise<any> => {
+    return await ipcRenderer.invoke('delivery-cancelar', deliveryId, motivo);
+  },
+  deliveryConvertirModo: async (deliveryId: number, payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('delivery-convertir-modo', deliveryId, payload);
+  },
+  deliveryImprimirTicket: async (deliveryId: number, printerId?: number): Promise<any> => {
+    return await ipcRenderer.invoke('delivery-imprimir-ticket', deliveryId, printerId);
+  },
   getDeliveriesByCaja: async (cajaId: number, filtros?: any): Promise<{ data: any[], total: number }> => {
     return await ipcRenderer.invoke('getDeliveriesByCaja', cajaId, filtros);
   },
@@ -1800,8 +2081,8 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // Cerrar ventas abiertas de una mesa
-  cerrarVentasAbiertasMesa: async (mesaId: number, estado: string): Promise<number> => {
-    return await ipcRenderer.invoke('cerrarVentasAbiertasMesa', mesaId, estado);
+  cerrarVentasAbiertasMesa: async (mesaId: number, estado: string, opts?: { validarDispositivoCaja?: boolean }): Promise<number> => {
+    return await ipcRenderer.invoke('cerrarVentasAbiertasMesa', mesaId, estado, opts);
   },
 
   // Venta methods
@@ -2023,6 +2304,15 @@ contextBridge.exposeInMainWorld('api', {
   },
   updatePdvMesa: async (id: number, data: Partial<PdvMesa>): Promise<PdvMesa> => {
     return await ipcRenderer.invoke('updatePdvMesa', id, data);
+  },
+
+  // Cambia SOLO el estado de una mesa (ocupar/liberar). Va aparte de
+  // updatePdvMesa porque ese es el ABM y exige un permiso de configuracion.
+  setPdvMesaEstado: async (mesaId: number, estado: string): Promise<any> => {
+    return await ipcRenderer.invoke('set-pdv-mesa-estado', mesaId, estado);
+  },
+  transferirVentaPdv: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('transferir-venta-pdv', payload);
   },
   deletePdvMesa: async (id: number): Promise<boolean> => {
     return await ipcRenderer.invoke('deletePdvMesa', id);
@@ -2308,6 +2598,9 @@ contextBridge.exposeInMainWorld('api', {
   vincularVentaPedidoOnline: async (pedidoId: number, ventaId: number): Promise<any> => {
     return await ipcRenderer.invoke('vincular-venta-pedido-online', pedidoId, ventaId);
   },
+  getDetalleVariacionItems: async (itemIds: number[]): Promise<any> => {
+    return await ipcRenderer.invoke('get-detalle-variacion-items', itemIds);
+  },
   getTiendaOnlineConfig: async (): Promise<any> => {
     return await ipcRenderer.invoke('get-tienda-online-config');
   },
@@ -2427,6 +2720,21 @@ contextBridge.exposeInMainWorld('api', {
   }): Promise<{items: Receta[], total: number, page: number, pageSize: number}> => {
     return await ipcRenderer.invoke('get-recetas-with-filters', filters);
   },
+  getRecetasAsignables: async (params: {
+    productoId?: number | null;
+    search?: string;
+    activo?: boolean | null;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{items: Receta[], total: number, page: number, pageSize: number}> => {
+    return await ipcRenderer.invoke('get-recetas-asignables', params);
+  },
+  vincularRecetaAProducto: async (productoId: number, recetaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('vincular-receta-a-producto', productoId, recetaId);
+  },
+  desvincularRecetaDeProducto: async (productoId: number): Promise<any> => {
+    return await ipcRenderer.invoke('desvincular-receta-de-producto', productoId);
+  },
   getReceta: async (recetaId: number): Promise<Receta> => {
     return await ipcRenderer.invoke('get-receta', recetaId);
   },
@@ -2481,6 +2789,19 @@ contextBridge.exposeInMainWorld('api', {
     eliminarDeOtrasVariaciones: boolean;
   }): Promise<any> => {
     return await ipcRenderer.invoke('delete-receta-ingrediente-multiples-variaciones', data);
+  },
+  agregarIngredienteMultiplesVariaciones: async (data: {
+    recetaIngredienteId: number;
+    variaciones: Array<{ variacionId: number; cantidad: number }>;
+  }): Promise<any> => {
+    return await ipcRenderer.invoke('agregar-ingrediente-multiples-variaciones', data);
+  },
+  getRecetasConIngrediente: async (data: {
+    recetaIds: number[];
+    ingredienteId?: number | null;
+    descripcion?: string | null;
+  }): Promise<number[]> => {
+    return await ipcRenderer.invoke('get-recetas-con-ingrediente', data);
   },
 
   // RecetaIngrediente additional methods
@@ -2795,6 +3116,8 @@ contextBridge.exposeInMainWorld('api', {
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;
+      /** Tope de descuento al cobrar CPC, en % del cobro. null = sin tope. */
+      descuentoCpcMaxPorcentaje?: number | null;
     }
   ): Promise<any> => {
     return await ipcRenderer.invoke('save-caja-mayor-configuracion', cajaMayorId, data);
@@ -3046,6 +3369,20 @@ contextBridge.exposeInMainWorld('api', {
   },
   pagarCuotasComprasLote: async (payload: any): Promise<any> => {
     return await ipcRenderer.invoke('pagar-cuotas-compras-lote', payload);
+  },
+
+  // ── Pago consolidado de obligaciones (Caja Mayor) ──
+  getObligacionesPendientes: async (concepto: string, filtros?: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-obligaciones-pendientes', concepto, filtros);
+  },
+  registrarPagoConsolidado: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('registrar-pago-consolidado', payload);
+  },
+  getPagoConsolidadoDetalle: async (pagoId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-pago-consolidado-detalle', pagoId);
+  },
+  anularPagoConsolidado: async (pagoId: number, motivo?: string): Promise<any> => {
+    return await ipcRenderer.invoke('anular-pago-consolidado', pagoId, motivo);
   },
   getCuotasPendientesCompras: async (filtros?: any): Promise<any[]> => {
     return await ipcRenderer.invoke('get-cuotas-pendientes-compras', filtros);
@@ -3792,20 +4129,23 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // === Dashboards por dominio ===
-  getDashboardVentasKpis: async (rango: string = 'week'): Promise<any> => {
-    return await ipcRenderer.invoke('get-dashboard-ventas-kpis', rango);
+  getCajasSelector: async (params: { desde?: string; hasta?: string; limite?: number } = {}): Promise<any> => {
+    return await ipcRenderer.invoke('get-cajas-selector', params);
   },
-  getDashboardComprasKpis: async (): Promise<any> => {
-    return await ipcRenderer.invoke('get-dashboard-compras-kpis');
+  getDashboardVentasKpis: async (param: any = 'week'): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-ventas-kpis', param);
   },
-  getDashboardProductosKpis: async (): Promise<any> => {
-    return await ipcRenderer.invoke('get-dashboard-productos-kpis');
+  getDashboardComprasKpis: async (rango: string = 'month'): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-compras-kpis', rango);
+  },
+  getDashboardProductosKpis: async (rango: string = 'month'): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-productos-kpis', rango);
   },
   getDashboardFinancieroKpis: async (): Promise<any> => {
     return await ipcRenderer.invoke('get-dashboard-financiero-kpis');
   },
-  getDashboardCajaMayorKpis: async (): Promise<any> => {
-    return await ipcRenderer.invoke('get-dashboard-caja-mayor-kpis');
+  getDashboardCajaMayorKpis: async (rango: string = 'month'): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-caja-mayor-kpis', rango);
   },
 
   // === Hub de Reportes (cierre de mes) ===

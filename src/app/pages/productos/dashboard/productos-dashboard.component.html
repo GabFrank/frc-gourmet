@@ -6,6 +6,14 @@
       <span class="dashboard-subtitle">Panel de control</span>
     </div>
     <div class="dashboard-header-actions">
+      <div class="dashboard-chart-chips">
+        <button *ngFor="let chip of rangosChips"
+                class="dashboard-range-chip"
+                [class.range-chip-active]="chip.selected"
+                (click)="selectRango(chip)">
+          {{ chip.label }}
+        </button>
+      </div>
       <button mat-icon-button (click)="cargarKpis()" [disabled]="loading" matTooltip="Actualizar">
         <mat-icon>refresh</mat-icon>
       </button>
@@ -50,69 +58,60 @@
     </app-dash-quick-action>
   </div>
 
-  <div class="dashboard-main-content">
+  <!-- Tres listas de productos, mismo peso visual: las tres abren el producto
+       en su tab de edicion con un click. -->
+  <div class="dashboard-cards-row">
+    <app-dash-ranking
+      title="Mejor margen (CMV)"
+      icon="trending_up"
+      [items]="topCmv"
+      emptyText="Sin productos con precio de venta y costo cargados"
+      [clickable]="true"
+      (itemClick)="abrirProducto($event)">
+    </app-dash-ranking>
 
-    <div class="dashboard-col-left">
+    <app-dash-ranking
+      [title]="tituloTopVendidos"
+      icon="emoji_events"
+      [items]="topVendidos"
+      [emptyText]="vacioTopVendidos"
+      [clickable]="true"
+      (itemClick)="abrirProducto($event)">
+    </app-dash-ranking>
 
-      <div class="dashboard-card">
-        <app-dash-section-header
-          icon="schedule"
-          title="Precios desactualizados (>30 dias)"
-          [badge]="productosPrecioDesactualizado.length"
-          badgeColor="warning">
-        </app-dash-section-header>
-        <mat-divider></mat-divider>
+    <app-dash-ranking
+      title="Productos parciales"
+      icon="construction"
+      [items]="parciales"
+      emptyText="Todos los productos completos"
+      [clickable]="true"
+      (itemClick)="abrirProducto($event)">
+    </app-dash-ranking>
+  </div>
 
-        <div *ngIf="!loading && productosPrecioDesactualizado.length === 0" class="dashboard-empty-state">
-          <mat-icon>check_circle</mat-icon>
-          <span>Todos los productos con precio actualizado</span>
-        </div>
+  <div class="dashboard-card">
+    <app-dash-section-header
+      icon="schedule"
+      title="Precios desactualizados (>30 dias)"
+      [badge]="productosPrecioDesactualizado.length"
+      badgeColor="warning">
+    </app-dash-section-header>
+    <mat-divider></mat-divider>
 
-        <div class="dashboard-alert-list" *ngIf="productosPrecioDesactualizado.length > 0">
-          <div *ngFor="let p of productosPrecioDesactualizado" class="dashboard-alert-item alert-warning">
-            <mat-icon>schedule</mat-icon>
-            <div class="dashboard-alert-info">
-              <span class="dashboard-alert-title">{{ p.producto }}</span>
-              <span class="dashboard-alert-detail">Ultima actualizacion: {{ p.dias }} dia(s)</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="dashboard-card">
-        <app-dash-section-header
-          icon="construction"
-          title="Productos parciales"
-          [badge]="productosParcialesLista.length"
-          badgeColor="info">
-        </app-dash-section-header>
-        <mat-divider></mat-divider>
-
-        <div *ngIf="!loading && productosParcialesLista.length === 0" class="dashboard-empty-state">
-          <mat-icon>check_circle</mat-icon>
-          <span>Todos los productos completos</span>
-        </div>
-
-        <div class="dashboard-alert-list" *ngIf="productosParcialesLista.length > 0">
-          <div *ngFor="let p of productosParcialesLista" class="dashboard-alert-item alert-info"
-               (click)="openProducto(p.id)" style="cursor: pointer;">
-            <mat-icon>edit</mat-icon>
-            <div class="dashboard-alert-info">
-              <span class="dashboard-alert-title">{{ p.nombre }}</span>
-              <span class="dashboard-alert-detail">Falta completar registro</span>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div *ngIf="!loading && productosPrecioDesactualizado.length === 0" class="dashboard-empty-state">
+      <mat-icon>check_circle</mat-icon>
+      <span>Todos los productos con precio actualizado</span>
     </div>
 
-    <div class="dashboard-col-right">
-      <app-dash-ranking
-        title="Mas vendidos del mes"
-        icon="emoji_events"
-        [items]="topVendidos"
-        emptyText="Sin ventas este mes">
-      </app-dash-ranking>
+    <div class="dashboard-alert-list" *ngIf="productosPrecioDesactualizado.length > 0">
+      <div *ngFor="let p of productosPrecioDesactualizado" class="dashboard-alert-item alert-warning">
+        <mat-icon>schedule</mat-icon>
+        <div class="dashboard-alert-info">
+          <span class="dashboard-alert-title">{{ p.producto }}</span>
+          <span class="dashboard-alert-detail">Ultima actualizacion: {{ p.dias }} dia(s)</span>
+        </div>
+      </div>
     </div>
   </div>
+
 </div>

@@ -1,0 +1,303 @@
+<div class="pago-wizard" [class.pago-wizard-tab]="esTab">
+
+  <div class="pago-header">
+    <h2 class="pago-titulo">{{ titulo }}</h2>
+    <span class="pago-subtitulo" *ngIf="cantidadSeleccionada > 0">
+      {{ cantidadSeleccionada }} seleccionada(s) · {{ monedaDeudaSimbolo }} {{ totalDeudaTexto }}
+    </span>
+  </div>
+
+  <div class="pago-loading" *ngIf="loading">
+    <mat-spinner diameter="36"></mat-spinner>
+  </div>
+
+  <mat-stepper #stepper linear class="pago-stepper" *ngIf="!loading"
+               (selectionChange)="onPasoChange($event.selectedIndex)">
+
+    <!-- ───────────── Paso 1: seleccionar ───────────── -->
+    <mat-step [completed]="puedeAvanzarSeleccion">
+      <ng-template matStepLabel>Seleccionar</ng-template>
+
+      <div class="pago-toolbar">
+        <mat-form-field appearance="outline" class="pago-filtro" *ngIf="beneficiarios.length > 1">
+          <mat-label>{{ txt.filtroBeneficiario }}</mat-label>
+          <mat-select [(ngModel)]="filtroBeneficiarioId" (selectionChange)="aplicarFiltro()">
+            <mat-option [value]="null">Todos</mat-option>
+            <mat-option *ngFor="let b of beneficiarios" [value]="b.id">{{ b.nombre }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <!-- Buscador de texto: el flujo viejo tenía autocomplete de cliente y con
+             cientos de clientes a crédito un dropdown solo no alcanza. Con botón:
+             el repo no usa filtrado en vivo. -->
+        <mat-form-field appearance="outline" class="pago-filtro" *ngIf="beneficiarios.length > 1">
+          <mat-label>Buscar</mat-label>
+          <input matInput [(ngModel)]="filtroTexto" (keyup.enter)="aplicarFiltro()">
+        </mat-form-field>
+        <button mat-stroked-button *ngIf="beneficiarios.length > 1" (click)="aplicarFiltro()">
+          <mat-icon>search</mat-icon> Filtrar
+        </button>
+        <button mat-stroked-button *ngIf="filtroTexto || filtroBeneficiarioId !== null" (click)="limpiarFiltro()">
+          <mat-icon>filter_alt_off</mat-icon> Limpiar filtro
+        </button>
+
+        <span class="pago-spacer"></span>
+
+        <button mat-stroked-button *ngIf="!seleccionUnica" (click)="marcarTodo(true)">
+          <mat-icon>done_all</mat-icon> Marcar todo
+        </button>
+        <button mat-stroked-button *ngIf="!seleccionUnica && cantidadSeleccionada > 0" (click)="marcarTodo(false)">
+          <mat-icon>remove_done</mat-icon> Limpiar
+        </button>
+        <button mat-flat-button color="primary" *ngIf="etiquetaNuevo" (click)="nuevaObligacion()">
+          <mat-icon>add</mat-icon> {{ etiquetaNuevo }}
+        </button>
+      </div>
+
+      <div class="pago-tabla-wrap">
+        <table mat-table [dataSource]="obligacionesFiltradas" class="pago-tabla">
+
+          <ng-container matColumnDef="select">
+            <th mat-header-cell *matHeaderCellDef></th>
+            <td mat-cell *matCellDef="let row">
+              <mat-checkbox
+                [checked]="row.selected"
+                [disabled]="row.bloqueado || row.incompatible"
+                [matTooltip]="row.bloqueoMotivo || ''"
+                (change)="toggle(row)">
+              </mat-checkbox>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="beneficiario">
+            <th mat-header-cell *matHeaderCellDef>{{ txt.columnaBeneficiario }}</th>
+            <td mat-cell *matCellDef="let row">{{ row.beneficiario || '—' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="item">
+            <th mat-header-cell *matHeaderCellDef>{{ columnaItem }}</th>
+            <td mat-cell *matCellDef="let row">
+              <span class="pago-item-desc">{{ row.descripcion }}</span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="fecha">
+            <th mat-header-cell *matHeaderCellDef>Fecha</th>
+            <td mat-cell *matCellDef="let row">{{ row.fecha ? (row.fecha | date:'dd/MM/yyyy') : '—' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="saldo">
+            <th mat-header-cell *matHeaderCellDef class="pago-num">Saldo pendiente</th>
+            <td mat-cell *matCellDef="let row" class="pago-num">
+              {{ row.monedaSimbolo }} {{ row.saldoPendiente | number:'1.0-2' }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="monto">
+            <th mat-header-cell *matHeaderCellDef class="pago-num">{{ txt.columnaMonto }}</th>
+            <td mat-cell *matCellDef="let row" class="pago-num">
+              <mat-form-field appearance="outline" class="pago-monto-input"
+                              *ngIf="row.selected && permiteParcial">
+                <input matInput appCurrencyInput [decimals]="row.decimales"
+                       [(ngModel)]="row.montoAPagar" (ngModelChange)="onMontoChange()">
+              </mat-form-field>
+              <span *ngIf="!row.selected || !permiteParcial">
+                {{ row.monedaSimbolo }} {{ row.montoAPagar | number:'1.0-2' }}
+              </span>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="columnas"></tr>
+          <tr mat-row *matRowDef="let row; columns: columnas"
+              [class.pago-fila-bloqueada]="row.bloqueado"
+              [class.pago-fila-incompatible]="row.incompatible"></tr>
+        </table>
+
+        <div class="pago-vacio" *ngIf="obligacionesFiltradas.length === 0">
+          <mat-icon>info_outline</mat-icon>
+          <span>{{ txt.sinPendientes }}</span>
+        </div>
+      </div>
+
+      <div class="pago-errores" *ngIf="errores.length > 0">
+        <mat-icon>error_outline</mat-icon>
+        <div>
+          <div *ngFor="let e of errores">{{ e }}</div>
+        </div>
+      </div>
+    </mat-step>
+
+    <!-- ───────────── Paso 2: formas de pago ───────────── -->
+    <mat-step [completed]="cuadra">
+      <ng-template matStepLabel>{{ txt.pasoLineas }}</ng-template>
+
+      <div class="pago-destinatario" *ngIf="beneficiarioSeleccionado">
+        {{ txt.destinatarioPrefijo }} <strong>{{ beneficiarioSeleccionado }}</strong>
+      </div>
+
+      <form [formGroup]="draft" class="pago-draft">
+        <mat-form-field appearance="outline">
+          <mat-label>Fuente</mat-label>
+          <mat-select formControlName="fuente">
+            <mat-option value="CAJA_MAYOR">{{ txt.fuenteCaja }}</mat-option>
+            <mat-option value="CUENTA_BANCARIA">Cuenta bancaria</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" *ngIf="!draftEsBanco">
+          <mat-label>Caja mayor</mat-label>
+          <mat-select formControlName="cajaMayorId">
+            <mat-option *ngFor="let c of cajasMayor" [value]="c.id">{{ c.nombre }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" *ngIf="!draftEsBanco">
+          <mat-label>Forma</mat-label>
+          <mat-select formControlName="formaPagoId">
+            <mat-option *ngFor="let f of formasPagoEfectivo" [value]="f.id">{{ f.nombre }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" *ngIf="draftEsBanco">
+          <mat-label>Cuenta</mat-label>
+          <mat-select formControlName="cuentaBancariaId" (selectionChange)="onCuentaChange()">
+            <mat-option *ngFor="let c of cuentasBancarias" [value]="c.id">
+              {{ c.nombre || c.numeroCuenta }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <!-- En una línea bancaria la moneda la fija la cuenta: el saldo bancario
+             es un escalar en una sola moneda, elegir otra lo corrompería. -->
+        <mat-form-field appearance="outline" *ngIf="!draftEsBanco">
+          <mat-label>Moneda</mat-label>
+          <mat-select formControlName="monedaId">
+            <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <div class="pago-moneda-fija" *ngIf="draftEsBanco && monedaCuentaTexto">
+          <span class="pago-moneda-fija-label">Moneda</span>
+          <span class="pago-moneda-fija-valor">{{ monedaCuentaTexto }}</span>
+        </div>
+
+        <mat-form-field appearance="outline" *ngIf="draftNecesitaCotizacion">
+          <mat-label>Cotización</mat-label>
+          <input matInput type="number" formControlName="cotizacion" min="0">
+          <mat-hint>1 unidad = ? {{ monedaDeudaSimbolo }}</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Monto</mat-label>
+          <input matInput type="number" formControlName="monto" min="0">
+        </mat-form-field>
+
+        <button mat-flat-button color="primary" type="button" (click)="agregarLinea()">
+          <mat-icon>add</mat-icon> Agregar
+        </button>
+        <button mat-stroked-button type="button" (click)="completarFaltante()"
+                matTooltip="Cargar el importe que falta para cuadrar">
+          <mat-icon>calculate</mat-icon> Completar
+        </button>
+      </form>
+
+      <!-- El descuento no es una forma de cobro: no sale de ninguna caja. Va en su
+           propio botón, fuera del formulario de líneas. -->
+      <div class="pago-descuento-bar" *ngIf="puedeAplicarDescuento">
+        <button mat-stroked-button color="accent" type="button" (click)="aplicarDescuento()">
+          <mat-icon>discount</mat-icon>
+          {{ descuentoTexto ? 'Editar descuento' : 'Aplicar descuento' }}
+        </button>
+        <span class="pago-descuento-info" *ngIf="descuentoTexto">
+          Descuento: <strong>{{ descuentoTexto }}</strong>
+          <ng-container *ngIf="motivoDescuento"> — {{ motivoDescuento }}</ng-container>
+        </span>
+        <button mat-icon-button *ngIf="descuentoTexto" (click)="quitarDescuento()" matTooltip="Quitar descuento">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+
+      <div class="pago-lineas">
+        <div class="pago-linea" *ngFor="let l of lineas; let i = index">
+          <mat-icon>{{ l.icono }}</mat-icon>
+          <span class="pago-linea-etiqueta">{{ l.etiqueta }}</span>
+          <span class="pago-linea-monto">{{ l.montoTexto }}</span>
+          <span class="pago-linea-conv" *ngIf="l.convertidoTexto">= {{ l.convertidoTexto }}</span>
+          <button mat-icon-button (click)="quitarLinea(i)" matTooltip="Quitar">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </div>
+        <div class="pago-vacio" *ngIf="lineas.length === 0">
+          <mat-icon>info_outline</mat-icon>
+          <span>{{ txt.sinLineas }}</span>
+        </div>
+      </div>
+
+      <div class="pago-balance" [class.pago-balance-ok]="cuadra">
+        <div class="pago-balance-col">
+          <span class="pago-balance-label">{{ txt.totalDeuda }}</span>
+          <span class="pago-balance-valor">{{ monedaDeudaSimbolo }} {{ totalDeudaTexto }}</span>
+        </div>
+        <mat-icon class="pago-balance-check" *ngIf="cuadra">check_circle</mat-icon>
+        <div class="pago-balance-col">
+          <span class="pago-balance-label">{{ txt.totalLineas }}</span>
+          <span class="pago-balance-valor">{{ monedaDeudaSimbolo }} {{ totalPagoTexto }}</span>
+        </div>
+        <span class="pago-balance-dif" *ngIf="!cuadra && diferenciaTexto">{{ diferenciaTexto }}</span>
+      </div>
+    </mat-step>
+
+    <!-- ───────────── Paso 3: revisar ───────────── -->
+    <mat-step>
+      <ng-template matStepLabel>Revisar y confirmar</ng-template>
+
+      <div class="pago-revision">
+        <div class="pago-bloque" *ngIf="beneficiarioSeleccionado">
+          <span class="pago-bloque-label">{{ txt.columnaBeneficiario }}</span>
+          <span class="pago-bloque-valor">{{ beneficiarioSeleccionado }}</span>
+        </div>
+
+        <div class="pago-bloque">
+          <span class="pago-bloque-label">{{ txt.bloqueItems }}</span>
+          <div class="pago-resumen-item" *ngFor="let r of resumenItems">
+            <span>{{ r.descripcion }}</span>
+            <span class="pago-num">{{ r.montoTexto }}</span>
+          </div>
+          <mat-divider></mat-divider>
+          <div class="pago-resumen-item pago-resumen-total">
+            <span>Total</span>
+            <span class="pago-num">{{ monedaDeudaSimbolo }} {{ totalDeudaTexto }}</span>
+          </div>
+        </div>
+
+        <div class="pago-bloque">
+          <span class="pago-bloque-label">{{ txt.bloqueLineas }}</span>
+          <div class="pago-resumen-item" *ngFor="let l of lineas">
+            <span>{{ l.etiqueta }}</span>
+            <span class="pago-num">{{ l.montoTexto }}<ng-container *ngIf="l.convertidoTexto"> = {{ l.convertidoTexto }}</ng-container></span>
+          </div>
+        </div>
+      </div>
+    </mat-step>
+  </mat-stepper>
+
+  <div class="pago-footer" *ngIf="!loading">
+    <button mat-button (click)="cancelar()" *ngIf="paso === 0 && !esTab">Cancelar</button>
+    <button mat-button (click)="pasoAnterior()" *ngIf="paso > 0">
+      <mat-icon>arrow_back</mat-icon> Atrás
+    </button>
+    <span class="pago-spacer"></span>
+    <button mat-flat-button color="primary" (click)="siguientePaso()"
+            *ngIf="paso === 0" [disabled]="!puedeAvanzarSeleccion">
+      Siguiente <mat-icon>arrow_forward</mat-icon>
+    </button>
+    <button mat-flat-button color="primary" (click)="siguientePaso()"
+            *ngIf="paso === 1" [disabled]="!cuadra">
+      Revisar <mat-icon>arrow_forward</mat-icon>
+    </button>
+    <button mat-flat-button color="primary"
+            *ngIf="paso === 2" [disabled]="saving || !cuadra" (click)="confirmar()">
+      <mat-icon>{{ txt.iconoConfirmar }}</mat-icon> {{ txt.confirmar }}
+    </button>
+  </div>
+</div>

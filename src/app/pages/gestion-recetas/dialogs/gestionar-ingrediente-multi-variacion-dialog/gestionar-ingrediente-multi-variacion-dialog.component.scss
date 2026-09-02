@@ -61,10 +61,31 @@
       flex-shrink: 0;
     }
 
+    &.variacion-bloqueada {
+      opacity: 0.6;
+
+      &:hover {
+        background-color: transparent;
+      }
+    }
+
     .variacion-nombre {
       flex-grow: 1;
       font-weight: 500;
       color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      .variacion-motivo {
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.4px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        color: var(--warning-color);
+        border: 1px solid var(--warning-color);
+      }
     }
 
     .variacion-cantidad {
@@ -80,6 +101,13 @@
       }
     }
   }
+}
+
+.dialog-nota {
+  margin-top: 16px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
 }
 
 .dialog-actions {

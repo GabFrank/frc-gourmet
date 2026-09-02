@@ -478,6 +478,13 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       'STOCK_MOVIMIENTO_VER', 'STOCK_MOVIMIENTO_REGISTRAR',
       // Ventas
       'VENTAS_PDV', 'VENTAS_PDV_CONFIGURAR', 'VENTAS_HISTORICO_VER',
+      // Pedidos online: el gerente gestiona y además configura la tienda y las zonas.
+      'PEDIDOS_ONLINE_VER', 'PEDIDOS_ONLINE_GESTIONAR', 'PEDIDOS_ONLINE_CONFIGURAR',
+      // Cajon del PdV: el gerente hace todo lo del cajero, y ademas anula.
+      // PDV_ANULAR_EGRESO se le niega al cajero por separacion de funciones
+      // (ver rol CAJERO), asi que tiene que vivir aca o no lo tiene nadie.
+      'VENTAS_COBRAR',
+      'PDV_PAGAR_VALE', 'PDV_PAGAR_COMPRA', 'PDV_ANULAR_EGRESO',
       // Facturación legal
       'FACTURACION_VER', 'FACTURACION_EMITIR', 'FACTURACION_ANULAR',
       'FACTURACION_TIMBRADO_GESTIONAR', 'FACTURACION_PLANTILLA_GESTIONAR', 'FACTURACION_CONFIGURAR',
@@ -488,7 +495,8 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       'PERSONAS_VER', 'PERSONAS_GESTIONAR',
       'CLIENTES_VER', 'CLIENTES_GESTIONAR',
       // Financiero
-      'FINANCIERO_CAJA_VER', 'FINANCIERO_CAJA_GESTIONAR',
+      'FINANCIERO_CAJA_VER', 'FINANCIERO_CAJA_OPERAR', 'FINANCIERO_CAJA_GESTIONAR',
+      'FINANCIERO_CAJA_AJUSTAR',
       'CAJA_MAYOR_OPERAR',
       'MONEDAS_GESTIONAR',
       'BANCOS_VER', 'BANCOS_GESTIONAR',
@@ -515,7 +523,10 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
     descripcion: 'CAJERO',
     permisos: [
       'HOME_DASHBOARD_VER', 'VENTAS_DASHBOARD_VER', 'CAJA_MAYOR_DASHBOARD_VER',
-      'VENTAS_PDV', 'VENTAS_HISTORICO_VER',
+      'VENTAS_PDV', 'VENTAS_COBRAR', 'VENTAS_HISTORICO_VER',
+      // Pedidos online: el cajero acepta y rechaza -es quien atiende el reparto-
+      // pero NO configura la tienda ni dibuja zonas.
+      'PEDIDOS_ONLINE_VER', 'PEDIDOS_ONLINE_GESTIONAR',
       // Facturación: el cajero factura al cobrar en el PdV
       'FACTURACION_VER', 'FACTURACION_EMITIR',
       // Vales/compras pagados desde el cajón del PdV (Utilitarios).
@@ -524,7 +535,9 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       'PDV_PAGAR_VALE', 'PDV_PAGAR_COMPRA',
       'PRODUCTOS_VER',
       'CLIENTES_VER', 'CLIENTES_GESTIONAR', // crear cliente al cobrar venta a credito
-      'FINANCIERO_CAJA_VER',
+      // Abrir y cerrar SU caja, con sus conteos. No incluye borrar cajas ni
+      // configurar las monedas del conteo: eso es FINANCIERO_CAJA_GESTIONAR.
+      'FINANCIERO_CAJA_VER', 'FINANCIERO_CAJA_OPERAR',
       'CPC_COBRAR',
       'RRHH_ASISTENCIA_REGISTRAR',
       // Tickets de venta y comanda — el cajero imprime y reimprime su trabajo

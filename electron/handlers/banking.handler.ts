@@ -337,16 +337,27 @@ export function registerBankingHandlers(
   // No actualiza saldo bancario hasta que sea acreditada (auto o verificada)
   ipcMain.handle('create-acreditacion-pos', async (_event, data: any) => {
     try {
-      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
+      await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'BANCOS_GESTIONAR']);
       const repo = dataSource.getRepository(AcreditacionPos);
       const maquinaRepo = dataSource.getRepository(MaquinaPos);
 
       const maquinaPosId = data.maquinaPos?.id || data.maquinaPosId;
       const maquina = await maquinaRepo.findOne({
         where: { id: maquinaPosId },
-        relations: ['cuentaBancaria'],
+        relations: ['cuentaBancaria', 'cuentaBancaria.moneda'],
       });
       if (!maquina) throw new Error(`MaquinaPos ${maquinaPosId} no encontrada`);
+
+      // Mismo control que en la acreditación de transferencias: la máquina POS
+      // no tiene moneda propia, la hereda de su cuenta bancaria. Si la línea de
+      // cobro está en otra, acreditar el número pelado descuadra el banco.
+      // Sólo se rechaza cuando ambas monedas se conocen (la de la cuenta es
+      // nullable) y difieren.
+      const monedaCuentaId = (maquina.cuentaBancaria as any)?.moneda?.id ?? null;
+      const monedaPagoId = data.monedaId != null ? Number(data.monedaId) : null;
+      if (monedaCuentaId != null && monedaPagoId != null && monedaCuentaId !== monedaPagoId) {
+        throw new Error('MONEDA_NO_COINCIDE_CON_CUENTA');
+      }
 
       const montoOriginal = Number(data.montoOriginal);
       const porcComision = Number(maquina.porcentajeComision || 0);
@@ -480,15 +491,29 @@ export function registerBankingHandlers(
   // No tiene comision, no genera AcreditacionPos.
   ipcMain.handle('acreditar-transferencia-bancaria', async (_event, payload: any) => {
     try {
-      await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
+      await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'BANCOS_GESTIONAR']);
       const cuentaBancariaId = payload.cuentaBancariaId;
       const monto = Number(payload.monto);
       if (!cuentaBancariaId || monto <= 0) {
         throw new Error('Datos invalidos');
       }
       const repo = dataSource.getRepository(CuentaBancaria);
-      const cb = await repo.findOne({ where: { id: cuentaBancariaId } });
+      const cb = await repo.findOne({ where: { id: cuentaBancariaId }, relations: ['moneda'] });
       if (!cb) throw new Error(`CuentaBancaria ${cuentaBancariaId} no encontrada`);
+      // El monto viene en la moneda de la LÍNEA de cobro, y el saldo de la
+      // cuenta está en la suya: sumarlos sin comparar acreditaba 40 dólares
+      // como 40 guaraníes (y 150.000 guaraníes como R$ 150.000). Pasa de
+      // verdad, porque los atajos de moneda del diálogo de cobro cambian la
+      // línea sin tocar la cuenta elegida.
+      //
+      // Se rechaza sólo cuando las DOS monedas se conocen y difieren: la
+      // columna `moneda_id` de la cuenta es nullable, y bloquear ahí dejaría
+      // sin acreditar a cualquier instalación que no la haya cargado.
+      const monedaCuentaId = (cb.moneda as any)?.id ?? null;
+      const monedaPagoId = payload.monedaId != null ? Number(payload.monedaId) : null;
+      if (monedaCuentaId != null && monedaPagoId != null && monedaCuentaId !== monedaPagoId) {
+        throw new Error('MONEDA_NO_COINCIDE_CON_CUENTA');
+      }
       cb.saldo = Number(cb.saldo) + monto;
       await repo.save(cb);
       await registrarMovimientoBancario(dataSource.manager, dataSource, {

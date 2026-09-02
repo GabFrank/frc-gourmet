@@ -95,9 +95,16 @@ export class CreateEditGastoDialogComponent implements OnInit {
   /** True una vez que se creo o edito al menos una vez en esta sesion del dialog. */
   private touched = false;
 
+  /**
+   * Alta diferida: el gasto nace PENDIENTE y no asienta nada. El pago se hace
+   * despues desde Caja Mayor, donde se pueden saldar varios de una.
+   */
+  diferido = false;
+
   // Tabla de detalles de pago
   detalles: DetalleRow[] = [];
   detallesColumns = ['moneda', 'formaPago', 'monto', 'actions'];
+
   totalesPorMoneda: { simbolo: string; denominacion: string; total: number }[] = [];
 
   constructor(
@@ -111,6 +118,10 @@ export class CreateEditGastoDialogComponent implements OnInit {
 
   ngOnInit(): void {
     this.cajaMayorFijo = !!this.data?.cajaMayorId;
+    this.diferido = !!this.data?.diferido;
+    if (this.diferido) {
+      this.detallesColumns = ['moneda', 'monto', 'actions'];
+    }
     this.gastoId = this.data?.gastoId || null;
     this.isEditing = !!this.gastoId;
 
@@ -135,7 +146,8 @@ export class CreateEditGastoDialogComponent implements OnInit {
 
     this.detalleForm = this.fb.group({
       monedaId: [null, Validators.required],
-      formaPagoId: [null, Validators.required],
+      // En alta diferida la forma de pago se decide al pagar, no acá.
+      formaPagoId: [null, this.diferido ? [] : [Validators.required]],
       monto: [null, [Validators.required, Validators.min(0.01)]],
     });
 
@@ -428,8 +440,11 @@ export class CreateEditGastoDialogComponent implements OnInit {
     const esBanco = this.form.value.fuente === 'CUENTA_BANCARIA';
 
     // Saldos negativos: solo aplica a Caja Mayor (en banco se debita la cuenta).
+    // En alta diferida NO aplica: el gasto no toca la caja, y como la forma de
+    // pago queda en null el chequeo no encontraría el saldo y avisaría "saldo
+    // insuficiente" siempre.
     const cajaMayorId = this.form.value.cajaMayorId;
-    if (!esBanco && cajaMayorId) {
+    if (!this.diferido && !esBanco && cajaMayorId) {
       const ok = await this.confirmarSaldoSiNegativo(cajaMayorId);
       if (!ok) return;
     }
@@ -458,6 +473,31 @@ export class CreateEditGastoDialogComponent implements OnInit {
           monto: d.monto,
         })),
       };
+
+      if (this.diferido && !this.isEditing) {
+        // Un gasto pendiente no tiene "detalles de pago": tiene un importe. Se
+        // manda moneda y monto directos (no derivados de los detalles, que hoy
+        // se suman sin convertir si mezclan monedas).
+        const monedasDistintas = new Set(this.detalles.map(d => d.monedaId));
+        if (monedasDistintas.size > 1) {
+          this.snackBar.open('Un gasto pendiente va en una sola moneda.', 'Cerrar', { duration: 4000 });
+          this.saving = false;
+          return;
+        }
+        const payloadDiferido: any = {
+          ...gastoData,
+          diferido: true,
+          monedaId: this.detalles[0].monedaId,
+          monto: this.detalles.reduce((sum, d) => sum + Number(d.monto), 0),
+        };
+        delete payloadDiferido.detalles;
+        delete payloadDiferido.fuente;
+        delete payloadDiferido.cuentaBancariaId;
+        const savedDif: any = await firstValueFrom(this.repositoryService.createGasto(payloadDiferido));
+        this.snackBar.open('Gasto registrado como pendiente. Se paga desde Caja Mayor.', 'Cerrar', { duration: 4000 });
+        this.dialogRef.close(savedDif || true);
+        return;
+      }
 
       if (this.isEditing && this.gastoId) {
         await firstValueFrom(this.repositoryService.editGasto(this.gastoId, gastoData));

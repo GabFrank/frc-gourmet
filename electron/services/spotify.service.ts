@@ -3,7 +3,7 @@
  *
  * Rol de Spotify en el sistema: **catalogo + reproductor**. El "cerebro"
  * (programacion por franja, perfil de energia, seleccion de tracks) es nuestro.
- * Ver docs/PLAN-MUSICA-SPOTIFY.md.
+ * Ver .claude/skills/frc-gourmet-expert/domains/musica-ambiental.md.
  *
  * Decisiones que este archivo materializa:
  *

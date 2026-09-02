@@ -27,7 +27,8 @@
 | **dashboard-productos.handler.ts** | 120 | KPIs Productos |
 | **dashboard-rrhh.handler.ts** | 169 | KPIs RRHH (nómina, asistencia, cumpleaños, etc.) |
 | **dashboard-shortcuts.handler.ts** | 78 | DashboardShortcut (personalización de Home) |
-| **dashboard-ventas.handler.ts** | 249 | KPIs Ventas |
+| **dashboard-ventas.handler.ts** | ~590 | KPIs Ventas. Devuelve además el bloque `delivery` (envíos, retiros, ingreso por envíos y `enCamino`, este último SIN filtro de período: es estado operativo) |
+| **delivery.handler.ts** | ~930 | Máquina de estados del delivery/retiro (`delivery-crear`, `-cambiar-estado`, `-actualizar-datos`, `-asignar-repartidor`, `-cancelar` transaccional, `-listar-pdv`, `-imprimir-ticket`) + **`delivery-convertir-modo`** (DELIVERY ⇄ RETIRO: mueve `venta.costoDelivery`, desasigna repartidor y sincroniza el `PedidoOnline`). El CRUD genérico de `ventas.handler.ts` rechaza estado, zona y `modo` |
 | **db-config.handler.ts** | 273 | Configuración de BD (sqlite path / postgres); `db-config-init-postgres` crea rol+DB |
 | **documentos-tickets.handler.ts** | 962 | Tickets térmicos (comanda multi-sector, venta, recibos, vales) |
 | **empresa.handler.ts** | 96 | Empresa singleton (datos + branding + fiscal) |
@@ -52,9 +53,10 @@
 | **productos.handler.ts** | 2275 | Familia, Subfamilia, Producto, Presentacion, CodigoBarra, PrecioVenta, PrecioCosto, Adicional, Observacion + search por modo venta/compra |
 | **qr-upload.handler.ts** | ~110 | Emparejamiento QR → subida desde la PWA mobile (`qr-upload-{create-session,enable-remote,poll,close}`). Store en `server/qr-upload-store.ts`, rutas Fastify en `server/qr-upload-routes.ts`, arranque on-demand en `server/pairing.ts`. Detalles → [domains/archivos-y-adjuntos.md](../domains/archivos-y-adjuntos.md) §8 |
 | **receta-presentacion.handler.ts** | 556 | Helpers `generarNombreVariacion`, `generarSKU` usados desde recetas.handler (NO se registra como handler propio) |
-| **recetas.handler.ts** | 2427 | Receta, RecetaIngrediente*, RecetaAdicionalVinculacion **+ RecetaPresentacion (variaciones) + Sabores** (unificado) |
+| **recetas.handler.ts** | 2427 | Receta, RecetaIngrediente*, RecetaAdicionalVinculacion **+ RecetaPresentacion (variaciones) + Sabores** (unificado) + vínculo producto↔receta (`get-recetas-asignables`, `vincular-receta-a-producto`, `desvincular-receta-de-producto`) |
 | **remote-tunnel.handler.ts** | 172 | Acceso remoto vía Cloudflare quick tunnel |
 | **reportes.handler.ts** | 73 | Reportes de cierre de mes: `get-reporte-ventas-cierre`, `get-reporte-finanzas-cierre`, `enviar-reporte-whatsapp`. Delega en `reportes-{ventas,finanzas}.helper.ts` + `reportes-periodo.util.ts`. → [domains/reportes.md](../domains/reportes.md) |
+| **reportes-delivery.helper.ts** | ~720 | *(helper, no registra canales)* Motor único de métricas de delivery/retiro: KPIs, mix por canal, zonas, repartidores, tiempos+SLA, cancelaciones, y `resumenDeliveryCaja` para el cierre. Lo consumen `reportes-ventas.helper.ts`, `dashboard-ventas.handler.ts` y `resumen-caja.utils.ts`. → [domains/reportes.md](../domains/reportes.md) §8 |
 | **reportes-rrhh.handler.ts** | 472 | Exports PDF/Excel (pdfmake + exceljs) |
 | **rrhh-funcionarios.handler.ts** | ~530 | Cargo, Funcionario, HistoricoCargo/Salario + alta transaccional. 2026-07: `get-funcionario-resumen-financiero` (deudas convertidas a PYG), `get-funcionario-de-cliente` (vínculo cruzado) |
 | **sabores.handler.ts** | 437 | Sabor + auto-generación de variaciones al crear sabor |
@@ -62,7 +64,7 @@
 | **system.handler.ts** | 68 | OS info / MAC address. No necesita DB |
 | **vacaciones.handler.ts** | 380 | Vacacion, VacacionPeriodo + auto-Asistencia VACACION al marcar GOZADA |
 | **vales.handler.ts** | 417 | Vale, MotivoVale + `confirmar-vale` (EGRESO_VALE), `anular-vale` (contra-mov) |
-| **ventas.handler.ts** | 3032 | Venta*, Comanda*, PdvMesa, Sector, Reserva, Delivery, PdvAtajo*, PdvConfig. Incluye `procesarStockVenta`/`revertirStockVenta`. El más grande. |
+| **ventas.handler.ts** | ~3300 | Venta*, Comanda*, PdvMesa, Sector, Reserva, Delivery, PdvAtajo*, PdvConfig. Incluye `procesarStockVenta`/`revertirStockVenta`, `set-pdv-mesa-estado` (ocupar/liberar, permiso operativo) y `transferir-venta-pdv` (mover una cuenta entre mesas y comandas, transaccional). El más grande. `getVentasByDateRange` filtra además por canal / zona / repartidor / origen y devuelve `totales.costoDelivery` del resultado filtrado. ⚠️ **No tiene `ensurePermission`** y no está en `BLOCKED_CHANNELS` — ver `known-bugs.md`. |
 
 > **Nota:** `receta-presentacion.handler.ts` y `caja-mayor-utils.ts` NO se registran como handlers en `main.ts` — exportan helpers usados por otros handlers.
 
@@ -136,6 +138,8 @@ Los handlers sensibles llaman `ensurePermission(dataSource, getCurrentUser, 'COD
 - Cobro parcial: `getEstadoCobroVenta`/`registrarCobroParcial`/`anularCobroParcial` (en `ventas.handler.ts`).
 - Cajas: `get-cajas-abiertas`, `generar-retiro-cierre-caja`, `puede-ajustar-caja`/`finalizar-ajuste-caja`.
 - Sabores: `get-all-sabores`, `reparar-recetas-compartidas` (en `recetas.handler.ts`).
+- Vínculo producto↔receta: `get-recetas-asignables`, `vincular-receta-a-producto`, `desvincular-receta-de-producto` (en `recetas.handler.ts`, perm `PRODUCTOS_GESTIONAR`). Únicos caminos válidos: **no** encadenar `update-producto` + `update-receta`. → [domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
+- Ingredientes multi-variación: `agregar-ingrediente-multiples-variaciones` (transaccional, deduplica y omite duplicados), `get-recetas-con-ingrediente`, `delete-receta-ingrediente-multiples-variaciones` (en `recetas.handler.ts`). → [domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
 - Login QR: rutas Fastify `electron/server/device-auth-routes.ts` (`/api/auth/device/*`).
 - Rutas Fastify: `electron/server/public-routes.ts` (`/pub/*`), `kds-sse-routes.ts` (`/api/kds/stream`), static `/admin/` + `/tienda/`.
 - Impresoras: `list-system-printers`, `scan-network-printers`, `test-printer-connection`, `print-cierre-caja`.

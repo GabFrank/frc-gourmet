@@ -18,7 +18,7 @@ import { registerPublicOperation } from '../server/public-routes';
  * `disponibleOnline && !pausadoOnline`.
  *
  * Expuesto en `/pub/*` como `menu.get` (lectura, sin auth).
- * Ver docs/arquitectura/webapp-pedidos-plan.md.
+ * Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 
 const ONLINE_TIPO = 'ONLINE';
@@ -164,7 +164,8 @@ export function registerPedidosOnlineHandlers(
               .filter((pr: any) => pricedPres.has(pr.id))
               .sort((a: any, b: any) => Number(a.cantidad) - Number(b.cantidad))
               .map((pr: any, i: number) => ({ presentacionId: pr.id, nombre: pr.nombre, orden: i }));
-            const pizzaCfg = await getPizzaConfig(dataSource);
+            // Config del producto (mitad y mitad, estrategia) con fallback al global.
+            const pizzaCfg = await getPizzaConfig(dataSource, p);
             pizza = {
               tamanos,
               sabores: saboresOut,

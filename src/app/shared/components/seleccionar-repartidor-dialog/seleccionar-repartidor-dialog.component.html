@@ -1,0 +1,36 @@
+<h2 mat-dialog-title>REPARTIDOR</h2>
+
+<mat-dialog-content>
+  <div class="filtro-row">
+    <mat-form-field appearance="outline" class="filtro-field">
+      <mat-label>BUSCAR</mat-label>
+      <input matInput [(ngModel)]="filtro" (keydown.enter)="aplicarFiltro()" placeholder="Nombre del funcionario" />
+    </mat-form-field>
+    <button mat-stroked-button (click)="aplicarFiltro()">
+      <mat-icon>search</mat-icon> FILTRAR
+    </button>
+  </div>
+
+  <mat-selection-list [multiple]="false" class="repartidores-list">
+    <mat-list-option *ngFor="let r of visibles"
+      [value]="r.id"
+      [selected]="r.id === seleccionadoId"
+      (click)="seleccionar(r.id)">
+      <span class="repartidor-nombre">{{ r.nombre }}</span>
+      <span class="repartidor-cargo" *ngIf="r.cargo">{{ r.cargo }}</span>
+    </mat-list-option>
+  </mat-selection-list>
+
+  <div *ngIf="visibles.length === 0" class="empty-state">
+    <mat-icon>person_off</mat-icon>
+    <span>No hay funcionarios activos para asignar.</span>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancelar()">CANCELAR</button>
+  <button mat-button (click)="sinRepartidor()">SIN REPARTIDOR</button>
+  <button mat-raised-button color="primary" (click)="confirmar()" [disabled]="!seleccionadoId">
+    <mat-icon>delivery_dining</mat-icon> ENVIAR
+  </button>
+</mat-dialog-actions>

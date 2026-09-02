@@ -13,7 +13,7 @@
  * El mapeo método→canal sale de `api-channel-map.generated.ts` (regenerado
  * desde preload.ts con `scripts/generate-mobile-api-map.js`).
  */
-import { API_CHANNEL_MAP } from './api-channel-map.generated';
+import { API_CHANNEL_MAP, API_ARG_SHAPE } from './api-channel-map.generated';
 import { setOnline } from './connection-state';
 import { sessionExpired$ } from './auth-events';
 
@@ -133,8 +133,19 @@ async function httpFetch(path: string, body: unknown, withAuth = true): Promise<
   // Hubo respuesta del server (aunque sea 4xx/5xx) → estamos online.
   setOnline(true);
   if (!res.ok) {
+    // El body de error es JSON (`{ error }` de los handlers, `{ message }` de
+    // Fastify). Sin desenvolverlo, el mensaje del backend llegaba a la pantalla
+    // como `HTTP 400: {"error":"..."}` — visto en produccion con un 429 del rate
+    // limiter. El motivo real queda sepultado en el JSON crudo.
     const txt = await res.text().catch(() => '');
-    const err: HttpError = new Error(`HTTP ${res.status}: ${txt}`);
+    let mensaje = txt;
+    try {
+      const body = JSON.parse(txt);
+      mensaje = body?.error || body?.message || txt;
+    } catch {
+      /* no era JSON: se usa el texto tal cual */
+    }
+    const err: HttpError = new Error(mensaje || `HTTP ${res.status}`);
     err.status = res.status;
     throw err;
   }
@@ -224,6 +235,23 @@ function kebab(name: string): string {
   return name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
 }
 
+/**
+ * Reproduce el empaquetado de argumentos que hace el preload de Electron.
+ *
+ * Unos pocos metodos de `window.api` reciben parametros posicionales y los
+ * mandan al canal como UN objeto (`invoke('change-password', { usuarioId, ... })`).
+ * El transporte HTTP manda `params: [...args]` tal cual, asi que sin esto el
+ * handler recibia `usuarioId` suelto como payload y devolvia PAYLOAD INVALIDO.
+ * La lista sale de `API_ARG_SHAPE`, generado del propio preload.
+ */
+function conformarArgs(method: string, args: any[]): any[] {
+  const shape = API_ARG_SHAPE[method];
+  if (!shape) return args;
+  const payload: Record<string, unknown> = {};
+  shape.forEach((clave, i) => { payload[clave] = args[i]; });
+  return [payload];
+}
+
 function channelFor(method: string): string {
   const mapped = API_CHANNEL_MAP[method];
   if (mapped) return mapped;
@@ -268,7 +296,7 @@ export function installApiHttp(opts?: { serverUrl?: string; deviceId?: number | 
       if (typeof prop !== 'string') return undefined;
       if (prop in target) return (target as Record<string, unknown>)[prop];
       const channel = channelFor(prop);
-      return (...args: any[]): Promise<any> => invokeRouter(channel, ...args);
+      return (...args: any[]): Promise<any> => invokeRouter(channel, ...conformarArgs(prop, args));
     },
   });
 

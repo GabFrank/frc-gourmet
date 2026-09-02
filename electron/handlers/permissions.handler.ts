@@ -50,6 +50,7 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'CPC_GESTIONAR', descripcion: 'Gestionar cuentas por cobrar (crear/editar)', modulo: 'FINANCIERO' },
   { codigo: 'CPC_COBRAR', descripcion: 'Registrar cobros de cuotas de clientes', modulo: 'FINANCIERO' },
   { codigo: 'CPC_ANULAR', descripcion: 'Anular cobros de cuotas de clientes', modulo: 'FINANCIERO' },
+  { codigo: 'CPC_DESCUENTO', descripcion: 'Conceder descuentos al cobrar cuentas por cobrar', modulo: 'FINANCIERO' },
   { codigo: 'CPC_CANCELAR', descripcion: 'Cancelar cuentas por cobrar', modulo: 'FINANCIERO' },
   // RRHH Fase 8 - Dashboard, Notificaciones y Reportes
   { codigo: 'RRHH_DASHBOARD_VER', descripcion: 'Ver dashboard de RRHH con KPIs', modulo: 'RRHH' },
@@ -86,10 +87,18 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   // Ventas
   { codigo: 'VENTAS_PDV', descripcion: 'Operar punto de venta (PdV/mesas/comandas)', modulo: 'VENTAS' },
   { codigo: 'VENTAS_PDV_CONFIGURAR', descripcion: 'Configurar el PdV (categorías, ítems, atajos, mesas, sectores, config)', modulo: 'VENTAS' },
+  // Pedidos online. Hasta ahora todo el módulo usaba `VENTAS_PDV`, incluida la
+  // configuración de la tienda y el borrado de zonas: cualquier cajero podía
+  // tocarlas. Se separa gestión de configuración, igual que en el resto del PdV.
+  { codigo: 'PEDIDOS_ONLINE_VER', descripcion: 'Ver la cola de pedidos de la web', modulo: 'VENTAS' },
+  { codigo: 'PEDIDOS_ONLINE_GESTIONAR', descripcion: 'Aceptar, rechazar y avanzar pedidos de la web', modulo: 'VENTAS' },
+  { codigo: 'PEDIDOS_ONLINE_CONFIGURAR', descripcion: 'Configurar la tienda online y dibujar las zonas de reparto', modulo: 'VENTAS' },
   { codigo: 'VENTAS_HISTORICO_VER', descripcion: 'Ver historico de ventas concluidas', modulo: 'VENTAS' },
+  { codigo: 'VENTAS_COBRAR', descripcion: 'Cobrar una venta: registrar pagos, vuelto y acreditaciones', modulo: 'VENTAS' },
   { codigo: 'PDV_PAGAR_VALE', descripcion: 'Crear/pagar vales de funcionario desde el cajón del PdV', modulo: 'VENTAS' },
   { codigo: 'PDV_PAGAR_COMPRA', descripcion: 'Crear/pagar compras desde el cajón del PdV', modulo: 'VENTAS' },
   { codigo: 'PDV_ANULAR_EGRESO', descripcion: 'Anular egresos de caja (vales/compras) del PdV', modulo: 'VENTAS' },
+  { codigo: 'VENTAS_DELIVERY_CANCELAR_COBRADO', descripcion: 'Cancelar un delivery ya cobrado (revierte el cobro, el stock y la cuenta por cobrar)', modulo: 'VENTAS' },
 
   // Facturación legal (SET/SIFEN)
   { codigo: 'FACTURACION_VER', descripcion: 'Ver facturas, timbrados y plantillas', modulo: 'FACTURACION' },
@@ -114,7 +123,8 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
 
   // Financiero
   { codigo: 'FINANCIERO_CAJA_VER', descripcion: 'Ver cajas y conteos', modulo: 'FINANCIERO' },
-  { codigo: 'FINANCIERO_CAJA_GESTIONAR', descripcion: 'Crear/editar/cerrar cajas y conteos', modulo: 'FINANCIERO' },
+  { codigo: 'FINANCIERO_CAJA_OPERAR', descripcion: 'Abrir y cerrar la caja del turno, y cargar sus conteos', modulo: 'FINANCIERO' },
+  { codigo: 'FINANCIERO_CAJA_GESTIONAR', descripcion: 'Borrar cajas/conteos y configurar las monedas habilitadas', modulo: 'FINANCIERO' },
   { codigo: 'FINANCIERO_CAJA_AJUSTAR', descripcion: 'Ajustar una caja ya cerrada (corregir conteo, agregar gasto/retiro)', modulo: 'FINANCIERO' },
   { codigo: 'CAJA_MAYOR_OPERAR', descripcion: 'Registrar movimientos/gastos/retiros en caja mayor', modulo: 'FINANCIERO' },
   { codigo: 'MONEDAS_GESTIONAR', descripcion: 'Gestionar monedas y cotizaciones', modulo: 'FINANCIERO' },
@@ -129,6 +139,7 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'SISTEMA_BACKUP', descripcion: 'Crear y restaurar backups de la base de datos', modulo: 'SISTEMA' },
   { codigo: 'SISTEMA_BD_CONFIGURAR', descripcion: 'Configurar base de datos (SQLite/Postgres)', modulo: 'SISTEMA' },
   { codigo: 'SISTEMA_MODO_CONFIGURAR', descripcion: 'Configurar modo de operacion (standalone/server/client)', modulo: 'SISTEMA' },
+  { codigo: 'SISTEMA_DEVTOOLS', descripcion: 'Abrir las herramientas de desarrollo (consola) de la app', modulo: 'SISTEMA' },
   { codigo: 'NOTIFICACIONES_CONFIGURAR', descripcion: 'Configurar notificaciones por Email/WhatsApp (canales, receptores, eventos)', modulo: 'SISTEMA' },
 
   // Musica ambiental (Spotify Connect)

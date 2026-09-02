@@ -2,6 +2,7 @@ import { app, ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { readAppSettings, updateAppSettings, AppMode, NetworkSettings } from '../utils/app-settings.utils';
 import { setCurrentDevice } from '../utils/current-device.utils';
+import { clearClientRefreshToken } from '../utils/client-refresh-token.utils';
 import { ensurePermission } from '../utils/auth.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 
@@ -65,6 +66,22 @@ export function registerAppModeHandlers(
     const deviceId = typeof payload.deviceId === 'number' && payload.deviceId > 0
       ? payload.deviceId
       : null;
+
+    // Salir del modo cliente —o apuntar a otro servidor— deja huérfano el
+    // refresh token persistido: una credencial de 30 días, válida y sin revocar
+    // del lado del servidor viejo, que ya nadie va a leer ni a limpiar. Se
+    // borra acá, que es el único momento en que se sabe que dejó de servir.
+    const anterior = readAppSettings(app.getPath('userData'));
+    const dejaDeSerCliente = anterior.mode === 'client' && payload.mode !== 'client';
+    const cambiaDeServidor = anterior.mode === 'client' && payload.mode === 'client'
+      && anterior.network?.serverUrl !== network?.serverUrl;
+    if (dejaDeSerCliente || cambiaDeServidor) {
+      try {
+        await clearClientRefreshToken();
+      } catch (e) {
+        console.warn('[app-mode] no se pudo limpiar el refresh token del modo cliente:', e);
+      }
+    }
 
     updateAppSettings(app.getPath('userData'), (s) => ({
       ...s,

@@ -4,7 +4,7 @@
       <div class="filtros">
         <mat-form-field appearance="outline" class="campo-buscar">
           <mat-label>Buscar tema o artista</mat-label>
-          <input matInput [(ngModel)]="filtroTexto" (keyup.enter)="buscar()" />
+          <input matInput [(ngModel)]="filtroTexto" (keyup.enter)="filtrar()" />
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="campo-estado">
@@ -17,7 +17,28 @@
           </mat-select>
         </mat-form-field>
 
-        <button mat-flat-button color="primary" (click)="buscar()">
+        <mat-form-field appearance="outline" class="campo-estilo">
+          <mat-label>Estilo</mat-label>
+          <mat-select [(ngModel)]="filtroEstilo">
+            <mat-option value="">Todos</mat-option>
+            <mat-option *ngFor="let e of estilos" [value]="e.id">
+              {{ e.nombre }} ({{ e.tracks | number: '1.0-2' }})
+            </mat-option>
+            <mat-option value="SIN_ESTILO">Sin estilo</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="campo-genero">
+          <mat-label>Género</mat-label>
+          <mat-select [(ngModel)]="filtroGenero">
+            <mat-option value="">Todos</mat-option>
+            <mat-option *ngFor="let g of generos" [value]="g.genero">
+              {{ g.genero }} ({{ g.cantidad | number: '1.0-2' }})
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <button mat-flat-button color="primary" (click)="filtrar()">
           <mat-icon>search</mat-icon> Filtrar
         </button>
         <button mat-stroked-button (click)="limpiarFiltros()">Limpiar</button>

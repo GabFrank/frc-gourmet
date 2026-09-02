@@ -30,6 +30,7 @@ import { DashSectionHeaderComponent } from 'src/app/shared/components/dashboard/
 import { DashChartCardComponent } from 'src/app/shared/components/dashboard/chart-card/dash-chart-card.component';
 import { getDashboardChartOptions, DASHBOARD_CHART_COLORS, buildLineDataset } from 'src/app/shared/utils/dashboard-chart-theme';
 import { VentasDesgloseDialogComponent } from 'src/app/shared/components/ventas-desglose-dialog/ventas-desglose-dialog.component';
+import { Rango, RangoChip, RANGO_LABEL, buildRangoChips } from 'src/app/shared/utils/dashboard-rangos.util';
 
 interface CajaAbierta {
   id: number;
@@ -39,14 +40,10 @@ interface CajaAbierta {
   valorAperturaPYG: number;
   valorAperturaUSD: number;
   ventaTotal: number;
+  /** Precomputado: el template no llama funciones. */
+  ventaTotalTexto: string;
   mesasAtendidas: number;
   cantidadVentas: number;
-}
-
-interface RangoChip {
-  label: string;
-  value: 'week' | 'month' | '3months' | '6months';
-  selected: boolean;
 }
 
 @Component({
@@ -107,15 +104,25 @@ export class VentasDashboardComponent implements OnInit {
   totalBasadoEnCajas = false;
   labelVentas = 'Ventas hoy';
   labelTotal = 'Total hoy';
+  /** Precomputados: el template no llama funciones. */
+  totalHoyTexto = '0 Gs';
+  ticketPromedioTexto = '0 Gs';
+
+  // ── Delivery ──
+  // Siguen el MISMO filtro que el total (caja abierta o período), salvo
+  // `enCamino`, que es estado operativo y no depende del período mirado.
+  enviosHoy = 0;
+  retirosHoy = 0;
+  enCaminoAhora = 0;
+  ingresoEnviosTexto = '0 Gs';
+  /** Sin repartos no se muestran las chips: cuatro ceros no informan nada. */
+  hayDelivery = false;
 
   // --- Rango ---
-  rangosChips: RangoChip[] = [
-    { label: 'Esta semana', value: 'week', selected: true },
-    { label: 'Este mes', value: 'month', selected: false },
-    { label: '3 meses', value: '3months', selected: false },
-    { label: '6 meses', value: '6months', selected: false },
-  ];
-  rangoSeleccionado: 'week' | 'month' | '3months' | '6months' = 'week';
+  // 'today' grafica por hora; el resto por dia/semana/mes (ver bucketsForRango).
+  rangoSeleccionado: Rango = 'week';
+  rangosChips: RangoChip[] = buildRangoChips(['today', 'week', 'month', '3months', '6months'], 'week');
+  tituloTopProductos = `Top productos · ${RANGO_LABEL['week']}`;
 
   // --- Chart ---
   chartData: ChartData<'line'> = { labels: [], datasets: [] };
@@ -161,10 +168,24 @@ export class VentasDashboardComponent implements OnInit {
         this.labelVentas = this.totalBasadoEnCajas ? 'Ventas en caja' : 'Ventas hoy';
         this.labelTotal = this.totalBasadoEnCajas ? 'Total en caja' : 'Total hoy';
         this.ticketPromedio = kpis.ticketPromedio || 0;
+        this.totalHoyTexto = `${this.formatPYG(this.totalHoyPYG)} Gs`;
+        this.ticketPromedioTexto = `${this.formatPYG(this.ticketPromedio)} Gs`;
+        const dv = kpis.delivery || {};
+        this.enviosHoy = dv.envios || 0;
+        this.retirosHoy = dv.retiros || 0;
+        this.enCaminoAhora = dv.enCamino || 0;
+        this.ingresoEnviosTexto = `${this.formatPYG(dv.ingresoEnvios || 0)} Gs`;
+        // `enCamino` cuenta para mostrar la fila aunque el período elegido no
+        // tenga repartos: si hay pedidos en la calle, el cajero tiene que verlo.
+        this.hayDelivery = this.enviosHoy > 0 || this.retirosHoy > 0 || this.enCaminoAhora > 0;
+
         this.mesasOcupadas = kpis.mesasOcupadas || 0;
         this.mesasTotal = kpis.mesasTotal || 0;
         this.comandasPendientes = kpis.comandasPendientes || 0;
-        this.cajasAbiertas = kpis.cajasAbiertas || [];
+        this.cajasAbiertas = (kpis.cajasAbiertas || []).map((c: any) => ({
+          ...c,
+          ventaTotalTexto: `${this.formatPYG(c.ventaTotal)} Gs`,
+        }));
         this.topProductos = (kpis.topProductos || []).map((p: any) => ({
           nombre: p.nombre,
           valorPrincipal: `${p.cantidad} uds`,
@@ -189,9 +210,11 @@ export class VentasDashboardComponent implements OnInit {
   }
 
   selectRango(chip: RangoChip): void {
+    if (chip.selected) return;
     this.rangosChips.forEach(c => c.selected = false);
     chip.selected = true;
     this.rangoSeleccionado = chip.value;
+    this.tituloTopProductos = `Top productos · ${RANGO_LABEL[chip.value]}`;
     this.cargarKpis();
   }
 

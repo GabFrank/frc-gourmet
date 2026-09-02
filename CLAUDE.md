@@ -46,7 +46,7 @@ Handler registration happens in `main.ts` after DB initialization. Each handler 
 #### Migrations
 
 - One file per change in `src/app/database/migrations/`, named **`<epoch-millis>-<Descripcion>.ts`** with class `Descripcion<epoch-millis>`.
-- **Timestamp = real epoch milliseconds** — get it with `date +%s%3N` (or let `npm run migration:generate` assign it). **NEVER hand-pick a rounded number** (e.g. `1780500000000`): rounded timestamps collide across unmerged branches; a real-ms value is unique and orders correctly. Older migrations use rounded numbers — do not imitate them.
+- **Timestamp = real epoch milliseconds** — en macOS usar `python3 -c "import time;print(int(time.time()*1000))"`. **`date +%s%3N` es GNU y NO funciona en macOS**: BSD `date` no soporta `%3N` y devuelve la `N` literal pegada (`17871698783N`), que produce un nombre de clase inválido. En Linux `date +%s%3N` sirve. También sirve dejar que `npm run migration:generate` lo asigne. **NEVER hand-pick a rounded number** (e.g. `1780500000000`): rounded timestamps collide across unmerged branches; a real-ms value is unique and orders correctly. Older migrations use rounded numbers — do not imitate them.
 - Must be **driver-aware** (branch on `queryRunner.connection.options.type === 'postgres'`) and **additive** (no `DROP`/`RENAME` without a 2-version strategy). Prefer `IF NOT EXISTS`. Never modify an already-merged migration — add a new one. Full guide: `docs/MIGRATIONS.md`.
 
 ### Frontend Structure

@@ -27,6 +27,15 @@
         Primero cargá la programación semanal (abajo) para poder generar el plan.
       </p>
 
+      <!--
+        El plan se genera solo al iniciar el sistema. Antes eso pasaba en
+        silencio y un fallo recién se notaba cuando el local abría sin música.
+      -->
+      <div class="estado-automatico" *ngIf="estadoPlanAutomatico" [class.ok]="planAutomaticoOk">
+        <mat-icon>{{ planAutomaticoOk ? 'check_circle' : 'warning' }}</mat-icon>
+        <span>{{ estadoPlanAutomatico }}</span>
+      </div>
+
       <div class="resultado" *ngIf="ultimoPlan">
         <h4>{{ ultimoPlan.resumen }}</h4>
         <div class="advertencia" *ngFor="let a of ultimoPlan.advertencias">

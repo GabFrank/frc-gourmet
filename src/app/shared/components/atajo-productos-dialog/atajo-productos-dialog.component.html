@@ -20,7 +20,12 @@
       </div>
       <div class="producto-info">
         <span class="producto-nombre">{{ getDisplayName(item) }}</span>
-        <span class="producto-precio">{{ getPrice(item) | number:'1.0-0' }}</span>
+        <span class="producto-precio">
+          <ng-container *ngIf="item.esRangoVariacion; else precioUnicoAtajo">
+            {{ item.precio | number:'1.0-0' }} – {{ item.precioHasta | number:'1.0-0' }}
+          </ng-container>
+          <ng-template #precioUnicoAtajo>{{ item.precio | number:'1.0-0' }}</ng-template>
+        </span>
       </div>
     </div>
   </div>

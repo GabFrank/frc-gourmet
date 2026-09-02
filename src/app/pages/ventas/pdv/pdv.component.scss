@@ -84,6 +84,26 @@
     gap: 10px;
   }
 
+  /* Caja abierta en otra terminal. Naranja de aviso desde las variables de
+     tema, no el rojo de marca del resto de los iconos de esta barra: acá no hay
+     nada roto, es una condición operativa que el cajero tiene que tener
+     presente. */
+  .caja-info-row.terminal-ajena-row {
+    border-left: 3px solid var(--warning-color);
+    background: rgba(255, 152, 0, 0.12);
+    border-radius: 4px;
+    padding: 4px 8px;
+
+    .caja-info-item mat-icon {
+      color: var(--warning-color);
+    }
+
+    .info-value {
+      white-space: normal;
+      line-height: 1.3;
+    }
+  }
+
   .caja-info-item, .mesa-info-item {
     display: flex;
     align-items: center;
@@ -987,11 +1007,32 @@ tr.example-element-row:not(.example-expanded-row):active {
   color: white;
 }
 
+// Sin cuenta de mesa, pero con comandas sentadas ahí. Intermedio entre "vacía"
+// y "tiene cuenta": el cajero no le cobra a la mesa, le cobra a cada comanda.
+// El badge dice cuántas.
+.table-solo-comandas {
+  // Amarillo puro, no ambar. `#ffc107` se confunde con el naranja `#f4a536` de
+  // .table-inactive a la distancia a la que se mira un plano de mesas — probado
+  // en pantalla: dos mesas contiguas parecian del mismo color.
+  background-color: #ffeb3b;
+  color: rgba(0, 0, 0, 0.87); // sobre amarillo, el texto blanco no se lee
+}
+
+// Borde BLANCO, no amarillo: el amarillo pasó a ser un estado
+// (.table-solo-comandas) y una mesa amarilla con borde y glow amarillos no se
+// distinguía de una sin seleccionar.
 .table-selected {
-  border: 3px solid #ffea07;
-  box-shadow: 0 0 10px rgba(255, 193, 7, 0.6);
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.75);
   transform: scale(1.05);
   z-index: 1;
+}
+
+// ...salvo sobre el amarillo, donde el blanco casi no contrasta (~1.2:1). Ahí la
+// selección se marca en oscuro. Es el único fondo claro de los cuatro estados.
+.table-selected.table-solo-comandas {
+  border-color: #212121;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.6);
 }
 
 .table-reserved {
@@ -1030,6 +1071,9 @@ tr.example-element-row:not(.example-expanded-row):active {
   
   .bottom-button {
     flex: 1;
+    // Ancla de los badges: sin esto se posicionan contra el contenedor de la
+    // fila y todos se apilan en la misma esquina.
+    position: relative;
     margin: 0 5px;
     background-color: #b71c1c;
     color: white;
@@ -1137,6 +1181,28 @@ tr.example-element-row:not(.example-expanded-row):active {
   color: #07a4ff;
 }
 
+// Sin cuenta de mesa pero con comandas sentadas: el cajero no le cobra a la mesa.
+.status-solo-comandas {
+  color: #f9a825; // amarillo oscuro: sobre fondo claro, #ffeb3b no se lee
+}
+
+// Acceso directo a una comanda sentada en la mesa seleccionada.
+.mesa-comanda-chip {
+  min-width: 0 !important;
+  padding: 0 8px !important;
+  line-height: 26px !important;
+  border-color: #f9a825 !important;
+  color: var(--text-primary);
+
+  mat-icon {
+    font-size: 15px;
+    width: 15px;
+    height: 15px;
+    margin-right: 2px;
+    vertical-align: middle;
+  }
+}
+
 /* ─── Estado de cobro por ítem (cobro parcial) ───────────────────────────── */
 .cobro-chip {
   display: inline-block;
@@ -1185,3 +1251,46 @@ tr.example-element-row:not(.example-expanded-row):active {
   .cr-pagado strong { color: #66bb6a; }
   .cr-saldo strong { color: #ffa726; }
 }
+
+
+/* Badges del botón DELIVERY, contra la esquina superior derecha del botón.
+   `.bottom-button` tiene `overflow: hidden`, así que van por dentro del borde
+   en vez de montados encima como haría matBadge. */
+.pdv-badges {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  display: flex;
+  gap: 2px;
+  // Por encima del ripple, que es el otro absolute del botón.
+  z-index: 2;
+}
+
+/* Material envuelve el contenido proyectado en `.mdc-button__label`, y ese
+   wrapper viene con `position: relative`. Sin esto los badges se anclan al
+   label —o sea al centro del botón, pegados al texto— en vez de al borde.
+
+   Va con `::ng-deep` porque el label lo genera el template de `MatButton`, no
+   el nuestro: no lleva el atributo de scope del componente y un selector
+   normal no lo alcanza. Acotado con `:host` para que no se escape al resto de
+   la app. */
+:host ::ng-deep .bottom-buttons .bottom-button .mdc-button__label {
+  position: static;
+}
+
+.pdv-badge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  color: #fff;
+}
+
+/* Rojo = pide una decisión ahora (aceptar o rechazar).
+   Naranja = trabajo en curso, no bloquea a nadie. */
+.pdv-badge-web { background-color: var(--error-color); }
+.pdv-badge-repartos { background-color: var(--warning-color); }

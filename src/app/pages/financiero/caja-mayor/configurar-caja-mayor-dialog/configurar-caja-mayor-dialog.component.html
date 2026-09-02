@@ -47,6 +47,18 @@
         </mat-checkbox>
       </div>
     </section>
+
+    <mat-divider></mat-divider>
+
+    <section class="cfg-section">
+      <h3>Cobro de cuentas por cobrar</h3>
+      <p class="hint">Tope del descuento que se puede conceder al cobrar, como porcentaje del cobro. Vacío = sin tope. Solo aplica a quien tenga el permiso de descuento.</p>
+      <mat-form-field appearance="outline" class="cfg-tope">
+        <mat-label>Descuento máximo</mat-label>
+        <input matInput type="number" min="0" max="100" [(ngModel)]="descuentoCpcMaxPorcentaje">
+        <span matSuffix>%</span>
+      </mat-form-field>
+    </section>
   </div>
 </mat-dialog-content>
 

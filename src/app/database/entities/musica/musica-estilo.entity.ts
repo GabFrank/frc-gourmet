@@ -43,6 +43,22 @@ export class MusicaEstilo extends BaseModel {
   @Column({ type: 'int', default: 0 })
   orden!: number;
 
+  /**
+   * Cuanto le gusta este estilo al dueno: `1` pulgar arriba, `-1` pulgar abajo,
+   * `0` sin opinion.
+   *
+   * ALCANCE DELIBERADO: alimenta SOLO el prompt del descubrimiento, para que la
+   * IA sepa hacia donde crecer el repertorio. NO toca cuanto suena cada estilo
+   * — eso lo decide la mezcla por bloque (`BloqueEstiloMezcla`). Si el voto
+   * tambien moviera las cuotas habria dos perillas peleando por lo mismo y
+   * ninguna seria predecible.
+   *
+   * Para que un estilo NO suene esta el veto (`TipoVeto.ESTILO`), que es una
+   * decision distinta y reversible.
+   */
+  @Column({ type: 'int', default: 0 })
+  preferencia!: number;
+
   @Column({ default: true })
   activo!: boolean;
 }

@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -11,6 +11,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { firstValueFrom } from 'rxjs';
 
 import { RepositoryService } from '../../../database/repository.service';
@@ -34,6 +35,7 @@ import { RepositoryService } from '../../../database/repository.service';
     MatSnackBarModule,
     MatProgressSpinnerModule,
     MatDividerModule,
+    MatSlideToggleModule,
   ]
 })
 export class PdvConfigDialogComponent implements OnInit {
@@ -41,6 +43,8 @@ export class PdvConfigDialogComponent implements OnInit {
   isSaving = false;
   configForm: FormGroup;
   pdvConfigId: number | null = null;
+  /** Zonas de entrega activas, para el selector de zona por defecto. */
+  preciosDelivery: any[] = [];
 
   constructor(
     private dialogRef: MatDialogRef<PdvConfigDialogComponent>,
@@ -54,17 +58,53 @@ export class PdvConfigDialogComponent implements OnInit {
       ocuparMesaAlVincularComanda: [false],
       pizzaMaxSabores: [2],
       pizzaEstrategiaPrecio: ['MAYOR_PRECIO'],
+      // Validators de verdad: `min`/`max` en el HTML son sugerencias del
+      // navegador. Sin esto se guardaba un 24 o un -1, el backend lo descartaba
+      // en silencio y volvia a 7 — el admin creia haber configurado otro corte.
+      inicioJornadaHora: [7, [Validators.required, Validators.min(0), Validators.max(23)]],
       umbralDiferenciaBaja: [5],
       umbralDiferenciaAlta: [15],
+      // --- Delivery ---
+      // `deliveryTiempoAmarillo` / `deliveryTiempoRojo` ya estaban en el form
+      // pero NO tenian campo en el HTML: de hecho eran 30 y 60 fijos salvo que
+      // se editara la base a mano.
+      deliveryHabilitado: [true],
       deliveryTiempoAmarillo: [30],
       deliveryTiempoRojo: [60],
+      deliveryPrecioDefaultId: [null],
+      deliveryCobroAnticipadoDefault: [false],
+      deliveryRequiereDireccion: [true],
+      deliveryRequiereRepartidor: [true],
+      deliveryRepartidorEtapa: ['EN_CAMINO'],
+      deliveryTelefonoMinDigitos: [4],
+      deliveryPageSize: [20],
+      deliveryMostrarPendientesOtrasCajas: [true],
+      deliveryAutoImprimirAlCrear: [false],
+      deliveryAutoImprimirAlEnviar: [false],
       whatsappCierreCajaActivo: [false],
       whatsappCierreCajaDestino: [''],
+      // --- Caja compartida entre terminales ---
+      // Default false = conducta previa: sólo la terminal que abrió la caja
+      // opera sobre ella.
+      permitirPagosTerminalAjena: [false],
+      permitirFinalizarTerminalAjena: [false],
     });
   }
 
   async ngOnInit(): Promise<void> {
     try {
+      // Zonas de entrega, para elegir la preseleccionada al crear un delivery.
+      // `valor` es decimal -> string en Postgres: el Number() evita que el
+      // orden salga alfabetico ("10000" < "5000").
+      try {
+        const precios = await firstValueFrom(this.repositoryService.getPreciosDelivery());
+        this.preciosDelivery = (precios || [])
+          .filter((p: any) => p.activo)
+          .sort((a: any, b: any) => Number(a.valor) - Number(b.valor));
+      } catch (e) {
+        console.warn('No se pudieron cargar las zonas de delivery:', e);
+      }
+
       const config = await firstValueFrom(this.repositoryService.getPdvConfig());
       const cfg = Array.isArray(config) ? config[0] : config;
       if (cfg) {
@@ -75,12 +115,30 @@ export class PdvConfigDialogComponent implements OnInit {
           ocuparMesaAlVincularComanda: cfg.ocuparMesaAlVincularComanda || false,
           pizzaMaxSabores: cfg.pizzaMaxSabores || 2,
           pizzaEstrategiaPrecio: cfg.pizzaEstrategiaPrecio || 'MAYOR_PRECIO',
+          // `?? 7` y no `|| 7`: 0 es un valor valido (jornada = dia calendario)
+          // y con `||` se convertiria en 7 cada vez que se abre el dialogo.
+          inicioJornadaHora: cfg.inicioJornadaHora ?? 7,
           umbralDiferenciaBaja: cfg.umbralDiferenciaBaja || 5,
           umbralDiferenciaAlta: cfg.umbralDiferenciaAlta || 15,
+          deliveryHabilitado: cfg.deliveryHabilitado !== false,
           deliveryTiempoAmarillo: cfg.deliveryTiempoAmarillo || 30,
           deliveryTiempoRojo: cfg.deliveryTiempoRojo || 60,
+          deliveryPrecioDefaultId: cfg.deliveryPrecioDefaultId ?? null,
+          deliveryCobroAnticipadoDefault: cfg.deliveryCobroAnticipadoDefault || false,
+          deliveryRequiereDireccion: cfg.deliveryRequiereDireccion !== false,
+          deliveryRequiereRepartidor: cfg.deliveryRequiereRepartidor !== false,
+          deliveryRepartidorEtapa: cfg.deliveryRepartidorEtapa || 'EN_CAMINO',
+          deliveryTelefonoMinDigitos: cfg.deliveryTelefonoMinDigitos || 4,
+          deliveryPageSize: cfg.deliveryPageSize || 20,
+          deliveryMostrarPendientesOtrasCajas: cfg.deliveryMostrarPendientesOtrasCajas !== false,
+          deliveryAutoImprimirAlCrear: cfg.deliveryAutoImprimirAlCrear || false,
+          deliveryAutoImprimirAlEnviar: cfg.deliveryAutoImprimirAlEnviar || false,
           whatsappCierreCajaActivo: cfg.whatsappCierreCajaActivo || false,
           whatsappCierreCajaDestino: cfg.whatsappCierreCajaDestino || '',
+          // `|| false` y no `??`: el default es false, así que una base sin
+          // migrar (undefined) tiene que caer en false igual.
+          permitirPagosTerminalAjena: cfg.permitirPagosTerminalAjena || false,
+          permitirFinalizarTerminalAjena: cfg.permitirFinalizarTerminalAjena || false,
         });
       }
     } catch (error) {
@@ -92,6 +150,11 @@ export class PdvConfigDialogComponent implements OnInit {
 
   async guardar(): Promise<void> {
     if (!this.pdvConfigId) return;
+    if (this.configForm.invalid) {
+      this.configForm.markAllAsTouched();
+      this.snackBar.open('Revisá los campos marcados', 'OK', { duration: 3000 });
+      return;
+    }
     this.isSaving = true;
     try {
       const data = this.configForm.value;

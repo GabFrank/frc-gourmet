@@ -46,6 +46,16 @@ async function main() {
   const { FormasPago } = require('../src/app/database/entities/compras/forma-pago.entity');
 
   const admin = await ds.getRepository(Usuario).save(ds.getRepository(Usuario).create({ nickname: 'admin', password: 'x', activo: true } as any));
+  // `save-caja-mayor-configuracion` exige CAJA_MAYOR_OPERAR desde la auditoría de
+  // permisos de 2026-07; este test nunca se actualizó y fallaba con FORBIDDEN.
+  const { Permission } = require('../src/app/database/entities/personas/permission.entity');
+  const { Role } = require('../src/app/database/entities/personas/role.entity');
+  const { RolePermission } = require('../src/app/database/entities/personas/role-permission.entity');
+  const { UsuarioRole } = require('../src/app/database/entities/personas/usuario-role.entity');
+  const permCm: any = await ds.getRepository(Permission).save(ds.getRepository(Permission).create({ codigo: 'CAJA_MAYOR_OPERAR', descripcion: 'OPERAR', activo: true } as any));
+  const rolCm: any = await ds.getRepository(Role).save(ds.getRepository(Role).create({ descripcion: 'ADMIN', activo: true } as any));
+  await ds.getRepository(RolePermission).save(ds.getRepository(RolePermission).create({ role: rolCm, permission: permCm } as any));
+  await ds.getRepository(UsuarioRole).save(ds.getRepository(UsuarioRole).create({ usuario: admin, role: rolCm } as any));
   const pyg = await ds.getRepository(Moneda).save(ds.getRepository(Moneda).create({ denominacion: 'GUARANI', simbolo: '₲', principal: true, decimales: 0, activo: true } as any));
   const caja = await ds.getRepository(CajaMayor).save(ds.getRepository(CajaMayor).create({ nombre: 'CM CENTRO', estado: 'ABIERTA', fechaApertura: new Date(), responsable: admin, activo: true } as any));
 

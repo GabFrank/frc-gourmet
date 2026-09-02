@@ -78,6 +78,16 @@ PdvMesaEstado = DISPONIBLE | OCUPADO
 
 // (en delivery.entity.ts)
 DeliveryEstado = ABIERTO | PARA_ENTREGA | EN_CAMINO | ENTREGADO | CANCELADO
+DeliveryModo   = DELIVERY | RETIRO        // se reparte / lo pasa a buscar
+
+// (en shared/utils/canal-venta.util.ts — NO es una columna: se DERIVA)
+// Cómo llegó el pedido a manos del cliente. Fuente única compartida entre el
+// backend (que además tiene el CASE SQL equivalente en
+// electron/utils/canal-venta.utils.ts) y el renderer. El reparto gana sobre la
+// mesa, y un delivery sin `modo` cuenta como DELIVERY.
+CanalVenta = SALON | MOSTRADOR | DELIVERY | RETIRO
+// ⚠️ Distinto de `Venta.canalOrigen` (LOCAL | WEB | QR_MESA), que dice por qué
+// PUERTA entró el pedido. Se cruzan, no se reemplazan.
 
 // (en venta-item-ingrediente-modificacion.entity.ts)
 TipoModificacionIngrediente = REMOVIDO | INTERCAMBIADO
@@ -163,6 +173,22 @@ CuentaPorCobrarCuotaEstado = PENDIENTE | PARCIAL | COBRADO | CANCELADO
 
 // (movimiento-cliente.entity.ts)
 MovimientoClienteTipo = CARGO | PAGO | AJUSTE_POSITIVO | AJUSTE_NEGATIVO
+// CARGO/AJUSTE_POSITIVO suben la deuda; PAGO/AJUSTE_NEGATIVO la bajan.
+// El descuento de un cobro consolidado se registra como AJUSTE_NEGATIVO, no como
+// PAGO: los dos bajan la deuda, pero el estado de cuenta tiene que poder decir
+// cuanto pago el cliente y cuanto se le perdono.
+
+// pago-consolidado-enums.ts — motor consolidado de Caja Mayor (pagos Y cobros)
+PagoConcepto = COMPRA | GASTO | VALE | LIQUIDACION_SUELDO | COBRO_CLIENTE
+PagoOrigenTipo = CPP_CUOTA | GASTO | VALE | LIQUIDACION_SUELDO | CPC_CUOTA
+PagoConsolidadoEstado = ACTIVO | ANULADO
+PagoConsolidadoFuente = CAJA_MAYOR | CUENTA_BANCARIA | DESCUENTO
+// DESCUENTO no es una fuente de fondos: condona deuda sin mover plata. Solo la
+// admite COBRO_CLIENTE, que es el unico concepto de sentido INGRESO.
+// Tablas por concepto (todas Record<PagoConcepto, ...> exhaustivas, para que el
+// compilador obligue a decidir al agregar un concepto): CONCEPTO_ORIGEN,
+// CONCEPTO_PERMITE_PARCIAL, CONCEPTO_SELECCION_UNICA, CONCEPTO_BENEFICIARIO_UNICO
+// (+ _ERROR), CONCEPTO_PERMITE_DESCUENTO, CONCEPTO_ES_INGRESO.
 ```
 
 ## RRHH

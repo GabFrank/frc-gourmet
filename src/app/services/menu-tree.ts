@@ -61,6 +61,7 @@ import { VentasDashboardComponent } from 'src/app/pages/ventas/dashboard/ventas-
 import { VentasReportesComponent } from 'src/app/pages/reportes/ventas-reportes/ventas-reportes.component';
 import { FinanzasReportesComponent } from 'src/app/pages/reportes/finanzas-reportes/finanzas-reportes.component';
 import { ZonasDeliveryComponent } from 'src/app/pages/ventas/pedidos-online/zonas-delivery.component';
+import { ListPreciosDeliveryComponent } from 'src/app/pages/ventas/precios-delivery/list-precios-delivery.component';
 
 // ── Destinos fuera del sidenav (sub-listados y acciones) ──
 import { ListCajasMayorComponent } from 'src/app/pages/financiero/caja-mayor/list-cajas-mayor/list-cajas-mayor.component';
@@ -90,6 +91,7 @@ import { MenuConfigComponent } from 'src/app/pages/sistema/menu-config/menu-conf
 import { ConfigMonedasDialogComponent } from 'src/app/pages/financiero/monedas/config-monedas/config-monedas-dialog.component';
 import { PdvConfigDialogComponent } from 'src/app/shared/components/pdv-config-dialog/pdv-config-dialog.component';
 import { AtajoConfigDialogComponent } from 'src/app/shared/components/atajo-config-dialog/atajo-config-dialog.component';
+import { ForceChangePasswordDialogComponent } from 'src/app/auth/force-change-password-dialog/force-change-password-dialog.component';
 import { PrinterSettingsComponent } from 'src/app/components/printer-settings/printer-settings.component';
 import { SectoresImpresorasSettingsComponent } from 'src/app/components/sectores-impresoras-settings/sectores-impresoras-settings.component';
 
@@ -164,6 +166,13 @@ export const MENU_TREE: MenuNode[] = [
           { id: 'zonas-delivery', label: 'Zonas de Delivery', icon: 'pin_drop', permiso: 'VENTAS_PDV', esConfig: true,
             keywords: ['zonas', 'delivery', 'reparto'],
             action: { component: ZonasDeliveryComponent, title: 'Zonas de Delivery', tabId: 'zonas-delivery-tab', data: NAV } },
+          // Zonas de entrega del delivery del PdV, con su precio. Distinto de
+          // 'Zonas de Delivery', que es el mapa de cobertura de la tienda
+          // online. Solo se alcanzaba desde una tarjeta del dashboard de
+          // Ventas: no aparecia ni en el sidenav ni en el buscador.
+          { id: 'precios-delivery', label: 'Precios de Delivery', icon: 'local_shipping', permiso: 'VENTAS_PDV_CONFIGURAR', esConfig: true,
+            keywords: ['precios', 'delivery', 'envio', 'zona', 'reparto', 'costo'],
+            action: { component: ListPreciosDeliveryComponent, title: 'Precios de Delivery', tabId: 'precios-delivery-tab', data: NAV } },
           { id: 'kds-pantallas', label: 'Pantallas KDS', icon: 'tv', permiso: 'COMANDAS_KDS_CONFIGURAR', esConfig: true,
             keywords: ['pantallas', 'kds', 'cocina'],
             action: { component: ListKdsPantallasComponent, title: 'Pantallas KDS', tabId: 'kds-pantallas-tab', data: NAV } },
@@ -261,16 +270,16 @@ export const MENU_TREE: MenuNode[] = [
           { id: 'cajas-mayor', label: 'Cajas Mayor', icon: 'account_balance', permiso: 'CAJA_MAYOR_DASHBOARD_VER',
             keywords: ['cajas', 'mayor'],
             action: { component: ListCajasMayorComponent, title: 'Cajas Mayor', tabId: 'cajas-mayor-tab', data: {} } },
-          { id: 'gastos', label: 'Gastos', icon: 'receipt_long', permiso: 'FINANCIERO_CAJA_VER',
+          { id: 'gastos', label: 'Gastos', icon: 'receipt_long', permiso: 'CAJA_MAYOR_OPERAR',
             keywords: ['gastos', 'egresos'],
             action: { component: ListGastosComponent, title: 'Gastos', tabId: 'gastos-tab', data: {} } },
-          { id: 'entradas-varias', label: 'Entradas Varias', icon: 'input', permiso: 'FINANCIERO_CAJA_VER',
+          { id: 'entradas-varias', label: 'Entradas Varias', icon: 'input', permiso: 'CAJA_MAYOR_OPERAR',
             keywords: ['entradas', 'ingresos', 'varias'],
             action: { component: ListEntradasVariasComponent, title: 'Entradas Varias', tabId: 'entradas-varias-tab', data: {} } },
-          { id: 'operaciones-financieras', label: 'Operaciones Financieras', icon: 'swap_horiz', permiso: 'FINANCIERO_CAJA_VER',
+          { id: 'operaciones-financieras', label: 'Operaciones Financieras', icon: 'swap_horiz', permiso: 'CAJA_MAYOR_OPERAR',
             keywords: ['operaciones', 'financieras', 'cambio', 'transferencia'],
             action: { component: ListOperacionesFinancierasComponent, title: 'Operaciones Financieras', tabId: 'operaciones-financieras-tab', data: {} } },
-          { id: 'retiros-caja', label: 'Retiros de Caja', icon: 'output', permiso: 'FINANCIERO_CAJA_VER',
+          { id: 'retiros-caja', label: 'Retiros de Caja', icon: 'output', permiso: 'CAJA_MAYOR_OPERAR',
             keywords: ['retiros', 'caja', 'efectivo'],
             action: { component: ListRetirosCajaComponent, title: 'Retiros de Caja', tabId: 'retiros-caja-tab', data: {} } },
           { id: 'cuentas-por-pagar', label: 'Cuentas por Pagar', icon: 'request_quote', permiso: 'CAJA_MAYOR_DASHBOARD_VER',
@@ -520,6 +529,12 @@ export const MENU_TREE: MenuNode[] = [
       { id: 'menu-config', label: 'Configuración del menú', icon: 'menu_open', permiso: 'SISTEMA_MENU_CONFIGURAR', esConfig: true,
         keywords: ['menu', 'sidenav', 'buscador', 'navegacion', 'visibilidad', 'orden'],
         action: { component: MenuConfigComponent, title: 'Configuración del menú', tabId: 'menu-config-tab', data: NAV } },
+      // Sin permiso: cualquiera cambia SU propia contraseña. Vive en el menú de
+      // usuario de la toolbar, acá sólo para que el buscador global lo encuentre.
+      { id: 'cambiar-password', label: 'Cambiar mi contraseña', icon: 'password', esConfig: true, enSidenav: false,
+        keywords: ['contrasena', 'contraseña', 'password', 'clave', 'cambiar', 'seguridad'],
+        action: { mode: 'dialog', component: ForceChangePasswordDialogComponent, title: 'Cambiar mi contraseña',
+          data: { modo: 'self' }, dialogConfig: { width: '480px' } } },
     ],
   },
 ];

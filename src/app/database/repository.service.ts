@@ -27,6 +27,7 @@ import { ProveedorProducto } from './entities/compras/proveedor-producto.entity'
 import { FormasPago } from './entities/compras/forma-pago.entity';
 import { PrecioDelivery } from './entities/ventas/precio-delivery.entity';
 import { Delivery, DeliveryEstado } from './entities/ventas/delivery.entity';
+import { ConvertirModoDeliveryPayload } from './convertir-modo-delivery.types';
 import { Venta, VentaEstado } from './entities/ventas/venta.entity';
 import { VentaItem } from './entities/ventas/venta-item.entity';
 import { PdvGrupoCategoria } from './entities/ventas/pdv-grupo-categoria.entity';
@@ -62,6 +63,27 @@ import { Adicional } from './entities/productos/adicional.entity';
 import { RecetaAdicionalVinculacion } from './entities/productos/receta-adicional-vinculacion.entity';
 import { RecetaIngredienteIntercambiable } from './entities/productos/receta-ingrediente-intercambiable.entity';
 
+/**
+ * Transferencia de una cuenta del PdV entre contenedores del salon.
+ * `alcance: 'ITEMS'` exige `itemIds`; `'COMPLETA'` los ignora.
+ */
+export interface TransferirVentaPdvPayload {
+  origen: { tipo: 'MESA' | 'COMANDA'; id: number };
+  destino: { tipo: 'MESA' | 'COMANDA'; id: number };
+  alcance: 'COMPLETA' | 'ITEMS';
+  itemIds?: number[];
+}
+
+export interface TransferirVentaPdvResult {
+  ventaOrigenId: number;
+  ventaDestinoId: number;
+  itemsMovidos: number;
+  origenCerrado: boolean;
+  origenLiberado: boolean;
+  /** true = la venta cambio de contenedor sin fusionarse con otra cuenta. */
+  reapunte: boolean;
+}
+
 export interface LoginResult {
   success: boolean;
   usuario?: Usuario;
@@ -76,6 +98,37 @@ export interface ClienteFilters {
   tipoClienteId?: number;
   activo?: boolean;
   conCredito?: boolean;
+}
+
+/**
+ * Filtro del resumen de ventas (`get-dashboard-ventas-kpis`).
+ *
+ * El canal acepta además el string suelto (`'today'`, `'week'`, …) y lo sigue
+ * aceptando: el default histórico se preserva por su AUSENCIA, no por la forma
+ * del argumento. `{ rango: 'today' }` sin fechas ni cajas se comporta idéntico
+ * al string `'today'`.
+ *
+ * Sin filtro explícito, el total de "hoy" sigue a la CAJA ABIERTA (Opción B):
+ * una caja que cruza medianoche no reinicia el total. En cuanto el usuario
+ * elige fechas o cajas manda lo que pidió, no la caja abierta.
+ */
+export interface DashboardVentasFiltro {
+  /** Preset. Default `'week'`. Lo pisan `desde`/`hasta` si vienen. */
+  rango?: 'today' | 'week' | 'month' | 'last-month' | '3months' | '6months';
+  /** `YYYY-MM-DD` (fecha local) o ISO completo. Se expande a la jornada entera. */
+  desde?: string;
+  hasta?: string;
+  /** Varias cajas a la vez. Se COMBINA con el período (AND), no lo reemplaza. */
+  cajaIds?: number[];
+}
+
+/** Fila del selector de cajas de los filtros: lo mínimo para elegir una caja. */
+export interface CajaSelectorItem {
+  id: number;
+  estado: string;
+  fechaApertura: string;
+  fechaCierre: string | null;
+  dispositivoNombre: string;
 }
 
 /** Archivo devuelto por la subida (genérica o por QR). */
@@ -297,10 +350,21 @@ export abstract class RepositoryService {
   abstract updateDelivery(deliveryId: number, deliveryData: Partial<Delivery>): Observable<any>;
   abstract deleteDelivery(deliveryId: number): Observable<any>;
   abstract getDeliveriesByCaja(cajaId: number, filtros?: any): Observable<{ data: any[], total: number }>;
+  // Delivery del PdV: maquina de estados + operaciones transaccionales.
+  // `updateDelivery` rechaza cualquier cambio de estado o de fechas.
+  abstract deliveryListarPdv(cajaId: number, filtros?: any): Observable<{ data: any[], total: number }>;
+  abstract deliveryListarRepartidores(): Observable<{ id: number; nombre: string; cargo: string | null }[]>;
+  abstract deliveryCrear(payload: any): Observable<{ delivery: any; venta: any }>;
+  abstract deliveryActualizarDatos(deliveryId: number, payload: any): Observable<any>;
+  abstract deliveryCambiarEstado(deliveryId: number, nuevoEstado: DeliveryEstado, opts?: { funcionarioId?: number }): Observable<any>;
+  abstract deliveryAsignarRepartidor(deliveryId: number, funcionarioId: number | null): Observable<any>;
+  abstract deliveryCancelar(deliveryId: number, motivo: string): Observable<any>;
+  abstract deliveryConvertirModo(deliveryId: number, payload: ConvertirModoDeliveryPayload): Observable<any>;
+  abstract deliveryImprimirTicket(deliveryId: number, printerId?: number): Observable<any>;
   abstract buscarClientePorTelefono(telefono: string): Observable<any>;
   abstract buscarClientesPorTelefono(telefono: string): Observable<any[]>;
   abstract crearClienteRapido(data: { telefono: string; nombre?: string; direccion?: string }): Observable<any>;
-  abstract cerrarVentasAbiertasMesa(mesaId: number, estado: string): Observable<number>;
+  abstract cerrarVentasAbiertasMesa(mesaId: number, estado: string, opts?: { validarDispositivoCaja?: boolean }): Observable<number>;
   abstract getVentas(): Observable<Venta[]>;
   abstract getVentasByDateRange(desde: string, hasta: string, filtros?: any): Observable<{ data: Venta[], total: number }>;
   abstract getBuffetMetricas(filtros?: any): Observable<any>;
@@ -377,6 +441,8 @@ export abstract class RepositoryService {
   abstract createPdvMesa(data: Partial<PdvMesa>): Observable<PdvMesa>;
   abstract createBatchPdvMesas(batchData: Partial<PdvMesa>[]): Observable<PdvMesa[]>;
   abstract updatePdvMesa(id: number, data: Partial<PdvMesa>): Observable<PdvMesa>;
+  abstract setPdvMesaEstado(mesaId: number, estado: string): Observable<any>;
+  abstract transferirVentaPdv(payload: TransferirVentaPdvPayload): Observable<TransferirVentaPdvResult>;
   abstract deletePdvMesa(id: number): Observable<boolean>;
   abstract getSectores(tipo?: string): Observable<Sector[]>;
   abstract getSectoresActivos(tipo?: string): Observable<Sector[]>;
@@ -460,6 +526,7 @@ export abstract class RepositoryService {
   abstract rechazarPedidoOnline(pedidoId: number, motivo: string): Observable<any>;
   abstract avanzarEstadoPedidoOnline(pedidoId: number, nuevoEstado: string): Observable<any>;
   abstract vincularVentaPedidoOnline(pedidoId: number, ventaId: number): Observable<any>;
+  abstract getDetalleVariacionItems(itemIds: number[]): Observable<any>;
   abstract getTiendaOnlineConfig(): Observable<any>;
   abstract updateTiendaOnlineConfig(data: any): Observable<any>;
   abstract getZonasDeliveryAdmin(): Observable<any[]>;
@@ -500,6 +567,19 @@ export abstract class RepositoryService {
     page?: number;
     pageSize?: number;
   }): Observable<{items: Receta[], total: number, page: number, pageSize: number}>;
+  /**
+   * Recetas libres, asignables a un producto simple. Excluye las que ya son de
+   * otro producto, de un adicional o de una variacion sabor x tamano.
+   */
+  abstract getRecetasAsignables(params: {
+    productoId?: number | null;
+    search?: string;
+    activo?: boolean | null;
+    page?: number;
+    pageSize?: number;
+  }): Observable<{items: Receta[], total: number, page: number, pageSize: number}>;
+  abstract vincularRecetaAProducto(productoId: number, recetaId: number): Observable<any>;
+  abstract desvincularRecetaDeProducto(productoId: number): Observable<any>;
   abstract getReceta(recetaId: number): Observable<Receta>;
   abstract createReceta(recetaData: Partial<Receta>): Observable<Receta>;
   abstract updateReceta(recetaId: number, recetaData: Partial<Receta>): Observable<any>;
@@ -521,6 +601,15 @@ export abstract class RepositoryService {
     recetaIngredienteId: number;
     eliminarDeOtrasVariaciones: boolean;
   }): Observable<any>;
+  abstract agregarIngredienteMultiplesVariaciones(data: {
+    recetaIngredienteId: number;
+    variaciones: Array<{ variacionId: number; cantidad: number }>;
+  }): Observable<any>;
+  abstract getRecetasConIngrediente(data: {
+    recetaIds: number[];
+    ingredienteId?: number | null;
+    descripcion?: string | null;
+  }): Observable<number[]>;
   abstract getRecetaIngredientesActivos(recetaId: number): Observable<RecetaIngrediente[]>;
   abstract calcularCostoIngrediente(recetaIngredienteId: number): Observable<number>;
   abstract validarStockIngrediente(recetaIngredienteId: number): Observable<boolean>;
@@ -651,6 +740,8 @@ export abstract class RepositoryService {
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;
+      /** Tope de descuento al cobrar CPC, en % del cobro. null = sin tope. */
+      descuentoCpcMaxPorcentaje?: number | null;
     }): Observable<any>;
   abstract getCuentaBancariaResumen(cuentaBancariaId: number): Observable<any>;
   abstract getCuentasBancariasResumenes(ids: number[]): Observable<any[]>;
@@ -728,6 +819,12 @@ export abstract class RepositoryService {
   abstract anularPagoMixtoCuota(payload: any): Observable<any>;
   abstract getCuotasConPagoMixto(cuentaPorPagarId: number): Observable<any>;
   abstract pagarCuotasComprasLote(payload: any): Observable<any>;
+
+  // Pago consolidado de obligaciones desde Caja Mayor
+  abstract getObligacionesPendientes(concepto: string, filtros?: any): Observable<any>;
+  abstract registrarPagoConsolidado(payload: any): Observable<any>;
+  abstract getPagoConsolidadoDetalle(pagoId: number): Observable<any>;
+  abstract anularPagoConsolidado(pagoId: number, motivo?: string): Observable<any>;
   abstract getCuotasPendientesCompras(filtros?: any): Observable<any[]>;
   abstract cancelarCppCuota(payload: any): Observable<any>;
   abstract getDashboardShortcuts(dashboardKey?: string): Observable<any[]>;
@@ -942,11 +1039,12 @@ export abstract class RepositoryService {
   abstract generarNotificacionesRrhh(): Observable<any>;
   abstract countNotificacionesNoLeidas(usuarioId?: number): Observable<any>;
   abstract getDashboardRrhhKpis(periodo: string): Observable<any>;
-  abstract getDashboardVentasKpis(rango?: string): Observable<any>;
-  abstract getDashboardComprasKpis(): Observable<any>;
-  abstract getDashboardProductosKpis(): Observable<any>;
+  abstract getCajasSelector(params?: { desde?: string; hasta?: string; limite?: number }): Observable<CajaSelectorItem[]>;
+  abstract getDashboardVentasKpis(param?: string | DashboardVentasFiltro): Observable<any>;
+  abstract getDashboardComprasKpis(rango?: string): Observable<any>;
+  abstract getDashboardProductosKpis(rango?: string): Observable<any>;
   abstract getDashboardFinancieroKpis(): Observable<any>;
-  abstract getDashboardCajaMayorKpis(): Observable<any>;
+  abstract getDashboardCajaMayorKpis(rango?: string): Observable<any>;
   abstract getReporteVentasCierre(params: any): Observable<any>;
   abstract getReporteFinanzasCierre(params: any): Observable<any>;
   abstract enviarReporteWhatsapp(params: { base64: string; caption?: string; fileName?: string; destino?: string }): Observable<any>;
@@ -986,6 +1084,7 @@ export abstract class RepositoryService {
   abstract getFacturas(filtros?: any): Observable<Factura[]>;
   abstract getFactura(id: number): Observable<Factura>;
   abstract createFactura(payload: { factura: Partial<Factura> & { timbradoDetalleId?: number; numeroManual?: number }; items: any[] }): Observable<Factura>;
+  abstract getClientePorRuc(ruc: string): Observable<any>;
   abstract anularFactura(id: number, motivo: string): Observable<any>;
   abstract getFacturacionConfig(): Observable<FacturacionConfig>;
   abstract saveFacturacionConfig(data: any): Observable<FacturacionConfig>;

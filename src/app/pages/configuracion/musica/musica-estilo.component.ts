@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
@@ -15,7 +16,24 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
-import { MusicaSemilla, MusicaService, ResumenPool } from 'src/app/services/musica.service';
+import {
+  CriterioDescubrimiento,
+  EstiloConDatos,
+  FuenteDescubrimiento,
+  MusicaSemilla,
+  MusicaService,
+  ResumenPool,
+} from 'src/app/services/musica.service';
+
+/** Qué hace cada fuente, en una línea, debajo del selector. */
+const AYUDA_FUENTE: Record<FuenteDescubrimiento, string> = {
+  AUTOMATICO:
+    'Usa tu descripción, la programación, lo que más falta según las cuotas, tus votos y lo que rechazaste.',
+  PROMPT: 'Sólo tu pedido. Se ignora todo el criterio acumulado, salvo lo que está prohibido.',
+  ESTILO: 'Busca dentro de ese estilo, usando su descripción del catálogo para no confundirlo con otro parecido.',
+  TEMA: 'Busca música en la línea de ese tema: mismo clima, época e instrumentación.',
+  PLAYLIST: 'Busca música del tipo que caracteriza a esa playlist.',
+};
 
 /**
  * "Mi estilo": de donde sale la musica del local.
@@ -35,6 +53,7 @@ import { MusicaSemilla, MusicaService, ResumenPool } from 'src/app/services/musi
     MatCardModule,
     MatFormFieldModule,
     MatInputModule,
+    MatSelectModule,
     MatButtonModule,
     MatIconModule,
     MatMenuModule,
@@ -79,6 +98,30 @@ export class MusicaEstiloComponent implements OnInit {
   // Resultado de la ultima ronda de descubrimiento.
   ultimoResultado: { titulo: string; detalle: string[]; agregados: string[] } | null = null;
 
+  /**
+   * Fuente del criterio de la ronda. `AUTOMATICO` es el comportamiento de
+   * siempre; las otras cuatro ignoran el criterio acumulado (menos las
+   * prohibiciones), que es justo lo que las hace útiles.
+   */
+  fuente: FuenteDescubrimiento = 'AUTOMATICO';
+  promptLibre = '';
+  estiloElegido = 0;
+  generoElegido = '';
+  referencia = '';
+  ayudaFuente = '';
+  /** Catálogo, para el selector de la fuente ESTILO. */
+  estilos: EstiloConDatos[] = [];
+
+  /** Panel "¿Qué va a buscar?": el criterio efectivo, sin llamar a la IA. */
+  mostrarCriterio = false;
+  cargandoCriterio = false;
+  criterio: CriterioDescubrimiento | null = null;
+  // Pre-computados: sin funciones ni getters en el template.
+  textoQueGusta = '';
+  textoQueGustaMenos = '';
+  textoApagados = '';
+  textoGenerosVetados = '';
+
   constructor(
     private musicaService: MusicaService,
     private snackBar: MatSnackBar,
@@ -86,7 +129,18 @@ export class MusicaEstiloComponent implements OnInit {
   ) {}
 
   async ngOnInit(): Promise<void> {
+    this.ayudaFuente = AYUDA_FUENTE[this.fuente];
+    // Sin catálogo la fuente ESTILO queda sin opciones: no es un error, la
+    // pantalla sigue sirviendo con las otras cuatro.
+    this.musicaService
+      .listarEstilos()
+      .then((e) => (this.estilos = e))
+      .catch(() => (this.estilos = []));
     await this.cargar();
+  }
+
+  cambiarFuente(): void {
+    this.ayudaFuente = AYUDA_FUENTE[this.fuente];
   }
 
   async cargar(): Promise<void> {
@@ -270,17 +324,62 @@ export class MusicaEstiloComponent implements OnInit {
     this.propuestaDescripcion = [];
   }
 
+  /**
+   * Muestra el criterio con el que se va a buscar. Se carga al abrir y no en
+   * `ngOnInit` porque recorre las cuotas de todos los bloques: es barato pero
+   * no gratis, y la mayoría de las visitas a esta pantalla no lo miran.
+   */
+  async alternarCriterio(): Promise<void> {
+    this.mostrarCriterio = !this.mostrarCriterio;
+    if (!this.mostrarCriterio) return;
+    this.cargandoCriterio = true;
+    try {
+      const c = await this.musicaService.criterioDescubrimiento();
+      this.criterio = c;
+      this.textoQueGusta = c.estilosQueGustan.join(', ');
+      this.textoQueGustaMenos = c.estilosQueGustanMenos.join(', ');
+      this.textoApagados = c.estilosVetados.join(', ');
+      this.textoGenerosVetados = c.generosVetados.join(', ');
+    } catch (e: any) {
+      this.mostrarCriterio = false;
+      this.mostrarError(e);
+    } finally {
+      this.cargandoCriterio = false;
+    }
+  }
+
   async descubrir(): Promise<void> {
     this.descubriendo = true;
     this.ultimoResultado = null;
     try {
-      const r = await this.musicaService.descubrir(this.cantidadDescubrir);
+      const r = await this.musicaService.descubrir(this.cantidadDescubrir, undefined, {
+        fuente: this.fuente,
+        prompt: this.promptLibre || undefined,
+        estiloId: this.estiloElegido || undefined,
+        genero: this.generoElegido || undefined,
+        referencia: this.referencia || undefined,
+      });
       await this.refrescarResumen();
+      // El déficit cambió: lo que se acaba de agregar ya no falta.
+      if (this.mostrarCriterio) {
+        this.mostrarCriterio = false;
+        await this.alternarCriterio();
+      }
+      // Lo que se pudo leer de la referencia va primero: si Spotify no dio los
+      // temas de la playlist, el dueño tiene que saberlo para interpretar un
+      // resultado flojo.
+      const detalle = [...r.detalleFiltrados];
+      if (r.referencia?.advertencia) detalle.unshift(r.referencia.advertencia);
+      else if (r.referencia?.ejemplos.length) {
+        detalle.unshift(
+          `Referencia usada: ${r.referencia.descripcion} (${r.referencia.ejemplos.length} temas leídos)`,
+        );
+      }
       this.ultimoResultado = {
         titulo:
           `${r.agregados} temas nuevos de ${r.propuestos} propuestos ` +
           `(${r.yaEstaban} ya estaban · ${r.noEncontrados} no encontrados · ${r.filtrados} filtrados)`,
-        detalle: r.detalleFiltrados,
+        detalle,
         agregados: r.agregadosDetalle.map(
           (a) => `${a.artista} — ${a.tema}${a.motivo ? ` · ${a.motivo}` : ''}`,
         ),

@@ -21,6 +21,7 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { ensurePermission } from '../utils/auth.utils';
+import { sumarTotalesDeVentas } from '../utils/venta-total.utils';
 
 function getPeriodoBounds(periodo: string): { fechaInicio: Date; fechaFin: Date } {
   const [yStr, mStr] = periodo.split('-');
@@ -94,7 +95,6 @@ async function evaluarReglaParaFuncionario(
       'vi.precio_adicionales as "precioAdicionales"',
       'vi.producto_id as "productoId"',
       'v.id as "ventaId"',
-      'v.total as "ventaTotal"',
     ])
     .where('v.estado = :estado', { estado: 'CONCLUIDA' })
     .andWhere(`(date(v.fecha_cierre) >= :fd OR date(v.created_at) >= :fd)`)
@@ -109,20 +109,23 @@ async function evaluarReglaParaFuncionario(
   const rawItems = await ventaItemsQb.getRawMany();
 
   // Sumar métricas
-  const ventasUnicas = new Map<number, number>();
+  const ventaIds = new Set<number>();
   for (const row of rawItems) {
     totalUnidades += Number(row.cantidad || 0);
-    const lineaMonto = Number(row.precioUnitario || 0) * Number(row.cantidad || 0)
-      - Number(row.descuentoUnitario || 0) * Number(row.cantidad || 0)
-      + Number(row.precioAdicionales || 0);
-    totalMontoProductos += lineaMonto;
-
-    const vId = Number(row.ventaId);
-    if (!ventasUnicas.has(vId)) {
-      ventasUnicas.set(vId, Number(row.ventaTotal || 0));
-    }
+    // (unitario + adicionales − descuento) × cantidad. El adicional es POR
+    // UNIDAD: antes se sumaba una sola vez y 2 hamburguesas con extra queso
+    // contaban un solo extra.
+    const cantidad = Number(row.cantidad || 0);
+    totalMontoProductos +=
+      (Number(row.precioUnitario || 0) + Number(row.precioAdicionales || 0) - Number(row.descuentoUnitario || 0)) *
+      cantidad;
+    ventaIds.add(Number(row.ventaId));
   }
-  ventasUnicas.forEach((total) => { totalMontoVentaLocal += total; });
+
+  // Monto de venta del local = total de las ventas COMPLETAS en las que
+  // participó (no sólo los productos de la regla). Antes salía de `v.total`,
+  // columna que no se persiste nunca → siempre 0 → la meta jamás se alcanzaba.
+  totalMontoVentaLocal = await sumarTotalesDeVentas(dataSource, Array.from(ventaIds));
 
   // === EVALUACION DE REQUISITOS ===
   let factorRequisitos = 1;

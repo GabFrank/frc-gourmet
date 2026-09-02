@@ -69,6 +69,16 @@ const BLOCKED_CHANNELS = new Set<string>([
 
   // Secretos / credenciales
   'set-notif-secret',   // secreto de notificaciones (WhatsApp/email)
+  // Refresh token persistido del modo cliente. Hoy estos canales NO llegan al
+  // registry —se registran en `app.on('ready')`, antes de que
+  // `installHandlerRegistry()` monkey-patchee `ipcMain.handle`—, así que el
+  // bloqueo es defensa en profundidad: si alguna vez se reordena el arranque,
+  // quedarían expuestos por HTTP y cualquier cliente autenticado podría leer,
+  // sobrescribir o borrar la credencial de 30 días de la máquina que corre el
+  // nodo servidor.
+  'client-refresh-token-read',
+  'client-refresh-token-write',
+  'client-refresh-token-clear',
   'ia-config-set',      // API keys de IA/OCR
 
   // Seeds (se ejecutan internamente en el arranque, no vía HTTP)
@@ -84,6 +94,23 @@ const BLOCKED_CHANNELS = new Set<string>([
   'remote-tunnel-start',
   'remote-tunnel-stop',
 ]);
+
+/**
+ * Prefijos de canal bloqueados en bloque. Van por prefijo y no por nombre para
+ * que un handler nuevo de la familia quede cerrado por default (la deny-list
+ * por nombre se olvida sola).
+ *
+ * `window:*` = chrome de la ventana física del nodo servidor: minimizar,
+ * cerrar, recargar, DevTools, zoom, pantalla completa. Un cliente HTTP
+ * autenticado (PWA de un mozo, nodo cliente) podría cerrar o recargar la caja
+ * registradora en medio de una venta. Cada cliente maneja SU ventana por IPC
+ * local — el preload nunca manda estos canales por HTTP.
+ */
+const BLOCKED_PREFIXES = ['window:'];
+
+function canalBloqueado(method: string): boolean {
+  return BLOCKED_CHANNELS.has(method) || BLOCKED_PREFIXES.some((p) => method.startsWith(p));
+}
 
 export function registerRpcRoute(fastify: FastifyInstance, dataSource?: DataSource): void {
   fastify.post<{ Body: { method: string; params?: any[] } }>('/api/rpc', {
@@ -101,7 +128,7 @@ export function registerRpcRoute(fastify: FastifyInstance, dataSource?: DataSour
   }, async (request, reply) => {
     const { method, params } = request.body;
 
-    if (BLOCKED_CHANNELS.has(method)) {
+    if (canalBloqueado(method)) {
       reply.code(403);
       return { error: 'channel_bloqueado_para_http' };
     }

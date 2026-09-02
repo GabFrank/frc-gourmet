@@ -20,8 +20,9 @@ import { RecetaPresentacion } from '../../src/app/database/entities/productos/re
 import { Presentacion } from '../../src/app/database/entities/productos/presentacion.entity';
 import { TipoPrecio } from '../../src/app/database/entities/financiero/tipo-precio.entity';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
-import { Like, IsNull, Not } from 'typeorm';
+import { Like, IsNull, Not, In } from 'typeorm';
 import { ensurePermission } from '../utils/auth.utils';
+import { recalcularNombresDeVariacion } from '../utils/nombre-variacion.utils';
 import { desduplicarRecetasCompartidas } from '../utils/receta-clone.utils';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -32,6 +33,51 @@ import {
 } from '../utils/pdf.utils';
 
 export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
+
+  /**
+   * Llena la propiedad virtual `receta.productoVinculado` resolviendo el vinculo
+   * por `producto.receta_id` (fuente de verdad). NO usar `receta.producto`: esa
+   * columna (`receta.producto_id`) esta deprecada y siempre es NULL.
+   *
+   * Una sola query para todo el lote (evita N+1).
+   */
+  const adjuntarProductoVinculado = async (recetas: Receta[]): Promise<void> => {
+    const ids = recetas.map(r => r.id).filter((id): id is number => typeof id === 'number');
+    if (ids.length === 0) return;
+
+    const productos = await dataSource
+      .getRepository(Producto)
+      .createQueryBuilder('p')
+      .select(['p.id', 'p.nombre'])
+      .addSelect('p.receta_id', 'p_receta_id')
+      .where('p.receta_id IN (:...ids)', { ids })
+      .getRawMany();
+
+    const porRecetaId = new Map<number, { id: number; nombre: string }>();
+    for (const row of productos) {
+      porRecetaId.set(Number(row.p_receta_id), { id: row.p_id, nombre: row.p_nombre });
+    }
+    for (const receta of recetas) {
+      receta.productoVinculado = porRecetaId.get(receta.id!) ?? null;
+    }
+  };
+
+  /**
+   * Pasa una cantidad expresada en la unidad que ve el usuario (`unidadOriginal`) a
+   * la unidad en la que se persiste (`unidad`, la base del producto). Es la misma
+   * conversión que hace `normalizarDatosParaGuardar` en el diálogo de ingrediente;
+   * sin ella, `calculateRecipeCost` (costoUnitario × cantidad) costea 1000× de más.
+   */
+  const normalizarCantidadIngrediente = (
+    cantidad: number,
+    unidad?: string | null,
+    unidadOriginal?: string | null
+  ): number => {
+    if (!unidad || !unidadOriginal || unidad === unidadOriginal) return cantidad;
+    if (unidad === 'KILOGRAMOS' && unidadOriginal === 'GRAMOS') return cantidad / 1000;
+    if (unidad === 'LITROS' && unidadOriginal === 'MILILITROS') return cantidad / 1000;
+    return cantidad;
+  };
 
   // Helper function to calculate recipe cost
   const calculateRecipeCost = async (recetaId: number): Promise<number> => {
@@ -217,9 +263,16 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
           // Vincular a la receta directamente
           precioCostoData.receta = receta;
 
-          // Si la receta tiene producto, también vincular al producto (para compatibilidad)
-          if (receta.producto) {
-            precioCostoData.producto = receta.producto;
+          // Si la receta esta vinculada a un producto, tambien vincular el
+          // PrecioCosto al producto (para compatibilidad). El vinculo se
+          // resuelve por `producto.receta_id` (fuente de verdad); antes se leia
+          // `receta.producto`, columna deprecada y siempre NULL, con lo que el
+          // PrecioCosto nunca quedaba asociado al producto.
+          const productoVinculado = await dataSource
+            .getRepository(Producto)
+            .findOne({ where: { receta: { id: receta.id } } });
+          if (productoVinculado) {
+            precioCostoData.producto = productoVinculado;
           }
 
           const precioCosto = precioCostoRepository.create(precioCostoData);
@@ -382,13 +435,16 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       // Obtener registros paginados
       const recetas = await recetaRepository.find({
         where: whereConditions,
-        // `producto` para que la UI distinga pre-receta (sin producto) de
-        // receta completa (con producto vinculado).
-        relations: ['producto'],
         order: { nombre: 'ASC' },
         skip,
         take: pageSize
       });
+
+      // `productoVinculado` para que la UI distinga pre-receta (sin producto) de
+      // receta completa. Se resuelve por `producto.receta_id`, la fuente de
+      // verdad: antes se cargaba `relations:['producto']` (columna deprecada,
+      // siempre NULL) y por eso TODA receta se mostraba como "pre-receta".
+      await adjuntarProductoVinculado(recetas);
 
       return {
         items: recetas,
@@ -407,12 +463,16 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       const recetaRepository = dataSource.getRepository(Receta);
       const receta = await recetaRepository.findOne({
         where: { id: recetaId },
-        relations: ['preciosVenta', 'preciosVenta.moneda', 'preciosVenta.tipoPrecio', 'ingredientes', 'ingredientes.ingrediente', 'adicionalesVinculados', 'adicionalesVinculados.adicional', 'producto']
+        relations: ['preciosVenta', 'preciosVenta.moneda', 'preciosVenta.tipoPrecio', 'ingredientes', 'ingredientes.ingrediente', 'adicionalesVinculados', 'adicionalesVinculados.adicional']
       });
 
       if (!receta) {
         throw new Error('Receta not found');
       }
+
+      // Vinculo con el producto por `producto.receta_id` (ya no por la columna
+      // deprecada `receta.producto_id`, que siempre es NULL).
+      await adjuntarProductoVinculado([receta]);
 
       // Calcular precio principal
       if (receta.preciosVenta && receta.preciosVenta.length > 0) {
@@ -483,9 +543,14 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         rendimiento: recetaData.rendimiento,
         unidadRendimiento: recetaData.unidadRendimiento,
         unidadRendimientoOriginal: recetaData.unidadRendimientoOriginal,
-        activo: recetaData.activo,
-        productoId: recetaData.productoId // Agregar actualización del productoId
+        activo: recetaData.activo
       });
+      // NO se toca la relacion `producto` (columna `receta.producto_id`): esta
+      // DEPRECADA. La fuente de verdad del vinculo producto<->receta es
+      // `producto.receta_id`, y se escribe con los handlers dedicados
+      // `vincular-receta-a-producto` / `desvincular-receta-de-producto`.
+      // Antes habia aca un `productoId: recetaData.productoId` que ademas era
+      // un no-op: `Receta` nunca declaro esa propiedad, TypeORM la descartaba.
       // tiempoPreparo / imageUrl: solo actualizar si vienen en el payload.
       if (recetaData.tiempoPreparo !== undefined) receta.tiempoPreparo = recetaData.tiempoPreparo;
       if (recetaData.imageUrl !== undefined) receta.imageUrl = recetaData.imageUrl;
@@ -494,6 +559,155 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       return await recetaRepository.save(receta);
     } catch (error) {
       console.error('Error updating receta:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Recetas ASIGNABLES a un producto simple (ELABORADO_SIN_VARIACION).
+   *
+   * Una `Receta` puede tener cuatro duenos distintos, y solo las que no tienen
+   * ninguno son ofrecibles en el buscador "Buscar Receta" del tab Recetas:
+   *   - `producto.receta_id`            -> ya es la receta de otro producto (UNIQUE)
+   *   - `adicional.receta_id`           -> es la receta de un adicional (UNIQUE)
+   *   - `receta_presentacion.receta_id` -> es la receta de una variacion sabor x tamano
+   *   - `receta.producto_variacion_id`  -> cuelga de un producto con variaciones
+   *
+   * Antes esto se filtraba en el renderer con `!receta.producto` sobre el
+   * resultado de `get-recetas`, lo cual (a) leia una columna deprecada y siempre
+   * NULL, asi que no filtraba nada, y (b) traia la tabla entera por IPC en cada
+   * tecla. Al ofrecer recetas ya ocupadas, asignarlas explotaba con
+   * "UNIQUE constraint failed: producto.receta_id".
+   *
+   * `productoIdActual` se excluye del chequeo para que el producto pueda volver
+   * a elegir la receta que ya tiene asignada.
+   */
+  ipcMain.handle('get-recetas-asignables', async (
+    _event: any,
+    params: { productoId?: number | null; search?: string; activo?: boolean | null; page?: number; pageSize?: number } = {}
+  ) => {
+    try {
+      const page = params.page || 0;
+      const pageSize = params.pageSize || 10;
+      const productoIdActual = params.productoId ?? 0;
+
+      const qb = dataSource
+        .getRepository(Receta)
+        .createQueryBuilder('r')
+        .where('r.producto_variacion_id IS NULL')
+        .andWhere('NOT EXISTS (SELECT 1 FROM producto p WHERE p.receta_id = r.id AND p.id <> :productoIdActual)', { productoIdActual })
+        .andWhere('NOT EXISTS (SELECT 1 FROM adicional a WHERE a.receta_id = r.id)')
+        .andWhere('NOT EXISTS (SELECT 1 FROM receta_presentacion rp WHERE rp.receta_id = r.id)');
+
+      if (params.activo !== null && params.activo !== undefined) {
+        qb.andWhere('r.activo = :activo', { activo: params.activo });
+      }
+
+      // UPPERCASE: los nombres se guardan en mayusculas y LIKE es
+      // case-sensitive en Postgres.
+      const search = (params.search || '').trim().toUpperCase();
+      if (search) {
+        qb.andWhere('(r.nombre LIKE :search OR r.descripcion LIKE :search)', { search: `%${search}%` });
+      }
+
+      const total = await qb.getCount();
+      const items = await qb
+        .orderBy('r.nombre', 'ASC')
+        .skip(page * pageSize)
+        .take(pageSize)
+        .getMany();
+
+      return { items, total, page, pageSize };
+    } catch (error) {
+      console.error('Error getting recetas asignables:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Vincula una receta a un producto de forma atomica.
+   *
+   * Reemplaza los dos updates encadenados que hacia el frontend
+   * (`update-receta` + `update-producto`), que podian dejar estado a medio
+   * aplicar si el segundo fallaba. Valida ademas que la receta sea realmente
+   * asignable, devolviendo un mensaje legible en vez del `UNIQUE constraint
+   * failed` crudo del driver.
+   *
+   * Permiso: `PRODUCTOS_GESTIONAR`, que es la tabla que se escribe
+   * (`producto.receta_id`). Importa porque `/api/rpc` es default-allow.
+   */
+  ipcMain.handle('vincular-receta-a-producto', async (_event: any, productoId: number, recetaId: number) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
+      const currentUser = getCurrentUser();
+
+      return await dataSource.transaction(async (manager) => {
+        const producto = await manager.getRepository(Producto).findOne({ where: { id: productoId } });
+        if (!producto) throw new Error('Producto no encontrado');
+
+        const receta = await manager.getRepository(Receta).findOne({ where: { id: recetaId } });
+        if (!receta) throw new Error('Receta no encontrada');
+
+        const ocupadaPorProducto = await manager.getRepository(Producto).findOne({
+          where: { receta: { id: recetaId } }
+        });
+        if (ocupadaPorProducto && ocupadaPorProducto.id !== productoId) {
+          throw new Error(`La receta "${receta.nombre}" ya está vinculada al producto "${ocupadaPorProducto.nombre}". Desvinculala primero.`);
+        }
+
+        const ocupadaPorAdicional = await manager.getRepository(Adicional).findOne({
+          where: { receta: { id: recetaId } }
+        });
+        if (ocupadaPorAdicional) {
+          throw new Error(`La receta "${receta.nombre}" pertenece al adicional "${ocupadaPorAdicional.nombre}" y no puede asignarse a un producto.`);
+        }
+
+        const ocupadaPorVariacion = await manager.getRepository(RecetaPresentacion).findOne({
+          where: { receta: { id: recetaId } }
+        });
+        if (ocupadaPorVariacion) {
+          throw new Error(`La receta "${receta.nombre}" pertenece a una variación (sabor/tamaño) y no puede asignarse a un producto.`);
+        }
+
+        producto.receta = receta;
+        await setEntityUserTracking(dataSource, producto, currentUser?.id, true);
+        await manager.getRepository(Producto).save(producto);
+
+        return { success: true, producto, receta };
+      });
+    } catch (error) {
+      console.error('Error vinculando receta a producto:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Desvincula la receta de un producto (limpia `producto.receta_id`).
+   *
+   * OJO: la receta NO se borra, queda libre para reasignarse. El producto sí
+   * pierde el precio de venta que se resolvia via receta y el descuento de
+   * stock por receta — el frontend debe advertirlo antes de llamar.
+   */
+  ipcMain.handle('desvincular-receta-de-producto', async (_event: any, productoId: number) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'PRODUCTOS_GESTIONAR');
+      const currentUser = getCurrentUser();
+
+      const productoRepository = dataSource.getRepository(Producto);
+      const producto = await productoRepository.findOne({
+        where: { id: productoId },
+        relations: ['receta']
+      });
+      if (!producto) throw new Error('Producto no encontrado');
+
+      // `null`, nunca `undefined`: con `undefined` TypeORM no emite el UPDATE.
+      (producto as any).receta = null;
+      await setEntityUserTracking(dataSource, producto, currentUser?.id, true);
+      await productoRepository.save(producto);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error desvinculando receta de producto:', error);
       throw error;
     }
   });
@@ -802,6 +1016,196 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       console.error('Error updating receta ingrediente:', error);
       throw error;
     }
+  });
+
+  ipcMain.handle('get-recetas-con-ingrediente', async (_event: any, data: {
+    recetaIds: number[];
+    ingredienteId?: number | null;
+    descripcion?: string | null;
+  }) => {
+    try {
+      const recetaIds = (data?.recetaIds || []).filter((id: any) => Number.isInteger(id));
+      if (recetaIds.length === 0) return [];
+
+      const descripcion = (data?.descripcion || '').trim().toUpperCase() || null;
+      if (!data?.ingredienteId && !descripcion) return [];
+
+      const qb = dataSource.getRepository(RecetaIngrediente)
+        .createQueryBuilder('ri')
+        // Alias en minúsculas: Postgres baja a minúsculas los alias sin comillas,
+        // así la lectura de la fila cruda es igual en SQLite y en Postgres.
+        .select('ri.receta_id', 'receta_id')
+        .where('ri.receta_id IN (:...recetaIds)', { recetaIds })
+        // Sólo las filas ACTIVAS bloquean: una desactivada por un borrado previo se
+        // reactiva en `agregar-ingrediente-multiples-variaciones`, no duplica.
+        .andWhere('ri.activo = :activo', { activo: true });
+
+      if (data.ingredienteId) {
+        qb.andWhere('ri.ingrediente_id = :ingredienteId', { ingredienteId: data.ingredienteId });
+      } else {
+        qb.andWhere('ri.ingrediente_id IS NULL')
+          .andWhere('UPPER(ri.descripcion) = :descripcion', { descripcion });
+      }
+
+      const filas = await qb.getRawMany();
+      return Array.from(new Set(filas.map((f: any) => Number(f.receta_id))));
+    } catch (error) {
+      console.error('Error en get-recetas-con-ingrediente:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Copia un ingrediente ya existente a las recetas de otras variaciones del mismo sabor.
+   *
+   * Antes esto lo hacía el frontend con un `create-receta-ingrediente` suelto por
+   * variación, sin ninguna validación: si dos variaciones compartían receta (datos
+   * previos al refactor "una receta por variación") las N inserciones caían en la
+   * MISMA receta, y volver a correr el asistente desde otra variación insertaba de
+   * nuevo en todas. Resultado: el mismo ingrediente repetido N veces por receta.
+   *
+   * Este handler es la única vía: deduplica recetas destino, excluye la receta de
+   * origen, omite las que ya tienen el ingrediente y normaliza la cantidad a la
+   * unidad base del ingrediente original (la copia guardaba 100 GRAMOS donde el
+   * original tenía 0.1 KILOGRAMOS, y el costo salía 1000× por `costoUnitario × cantidad`).
+   */
+  ipcMain.handle('agregar-ingrediente-multiples-variaciones', async (_event: any, data: {
+    recetaIngredienteId: number;
+    variaciones: Array<{ variacionId: number; cantidad: number }>;
+  }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'INGREDIENTES_GESTIONAR');
+
+    if (!Number.isInteger(data?.recetaIngredienteId)) {
+      throw new Error('agregar-ingrediente-multiples-variaciones: recetaIngredienteId inválido');
+    }
+    const solicitadas = (data?.variaciones || []).filter(
+      (v: any) => Number.isInteger(v?.variacionId) && Number(v?.cantidad) > 0
+    );
+    if (solicitadas.length === 0) {
+      return { success: true, agregadas: 0, recetasAfectadas: [], omitidasPorDuplicado: [], omitidasPorRecetaCompartida: [], omitidasSinReceta: [] };
+    }
+
+    const origen = await dataSource.getRepository(RecetaIngrediente).findOne({
+      where: { id: data.recetaIngredienteId },
+      relations: ['receta', 'ingrediente']
+    });
+    if (!origen?.receta?.id) {
+      throw new Error('Ingrediente de origen no encontrado');
+    }
+
+    // Recetas destino de cada variación solicitada.
+    const variaciones = await dataSource.getRepository(RecetaPresentacion).find({
+      where: { id: In(solicitadas.map((v: any) => v.variacionId)) },
+      relations: ['receta']
+    });
+    const porVariacion = new Map<number, RecetaPresentacion>(variaciones.map((v: RecetaPresentacion) => [v.id, v]));
+
+    const omitidasSinReceta: string[] = [];
+    const omitidasPorRecetaCompartida: string[] = [];
+    const omitidasPorDuplicado: string[] = [];
+
+    // 1) Resolver variación → receta, descartando la receta de origen y las repetidas.
+    const destinos: Array<{ recetaId: number; cantidad: number; nombre: string }> = [];
+    const recetasVistas = new Set<number>([origen.receta.id]);
+    for (const solicitada of solicitadas) {
+      const variacion = porVariacion.get(solicitada.variacionId);
+      const nombre = variacion?.nombre_generado || `Variación ${solicitada.variacionId}`;
+      const recetaId = variacion?.receta?.id;
+
+      if (!recetaId) { omitidasSinReceta.push(nombre); continue; }
+      // Comparte receta con el origen (o con otra variación ya procesada): insertar
+      // ahí duplicaría la fila dentro de la misma receta.
+      if (recetasVistas.has(recetaId)) { omitidasPorRecetaCompartida.push(nombre); continue; }
+
+      recetasVistas.add(recetaId);
+      destinos.push({ recetaId, cantidad: Number(solicitada.cantidad), nombre });
+    }
+
+    // 2) Insertar dentro de la transacción, descartando ahí mismo las recetas que ya
+    //    tienen el ingrediente. El chequeo va DENTRO de la transacción para no dejar
+    //    una ventana entre "verifiqué que no está" y "lo inserto" (no hay índice único
+    //    en (receta_id, ingrediente_id) que lo ataje a nivel de BD).
+    const descripcionOrigen = (origen.descripcion || '').trim().toUpperCase() || null;
+    const currentUser = getCurrentUser();
+    const afectadas: number[] = [];
+
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const repo = queryRunner.manager.getRepository(RecetaIngrediente);
+
+      for (const destino of destinos) {
+        const existente = await repo.findOne({
+          where: origen.ingrediente
+            ? { receta: { id: destino.recetaId }, ingrediente: { id: origen.ingrediente.id } }
+            : { receta: { id: destino.recetaId }, descripcion: descripcionOrigen as any }
+        });
+
+        // Ya lo tiene y está activo: no se toca.
+        if (existente?.activo) { omitidasPorDuplicado.push(destino.nombre); continue; }
+
+        // La cantidad viaja en la unidad que ve el usuario (unidadOriginal); se guarda
+        // en la unidad base del ingrediente, igual que el alta manual.
+        const cantidad = normalizarCantidadIngrediente(destino.cantidad, origen.unidad, origen.unidadOriginal);
+        const costoUnitario = Number(origen.costoUnitario || 0);
+        const datos = {
+          cantidad,
+          unidad: origen.unidad ?? null,
+          unidadOriginal: origen.unidadOriginal ?? null,
+          descripcion: descripcionOrigen,
+          costoUnitario,
+          costoTotal: costoUnitario * cantidad,
+          esExtra: origen.esExtra,
+          esOpcional: origen.esOpcional,
+          esCambiable: origen.esCambiable,
+          costoExtra: origen.costoExtra || 0,
+          porcentajeAprovechamiento: origen.porcentajeAprovechamiento,
+          esIngredienteBase: origen.esIngredienteBase,
+          activo: true
+        };
+
+        if (existente) {
+          // Quedó una fila desactivada de un borrado anterior (`delete-receta-ingrediente`
+          // hace soft delete la primera vez y `get-receta-ingredientes` no filtra `activo`,
+          // así que insertar al lado volvería a mostrar la fila repetida). Se reactiva.
+          Object.assign(existente, datos);
+          setEntityUserTracking(dataSource, existente, currentUser?.id, true);
+          await repo.save(existente);
+        } else {
+          const nuevo = repo.create({
+            ...datos,
+            receta: { id: destino.recetaId },
+            ingrediente: origen.ingrediente ?? null
+          } as any);
+          setEntityUserTracking(dataSource, nuevo, currentUser?.id, false);
+          await repo.save(nuevo);
+        }
+        afectadas.push(destino.recetaId);
+      }
+
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      console.error('Error en agregar-ingrediente-multiples-variaciones:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+
+    // 3) Recalcular costos fuera de la transacción (calculateRecipeCost usa el dataSource).
+    for (const recetaId of afectadas) {
+      await calculateRecipeCost(recetaId);
+    }
+
+    return {
+      success: true,
+      agregadas: afectadas.length,
+      recetasAfectadas: afectadas,
+      omitidasPorDuplicado,
+      omitidasPorRecetaCompartida,
+      omitidasSinReceta
+    };
   });
 
   ipcMain.handle('delete-receta-ingrediente', async (_event: any, recetaIngredienteId: number) => {
@@ -1301,8 +1705,11 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
         throw new Error('Adicional does not have a receta');
       }
 
-      // Desvincular la receta del adicional
-      adicional.receta = undefined as unknown as Receta;
+      // Desvincular la receta del adicional.
+      // `null` y no `undefined`: TypeORM ignora `undefined` y no emitiria el
+      // UPDATE, dejando `adicional.receta_id` ocupado (mismo bug que tenia
+      // `update-producto` con `producto.receta_id`).
+      (adicional as any).receta = null;
       setEntityUserTracking(dataSource, adicional, currentUser?.id, true);
       await adicionalRepository.save(adicional);
 
@@ -1702,6 +2109,11 @@ export function registerRecetasHandlers(dataSource: DataSource, getCurrentUser: 
       categoria: saborData.categoria?.toUpperCase(),
       descripcion: saborData.descripcion?.toUpperCase()
     } as any);
+    // El nombre de las variaciones deriva del sabor: sin esto quedaba
+    // describiendo el nombre viejo para siempre.
+    if (saborData.nombre !== undefined || saborData.mostrarEnNombre !== undefined) {
+      await recalcularNombresDeVariacion(dataSource, { saborId: id });
+    }
     return await repo.findOne({ where: { id } });
   });
 

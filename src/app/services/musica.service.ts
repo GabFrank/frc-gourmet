@@ -75,6 +75,22 @@ export interface ResumenPool {
   sinFeatures: number;
 }
 
+/**
+ * De dónde sale el criterio de una ronda de descubrimiento.
+ *
+ * `AUTOMATICO` usa todo lo que el local ya dijo. Las otras cuatro ignoran ese
+ * criterio acumulado (menos las prohibiciones) porque a veces estorba: pedir
+ * covers de bossa cuando el déficit grita pagode daba siempre pagode.
+ */
+export type FuenteDescubrimiento = 'AUTOMATICO' | 'PROMPT' | 'ESTILO' | 'TEMA' | 'PLAYLIST';
+
+/** Qué se pudo leer de la referencia (tema o playlist de ejemplo). */
+export interface ReferenciaResuelta {
+  descripcion: string;
+  ejemplos: string[];
+  advertencia?: string;
+}
+
 export interface ResultadoDescubrimiento {
   propuestos: number;
   agregados: number;
@@ -83,6 +99,8 @@ export interface ResultadoDescubrimiento {
   filtrados: number;
   detalleFiltrados: string[];
   agregadosDetalle: Array<{ artista: string; tema: string; motivo?: string }>;
+  fuente: FuenteDescubrimiento;
+  referencia?: ReferenciaResuelta;
 }
 
 export interface BloqueProgramacion {
@@ -131,6 +149,10 @@ export interface EstiloConDatos {
   descripcion?: string;
   orden: number;
   activo: boolean;
+  /** `1` me gusta más · `-1` me gusta menos · `0` sin opinión. Sólo descubrimiento. */
+  preferencia: number;
+  /** true = veto global activo: sus temas no entran a ninguna playlist. */
+  vetado: boolean;
   /** Géneros crudos de Spotify que caen en este estilo. */
   alias: string[];
   /** Lo mismo con id, para poder quitarlos o reasignarlos desde la UI. */
@@ -155,6 +177,34 @@ export interface DesacuerdoEstilo {
   estiloGenero: string;
   resuelto: string;
   hayManual: boolean;
+}
+
+/** Cuánto material falta de un estilo, según las cuotas de los bloques. */
+export interface FaltanteEstilo {
+  estiloNombre: string;
+  descripcion?: string;
+  faltanteHoras: number;
+  tracksFaltantes: number;
+  tracksDisponibles: number;
+}
+
+/**
+ * Con qué criterio va a buscar el descubridor. Sale de la misma función que
+ * arma el prompt, así que lo que se ve acá es literalmente lo que se le pide
+ * a la IA.
+ */
+export interface CriterioDescubrimiento {
+  brief: string;
+  estilosQueGustan: string[];
+  estilosQueGustanMenos: string[];
+  estilosVetados: string[];
+  faltantes: FaltanteEstilo[];
+  generosVetados: string[];
+  artistasVetados: string[];
+  bloques: number;
+  artistasEnPool: number;
+  rechazados: number;
+  gustados: number;
 }
 
 export interface MezclaItem {
@@ -191,6 +241,11 @@ export interface EstadoRuntime {
   modoManual: boolean;
   ultimoError: string | null;
   ultimoChequeo?: string | null;
+  /**
+   * Cómo salió la generación automática del plan de hoy. Antes esto no se veía
+   * en ningún lado: si fallaba, el local abría en silencio y nadie sabía por qué.
+   */
+  planDelDia?: { fecha: string; generado: boolean; motivo?: string } | null;
   salon?: {
     mesasTotales: number;
     mesasOcupadas: number;
@@ -345,6 +400,10 @@ export class MusicaService {
   listarTracks(filtros?: {
     estado?: string;
     texto?: string;
+    /** Género crudo de Spotify, tal cual está guardado. */
+    genero?: string;
+    /** Id del catálogo, o `SIN_ESTILO` para los que no cayeron en ninguno. */
+    estiloId?: number | 'SIN_ESTILO';
     page?: number;
     pageSize?: number;
   }): Promise<{ items: MusicaTrack[]; total: number }> {
@@ -377,6 +436,25 @@ export class MusicaService {
     mezclasBorradas: number;
   }> {
     return this.api.callIpc('musica-estilo-eliminar', id);
+  }
+
+  /**
+   * Pulgar arriba/abajo. Orienta al descubridor hacia dónde crecer; **no**
+   * cambia cuánto suena el estilo — eso es la mezcla por bloque.
+   */
+  setPreferenciaEstilo(estiloId: number, valor: number): Promise<any> {
+    return this.api.callIpc('musica-estilo-preferencia', { estiloId, valor });
+  }
+
+  /**
+   * Apaga o vuelve a encender un estilo entero para el generador de playlists.
+   * Reversible: no toca los temas, sólo deja de elegirlos.
+   */
+  vetarEstilo(
+    estiloId: number,
+    vetar: boolean,
+  ): Promise<{ success: boolean; vetado: boolean; tracksAfectados: number }> {
+    return this.api.callIpc('musica-estilo-vetar', { estiloId, vetar });
   }
 
   asignarAlias(genero: string, estiloId: number): Promise<any> {
@@ -412,6 +490,11 @@ export class MusicaService {
 
   generosSinClasificar(): Promise<Array<{ genero: string; cantidad: number }>> {
     return this.api.callIpc('musica-generos-sin-clasificar');
+  }
+
+  /** Todos los géneros del repertorio (no sólo los sin mapear): para filtrar. */
+  generosDelPool(): Promise<Array<{ genero: string; cantidad: number }>> {
+    return this.api.callIpc('musica-generos-listar');
   }
 
   getMezcla(bloqueId: number): Promise<MezclaItem[]> {
@@ -464,8 +547,23 @@ export class MusicaService {
 
   // ─────────── Descubrimiento con IA ───────────
 
-  descubrir(cantidad?: number, bloqueId?: number): Promise<ResultadoDescubrimiento> {
-    return this.api.callIpc('musica-descubrir', { cantidad, bloqueId });
+  descubrir(
+    cantidad?: number,
+    bloqueId?: number,
+    fuente?: {
+      fuente?: FuenteDescubrimiento;
+      prompt?: string;
+      estiloId?: number;
+      genero?: string;
+      referencia?: string;
+    },
+  ): Promise<ResultadoDescubrimiento> {
+    return this.api.callIpc('musica-descubrir', { cantidad, bloqueId, ...(fuente || {}) });
+  }
+
+  /** Con qué criterio va a buscar, sin gastar una llamada a la IA. */
+  criterioDescubrimiento(): Promise<CriterioDescubrimiento> {
+    return this.api.callIpc('musica-descubrimiento-criterio');
   }
 
   rechazar(

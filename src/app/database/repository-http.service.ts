@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Observable, throwError, of } from 'rxjs';
-import { RepositoryService, LoginResult, ClienteFilters } from './repository.service';
+import { RepositoryService, LoginResult, ClienteFilters, DashboardVentasFiltro, CajaSelectorItem } from './repository.service';
 import { Printer } from './entities/printer.entity';
 import { Persona } from './entities/personas/persona.entity';
 import { DocumentoTipo } from './entities/personas/documento-tipo.enum';
@@ -28,6 +28,7 @@ import { ProveedorProducto } from './entities/compras/proveedor-producto.entity'
 import { FormasPago } from './entities/compras/forma-pago.entity';
 import { PrecioDelivery } from './entities/ventas/precio-delivery.entity';
 import { Delivery, DeliveryEstado } from './entities/ventas/delivery.entity';
+import { ConvertirModoDeliveryPayload } from './convertir-modo-delivery.types';
 import { Venta, VentaEstado } from './entities/ventas/venta.entity';
 import { VentaItem } from './entities/ventas/venta-item.entity';
 import { PdvGrupoCategoria } from './entities/ventas/pdv-grupo-categoria.entity';
@@ -611,6 +612,34 @@ export class RepositoryHttpService extends RepositoryService {
   getDeliveriesByCaja(cajaId: number, filtros?: any): Observable<{ data: any[], total: number }> {
     return throwError(() => new Error(`RepositoryHttpService.getDeliveriesByCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  deliveryListarPdv(cajaId: number, filtros?: any): Observable<{ data: any[], total: number }> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryListarPdv() no esta implementado todavia.`)) as any;
+  }
+  deliveryListarRepartidores(): Observable<{ id: number; nombre: string; cargo: string | null }[]> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryListarRepartidores() no esta implementado todavia.`)) as any;
+  }
+  deliveryCrear(payload: any): Observable<{ delivery: any; venta: any }> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryCrear() no esta implementado todavia.`)) as any;
+  }
+  deliveryActualizarDatos(deliveryId: number, payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryActualizarDatos() no esta implementado todavia.`)) as any;
+  }
+  deliveryCambiarEstado(deliveryId: number, nuevoEstado: DeliveryEstado, opts?: { funcionarioId?: number }): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryCambiarEstado() no esta implementado todavia.`)) as any;
+  }
+  deliveryAsignarRepartidor(deliveryId: number, funcionarioId: number | null): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryAsignarRepartidor() no esta implementado todavia.`)) as any;
+  }
+  deliveryCancelar(deliveryId: number, motivo: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryCancelar() no esta implementado todavia.`)) as any;
+  }
+
+  deliveryConvertirModo(deliveryId: number, payload: ConvertirModoDeliveryPayload): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryConvertirModo() no esta implementado todavia.`)) as any;
+  }
+  deliveryImprimirTicket(deliveryId: number, printerId?: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deliveryImprimirTicket() no esta implementado todavia.`)) as any;
+  }
   buscarClientePorTelefono(telefono: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.buscarClientePorTelefono() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
@@ -620,7 +649,7 @@ export class RepositoryHttpService extends RepositoryService {
   crearClienteRapido(data: { telefono: string; nombre?: string; direccion?: string }): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.crearClienteRapido() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  cerrarVentasAbiertasMesa(mesaId: number, estado: string): Observable<number> {
+  cerrarVentasAbiertasMesa(mesaId: number, estado: string, _opts?: { validarDispositivoCaja?: boolean }): Observable<number> {
     return throwError(() => new Error(`RepositoryHttpService.cerrarVentasAbiertasMesa() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getVentas(): Observable<Venta[]> {
@@ -852,6 +881,12 @@ export class RepositoryHttpService extends RepositoryService {
   updatePdvMesa(id: number, data: Partial<PdvMesa>): Observable<PdvMesa> {
     return throwError(() => new Error(`RepositoryHttpService.updatePdvMesa() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  setPdvMesaEstado(mesaId: number, estado: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.setPdvMesaEstado() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  transferirVentaPdv(payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.transferirVentaPdv() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   deletePdvMesa(id: number): Observable<boolean> {
     return throwError(() => new Error(`RepositoryHttpService.deletePdvMesa() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
@@ -1066,6 +1101,9 @@ export class RepositoryHttpService extends RepositoryService {
   vincularVentaPedidoOnline(pedidoId: number, ventaId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.vincularVentaPedidoOnline() no esta implementado todavia.`)) as any;
   }
+  getDetalleVariacionItems(_itemIds: number[]): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getDetalleVariacionItems() no esta implementado todavia.`)) as any;
+  }
   getTiendaOnlineConfig(): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getTiendaOnlineConfig() no esta implementado todavia.`)) as any;
   }
@@ -1173,6 +1211,21 @@ export class RepositoryHttpService extends RepositoryService {
   }): Observable<{items: Receta[], total: number, page: number, pageSize: number}> {
     return throwError(() => new Error(`RepositoryHttpService.getRecetasWithFilters() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getRecetasAsignables(params: {
+    productoId?: number | null;
+    search?: string;
+    activo?: boolean | null;
+    page?: number;
+    pageSize?: number;
+  }): Observable<{items: Receta[], total: number, page: number, pageSize: number}> {
+    return throwError(() => new Error(`RepositoryHttpService.getRecetasAsignables() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  vincularRecetaAProducto(productoId: number, recetaId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.vincularRecetaAProducto() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  desvincularRecetaDeProducto(productoId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.desvincularRecetaDeProducto() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getReceta(recetaId: number): Observable<Receta> {
     return throwError(() => new Error(`RepositoryHttpService.getReceta() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
@@ -1223,6 +1276,19 @@ export class RepositoryHttpService extends RepositoryService {
     eliminarDeOtrasVariaciones: boolean;
   }): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.deleteRecetaIngredienteMultiplesVariaciones() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  agregarIngredienteMultiplesVariaciones(data: {
+    recetaIngredienteId: number;
+    variaciones: Array<{ variacionId: number; cantidad: number }>;
+  }): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.agregarIngredienteMultiplesVariaciones() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getRecetasConIngrediente(data: {
+    recetaIds: number[];
+    ingredienteId?: number | null;
+    descripcion?: string | null;
+  }): Observable<number[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getRecetasConIngrediente() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getRecetaIngredientesActivos(recetaId: number): Observable<RecetaIngrediente[]> {
     return throwError(() => new Error(`RepositoryHttpService.getRecetaIngredientesActivos() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
@@ -1540,6 +1606,8 @@ export class RepositoryHttpService extends RepositoryService {
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;
+      /** Tope de descuento al cobrar CPC, en % del cobro. null = sin tope. */
+      descuentoCpcMaxPorcentaje?: number | null;
     }): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.saveCajaMayorConfiguracion() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
@@ -1765,6 +1833,18 @@ export class RepositoryHttpService extends RepositoryService {
   }
   pagarCuotasComprasLote(payload: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.pagarCuotasComprasLote() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getObligacionesPendientes(concepto: string, filtros?: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getObligacionesPendientes() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  registrarPagoConsolidado(payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.registrarPagoConsolidado() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getPagoConsolidadoDetalle(pagoId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getPagoConsolidadoDetalle() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  anularPagoConsolidado(pagoId: number, motivo?: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.anularPagoConsolidado() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getCuotasPendientesCompras(filtros?: any): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getCuotasPendientesCompras() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
@@ -2399,19 +2479,23 @@ export class RepositoryHttpService extends RepositoryService {
   getDashboardRrhhKpis(periodo: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardRrhhKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  getDashboardVentasKpis(rango?: string): Observable<any> {
+  getCajasSelector(params?: { desde?: string; hasta?: string; limite?: number }): Observable<CajaSelectorItem[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getCajasSelector() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+
+  getDashboardVentasKpis(param?: string | DashboardVentasFiltro): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardVentasKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  getDashboardComprasKpis(): Observable<any> {
+  getDashboardComprasKpis(_rango?: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardComprasKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  getDashboardProductosKpis(): Observable<any> {
+  getDashboardProductosKpis(_rango?: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardProductosKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getDashboardFinancieroKpis(): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardFinancieroKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  getDashboardCajaMayorKpis(): Observable<any> {
+  getDashboardCajaMayorKpis(_rango?: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getDashboardCajaMayorKpis() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getReporteVentasCierre(_params: any): Observable<any> {
@@ -2526,6 +2610,9 @@ export class RepositoryHttpService extends RepositoryService {
   }
   createFactura(payload: { factura: Partial<Factura> & { timbradoDetalleId?: number; numeroManual?: number }; items: any[] }): Observable<Factura> {
     return throwError(() => new Error('RepositoryHttpService.createFactura() no esta implementado en modo cliente.')) as any;
+  }
+  getClientePorRuc(ruc: string): Observable<any> {
+    return throwError(() => new Error('RepositoryHttpService.getClientePorRuc() no esta implementado en modo cliente.')) as any;
   }
   anularFactura(id: number, motivo: string): Observable<any> {
     return throwError(() => new Error('RepositoryHttpService.anularFactura() no esta implementado en modo cliente.')) as any;

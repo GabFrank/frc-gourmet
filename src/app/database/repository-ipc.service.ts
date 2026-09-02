@@ -28,6 +28,7 @@ import { ProveedorProducto } from './entities/compras/proveedor-producto.entity'
 import { FormasPago } from './entities/compras/forma-pago.entity';
 import { PrecioDelivery } from './entities/ventas/precio-delivery.entity';
 import { Delivery, DeliveryEstado } from './entities/ventas/delivery.entity';
+import { ConvertirModoDeliveryPayload } from './convertir-modo-delivery.types';
 import { Venta, VentaEstado } from './entities/ventas/venta.entity';
 import { VentaItem } from './entities/ventas/venta-item.entity';
 import { PdvGrupoCategoria } from './entities/ventas/pdv-grupo-categoria.entity';
@@ -65,7 +66,7 @@ import { RecetaAdicionalVinculacion } from './entities/productos/receta-adiciona
 import { RecetaIngredienteIntercambiable } from './entities/productos/receta-ingrediente-intercambiable.entity';
 
 // LoginResult queda definido en repository.service.ts (abstract base)
-import { RepositoryService, LoginResult, ClienteFilters } from './repository.service';
+import { RepositoryService, LoginResult, ClienteFilters, DashboardVentasFiltro, CajaSelectorItem } from './repository.service';
 
 // Define an interface for the electron API
 interface ElectronAPI {
@@ -277,11 +278,20 @@ interface ElectronAPI {
   createDelivery: (deliveryData: Partial<Delivery>) => Promise<Delivery>;
   updateDelivery: (deliveryId: number, deliveryData: Partial<Delivery>) => Promise<any>;
   deleteDelivery: (deliveryId: number) => Promise<any>;
+  deliveryListarPdv: (cajaId: number, filtros?: any) => Promise<{ data: any[]; total: number }>;
+  deliveryListarRepartidores: () => Promise<any[]>;
+  deliveryCrear: (payload: any) => Promise<any>;
+  deliveryActualizarDatos: (deliveryId: number, payload: any) => Promise<any>;
+  deliveryCambiarEstado: (deliveryId: number, nuevoEstado: string, opts?: any) => Promise<any>;
+  deliveryAsignarRepartidor: (deliveryId: number, funcionarioId: number | null) => Promise<any>;
+  deliveryCancelar: (deliveryId: number, motivo: string) => Promise<any>;
+  deliveryConvertirModo: (deliveryId: number, payload: any) => Promise<any>;
+  deliveryImprimirTicket: (deliveryId: number, printerId?: number) => Promise<any>;
   getDeliveriesByCaja: (cajaId: number, filtros?: any) => Promise<{ data: any[], total: number }>;
   buscarClientePorTelefono: (telefono: string) => Promise<any>;
   buscarClientesPorTelefono: (telefono: string) => Promise<any[]>;
   crearClienteRapido: (data: { telefono: string; nombre?: string; direccion?: string }) => Promise<any>;
-  cerrarVentasAbiertasMesa: (mesaId: number, estado: string) => Promise<number>;
+  cerrarVentasAbiertasMesa: (mesaId: number, estado: string, opts?: { validarDispositivoCaja?: boolean }) => Promise<number>;
   // Venta operations
   getVentas: () => Promise<Venta[]>;
   getVentasByDateRange: (desde: string, hasta: string, filtros?: any) => Promise<{ data: Venta[], total: number }>;
@@ -372,6 +382,8 @@ interface ElectronAPI {
   createPdvMesa: (data: Partial<PdvMesa>) => Promise<PdvMesa>;
   createBatchPdvMesas: (batchData: Partial<PdvMesa>[]) => Promise<PdvMesa[]>;
   updatePdvMesa: (id: number, data: Partial<PdvMesa>) => Promise<PdvMesa>;
+  setPdvMesaEstado: (mesaId: number, estado: string) => Promise<any>;
+  transferirVentaPdv: (payload: any) => Promise<any>;
   deletePdvMesa: (id: number) => Promise<boolean>;
 
   // Sector methods
@@ -475,6 +487,7 @@ interface ElectronAPI {
   rechazarPedidoOnline: (pedidoId: number, motivo: string) => Promise<any>;
   avanzarEstadoPedidoOnline: (pedidoId: number, nuevoEstado: string) => Promise<any>;
   vincularVentaPedidoOnline: (pedidoId: number, ventaId: number) => Promise<any>;
+  getDetalleVariacionItems: (itemIds: number[]) => Promise<any>;
   getTiendaOnlineConfig: () => Promise<any>;
   updateTiendaOnlineConfig: (data: any) => Promise<any>;
   getZonasDeliveryAdmin: () => Promise<any[]>;
@@ -523,6 +536,15 @@ interface ElectronAPI {
     receta: { id: number; nombre: string };
     productosVinculados: Array<{ id: number; nombre: string; tipo: string; activo: boolean }>;
   }>;
+  getRecetasAsignables: (params: {
+    productoId?: number | null;
+    search?: string;
+    activo?: boolean | null;
+    page?: number;
+    pageSize?: number;
+  }) => Promise<{items: Receta[], total: number, page: number, pageSize: number}>;
+  vincularRecetaAProducto: (productoId: number, recetaId: number) => Promise<any>;
+  desvincularRecetaDeProducto: (productoId: number) => Promise<any>;
   getReceta: (recetaId: number) => Promise<Receta>;
   createReceta: (recetaData: any) => Promise<Receta>;
   updateReceta: (recetaId: number, recetaData: any) => Promise<any>;
@@ -594,6 +616,15 @@ interface ElectronAPI {
     recetaIngredienteId: number;
     eliminarDeOtrasVariaciones: boolean;
   }) => Promise<any>;
+  agregarIngredienteMultiplesVariaciones: (data: {
+    recetaIngredienteId: number;
+    variaciones: Array<{ variacionId: number; cantidad: number }>;
+  }) => Promise<any>;
+  getRecetasConIngrediente: (data: {
+    recetaIds: number[];
+    ingredienteId?: number | null;
+    descripcion?: string | null;
+  }) => Promise<number[]>;
   // RecetaIngrediente additional methods
   getRecetaIngredientesActivos: (recetaId: number) => Promise<RecetaIngrediente[]>;
   calcularCostoIngrediente: (recetaIngredienteId: number) => Promise<number>;
@@ -690,6 +721,8 @@ interface ElectronAPI {
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;
+      /** Tope de descuento al cobrar CPC, en % del cobro. null = sin tope. */
+      descuentoCpcMaxPorcentaje?: number | null;
     }
   ) => Promise<any>;
   getCuentaBancariaResumen: (cuentaBancariaId: number) => Promise<any>;
@@ -777,6 +810,10 @@ interface ElectronAPI {
   anularPagoMixtoCuota: (payload: any) => Promise<any>;
   getCuotasConPagoMixto: (cuentaPorPagarId: number) => Promise<any>;
   pagarCuotasComprasLote: (payload: any) => Promise<any>;
+  getObligacionesPendientes: (concepto: string, filtros?: any) => Promise<any>;
+  registrarPagoConsolidado: (payload: any) => Promise<any>;
+  getPagoConsolidadoDetalle: (pagoId: number) => Promise<any>;
+  anularPagoConsolidado: (pagoId: number, motivo?: string) => Promise<any>;
   getCuotasPendientesCompras: (filtros?: any) => Promise<any[]>;
   cancelarCppCuota: (payload: any) => Promise<any>;
 
@@ -1055,11 +1092,12 @@ interface ElectronAPI {
   getDashboardRrhhKpis: (periodo: string) => Promise<any>;
 
   // Dashboards por dominio
-  getDashboardVentasKpis: (rango?: string) => Promise<any>;
-  getDashboardComprasKpis: () => Promise<any>;
-  getDashboardProductosKpis: () => Promise<any>;
+  getCajasSelector: (params?: any) => Promise<any>;
+  getDashboardVentasKpis: (param?: any) => Promise<any>;
+  getDashboardComprasKpis: (rango?: string) => Promise<any>;
+  getDashboardProductosKpis: (rango?: string) => Promise<any>;
   getDashboardFinancieroKpis: () => Promise<any>;
-  getDashboardCajaMayorKpis: () => Promise<any>;
+  getDashboardCajaMayorKpis: (rango?: string) => Promise<any>;
   getReporteVentasCierre: (params: any) => Promise<any>;
   getReporteFinanzasCierre: (params: any) => Promise<any>;
   enviarReporteWhatsapp: (params: { base64: string; caption?: string; fileName?: string; destino?: string }) => Promise<any>;
@@ -1924,6 +1962,42 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.deleteDelivery(deliveryId));
   }
 
+  deliveryListarPdv(cajaId: number, filtros?: any): Observable<{ data: any[], total: number }> {
+    return from(this.api.deliveryListarPdv(cajaId, filtros));
+  }
+
+  deliveryListarRepartidores(): Observable<{ id: number; nombre: string; cargo: string | null }[]> {
+    return from(this.api.deliveryListarRepartidores());
+  }
+
+  deliveryCrear(payload: any): Observable<{ delivery: any; venta: any }> {
+    return from(this.api.deliveryCrear(payload));
+  }
+
+  deliveryActualizarDatos(deliveryId: number, payload: any): Observable<any> {
+    return from(this.api.deliveryActualizarDatos(deliveryId, payload));
+  }
+
+  deliveryCambiarEstado(deliveryId: number, nuevoEstado: DeliveryEstado, opts?: { funcionarioId?: number }): Observable<any> {
+    return from(this.api.deliveryCambiarEstado(deliveryId, nuevoEstado, opts));
+  }
+
+  deliveryAsignarRepartidor(deliveryId: number, funcionarioId: number | null): Observable<any> {
+    return from(this.api.deliveryAsignarRepartidor(deliveryId, funcionarioId));
+  }
+
+  deliveryCancelar(deliveryId: number, motivo: string): Observable<any> {
+    return from(this.api.deliveryCancelar(deliveryId, motivo));
+  }
+
+  deliveryConvertirModo(deliveryId: number, payload: ConvertirModoDeliveryPayload): Observable<any> {
+    return from(this.api.deliveryConvertirModo(deliveryId, payload));
+  }
+
+  deliveryImprimirTicket(deliveryId: number, printerId?: number): Observable<any> {
+    return from(this.api.deliveryImprimirTicket(deliveryId, printerId));
+  }
+
   getDeliveriesByCaja(cajaId: number, filtros?: any): Observable<{ data: any[], total: number }> {
     return from(this.api.getDeliveriesByCaja(cajaId, filtros));
   }
@@ -1940,8 +2014,8 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.crearClienteRapido(data));
   }
 
-  cerrarVentasAbiertasMesa(mesaId: number, estado: string): Observable<number> {
-    return from(this.api.cerrarVentasAbiertasMesa(mesaId, estado));
+  cerrarVentasAbiertasMesa(mesaId: number, estado: string, opts?: { validarDispositivoCaja?: boolean }): Observable<number> {
+    return from(this.api.cerrarVentasAbiertasMesa(mesaId, estado, opts));
   }
 
   // Venta methods
@@ -2261,6 +2335,14 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.updatePdvMesa(id, data));
   }
 
+  setPdvMesaEstado(mesaId: number, estado: string): Observable<any> {
+    return from(this.api.setPdvMesaEstado(mesaId, estado));
+  }
+
+  transferirVentaPdv(payload: any): Observable<any> {
+    return from(this.api.transferirVentaPdv(payload));
+  }
+
   deletePdvMesa(id: number): Observable<boolean> {
     return from(this.api.deletePdvMesa(id));
   }
@@ -2548,6 +2630,9 @@ export class RepositoryIpcService extends RepositoryService {
   vincularVentaPedidoOnline(pedidoId: number, ventaId: number): Observable<any> {
     return from(this.api.vincularVentaPedidoOnline(pedidoId, ventaId));
   }
+  getDetalleVariacionItems(itemIds: number[]): Observable<any> {
+    return from(this.api.getDetalleVariacionItems(itemIds));
+  }
   getTiendaOnlineConfig(): Observable<any> {
     return from(this.api.getTiendaOnlineConfig());
   }
@@ -2690,6 +2775,24 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.getRecetasWithFilters(filters));
   }
 
+  getRecetasAsignables(params: {
+    productoId?: number | null;
+    search?: string;
+    activo?: boolean | null;
+    page?: number;
+    pageSize?: number;
+  }): Observable<{items: Receta[], total: number, page: number, pageSize: number}> {
+    return from(this.api.getRecetasAsignables(params));
+  }
+
+  vincularRecetaAProducto(productoId: number, recetaId: number): Observable<any> {
+    return from(this.api.vincularRecetaAProducto(productoId, recetaId));
+  }
+
+  desvincularRecetaDeProducto(productoId: number): Observable<any> {
+    return from(this.api.desvincularRecetaDeProducto(productoId));
+  }
+
   getReceta(recetaId: number): Observable<Receta> {
     return from(this.api.getReceta(recetaId));
   }
@@ -2756,6 +2859,21 @@ export class RepositoryIpcService extends RepositoryService {
     eliminarDeOtrasVariaciones: boolean;
   }): Observable<any> {
     return from(this.api.deleteRecetaIngredienteMultiplesVariaciones(data));
+  }
+
+  agregarIngredienteMultiplesVariaciones(data: {
+    recetaIngredienteId: number;
+    variaciones: Array<{ variacionId: number; cantidad: number }>;
+  }): Observable<any> {
+    return from(this.api.agregarIngredienteMultiplesVariaciones(data));
+  }
+
+  getRecetasConIngrediente(data: {
+    recetaIds: number[];
+    ingredienteId?: number | null;
+    descripcion?: string | null;
+  }): Observable<number[]> {
+    return from(this.api.getRecetasConIngrediente(data));
   }
 
   // RecetaIngrediente additional methods
@@ -3162,6 +3280,8 @@ export class RepositoryIpcService extends RepositoryService {
       cuentaBancariaIds: number[];
       mostrarCuentasPorPagar?: boolean;
       mostrarCuentasPorCobrar?: boolean;
+      /** Tope de descuento al cobrar CPC, en % del cobro. null = sin tope. */
+      descuentoCpcMaxPorcentaje?: number | null;
     }
   ): Observable<any> {
     return from(this.api.saveCajaMayorConfiguracion(cajaMayorId, data));
@@ -3401,6 +3521,22 @@ export class RepositoryIpcService extends RepositoryService {
   }
   pagarCuotasComprasLote(payload: any): Observable<any> {
     return from(this.api.pagarCuotasComprasLote(payload));
+  }
+
+  getObligacionesPendientes(concepto: string, filtros?: any): Observable<any> {
+    return from(this.api.getObligacionesPendientes(concepto, filtros));
+  }
+
+  registrarPagoConsolidado(payload: any): Observable<any> {
+    return from(this.api.registrarPagoConsolidado(payload));
+  }
+
+  getPagoConsolidadoDetalle(pagoId: number): Observable<any> {
+    return from(this.api.getPagoConsolidadoDetalle(pagoId));
+  }
+
+  anularPagoConsolidado(pagoId: number, motivo?: string): Observable<any> {
+    return from(this.api.anularPagoConsolidado(pagoId, motivo));
   }
   getCuotasPendientesCompras(filtros?: any): Observable<any[]> {
     return from(this.api.getCuotasPendientesCompras(filtros));
@@ -4101,20 +4237,24 @@ export class RepositoryIpcService extends RepositoryService {
   }
 
   // ===================== DASHBOARDS POR DOMINIO =====================
-  getDashboardVentasKpis(rango: string = 'week'): Observable<any> {
-    return from(this.api.getDashboardVentasKpis(rango));
+  getCajasSelector(params: { desde?: string; hasta?: string; limite?: number } = {}): Observable<CajaSelectorItem[]> {
+    return from(this.api.getCajasSelector(params));
   }
-  getDashboardComprasKpis(): Observable<any> {
-    return from(this.api.getDashboardComprasKpis());
+
+  getDashboardVentasKpis(param: string | DashboardVentasFiltro = 'week'): Observable<any> {
+    return from(this.api.getDashboardVentasKpis(param));
   }
-  getDashboardProductosKpis(): Observable<any> {
-    return from(this.api.getDashboardProductosKpis());
+  getDashboardComprasKpis(rango: string = 'month'): Observable<any> {
+    return from(this.api.getDashboardComprasKpis(rango));
+  }
+  getDashboardProductosKpis(rango: string = 'month'): Observable<any> {
+    return from(this.api.getDashboardProductosKpis(rango));
   }
   getDashboardFinancieroKpis(): Observable<any> {
     return from(this.api.getDashboardFinancieroKpis());
   }
-  getDashboardCajaMayorKpis(): Observable<any> {
-    return from(this.api.getDashboardCajaMayorKpis());
+  getDashboardCajaMayorKpis(rango: string = 'month'): Observable<any> {
+    return from(this.api.getDashboardCajaMayorKpis(rango));
   }
   getReporteVentasCierre(params: any): Observable<any> {
     return from(this.api.getReporteVentasCierre(params));
@@ -4230,6 +4370,10 @@ export class RepositoryIpcService extends RepositoryService {
   }
   createFactura(payload: { factura: Partial<Factura> & { timbradoDetalleId?: number; numeroManual?: number }; items: any[] }): Observable<Factura> {
     return from(this.api.callIpc('create-factura', payload));
+  }
+
+  getClientePorRuc(ruc: string): Observable<any> {
+    return from(this.api.callIpc('get-cliente-por-ruc', ruc));
   }
   anularFactura(id: number, motivo: string): Observable<any> {
     return from(this.api.callIpc('anular-factura', id, motivo));

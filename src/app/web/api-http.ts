@@ -18,7 +18,7 @@
  * Instalar con `installApiHttp()` ANTES de `bootstrapApplication` (main.web.ts),
  * porque `RepositoryIpcService` lee `window.api` en su constructor.
  */
-import { API_CHANNEL_MAP } from './api-channel-map.generated';
+import { API_CHANNEL_MAP, API_ARG_SHAPE } from './api-channel-map.generated';
 
 const ACCESS_KEY = 'frc_admin_access_token';
 const REFRESH_KEY = 'frc_admin_refresh_token';
@@ -79,8 +79,19 @@ async function httpFetch(path: string, body: unknown, withAuth = true): Promise<
     throw err;
   }
   if (!res.ok) {
+    // El body de error es JSON (`{ error }` de los handlers, `{ message }` de
+    // Fastify). Sin desenvolverlo, el mensaje del backend llegaba a la pantalla
+    // como `HTTP 400: {"error":"..."}` — visto en produccion con un 429 del rate
+    // limiter. El motivo real queda sepultado en el JSON crudo.
     const txt = await res.text().catch(() => '');
-    const err: HttpError = new Error(`HTTP ${res.status}: ${txt}`);
+    let mensaje = txt;
+    try {
+      const body = JSON.parse(txt);
+      mensaje = body?.error || body?.message || txt;
+    } catch {
+      /* no era JSON: se usa el texto tal cual */
+    }
+    const err: HttpError = new Error(mensaje || `HTTP ${res.status}`);
     err.status = res.status;
     throw err;
   }
@@ -187,6 +198,23 @@ function kebab(name: string): string {
   return name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
 }
 
+/**
+ * Reproduce el empaquetado de argumentos que hace el preload de Electron.
+ *
+ * Unos pocos metodos de `window.api` reciben parametros posicionales y los
+ * mandan al canal como UN objeto (`invoke('change-password', { usuarioId, ... })`).
+ * El transporte HTTP manda `params: [...args]` tal cual, asi que sin esto el
+ * handler recibia `usuarioId` suelto como payload y devolvia PAYLOAD INVALIDO.
+ * La lista sale de `API_ARG_SHAPE`, generado del propio preload.
+ */
+function conformarArgs(method: string, args: any[]): any[] {
+  const shape = API_ARG_SHAPE[method];
+  if (!shape) return args;
+  const payload: Record<string, unknown> = {};
+  shape.forEach((clave, i) => { payload[clave] = args[i]; });
+  return [payload];
+}
+
 function channelFor(method: string): string {
   const mapped = API_CHANNEL_MAP[method];
   if (mapped) return mapped;
@@ -234,6 +262,27 @@ function buildExplicit(): Record<string, unknown> {
     windowMaximizeToggle: undefined,
     windowClose: undefined,
     onWindowStateChanged: undefined,
+    // Chrome de ventana + herramientas (zoom/devtools/fullscreen): en el
+    // browser las provee el navegador, no la app. `windowGetChrome` devuelve
+    // 'none' para que el header no dibuje botones ni el menú de herramientas.
+    windowGetChrome: async (): Promise<{ platform: string; controlsMode: 'none'; overlay: false; toolbarHeight: number }> => ({
+      platform: 'web',
+      controlsMode: 'none',
+      overlay: false,
+      toolbarHeight: 64,
+    }),
+    windowSetTitleBarOverlay: undefined,
+    windowZoomGet: undefined,
+    windowZoomSet: undefined,
+    windowZoomStep: undefined,
+    windowZoomReset: undefined,
+    windowReload: undefined,
+    windowToggleDevTools: undefined,
+    windowToggleFullscreen: undefined,
+    windowIsFullscreen: undefined,
+    onWindowZoomChanged: undefined,
+    onWindowFullscreenChanged: undefined,
+    onWindowDevToolsRequested: undefined,
     // Auto-update (electron-updater): no aplica a la app web.
     autoUpdateGetConfig: undefined,
     // Push IPC de impresora / comandas: en web se usa el fallback SSE/poll.
@@ -258,7 +307,7 @@ export function installApiHttp(): void {
       if (typeof prop !== 'string') return undefined;
       if (prop in target) return (target as Record<string, unknown>)[prop];
       const channel = channelFor(prop);
-      return (...args: any[]): Promise<any> => invokeRouter(channel, ...args);
+      return (...args: any[]): Promise<any> => invokeRouter(channel, ...conformarArgs(prop, args));
     },
   });
 

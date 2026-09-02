@@ -3,7 +3,7 @@
  *
  * Alcance de F0: validar de punta a punta que FRC Gourmet puede controlar la
  * musica del local. Todavia NO hay entidades, ni programacion por franja, ni
- * agente: la config vive en app-settings + keytar. Ver docs/PLAN-MUSICA-SPOTIFY.md.
+ * agente: la config vive en app-settings + keytar. Ver .claude/skills/frc-gourmet-expert/domains/musica-ambiental.md.
  *
  * El reproductor es la app de Spotify Desktop instalada en esta PC, controlada
  * por Spotify Connect. Esta app es el control remoto.
@@ -26,8 +26,17 @@ import {
 import { PlanProgramacion } from '../../src/app/database/entities/musica/plan-programacion.entity';
 import { PlanBloque } from '../../src/app/database/entities/musica/plan-bloque.entity';
 import { PRESETS_MUSICA, getPreset } from '../utils/musica-presets';
-import { generarPlanDelDia, getBloqueVigente } from '../services/musica-planner.service';
-import { descubrirMusica, rechazarTrack } from '../services/musica-descubrimiento.service';
+import {
+  fechaLocalHoy,
+  generarPlanDelDia,
+  getBloqueVigente,
+} from '../services/musica-planner.service';
+import {
+  construirContexto,
+  descubrirMusica,
+  rechazarTrack,
+  type FuenteDescubrimiento,
+} from '../services/musica-descubrimiento.service';
 import { enriquecerFeatures, etiquetarTracks } from '../services/musica-features.service';
 import { emitirStreamToken, StreamScope } from '../utils/stream-token.utils';
 import {
@@ -53,7 +62,10 @@ import {
   sembrarCatalogo,
   reclasificarPool,
   clasificarTodo,
+  generosDelPool,
   generosSinClasificar,
+  setPreferenciaEstilo,
+  vetarEstilo,
   fijarEstiloTrack,
   desacuerdosDeEstilo,
   getMezcla,
@@ -64,17 +76,6 @@ import { VarianteEnergia } from '../../src/app/database/entities/musica/musica-e
 import { MusicaFeedback } from '../../src/app/database/entities/musica/musica-feedback.entity';
 import { TipoFeedback } from '../../src/app/database/entities/musica/musica-enums';
 
-/**
- * Fecha local en YYYY-MM-DD. `toISOString()` daria UTC y en Paraguay (UTC-3)
- * la noche caeria al dia siguiente: el plan de las 21:00 del sabado se
- * guardaria como domingo.
- */
-function fechaLocalHoy(): string {
-  const d = new Date();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${mm}-${dd}`;
-}
 import { ensurePermission } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import {
@@ -429,25 +430,47 @@ export function registerMusicaHandlers(
     'musica-tracks-listar',
     async (
       _event,
-      filtros?: { estado?: EstadoTrack; texto?: string; page?: number; pageSize?: number },
+      filtros?: {
+        estado?: EstadoTrack;
+        texto?: string;
+        genero?: string;
+        /** Id del catalogo, o `SIN_ESTILO` para los que no cayeron en ninguno. */
+        estiloId?: number | 'SIN_ESTILO';
+        page?: number;
+        pageSize?: number;
+      },
     ) => {
       await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);
       const repo = dataSource.getRepository(MusicaTrack);
       const pageSize = Number(filtros?.pageSize) || 50;
       const page = Math.max(0, Number(filtros?.page) || 0);
 
-      const qb = repo.createQueryBuilder('t');
+      // Los joins van ANTES que los where: el filtro por estilo se expresa
+      // sobre el alias `estilo`, porque la FK `estilo_id` no tiene @Column
+      // propia y no es referenciable como `t.estiloId`.
+      const qb = repo
+        .createQueryBuilder('t')
+        .leftJoinAndSelect('t.estilo', 'estilo')
+        .leftJoinAndSelect('t.estiloManual', 'estiloManual');
+
       if (filtros?.estado) qb.andWhere('t.estado = :estado', { estado: filtros.estado });
       if (filtros?.texto) {
         qb.andWhere('(t.titulo LIKE :q OR t.artista LIKE :q)', {
           q: `%${filtros.texto.toUpperCase()}%`,
         });
       }
-      // Con las relaciones de estilo: la pantalla muestra en que estilo quedo
-      // cada tema y permite corregirlo, y sin esto vendrian todas undefined.
+      // Igualdad exacta contra el valor guardado, sin normalizar: las opciones
+      // del desplegable salen de `musica-generos-listar`, que devuelve la
+      // columna cruda.
+      if (filtros?.genero) qb.andWhere('t.genero = :genero', { genero: filtros.genero });
+
+      if (filtros?.estiloId === 'SIN_ESTILO') {
+        qb.andWhere('estilo.id IS NULL');
+      } else if (filtros?.estiloId) {
+        qb.andWhere('estilo.id = :estiloId', { estiloId: Number(filtros.estiloId) });
+      }
+
       const [items, total] = await qb
-        .leftJoinAndSelect('t.estilo', 'estilo')
-        .leftJoinAndSelect('t.estiloManual', 'estiloManual')
         .orderBy('t.artista', 'ASC')
         .addOrderBy('t.titulo', 'ASC')
         .skip(page * pageSize)
@@ -684,6 +707,33 @@ export function registerMusicaHandlers(
     return await generosSinClasificar(dataSource);
   });
 
+  /** Todos los generos del repertorio: alimenta el filtro de la pantalla. */
+  ipcMain.handle('musica-generos-listar', async () => {
+    await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);
+    return await generosDelPool(dataSource);
+  });
+
+  /**
+   * Pulgar arriba/abajo sobre un estilo. Orienta al descubridor; NO cambia
+   * cuanto suena (eso es la mezcla por bloque).
+   */
+  ipcMain.handle(
+    'musica-estilo-preferencia',
+    async (_event, data: { estiloId: number; valor: number }) => {
+      await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+      return await setPreferenciaEstilo(dataSource, data.estiloId, Number(data.valor) || 0);
+    },
+  );
+
+  /** Apaga o vuelve a encender un estilo entero para el generador de playlists. */
+  ipcMain.handle(
+    'musica-estilo-vetar',
+    async (_event, data: { estiloId: number; vetar: boolean }) => {
+      await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+      return await vetarEstilo(dataSource, data.estiloId, !!data.vetar);
+    },
+  );
+
   ipcMain.handle(
     'musica-track-estilo',
     async (_event, { trackId, estiloId }: { trackId: number; estiloId: number | null }) => {
@@ -765,7 +815,18 @@ export function registerMusicaHandlers(
    */
   ipcMain.handle(
     'musica-descubrir',
-    async (_event, data?: { cantidad?: number; bloqueId?: number }) => {
+    async (
+      _event,
+      data?: {
+        cantidad?: number;
+        bloqueId?: number;
+        fuente?: FuenteDescubrimiento;
+        prompt?: string;
+        estiloId?: number;
+        genero?: string;
+        referencia?: string;
+      },
+    ) => {
       await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
       const { musica } = readAppSettings(userData());
       return await descubrirMusica(dataSource, userData(), {
@@ -773,9 +834,42 @@ export function registerMusicaHandlers(
         bloqueId: data?.bloqueId,
         brief: musica.brief || undefined,
         usuarioId: getCurrentUser()?.id,
+        fuente: data?.fuente,
+        prompt: data?.prompt,
+        estiloId: data?.estiloId,
+        genero: data?.genero,
+        referencia: data?.referencia,
       });
     },
   );
+
+  /**
+   * El criterio con el que se va a descubrir, SIN llamar a la IA.
+   *
+   * Existe porque "Descubrir música nueva" no explicaba con que decidia, y sin
+   * eso el dueno no puede saber si el resultado flojo es culpa del modelo o de
+   * que el criterio esta incompleto. Usa la MISMA funcion que arma el prompt:
+   * si el panel consultara por su cuenta, en dos cambios diria una cosa y el
+   * prompt haria otra.
+   */
+  ipcMain.handle('musica-descubrimiento-criterio', async () => {
+    await ensurePermission(dataSource, getCurrentUser, [PERM_VER, PERM_CONFIGURAR]);
+    const { musica } = readAppSettings(userData());
+    const ctx = await construirContexto(dataSource, null, musica.avanzado?.factorDuracion || 1.5);
+    return {
+      brief: musica.brief || '',
+      estilosQueGustan: ctx.estilosQueGustan,
+      estilosQueGustanMenos: ctx.estilosQueGustanMenos,
+      estilosVetados: ctx.estilosVetados,
+      faltantes: ctx.faltantes,
+      generosVetados: ctx.generosVetados,
+      artistasVetados: ctx.artistasVetados,
+      bloques: ctx.bloques.length,
+      artistasEnPool: ctx.artistasEnPool.length,
+      rechazados: ctx.rechazados.length,
+      gustados: ctx.gustados.length,
+    };
+  });
 
   /**
    * "No va": saca el tema del repertorio y lo convierte en ejemplo negativo

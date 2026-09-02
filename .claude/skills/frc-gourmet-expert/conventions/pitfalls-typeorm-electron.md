@@ -83,6 +83,46 @@ Los campos que ya usaban `| null` (`maxPorArtista?: number | null`, `factorDurac
 
 **Bug original**: PR #234 (música, clasificación semántica). Tres revisores y toda la batería local en SQLite lo dejaron pasar; lo atajó el CI.
 
+## TypeORM + Postgres: un lock pesimista NO puede llevar `relations`
+
+```ts
+// ✗ Explota en Postgres. En SQLite pasa sin chistar.
+await qr.manager.findOne(Vale, {
+  where: { id },
+  relations: ['moneda', 'funcionario', 'funcionario.persona'],
+  lock: { mode: 'pessimistic_write' },
+});
+// → FOR UPDATE no puede ser aplicado al lado nulable de un outer join
+```
+
+TypeORM resuelve las `relations` con **LEFT JOIN**, y Postgres rechaza `FOR UPDATE` sobre el lado nulable de un outer join. **SQLite ni se entera**: su driver ignora los locks, así que en desarrollo no pasa nada y el error aparece recién en el local del cliente — en el caso del issue #258, con el pago a medio registrar.
+
+```ts
+// ✓ Dos consultas. El FOR UPDATE se sostiene hasta el fin de la transacción,
+//   así que la segunda lectura ya está protegida.
+if (esPostgres) {
+  await qr.manager.findOne(Vale, { where: { id }, lock: { mode: 'pessimistic_write' } });
+}
+return qr.manager.findOne(Vale, { where: { id }, relations: [...] });
+```
+
+Filtrar por la FK de una relación (`where: { venta: { id } }`) **sí** es compatible con el lock — verificado contra Postgres real en `npm run test:locks-pg`, que además barre el backend buscando la forma prohibida.
+
+## Angular standalone: `*appHasPermission` sin importar la directiva esconde el elemento, en silencio
+
+`*appHasPermission="'X'"` desazucara a `<ng-template appHasPermission [appHasPermission]="'X'">`. Si el componente **standalone** no tiene `HasPermissionDirective` en sus `imports`, **nadie instancia ese template**: el elemento no se renderiza nunca, para ningún usuario.
+
+No hay error de AOT, ni warning de consola, ni test que falle. El botón simplemente no está. Le pasó al **COBRAR del PdV**, que quedó invisible incluso para el ADMIN — y se diagnostica mal, porque parece un problema de permisos.
+
+```ts
+@Component({
+  standalone: true,
+  imports: [..., HasPermissionDirective],   // ← sin esto, el gate esconde todo
+})
+```
+
+Los componentes declarados en un `NgModule` heredan la directiva del módulo, así que el riesgo es exclusivo de los standalone. `npm run test:gating-ui` cruza cada template que usa la directiva con el array `imports` del decorador que declara ese template.
+
 ## TypeORM: leftJoin a tabla sin relación @ManyToOne
 
 Si una entidad tiene **columna plana** (`compraId: int`) pero no `@ManyToOne compra`, no se puede hacer `leftJoinAndSelect('cpp.compra', ...)`. Hay que joinear con la tabla raw:
@@ -131,7 +171,45 @@ function parseLocalDate(s: string): Date {
 
 **Aplicado en compras**. Pendiente sweep en otros handlers (`gastos`, `retiros-caja`, `caja-mayor`, `entradas-varias`, `cheques`, `cuentas-por-pagar`, `vacaciones`, `feriados`, `asistencias`, etc.). (`project_todo_fechas_local_timezone`)
 
-Las columnas `datetime` no tienen el problema (guardan timestamp completo).
+Las columnas `datetime` no tienen el problema **de la fecha corrida**, pero tienen el suyo propio — el de acá abajo.
+
+## SQL crudo: comparar un `datetime` contra `toISOString()` rompe en SQLite
+
+En SQLite las columnas `datetime` son **TEXT** con el formato que persiste TypeORM:
+
+```
+'2026-08-01 18:00:00.000'     ← separador ESPACIO, sin Z
+```
+
+y SQLite compara TEXT **byte a byte**. Un límite armado con `fecha.toISOString()`
+trae `'2026-08-01T00:00:00.000Z'`, con `T`. En la posición 10 chocan `' '` (0x20)
+contra `'T'` (0x54), y como `' ' < 'T'`:
+
+- en un `WHERE created_at >= :desde` se caen **todas** las filas del día del
+  límite (en un reporte mensual: el día 1 entero, no un caso borde);
+- en un `WHERE created_at <= :hasta` se **cuelan** las del día del límite
+  superior — con huso negativo, el día 1 del mes siguiente.
+
+Verificado sobre una BD creada con las migraciones del repo:
+
+```sql
+-- created_at guardado: '2026-08-01 18:00:00.000'
+SELECT id FROM ventas WHERE created_at >= '2026-08-01T00:00:00.000Z';  -- []  ← se pierde
+```
+
+En **Postgres no pasa**: la columna es `timestamp` nativo y el driver parsea el ISO.
+O sea que el bug sólo se ve en standalone, que es el despliegue default.
+
+**Regla:** todo parámetro de fecha que se compare contra una columna
+`datetime`/`timestamp` en SQL crudo pasa por
+`fechaParamSql(dataSource, fecha)` (`electron/utils/date.utils.ts`), que formatea
+según el driver. No usar `.toISOString()` suelto.
+
+> Los reportes y dashboards de Ventas todavía tienen este bug (`filtroRango` en
+> `dashboard-ventas.handler.ts` y las queries de `reportes-ventas.helper.ts`):
+> issue [#249](https://github.com/GabFrank/frc-gourmet/issues/249). Ojo al
+> arreglarlo: los totales publicados **cambian** (aparece el día 1, desaparece el
+> arrastre del mes siguiente).
 
 ## TypeORM `find` con relations no carga columnas raw
 
@@ -288,8 +366,162 @@ dataSource.query(`UPDATE ventas SET vendedor_id = created_by WHERE vendedor_id I
 
 Corre en cada arranque (en el `then` de `DataSource.initialize`). Es idempotente (la próxima vez el WHERE está vacío). Patrón aceptable para data fixes simples; para cambios de esquema, usar una migración formal.
 
+## Los `.js` compilados le ganan a los `.ts` en los tests ts-node
+
+Los scripts `npm run test:*` corren con ts-node e importan los handlers por ruta
+sin extensión (`require('../electron/handlers/ventas.handler')`). Node resuelve
+`.js` **antes** que `.ts`, y `electron/**/*.js` está gitignorado pero **existe en
+tu working copy** apenas corriste `npm start`, `npm run build`, `npm run check` o
+el hook de pre-commit (todos ejecutan `tsc -p tsconfig.electron.json`, que emite).
+
+Resultado: editás un handler, corrés su test y estás ejecutando **la versión
+compilada vieja** — el test pasa (o falla) por motivos que no tienen nada que ver
+con tu cambio. Pasó el 2026-08-17: un test nuevo "fallaba" contra el bug que
+acababa de arreglarse, porque corría el `.js` de otra rama.
+
+**No es sólo `electron/`.** Pasó otra vez el 2026-08-19 con un util nuevo en
+`src/app/shared/utils/`: el hook de pre-commit emite el `.js` al lado de cada
+`.ts` que toca, así que el test corría **la versión del último commit** en vez
+de la del working tree. El síntoma es traicionero: el test pasa en verde con el
+bug adentro, porque valida código viejo que todavía no tenía el bug (o al revés,
+falla contra un fix que ya aplicaste). Un `.js` fechado más tarde que su `.ts`
+es la pista.
+
+**Regla:** agregá **`--prefer-ts-exts`** al script del test. Le dice a ts-node
+que resuelva `.ts` antes que `.js` y el problema desaparece de raíz, sin
+depender de acordarse de recompilar:
+
+```json
+"test:mi-cosa": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-mi-cosa.ts"
+```
+
+**Desde 2026-08 lo tienen los 28 scripts `test:*`.** Costó caro descubrirlo: `test:variacion-config` y `test:variacion-precios` daban rojo validando un `productos.handler.js` compilado una hora antes, sin la feature que decían probar, y se dieron por "fallos preexistentes" durante un día entero. Si agregás un script de test nuevo, la bandera va sí o sí.
+Alternativa manual: correr `npm run electron:serve-tsc` antes del test (sólo
+sirve para `electron/`), o borrar el `.js` que tapa. En CI no aplica (clona
+limpio, no hay `.js`) — pero eso significa que **CI y local pueden diferir**:
+si un test se comporta distinto en los dos, sospechá de esto primero.
+
+Corolario: los `test:*` que corren ts-node **sin** `--transpile-only` (hoy sólo
+`test:pedidos-online`) type-chequean los `.ts` en local sólo cuando no hay `.js`
+que los tape.
+
 ## TypeORM cascade en BaseModel.createdBy/updatedBy
 
 `createdBy: Usuario` con `@ManyToOne('Usuario', { nullable: true })`. Si se borra el usuario, las FKs **no se nulean automáticamente**. Si bien las entidades quedan con `created_by_id` apuntando a un usuario inexistente, las queries con `relations: ['createdBy']` pueden fallar o devolver `null`.
 
 Solución actual: usuarios no se borran, se hacen `activo = false`. Soft delete preserva integridad referencial.
+
+
+## `date +%s%3N` no funciona en macOS (timestamp de migraciones)
+
+La convención dice que el prefijo de una migración es epoch en milisegundos reales.
+`date +%s%3N` es sintaxis **GNU**: en macOS, BSD `date` no conoce `%3N` y devuelve
+la `N` literal pegada al final —
+
+```
+$ date +%s%3N
+17871698783N          # <- la N es parte de la salida
+```
+
+…lo que produce un archivo `17871698783N-Migracion.ts` y una clase
+`Migracion17871698783N`, que ni siquiera es un identificador coherente.
+
+En macOS:
+
+```bash
+python3 -c "import time;print(int(time.time()*1000))"
+```
+
+## `ADD COLUMN ... IF NOT EXISTS` es inválido en SQLite
+
+`CREATE TABLE IF NOT EXISTS` funciona en los dos motores. `ALTER TABLE ... ADD
+COLUMN IF NOT EXISTS` **no**: SQLite lo rechaza. El patrón del repo es consultar el
+esquema antes:
+
+```ts
+const tabla = await queryRunner.getTable('cajas_mayor_movimientos');
+if (tabla && !tabla.columns.find((c) => c.name === 'pago_consolidado_id')) {
+  await queryRunner.query(`ALTER TABLE "cajas_mayor_movimientos" ADD COLUMN "pago_consolidado_id" integer NULL`);
+}
+```
+
+## Entidades sin columna `activo`
+
+`BaseModel` **no** trae `activo`: cada entidad la agrega si la necesita. `Gasto` y
+`Vale`, por ejemplo, **no la tienen** — filtrar por `g.activo = true` revienta con
+`no such column`. Su ciclo de vida se expresa en `estado`, no en un booleano.
+
+
+## `matStepperNext` / `matStepperPrevious` sólo funcionan DENTRO del `<mat-stepper>`
+
+Un footer fijo fuera del stepper (patrón común para que los botones no scrolleen
+con el contenido) **no puede** usar esas directivas: inyectan el `CdkStepper` de
+un ancestro, no lo encuentran, y los botones **no llegan a crearse** — sin error
+visible en consola, simplemente no están en el DOM.
+
+Fuera del stepper hay que navegar a mano:
+
+```ts
+@ViewChild('stepper') stepper?: MatStepper;
+paso = 0;                                  // la vista lee esto, no stepper.selectedIndex
+siguientePaso() { this.stepper?.next(); this.paso = this.stepper!.selectedIndex; }
+```
+
+Y en el template, `(selectionChange)="onPasoChange($event.selectedIndex)"` sobre
+el `<mat-stepper>` para no perder el sincronismo si el usuario navega por los
+encabezados.
+
+> Relacionado: una variable de template (`#stepper`) declarada **dentro** de un
+> `*ngIf` no es visible fuera de esa vista embebida. Si además existe una
+> propiedad del componente con el mismo nombre, la vista resuelve a la propiedad
+> y el bug queda camuflado.
+
+## `@ViewChild('btn')` sobre un botón Material devuelve la directiva, no el elemento
+
+En el Material MDC de Angular 15, **`MatButton` es un `@Component`**, no una
+directiva. Una template ref sin `exportAs` sobre un elemento que hospeda un
+componente resuelve a **la instancia del componente**, así que esto compila,
+no tira ningún error en runtime y no hace absolutamente nada:
+
+```ts
+@ViewChild('confirmarBtn') confirmarBtn!: ElementRef<HTMLButtonElement>;
+// ...
+this.confirmarBtn?.nativeElement?.focus();   // nativeElement es undefined
+```
+
+El optional chaining se traga el `undefined` y el foco nunca se mueve. Va con
+`read`:
+
+```ts
+@ViewChild('confirmarBtn', { read: ElementRef }) confirmarBtn!: ElementRef<HTMLButtonElement>;
+```
+
+Cómo distinguir sin adivinar: `<input matInput>` / `<textarea matInput>` son
+elementos nativos con una **directiva** encima, así que un `#ref` pelado ya da
+`ElementRef`. `<mat-select>`, `<button mat-raised-button>` y compañía son
+componentes: sin `read` obtenés la instancia — que a veces es justo lo que
+querés (`MatSelect` tiene su propio `.focus()` y `.open()`), y a veces no.
+
+Apareció en `crear-delivery-dialog`: el Enter en OBSERVACIÓN nunca llevó el
+foco al botón CREAR desde que se escribió, sin síntoma visible más allá de
+"no pasa nada".
+
+## `matBadge` se ancla al elemento que lo declara, no al botón que lo contiene
+
+Material envuelve el contenido proyectado de un botón en
+`.mdc-button__label`, y ese wrapper viene con `position: relative`. Un
+`matBadge` colgado del `<mat-icon>` o del `<span>` del texto —o cualquier
+`position: absolute` propio— se posiciona **contra el label**, o sea contra el
+medio del botón, no contra su esquina.
+
+Si querés el badge en la esquina, hay que neutralizar el wrapper:
+
+```scss
+.mi-boton .mdc-button__label { position: static; }
+.mi-badge { position: absolute; top: 2px; right: 3px; z-index: 2; }
+```
+
+El `z-index` es necesario porque el ripple (`.mat-mdc-button-persistent-ripple`)
+es el otro absolute del botón. Y ojo con `overflow: hidden` en el botón: el
+badge tiene que caer **por dentro** del borde, no montado encima como haría
+matBadge.

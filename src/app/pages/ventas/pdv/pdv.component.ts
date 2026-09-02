@@ -14,6 +14,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { mensajeDeError } from 'src/app/shared/utils/error-message.util';
 import { FormControl, FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { Observable, of, firstValueFrom, async } from 'rxjs';
 import { debounceTime, distinctUntilChanged, map, startWith, switchMap } from 'rxjs/operators';
@@ -46,7 +47,10 @@ import { PdvAtajoGrupo } from 'src/app/database/entities/ventas/pdv-atajo-grupo.
 import { CobrarVentaDialogComponent, CobrarVentaDialogData } from 'src/app/shared/components/cobrar-venta-dialog/cobrar-venta-dialog.component';
 import { CancelarVentaDialogComponent } from 'src/app/shared/components/cancelar-venta-dialog/cancelar-venta-dialog.component';
 import { EditVentaItemDialogComponent } from 'src/app/shared/components/edit-venta-item-dialog/edit-venta-item-dialog.component';
-import { TransferirMesaDialogComponent } from 'src/app/shared/components/transferir-mesa-dialog/transferir-mesa-dialog.component';
+import { derivarEstadoVisualMesa, derivarEstadoDetalleMesa } from 'src/app/shared/utils/mesa-estado.util';
+import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
+import { TransferirDestinoDialogComponent, TransferirDestinoDialogData, TransferirDestinoResult }
+  from 'src/app/shared/components/transferir-destino-dialog/transferir-destino-dialog.component';
 import { BuscarClienteDialogComponent } from 'src/app/shared/components/buscar-cliente-dialog/buscar-cliente-dialog.component';
 import { DescuentoDialogComponent } from 'src/app/shared/components/descuento-dialog/descuento-dialog.component';
 import { DividirCuentaDialogComponent } from 'src/app/shared/components/dividir-cuenta-dialog/dividir-cuenta-dialog.component';
@@ -78,6 +82,15 @@ interface CurrencyDisplay {
   flag: string;
 }
 
+/**
+ * Mesa con el color y el tooltip ya resueltos.
+ *
+ * La regla 4 del proyecto prohíbe funciones y getters en templates, así que el
+ * estado visual se calcula una vez y se estampa acá. No son columnas: viven sólo
+ * en el objeto que consume la grilla.
+ */
+type MesaVm = PdvMesa & { _claseEstado?: string; _tooltip?: string };
+
 @Component({
   selector: 'app-pdv',
   templateUrl: './pdv.component.html',
@@ -99,7 +112,10 @@ interface CurrencyDisplay {
     MatTooltipModule,
     MatDialogModule,
     MatMenuModule,
-    MatCheckboxModule
+    MatCheckboxModule,
+    // Sin esto, `*appHasPermission` desazucara a un <ng-template> que nadie
+    // instancia: el boton desaparece en silencio, sin error de AOT ni de consola.
+    HasPermissionDirective
   ],
   animations: [
     trigger('detailExpand', [
@@ -147,7 +163,7 @@ export class PdvComponent implements OnInit, OnDestroy {
   productos: Producto[] = [];
 
   // Tables (mesas)
-  mesas: PdvMesa[] = [];
+  mesas: MesaVm[] = [];
   loadingMesas = false;
   selectedMesa: PdvMesa | null = null;
 
@@ -156,6 +172,8 @@ export class PdvComponent implements OnInit, OnDestroy {
 
   // Delivery activo (cuando se editan items de un delivery)
   deliveryActual: Delivery | null = null;
+  /** Muestra el boton DELIVERY del PdV (Configuracion del PdV -> Delivery). */
+  deliveryHabilitado = true;
 
   // Comandas (tarjetas de cuenta individual)
   comandas: any[] = [];
@@ -164,6 +182,17 @@ export class PdvComponent implements OnInit, OnDestroy {
   activeTab: 'MESAS' | 'COMANDAS' = 'MESAS';
   mesasOcupadasCount = 0;
   comandasOcupadasCount = 0;
+  /** Repartos vivos (ABIERTO / PARA_ENTREGA / EN_CAMINO). */
+  deliveriesPendientesCount = 0;
+  /** Pedidos de la web esperando que alguien los acepte. */
+  pedidosOnlinePendientesCount = 0;
+  /**
+   * Con la tienda online apagada no entran pedidos web, así que su badge no
+   * tiene nada que contar y el poll que lo alimenta no tiene a qué preguntarle.
+   */
+  tiendaOnlineActiva = false;
+  private pedidosOnlineInterval: any;
+  private ultimoConteoPedidosOnline = 0;
   private refreshingComandas = false;
 
   // Sector filter for tables
@@ -188,7 +217,24 @@ export class PdvComponent implements OnInit, OnDestroy {
   currentDeviceId: number | null = null;
   // Gate de cobro por dispositivo: true solo en el dispositivo donde se abrio
   // la caja. Otros dispositivos (y la PWA) pueden lanzar items pero no cobrar.
+  /**
+   * Gate de terminal ajena. Se computa en dos etapas a propósito:
+   *
+   *  1. `aplicarCajaSeleccionada()` lo fija **síncrono** al unirse a la caja,
+   *     con el criterio histórico (sólo la terminal dueña opera). Fail-closed.
+   *  2. `recomputarGateTerminal()` lo **amplía** una vez leída la config del
+   *     PdV, si el local habilitó alguno de los dos permisos.
+   *
+   * Si la lectura de config falla, quedan los valores de (1): la terminal dueña
+   * nunca puede quedarse sin cobrar por un error de red.
+   */
+  esTerminalDeLaCaja = true;
   puedeCobrar = false;
+  puedeFinalizarVenta = false;
+  /** Texto del chip informativo en la barra de caja. Vacío = no se muestra. */
+  avisoTerminal = '';
+  tooltipCobrar = 'Cobrar (F1)';
+  tooltipCobroRapido = 'Cobro rápido (F2)';
   // Nombre del dispositivo dueno de la caja (para el mensaje al usuario).
   dispositivoCajaNombre = '';
 
@@ -235,6 +281,12 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit(): Promise<void> {
+    // Los pedidos de la web entran solos. Sin un aviso acá, el cajero se entera
+    // recién si abre el diálogo de delivery por su cuenta: un pedido puede
+    // quedar sin mirar mientras el cliente espera.
+    this.refrescarContadoresDelivery();
+    this.pedidosOnlineInterval = setInterval(() => this.refrescarContadoresDelivery(), 15000);
+
     // Dispositivo de este PC (para el gate de cobro por dispositivo).
     this.currentDeviceId = (window as any).api?.getDeviceId ? (window as any).api.getDeviceId() : null;
 
@@ -354,15 +406,78 @@ export class PdvComponent implements OnInit, OnDestroy {
     // dueño de la caja; si el dispositivo local no está identificado (ej.
     // standalone sin device configurado) no se bloquea, para no romper el cobro
     // en instalaciones de un solo equipo.
-    this.puedeCobrar = this.currentDeviceId == null || dispositivoCajaId == null || this.currentDeviceId === dispositivoCajaId;
-    if (!this.puedeCobrar) {
-      this.snackBar.open(
-        `Unido a la caja #${caja.id}. El cobro solo se realiza en ${this.dispositivoCajaNombre || 'el dispositivo donde se abrió la caja'}.`,
-        'OK',
-        { duration: 6000 }
-      );
-    }
+    this.esTerminalDeLaCaja =
+      this.currentDeviceId == null || dispositivoCajaId == null || this.currentDeviceId === dispositivoCajaId;
+    // Arranque fail-closed: la conducta histórica. `recomputarGateTerminal()`
+    // sólo puede ampliar esto, nunca restringirlo.
+    this.puedeCobrar = this.esTerminalDeLaCaja;
+    this.puedeFinalizarVenta = this.esTerminalDeLaCaja;
+    this.actualizarTextosTerminal(caja.id);
     this.loadInitialData();
+  }
+
+  /**
+   * Amplía el gate según la configuración del PdV, una vez leída.
+   *
+   * `PdvConfig` puede habilitar por separado registrar pagos y finalizar ventas
+   * desde una terminal que no abrió la caja. Nunca restringe: si la config no
+   * se pudo leer o no habilita nada, quedan los valores fail-closed que fijó
+   * `aplicarCajaSeleccionada`.
+   */
+  private recomputarGateTerminal(): void {
+    if (this.esTerminalDeLaCaja) return;
+    this.puedeCobrar = this.pdvConfig?.permitirPagosTerminalAjena === true;
+    this.puedeFinalizarVenta = this.pdvConfig?.permitirFinalizarTerminalAjena === true;
+    this.actualizarTextosTerminal(this.caja?.id);
+  }
+
+  /**
+   * Textos del aviso y de los tooltips. Pre-computados: la regla 4 prohíbe
+   * funciones y getters en el template.
+   */
+  private actualizarTextosTerminal(cajaId?: number | null): void {
+    const terminal = this.dispositivoCajaNombre || 'la terminal donde se abrió la caja';
+    if (this.esTerminalDeLaCaja) {
+      this.avisoTerminal = '';
+      this.tooltipCobrar = 'Cobrar (F1)';
+      this.tooltipCobroRapido = 'Cobro rápido (F2)';
+      return;
+    }
+    const ref = cajaId ? `Caja #${cajaId}` : 'Caja';
+    if (this.puedeCobrar && this.puedeFinalizarVenta) {
+      this.avisoTerminal = `${ref} abierta en ${terminal} · cobro habilitado desde acá`;
+    } else if (this.puedeCobrar) {
+      this.avisoTerminal = `${ref} abierta en ${terminal} · podés cargar pagos, no finalizar`;
+    } else if (this.puedeFinalizarVenta) {
+      this.avisoTerminal = `${ref} abierta en ${terminal} · podés finalizar, no cargar pagos`;
+    } else {
+      this.avisoTerminal = `${ref} abierta en ${terminal} · el cobro se hace allá`;
+    }
+    this.tooltipCobrar = this.puedeCobrar || this.puedeFinalizarVenta
+      ? 'Cobrar (F1)'
+      : `El cobro solo se realiza en ${terminal}`;
+    // El cobro rápido hace las dos cosas de una: cargar el pago y cerrar la
+    // venta. Necesita los dos permisos.
+    this.tooltipCobroRapido = this.puedeCobrar && this.puedeFinalizarVenta
+      ? 'Cobro rápido (F2)'
+      : `El cobro rápido registra y finaliza: solo se hace en ${terminal}`;
+  }
+
+  /**
+   * Relee la config del PdV justo antes de cobrar.
+   *
+   * El diálogo de configuración no se abre desde el PdV (va por el menú, el
+   * home o el dashboard), así que sin esto un cambio de los flags no surtía
+   * efecto hasta cerrar y reabrir la pestaña. Es una sola fila.
+   */
+  private async refrescarGateTerminal(): Promise<void> {
+    if (this.esTerminalDeLaCaja) return;
+    try {
+      const cfg = await firstValueFrom(this.repositoryService.getPdvConfig());
+      const config = Array.isArray(cfg) ? cfg[0] : cfg;
+      if (config) this.pdvConfig = config;
+    } catch { /* se mantiene lo que ya estaba */ }
+    this.recomputarGateTerminal();
   }
 
   /**
@@ -416,8 +531,21 @@ export class PdvComponent implements OnInit, OnDestroy {
           if (config?.atajosProductosGridSize) {
             this.atajosProductosGridSize = config.atajosProductosGridSize;
           }
+          // `deliveryHabilitado` es nuevo: en una base sin migrar llega
+          // undefined, y ahi el modulo tiene que seguir visible.
+          this.deliveryHabilitado = config?.deliveryHabilitado !== false;
         }
       } catch (e) { /* use default */ }
+      finally {
+        // En `finally`: si la lectura falla, el gate se queda en fail-closed y
+        // el aviso sigue siendo el correcto.
+        this.recomputarGateTerminal();
+      }
+
+      try {
+        const tienda: any = await firstValueFrom(this.repositoryService.getTiendaOnlineConfig());
+        this.tiendaOnlineActiva = !!tienda?.activa;
+      } catch { /* sin config legible se asume apagada */ }
 
       // Load atajo grupos
       await this.loadAtajoGrupos();
@@ -439,9 +567,73 @@ export class PdvComponent implements OnInit, OnDestroy {
     }, 1000);
   }
 
+  /**
+   * Refresca los dos badges del botón DELIVERY y avisa con un sonido cuando
+   * entra un pedido nuevo. El sonido se genera con WebAudio en vez de un
+   * archivo: no hay assets de audio en el proyecto y empaquetar uno para un
+   * beep no se justifica.
+   */
+  private async refrescarContadoresDelivery(): Promise<void> {
+    if (!this.deliveryHabilitado) return;
+    if (this.tiendaOnlineActiva) {
+      try {
+        const res: any = await firstValueFrom(this.repositoryService.contarPedidosOnlinePendientes());
+        const nuevos = Number(res?.total ?? res ?? 0) || 0;
+        if (nuevos > this.ultimoConteoPedidosOnline) this.sonarAvisoPedido();
+        this.ultimoConteoPedidosOnline = nuevos;
+        this.pedidosOnlinePendientesCount = nuevos;
+      } catch {
+        /* el badge no puede romper el PdV */
+      }
+    }
+    try {
+      const caja = this.caja?.id;
+      if (caja) {
+        const r: any = await firstValueFrom(
+          this.repositoryService.deliveryListarPdv(caja, { page: 1, pageSize: 200 }),
+        );
+        const vivos = (r?.data || []).filter((d: any) =>
+          ['ABIERTO', 'PARA_ENTREGA', 'EN_CAMINO'].includes(d?.estado));
+        this.deliveriesPendientesCount = vivos.length;
+      }
+    } catch {
+      /* idem */
+    }
+  }
+
+  /** Beep de aviso. Deliberadamente distinto del resto: el local tiene ruido. */
+  private sonarAvisoPedido(): void {
+    try {
+      const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const tono = (freq: number, inicio: number, dur: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime + inicio);
+        gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + inicio + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + inicio + dur);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + inicio);
+        osc.stop(ctx.currentTime + inicio + dur + 0.02);
+      };
+      // Dos notas ascendentes: se distingue de cualquier beep de error.
+      tono(880, 0, 0.16);
+      tono(1320, 0.18, 0.22);
+      setTimeout(() => ctx.close().catch(() => {}), 900);
+    } catch {
+      /* sin audio no pasa nada */
+    }
+  }
+
   ngOnDestroy(): void {
     if (this.mesasRefreshInterval) {
       clearInterval(this.mesasRefreshInterval);
+    }
+    if (this.pedidosOnlineInterval) {
+      clearInterval(this.pedidosOnlineInterval);
     }
     if (this.focusBuscadorTimeout) {
       clearTimeout(this.focusBuscadorTimeout);
@@ -483,6 +675,85 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Estampa en la mesa el color y el tooltip que le corresponden.
+   *
+   * El color responde UNA pregunta: ¿la mesa tiene cuenta propia? El badge, que
+   * ya existía, carga la otra dimensión: ¿hay comandas sentadas acá? Son dos
+   * señales ortogonales, y colapsarlas destruye la distinción que necesita el
+   * cajero — "no hay nada que cobrarle a la mesa" vs "hay cuenta de mesa Y
+   * además comandas".
+   *
+   *   verde            vacía
+   *   amarillo + badge sin cuenta de mesa, N comandas sentadas
+   *   naranja          cuenta de mesa
+   *   naranja + badge  cuenta de mesa + comandas → ⚠️ 2 cuentas o más
+   *   azul             reservada (pisa a las demás)
+   *
+   * Se estampa en vez de calcularse en el template porque la regla 4 del
+   * proyecto prohíbe funciones y getters en templates. ⚠️ Hay SIETE caminos que
+   * escriben `mesas`; si alguno no llama a esto, el color se congela — y el más
+   * traicionero es el de la mesa SELECCIONADA, que `refreshMesasSilent` saltea a
+   * propósito para no pisar datos en edición.
+   */
+  private estamparMesa(mesa: any): void {
+    if (!mesa) return;
+    // La matriz de decisión vive en `mesa-estado.util.ts`, fuera del componente,
+    // para que el test la importe en vez de replicarla: una copia se queda vieja
+    // en silencio el día que alguien cambia la regla acá.
+    const { clase, tooltip } = derivarEstadoVisualMesa(mesa);
+    mesa._claseEstado = clase;
+    mesa._tooltip = tooltip;
+
+    // La card de detalle muestra la misma verdad que la tarjeta del plano.
+    if (this.selectedMesa && mesa.id === this.selectedMesa.id) this.estamparDetalleMesa();
+  }
+
+  /** Estado de la mesa seleccionada, para la card de detalle (regla 4: sin
+   *  funciones ni getters en el template). Se recalcula al seleccionar y al
+   *  estampar. */
+  mesaDetalleClase = '';
+  mesaDetalleTexto = '';
+
+  private estamparDetalleMesa(): void {
+    const { clase, texto } = derivarEstadoDetalleMesa(this.selectedMesa as any);
+    this.mesaDetalleClase = clase;
+    this.mesaDetalleTexto = texto;
+  }
+
+  /**
+   * Abre una comanda sentada en la mesa seleccionada.
+   *
+   * ⚠️ Se busca por id dentro de `this.comandas`, NO se reusa el objeto que
+   * viene en `mesa.comandas`: son grafos distintos y `refreshComandasSilent`
+   * sólo actualiza los de `this.comandas`. Reusar la referencia de la mesa deja
+   * la comanda seleccionada congelada.
+   */
+  async abrirComandaDeMesa(comandaDeLaMesa: any): Promise<void> {
+    if (!comandaDeLaMesa?.id) return;
+    // Se revalida el ESTADO, no sólo la existencia: `getComandasActivas` devuelve
+    // también las DISPONIBLE, y si otro cajero liberó la comanda entre el render
+    // del chip y el click, `selectComanda` abriría el diálogo de asignar
+    // mesa/sector — otra cosa completamente distinta a lo que se pidió.
+    const viva = this.comandas.find((c: any) => c.id === comandaDeLaMesa.id);
+    if (!viva || viva.estado !== 'OCUPADO') {
+      this.snackBar.open('Esa comanda ya no está abierta', 'CERRAR', { duration: 3000 });
+      await this.loadMesas();
+      return;
+    }
+    this.activeTab = 'COMANDAS';
+    await this.selectComanda(viva);
+  }
+
+  /** Estampa todas y recalcula el contador del tab, que también deriva. */
+  private estamparMesas(): void {
+    for (const mesa of this.mesas) this.estamparMesa(mesa);
+    this.estamparDetalleMesa();  // por si la seleccionada no está en el array
+    // El badge del tab cuenta lo mismo que pinta de naranja: cuentas de mesa.
+    // Antes contaba por la columna cruda y quedaba desalineado con los colores.
+    this.mesasOcupadasCount = this.mesas.filter(m => !!(m as any).venta).length;
+  }
+
+  /**
    * Refresh mesas sin afectar la selección actual
    */
   private async refreshMesasSilent(): Promise<void> {
@@ -513,7 +784,7 @@ export class PdvComponent implements OnInit, OnDestroy {
       }
 
       this.mesas = [...this.mesas];
-      this.mesasOcupadasCount = this.mesas.filter(m => m.estado === PdvMesaEstado.OCUPADO).length;
+      this.estamparMesas();
     } catch (error) {
       // Silencioso — no interrumpir al usuario
     } finally {
@@ -528,14 +799,14 @@ export class PdvComponent implements OnInit, OnDestroy {
     this.loadingMesas = true;
     try {
       // Get all active tables
-      this.mesas = await firstValueFrom(this.repositoryService.getPdvMesas());
+      this.mesas = await firstValueFrom(this.repositoryService.getPdvMesas()) as MesaVm[];
 
       // Filter for active tables
       this.mesas = this.mesas.filter(mesa => mesa.activo);
 
       // Sort tables by number
       this.mesas.sort((a, b) => a.numero - b.numero);
-      this.mesasOcupadasCount = this.mesas.filter(m => m.estado === PdvMesaEstado.OCUPADO).length;
+      this.estamparMesas();
 
       console.log(`Loaded ${this.mesas.length} tables`);
     } catch (error) {
@@ -555,13 +826,14 @@ export class PdvComponent implements OnInit, OnDestroy {
     try {
       this.selectedSectorId = sectorId;
       // Get tables by sector
-      this.mesas = await firstValueFrom(this.repositoryService.getPdvMesasBySector(sectorId));
+      this.mesas = await firstValueFrom(this.repositoryService.getPdvMesasBySector(sectorId)) as MesaVm[];
 
       // Filter for active tables
       this.mesas = this.mesas.filter(mesa => mesa.activo);
 
       // Sort tables by number
       this.mesas.sort((a, b) => a.numero - b.numero);
+      this.estamparMesas();
 
       console.log(`Loaded ${this.mesas.length} tables for sector ${sectorId}`);
     } catch (error) {
@@ -823,66 +1095,6 @@ export class PdvComponent implements OnInit, OnDestroy {
     });
   }
 
-  /**
-   * Transferir venta de comanda a una mesa (libera la comanda)
-   */
-  transferirComandaAMesa(): void {
-    if (!this.selectedComanda?.venta) return;
-
-    const dialogRef = this.dialog.open(TransferirMesaDialogComponent, {
-      width: '500px',
-      data: { mesaActual: this.selectedComanda.pdv_mesa || { numero: `Comanda #${this.selectedComanda.numero}` } },
-    });
-
-    dialogRef.afterClosed().subscribe(async (mesaDestino: PdvMesa | null) => {
-      if (!mesaDestino || !this.selectedComanda?.venta) return;
-      try {
-        const ventaId = this.selectedComanda.venta.id;
-
-        if (mesaDestino.venta?.id) {
-          // Mesa destino tiene venta: mover items a esa venta
-          const items = this.ventaItemsDataSource.data.filter(i => i.estado === EstadoVentaItem.ACTIVO);
-          for (const item of items) {
-            await firstValueFrom(this.repositoryService.updateVentaItem(item.id, {
-              venta: { id: mesaDestino.venta.id } as any,
-            }));
-          }
-          // Transferir nombre cliente si destino no tiene
-          const ventaOrigen = await firstValueFrom(this.repositoryService.getVenta(ventaId));
-          if (ventaOrigen?.nombreCliente && !mesaDestino.venta.nombreCliente) {
-            await firstValueFrom(this.repositoryService.updateVenta(mesaDestino.venta.id, {
-              nombreCliente: ventaOrigen.nombreCliente,
-            }));
-          }
-          // Cancelar la venta de la comanda
-          await firstValueFrom(this.repositoryService.updateVenta(ventaId, {
-            estado: VentaEstado.CANCELADA,
-          }));
-        } else {
-          // Mesa destino libre: mover la venta completa
-          await firstValueFrom(this.repositoryService.updateVenta(ventaId, {
-            mesa: { id: mesaDestino.id } as any,
-            comanda: null as any,
-          }));
-          // Ocupar mesa destino
-          await firstValueFrom(this.repositoryService.updatePdvMesa(mesaDestino.id!, { estado: PdvMesaEstado.OCUPADO } as any));
-        }
-
-        // Cerrar comanda (liberar tarjeta)
-        await this.cerrarComandaActual();
-
-        // Limpiar UI
-        this.ventaItemsDataSource.data = [];
-        this.calculateTotals();
-        this.clienteNameForm.get('nombre')?.setValue('');
-
-        await this.loadMesas();
-      } catch (error) {
-        console.error('Error al transferir comanda a mesa:', error);
-      }
-    });
-  }
-
   // --- Atajos (accesos rápidos) ---
 
   async loadAtajoGrupos(): Promise<void> {
@@ -1135,8 +1347,11 @@ export class PdvComponent implements OnInit, OnDestroy {
         reemplazoProductoId: m.ingredienteReemplazo?.id,
       }));
     const adicionalesSeleccionados = (existingAdicionales || []).map((a: any) => a.adicional?.id);
+    // La fila de la nota libre cuelga del sentinel NOTA DEL CLIENTE, así que se
+    // excluye de los chips seleccionados: si no, el sentinel volvería marcado
+    // como si fuera una observación del catálogo elegida por el cajero.
     const observacionIds = (existingObs || [])
-      .filter((o: any) => o.observacion?.id)
+      .filter((o: any) => o.observacion?.id && !o.observacionLibre)
       .map((o: any) => o.observacion.id);
     const observacionLibre = (existingObs || []).find((o: any) => o.observacionLibre)?.observacionLibre || '';
 
@@ -1242,21 +1457,30 @@ export class PdvComponent implements OnInit, OnDestroy {
           item.modificado = true;
           item.historialCambios = JSON.stringify(historial);
 
-          // Guardar observaciones
-          if (result.observacionIds?.length > 0 || result.observacionLibre) {
-            for (const obsId of (result.observacionIds || [])) {
-              await firstValueFrom(this.repositoryService.createVentaItemObservacion({
-                ventaItem: { id: item.id },
-                observacion: { id: obsId },
-                observacionLibre: result.observacionLibre,
-              }));
-            }
-            if (result.observacionIds?.length === 0 && result.observacionLibre) {
-              await firstValueFrom(this.repositoryService.createVentaItemObservacion({
-                ventaItem: { id: item.id },
-                observacionLibre: result.observacionLibre,
-              }));
-            }
+          // Guardar observaciones. El diálogo precarga lo que el ítem ya tenía y
+          // devuelve la selección COMPLETA, así que hay que reconciliar: borrar
+          // las actuales y recrear. Sin esto, cada "Editar" (aunque sólo cambies
+          // la cantidad) volvía a insertar todo y las observaciones se
+          // multiplicaban en pantalla y en la comanda. Mismo criterio que
+          // `personalizarItem()` y que el flujo de mobile.
+          const obsActuales = await firstValueFrom(this.repositoryService.getObservacionesByVentaItem(item.id));
+          for (const o of (obsActuales || [])) {
+            await firstValueFrom(this.repositoryService.deleteVentaItemObservacion(o.id));
+          }
+          // Una fila por observación del catálogo (sin la nota adentro — antes se
+          // repetía en todas) + una sola fila para la nota libre, que el handler
+          // cuelga del sentinel NOTA DEL CLIENTE.
+          for (const obsId of (result.observacionIds || [])) {
+            await firstValueFrom(this.repositoryService.createVentaItemObservacion({
+              ventaItem: { id: item.id },
+              observacion: { id: obsId },
+            }));
+          }
+          if (result.observacionLibre) {
+            await firstValueFrom(this.repositoryService.createVentaItemObservacion({
+              ventaItem: { id: item.id },
+              observacionLibre: result.observacionLibre,
+            }));
           }
 
           // Recargar personalizaciones del item
@@ -1382,6 +1606,7 @@ export class PdvComponent implements OnInit, OnDestroy {
         this.ventaItemsDataSource.data = auxList;
       } catch (error) {
         console.error('Error al guardar el item de venta:', error);
+        this.mostrarErrorItem(error, 'NO SE PUDO AGREGAR EL ITEM');
       }
 
       // Recalculate totals after adding item
@@ -1578,7 +1803,21 @@ export class PdvComponent implements OnInit, OnDestroy {
       this.calculateTotals();
     } catch (error) {
       console.error('Error al guardar item de variación:', error);
+      this.mostrarErrorItem(error, 'NO SE PUDO AGREGAR EL ITEM');
     }
+  }
+
+  /**
+   * Muestra el motivo real por el que el backend rechazó el ítem. Antes estos
+   * catch sólo hacían `console.error`, así que un rechazo de permisos (o el
+   * 'DEBE CAMBIAR SU CONTRASEÑA ANTES DE CONTINUAR' de un usuario con
+   * contraseña temporal) se veía como si no hubiera pasado nada.
+   */
+  private mostrarErrorItem(error: any, fallback: string): void {
+    this.snackBar.open(mensajeDeError(error, fallback), 'CERRAR', {
+      duration: 6000,
+      panelClass: 'error-snackbar',
+    });
   }
 
   private async persistirPersonalizacionConSabor(ventaItemId: number, result: PersonalizarProductoDialogResult, ventaItemSaborId: number): Promise<void> {
@@ -1625,21 +1864,16 @@ export class PdvComponent implements OnInit, OnDestroy {
       })));
     }
 
-    // Observación libre
+    // Nota libre: UNA sola fila, sin `observacion` — el handler la cuelga del
+    // sentinel NOTA DEL CLIENTE. Antes se colgaba de `observacionIds[0]`, lo que
+    // duplicaba esa observación en pantalla y en la comanda; y si no había
+    // ninguna seleccionada, la nota se descartaba.
     if (result.observacionLibre) {
-      const firstObs = result.observacionIds.length > 0 ? result.observacionIds[0] : null;
-      if (firstObs) {
-        // Ya se guardó arriba, agregar observación libre en una entry separada
-        promises.push(firstValueFrom(this.repositoryService.createVentaItemObservacion({
-          ventaItem: { id: ventaItemId },
-          observacion: { id: firstObs },
-          observacionLibre: result.observacionLibre,
-          ventaItemSabor: { id: ventaItemSaborId },
-        })));
-      } else {
-        // Solo observación libre sin observación predefinida — necesitamos al menos una observación
-        // Por ahora guardar como observación libre sin relación a observación predefinida
-      }
+      promises.push(firstValueFrom(this.repositoryService.createVentaItemObservacion({
+        ventaItem: { id: ventaItemId },
+        observacionLibre: result.observacionLibre,
+        ventaItemSabor: { id: ventaItemSaborId },
+      })));
     }
 
     await Promise.all(promises);
@@ -1684,10 +1918,12 @@ export class PdvComponent implements OnInit, OnDestroy {
         observacion: { id: obsId },
       })));
     }
+    // Nota libre: UNA sola fila, sin `observacion` (el handler resuelve el
+    // sentinel NOTA DEL CLIENTE). Antes duplicaba `observacionIds[0]`, o mandaba
+    // `observacion: null` y la fila moría contra el NOT NULL de la columna.
     if (result.observacionLibre) {
       promises.push(firstValueFrom(this.repositoryService.createVentaItemObservacion({
         ventaItem: { id: ventaItemId },
-        observacion: result.observacionIds.length > 0 ? { id: result.observacionIds[0] } : null,
         observacionLibre: result.observacionLibre,
       })));
     }
@@ -1778,8 +2014,11 @@ export class PdvComponent implements OnInit, OnDestroy {
             createdVenta.estado = VentaEstado.ABIERTA;
             if (this.selectedMesa) {
               this.selectedMesa.venta = createdVenta;
-              // Update mesa estado to OCUPADO
-              this.updateMesaEstado(this.selectedMesa, PdvMesaEstado.OCUPADO);
+            this.estamparMesa(this.selectedMesa as any);
+              // La mesa la marca OCUPADO el backend, dentro de la misma
+              // transaccion que crea la venta. Antes se hacia con una segunda
+              // llamada desde aca, que fallaba para todo el que no fuera gerente.
+              this.selectedMesa.estado = PdvMesaEstado.OCUPADO;
             }
             return createdVenta;
           })
@@ -1793,16 +2032,32 @@ export class PdvComponent implements OnInit, OnDestroy {
   /**
    * Update the estado of a mesa
    */
-  private updateMesaEstado(mesa: PdvMesa, estado: PdvMesaEstado): void {
+  /**
+   * Cambia el estado de una mesa.
+   *
+   * Usa `setPdvMesaEstado` (permiso VENTAS_PDV) y no `updatePdvMesa`, que es el
+   * ABM y exige VENTAS_PDV_CONFIGURAR — permiso que sólo tiene gerente. Con el
+   * handler viejo, a un mozo o cajero le fallaba siempre.
+   *
+   * Y si falla, se avisa: antes el error moría en un console.error y la mesa
+   * quedaba con el estado equivocado sin que nadie se enterara.
+   */
+  private async updateMesaEstado(mesa: PdvMesa, estado: PdvMesaEstado): Promise<void> {
+    const anterior = mesa.estado;
     mesa.estado = estado;
-    this.repositoryService.updatePdvMesa(mesa.id!, mesa).subscribe(
-      updatedMesa => {
-        console.log(`Mesa ${updatedMesa.numero} updated to estado: ${updatedMesa.estado}`);
-      },
-      error => {
-        console.error('Error updating mesa estado:', error);
-      }
-    );
+    this.estamparMesa(mesa as any);
+    try {
+      await firstValueFrom(this.repositoryService.setPdvMesaEstado(mesa.id!, estado));
+    } catch (err: any) {
+      mesa.estado = anterior;
+      this.estamparMesa(mesa as any);
+      console.error('Error updating mesa estado:', err);
+      this.snackBar.open(
+        err?.message || `No se pudo cambiar el estado de la mesa ${mesa.numero}`,
+        'Cerrar',
+        { duration: 5000 },
+      );
+    }
   }
 
   async findPrecioCosto(producto: Producto): Promise<number> {
@@ -1868,11 +2123,16 @@ export class PdvComponent implements OnInit, OnDestroy {
     return this.ventaItemsDataSource.data.some(i => i.estado === EstadoVentaItem.ACTIVO);
   }
 
-  cobrarVenta(): void {
+  async cobrarVenta(): Promise<void> {
     if (!this.hasActiveVenta || !this.hasActiveItems) return;
 
-    // El cobro solo se permite en el dispositivo donde se abrió la caja.
-    if (!this.puedeCobrar) {
+    // La config puede haber cambiado desde que se abrió la pestaña: el diálogo
+    // de configuración del PdV no se abre desde acá.
+    await this.refrescarGateTerminal();
+
+    // Sin ninguno de los dos permisos el diálogo no tiene nada que ofrecer. Con
+    // uno solo sí se abre: adentro se deshabilita lo que corresponda.
+    if (!this.puedeCobrar && !this.puedeFinalizarVenta) {
       this.snackBar.open(
         `El cobro solo se realiza en ${this.dispositivoCajaNombre || 'el dispositivo donde se abrió la caja'}.`,
         'OK',
@@ -1891,6 +2151,11 @@ export class PdvComponent implements OnInit, OnDestroy {
       exchangeRates: this.exchangeRates,
       principalMoneda: this.principalMoneda!,
       caja: this.caja!,
+      // Cobrando un delivery desde el PdV, el envio es parte del total.
+      costoDelivery: Number((venta as any)?.costoDelivery ?? 0) || 0,
+      puedeAgregarPagos: this.puedeCobrar,
+      puedeFinalizar: this.puedeFinalizarVenta,
+      terminalDeLaCaja: this.esTerminalDeLaCaja ? undefined : this.dispositivoCajaNombre,
     };
 
     const dialogRef = this.dialog.open(CobrarVentaDialogComponent, {
@@ -1910,9 +2175,10 @@ export class PdvComponent implements OnInit, OnDestroy {
         // Liberar mesa y limpiar estado completamente
         if (this.selectedMesa) {
           // Cerrar cualquier venta huérfana abierta en esta mesa
-          await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CONCLUIDA));
+          await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CONCLUIDA, { validarDispositivoCaja: true }));
           this.updateMesaEstado(this.selectedMesa, PdvMesaEstado.DISPONIBLE);
           this.selectedMesa.venta = null as any;
+        this.estamparMesa(this.selectedMesa as any);
           this.selectedMesa = null;
           this.clienteNameForm.get('nombre')?.setValue('');
         }
@@ -1920,6 +2186,9 @@ export class PdvComponent implements OnInit, OnDestroy {
         if (this.ventaRapidaActual) {
           this.ventaRapidaActual = null;
         }
+        // Salir del modo delivery: la venta ya está cobrada, dejar el cartel
+        // colgado hacía creer que seguía habiendo un pedido en edición.
+        this.deliveryActual = null;
         // Limpiar UI
         this.ventaItemsDataSource.data = [];
         this.calculateTotals();
@@ -1974,6 +2243,7 @@ export class PdvComponent implements OnInit, OnDestroy {
             await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CANCELADA));
             await this.updateMesaEstado(this.selectedMesa, PdvMesaEstado.DISPONIBLE);
             this.selectedMesa.venta = null as any;
+            this.estamparMesa(this.selectedMesa as any);
             this.selectedMesa = null;
             this.clienteNameForm.get('nombre')?.setValue('');
           }
@@ -2017,12 +2287,35 @@ export class PdvComponent implements OnInit, OnDestroy {
   async cobroRapido(): Promise<void> {
     if (!this.hasActiveVenta || !this.hasActiveItems) return;
 
+    // El cobro rápido registra el pago Y cierra la venta de un saque, así que
+    // necesita los dos permisos. Este camino no tenía ningún gate: en una
+    // terminal ajena F2 cobraba completo aunque el botón COBRAR estuviera
+    // bloqueado.
+    await this.refrescarGateTerminal();
+    if (!this.puedeCobrar || !this.puedeFinalizarVenta) {
+      this.snackBar.open(this.tooltipCobroRapido, 'OK', { duration: 5000 });
+      return;
+    }
+
     const venta = this.ventaRapidaActual || this.selectedComanda?.venta || this.selectedMesa?.venta;
     if (!venta) return;
 
     const items = this.ventaItemsDataSource.data.filter(i => i.estado === EstadoVentaItem.ACTIVO);
-    const total = items.reduce((sum, i) => sum + (i.precioVentaUnitario + (i.precioAdicionales || 0) - (i.descuentoUnitario || 0)) * i.cantidad, 0);
-    if (total <= 0) return;
+    // `Number()` en los cuatro términos: son columnas `decimal` y en Postgres
+    // llegan como string. Sin esto la suma concatena y da NaN — y el guard de
+    // abajo NO lo atrapaba (`NaN <= 0` es false), así que seguía y persistía un
+    // `PagoDetalle` con `valor: NaN`. Es el mismo arreglo que ya tiene
+    // `calculateTotals()` del diálogo de cobro.
+    const total = items.reduce((sum, i) => sum + (
+      Number(i.precioVentaUnitario || 0)
+      + Number(i.precioAdicionales || 0)
+      - Number(i.descuentoUnitario || 0)
+    ) * Number(i.cantidad || 0), 0)
+      // El envío es un cargo de la venta, no un ítem. F2 es alcanzable sobre un
+      // delivery (editar ítems desde el diálogo deja el delivery como venta
+      // rápida), así que sin esto el cobro rápido regalaba el costo de envío.
+      + (Number((venta as any)?.costoDelivery ?? 0) || 0);
+    if (!Number.isFinite(total) || total <= 0) return;
 
     try {
       const formasPago = await firstValueFrom(this.repositoryService.getFormasPago());
@@ -2033,7 +2326,8 @@ export class PdvComponent implements OnInit, OnDestroy {
         estado: PagoEstado.PAGADO,
         caja: this.caja!,
         activo: true,
-      }));
+        validarDispositivoCaja: true,
+      } as any));
 
       await firstValueFrom(this.repositoryService.createPagoDetalle({
         valor: total,
@@ -2043,14 +2337,16 @@ export class PdvComponent implements OnInit, OnDestroy {
         moneda: this.principalMoneda,
         formaPago: fpPrincipal,
         activo: true,
-      }));
+        validarDispositivoCaja: true,
+      } as any));
 
       await firstValueFrom(this.repositoryService.updateVenta(venta.id, {
         estado: VentaEstado.CONCLUIDA,
         formaPago: fpPrincipal,
         pago,
         fechaCierre: new Date(),
-      }));
+        __validarDispositivoCaja: true,
+      } as any));
 
       // Procesar stock (fire-and-forget)
       this.repositoryService.procesarStockVenta(venta.id).subscribe({
@@ -2064,9 +2360,10 @@ export class PdvComponent implements OnInit, OnDestroy {
       }
       if (this.selectedMesa) {
         // Cerrar cualquier venta huérfana abierta en esta mesa
-        await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CONCLUIDA));
-        await firstValueFrom(this.repositoryService.updatePdvMesa(this.selectedMesa.id!, { estado: PdvMesaEstado.DISPONIBLE } as any));
+        await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CONCLUIDA, { validarDispositivoCaja: true }));
+        await firstValueFrom(this.repositoryService.setPdvMesaEstado(this.selectedMesa.id!, PdvMesaEstado.DISPONIBLE));
         this.selectedMesa.venta = null as any;
+        this.estamparMesa(this.selectedMesa as any);
         this.selectedMesa = null;
         this.clienteNameForm.get('nombre')?.setValue('');
       }
@@ -2079,6 +2376,14 @@ export class PdvComponent implements OnInit, OnDestroy {
       await this.loadMesas();
     } catch (error) {
       console.error('Error al realizar cobro rápido:', error);
+      const msg = String((error as any)?.message || '');
+      this.snackBar.open(
+        msg.includes('_NO_PERMITID') || msg.includes('NO_PERMITIDA')
+          ? this.tooltipCobroRapido
+          : 'No se pudo completar el cobro rápido',
+        'CERRAR',
+        { duration: 5000 },
+      );
     }
   }
 
@@ -2119,8 +2424,12 @@ export class PdvComponent implements OnInit, OnDestroy {
     });
   }
 
-  openDelivery(): void {
+  async openDelivery(): Promise<void> {
     if (!this.caja) return;
+
+    // El cobro de un delivery sale por el mismo diálogo, así que necesita el
+    // gate al día.
+    await this.refrescarGateTerminal();
 
     const dialogData: DeliveryDialogData = {
       caja: this.caja,
@@ -2128,6 +2437,9 @@ export class PdvComponent implements OnInit, OnDestroy {
       principalMoneda: this.principalMoneda!,
       exchangeRates: this.exchangeRates,
       filteredMonedas: this.filteredMonedas,
+      puedeAgregarPagos: this.puedeCobrar,
+      puedeFinalizar: this.puedeFinalizarVenta,
+      terminalDeLaCaja: this.esTerminalDeLaCaja ? undefined : this.dispositivoCajaNombre,
     };
 
     const dialogRef = this.dialog.open(DeliveryDialogComponent, {
@@ -2221,68 +2533,84 @@ export class PdvComponent implements OnInit, OnDestroy {
     });
   }
 
-  transferirMesa(): void {
-    if (!this.selectedMesa || !this.selectedMesa.venta) return;
+  /**
+   * Contenedor del que sale la cuenta activa. Null cuando no hay nada que
+   * transferir (venta rápida y delivery quedan fuera: el mostrador no es un
+   * contenedor del salón).
+   */
+  private resolverOrigenTransferencia(): { tipo: 'MESA' | 'COMANDA'; id: number; etiqueta: string } | null {
+    if (this.selectedComanda?.id && this.selectedComanda?.venta) {
+      return { tipo: 'COMANDA', id: this.selectedComanda.id, etiqueta: `COMANDA ${this.selectedComanda.numero}` };
+    }
+    if (this.selectedMesa?.id && this.selectedMesa?.venta) {
+      return { tipo: 'MESA', id: this.selectedMesa.id, etiqueta: `MESA ${this.selectedMesa.numero}` };
+    }
+    return null;
+  }
 
-    const dialogRef = this.dialog.open(TransferirMesaDialogComponent, {
-      width: '500px',
-      data: { mesaActual: this.selectedMesa },
+  /** Transfiere la cuenta entera a otra mesa o comanda. */
+  transferirCuenta(): void {
+    const origen = this.resolverOrigenTransferencia();
+    if (!origen) return;
+
+    const dialogRef = this.dialog.open(TransferirDestinoDialogComponent, {
+      width: '520px',
+      data: { origen, alcance: 'COMPLETA' } as TransferirDestinoDialogData,
     });
 
-    dialogRef.afterClosed().subscribe(async (mesaDestino: PdvMesa | null) => {
-      if (mesaDestino && this.selectedMesa?.venta) {
-        try {
-          const ventaOrigenId = this.selectedMesa.venta.id;
+    dialogRef.afterClosed().subscribe(async (destino: TransferirDestinoResult | null) => {
+      if (!destino) return;
+      await this.ejecutarTransferencia(origen, destino, 'COMPLETA');
+    });
+  }
 
-          if (mesaDestino.venta?.id) {
-            // Mesa destino tiene venta abierta: mover items + pago a la venta destino
-            const items = this.ventaItemsDataSource.data.filter(i => i.estado === EstadoVentaItem.ACTIVO);
-            for (const item of items) {
-              await firstValueFrom(this.repositoryService.updateVentaItem(item.id, {
-                venta: { id: mesaDestino.venta.id } as any,
-              }));
-            }
-            // Transferir pago y nombre de cliente si la venta destino no tiene
-            const ventaOrigen = await firstValueFrom(this.repositoryService.getVenta(ventaOrigenId));
-            const updateData: any = {};
-            if (ventaOrigen?.pago?.id) {
-              updateData.pago = ventaOrigen.pago;
-            }
-            if (ventaOrigen?.nombreCliente && !mesaDestino.venta.nombreCliente) {
-              updateData.nombreCliente = ventaOrigen.nombreCliente;
-            }
-            if (Object.keys(updateData).length > 0) {
-              await firstValueFrom(this.repositoryService.updateVenta(mesaDestino.venta.id, updateData));
-            }
-            // Cancelar la venta origen
-            await firstValueFrom(this.repositoryService.updateVenta(ventaOrigenId, {
-              estado: VentaEstado.CANCELADA,
-            }));
-          } else {
-            // Mesa destino libre: mover la venta completa (pago va con la venta)
-            await firstValueFrom(this.repositoryService.updateVenta(ventaOrigenId, {
-              mesa: { id: mesaDestino.id } as any,
-            }));
-          }
+  /**
+   * Una sola llamada al backend por transferencia. Antes esto eran 5 a 8 IPC
+   * encadenados desde acá, y una falla a mitad dejaba los ítems movidos con la
+   * mesa origen todavía ocupada.
+   */
+  private async ejecutarTransferencia(
+    origen: { tipo: 'MESA' | 'COMANDA'; id: number; etiqueta: string },
+    destino: TransferirDestinoResult,
+    alcance: 'COMPLETA' | 'ITEMS',
+    itemIds?: number[],
+  ): Promise<void> {
+    try {
+      const resultado = await firstValueFrom(this.repositoryService.transferirVentaPdv({
+        origen: { tipo: origen.tipo, id: origen.id },
+        destino: { tipo: destino.tipo, id: destino.id },
+        alcance,
+        ...(itemIds ? { itemIds } : {}),
+      }));
 
-          // Liberar mesa origen
-          await firstValueFrom(this.repositoryService.updatePdvMesa(this.selectedMesa.id!, { estado: PdvMesaEstado.DISPONIBLE } as any));
+      this.cancelarMoverItems();
 
-          // Ocupar mesa destino
-          await firstValueFrom(this.repositoryService.updatePdvMesa(mesaDestino.id!, { estado: PdvMesaEstado.OCUPADO } as any));
-
-          // Limpiar UI
-          this.selectedMesa = null;
-          this.ventaItemsDataSource.data = [];
-          this.calculateTotals();
-
-          // Recargar mesas
-          await this.loadMesas();
-        } catch (error) {
-          console.error('Error al transferir mesa:', error);
-        }
+      if (resultado.origenCerrado) {
+        this.selectedMesa = null;
+        this.selectedComanda = null;
+        this.ventaItemsDataSource.data = [];
+        this.clienteNameForm.get('nombre')?.setValue('');
+      } else {
+        await this.loadVentaItemsForVenta(resultado.ventaOrigenId);
       }
-    });
+
+      this.calculateTotals();
+      await this.loadMesas();
+      await this.loadComandas();
+
+      this.snackBar.open(
+        `${resultado.itemsMovidos} item(s) transferidos a ${destino.etiqueta}`,
+        'CERRAR',
+        { duration: 3000 },
+      );
+    } catch (error: any) {
+      console.error('Error al transferir la cuenta:', error);
+      this.snackBar.open(
+        error?.message || 'No se pudo transferir la cuenta',
+        'CERRAR',
+        { duration: 6000, panelClass: ['error-snackbar'] },
+      );
+    }
   }
 
   imprimirPreCuenta(): void {
@@ -2354,13 +2682,16 @@ export class PdvComponent implements OnInit, OnDestroy {
     const allSelected = activeItems.every(i => this.selectedItemIds.has(i.id));
 
     if (allSelected) {
-      // Todos seleccionados — preguntar si transferir mesa completa
+      // Todos seleccionados — preguntar si transferir la cuenta completa. No es lo
+      // mismo: la completa arrastra cobros y datos del cliente, la de ítems no.
+      const origen = this.resolverOrigenTransferencia();
+      const etiqueta = origen ? origen.etiqueta : 'LA CUENTA';
       const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
         width: '400px',
         data: {
-          title: 'TRANSFERIR MESA COMPLETA',
-          message: 'Todos los items están seleccionados. ¿Desea transferir la mesa completa (incluyendo cobros y datos del cliente)?',
-          confirmText: 'TRANSFERIR MESA',
+          title: `TRANSFERIR ${etiqueta} COMPLETA`,
+          message: `Todos los items están seleccionados. ¿Desea transferir ${etiqueta.toLowerCase()} completa (incluyendo cobros y datos del cliente)?`,
+          confirmText: 'TRANSFERIR COMPLETA',
           cancelText: 'SOLO ITEMS',
         },
       });
@@ -2368,7 +2699,7 @@ export class PdvComponent implements OnInit, OnDestroy {
       dialogRef.afterClosed().subscribe((transferirCompleta: boolean) => {
         if (transferirCompleta === true) {
           this.cancelarMoverItems();
-          this.transferirMesa();
+          this.transferirCuenta();
         } else if (transferirCompleta === false) {
           this.ejecutarMoverItems();
         }
@@ -2416,66 +2747,20 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   private ejecutarMoverItems(): void {
-    if (!this.selectedMesa) return;
+    const origen = this.resolverOrigenTransferencia();
+    if (!origen) return;
 
-    const dialogRef = this.dialog.open(TransferirMesaDialogComponent, {
-      width: '500px',
-      data: { mesaActual: this.selectedMesa },
+    const itemIds = Array.from(this.selectedItemIds);
+    if (itemIds.length === 0) return;
+
+    const dialogRef = this.dialog.open(TransferirDestinoDialogComponent, {
+      width: '520px',
+      data: { origen, alcance: 'ITEMS', cantidadItems: itemIds.length } as TransferirDestinoDialogData,
     });
 
-    dialogRef.afterClosed().subscribe(async (mesaDestino: PdvMesa | null) => {
-      if (!mesaDestino || !this.selectedMesa?.venta) {
-        return;
-      }
-
-      try {
-        // Obtener o crear venta en mesa destino
-        let ventaDestinoId: number;
-        if (mesaDestino.venta?.id) {
-          ventaDestinoId = mesaDestino.venta.id;
-        } else {
-          const nuevaVenta = await firstValueFrom(this.repositoryService.createVenta({
-            estado: VentaEstado.ABIERTA,
-            caja: this.caja!,
-            mesa: { id: mesaDestino.id } as any,
-          } as any));
-          nuevaVenta.estado = VentaEstado.ABIERTA;
-          ventaDestinoId = nuevaVenta.id;
-          await firstValueFrom(this.repositoryService.updatePdvMesa(mesaDestino.id!, { estado: PdvMesaEstado.OCUPADO } as any));
-        }
-
-        // Mover items seleccionados
-        const itemsToMove = this.ventaItemsDataSource.data.filter(i => this.selectedItemIds.has(i.id));
-        for (const item of itemsToMove) {
-          await firstValueFrom(this.repositoryService.updateVentaItem(item.id, {
-            venta: { id: ventaDestinoId } as any,
-          }));
-        }
-
-        // Verificar si quedan items activos en la mesa origen
-        const itemsRestantes = this.ventaItemsDataSource.data.filter(
-          i => i.estado === EstadoVentaItem.ACTIVO && !this.selectedItemIds.has(i.id)
-        );
-
-        if (itemsRestantes.length === 0) {
-          // No quedan items — desocupar mesa origen
-          await firstValueFrom(this.repositoryService.updateVenta(this.selectedMesa.venta.id, {
-            estado: VentaEstado.CANCELADA,
-          }));
-          await firstValueFrom(this.repositoryService.updatePdvMesa(this.selectedMesa.id!, { estado: PdvMesaEstado.DISPONIBLE } as any));
-          this.selectedMesa = null;
-          this.ventaItemsDataSource.data = [];
-        } else {
-          // Quedan items — recargar la mesa
-          this.ventaItemsDataSource.data = itemsRestantes;
-        }
-
-        this.cancelarMoverItems();
-        this.calculateTotals();
-        await this.loadMesas();
-      } catch (error) {
-        console.error('Error al mover items:', error);
-      }
+    dialogRef.afterClosed().subscribe(async (destino: TransferirDestinoResult | null) => {
+      if (!destino) return;
+      await this.ejecutarTransferencia(origen, destino, 'ITEMS', itemIds);
     });
   }
 
@@ -2673,6 +2958,7 @@ export class PdvComponent implements OnInit, OnDestroy {
   selectMesa(mesa: PdvMesa): void {
     this.selectedMesa = mesa;
     this.selectedComanda = null;
+    this.estamparDetalleMesa();
 
     // Reset cliente name form when selecting a new mesa
     this.isEditingClienteName = false;

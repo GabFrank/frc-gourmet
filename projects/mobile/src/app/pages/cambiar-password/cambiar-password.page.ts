@@ -35,6 +35,12 @@ export class CambiarPasswordPage {
   loading = false;
   error: string | null = null;
 
+  // Ver la contrasenha en claro. En un telefono, escribir una clave nueva a
+  // ciegas y despues repetirla es la forma mas rapida de trabarse en este paso.
+  verActual = false;
+  verNueva = false;
+  verConfirmar = false;
+
   async submit(): Promise<void> {
     if (this.form.invalid || this.loading) {
       this.form.markAllAsTouched();

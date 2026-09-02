@@ -40,12 +40,16 @@ export class HomePage {
     shareReplay(1),
   );
 
-  // Acceso directo a las cajas mayores ABIERTAS (una card por caja). Solo si el
-  // usuario puede ver Caja Mayor. Si no hay abiertas, la sección se oculta.
+  // Acceso directo a las cajas mayores ABIERTAS (una card por caja). Si no hay
+  // abiertas, la sección se oculta.
+  //
+  // Gatea con CAJA_MAYOR_OPERAR, el mismo permiso que exige la ruta destino.
+  // Antes pedía FINANCIERO_CAJA_VER, que es el permiso de la caja del TURNO, no
+  // de Caja Mayor: cualquier cajero veía las cards del tesoro en el home.
   readonly cajasMayorAbiertas$: Observable<{ id: number; nombre: string }[]> =
     this.permissions.codigos$.pipe(
       switchMap((set) =>
-        set.has('FINANCIERO_CAJA_VER')
+        set.has('CAJA_MAYOR_OPERAR')
           ? this.repo.getCajasMayor().pipe(
               map((list: any[]) =>
                 (list || [])

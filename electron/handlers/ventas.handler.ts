@@ -13,11 +13,18 @@ import { PdvCategoria } from '../../src/app/database/entities/ventas/pdv-categor
 import { PdvCategoriaItem } from '../../src/app/database/entities/ventas/pdv-categoria-item.entity';
 import { PdvItemProducto } from '../../src/app/database/entities/ventas/pdv-item-producto.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { crearDeliveryEnTx } from '../utils/delivery-alta.utils';
+import { DeliveryModo } from '../../src/app/database/entities/ventas/delivery.entity';
+import { getRangosPrecioVariacion } from '../utils/variacion-precio.utils';
+import { getVariacionConfig, getVariacionConfigGlobal } from '../utils/variacion-config.utils';
+import { ensureObservacionNotaLibreId } from '../utils/observacion-libre.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
-import { Not, IsNull, In } from 'typeorm';
+import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
+import { Not, IsNull, In, EntityManager } from 'typeorm';
 import { DeepPartial } from 'typeorm';
+import { SelectQueryBuilder } from 'typeorm';
 import { Reserva } from '../../src/app/database/entities/ventas/reserva.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
@@ -53,12 +60,15 @@ import { EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-it
 import { VentaItemSabor } from '../../src/app/database/entities/ventas/venta-item-sabor.entity';
 import { dbQuery } from '../utils/db-query';
 import { computeResumenCaja } from '../utils/resumen-caja.utils';
+import { condicionCanal, esCanalValido } from '../utils/canal-venta.utils';
+import { limiteFechaSqlite } from '../utils/db-query';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
-import { EstadoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { EstadoPedidoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { CobroParcial } from '../../src/app/database/entities/ventas/cobro-parcial.entity';
 import { CobroParcialItem } from '../../src/app/database/entities/ventas/cobro-parcial-item.entity';
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
+import { invalidarCacheJornada } from './dashboard-ventas.handler';
 
 /**
  * M-04: mutex por-venta para serializar procesarStockVenta. El chequeo de
@@ -84,31 +94,80 @@ async function withVentaStockLock<T>(ventaId: number, fn: () => Promise<T>): Pro
   }
 }
 
-// Serializa la materialización de pedidos online por mesa (proceso Node único).
-// Evita dos ventas ABIERTAS para la misma mesa y la doble materialización de un
-// pedido cuando la auto-materialización y un click manual del cajero coinciden.
-const mesaMaterializeTails = new Map<number, Promise<void>>();
-async function withMesaMaterializeLock<T>(mesaId: number, fn: () => Promise<T>): Promise<T> {
-  const prev = mesaMaterializeTails.get(mesaId) ?? Promise.resolve();
+// Serializa por mesa las operaciones que abren una venta sobre ella (proceso Node
+// único). Evita dos ventas ABIERTAS para la misma mesa y la doble materialización
+// de un pedido online cuando la auto-materialización y un click manual del cajero
+// coinciden. Lo usan `materializarPedidoOnlineEnVenta` y `createVenta`.
+const mesaTails = new Map<number, Promise<void>>();
+async function withMesaLock<T>(mesaId: number, fn: () => Promise<T>): Promise<T> {
+  const prev = mesaTails.get(mesaId) ?? Promise.resolve();
   let release!: () => void;
   const myTurn = new Promise<void>((res) => (release = res));
   const composed = prev.then(() => myTurn);
-  mesaMaterializeTails.set(mesaId, composed);
+  mesaTails.set(mesaId, composed);
   await prev.catch(() => {});
   try {
     return await fn();
   } finally {
     release();
-    if (mesaMaterializeTails.get(mesaId) === composed) mesaMaterializeTails.delete(mesaId);
+    if (mesaTails.get(mesaId) === composed) mesaTails.delete(mesaId);
+  }
+}
+
+// Lo mismo por comanda. El candado de mesa no las cubre: una transferencia
+// entre dos comandas no toca ninguna mesa, asi que corria sin serializar y dos
+// cajeros podian dejar dos ventas ABIERTA colgando de la misma comanda — una de
+// ellas inalcanzable desde el cobro, con sus items ya en cocina.
+// Y lo mismo por pedido online. Un pedido de PICKUP/DELIVERY no tiene mesa, así
+// que `withMesaLock` no lo cubre: usarlo con `mesaId` nulo haría que TODOS los
+// pedidos sin mesa compartan una única clave y se serialicen entre sí, un mutex
+// global accidental. La unidad que hay que serializar es el pedido.
+const pedidoTails = new Map<number, Promise<void>>();
+async function withPedidoLock<T>(pedidoId: number, fn: () => Promise<T>): Promise<T> {
+  const prev = pedidoTails.get(pedidoId) ?? Promise.resolve();
+  let release!: () => void;
+  const myTurn = new Promise<void>((res) => (release = res));
+  const composed = prev.then(() => myTurn);
+  pedidoTails.set(pedidoId, composed);
+  await prev.catch(() => {});
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (pedidoTails.get(pedidoId) === composed) pedidoTails.delete(pedidoId);
+  }
+}
+
+const comandaTails = new Map<number, Promise<void>>();
+async function withComandaLock<T>(comandaId: number, fn: () => Promise<T>): Promise<T> {
+  const prev = comandaTails.get(comandaId) ?? Promise.resolve();
+  let release!: () => void;
+  const myTurn = new Promise<void>((res) => (release = res));
+  const composed = prev.then(() => myTurn);
+  comandaTails.set(comandaId, composed);
+  await prev.catch(() => {});
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (comandaTails.get(comandaId) === composed) comandaTails.delete(comandaId);
   }
 }
 
 /**
- * Materializa un PedidoOnline en la Venta ABIERTA de su mesa (canal MESA_QR).
- * Resuelve/abre la venta de la mesa y vuelca los items como VentaItem (+ sabores
- * + adicionales + observaciones/nota libre) disparando el KDS/impresión por los
- * hooks. Idempotente por `pedido.ventaId`. Escrituras en transacción; los hooks
- * corren post-commit.
+ * Materializa un PedidoOnline en una Venta y lo manda a cocina.
+ *
+ * Dos caminos según el canal:
+ * - **MESA_QR** (con `mesaId`): reusa la Venta ABIERTA de la mesa o la abre, y
+ *   marca la mesa OCUPADO. Varios comensales de la misma mesa caen en una sola
+ *   cuenta. Se serializa por mesa.
+ * - **PICKUP/DELIVERY** (sin mesa): abre una Venta propia por pedido, con
+ *   `canalOrigen = 'WEB'`. No reusa ninguna venta de mostrador abierta: cada
+ *   pedido web es una cuenta en sí misma. Se serializa por pedido.
+ *
+ * Vuelca los items como VentaItem (+ sabores + adicionales + observaciones/nota
+ * libre) disparando el KDS/impresión por los hooks. Idempotente por
+ * `pedido.ventaId`. Escrituras en transacción; los hooks corren post-commit.
  *
  * Las observaciones predefinidas se resuelven por texto contra el catálogo
  * `Observacion`; la nota libre y las no matcheadas se cuelgan de un sentinel
@@ -128,15 +187,24 @@ export async function materializarPedidoOnlineEnVenta(
   // Fast-path (no autoritativo): si ya se materializó, salir sin tomar el lock.
   const pedidoPre = await dataSource.getRepository(PedidoOnline).findOne({ where: { id: pedidoId } });
   if (!pedidoPre) throw new Error(`Pedido online ${pedidoId} no encontrado`);
-  if (!pedidoPre.mesaId) throw new Error('El pedido no es de mesa (sin mesaId)');
   if (pedidoPre.ventaId) {
     return { ventaId: pedidoPre.ventaId, yaMaterializado: true, itemsCreados: 0, observacionesNoMapeadas: [] };
   }
 
-  return withMesaMaterializeLock(pedidoPre.mesaId, async () => {
+  // MESA_QR se serializa por mesa (varios comensales pidiendo a la misma cuenta);
+  // PICKUP/DELIVERY no tienen mesa y se serializan por pedido.
+  const conMesa = !!pedidoPre.mesaId;
+  const conLock = conMesa
+    ? <T,>(fn: () => Promise<T>) => withMesaLock(pedidoPre.mesaId as number, fn)
+    : <T,>(fn: () => Promise<T>) => withPedidoLock(pedidoId, fn);
+
+  return conLock(async () => {
+    // `zonaDelivery.precioDelivery` se carga para poder sellar la zona en el
+    // `Delivery` (ver el alta más abajo). Sin la relación anidada el pedido web
+    // nace sin zona y desaparece de cualquier agrupación por zona.
     const pedido = await dataSource.getRepository(PedidoOnline).findOne({
       where: { id: pedidoId },
-      relations: ['items'],
+      relations: ['items', 'zonaDelivery', 'zonaDelivery.precioDelivery'],
     });
     if (!pedido) throw new Error(`Pedido online ${pedidoId} no encontrado`);
     // Idempotencia autoritativa BAJO lock: evita doble materialización del mismo pedido.
@@ -174,42 +242,94 @@ export async function materializarPedidoOnlineEnVenta(
     // FK obligatoria; la nota va en observacionLibre colgada de esta observación).
     // Se asegura vía dataSource (fuera de la transacción) tolerando la colisión de
     // unique, para no abortar la materialización si dos mesas lo crean a la vez.
+    // Se memoiza por llamada: la materialización puede tener varios ítems con nota.
     let sentinelObsId: number | null = null;
     const getSentinelObs = async (): Promise<number> => {
-      if (sentinelObsId != null) return sentinelObsId;
-      const desc = 'NOTA DEL CLIENTE';
-      const repoObs = dataSource.getRepository(Observacion);
-      let obs = await repoObs.findOne({ where: { descripcion: desc } });
-      if (!obs) {
-        try { obs = await repoObs.save(repoObs.create({ descripcion: desc, activo: true })); }
-        catch { obs = await repoObs.findOne({ where: { descripcion: desc } }); }
-      }
-      if (!obs) throw new Error('no_se_pudo_asegurar_observacion_sentinel');
-      sentinelObsId = obs.id;
+      if (sentinelObsId == null) sentinelObsId = await ensureObservacionNotaLibreId(dataSource);
       return sentinelObsId;
     };
 
-    const mesa = await mesaRepo.findOneBy({ id: pedido.mesaId });
-    if (!mesa) throw new Error(`Mesa ${pedido.mesaId} no encontrada`);
+    let venta: Venta | null = null;
 
-    // Venta ABIERTA de la mesa (comanda IsNull = cuenta de mesa), o crear una.
-    let venta = await ventaRepo.findOne({
-      where: { mesa: { id: mesa.id }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
-    });
-    if (!venta) {
+    if (conMesa) {
+      const mesa = await mesaRepo.findOneBy({ id: pedido.mesaId });
+      if (!mesa) throw new Error(`Mesa ${pedido.mesaId} no encontrada`);
+
+      // Venta ABIERTA de la mesa (comanda IsNull = cuenta de mesa), o crear una.
+      // Se REUSA a propósito: varios comensales de la misma mesa pidiendo desde
+      // su celular tienen que caer en una sola cuenta.
+      venta = await ventaRepo.findOne({
+        where: { mesa: { id: mesa.id }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
+      });
+      if (!venta) {
+        venta = ventaRepo.create({
+          estado: VentaEstado.ABIERTA,
+          caja: { id: cajaId } as any,
+          mesa: { id: mesa.id } as any,
+          canalOrigen: 'QR_MESA',
+        });
+        await setEntityUserTracking(dataSource, venta, userId, false);
+        venta = await ventaRepo.save(venta);
+        if (mesa.estado !== PdvMesaEstado.OCUPADO) {
+          mesa.estado = PdvMesaEstado.OCUPADO;
+          await setEntityUserTracking(dataSource, mesa, userId, true);
+          await mesaRepo.save(mesa);
+        }
+      }
+    } else {
+      // PICKUP/DELIVERY: venta propia por pedido, sin mesa. NO se reusa ninguna
+      // venta abierta — cada pedido web es una cuenta cerrada en sí misma, y
+      // colgarlo de una venta de mostrador ajena mezclaría dos clientes.
+      // `canalOrigen: 'WEB'` es lo que hace que los hooks la manden a cocina.
       venta = ventaRepo.create({
         estado: VentaEstado.ABIERTA,
         caja: { id: cajaId } as any,
-        mesa: { id: mesa.id } as any,
+        canalOrigen: 'WEB',
+        nombreCliente: pedido.nombreCliente ? pedido.nombreCliente.toUpperCase() : undefined,
       });
+
+      // DELIVERY y PICKUP abren su registro en la misma transacción. Sin esto
+      // el pedido no entra al tablero del PdV: no se le puede cambiar de
+      // estado, ni cobrar desde el footer, ni imprimir su ticket — vivía en un
+      // carril paralelo.
+      //
+      // El PICKUP entra como `Delivery` en modo RETIRO, sin dirección ni costo
+      // de envío. Es la misma fila de la lista que un reparto, con las tres
+      // columnas que dependen de que alguien lo lleve vacías.
+      const esRetiro = pedido.tipoPedido === TipoPedidoOnline.PICKUP;
+      if (esRetiro || pedido.tipoPedido === TipoPedidoOnline.DELIVERY) {
+        const delivery = await crearDeliveryEnTx(qr.manager, dataSource, {
+          nombre: pedido.nombreCliente,
+          telefono: pedido.telefonoCliente,
+          direccion: esRetiro
+            ? undefined
+            : [pedido.direccionEntrega, pedido.referenciaDireccion]
+                .filter(Boolean).join(' · ') || undefined,
+          observacion: pedido.notas,
+          modo: esRetiro ? DeliveryModo.RETIRO : DeliveryModo.DELIVERY,
+          // La ZONA sí se sella; el COSTO no se recalcula a partir de ella.
+          //
+          // El costo viene congelado del pedido porque la tarifa pudo cambiar
+          // entre el checkout y la aceptación, y el cliente vio la vieja. La
+          // zona, en cambio, es la identidad del reparto, y hasta acá no
+          // llegaba al PdV: quedaba sólo en `pedidos_online`, así que todo el
+          // canal web caía en "SIN ZONA" al agrupar por zona.
+          //
+          // `ZonaDelivery.precioDelivery` es la tarifa compartida entre los dos
+          // canales; es null en las zonas anteriores a esa unificación, y ahí
+          // no hay zona que sellar.
+          precioDeliveryId: esRetiro ? null : (pedido.zonaDelivery?.precioDelivery?.id ?? null),
+          cobroAnticipado: false,
+        }, userId);
+        venta.delivery = delivery as any;
+        venta.costoDelivery = esRetiro ? 0 : (Number(pedido.costoEnvio) || 0);
+        pedido.deliveryId = delivery.id;
+      }
+
       await setEntityUserTracking(dataSource, venta, userId, false);
       venta = await ventaRepo.save(venta);
-      if (mesa.estado !== PdvMesaEstado.OCUPADO) {
-        mesa.estado = PdvMesaEstado.OCUPADO;
-        await setEntityUserTracking(dataSource, mesa, userId, true);
-        await mesaRepo.save(mesa);
-      }
     }
+
     ventaId = venta.id;
 
     for (const pItem of pedido.items || []) {
@@ -320,7 +440,8 @@ export async function materializarPedidoOnlineEnVenta(
           libres.push(desc);
         }
       }
-      const notaLibre = pers.notaLibre ? String(pers.notaLibre).trim() : '';
+      // UPPERCASE como todo string que va a BD (las de catálogo ya se normalizan arriba).
+      const notaLibre = pers.notaLibre ? String(pers.notaLibre).trim().toUpperCase() : '';
       if (notaLibre) libres.push(notaLibre);
       if (libres.length) {
         const vo = obsItemRepo.create({
@@ -331,6 +452,34 @@ export async function materializarPedidoOnlineEnVenta(
         await setEntityUserTracking(dataSource, vo, userId, false);
         await obsItemRepo.save(vo);
       }
+    }
+
+    // Relectura del estado DENTRO de la transacción, justo antes de escribir.
+    //
+    // El `pedido` que tenemos en memoria se cargó al abrir la transacción, y
+    // entre ese momento y ahora hay una ventana real: `aceptar-pedido-online`
+    // marca ACEPTADO y recién después llama acá, así que un RECHAZAR de otro
+    // operador (o un reintento cruzado) puede haber comiteado RECHAZADO
+    // mientras esto corría. Sin este chequeo el `save` de abajo pisaba ese
+    // rechazo y el pedido resucitaba EN_PREPARACION, con venta viva y comanda
+    // ya impresa: el operador rechazó y la cocina cocinó igual.
+    const estadoActual = await qr.manager.getRepository(PedidoOnline).findOne({
+      where: { id: pedidoId },
+      select: ['id', 'estado', 'ventaId'],
+    });
+    if (!estadoActual) throw new Error(`Pedido online ${pedidoId} no encontrado`);
+    if (
+      estadoActual.estado === EstadoPedidoOnline.RECHAZADO ||
+      estadoActual.estado === EstadoPedidoOnline.CANCELADO
+    ) {
+      // Rollback: la Venta y sus ítems creados en esta transacción se
+      // descartan enteros, que es exactamente lo que corresponde a un pedido
+      // que ya no existe para el negocio.
+      throw new Error('pedido_rechazado_durante_materializacion');
+    }
+    if (estadoActual.ventaId) {
+      // Otro camino lo materializó primero. Igual que arriba: descartar.
+      throw new Error('pedido_ya_materializado_por_otro');
     }
 
     pedido.ventaId = ventaId;
@@ -357,19 +506,54 @@ export async function materializarPedidoOnlineEnVenta(
   });
 }
 
+/**
+ * Un producto con variación no puede venderse sin su variación.
+ *
+ * El diálogo del PdV no deja avanzar sin elegir tamaño y sabor, pero esa
+ * validación es de la UI: `/api/rpc` es default-allow, así que cualquier
+ * cliente con `VENTAS_PDV` podía crear un ítem de PAPAS FRITAS sin tamaño ni
+ * sabor —y con el precio que quisiera— llamando al handler directo. El ítem
+ * entraba a la venta, a la comanda de cocina y al ticket como «1 PAPAS
+ * FRITAS», sin que nadie supiera cuáles.
+ *
+ * `recetaPresentacion` es lo que identifica la variación (sabor × tamaño) y es
+ * lo que el PdV manda siempre; sin eso el ítem no describe nada vendible.
+ */
+async function validarVariacionDelItem(
+  dataSource: DataSource,
+  data: any,
+  existente?: any,
+): Promise<void> {
+  // Se valida el ESTADO FINAL del ítem, no el payload.
+  //
+  // Es la diferencia entre funcionar y bloquear ventas: `cancelItem` en el PdV
+  // reenvía el `VentaItem` entero tal como lo devolvió `getVentaItems`, y esa
+  // consulta no carga la relación `recetaPresentacion`. Mirando sólo el payload,
+  // cancelar una pizza fallaba siempre con "falta elegir el tamaño y el sabor"
+  // — el ítem sí tenía su variación, simplemente no venía en el objeto.
+  const productoId = data?.producto?.id ?? data?.productoId ?? data?.producto_id
+    ?? existente?.producto?.id;
+  if (!productoId) return;
+
+  const producto = await dataSource.getRepository(Producto).findOne({
+    where: { id: Number(productoId) },
+    select: ['id', 'nombre', 'tipo'],
+  });
+  if (!producto || (producto as any).tipo !== ProductoTipo.ELABORADO_CON_VARIACION) return;
+
+  const rp = data?.recetaPresentacion?.id ?? data?.recetaPresentacionId ?? data?.receta_presentacion_id
+    ?? existente?.recetaPresentacion?.id;
+  if (!rp) {
+    throw new Error(
+      `${producto.nombre} se vende por variación: falta elegir el tamaño y el sabor.`,
+    );
+  }
+}
+
 export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
   // Remove this line - get the current user in each handler instead
   // const currentUser = getCurrentUser(); // Get user for tracking
 
-  // Flag de config: ¿vincular una comanda a una mesa debe ocupar la mesa?
-  const ocuparMesaAlVincularComanda = async (): Promise<boolean> => {
-    try {
-      const cfg = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
-      return !!cfg?.ocuparMesaAlVincularComanda;
-    } catch {
-      return false;
-    }
-  };
 
   // Arrancar worker de retry de comandas (cada 5s reintenta items con
   // `impreso=false` y al menos un intento previo, en ventas ABIERTAS).
@@ -531,22 +715,52 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     }
   });
 
-  ipcMain.handle('createDelivery', async (_event: any, data: any) => {
-    try {
-      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
-      const repo = dataSource.getRepository(Delivery);
-      const entity = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
-      return await repo.save(entity);
-    } catch (error) {
-      console.error('Error creating delivery:', error);
-      throw error;
-    }
+  /**
+   * @deprecated Usar `delivery-crear`, que crea el Delivery y su Venta en UNA
+   * transacción.
+   *
+   * Este handler creaba un `Delivery` suelto. Como la lista del PdV se arma
+   * partiendo de `Venta`, un delivery sin venta es un registro invisible e
+   * inalcanzable para siempre. El canal sigue registrado (está en `preload.ts`
+   * y en el mapa de canales) pero rechaza: `/api/rpc` es default-allow y
+   * dejarlo vivo reabre el agujero desde cualquier cliente.
+   */
+  ipcMain.handle('createDelivery', async () => {
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+    throw new Error(
+      'createDelivery está deprecado: usá delivery-crear, que crea el delivery y su venta en una sola transacción.',
+    );
   });
 
   ipcMain.handle('updateDelivery', async (_event: any, id: number, data: any) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+      // El estado y sus timestamps son de la máquina de estados
+      // (`delivery-cambiar-estado` / `delivery-cancelar`), no de este merge
+      // crudo. Como `/api/rpc` es default-allow, sin este guard cualquier
+      // cliente con un JWT de VENTAS_PDV podía saltar de ABIERTO a ENTREGADO,
+      // escribir un estado inexistente o falsear las fechas.
+      // Además del estado y sus timestamps, la ZONA está reservada: cambiarla
+      // tiene que resincronizar `venta.costoDelivery` (y sólo se puede si la
+      // venta sigue ABIERTA), y este merge crudo no hace ni una cosa ni la otra
+      // — dejaría el envío cobrado con un precio y el delivery mostrando otro.
+      const camposReservados = [
+        'estado', 'fechaAbierto', 'fechaParaEntrega', 'fechaEnCamino',
+        'fechaEntregado', 'fechaCancelacion', 'motivoCancelacion',
+        'precioDelivery', 'precioDeliveryId', 'entregadoPorFuncionario',
+        // `modo` tiene su propio canal (`delivery-convertir-modo`): convertir
+        // mueve el costo de envío de la venta, desasigna al repartidor,
+        // sincroniza el pedido de la tienda y cambia la tabla de transiciones
+        // que rige el pedido. Un `merge` crudo no hace nada de eso y dejaría un
+        // registro con dirección y envío cobrado disfrazado de algo que nadie
+        // lleva.
+        'modo',
+      ].filter((c) => data && Object.prototype.hasOwnProperty.call(data, c));
+      if (camposReservados.length > 0) {
+        throw new Error(
+          `updateDelivery no puede modificar ${camposReservados.join(', ')}: usá delivery-actualizar-datos, delivery-cambiar-estado o delivery-cancelar.`,
+        );
+      }
       const repo = dataSource.getRepository(Delivery);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Delivery ID ${id} not found`);
@@ -625,7 +839,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   });
 
   // --- Cerrar todas las ventas abiertas de una mesa ---
-  ipcMain.handle('cerrarVentasAbiertasMesa', async (_event: any, mesaId: number, estado: string) => {
+  ipcMain.handle('cerrarVentasAbiertasMesa', async (_event: any, mesaId: number, estado: string, opts?: { validarDispositivoCaja?: boolean }) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Venta);
@@ -633,11 +847,23 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // vinculadas a la mesa se cierran/liberan desde su propio flujo.
       const ventasAbiertas = await repo.find({
         where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
+        relations: ['caja'],
       });
+      // Este handler pone CONCLUIDA con `repo.save` directo, sin pasar por
+      // `updateVenta`: es un tercer camino de finalización y necesita el mismo
+      // gate de terminal ajena. Sólo aplica al cierre por cobro (CONCLUIDA); la
+      // cancelación de una mesa no es finalizar un cobro.
+      if (opts?.validarDispositivoCaja && estado === VentaEstado.CONCLUIDA) {
+        for (const v of ventasAbiertas) {
+          await assertTerminalPuedeOperar(dataSource, _event, (v.caja as any)?.id ?? null, 'FINALIZAR');
+        }
+      }
       for (const v of ventasAbiertas) {
         v.estado = estado as VentaEstado;
         await repo.save(v);
       }
+      // Cerrar las cuentas de la mesa cambia su ocupacion: el cache la sigue.
+      if (ventasAbiertas.length > 0) await sincronizarEstadoMesa(mesaId);
       return ventasAbiertas.length;
     } catch (error) {
       console.error(`Error cerrando ventas abiertas de mesa ${mesaId}:`, error);
@@ -710,16 +936,53 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('createVenta', async (_event: any, data: any) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
-      const repo = dataSource.getRepository(Venta);
-      const entity: any = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
+      const userId = getCurrentUser()?.id;
       // F5 paso 3: si el caller no especifico dispositivo, resolverlo del
       // request context (JWT en cliente HTTP, current-device en IPC local).
-      if (!data?.dispositivo && !data?.dispositivo_id) {
-        const deviceId = resolveRequestDeviceId(_event);
+      const deviceId = (!data?.dispositivo && !data?.dispositivo_id)
+        ? resolveRequestDeviceId(_event)
+        : null;
+
+      // La mesa se ocupa ACA, en la misma transaccion que crea la venta.
+      //
+      // Antes el frontend hacia una segunda llamada a `updatePdvMesa`, que exige
+      // VENTAS_PDV_CONFIGURAR — un permiso que solo tiene GERENTE. A un mozo o
+      // cajero le fallaba, el error se tragaba en un console.error y la mesa
+      // quedaba sin marcar. Es el mismo patron que ya usa `abrirComanda`.
+      //
+      // Solo aplica a la venta de mesa DIRECTA. Si la venta cuelga de una
+      // comanda NO ocupa la mesa: el vinculo comanda->mesa es de ubicacion, no
+      // de ocupacion (ver `mesaTieneCuentaPropia`).
+      // Sólo la forma `{ mesa: { id } }`: un `mesa_id` suelto no lo traduce
+      // `repo.create()` a la relación, así que la venta quedaría sin mesa y
+      // marcaríamos ocupada una mesa sin venta vinculada — justo el estado que
+      // este fix elimina.
+      const mesaId = data?.mesa?.id ?? null;
+      const tieneComanda = !!data?.comanda?.id;
+      const ocupaMesa = !!mesaId && !tieneComanda;
+
+      const crear = async (): Promise<any> => dataSource.transaction(async (manager) => {
+        const repo = manager.getRepository(Venta);
+        const entity: any = repo.create(data);
+        await setEntityUserTracking(dataSource, entity, userId, false);
         if (deviceId != null) entity.dispositivo = { id: deviceId };
-      }
-      return await repo.save(entity);
+        const saved = await repo.save(entity);
+
+        if (ocupaMesa) {
+          const mesaRepo = manager.getRepository(PdvMesa);
+          const mesa = await mesaRepo.findOneBy({ id: Number(mesaId) });
+          // Nunca degrada una mesa ya ocupada por otra venta.
+          if (mesa && mesa.estado !== PdvMesaEstado.OCUPADO) {
+            mesa.estado = PdvMesaEstado.OCUPADO;
+            await mesaRepo.save(mesa);
+          }
+        }
+        return saved;
+      });
+
+      // El lock por mesa evita dos ventas ABIERTAS sobre la misma mesa cuando dos
+      // dispositivos la abren a la vez (mismo criterio que pedidos online).
+      return ocupaMesa ? await withMesaLock(Number(mesaId), crear) : await crear();
     } catch (error) {
       console.error('Error creating venta:', error);
       throw error;
@@ -741,104 +1004,192 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         .leftJoinAndSelect('cliente.persona', 'persona')
         .leftJoinAndSelect('venta.createdBy', 'createdBy')
         .leftJoinAndSelect('createdBy.persona', 'createdByPersona')
-        .leftJoinAndSelect('venta.items', 'items');
+        .leftJoinAndSelect('venta.items', 'items')
+        // El delivery entra en la lista para poder mostrar el canal, la zona y
+        // el repartidor. Va LEFT: la mayoría de las ventas no tiene reparto.
+        .leftJoinAndSelect('venta.delivery', 'delivery')
+        .leftJoinAndSelect('delivery.precioDelivery', 'deliveryZona')
+        // ⚠️ El repartidor va con `leftJoin` + `addSelect` de columnas sueltas,
+        // NO con `leftJoinAndSelect`. `Funcionario` trae `salarioBase`,
+        // `valorJornal`, `numeroIps` y `cuentaBancariaPropia`, y su `Persona`
+        // trae documento, dirección, teléfono y fecha de nacimiento. Hidratar
+        // las entidades enteras publicaba el sueldo y la cuenta bancaria de
+        // cada repartidor en la respuesta de una lista de ventas — y este canal
+        // no tiene `ensurePermission` y `/api/rpc` es default-allow, así que lo
+        // habría podido leer cualquier usuario con un JWT válido.
+        //
+        // La lista sólo necesita el nombre. El `id` de cada lado va porque sin
+        // la PK TypeORM no arma el objeto de la relación.
+        .leftJoin('delivery.entregadoPorFuncionario', 'repartidor')
+        .leftJoin('repartidor.persona', 'repartidorPersona')
+        .addSelect(['repartidor.id', 'repartidorPersona.id', 'repartidorPersona.nombre']);
 
       // Date range filter (skip if cajaId is provided — caja has its own date range)
-      if (!filtros?.cajaId) {
-        qb.where('venta.createdAt >= :desde', { desde })
-          .andWhere('venta.createdAt <= :hasta', { hasta });
-      } else {
-        qb.where('caja.id = :cajaId', { cajaId: filtros.cajaId });
-      }
+      //
+      // ⚠️ Los límites se normalizan al formato de SQLite antes de comparar.
+      // TypeORM escribe `created_at` como `YYYY-MM-DD HH:MM:SS` (sin `T` ni
+      // `Z`) y el frontend manda `toISOString()`. SQLite compara esas columnas
+      // como TEXTO, y el espacio (0x20) ordena ANTES que la `T` (0x54): una
+      // fila de HOY quedaba fuera del rango "hoy" porque
+      // '2026-09-01 13:00:00' >= '2026-09-01T03:00:00.000Z' da FALSO. No
+      // fallaba: devolvía cero. Es el mismo bug que `dbQuery` ya corrige para
+      // los handlers que usan SQL crudo; este arma su `WHERE` con QueryBuilder
+      // y quedaba afuera. Sólo afecta al modo standalone: en Postgres la
+      // columna es `timestamp` y el driver castea el ISO.
+      const esSqlite = dataSource.options.type !== 'postgres';
+      const desdeLim = esSqlite ? limiteFechaSqlite(desde) : desde;
+      const hastaLim = esSqlite ? limiteFechaSqlite(hasta) : hasta;
 
-      // Estado
-      if (filtros?.estado) {
-        qb.andWhere('venta.estado = :estado', { estado: filtros.estado });
-      }
+      /**
+       * Aplica TODOS los filtros del pedido a un builder.
+       *
+       * Existe como función y no inline porque hay dos consultas que tienen que
+       * filtrar exactamente igual: la de la página y la de los totales. Cuando
+       * los filtros vivían sólo en `qb` y los totales salían de un `clone()`,
+       * cualquier join de `qb` se colaba en el agregado — que es justo como el
+       * join de `items` terminó multiplicando el total de envíos.
+       */
+      const aplicarFiltros = (b: SelectQueryBuilder<Venta>): void => {
+        if (!filtros?.cajaId) {
+          b.where('venta.createdAt >= :desde', { desde: desdeLim })
+            .andWhere('venta.createdAt <= :hasta', { hasta: hastaLim });
+        } else {
+          b.where('caja.id = :cajaId', { cajaId: filtros.cajaId });
+        }
 
-      // Mesa
-      if (filtros?.mesaId) {
-        qb.andWhere('mesa.id = :mesaId', { mesaId: filtros.mesaId });
-      }
+        // Estado
+        if (filtros?.estado) {
+          b.andWhere('venta.estado = :estado', { estado: filtros.estado });
+        }
 
-      // Formas de pago (multi-select) — subquery en pago_detalles
-      if (filtros?.formasPagoIds?.length > 0) {
-        qb.andWhere(qb2 => {
-          const subQuery = qb2.subQuery()
-            .select('pd_fp.pago_id')
-            .from('pagos_detalles', 'pd_fp')
-            .where('pd_fp.forma_pago_id IN (:...formasPagoIds)')
-            .andWhere('pd_fp.activo')
-            .getQuery();
-          return 'pago.id IN ' + subQuery;
-        }).setParameter('formasPagoIds', filtros.formasPagoIds);
-      }
+        // Mesa
+        if (filtros?.mesaId) {
+          b.andWhere('mesa.id = :mesaId', { mesaId: filtros.mesaId });
+        }
 
-      // Monedas (multi-select) — subquery en pago_detalles
-      if (filtros?.monedaIds?.length > 0) {
-        qb.andWhere(qb2 => {
-          const subQuery = qb2.subQuery()
-            .select('pd_m.pago_id')
-            .from('pagos_detalles', 'pd_m')
-            .where('pd_m.moneda_id IN (:...monedaIds)')
-            .andWhere('pd_m.activo')
-            .getQuery();
-          return 'pago.id IN ' + subQuery;
-        }).setParameter('monedaIds', filtros.monedaIds);
-      }
+        // Formas de pago (multi-select) — subquery en pago_detalles
+        if (filtros?.formasPagoIds?.length > 0) {
+          b.andWhere(qb2 => {
+            const subQuery = qb2.subQuery()
+              .select('pd_fp.pago_id')
+              .from('pagos_detalles', 'pd_fp')
+              .where('pd_fp.forma_pago_id IN (:...formasPagoIds)')
+              .andWhere('pd_fp.activo')
+              .getQuery();
+            return 'pago.id IN ' + subQuery;
+          }).setParameter('formasPagoIds', filtros.formasPagoIds);
+        }
 
-      // Rango de valores por moneda
-      if (filtros?.monedaValorId && (filtros?.valorMin != null || filtros?.valorMax != null)) {
-        qb.andWhere(qb2 => {
-          let subQuery = qb2.subQuery()
-            .select('pd_v.pago_id')
-            .from('pagos_detalles', 'pd_v')
-            .where('pd_v.moneda_id = :monedaValorId')
-            .andWhere('pd_v.tipo = :tipoPago')
-            .andWhere('pd_v.activo')
-            .groupBy('pd_v.pago_id');
-          if (filtros.valorMin != null) {
-            subQuery = subQuery.having('SUM(pd_v.valor) >= :valorMin');
-          }
-          if (filtros.valorMax != null) {
-            subQuery = subQuery.andHaving('SUM(pd_v.valor) <= :valorMax');
-          }
-          return 'pago.id IN ' + subQuery.getQuery();
-        })
-        .setParameter('monedaValorId', filtros.monedaValorId)
-        .setParameter('tipoPago', 'PAGO');
-        if (filtros.valorMin != null) qb.setParameter('valorMin', filtros.valorMin);
-        if (filtros.valorMax != null) qb.setParameter('valorMax', filtros.valorMax);
-      }
+        // Monedas (multi-select) — subquery en pago_detalles
+        if (filtros?.monedaIds?.length > 0) {
+          b.andWhere(qb2 => {
+            const subQuery = qb2.subQuery()
+              .select('pd_m.pago_id')
+              .from('pagos_detalles', 'pd_m')
+              .where('pd_m.moneda_id IN (:...monedaIds)')
+              .andWhere('pd_m.activo')
+              .getQuery();
+            return 'pago.id IN ' + subQuery;
+          }).setParameter('monedaIds', filtros.monedaIds);
+        }
 
-      // Descuento/Aumento
-      if (filtros?.tieneDescuento === 'CON_DESCUENTO') {
-        qb.andWhere('(venta.descuento_monto > 0 OR EXISTS (SELECT 1 FROM venta_items vi_d WHERE vi_d.venta_id = venta.id AND vi_d.descuento_unitario > 0))');
-      } else if (filtros?.tieneDescuento === 'CON_AUMENTO') {
-        qb.andWhere(qb2 => {
-          const subQuery = qb2.subQuery()
-            .select('pd_a.pago_id')
-            .from('pagos_detalles', 'pd_a')
-            .where('pd_a.tipo = :tipoAumento')
-            .andWhere('pd_a.activo')
-            .getQuery();
-          return 'pago.id IN ' + subQuery;
-        }).setParameter('tipoAumento', 'AUMENTO');
-      } else if (filtros?.tieneDescuento === 'SIN_DESCUENTO') {
-        qb.andWhere('(venta.descuento_monto IS NULL OR venta.descuento_monto = 0)')
-          .andWhere('NOT EXISTS (SELECT 1 FROM venta_items vi_nd WHERE vi_nd.venta_id = venta.id AND vi_nd.descuento_unitario > 0)');
-      }
+        // Rango de valores por moneda
+        if (filtros?.monedaValorId && (filtros?.valorMin != null || filtros?.valorMax != null)) {
+          b.andWhere(qb2 => {
+            let subQuery = qb2.subQuery()
+              .select('pd_v.pago_id')
+              .from('pagos_detalles', 'pd_v')
+              .where('pd_v.moneda_id = :monedaValorId')
+              .andWhere('pd_v.tipo = :tipoPago')
+              .andWhere('pd_v.activo')
+              .groupBy('pd_v.pago_id');
+            if (filtros.valorMin != null) {
+              subQuery = subQuery.having('SUM(pd_v.valor) >= :valorMin');
+            }
+            if (filtros.valorMax != null) {
+              subQuery = subQuery.andHaving('SUM(pd_v.valor) <= :valorMax');
+            }
+            return 'pago.id IN ' + subQuery.getQuery();
+          })
+          .setParameter('monedaValorId', filtros.monedaValorId)
+          .setParameter('tipoPago', 'PAGO');
+          if (filtros.valorMin != null) b.setParameter('valorMin', filtros.valorMin);
+          if (filtros.valorMax != null) b.setParameter('valorMax', filtros.valorMax);
+        }
 
-      // Mozo (usuario que creó al menos un item)
-      if (filtros?.mozoId) {
-        qb.andWhere('EXISTS (SELECT 1 FROM venta_items vi_m WHERE vi_m.venta_id = venta.id AND vi_m.created_by = :mozoId)')
-          .setParameter('mozoId', filtros.mozoId);
-      }
+        // Descuento/Aumento
+        if (filtros?.tieneDescuento === 'CON_DESCUENTO') {
+          b.andWhere('(venta.descuento_monto > 0 OR EXISTS (SELECT 1 FROM venta_items vi_d WHERE vi_d.venta_id = venta.id AND vi_d.descuento_unitario > 0))');
+        } else if (filtros?.tieneDescuento === 'CON_AUMENTO') {
+          b.andWhere(qb2 => {
+            const subQuery = qb2.subQuery()
+              .select('pd_a.pago_id')
+              .from('pagos_detalles', 'pd_a')
+              .where('pd_a.tipo = :tipoAumento')
+              .andWhere('pd_a.activo')
+              .getQuery();
+            return 'pago.id IN ' + subQuery;
+          }).setParameter('tipoAumento', 'AUMENTO');
+        } else if (filtros?.tieneDescuento === 'SIN_DESCUENTO') {
+          b.andWhere('(venta.descuento_monto IS NULL OR venta.descuento_monto = 0)')
+            .andWhere('NOT EXISTS (SELECT 1 FROM venta_items vi_nd WHERE vi_nd.venta_id = venta.id AND vi_nd.descuento_unitario > 0)');
+        }
 
-      // F5 paso 4: filtro por dispositivo de origen (multi-PC en LAN).
-      if (filtros?.dispositivoId) {
-        qb.andWhere('venta.dispositivo_id = :ventaDispositivoId', { ventaDispositivoId: filtros.dispositivoId });
-      }
+        // Mozo (usuario que creó al menos un item)
+        if (filtros?.mozoId) {
+          b.andWhere('EXISTS (SELECT 1 FROM venta_items vi_m WHERE vi_m.venta_id = venta.id AND vi_m.created_by = :mozoId)')
+            .setParameter('mozoId', filtros.mozoId);
+        }
+
+        // Canal (SALÓN / MOSTRADOR / DELIVERY / RETIRO). La condición sale del
+        // mismo util que usan los informes: si la lista clasificara por su cuenta,
+        // filtrar "DELIVERY" acá y leer "envíos" en el reporte podrían no dar el
+        // mismo conjunto de ventas. Un canal desconocido no abre el filtro: el
+        // util devuelve una condición imposible, así que un typo devuelve vacío
+        // en vez de mostrar todo como si no se hubiera filtrado.
+        if (filtros?.canal && esCanalValido(filtros.canal)) {
+          b.andWhere(condicionCanal(filtros.canal, 'venta'));
+        }
+
+        // Zona de entrega y repartidor.
+        if (filtros?.zonaId) {
+          b.andWhere('delivery.precio_delivery_id = :zonaId', { zonaId: filtros.zonaId });
+        }
+        if (filtros?.repartidorId) {
+          b.andWhere('delivery.entregado_por_funcionario_id = :repartidorId', { repartidorId: filtros.repartidorId });
+        }
+
+        // Puerta de entrada del pedido (LOCAL / WEB / QR_MESA). Es ortogonal al
+        // canal: un delivery puede ser LOCAL (lo cargó el cajero) o WEB.
+        if (filtros?.canalOrigen) {
+          b.andWhere('venta.canal_origen = :canalOrigen', { canalOrigen: String(filtros.canalOrigen).toUpperCase() });
+        }
+
+        // F5 paso 4: filtro por dispositivo de origen (multi-PC en LAN).
+        if (filtros?.dispositivoId) {
+          b.andWhere('venta.dispositivo_id = :ventaDispositivoId', { ventaDispositivoId: filtros.dispositivoId });
+        }
+
+      };
+
+      aplicarFiltros(qb);
+
+      // Totales del resultado FILTRADO (no de la página): lo que el usuario
+      // quiere saber es cuánto suma todo lo que buscó, no los 25 registros que
+      // está viendo.
+      //
+      // ⚠️ NO se puede clonar `qb` para esto. `venta.items` es `@OneToMany`, así
+      // que su join multiplica una fila por cada ítem, y `.select()` reemplaza
+      // las columnas pero NO quita los joins ya registrados: un delivery de
+      // 15.000 con 3 ítems sumaba 45.000. Por eso los totales corren sobre su
+      // propio builder, con los mismos filtros pero sin ese join — todos los
+      // demás son `@ManyToOne` y no duplican filas.
+      const qbTotales = repo.createQueryBuilder('venta')
+        .leftJoin('venta.caja', 'caja')
+        .leftJoin('venta.pago', 'pago')
+        .leftJoin('venta.mesa', 'mesa')
+        .leftJoin('venta.delivery', 'delivery');
+      aplicarFiltros(qbTotales);
 
       qb.orderBy('venta.createdAt', 'DESC');
 
@@ -848,7 +1199,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       qb.skip((page - 1) * pageSize).take(pageSize);
 
       const [data, total] = await qb.getManyAndCount();
-      return { data, total };
+
+      // `select()` reemplaza los selects de los joins; sin eso el agregado
+      // choca con las columnas que arrastran los `leftJoinAndSelect`.
+      const rawTotales = await qbTotales
+        .select('COALESCE(SUM(venta.costo_delivery), 0)', 'costo_delivery')
+        .getRawOne();
+      // `decimal` → string en Postgres: sin `Number()` el front concatena.
+      const costoDeliveryTotal = Number(rawTotales?.costo_delivery ?? 0) || 0;
+
+      return { data, total, totales: { costoDelivery: costoDeliveryTotal } };
     } catch (error) {
       console.error('Error getting ventas by date range:', error);
       throw error;
@@ -918,7 +1278,40 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         delete data.__imprimirTicketVenta;
       }
 
+      // Gate de terminal ajena para la FINALIZACION de la venta. Igual que
+      // `__imprimirTicketVenta`, se extrae antes del merge para que no intente
+      // persistirse como columna.
+      //
+      // Se activa sólo con el flag explícito, y no derivando la caja siempre,
+      // porque `updateVenta` es genérico: lo usan pedidos online, delivery, la
+      // cancelación desde el historial y varios flujos server-side que no son
+      // "el cajero cobrando". Sólo el cobro del PdV lo manda.
+      let validarDispositivoCaja = false;
+      if (data && Object.prototype.hasOwnProperty.call(data, '__validarDispositivoCaja')) {
+        validarDispositivoCaja = data.__validarDispositivoCaja === true;
+        delete data.__validarDispositivoCaja;
+      }
+
       const estadoAnterior = entity.estado;
+
+      // `findOneBy` no trae las relaciones `mesa` ni `caja`: se leen las FK
+      // crudas ANTES del merge, para poder resincronizar el cache de esa mesa si
+      // la venta cierra y para resolver el gate por dispositivo.
+      const filaVenta: any = (
+        await dataSource.query(`SELECT mesa_id AS m, caja_id AS c FROM ventas WHERE id = $1`.replace('$1', String(Number(id))))
+      )?.[0] ?? null;
+      const mesaDeLaVenta: number | null = filaVenta?.m ?? null;
+
+      // Sólo la transición ABIERTA → CONCLUIDA es "finalizar un cobro".
+      // `rehabilitarVenta()` (CANCELADA → CONCLUIDA, desde el historial) queda
+      // deliberadamente fuera: no es un cobro en el PdV.
+      if (
+        validarDispositivoCaja
+        && data?.estado === VentaEstado.CONCLUIDA
+        && estadoAnterior === VentaEstado.ABIERTA
+      ) {
+        await assertTerminalPuedeOperar(dataSource, _event, filaVenta?.c ?? null, 'FINALIZAR');
+      }
 
       // A-01: al cancelar una venta a crédito hay que revertir la Cuenta Por
       // Cobrar y el saldoActual del cliente; antes quedaban vivos (cobros
@@ -939,9 +1332,39 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         }
       }
 
-      repo.merge(entity, data);
+      // La caja de una venta se fija al crearla y no cambia nunca. Aceptarla en
+      // el merge permitía mover una venta CONCLUIDA —con todo su cobro— a otra
+      // caja, sin gate y sin transición de estado: la palanca más directa para
+      // descuadrar dos arqueos de una sola llamada. Ningún llamador la setea
+      // (el PdV manda la venta entera, con su misma caja).
+      //
+      // `costoDelivery` va por el mismo camino y por el mismo motivo. Es el
+      // monto CONGELADO del envío, y sus dos dueños —el cambio de zona y la
+      // conversión entre delivery y retiro— exigen que la venta siga ABIERTA
+      // justamente porque moverlo cambia lo que se cobra. Este merge no valida
+      // nada: como `/api/rpc` es default-allow, dejarlo pasar convertía toda
+      // esa guarda en una sugerencia, con una llamada capaz de reescribir el
+      // envío de una venta ya CONCLUIDA. Ningún llamador lo setea a propósito
+      // (el PdV manda la venta entera, con su mismo envío).
+      const { caja: _cajaIgnorada, costoDelivery: _envioIgnorado, ...ventaData } = data ?? {};
+      repo.merge(entity, ventaData);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
+
+      // Cobrar o cancelar una venta de mesa CIERRA la cuenta propia de esa mesa,
+      // asi que el cache `pdv_mesas.estado` tiene que seguirla. Es el evento mas
+      // frecuente de todos y no lo estaba haciendo: la grilla se veia bien porque
+      // deriva, pero cualquier lector de la columna cruda (p.ej. el servicio de
+      // musica ambiental, que decide el tempo por mesas ocupadas) sobre-contaba
+      // para siempre. El desktop lo compensaba con una segunda llamada manual
+      // desde el frontend; eso no cubre `cobrar-venta-credito` ni a ningun otro
+      // consumidor del handler.
+      const cerroLaCuenta =
+        (data?.estado === VentaEstado.CONCLUIDA || data?.estado === VentaEstado.CANCELADA)
+        && estadoAnterior === VentaEstado.ABIERTA;
+      if (cerroLaCuenta) {
+        await sincronizarEstadoMesa(mesaDeLaVenta);
+      }
 
       // A-01: revertir la CPC (sin cobros, garantizado por el pre-chequeo) y el
       // saldo del cliente en una transacción atómica.
@@ -1100,6 +1523,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('createVentaItem', async (_event: any, data: any) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+      await validarVariacionDelItem(dataSource, data);
       const repo = dataSource.getRepository(VentaItem);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -1148,8 +1572,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItem);
-      const entity = await repo.findOneBy({ id });
+      // Con las relaciones que necesita la validación: sin ellas no se puede
+      // saber si el ítem YA tenía su variación elegida.
+      const entity = await repo.findOne({
+        where: { id },
+        relations: ['producto', 'recetaPresentacion'],
+      });
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
+      // El update puede cambiar el producto: si el nuevo exige variación, hay
+      // que exigirla igual que en el alta. Se pasa el ítem existente aparte
+      // para que el chequeo mire el resultado final, no sólo lo que vino.
+      await validarVariacionDelItem(dataSource, data, entity);
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
@@ -1192,12 +1625,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   });
 
   // --- VentaItemObservacion Handlers ---
+  // Sólo las activas: `activo = false` es una observación dada de baja y no debe
+  // reaparecer al re-personalizar el ítem (la comanda y el KDS ya filtran así).
   ipcMain.handle('getObservacionesByVentaItem', async (_event: any, ventaItemId: number) => {
     try {
       const repo = dataSource.getRepository(VentaItemObservacion);
       return await repo.find({
-        where: { ventaItem: { id: ventaItemId } },
-        relations: ['observacion'],
+        where: { ventaItem: { id: ventaItemId }, activo: true },
+        // `ventaItemSabor` viaja para poder distinguir las observaciones de una
+        // mitad concreta (pizza) de las del ítem entero.
+        relations: ['observacion', 'ventaItemSabor'],
       });
     } catch (error) {
       console.error(`Error getting observaciones for venta item ${ventaItemId}:`, error);
@@ -1205,11 +1642,34 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     }
   });
 
+  /**
+   * Crea una `VentaItemObservacion`. Dos usos:
+   *
+   * 1. Observación del catálogo → mandar `observacion: { id }`.
+   * 2. **Nota libre** → mandar `observacionLibre` y **omitir** `observacion`: acá
+   *    se resuelve el sentinel `NOTA DEL CLIENTE`, porque la FK es NOT NULL.
+   *    Antes cada caller improvisaba: colgar la nota de la primera observación
+   *    seleccionada (la duplicaba en pantalla y en la comanda) o mandar
+   *    `observacion: null` (rompía el NOT NULL y la nota se perdía callada).
+   */
   ipcMain.handle('createVentaItemObservacion', async (_event: any, data: any) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemObservacion);
-      const entity = repo.create(data);
+      const payload: any = { ...(data || {}) };
+      const nota = typeof payload.observacionLibre === 'string' ? payload.observacionLibre.trim() : '';
+      // Excluyentes: una fila es o una observación del catálogo, o la nota libre.
+      // Mandar las dos juntas es justamente el bug viejo — al renderizar gana la
+      // nota y la observación elegida queda tapada.
+      if (payload.observacion?.id && nota) {
+        throw new Error('venta_item_observacion_no_combina_observacion_y_nota');
+      }
+      if (!payload.observacion?.id) {
+        if (!nota) throw new Error('venta_item_observacion_sin_observacion_ni_nota');
+        payload.observacion = { id: await ensureObservacionNotaLibreId(dataSource) };
+      }
+      payload.observacionLibre = nota ? nota.toUpperCase().slice(0, 500) : null;
+      const entity = repo.create(payload);
       return await repo.save(entity);
     } catch (error) {
       console.error('Error creating venta item observacion:', error);
@@ -1232,11 +1692,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   });
 
   // --- VentaItemAdicional Handlers ---
+  // Devuelve SOLO los adicionales activos: `activo = false` es un extra dado de
+  // baja y no debe reaparecer al re-personalizar el ítem ni en el ticket/comanda
+  // (esos ya filtran por su lado).
   ipcMain.handle('getVentaItemAdicionales', async (_event: any, ventaItemId: number) => {
     try {
       const repo = dataSource.getRepository(VentaItemAdicional);
       return await repo.find({
-        where: { ventaItem: { id: ventaItemId } },
+        where: { ventaItem: { id: ventaItemId }, activo: true },
         relations: ['adicional'],
       });
     } catch (error) {
@@ -1672,7 +2135,12 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       if (!config) {
         const newConfig = repository.create({
           cantidad_mesas: 0,
-          activo: true
+          activo: true,
+          // Explícito y no por default de columna: en una base vieja la columna
+          // conserva el `DEFAULT true` con que se creó (SQLite no soporta
+          // ALTER COLUMN SET DEFAULT), así que una fila insertada sin el campo
+          // nacería exigiendo dirección aunque la migración diga lo contrario.
+          deliveryRequiereDireccion: false,
         } as DeepPartial<PdvConfig>);
         
         config = await repository.save(newConfig);
@@ -1725,7 +2193,11 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       
       // Apply updates
       repository.merge(config, data as DeepPartial<PdvConfig>);
-      return await repository.save(config);
+      const guardado = await repository.save(config);
+      // La hora de la jornada se cachea 60s en los dashboards: sin esto, el
+      // usuario cambia el corte, vuelve al resumen y sigue viendo el anterior.
+      invalidarCacheJornada();
+      return guardado;
     } catch (error) {
       console.error(`Error updating PDV config ID ${id}:`, error);
       throw error;
@@ -1827,6 +2299,21 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   // --- PdvMesa Handlers ---
   // Helper: query mesas with only the ABIERTA venta joined + comandas OCUPADO vinculadas
+  /**
+   * Estampa el estado DERIVADO sobre las mesas que devuelve una consulta.
+   *
+   * `mesa.venta` viene del join que ya filtra `comanda_id IS NULL`, o sea que es
+   * exactamente la cuenta propia de la mesa. La columna `pdv_mesas.estado` es
+   * solo un cache: si difiere, gana lo derivado. Asi el plano nunca muestra una
+   * mesa colgada aunque la columna haya quedado mal por un camino viejo.
+   */
+  const derivarEstadoMesas = (mesas: any[]): any[] => {
+    for (const mesa of mesas || []) {
+      mesa.estado = mesa?.venta ? PdvMesaEstado.OCUPADO : PdvMesaEstado.DISPONIBLE;
+    }
+    return mesas;
+  };
+
   const queryMesasWithVentaAbierta = (repo: any) => {
     return repo.createQueryBuilder('mesa')
       .leftJoinAndSelect('mesa.reserva', 'reserva')
@@ -1843,7 +2330,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('getPdvMesas', async () => {
     try {
       const repo = dataSource.getRepository(PdvMesa);
-      return await queryMesasWithVentaAbierta(repo).getMany();
+      return derivarEstadoMesas(await queryMesasWithVentaAbierta(repo).getMany());
     } catch (error) {
       console.error('Error getting PDV Mesas:', error);
       throw error;
@@ -1853,9 +2340,9 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('getPdvMesasActivas', async () => {
     try {
       const repo = dataSource.getRepository(PdvMesa);
-      return await queryMesasWithVentaAbierta(repo)
+      return derivarEstadoMesas(await queryMesasWithVentaAbierta(repo)
         .where('mesa.activo = :activo', { activo: true })
-        .getMany();
+        .getMany());
     } catch (error) {
       console.error('Error getting PDV Mesas activas:', error);
       throw error;
@@ -1864,12 +2351,13 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
   ipcMain.handle('getPdvMesasDisponibles', async () => {
     try {
+      // "Disponible" = sin cuenta propia. Se filtra por la venta del join, no por
+      // la columna cache `mesa.estado`, que puede venir desincronizada.
       const repo = dataSource.getRepository(PdvMesa);
-      return await queryMesasWithVentaAbierta(repo)
-        .where('mesa.activo = :activo AND mesa.reservado = :reservado AND mesa.estado = :estado', {
-          activo: true, reservado: false, estado: PdvMesaEstado.DISPONIBLE
-        })
-        .getMany();
+      const mesas = derivarEstadoMesas(await queryMesasWithVentaAbierta(repo)
+        .where('mesa.activo = :activo AND mesa.reservado = :reservado', { activo: true, reservado: false })
+        .getMany());
+      return mesas.filter((m: any) => m.estado === PdvMesaEstado.DISPONIBLE);
     } catch (error) {
       console.error('Error getting PDV Mesas disponibles:', error);
       throw error;
@@ -1879,9 +2367,9 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('getPdvMesasBySector', async (_event: any, sectorId: number) => {
     try {
       const repo = dataSource.getRepository(PdvMesa);
-      return await queryMesasWithVentaAbierta(repo)
+      return derivarEstadoMesas(await queryMesasWithVentaAbierta(repo)
         .where('mesa.sector_id = :sectorId', { sectorId })
-        .getMany();
+        .getMany());
     } catch (error) {
       console.error(`Error getting PDV Mesas for Sector ID ${sectorId}:`, error);
       throw error;
@@ -1900,12 +2388,20 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // OneToOne `mesa.venta` no filtra por estado y puede devolver una venta
       // CANCELADA/CONCLUIDA que conserva `mesa_id` (al cancelar no se desvincula),
       // lo que hacía que el detalle en mobile siguiera mostrando ítems cancelados.
+      //
+      // `comanda: IsNull()` es la cuenta DE LA MESA: una venta que cuelga de una
+      // comanda vinculada a esta mesa es la cuenta de esa tarjeta, no de la mesa.
+      // Sin el filtro, el detalle en mobile mostraba la cuenta de una comanda —
+      // mismo criterio que ya usaban `queryMesasWithVentaAbierta` y
+      // `set-pdv-mesa-estado`.
       const ventaRepo = dataSource.getRepository(Venta);
       const ventaAbierta = await ventaRepo.findOne({
-        where: { mesa: { id }, estado: VentaEstado.ABIERTA },
+        where: { mesa: { id }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
         order: { id: 'DESC' },
       });
       (mesa as any).venta = ventaAbierta || null;
+      // Mismo criterio derivado que la grilla: la columna es solo cache.
+      (mesa as any).estado = ventaAbierta ? PdvMesaEstado.OCUPADO : PdvMesaEstado.DISPONIBLE;
       return mesa;
     } catch (error) {
       console.error(`Error getting PDV Mesa ID ${id}:`, error);
@@ -1940,6 +2436,442 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       return savedEntities;
     } catch (error) {
       console.error('Error creating batch PDV Mesas:', error);
+      throw error;
+    }
+  });
+
+  /**
+   * Cambia SOLO el estado de una mesa (ocupar / liberar).
+   *
+   * Existe aparte de `updatePdvMesa` por una razon de permisos: `updatePdvMesa` es
+   * el ABM real de mesas (renombrar, cambiar de sector) y exige
+   * VENTAS_PDV_CONFIGURAR, que solo tiene GERENTE. Pero ocupar y liberar mesas es
+   * la operacion mas cotidiana de un mozo. Usar el mismo handler para las dos
+   * cosas hacia que a un mozo o cajero le fallara siempre — en silencio, porque el
+   * frontend se tragaba el error — y la mesa quedaba con el estado equivocado.
+   *
+   * Este handler no puede tocar nada estructural: solo `estado`.
+   */
+  ipcMain.handle('set-pdv-mesa-estado', async (_event: any, mesaId: number, estado: string) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+      if (estado !== PdvMesaEstado.OCUPADO && estado !== PdvMesaEstado.DISPONIBLE) {
+        throw new Error(`Estado de mesa invalido: ${estado}`);
+      }
+      const mesaRepo = dataSource.getRepository(PdvMesa);
+      const mesa = await mesaRepo.findOneBy({ id: mesaId });
+      if (!mesa) throw new Error(`Mesa ${mesaId} no encontrada`);
+      if (mesa.estado === estado) return mesa;
+
+      if (estado === PdvMesaEstado.DISPONIBLE) {
+        // Solo la CUENTA PROPIA de la mesa impide liberarla. Las comandas ya no
+        // cuentan: una mesa sin cuenta propia con comandas encima queda
+        // DISPONIBLE (verde) y el badge avisa que hay comandas sentadas ahi.
+        //
+        // Antes esto contaba tambien las comandas, y por eso cobrar la cuenta de
+        // una mesa con una comanda encima tiraba error: la excepcion salia del
+        // bloque del cobro y la limpieza de la pantalla nunca corria.
+        const ventasVivas = await dataSource.getRepository(Venta).count({
+          where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
+        });
+        if (ventasVivas > 0) {
+          throw new Error(
+            `La mesa ${mesa.numero} todavia tiene ${ventasVivas} venta(s) abierta(s) propia(s).`,
+          );
+        }
+      }
+
+      mesa.estado = estado as PdvMesaEstado;
+      await setEntityUserTracking(dataSource, mesa, getCurrentUser()?.id, true);
+      return await mesaRepo.save(mesa);
+    } catch (error) {
+      console.error(`Error cambiando estado de la mesa ${mesaId}:`, error);
+      throw error;
+    }
+  });
+
+  // ─── Transferencia de cuentas entre mesas y comandas ─────────────────────
+  /**
+   * Mueve una cuenta del salon — entera o solo algunos items — de un contenedor
+   * a otro. Cubre las 4 combinaciones: mesa->mesa, mesa->comanda,
+   * comanda->mesa y comanda->comanda.
+   *
+   * Antes esto vivia en el frontend como 5 a 8 llamadas IPC sueltas repartidas en
+   * tres metodos del PdV (`transferirMesa`, `transferirComandaAMesa`,
+   * `ejecutarMoverItems`). Si una fallaba a mitad de camino los items quedaban
+   * movidos y la mesa origen ocupada, sin forma de saberlo. Aca es una sola
+   * transaccion, con un unico `ensurePermission` y el lock por mesa que ya usan
+   * `createVenta` y la materializacion de pedidos online.
+   *
+   * Reglas de dinero:
+   * - Solo items: nunca se mueve un item con cobertura de cobro parcial. El
+   *   cobro y el cliente se quedan en la cuenta origen.
+   * - Completa a un contenedor SIN venta abierta: se re-apunta la venta entera,
+   *   asi que cobros, pago y cliente viajan intactos con ella.
+   * - Completa a un contenedor que YA tiene venta abierta: se fusionan los items
+   *   en la venta destino. Si la cuenta origen tiene cobros parciales se rechaza:
+   *   `Venta.pago` es un ManyToOne simple y las rondas de `CobroParcial` llevan un
+   *   `factorAplicado` atado al descuento global de SU venta. Fusionarlas pisaba
+   *   el pago del destino y dejaba plata cobrada huerfana.
+   */
+  type TransferenciaContenedor = { tipo: 'MESA' | 'COMANDA'; id: number };
+  interface TransferenciaPayload {
+    origen: TransferenciaContenedor;
+    destino: TransferenciaContenedor;
+    alcance: 'COMPLETA' | 'ITEMS';
+    itemIds?: number[];
+  }
+
+  const buscarVentaAbiertaDe = async (
+    manager: EntityManager,
+    contenedor: TransferenciaContenedor,
+  ): Promise<Venta | null> => {
+    const where = contenedor.tipo === 'MESA'
+      ? { mesa: { id: contenedor.id }, estado: VentaEstado.ABIERTA, comanda: IsNull() }
+      : { comanda: { id: contenedor.id }, estado: VentaEstado.ABIERTA };
+    return await manager.findOne(Venta, { where: where as any, relations: ['pago', 'mesa', 'comanda', 'caja', 'cliente'] });
+  };
+
+  const ocuparMesaEnTx = async (manager: EntityManager, mesaId: number): Promise<void> => {
+    const mesa = await manager.findOneBy(PdvMesa, { id: mesaId });
+    if (mesa && mesa.estado !== PdvMesaEstado.OCUPADO) {
+      mesa.estado = PdvMesaEstado.OCUPADO;
+      await manager.save(PdvMesa, mesa);
+    }
+  };
+
+  /**
+   * FUENTE UNICA de la ocupacion de una mesa:
+   *
+   *     ocupada  <=>  existe Venta ABIERTA con mesa_id = X y comanda_id IS NULL
+   *
+   * Las comandas quedan FUERA de la formula a proposito. El color de la mesa
+   * responde una sola pregunta — "¿tiene cuenta propia?" — y la dimension "hay
+   * comandas sentadas aca" la carga el badge. Colapsar las dos en un solo bit
+   * destruye la distincion que necesita el cajero: "no hay nada que cobrarle a
+   * la mesa" (verde + badge) vs "hay cuenta de mesa Y ademas comandas"
+   * (naranja + badge).
+   *
+   * Antes esto era un flag manual que seis caminos distintos mantenian a mano y
+   * un septimo ignoraba. Cada bug de "mesa colgada en OCUPADO" fue un camino que
+   * se olvido de actualizarlo.
+   */
+  const mesaTieneCuentaPropia = async (manager: EntityManager, mesaId: number): Promise<boolean> => {
+    const n = await manager.count(Venta, {
+      where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
+    });
+    return n > 0;
+  };
+
+  /**
+   * Deja la columna cache `pdv_mesas.estado` igual al valor derivado. Se llama
+   * despues de cualquier cambio que pueda haber abierto o cerrado la cuenta de
+   * una mesa. Es idempotente y auto-reparadora: si la columna venia mal, la
+   * corrige sola.
+   */
+  /**
+   * Version sin transaccion, para los handlers que ya guardaron y solo necesitan
+   * dejar el cache al dia. Nunca lanza: el cache desincronizado degrada, no
+   * rompe (las consultas derivan igual), asi que no debe voltear la operacion
+   * que la llamo.
+   */
+  const sincronizarEstadoMesa = async (mesaId: number | null | undefined): Promise<void> => {
+    if (!mesaId) return;
+    try {
+      await sincronizarEstadoMesaEnTx(dataSource.manager, Number(mesaId));
+    } catch (e) {
+      console.warn(`[sincronizarEstadoMesa] no se pudo resincronizar la mesa ${mesaId}:`, e);
+    }
+  };
+
+  const sincronizarEstadoMesaEnTx = async (manager: EntityManager, mesaId: number): Promise<PdvMesaEstado> => {
+    const derivado = (await mesaTieneCuentaPropia(manager, mesaId))
+      ? PdvMesaEstado.OCUPADO
+      : PdvMesaEstado.DISPONIBLE;
+    const mesa = await manager.findOneBy(PdvMesa, { id: mesaId });
+    if (mesa && mesa.estado !== derivado) {
+      mesa.estado = derivado;
+      await manager.save(PdvMesa, mesa);
+    }
+    return derivado;
+  };
+
+  const cerrarComandaEnTx = async (manager: EntityManager, comandaId: number, userId?: number): Promise<void> => {
+    const comanda = await manager.findOne(Comanda, { where: { id: comandaId }, relations: ['pdv_mesa'] });
+    if (!comanda) return;
+    const mesaId = comanda.pdv_mesa?.id ?? null;
+    comanda.estado = ComandaEstado.DISPONIBLE;
+    (comanda as any).pdv_mesa = null;
+    (comanda as any).sector = null;
+    (comanda as any).observacion = null;
+    await setEntityUserTracking(dataSource, comanda, userId, true);
+    await manager.save(Comanda, comanda);
+    // Cerrar una comanda ya no cambia la ocupacion de su mesa — la comanda
+    // nunca la ocupaba. Se resincroniza igual porque es barato y auto-repara una
+    // columna que haya quedado mal por un camino viejo.
+    if (mesaId) {
+      await sincronizarEstadoMesaEnTx(manager, mesaId);
+    }
+  };
+
+  const abrirComandaEnTx = async (
+    manager: EntityManager,
+    comanda: Comanda,
+    mesaVinculada: PdvMesa | null,
+    userId?: number,
+  ): Promise<void> => {
+    comanda.estado = ComandaEstado.OCUPADO;
+    if (mesaVinculada) {
+      comanda.pdv_mesa = mesaVinculada;
+      (comanda as any).sector = (mesaVinculada as any).sector ?? null;
+    }
+    await setEntityUserTracking(dataSource, comanda, userId, true);
+    await manager.save(Comanda, comanda);
+    // No se ocupa la mesa: el vinculo comanda->mesa es de ubicacion, no de
+    // ocupacion (ver `mesaTieneCuentaPropia`).
+  };
+
+  const transferirVentaPdvInternal = async (payload: TransferenciaPayload, userId?: number): Promise<any> => {
+    const origen = payload?.origen;
+    const destino = payload?.destino;
+    const alcance = payload?.alcance;
+
+    if (!origen?.tipo || !origen?.id) throw new Error('Origen de transferencia invalido.');
+    if (!destino?.tipo || !destino?.id) throw new Error('Destino de transferencia invalido.');
+    if (alcance !== 'COMPLETA' && alcance !== 'ITEMS') throw new Error('Alcance de transferencia invalido.');
+    if (origen.tipo === destino.tipo && Number(origen.id) === Number(destino.id)) {
+      throw new Error('El origen y el destino son el mismo.');
+    }
+    if (alcance === 'ITEMS' && (!Array.isArray(payload.itemIds) || payload.itemIds.length === 0)) {
+      throw new Error('No se seleccionaron items para transferir.');
+    }
+
+    return await dataSource.transaction(async (manager) => {
+      const ventaOrigen = await buscarVentaAbiertaDe(manager, origen);
+      if (!ventaOrigen) throw new Error('La cuenta de origen no tiene una venta abierta.');
+
+      // Mesa fisica del origen: es a la que se vincula una comanda destino nueva
+      // (misma mesa, cuenta separada).
+      let mesaOrigenFisica: PdvMesa | null = null;
+      let comandaOrigen: Comanda | null = null;
+      if (origen.tipo === 'MESA') {
+        mesaOrigenFisica = await manager.findOne(PdvMesa, { where: { id: origen.id }, relations: ['sector'] });
+        if (!mesaOrigenFisica) throw new Error(`Mesa de origen ${origen.id} no encontrada.`);
+      } else {
+        comandaOrigen = await manager.findOne(Comanda, { where: { id: origen.id }, relations: ['pdv_mesa'] });
+        if (!comandaOrigen) throw new Error(`Comanda de origen ${origen.id} no encontrada.`);
+        if (comandaOrigen.pdv_mesa?.id) {
+          mesaOrigenFisica = await manager.findOne(PdvMesa, { where: { id: comandaOrigen.pdv_mesa.id }, relations: ['sector'] });
+        }
+      }
+
+      let mesaDestino: PdvMesa | null = null;
+      let comandaDestino: Comanda | null = null;
+      if (destino.tipo === 'MESA') {
+        mesaDestino = await manager.findOne(PdvMesa, { where: { id: destino.id }, relations: ['sector'] });
+        if (!mesaDestino || !mesaDestino.activo) throw new Error(`Mesa de destino ${destino.id} no disponible.`);
+      } else {
+        comandaDestino = await manager.findOne(Comanda, { where: { id: destino.id }, relations: ['pdv_mesa'] });
+        if (!comandaDestino || !comandaDestino.activo) throw new Error(`Comanda de destino ${destino.id} no disponible.`);
+      }
+
+      let ventaDestino = await buscarVentaAbiertaDe(manager, destino);
+      if (ventaDestino && ventaDestino.id === ventaOrigen.id) {
+        throw new Error('El origen y el destino son la misma cuenta.');
+      }
+      const destinoYaTeniaVenta = !!ventaDestino;
+
+      // Items a mover.
+      //
+      // Lock pesimista en Postgres: `registrarCobroParcial` corre en su propia
+      // transaccion y puede cubrir un item justo entre que aca lo leemos como
+      // "sin cobro" y el save que lo re-apunta. El item terminaria en la cuenta
+      // destino marcado como cubierto, con su `CobroParcialItem` atado a la venta
+      // origen ya cancelada: plata adjudicada a una cuenta cerrada. En SQLite no
+      // aplica (un solo escritor) y `pessimistic_write` no esta soportado.
+      const esPostgres = dataSource.options.type === 'postgres';
+      const itemsActivos = await manager.find(VentaItem, {
+        where: { venta: { id: ventaOrigen.id }, estado: EstadoVentaItem.ACTIVO },
+        ...(esPostgres ? { lock: { mode: 'pessimistic_write' as const } } : {}),
+      });
+      let itemsAMover: VentaItem[];
+      if (alcance === 'COMPLETA') {
+        itemsAMover = itemsActivos;
+      } else {
+        const pedidos = new Set((payload.itemIds || []).map((n) => Number(n)));
+        itemsAMover = itemsActivos.filter((i) => pedidos.has(Number(i.id)));
+        if (itemsAMover.length !== pedidos.size) {
+          throw new Error('Alguno de los items seleccionados ya no esta activo en la cuenta de origen.');
+        }
+        const cobrados = itemsAMover.filter((i) => Number((i as any).montoCubierto || 0) > 0.5);
+        if (cobrados.length > 0) {
+          throw new Error(`No se pueden mover ${cobrados.length} item(s) que ya tienen cobro parcial.`);
+        }
+      }
+      if (itemsAMover.length === 0) throw new Error('La cuenta de origen no tiene items activos para transferir.');
+
+      const origenTieneCobros = !!ventaOrigen.pago?.id
+        || (await manager.count(CobroParcial, { where: { venta: { id: ventaOrigen.id }, activo: true } })) > 0;
+
+      // Una venta con cuenta por cobrar viva no se transfiere. El flujo normal
+      // (`cobrar-venta-credito`) concluye la venta al crear la CPC, asi que no
+      // deberia aparecer como origen — pero `create-cuenta-por-cobrar` permite
+      // vincular una CPC a mano a una venta abierta, y por ahi la cancelacion de
+      // esta transaccion se saltearia la reversion de saldo que hace `updateVenta`.
+      const cpcViva = await manager.count(CuentaPorCobrar, {
+        where: { ventaId: ventaOrigen.id, estado: CuentaPorCobrarEstado.ACTIVO } as any,
+      });
+      if (cpcViva > 0) {
+        throw new Error(
+          'La cuenta de origen tiene una cuenta por cobrar vinculada. '
+          + 'Anula o cobra esa cuenta por cobrar antes de transferir.',
+        );
+      }
+
+      // Re-apunte: la venta entera cambia de contenedor. Es el unico camino que
+      // conserva cobros y pago sin tocarlos.
+      const esReapunte = alcance === 'COMPLETA' && !destinoYaTeniaVenta;
+
+      if (alcance === 'COMPLETA' && destinoYaTeniaVenta && origenTieneCobros) {
+        throw new Error(
+          'La cuenta de origen tiene cobros parciales y el destino ya tiene una cuenta abierta. '
+          + 'Termina de cobrar o anula el cobro parcial antes de unir las dos cuentas.',
+        );
+      }
+
+      // Abrir la comanda destino si estaba libre.
+      //
+      // Hereda la mesa del origen SOLO en una transferencia por ITEMS: eso es
+      // dividir la cuenta en la misma mesa, la gente sigue sentada ahi. En una
+      // transferencia COMPLETA la cuenta SE VA de la mesa, asi que vincularla
+      // seria lo contrario de lo que se pidio — y dejaba la mesa ocupada, sin
+      // cuenta propia y sin forma de atenderla ni liberarla.
+      if (comandaDestino && comandaDestino.estado === ComandaEstado.DISPONIBLE) {
+        const mesaHeredada = alcance === 'ITEMS' ? mesaOrigenFisica : null;
+        await abrirComandaEnTx(manager, comandaDestino, mesaHeredada, userId);
+      }
+
+      let ventaDestinoId: number;
+      let itemsMovidos = 0;
+
+      if (esReapunte) {
+        if (destino.tipo === 'MESA') {
+          (ventaOrigen as any).mesa = mesaDestino;
+          (ventaOrigen as any).comanda = null;
+        } else {
+          (ventaOrigen as any).comanda = comandaDestino;
+          (ventaOrigen as any).mesa = comandaDestino!.pdv_mesa ?? null;
+        }
+        await setEntityUserTracking(dataSource, ventaOrigen as any, userId, true);
+        await manager.save(Venta, ventaOrigen);
+        ventaDestinoId = ventaOrigen.id;
+        itemsMovidos = itemsAMover.length;
+      } else {
+        if (!ventaDestino) {
+          const nueva: any = manager.create(Venta, {
+            estado: VentaEstado.ABIERTA,
+            caja: ventaOrigen.caja,
+            ...(destino.tipo === 'MESA'
+              ? { mesa: mesaDestino }
+              : { comanda: comandaDestino, mesa: comandaDestino!.pdv_mesa ?? null }),
+          });
+          await setEntityUserTracking(dataSource, nueva, userId, false);
+          ventaDestino = await manager.save(Venta, nueva);
+        }
+        ventaDestinoId = ventaDestino!.id;
+
+        for (const item of itemsAMover) {
+          (item as any).venta = { id: ventaDestinoId };
+          await setEntityUserTracking(dataSource, item as any, userId, true);
+        }
+        await manager.save(VentaItem, itemsAMover);
+        itemsMovidos = itemsAMover.length;
+
+        // El nombre y el cliente solo viajan en una transferencia completa, y
+        // solo si el destino no tiene los suyos.
+        if (alcance === 'COMPLETA') {
+          const cambios: any = {};
+          if (ventaOrigen.nombreCliente && !ventaDestino!.nombreCliente) cambios.nombreCliente = ventaOrigen.nombreCliente;
+          if ((ventaOrigen as any).cliente?.id && !(ventaDestino as any).cliente?.id) cambios.cliente = (ventaOrigen as any).cliente;
+          if (Object.keys(cambios).length > 0) {
+            Object.assign(ventaDestino as any, cambios);
+            await setEntityUserTracking(dataSource, ventaDestino as any, userId, true);
+            await manager.save(Venta, ventaDestino as any);
+          }
+        }
+      }
+
+      // Cierre de la cuenta origen: completa siempre, por items solo si quedo vacia.
+      let origenCerrado = false;
+      if (!esReapunte) {
+        const quedanActivos = await manager.count(VentaItem, {
+          where: { venta: { id: ventaOrigen.id }, estado: EstadoVentaItem.ACTIVO },
+        });
+        if (alcance === 'COMPLETA' || quedanActivos === 0) {
+          (ventaOrigen as any).estado = VentaEstado.CANCELADA;
+          await setEntityUserTracking(dataSource, ventaOrigen as any, userId, true);
+          await manager.save(Venta, ventaOrigen);
+          origenCerrado = true;
+        }
+      } else {
+        origenCerrado = true;
+      }
+
+      let origenLiberado = false;
+      if (origenCerrado) {
+        if (origen.tipo === 'MESA') {
+          origenLiberado = (await sincronizarEstadoMesaEnTx(manager, origen.id)) === PdvMesaEstado.DISPONIBLE;
+        } else {
+          await cerrarComandaEnTx(manager, origen.id, userId);
+          origenLiberado = true;
+        }
+      }
+
+      // Ocupar el destino: si es mesa, ahora tiene una venta abierta encima.
+      if (destino.tipo === 'MESA') {
+        await ocuparMesaEnTx(manager, destino.id);
+      }
+
+      return {
+        ventaOrigenId: ventaOrigen.id,
+        ventaDestinoId,
+        itemsMovidos,
+        origenCerrado,
+        origenLiberado,
+        reapunte: esReapunte,
+      };
+    });
+  };
+
+  ipcMain.handle('transferir-venta-pdv', async (_event: any, payload: TransferenciaPayload) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+      const userId = getCurrentUser()?.id;
+      // Candados por contenedor. Van los DOS tipos: una transferencia entre dos
+      // comandas no toca ninguna mesa, y sin candado dos cajeros podian dejar dos
+      // ventas ABIERTA colgando de la misma comanda destino.
+      //
+      // El reduce anida de adentro hacia afuera, asi que cada lista va descendente
+      // para que el candado MAS EXTERNO de cada tipo sea el del id menor: dos
+      // transferencias cruzadas los toman en el mismo orden y no se abrazan. Y las
+      // comandas se toman SIEMPRE despues de las mesas, para que el orden entre
+      // tipos tambien sea unico.
+      const idsDe = (tipo: 'MESA' | 'COMANDA'): number[] => Array.from(new Set([
+        payload?.origen?.tipo === tipo ? Number(payload.origen.id) : null,
+        payload?.destino?.tipo === tipo ? Number(payload.destino.id) : null,
+      ].filter((n): n is number => typeof n === 'number' && !Number.isNaN(n)))).sort((a, b) => b - a);
+
+      const ejecutar = () => transferirVentaPdvInternal(payload, userId);
+      const conComandas = idsDe('COMANDA').reduce<() => Promise<any>>(
+        (fn, comandaId) => () => withComandaLock(comandaId, fn),
+        ejecutar,
+      );
+      return await idsDe('MESA').reduce<() => Promise<any>>(
+        (fn, mesaId) => () => withMesaLock(mesaId, fn),
+        conComandas,
+      )();
+    } catch (error) {
+      console.error('Error transfiriendo cuenta del PdV:', error);
       throw error;
     }
   });
@@ -2060,11 +2992,15 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(Comanda);
-      const entity = await repo.findOneBy({ id });
+      // Con `pdv_mesa`: hace falta la mesa ANTERIOR para saber si realmente
+      // cambia y arrastrar la venta.
+      const entity = await repo.findOne({ where: { id }, relations: ['pdv_mesa'] });
       if (!entity) throw new Error(`Comanda ID ${id} not found`);
 
       // Si se cambia la mesa, sincronizar sector con el de la mesa
-      if ('pdv_mesa' in data) {
+      const mesaAnterior = (entity as any).pdv_mesa?.id ?? null;
+      const cambiaMesa = 'pdv_mesa' in data;
+      if (cambiaMesa) {
         if (data.pdv_mesa?.id) {
           const mesaRepo = dataSource.getRepository(PdvMesa);
           const mesa = await mesaRepo.findOne({ where: { id: data.pdv_mesa.id }, relations: ['sector'] });
@@ -2079,7 +3015,31 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+
+      // `venta.mesa_id` de la cuenta de una comanda es una COPIA que se hace al
+      // crearla, no una derivacion. Al mover la comanda quedaba apuntando a la
+      // mesa vieja para siempre: en el PdV no se nota (todo filtra por
+      // `comanda_id IS NULL`) pero cualquier reporte que agrupe por mesa la
+      // atribuye a la mesa equivocada.
+      //
+      // Solo cuando efectivamente cambia la mesa: este handler tambien lo usa el
+      // ABM administrativo de comandas, que no esta moviendo una cuenta en
+      // servicio.
+      //
+      // Las dos escrituras van en UNA transaccion: si fallaba entre medio, la
+      // comanda quedaba en la mesa nueva y su venta apuntando a la vieja — el
+      // mismo desfasaje que este arreglo elimina, por otra ventana.
+      const mesaNueva = data?.pdv_mesa?.id ?? null;
+      return await dataSource.transaction(async (manager) => {
+        const guardada = await manager.save(Comanda, entity);
+        if (cambiaMesa && mesaNueva !== mesaAnterior) {
+          await manager.getRepository(Venta).update(
+            { comanda: { id }, estado: VentaEstado.ABIERTA } as any,
+            { mesa: mesaNueva ? ({ id: mesaNueva } as any) : null } as any,
+          );
+        }
+        return guardada;
+      });
     } catch (error) {
       console.error(`Error updating Comanda ID ${id}:`, error);
       throw error;
@@ -2172,15 +3132,10 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
 
-      // Si la config lo pide, vincular comanda a mesa también ocupa la mesa.
-      if (data.mesaId && (await ocuparMesaAlVincularComanda())) {
-        const mesaRepo = dataSource.getRepository(PdvMesa);
-        const mesa = await mesaRepo.findOneBy({ id: data.mesaId });
-        if (mesa && mesa.estado !== 'OCUPADO') {
-          mesa.estado = 'OCUPADO' as any;
-          await mesaRepo.save(mesa);
-        }
-      }
+      // Vincular una comanda a una mesa NO la ocupa: el vinculo es de UBICACION
+      // (donde esta sentada la cuenta, para saber a donde llevar la comida), no
+      // de ocupacion. La mesa se pinta por su cuenta propia; las comandas las
+      // muestra el badge.
       return saved;
     } catch (error) {
       console.error(`Error abriendo Comanda ID ${comandaId}:`, error);
@@ -2191,37 +3146,24 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   ipcMain.handle('cerrarComanda', async (_event: any, comandaId: number) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
-      const repo = dataSource.getRepository(Comanda);
-      const entity = await repo.findOne({ where: { id: comandaId }, relations: ['pdv_mesa'] });
-      if (!entity) throw new Error(`Comanda ID ${comandaId} not found`);
-
-      const mesaId = entity.pdv_mesa?.id;
-      entity.estado = ComandaEstado.DISPONIBLE;
-      entity.pdv_mesa = undefined as any;
-      entity.sector = undefined as any;
-      entity.observacion = undefined as any;
-      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      const saved = await repo.save(entity);
-
-      // Si la config ocupa la mesa al vincular comanda, al liberar la comanda
-      // liberar la mesa solo si no quedan otras comandas OCUPADO ni venta de mesa ABIERTA.
-      if (mesaId && (await ocuparMesaAlVincularComanda())) {
-        const otrasComandas = await repo.count({
-          where: { pdv_mesa: { id: mesaId }, estado: ComandaEstado.OCUPADO, activo: true },
-        });
-        const ventaMesa = await dataSource.getRepository(Venta).count({
-          where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
-        });
-        if (otrasComandas === 0 && ventaMesa === 0) {
-          const mesaRepo = dataSource.getRepository(PdvMesa);
-          const mesa = await mesaRepo.findOneBy({ id: mesaId });
-          if (mesa && mesa.estado !== 'DISPONIBLE') {
-            mesa.estado = 'DISPONIBLE' as any;
-            await mesaRepo.save(mesa);
-          }
-        }
-      }
-      return saved;
+      const userId = getCurrentUser()?.id;
+      // Delega en el mismo helper que usa la transferencia, dentro de una
+      // transaccion y con el candado de la comanda. Antes tenia su propia copia
+      // de la logica, que ya habia divergido en dos puntos:
+      //
+      //  - limpiaba `pdv_mesa`/`sector`/`observacion` con `undefined`, y TypeORM
+      //    NO emite UPDATE para propiedades undefined: el FK quedaba con el valor
+      //    viejo. Una comanda DISPONIBLE conservaba su mesa, y al reabrirse por
+      //    transferencia esa mesa stale se propagaba a la venta.
+      //  - contaba el trabajo vivo de la mesa FUERA de cualquier transaccion o
+      //    candado, asi que podia liberar una mesa que una transferencia en curso
+      //    acababa de ocupar.
+      return await withComandaLock(comandaId, async () => dataSource.transaction(async (manager) => {
+        const existe = await manager.findOneBy(Comanda, { id: comandaId });
+        if (!existe) throw new Error(`Comanda ID ${comandaId} not found`);
+        await cerrarComandaEnTx(manager, comandaId, userId);
+        return await manager.findOneBy(Comanda, { id: comandaId });
+      }));
     } catch (error) {
       console.error(`Error cerrando Comanda ID ${comandaId}:`, error);
       throw error;
@@ -3050,6 +3992,20 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         || precios?.[0]
         || null;
 
+      // Productos con variación: rango de precios y config de multi-sabor
+      // resueltos en batch (el atajo puede tener varios y todos consultarían lo
+      // mismo).
+      const idsVariacion = items
+        .map((item: any) => item.producto)
+        .filter((p: any) => p?.tipo === 'ELABORADO_CON_VARIACION')
+        .map((p: any) => p.id);
+      const rangosVariacion = idsVariacion.length
+        ? await getRangosPrecioVariacion(dataSource, idsVariacion)
+        : new Map();
+      const configGlobalVariacion = idsVariacion.length
+        ? await getVariacionConfigGlobal(dataSource)
+        : undefined;
+
       for (const item of items) {
         const p = item.producto as any;
         if (!p) continue;
@@ -3065,15 +4021,22 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             p.precioDirecto = pickPrecio(precios);
           }
         } else if (p.tipo === 'ELABORADO_CON_VARIACION') {
-          const precios = await pvRepo
-            .createQueryBuilder('pv')
-            .leftJoinAndSelect('pv.moneda', 'moneda')
-            .innerJoin('pv.receta', 'receta')
-            .where('receta.producto_id = :prodId', { prodId: p.id })
-            .andWhere('pv.activo = :activo', { activo: true })
-            .orderBy('pv.principal', 'DESC')
-            .getMany();
-          p.precioDirecto = pickPrecio(precios);
+          // El precio de una variación cuelga de `receta_presentacion_id`, no de
+          // la receta (y menos del 1:1 legacy `receta.producto_id`, que dejaba el
+          // atajo en 0). Se muestra el rango "desde / hasta" de sus variaciones.
+          const cfgVariacion = await getVariacionConfig(dataSource, p, configGlobalVariacion);
+          p.variacionConfig = { maxSabores: cfgVariacion.maxSabores, estrategia: cfgVariacion.estrategia };
+          const rango = rangosVariacion.get(p.id);
+          if (rango && rango.variacionesCount > 0) {
+            p.precioDirecto = rango.precioReferencia;
+            p.variacionResumen = {
+              precioDesde: rango.precioDesde,
+              precioHasta: rango.precioHasta,
+              variacionesCount: rango.variacionesCount,
+              saboresCount: rango.saboresCount,
+              presentacionesCount: rango.presentacionesCount,
+            };
+          }
         } else if (p.tipo === 'COMBO') {
           const precios = await pvRepo.find({
             where: { producto: { id: p.id }, activo: true },
@@ -3198,7 +4161,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   });
 
   // ─── Cobro parcial por ítems ─────────────────────────────────────────────
-  // Ver docs/PLAN-COBRO-PARCIAL-POR-ITEMS.md. El estado de cobro se maneja en
+  // Ver .claude/skills/frc-gourmet-expert/domains/ventas-pdv.md. El estado de cobro se maneja en
   // BRUTO (moneda principal, sin conversión): la cobertura por ítem
   // (`montoCubierto`) y los topes viven en bruto. El descuento/aumento global
   // se absorbe vía el `factor` que calcula el front (ya trabaja en principal).
@@ -3215,7 +4178,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
   // `VentaItem.montoCubierto`. Transaccional + anti-doble-cobro (valida topes
   // contra la cobertura ya persistida, incluso desde otro dispositivo).
   ipcMain.handle('registrarCobroParcial', async (_event: any, ventaId: number, payload: any) => {
-    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_COBRAR');
     const imputaciones: Array<{ ventaItemId: number; brutoCubierto: number; cantidad?: number }> =
       Array.isArray(payload?.imputaciones) ? payload.imputaciones : [];
     const pagoDetalleIds: number[] = Array.isArray(payload?.pagoDetalleIds) ? payload.pagoDetalleIds : [];
@@ -3229,7 +4192,10 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      const venta = await queryRunner.manager.findOne(Venta, { where: { id: ventaId } });
+      const venta = await queryRunner.manager.findOne(Venta, {
+        where: { id: ventaId },
+        relations: ['pago'],
+      });
       if (!venta) throw new Error(`Venta ${ventaId} no encontrada`);
       if (venta.estado !== VentaEstado.ABIERTA) throw new Error('VENTA_NO_ABIERTA');
 
@@ -3266,7 +4232,30 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const rondaSaved = await queryRunner.manager.save(CobroParcial, ronda);
 
       // Taguear las líneas de pago de esta ronda.
+      //
+      // ⚠️ Se valida que TODAS pertenezcan al pago de ESTA venta antes de tocar
+      // nada. El update filtraba sólo por id, así que un cliente podía mandar
+      // ids de líneas de otras ventas —de otras cajas, incluso ya cerradas— y
+      // atarlas a su ronda; después `anularCobroParcial` las ponía `activo=false`
+      // y esa plata desaparecía del arqueo ajeno de forma retroactiva. Alcanzaba
+      // con VENTAS_PDV + VENTAS_COBRAR.
+      //
+      // La verificación va con `find` + comparación y no como condición del
+      // `update`: `PagoDetalle` no expone `pagoId` escalar (sólo el JoinColumn),
+      // así que una condición de relación anidada en un UpdateQueryBuilder es
+      // terreno resbaladizo. Y además permite fallar explícito en vez de taguear
+      // de a pedazos.
       if (pagoDetalleIds.length) {
+        const pagoVentaId = (venta.pago as any)?.id ?? null;
+        const lineas = await queryRunner.manager.find(PagoDetalle, {
+          where: { id: In(pagoDetalleIds) },
+          relations: ['pago'],
+        });
+        const todasPropias = pagoVentaId != null
+          && lineas.length === pagoDetalleIds.length
+          && lineas.every((l) => ((l.pago as any)?.id ?? null) === pagoVentaId);
+        if (!todasPropias) throw new Error('PAGO_DETALLE_AJENO');
+
         await queryRunner.manager.update(
           PagoDetalle,
           { id: In(pagoDetalleIds) },
@@ -3317,6 +4306,19 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       if (!ronda) throw new Error(`CobroParcial ${cobroParcialId} no encontrado`);
       const ventaId = (ronda.venta as any)?.id;
 
+      // Anular una ronda desactiva sus `PagoDetalle`, o sea saca plata del
+      // arqueo. Sobre una venta ya cerrada eso cambia el resultado de una caja
+      // que puede estar cerrada, con su retiro generado y su ticket impreso — y
+      // encima deja viva la AcreditacionPos que ese cobro creó. Sólo tiene
+      // sentido mientras la cuenta sigue abierta.
+      const ventaDeLaRonda = ventaId
+        ? await queryRunner.manager.findOne(Venta, { where: { id: ventaId } })
+        : null;
+      if (!ventaDeLaRonda) throw new Error(`Venta de la ronda ${cobroParcialId} no encontrada`);
+      if (ventaDeLaRonda.estado !== VentaEstado.ABIERTA) {
+        throw new Error('COBRO_PARCIAL_VENTA_NO_ABIERTA');
+      }
+
       // Ítems que tocaba esta ronda.
       const impsRonda = await queryRunner.manager.find(CobroParcialItem, {
         where: { cobroParcial: { id: cobroParcialId } },
@@ -3366,8 +4368,13 @@ function computeNetoBrutoItem(item: any): number {
  * Estado de cobro de una venta (en bruto). Devuelve por ítem el neto bruto,
  * lo cubierto y su estado (PENDIENTE/PARCIAL/PAGADO), más totales en bruto y el
  * descuento/aumento global vigente (referencia para el front).
+ *
+ * Exportada: `delivery-convertir-modo` la usa para avisar si lo ya cobrado
+ * quedó por encima del total nuevo. Es matemática de plata (tolerancias,
+ * `Number()` sobre los `decimal` que Postgres devuelve como string) y tener dos
+ * copias es la forma más segura de que diverjan.
  */
-async function getEstadoCobroVentaInternal(dataSource: DataSource, ventaId: number) {
+export async function getEstadoCobroVentaInternal(dataSource: DataSource, ventaId: number) {
   const TOL = 0.5;
   const items = await dataSource.getRepository(VentaItem).find({
     where: { venta: { id: ventaId }, estado: EstadoVentaItem.ACTIVO },
@@ -3381,14 +4388,22 @@ async function getEstadoCobroVentaInternal(dataSource: DataSource, ventaId: numb
     else estado = 'PARCIAL';
     return { id: it.id, netoBruto, montoCubierto: cubierto, estado };
   });
-  const deudaBruta = itemsEstado.reduce((s, i) => s + i.netoBruto, 0);
+  const venta = await dataSource.getRepository(Venta).findOne({ where: { id: ventaId }, relations: ['pago'] });
+
+  // El costo del envío es un cargo de la venta, no un ítem: no se puede cubrir
+  // desde el panel de cobro parcial por ítems, pero SÍ es deuda. Antes no
+  // entraba en ningún total y el envío terminaba regalado.
+  // `costoDelivery` es `decimal` → string en Postgres, de ahí el Number().
+  const costoDelivery = Number(venta?.costoDelivery ?? 0) || 0;
+
+  const deudaItems = itemsEstado.reduce((s, i) => s + i.netoBruto, 0);
+  const deudaBruta = deudaItems + costoDelivery;
   const totalCubierto = itemsEstado.reduce((s, i) => s + i.montoCubierto, 0);
   const pendienteBruto = Math.max(0, deudaBruta - totalCubierto);
 
   // Descuento/aumento global desde las líneas del pago (si existe pago).
   let descuentoGlobal = 0;
   let aumentoGlobal = 0;
-  const venta = await dataSource.getRepository(Venta).findOne({ where: { id: ventaId }, relations: ['pago'] });
   if (venta?.pago?.id) {
     const detalles = await dataSource.getRepository(PagoDetalle).find({
       where: { pago: { id: venta.pago.id }, activo: true },
@@ -3399,7 +4414,7 @@ async function getEstadoCobroVentaInternal(dataSource: DataSource, ventaId: numb
     }
   }
 
-  return { items: itemsEstado, deudaBruta, totalCubierto, pendienteBruto, descuentoGlobal, aumentoGlobal };
+  return { items: itemsEstado, deudaItems, costoDelivery, deudaBruta, totalCubierto, pendienteBruto, descuentoGlobal, aumentoGlobal };
 }
 
 // Retardo antes de auto-imprimir la comanda: da tiempo a que el PdV persista los
@@ -3429,12 +4444,17 @@ async function autoPrintComandaIfNeeded(
   // 1. Buscar la venta con mesa+comanda
   const venta = await dataSource.getRepository(Venta).findOne({
     where: { id: ventaId },
-    relations: ['mesa', 'comanda'],
+    relations: ['mesa', 'comanda', 'delivery'],
   });
   if (!venta) return;
   const tieneMesa = !!(venta as any).mesa?.id;
   const tieneComanda = !!(venta as any).comanda?.id;
-  if (!tieneMesa && !tieneComanda) return; // Venta directa sin cocina
+  // Un delivery o un pedido online no tienen mesa ni comanda y IGUAL van a
+  // cocina. Lo que de verdad NO va a cocina es la venta rápida de mostrador, y
+  // eso es lo que distingue este predicado.
+  const tieneDelivery = !!(venta as any).delivery?.id;
+  const vieneDeLaWeb = ((venta as any).canalOrigen ?? 'LOCAL') !== 'LOCAL';
+  if (!tieneMesa && !tieneComanda && !tieneDelivery && !vieneDeLaWeb) return; // Venta directa sin cocina
 
   // 2. Verificar config global
   const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
@@ -3473,7 +4493,7 @@ async function autoPrintComandaIfNeeded(
  * Idempotente: si ya existe un ComandaItem activo para (ventaItem, sector) no
  * lo duplica (cubre reintentos / doble-fire). Emite evento por cada item creado.
  */
-async function crearComandaItemsSiCorresponde(
+export async function crearComandaItemsSiCorresponde(
   dataSource: DataSource,
   ventaItemId: number,
 ): Promise<void> {
@@ -3481,14 +4501,20 @@ async function crearComandaItemsSiCorresponde(
 
   const item = await dataSource.getRepository(VentaItem).findOne({
     where: { id: ventaItemId },
-    relations: ['venta', 'venta.mesa', 'venta.comanda', 'producto'],
+    relations: ['venta', 'venta.mesa', 'venta.comanda', 'venta.delivery', 'producto'],
   });
   if (!item) return;
 
   const venta: any = (item as any).venta;
   const producto: any = (item as any).producto;
   if (!venta?.id) return;
-  if (!venta.mesa?.id && !venta.comanda?.id) return; // venta de mostrador
+  // Igual que en la impresión: delivery y pedidos online sin mesa sí van a
+  // cocina. Un delivery cargado por el cajero jamás generaba ComandaItem, así
+  // que sus items nunca se ruteaban a la impresora del sector del producto: la
+  // cocina sólo veía el ticket único del reparto, si estaba configurado.
+  const tieneDelivery = !!(venta as any).delivery?.id;
+  const vieneDeLaWeb = (venta.canalOrigen ?? 'LOCAL') !== 'LOCAL';
+  if (!venta.mesa?.id && !venta.comanda?.id && !tieneDelivery && !vieneDeLaWeb) return; // venta de mostrador
   if (!producto?.id || producto.requiereComanda === false) return;
 
   // Sectores destino (M2M producto_sectores, activos, por prioridad)

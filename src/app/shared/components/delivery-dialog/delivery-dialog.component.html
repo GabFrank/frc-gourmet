@@ -23,6 +23,22 @@
     <button mat-raised-button color="primary" (click)="nuevoDelivery()">
       <mat-icon>add</mat-icon> NUEVO DELIVERY
     </button>
+
+    <!-- El panel derecho muestra la cola O el detalle del delivery
+         seleccionado, nunca los dos. Sin este aviso, un pedido nuevo quedaba
+         invisible mientras el cajero tenía un delivery abierto, que es la mayor
+         parte del tiempo. Vuelve a la cola con un click. -->
+    <button
+      *ngIf="tiendaActiva && colaWeb.length"
+      mat-flat-button
+      color="warn"
+      class="aviso-pedidos"
+      (click)="verColaPedidos()"
+      [matTooltip]="avisoTooltip"
+    >
+      <mat-icon>storefront</mat-icon>
+      {{ colaWeb.length }} PEDIDO{{ colaWeb.length === 1 ? '' : 'S' }} WEB
+    </button>
   </div>
 
   <!-- Content -->
@@ -38,13 +54,21 @@
 
           <ng-container matColumnDef="nombre">
             <th mat-header-cell *matHeaderCellDef>NOMBRE</th>
-            <td mat-cell *matCellDef="let row">{{ row.nombre }}</td>
+            <td mat-cell *matCellDef="let row">
+              {{ row.nombre }}
+              <mat-icon *ngIf="row.otraCaja" class="otra-caja-icon"
+                matTooltip="Delivery de otro turno (otra caja)">history</mat-icon>
+            </td>
           </ng-container>
 
           <ng-container matColumnDef="estado">
             <th mat-header-cell *matHeaderCellDef>ESTADO</th>
             <td mat-cell *matCellDef="let row">
               <span class="estado-chip" [class]="'estado-' + row.estadoColor">{{ row.estadoLabel }}</span>
+              <!-- De dónde salió el pedido. El WEB va marcado y el LOCAL
+                   discreto: lo normal es que el cajero lo haya cargado, y
+                   resaltar los 20 de siempre para distinguir 1 no sirve. -->
+              <span class="canal-chip" [class.canal-web]="row.canal === 'WEB'">{{ row.canal }}</span>
             </td>
           </ng-container>
 
@@ -57,7 +81,12 @@
 
           <ng-container matColumnDef="valorDelivery">
             <th mat-header-cell *matHeaderCellDef>DELIVERY</th>
-            <td mat-cell *matCellDef="let row">{{ row.valorDelivery | number:'1.0-0' }}</td>
+            <td mat-cell *matCellDef="let row">
+              <!-- Un retiro no se reparte, así que no hay costo de envío que
+                   mostrar: la columna dice qué es en vez de un 0 engañoso. -->
+              <span *ngIf="row.esRetiro" class="retirar-chip">RETIRAR</span>
+              <span *ngIf="!row.esRetiro">{{ row.valorDelivery | number:'1.0-0' }}</span>
+            </td>
           </ng-container>
 
           <ng-container matColumnDef="total">
@@ -85,7 +114,7 @@
 
         <div *ngIf="deliveryRows.length === 0" class="empty-state">
           <mat-icon>delivery_dining</mat-icon>
-          <span>No hay deliveries para esta caja.</span>
+          <span>No hay deliveries para mostrar.</span>
         </div>
       </div>
 
@@ -99,82 +128,170 @@
       </mat-paginator>
     </div>
 
-    <!-- Detalle ticket (30%) -->
-    <div class="delivery-detalle" *ngIf="selectedDelivery">
-      <!-- Card Cliente -->
-      <div class="detalle-card">
-        <div class="detalle-card-header">
-          <mat-icon>person</mat-icon>
-          <span>CLIENTE</span>
-        </div>
-        <div class="detalle-card-body">
-          <div class="detalle-row">
-            <span class="detalle-label">NOMBRE:</span>
-            <span>{{ selectedDelivery.nombre || selectedDelivery.cliente?.persona?.nombre || '-' }}</span>
-          </div>
-          <div class="detalle-row">
-            <span class="detalle-label">TEL:</span>
-            <span>{{ selectedDelivery.telefono || '-' }}</span>
-          </div>
-          <div class="detalle-row">
-            <span class="detalle-label">DIR:</span>
-            <span>{{ selectedDelivery.direccion || '-' }}</span>
-          </div>
-          <div class="detalle-row" *ngIf="selectedDelivery.observacion">
-            <span class="detalle-label">OBS:</span>
-            <span>{{ selectedDelivery.observacion }}</span>
-          </div>
-        </div>
+    <!-- Bandeja de pedidos de la web: SÓLO los que esperan confirmación.
+         Es una lista de decisiones pendientes, no de trabajo en curso. En
+         cuanto se acepta uno, sale de acá y entra en la lista de la izquierda
+         junto al resto de los pedidos, con su chip WEB. Tener los aceptados
+         también en el panel partía la operación en dos lugares para mirar. -->
+    <div class="delivery-detalle cola-online"
+         *ngIf="hayColaWeb && !selectedDelivery">
+      <div class="cola-header">
+        <mat-icon>storefront</mat-icon>
+        <span>PEDIDOS DE LA WEB</span>
+        <span class="cola-count">{{ colaWeb.length }}</span>
       </div>
 
-      <!-- Card Items -->
-      <div class="detalle-card">
-        <div class="detalle-card-header">
-          <mat-icon>receipt</mat-icon>
-          <span>ITEMS</span>
+      <div class="cola-item" *ngFor="let p of colaWeb; trackBy: trackPedido"
+           [class.retiro-item]="p.esRetiro">
+        <div class="cola-item-top">
+          <span class="cola-numero">{{ p.numero }}</span>
+          <span class="cola-tipo" [class.retiro]="p.esRetiro">{{ p.tipoLabel }}</span>
+          <span class="cola-espera" [class]="p.esperaColor">{{ p.espera }}</span>
         </div>
-        <div class="detalle-card-body">
-          <div *ngFor="let item of selectedItems" class="item-row" [class.item-cancelado]="item.estado === 'CANCELADO'">
-            <div class="item-main">
-              <span>{{ item.cantidad }}x {{ item.producto?.nombre || '-' }}</span>
-              <span>{{ (item.precioVentaUnitario * item.cantidad) | number:'1.0-0' }}</span>
-            </div>
-            <div *ngIf="item.descuentoUnitario > 0" class="item-sub">DESC: -{{ (item.descuentoUnitario * item.cantidad) | number:'1.0-0' }}</div>
-          </div>
-          <div *ngIf="selectedItems.length === 0" class="empty-items">SIN ITEMS</div>
+        <div class="cola-cliente">{{ p.nombreCliente || 'SIN NOMBRE' }}</div>
+        <div class="cola-dir" *ngIf="p.direccionEntrega">{{ p.direccionEntrega }}</div>
+        <div class="cola-items">{{ p.resumenItems }}</div>
+        <div class="cola-total">
+          <span>{{ p.total | number:'1.0-2' }}</span>
+          <span class="cola-envio" *ngIf="p.costoEnvio > 0">envío {{ p.costoEnvio | number:'1.0-2' }}</span>
         </div>
-      </div>
-
-      <!-- Card Totales -->
-      <div class="detalle-card detalle-card-total">
-        <div class="detalle-card-body">
-          <div class="detalle-row" *ngIf="selectedDelivery.precioDelivery">
-            <span>DELIVERY:</span>
-            <span>{{ selectedDelivery.precioDelivery.valor | number:'1.0-0' }}</span>
-          </div>
-          <div class="detalle-row total-row">
-            <span>TOTAL:</span>
-            <span>{{ (calcTotalItems() + (selectedDelivery.precioDelivery?.valor || 0)) | number:'1.0-0' }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Card Cobro -->
-      <div class="detalle-card" *ngIf="selectedPagoDetalles.length > 0">
-        <div class="detalle-card-header">
-          <mat-icon>payments</mat-icon>
-          <span>COBRO</span>
-        </div>
-        <div class="detalle-card-body">
-          <div *ngFor="let pd of selectedPagoDetalles" class="detalle-row">
-            <span>{{ pd.moneda?.simbolo }} {{ pd.formaPago?.nombre }}</span>
-            <span>{{ pd.valor | number:'1.0-0' }} ({{ pd.tipo }})</span>
-          </div>
+        <div class="cola-acciones">
+          <button mat-flat-button color="primary" [disabled]="procesandoPedidoId === p.id"
+                  (click)="aceptarPedidoOnline(p)">
+            <mat-icon>check</mat-icon> ACEPTAR
+          </button>
+          <button mat-stroked-button color="warn" [disabled]="procesandoPedidoId === p.id"
+                  (click)="rechazarPedidoOnline(p)">
+            <mat-icon>close</mat-icon> RECHAZAR
+          </button>
         </div>
       </div>
     </div>
 
-    <div class="delivery-detalle empty-detalle" *ngIf="!selectedDelivery">
+    <!-- Resumen del pedido, con forma de comprobante.
+         =====================================================================
+         Esto no es sólo una pantalla de trabajo: cuando el cliente pide su
+         resumen, el cajero le manda una FOTO de esta pantalla por WhatsApp.
+         Por eso va sobre papel blanco y en un ancho de ticket en vez de seguir
+         el tema de la app — una captura de una UI oscura, recortada de una
+         pantalla más grande, se lee como un pedazo de pantalla; ésta se lee
+         como un comprobante. Es el único lugar del diálogo donde el color no
+         sale de las variables de tema, y es deliberado: el destino de este
+         bloque es una imagen, no un monitor.
+
+         Los botones NO viven acá sino en el footer, así que el recorte sale
+         limpio: no hay controles que fotografiar. -->
+    <div class="delivery-detalle recibo-wrap" *ngIf="selectedDelivery">
+      <div class="recibo">
+        <div class="recibo-header">
+          <div class="recibo-local">{{ empresa?.nombreComercial || empresa?.nombre || '' }}</div>
+          <div class="recibo-contacto" *ngIf="empresa?.telefono">{{ empresa.telefono }}</div>
+          <div class="recibo-contacto" *ngIf="empresa?.direccion">{{ empresa.direccion }}</div>
+        </div>
+
+        <div class="recibo-titulo">{{ detalleTitulo }}</div>
+        <div class="recibo-meta">
+          <span>N° {{ selectedDelivery.id }}</span>
+          <span *ngIf="detalleFecha">{{ detalleFecha | date:'dd/MM/yyyy HH:mm' }}</span>
+        </div>
+
+        <div class="recibo-sep"></div>
+
+        <!-- Datos de entrega -->
+        <div class="recibo-kv">
+          <span>CLIENTE</span>
+          <span>{{ selectedDelivery.nombre || selectedDelivery.cliente?.persona?.nombre || '-' }}</span>
+        </div>
+        <div class="recibo-kv">
+          <span>TEL</span>
+          <span>{{ selectedDelivery.telefono || '-' }}</span>
+        </div>
+        <div class="recibo-dir" *ngIf="!esRetiroSeleccionado">
+          <span>DIRECCIÓN</span>
+          <div>{{ selectedDelivery.direccion || '-' }}</div>
+        </div>
+        <div class="recibo-dir" *ngIf="selectedDelivery.observacion">
+          <span>OBSERVACIÓN</span>
+          <div>{{ selectedDelivery.observacion }}</div>
+        </div>
+        <div class="recibo-kv" *ngIf="selectedDelivery.entregadoPorFuncionario">
+          <span>REPARTIDOR</span>
+          <span>{{ selectedDelivery.entregadoPorFuncionario.persona?.nombre }}</span>
+        </div>
+        <div class="recibo-dir" *ngIf="isCancelado && selectedDelivery.motivoCancelacion">
+          <span>MOTIVO DE CANCELACIÓN</span>
+          <div>{{ selectedDelivery.motivoCancelacion }}</div>
+        </div>
+
+        <div class="recibo-sep"></div>
+
+        <!-- Ítems: el mismo detalle que sale impreso en el ticket -->
+        <div class="recibo-item" *ngFor="let item of itemsDetalle" [class.anulado]="item.cancelado">
+          <div class="recibo-item-top">
+            <!-- Mismo formato que el papel: la x separada del número, en una
+                 columna de ancho fijo para que quede alineada entre líneas. -->
+            <span class="recibo-item-nombre">
+              <span class="recibo-cant">{{ item.cantidad }}</span>
+              <span class="recibo-x">x</span>
+              {{ item.nombre }}
+            </span>
+            <span class="recibo-item-total">{{ item.total | number:'1.0-2' }}</span>
+          </div>
+          <div class="recibo-item-var" *ngIf="item.variacion">{{ item.variacion }}</div>
+          <div class="recibo-item-mod quitado" *ngFor="let r of item.removidos">sin {{ r }}</div>
+          <div class="recibo-item-mod cambio" *ngFor="let c of item.cambios">{{ c }}</div>
+          <div class="recibo-item-mod extra" *ngFor="let a of item.adicionales">+ {{ a }}</div>
+          <div class="recibo-item-mod nota" *ngFor="let o of item.observaciones">{{ o }}</div>
+          <div class="recibo-item-mod" *ngIf="item.descuento > 0">
+            descuento −{{ item.descuento | number:'1.0-2' }}
+          </div>
+        </div>
+        <div class="recibo-vacio" *ngIf="itemsDetalle.length === 0">SIN ITEMS</div>
+
+        <div class="recibo-sep"></div>
+
+        <!-- Totales -->
+        <div class="recibo-kv">
+          <span>SUBTOTAL</span>
+          <span>{{ detalleSubtotal | number:'1.0-2' }}</span>
+        </div>
+        <div class="recibo-kv" *ngIf="detalleEnvio > 0">
+          <span>ENVÍO</span>
+          <span>{{ detalleEnvio | number:'1.0-2' }}</span>
+        </div>
+        <div class="recibo-total">
+          <span>TOTAL</span>
+          <span>{{ detalleTotal | number:'1.0-2' }}</span>
+        </div>
+        <div class="recibo-kv recibo-moneda" *ngFor="let t of totalesMoneda">
+          <span>{{ t.simbolo }}</span>
+          <span *ngIf="t.decimales === 0">{{ t.valor | number:'1.0-0' }}</span>
+          <span *ngIf="t.decimales !== 0">{{ t.valor | number:'1.2-2' }}</span>
+        </div>
+
+        <!-- Sello de cobro: lo primero que se mira en la foto. -->
+        <div class="recibo-sello" [class.pagado]="ventaCobrada">
+          {{ ventaCobrada ? 'PAGADO' : 'A COBRAR' }}
+        </div>
+
+        <!-- Cómo se pagó, sólo si ya se cobró. -->
+        <div class="recibo-pagos" *ngIf="selectedPagoDetalles.length > 0">
+          <div class="recibo-kv" *ngFor="let pd of selectedPagoDetalles">
+            <span>{{ pd.moneda?.simbolo }} {{ pd.formaPago?.nombre }}</span>
+            <span *ngIf="(pd.moneda?.decimales ?? 0) === 0">{{ pd.valor | number:'1.0-0' }}</span>
+            <span *ngIf="(pd.moneda?.decimales ?? 0) !== 0">{{ pd.valor | number:'1.2-2' }}</span>
+          </div>
+        </div>
+
+        <div class="recibo-pie">¡Gracias por su compra!</div>
+      </div>
+    </div>
+
+    <!-- Sólo cuando el panel derecho no tiene nada mejor que mostrar. Sin la
+         segunda condición se renderizaba JUNTO a la cola, y los dos paneles se
+         repartían el lado derecho: la cola quedaba a media pantalla en vez de
+         donde cae el detalle. -->
+    <div class="delivery-detalle empty-detalle" *ngIf="!panelOcupado">
       <mat-icon>receipt_long</mat-icon>
       <span>SELECCIONE UN DELIVERY</span>
     </div>
@@ -194,19 +311,16 @@
         <mat-icon>done_all</mat-icon> FINALIZAR
       </button>
 
-      <!-- Retroceder estado -->
-      <button mat-stroked-button [matMenuTriggerFor]="menuEstado" [disabled]="!selectedDelivery || isAbierto">
-        <mat-icon>undo</mat-icon> ESTADO
+      <!-- Cambio de estado manual. Las opciones salen de la misma tabla de
+           transiciones que valida el backend: un delivery CANCELADO no ofrece
+           ninguna, porque cancelar es terminal. -->
+      <button mat-stroked-button [matMenuTriggerFor]="menuEstado"
+        [disabled]="!puedeCambiarEstado">
+        <mat-icon>swap_horiz</mat-icon> ESTADO
       </button>
       <mat-menu #menuEstado="matMenu">
-        <button mat-menu-item (click)="cambiarEstado('ABIERTO')" *ngIf="selectedDelivery && !isAbierto">
-          <mat-icon>lock_open</mat-icon> ABIERTO
-        </button>
-        <button mat-menu-item (click)="cambiarEstado('PARA_ENTREGA')" *ngIf="selectedDelivery && !isAbierto && !isParaEntrega">
-          <mat-icon>check</mat-icon> PARA ENTREGA
-        </button>
-        <button mat-menu-item (click)="cambiarEstado('EN_CAMINO')" *ngIf="selectedDelivery && (isEntregado || isCancelado)">
-          <mat-icon>delivery_dining</mat-icon> EN CAMINO
+        <button mat-menu-item *ngFor="let e of estadosDisponibles" (click)="cambiarEstado(e)">
+          <mat-icon>arrow_forward</mat-icon> {{ e }}
         </button>
       </mat-menu>
 
@@ -219,8 +333,23 @@
       <button mat-stroked-button (click)="editarItems()" [disabled]="!selectedDelivery || isTerminal">
         <mat-icon>edit</mat-icon> ITEMS
       </button>
-      <button mat-stroked-button (click)="editarPago()" [disabled]="!selectedDelivery || isTerminal">
+      <button mat-stroked-button (click)="editarPago()" [disabled]="!puedeEditarPago" [matTooltip]="tooltipPago">
         <mat-icon>payments</mat-icon> PAGO
+      </button>
+      <!-- Reasignar sin cambiar de estado: el pedido ya salió y lo termina
+           llevando otra persona. -->
+      <!-- Único botón que un retiro no puede usar: nadie lo lleva. -->
+      <button mat-stroked-button (click)="cambiarRepartidor()"
+        [disabled]="!puedeAsignarRepartidor"
+        [matTooltip]="esRetiroSeleccionado ? 'Un retiro no tiene repartidor: lo pasa a buscar el cliente' : ''">
+        <mat-icon>person_pin_circle</mat-icon> REPARTIDOR
+      </button>
+      <!-- Convertir entre reparto y retiro. No cuelga del menú ESTADO a
+           propósito: ESTADO son transiciones de la máquina de estados, y esto
+           cambia qué ES el pedido, no en qué etapa está. -->
+      <button mat-stroked-button (click)="convertirModo()"
+        [disabled]="!puedeConvertirModo" [matTooltip]="tooltipConvertir">
+        <mat-icon>{{ iconoConvertir }}</mat-icon> {{ labelConvertir }}
       </button>
       <button mat-stroked-button (click)="imprimir()" [disabled]="!selectedDelivery">
         <mat-icon>print</mat-icon> IMPRIMIR

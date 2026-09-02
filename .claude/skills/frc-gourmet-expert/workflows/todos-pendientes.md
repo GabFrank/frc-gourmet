@@ -18,6 +18,7 @@ Confirmado contra código en la reauditoría integral. Estos ya NO son pendiente
 - [x] **Retiros de Efectivo desde PdV** — tarjeta "Retiro de Caja" en el cajón + integrados en el esperado del cierre.
 - [x] **Gastos desde PdV** — entidad `GastoCaja` + `gastos-caja.handler.ts` + `gasto-caja-dialog`.
 - [x] **Vales y Compras desde el PdV** — entidad `EgresoCaja` + `pdv-egresos.handler.ts` (permisos `PDV_PAGAR_VALE`/`PDV_PAGAR_COMPRA`/`PDV_ANULAR_EGRESO`).
+- [x] **Variaciones en el PdV/PWA (2026-08-18)** — precio `0` en las listas corregido (rango `desde – hasta` vía `variacion-precio.utils.ts`), autoselección del sabor único, y **config por producto** del máximo de sabores combinables y de la estrategia de precio (`Producto.maxVariacionesSimultaneas` / `estrategiaPrecioVariacion`, `null` = global del PdV). Tests: `test:variacion-precios`, `test:variacion-config`. → [domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
 - [x] **Refactor sabores: cada variación su propia receta** — `create-sabor`/`generarVariacionesParaProducto` crean una `Receta` por variación (ya no compartida). Módulo Gestión de Sabores + `reparar-recetas-compartidas`.
 - [x] **Batch de seguridad/correctness 2026-07-15** — ~20 bugs C/M/A cerrados (ver [reference/known-bugs.md](../reference/known-bugs.md)). Incluye permisos en handlers de precio/stock (C-03) y 23 handlers RRHH (M-05).
 - [x] **Transferencia bancaria (banco→banco) + UI config Caja Mayor 2026-07-27** — nuevo tipo `TipoOperacionFinanciera.TRANSFERENCIA_BANCARIA` (transferencia interna entre dos cuentas bancarias, posible multi-moneda con cotización; no toca Caja Mayor). Migración `DropCheckTipoOperacionFinanciera` (suelta el CHECK de SQLite). **UI Caja Mayor:** el diálogo de configuración quitó la sección "Formas de pago" (inútil, solo hay EFECTIVO) y agregó **drag & drop** para ordenar las cuentas bancarias (persistido en `CajaMayorConfiguracion.cuentasBancariasOrden`, reflejado en el sidebar desktop + mobile). Tests: `test:transferencia-bancaria`, `test:config-caja-mayor`, `test:operacion-financiera`. → [domains/financiero-caja-mayor.md](../domains/financiero-caja-mayor.md).
@@ -113,6 +114,19 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
 
 ## Refactor técnico
 
+- [ ] **Unificar los botones de ventana en Linux cuando se actualice Electron.** Desde 2026-08-27 los botones de min/max/cerrar los dibuja el SO (overlay en Windows, semáforos en macOS); Linux sigue siendo la excepción porque Electron 24 no soporta Window Controls Overlay ahí, y arrastra el único código de botones custom que queda (`.window-controls` en `app.component.html` + la barra propia de la pantalla de login). Al subir a un Electron con WCO en Linux, pasar Linux a `controlsMode: 'native'` en `resolveControlsMode()` y borrar ese camino. Ver [architecture/electron-bootstrap.md](../architecture/electron-bootstrap.md).
+
+- [ ] **Modo headless para el servidor (`--headless` en `main.ts`)**. Hoy el Fastify server vive dentro del proceso Electron (los handlers se registran con `ipcMain`), y `app.on('ready')` llama a `createWindow()` incondicionalmente. No hay forma de levantar sólo el server: para probar la web `/admin` en un navegador, o para correr un nodo `mode=server` en una máquina sin monitor, igual se abre una ventana ociosa. Un flag que saltee `createWindow()` cuando `mode === 'server'` es chico y desbloquea las dos cosas. Detectado el 2026-08-19 probando dashboards en Chrome.
+
+- [x] **`--prefer-ts-exts` en el resto de los `npm run test:*`** — RESUELTO (verificado 2026-09-01: los 53 scripts que invocan `ts-node` lo tienen). El pitfall que lo motiva sigue vigente y documentado en `conventions/pitfalls-typeorm-electron.md`: sin el flag, ts-node resuelve el `.js` compilado antes que el `.ts` y el test corre la versión del último commit en vez del working tree.
+
+- [ ] **Barrido periódico de consistencia del corpus documental.** Hay una clase de doc-rot que **ningún auditor de un PR puede detectar**, porque la información que invalida la afirmación vieja está en un commit ajeno: un PR marcado "abierto" que se mergeó hace semanas, un TODO que otra rama resolvió, un número de regla que se corrió al insertar otra, una instrucción repetida en cuatro lugares y actualizada en uno. El barrido de 2026-09-01 encontró cinco de éstas de una sentada. Debería correr por cadencia (mensual, o cada 15–20 PRs a `develop`), no por PR: grepear afirmaciones repetidas y cruzarlas entre sí, verificar los checkboxes de este archivo contra el código, cruzar los PR/issues citados en `SKILL.md` §4 contra `git log`, y chequear la numeración cruzada de las reglas duras. Salida: ítems de backlog o un PR de `docs`.
+
+- [ ] **El CI no corre ninguna suite `test:*`.** `.github/workflows/ci.yml` corre `tsc --noEmit`, `ng lint`, el build de producción y el job de migraciones contra Postgres — pero **ninguno de los 53 tests de dominio**. La batería del paso 9 del ciclo es enteramente manual: si alguien la saltea, nada lo detecta. Con `npm run test:all` ya existiendo, agregar un job que lo corra es barato. Ojo con el tiempo total y con las dos suites que se autosaltean sin Postgres (`test:locks-pg`, `test:pg-backup`).
+
+- [ ] **Cobertura de Postgres en los tests de dominio.** Los 53 scripts corren sólo contra SQLite. El riesgo de `decimal`/`numeric` que llega como **string** (no hay `pg.types.setTypeParser(1700)` en el repo) está documentado en varios encabezados pero no lo cubre ningún test — se han arreglado bugs de ese tipo *después* de llegar a producción. `scripts/test-resumen-caja-numeros.ts` tiene un `comoPostgres()` que stringifica decimales vía Proxy, pero sólo envuelve `getRepository().find/findOne`, no `dbQuery()`. Extenderlo a `dbQuery` habilitaría cubrir los helpers que usan SQL crudo.
+
+
 - [ ] **Sweep `appCurrencyInput` global**. Directiva nueva en `src/app/shared/directives/currency-input.directive.ts` formatea inputs monetarios con separador locale-aware (PYG sin decimales, USD/BRL con coma decimal). Aplicada SOLO en `compras/create-edit-compra/` (costoUnitario + subtotal). Falta escanear y aplicar al resto del proyecto. Patrón:
   ```html
   <input matInput type="text" inputmode="decimal"
@@ -184,12 +198,16 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
   - Auto-impresión al cobrar
   - Relación `Producto → Printer` para enrutar comandas a estaciones específicas
 - [ ] **Categorías click → agregar al carrito**: items de categoría se muestran pero no agregan productos al carrito.
+- [ ] **Retirar el árbol viejo de categorías del PdV**: `PdvGrupoCategoria` → `PdvCategoria` → `PdvCategoriaItem` → `PdvItemProducto` quedó reemplazado por los **atajos** (`PdvAtajoGrupo`/`PdvAtajoItem`/`PdvAtajoItemProducto`). Sigue con entidades, handlers y una FK en `PdvConfig`. Baja con estrategia de 2 versiones (no hay `DROP` directo).
 - [ ] **UI Precios de Delivery**: ABM visual (actualmente se gestionan desde crear-delivery dialog).
 - [ ] **UI Configuración PdV**: dialogo para editar umbrales y parámetros de `PdvConfig` (parcialmente hecho via `pdv-config-dialog`, falta refinamiento).
 - [ ] **Cancelar Caja**: cancela caja con ventas, cobros y movimientos de stock. UI parcial.
 - [ ] **Retiros de Efectivo desde PdV**: registrar retiros durante turno (entity `RetiroCaja` existe en módulo financiero, falta integración).
 - [ ] **Gastos desde PdV**: registrar gastos operativos sin salir del PdV.
 - [ ] **Bug findPrecioCosto()**: retorna 0 hardcodeado en vez de buscar el precio de costo real.
+- [ ] **`DividirCuentaDialog` quedó de facto reemplazado por el cobro parcial por ítems** (que sí persiste quién pagó qué; el diálogo viejo es informativo). Decidir si se quita o se reusa como atajo de selección de ítems.
+- [ ] **`anularCobroParcial` no tiene llamador en el frontend** — el handler existe y es transaccional, pero desde la UI no hay forma de anular una ronda. Ver `domains/ventas-pdv.md`.
+- [ ] **Comprobante por ronda de cobro parcial**: fuera del alcance original, pero el modelo ya lo habilita (`PagoDetalle.cobroParcialId` identifica la plata de cada ronda).
 
 ## Compras
 
@@ -215,7 +233,10 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
 - [ ] **Dialog de "Marcar asistencia individual"** en `list-asistencias`: actualmente solo flujo masivo. Agregar botón "Nueva asistencia" con: funcionario (autocomplete), fecha, estado, turno (auto-cargar turno vigente), hora entrada/salida, observación.
 - [ ] **Integrar emisión de Vale en dialog Egresos de Caja Mayor**: opción "Vale a funcionario" en `registrar-egreso-dialog`. Reusar handlers `crear-vale` + `confirmar-vale`.
 - [ ] **Tasa de interés en préstamo a funcionario**: dialog `crear-prestamo-funcionario-dialog` debe permitir `tasaInteresPorcentaje` (default 0). Calcular monto_total con interés simple (preferido) o compuesto. Extender `CuentaPorPagar` con `tasaInteres` decimal nullable y `tipoCalculoInteres` enum.
-- [ ] **Cobrar cuota préstamo func. desde dialog Egresos** (acceso rápido). Análogo TODO para CPC en dialog Ingresos.
+- [ ] **Cobrar cuota préstamo func. desde dialog Egresos** (acceso rápido).
+- [x] ~~Cobro de CPC desde el diálogo de Ingresos~~ — hecho 2026-08: la tarjeta *Cobrar a Cliente* abre el wizard consolidado (`concepto = COBRO_CLIENTE`), multi-cuota, multi-moneda y con descuento.
+- [ ] **Ofrecer el cobro multi-cuota desde `cuenta-por-cobrar-detalle` y `cliente-detalle`** con `origenIdsPreseleccionados` (el wizard ya soporta ese dato). Hoy esas dos pantallas siguen cobrando de a una cuota por `cobrar-cuota-dialog`, que es donde un cajero parado en la ficha del cliente naturalmente intenta cobrarle todo junto.
+- [ ] **Lock pesimista en `cobrar-cpc-cuota`** (el camino viejo, que usa la PWA). El cobro consolidado sí lockea cuota → CPC → cliente; el viejo no, así que dos cobros simultáneos del mismo cliente por caminos distintos pueden pisarse `saldoActual` en modo server.
 
 ## Comisiones
 
@@ -231,6 +252,22 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
 - [x] **Hash de contraseñas con bcrypt** (HECHO, verificado 2026-06-28): `electron/utils/password.utils.ts` (`hashPassword`/`verifyPassword` con `bcryptjs`, 10 rounds) + migración one-shot `migrate-passwords.ts` que hashea los plaintext legacy al arranque. `verifyPassword` solo cae a comparación plaintext como fallback si el valor aún no fue hasheado.
 - [x] **JWT secret fuera del código** (HECHO, verificado 2026-06-28): `electron/utils/jwt-secret.utils.ts` (`getJwtSecret`) lee el secret de keytar (fallback a archivo local en userData) y lo genera si no existe. Ya NO está hardcodeado.
 - [x] **Validación de permisos en backend** (HECHO, auditado 2026-06-08): sweep `ensurePermission` en ~178 handlers IPC (memoria `project_todo_sweep_handlers_auth`).
+- [ ] **Portar el modelo de 3 colores de mesas a la PWA mobile.** El desktop distingue verde (vacía) / amarillo (sólo comandas) / naranja (cuenta de mesa); `projects/mobile/.../mesas-list.page.ts` sigue con un modelo binario ocupada/libre. La derivación es server-side así que no está roto, pero la PWA no muestra la distinción que le importa al cajero. → [domains/ventas-pdv.md](../domains/ventas-pdv.md).
+
+- [ ] **`musica-salon.service.ts` lee `pdv_mesas.estado` crudo.** Funciona porque el cache ahora se mantiene al día, pero es el único consumidor que no pasa por las consultas que derivan. Si algún día se limpia la columna, este se rompe en silencio (la música elige tempo por mesas ocupadas).
+
+- [ ] 🔴 **Escaneo completo de roles y permisos, y granularización.** Pedido explícito de Gabriel (2026-08-21) tras encontrar, en una sola sesión, ocho operaciones cotidianas bloqueadas para el rol que las hace. El barrido de 2026-07 se preguntó *"¿este handler tiene guard?"*; falta la otra pregunta: *"¿el rol que hace esta operación tiene el permiso que el handler pide?"*.
+
+  **El patrón que hay que buscar es el permiso equivocado por proximidad**: se eligió el que estaba a mano en el archivo, no el que describe la operación (cobrar una venta pedía `COMPRAS_GESTIONAR`; ver Caja Mayor en la PWA pedía el permiso de la caja del turno). Ninguno se nota probando como admin.
+
+  Dos pasadas:
+  1. **Inventario mecánico** — un script que cruce cada `ipcMain.handle` con el permiso que exige (o si no exige ninguno), cada `*appHasPermission` del desktop y cada `permiso`/`permisos` de la PWA, contra `SEED_PERMISOS` y los roles plantilla. Saca sin criterio humano: handlers que mutan sin guard, permisos huérfanos (como estaba `FINANCIERO_CAJA_AJUSTAR`), gates de frontend que piden un permiso distinto al del backend, y códigos que no existen en el catálogo.
+  2. **Matriz por perfil, ejecutada** — extender `scripts/test-roles-pdv-e2e.ts` de las ~30 operaciones de hoy a compras, RRHH, caja mayor, facturación, música y reportes. Queda como test de regresión, no como informe que envejece.
+
+  **Granularizar**: `VENTAS_PDV` es enorme — atender mesas, transferir cuentas, cancelar ítems, aplicar descuentos y concluir ventas van todos juntos. Un mozo hoy puede cancelar ítems ya cargados sin que eso esté separado de tomar el pedido. Ídem `updateVenta`, que sigue dejando a un mozo marcar una venta CONCLUIDA (ver [architecture/auth-permissions.md](../architecture/auth-permissions.md)).
+
+  ⚠️ **Diseñar la migración de roles, no improvisarla**: `seedRolesPlantilla` sólo **agrega** permisos, nunca quita. Partir `VENTAS_PDV` en varios deja a los roles existentes — y sobre todo a los **roles custom** creados a mano — con el permiso viejo hasta que alguien los revise a mano.
+
 - [ ] **Idle timeout server-side**: hoy solo `last_activity_time` se actualiza, sin auto-logout.
 - [ ] **Refresh tokens** + invalidación.
 - [ ] **Recuperación de contraseña**.
@@ -253,6 +290,32 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
 - [ ] **Test impresión**: tickets, comandas.
 - [ ] **Performance**: paginación en todas las listas, carga lazy de relaciones.
 
+
+## Fechas y períodos — abierto tras el PR de jornada comercial (2026-08-24)
+
+- [ ] **Barrer los `ds.query()` directos con fechas.** `dbQuery` normaliza el
+      límite ISO-Z al formato de SQLite, pero **sólo cubre sus propios call
+      sites**. Cualquier consulta de fechas escrita con `dataSource.query()`
+      pelado sigue expuesta al bug de comparación de texto (una fila creada hoy
+      cae fuera del rango "hoy", sin error). Vale un `grep` de `ds.query(` con
+      `created_at`/`fecha` y migrarlos, o mover la normalización más abajo.
+- [ ] **La ventana `anterior` no-mensual suma milisegundos.**
+      `reportes-periodo.util.ts`, rama `else` de `comparar` (`today`/`week`/
+      `quarter`/`custom`): resta `hasta - desde` en ms para conseguir "una
+      ventana de igual longitud". Es intencional y hoy inofensivo — Paraguay no
+      tiene horario de verano — pero es la única excepción al principio que el
+      propio archivo documenta. Si alguna vez opera en un país con DST, revisar.
+- [ ] **Persistir los filtros del resumen entre visitas.** Hoy se pierden al
+      salir de la pantalla. Se dejó afuera del PR porque **no hay precedente en
+      el proyecto**: ninguna otra lista persiste sus filtros, y hacerlo en una
+      sola crea una inconsistencia. Si se hace, hacerlo para todas.
+- [ ] **El rótulo del período usa la zona del navegador.** `filtroAplicado` viaja
+      como ISO absoluto y el front lo formatea con `getHours()` local. Backend y
+      dispositivos del local comparten zona, así que coincide; un dispositivo con
+      la zona mal configurada mostraría el corte corrido. Sólo importa si alguna
+      vez se accede desde otra zona horaria.
+
+---
 ---
 
 ## Plan de implementación priorizado (P0→P5)
@@ -277,6 +340,13 @@ Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `proje
 - **Onboarding task "Agregar impresora"** + **wizard de configuración LPR** (ver detalle arriba en "Acciones inmediatas").
 
 ### P3 — Sweeps de calidad / consistencia
+- **Forma de pago EFECTIVO por fuente**: 5 diálogos de Caja Mayor
+  (`create-edit-gasto`, `create-edit-entrada-varia`, `pagar-cuota` de CPP,
+  `edit-movimiento`, `create-retiro-caja`) filtran el select con un
+  `.includes('EFECTIVO')` inline. Cumplen la regla pero ignoran `activo` /
+  `movimentaCaja` y pueden quedar vacíos. Pasar a `formasPagoEfectivoDeCaja()` de
+  `shared/utils/forma-pago-efectivo.util.ts`, que es la fuente única
+  desktop + PWA. Ver `domains/financiero-caja-mayor.md`.
 - **Preselecciones** en dialogs (única opción / principal / última-usada).
 - Sweep **`appCurrencyInput`** global (inputs monetarios locale-aware).
 - **ngModel → Reactive Forms** (~35 archivos).
@@ -296,9 +366,15 @@ Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `proje
 ### P5 — Features grandes / nuevas
 - **Pago mixto** reutilizable (efectivo+banco, N líneas).
 - **Clientes F3/F4**: loyalty/puntos, direcciones múltiples, cumpleaños, import CSV, reportes avanzados.
+- **Propina digital**: al cobrar, ofrecer 10/15/20% y registrarla como línea de pago tipo PROPINA.
+- **Cupones de descuento / promo tickets**: código único, validación al cobrar, vinculados a campañas.
+- **Tótem de autoatención**: pantalla táctil donde el cliente pide sin mozo. (El QR en mesa ya existe: es el canal MESA_QR.)
+- **Agendamiento de pedidos**: pedido con hora programada de lanzamiento a cocina — eventos, pedidos anticipados, delivery programado.
+- **App web del repartidor**: hoy el reparto se sigue desde el diálogo de delivery del PdV; el repartidor no tiene pantalla propia con dirección, teléfono, ítems y monto, ni hay seguimiento en vivo.
+- **`AuditLog`**: entidad + log de acciones críticas. No existe; hoy la trazabilidad es `createdBy`/`updatedBy` de `BaseModel` y los movimientos de caja.
 - ~~**KDS** + impresión ESC/POS avanzada~~ — ✅ **HECHO** (KDS completo + impresión real). Ver sección "Reauditado 2026-07-26".
 - **Reservas** UI completa.
-- **Pedidos Online / Storefront**: base construida (Fases 0–E). Pendiente: zonas por polígono (Fase 6), pasarelas de pago reales (Bancard/UPay/PagoPar hoy son enums).
+- **Pedidos Online / Storefront**: en operación desde 2026-08 (PICKUP + DELIVERY materializan en `Venta`, zonas por polígono resueltas server-side). Pendiente: pasarelas de pago reales — Bancard/UPay/PagoPar siguen siendo enums, y el pago efectivo contra entrega es decisión cerrada. Ver `domains/pedidos-online.md`.
 
 ### Continuo (transversal)
 - Testing E2E (Producto→Receta→PdV→Venta→Stock; Compras contado/crédito; multi-moneda).
@@ -320,11 +396,117 @@ Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `proje
 - Si la importación de una semilla falla, **la semilla queda creada con 0 temas** y "Reimportar todo" la reintenta cada vez. Debería revertirse.
 - Tamaños de inputs y espaciados en general (el dueño marcó que hay varios).
 
-**Pendiente después de la clasificación semántica (2026-08-12):**
-- **Semilla que declara su estilo.** La procedencia es el discriminador más barato y confiable: lo que entró por *Bossa Nova Covers* **es** un cover, sin inferencia. Columna en `MusicaSemilla` + migración; encaja entre manual y agente en la cadena de precedencia que ya existe.
-- **El repertorio, no el algoritmo, es el limitante.** Medido en producción: `PAGODE 6 temas · SERTANEJO 6 · BRASIL FESTIVO 0` contra `INDIE 53 · POP 47 · ROCK 44`. Cualquier cuota brasileña por encima del 10% es inalcanzable hasta salir a descubrir material. Mirar `musica-deficit` del bloque antes de tocar nada.
-- **Paridad en la PWA mobile**: los ejes de ánimo y momento y las acciones nuevas de catálogo están solo en el desktop. No es regresión (el handler solo actualiza lo que recibe), pero la programación desde el teléfono queda incompleta.
+**Hecho en el descubrimiento dirigido (2026-08-15, PR de `feat/musica-descubrimiento-dirigido`):**
+- ~~El descubridor leía `generosPreferidos` y nunca veía las cuotas por bloque~~ → ahora el déficit encabeza el prompt. **Era la causa de que el repertorio creciera en indie anglo y no donde las cuotas lo pedían.**
+- ~~No había forma de decirle a la IA qué estilos gustan más~~ → voto por estilo (`preferencia`).
+- ~~Apagar un estilo entero requería tocar la tabla de vetos a mano~~ → toggle *Que no suene* en la pestaña Estilos.
+- ~~"Descubrir música nueva" no explicaba su criterio~~ → panel *¿Qué va a buscar?*.
+- ~~No se podía dirigir una búsqueda~~ → cinco fuentes (`AUTOMATICO`/`PROMPT`/`ESTILO`/`TEMA`/`PLAYLIST`).
+- ~~El plan del día se generaba recién cuando había que reproducirlo~~ → `asegurarPlanDelDia` al arrancar y al cruzar la medianoche.
+- ~~Buscar "qué hay de bossa" en el repertorio era scrollear 12 páginas~~ → filtros por estilo y género.
+
+**Pendiente:**
+- **Semilla que declara su estilo.** La procedencia es el discriminador más barato y confiable: lo que entró por *Bossa Nova Covers* **es** un cover, sin inferencia. Columna en `MusicaSemilla` + migración; encaja entre manual y agente en la cadena de precedencia que ya existe. **Sigue siendo lo más valioso que queda**, y ahora encaja aún mejor: la fuente `PLAYLIST` del descubrimiento ya trabaja con playlists de referencia.
+- **El repertorio, no el algoritmo, es el limitante.** Medido en producción: `PAGODE 6 temas · SERTANEJO 6 · BRASIL FESTIVO 0` contra `INDIE 53 · POP 47 · ROCK 44`. El descubrimiento dirigido mejora *con qué* se pide música pero **no agrega un solo tema por sí solo**: hay que correr rondas. Mirar `musica-deficit` del bloque antes de tocar nada.
+- **Recalibrar los rangos de BPM de la grilla** con los datos reales de ReccoBeats: SOBREMESA pide 50–70 y el repertorio no tiene nada por debajo de 75, así que ese bloque cae siempre en modo relajado.
+- **Paridad en la PWA mobile**: los ejes de ánimo y momento, las acciones de catálogo, el voto de estilos y las fuentes de descubrimiento están solo en el desktop. No es regresión (el handler solo actualiza lo que recibe), pero la configuración desde el teléfono queda incompleta.
 
 **Notas de operación:**
 - **La música paraguaya no aparece por descubrimiento**: el modelo no conoce bien esa escena. Se siembra con **semillas de artista** (Kchiporros, Tierra Adentro) — los links de artista funcionan desde cualquier cuenta, a diferencia de las playlists ajenas.
 - En desarrollo las playlists `FRC · …` se crean en la **cuenta personal** conectada, no en la del local.
+
+
+## Pago consolidado — seguimiento (2026-08)
+
+- [x] **Wizard único de pago desde Caja Mayor** — compras, gastos, vales y
+  salarios en un solo componente; N obligaciones × M formas de pago; movimiento
+  consolidado con detalle y anulación del evento entero. Retirado el pago inline
+  de los diálogos de alta y eliminado `pagar-compras-dialog`.
+  → [domains/financiero-caja-mayor.md](../domains/financiero-caja-mayor.md).
+
+- [ ] **Borrar `modoConfirmar` de `create-edit-vale-dialog` (desktop).** Quedó sin
+  entrada: el hub de egresos ya abre el alta simple. El código sigue porque
+  `crear-vale-confirmado` está vivo para la PWA mobile, que no tiene pago
+  diferido. Borrarlo cuando el mobile tenga su propia pantalla de pago.
+
+- [ ] **Pago consolidado en la PWA mobile.** Hoy el mobile sigue con los flujos
+  viejos (gasto que paga al instante, confirmar vale, pagar cuota). No está roto,
+  pero no puede saldar varias obligaciones de una ni anular un evento.
+
+- [ ] **`RepositoryHttpService`**: los 4 canales nuevos quedaron como stubs, igual
+  que el resto del archivo (el bundle web usa el shim de `window.api`).
+
+- [ ] **Cheque como fuente de pago** — frc-comercial lo tiene (emite el cheque
+  desde el propio pago, con chequera y hojas). Acá el cheque sigue por
+  `emitir-cheque`. Se dejó fuera del alcance a propósito.
+
+- [ ] **Ofrecer el wizard consolidado desde `cuenta-por-cobrar-detalle` y
+  `cliente-detalle`** con `origenIdsPreseleccionados` (el diálogo ya soporta el
+  dato). Hoy esas dos pantallas sólo abren `cobrar-cuota-dialog`, de a una cuota:
+  el cajero parado en la ficha del cliente no llega al cobro múltiple ni al
+  descuento.
+## PdV: mesa y cliente (2026-08)
+
+- [x] **La mesa se ocupa y se libera con permiso de mozo** — el estado viaja con
+  la venta, más un handler operativo. Cierra el bug "Mesas colgadas en OCUPADO",
+  cuya causa real era de permisos, no una race condition.
+- [x] **El cliente se guarda al facturar** y se autocompleta por RUC.
+
+- [ ] **Unificar RUCs duplicados y recién ahí poner UNIQUE.** Hoy el índice es
+  simple: un UNIQUE fallaría al arrancar si alguna instalación ya tiene
+  duplicados. Hace falta un reporte de duplicados y una herramienta de fusión
+  antes de endurecerlo.
+- [ ] **`get-cliente-por-ruc` sin permiso**: sigue el precedente de los `get-*`,
+  pero expone datos de contacto a cualquier llamador autenticado de `/api/rpc`.
+  Revisar junto con el resto de las lecturas si alguna vez se endurece.
+- [ ] **`repository-http`**: los 2 canales nuevos quedaron como stubs, igual que
+  el resto del archivo.
+
+## Delivery — resto pendiente (2026-08-24)
+
+El módulo se cerró para poder usarse en producción
+(`docs/DIAGNOSTICO-DELIVERY.md`). Quedó fuera de alcance, a propósito:
+
+- **`Delivery.cobroAnticipado` no lo lee nadie.** Decidir qué debe hacer: ¿forzar
+  el cobro al crear? Hoy es un toggle que se guarda y nada más. **Parcialmente
+  cubierto (2026-08-27)**: aunque el flag siga sin leerse, si efectivamente se
+  cobró algo por anticipado el ticket **ya lo muestra** (bloque
+  `PAGOS REGISTRADOS` + `SALDO A COBRAR`), que era la mitad de lo que este ítem
+  pedía. **Y desde 2026-08-28 el flag SÍ se reporta**: aparece en el mix por
+  canal del reporte y en el bloque del cierre de caja. Lo que sigue faltando es
+  decidir si el toggle debe *forzar* el cobro.
+- **Comisiones por entrega.** El repartidor ya es un `Funcionario`, que es lo que
+  habilita engancharlo a `comisiones/`. Falta la regla. **El insumo ya existe**
+  (2026-08-28): el ranking de repartidores del reporte de Ventas da entregas,
+  monto y minutos promedio por persona y período.
+- **Reusar `venta-reversa.utils.ts` en Últimas Ventas**, que sigue cancelando una
+  venta cobrada sin revertir el cobro (ver `reference/known-bugs.md`).
+- **Baja lógica en `deletePrecioDelivery`** (hoy es `repo.remove`).
+- **Delivery en modo cliente (HTTP).** `repository-http.service.ts` tiene los
+  ocho métodos nuevos como stubs que lanzan, igual que los otros ~769 del
+  archivo.
+
+### Cerrado el 2026-08-28 (informes de delivery)
+
+- ~~El delivery no aparecía en ningún informe.~~ Hecho: reporte de cierre de mes
+  (4 KPIs + 5 tarjetas), dashboard de Ventas, resumen de la PWA, cierre de caja
+  (diálogo + ticket + WhatsApp) e historial de ventas (columna Canal + 4 filtros
+  + totales del filtro). Plan: `docs/planes/PLAN-INFORMES-DELIVERY.md`.
+- ~~El reparto que venía de la tienda online nacía sin zona.~~ Hecho: el alta la
+  sella y una migración backfillea los viejos.
+
+### Nuevo pendiente que dejó este trabajo
+
+- **Paleta de los gráficos de Reportes en modo oscuro.** El validador de la guía
+  `dataviz` marca dos pasos de la paleta categórica (naranja `#eb6834` y
+  amarillo `#eda100`) fuera de la banda de luminosidad contra la superficie
+  oscura. Contraste y separación CVD pasan; es sólo la banda. Es la paleta
+  preexistente, compartida por el mix de forma de pago y el mix por canal, así
+  que hay que re-paletizar **todas las pantallas de Reportes a la vez** — cambiar
+  sólo una deja dos donas con paletas distintas en la misma pantalla.
+- **Mapa de zonas con polígonos.** Descartado por ahora (sólo cubriría las zonas
+  de la tienda online, que son las únicas con polígono dibujado, y el canvas del
+  mapa no se captura bien en el export a PDF). Si se retoma, va junto con exigir
+  polígono también a las zonas del PdV.
+- **Rentabilidad por envío.** Requiere modelar lo que se le paga al repartidor;
+  hoy no hay entidad para eso.

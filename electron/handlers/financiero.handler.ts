@@ -23,6 +23,7 @@ import { generarResumenCajaImagenes, buildResumenCajaCaption } from '../utils/re
 import { buildEvolutionConfig } from '../services/notificacion.service';
 import { getEvolutionApiKey } from '../utils/notificaciones-secrets.util';
 import { sendWhatsappMedia, sendWhatsappText, normalizeWhatsappNumber } from '../services/whatsapp.service';
+import { dbQuery } from '../utils/db-query';
 
 interface EnvioCierreResult {
   ok: boolean;
@@ -367,7 +368,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('create-conteo', async (_event: IpcMainInvokeEvent, data: any) => {
     try {
-      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_OPERAR');
       const repo = dataSource.getRepository(Conteo);
       const entity: any = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -385,7 +386,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-conteo', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
-      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_OPERAR');
       const repo = dataSource.getRepository(Conteo);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Conteo ID ${id} not found`);
@@ -441,7 +442,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('create-conteo-detalle', async (_event: IpcMainInvokeEvent, data: any) => {
     try {
-      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_OPERAR');
       const repo = dataSource.getRepository(ConteoDetalle);
       const entity = repo.create(data);
       // No user tracking needed usually for details
@@ -454,7 +455,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-conteo-detalle', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
-      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_OPERAR');
       const repo = dataSource.getRepository(ConteoDetalle);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`ConteoDetalle ID ${id} not found`);
@@ -571,6 +572,65 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
     }
   });
 
+  /**
+   * Cajas para el SELECTOR de filtros: sólo id, dispositivo, estado y fechas.
+   *
+   * `get-cajas` no sirve para esto: no tiene `where` ni `LIMIT` y arrastra 6
+   * relaciones eager (incluidos los dos conteos completos y las personas). En un
+   * local con dos años de operación son miles de filas con sus conteos, por una
+   * lista desplegable de un filtro. Acá se pide lo que se muestra y nada más.
+   *
+   * `desde`/`hasta` acotan por fecha de apertura para que el selector ofrezca
+   * las cajas del período que el usuario está mirando, no todo el histórico.
+   */
+  ipcMain.handle(
+    'get-cajas-selector',
+    async (
+      _event: IpcMainInvokeEvent,
+      params: { desde?: string; hasta?: string; limite?: number } = {},
+    ) => {
+      try {
+        const limite = Math.min(Math.max(Number(params.limite) || 200, 1), 500);
+        const where: string[] = [];
+        const args: any[] = [];
+        // `fecha_apertura` es un datetime completo. Un `YYYY-MM-DD` pelado como
+        // `hasta` compara como texto contra `YYYY-MM-DD HH:MM:SS` y, siendo un
+        // prefijo mas corto, deja AFUERA las cajas abiertas ese mismo dia. Se
+        // expande a los extremos del dia antes de comparar.
+        const soloFecha = /^\d{4}-\d{2}-\d{2}$/;
+        if (params.desde) {
+          where.push('c.fecha_apertura >= ?');
+          args.push(soloFecha.test(params.desde) ? `${params.desde} 00:00:00` : params.desde);
+        }
+        if (params.hasta) {
+          where.push('c.fecha_apertura <= ?');
+          args.push(soloFecha.test(params.hasta) ? `${params.hasta} 23:59:59` : params.hasta);
+        }
+        const filtro = where.length ? `WHERE ${where.join(' AND ')}` : '';
+        const rows: any[] = await dbQuery(
+          dataSource,
+          `SELECT c.id, c.estado, c.fecha_apertura, c.fecha_cierre, d.nombre AS dispositivo_nombre
+             FROM cajas c
+             LEFT JOIN dispositivos d ON d.id = c.dispositivo_id
+             ${filtro}
+            ORDER BY c.fecha_apertura DESC
+            LIMIT ${limite}`,
+          args,
+        );
+        return rows.map((r) => ({
+          id: Number(r.id),
+          estado: String(r.estado || ''),
+          fechaApertura: r.fecha_apertura,
+          fechaCierre: r.fecha_cierre ?? null,
+          dispositivoNombre: String(r.dispositivo_nombre || 'SIN DISPOSITIVO').toUpperCase(),
+        }));
+      } catch (error) {
+        console.error('Error getting cajas selector:', error);
+        throw error;
+      }
+    },
+  );
+
   ipcMain.handle('get-caja', async (_event: IpcMainInvokeEvent, id: number) => {
     try {
       const repo = dataSource.getRepository(Caja);
@@ -599,7 +659,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   });
 
   ipcMain.handle('create-caja', async (_event: IpcMainInvokeEvent, data: any) => {
-    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_OPERAR');
     try {
       const repo = dataSource.getRepository(Caja);
       // Guard: una sola caja ABIERTA por dispositivo (terminal). Antes solo lo
@@ -625,7 +685,7 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
 
   ipcMain.handle('update-caja', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
-      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_OPERAR');
       const repo = dataSource.getRepository(Caja);
       const entity = await repo.findOne({ where: { id }, relations: ['createdBy'] });
       if (!entity) throw new Error(`Caja ID ${id} not found`);
@@ -660,7 +720,13 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
       }
 
       const seEstaCerrando = data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO;
-      repo.merge(entity, data);
+      // `dispositivo` fuera del merge: es el dueño de la caja y lo único que
+      // sostiene el gate de cobro por terminal. Aceptarlo dejaba que cualquier
+      // terminal se apropiara de una caja ajena con un update, desarmando el
+      // gate para siempre y rompiendo el invariante "una caja abierta por
+      // dispositivo", que sólo se verifica al crear. Ningún llamador lo manda.
+      const { dispositivo: _dispositivoIgnorado, ...cajaData } = data ?? {};
+      repo.merge(entity, cajaData);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
 
@@ -757,6 +823,10 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   // lógica que el envío automático al cerrar. Sin `cajaId`, usa la última caja
   // CERRADA. `forzar` ignora el flag de PdvConfig (útil para probar); `destino`
   // permite mandar a otro número/grupo sin tocar la config.
+  // Sigue en FINANCIERO_CAJA_GESTIONAR (gerente), no en el permiso operativo del
+  // turno: acepta CUALQUIER `cajaId` y un `destino` de WhatsApp arbitrario, asi
+  // que con el permiso del cajero seria una via para mandar el cierre de una caja
+  // ajena a un numero elegido por quien llama.
   ipcMain.handle('enviar-resumen-cierre-whatsapp', async (
     _event: IpcMainInvokeEvent,
     params?: { cajaId?: number; forzar?: boolean; destino?: string },

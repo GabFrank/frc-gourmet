@@ -32,6 +32,8 @@ import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { esIngreso, actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { ensurePermission, getEffectiveUser } from '../utils/auth.utils';
+import { bloquearSiPagoConsolidado } from './pago-consolidado-guard';
+import { PagoOrigenTipo } from '../../src/app/database/entities/financiero/pago-consolidado-enums';
 import { Vale } from '../../src/app/database/entities/rrhh/vale.entity';
 import { ValeEstado } from '../../src/app/database/entities/rrhh/vale-estado.enum';
 import { generarRetiroDelCierre } from './retiro-cierre.util';
@@ -506,7 +508,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       const contraDeId = mov.referenciaAnulacion?.id;
       // El egreso de caja inicial genera un movimiento por moneda con el mismo
       // conteo; se agrupan en una sola fila para poder "abrir caja con este conteo".
-      const key = gastoId ? `gasto-${gastoId}` :
+      // Un pago consolidado con lineas en dos monedas genera dos movimientos:
+      // son UN evento y van en una sola fila, igual que un gasto multi-detalle.
+      // Va primero que `gastoId` porque el evento de un solo gasto tambien setea
+      // la referencia clasica.
+      const pagoConsolidadoId = mov.pagoConsolidadoId ?? null;
+      const key = pagoConsolidadoId ? `pagocons-${pagoConsolidadoId}` :
+                  gastoId ? `gasto-${gastoId}` :
                   retiroCajaId ? `retiro-${retiroCajaId}` :
                   conteoId ? `conteo-${conteoId}` :
                   `mov-${mov.id}`;
@@ -548,6 +556,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           gastoId,
           retiroCajaId,
           conteoId,
+          // Se propaga al grupo para que la fila ofrezca "ver detalle" del evento.
+          pagoConsolidadoId,
           movimientoIds: [mov.id],
           esAnulacion: isAnulacion || !!contraDeId,
           anulacion: mov.anulacion || null,
@@ -698,6 +708,9 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           responsable: m.responsable,
           observacion: composeObs(m),
           observacionRaw: m.observacion,
+          // Habilita la accion "ver detalle": el movimiento consolidado no puede
+          // nombrar en su observacion a las N obligaciones que salda.
+          pagoConsolidadoId: (m as any).pagoConsolidadoId ?? null,
           gasto: m.gasto,
           retiroCaja: m.retiroCaja,
           conteo: m.conteo,
@@ -827,6 +840,18 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
       if (original.tipoMovimiento === TipoMovimiento.ANULACION) {
         throw new Error('No se puede anular un movimiento de tipo ANULACION');
+      }
+
+      // ANTES que cualquier rama por columna de referencia: un movimiento de un
+      // pago consolidado puede cubrir varias obligaciones y ademas lleva la
+      // referencia clasica cuando cubre una sola. Si no se chequea primero, la
+      // rama del vale revertiria solo su parte y dejaria el resto del evento en
+      // el aire.
+      if ((original as any).pagoConsolidadoId) {
+        throw new Error(
+          `Este movimiento es parte del pago consolidado #${(original as any).pagoConsolidadoId}. ` +
+          `Anulá el pago completo desde su detalle: la reversa tiene que deshacer todas las obligaciones que cubre.`,
+        );
       }
 
       // Bloquear anulacion directa de movimientos vinculados a otros modulos.
@@ -1166,10 +1191,42 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
-      const { detalles, fuente, cuentaBancariaId, montoCuentaBancaria, cotizacion, ...gastoData } = data;
+      const { detalles, fuente, cuentaBancariaId, montoCuentaBancaria, cotizacion, diferido, ...gastoData } = data;
       const cajaMayorId = gastoData.cajaMayor?.id || gastoData.cajaMayor;
       const destinoTipo = (gastoData.destinoTipo as GastoDestinoTipo) || GastoDestinoTipo.CAJA_MAYOR;
       const esBanco = fuente === 'CUENTA_BANCARIA';
+
+      // ===== Rama DIFERIDA: el gasto nace PENDIENTE y no asienta nada =====
+      // El pago se hace despues desde Caja Mayor (pago consolidado), que permite
+      // saldar varios gastos con un solo egreso.
+      //
+      // El contrato del handler NO cambia para quien manda datos de pago: la app
+      // mobile llama a este mismo canal con `detalles[]` y forma de pago
+      // esperando que el egreso se asiente al toque, y no tiene pantalla de pago
+      // diferido. Por eso la rama nueva es opt-in con `diferido: true`, no el
+      // default.
+      if (diferido === true) {
+        // Un gasto pendiente no tiene "detalles de pago": si vienen, el payload
+        // se contradice y no está claro cuál gana. Mejor fallar que adivinar.
+        if (Array.isArray(detalles) && detalles.length > 0) {
+          throw new Error('Un gasto diferido no lleva detalles de pago: se paga después desde Caja Mayor.');
+        }
+        const monedaId = gastoData.moneda?.id || gastoData.monedaId;
+        const monto = Number(gastoData.monto);
+        if (!monedaId) throw new Error('monedaId requerido');
+        if (!(monto > 0)) throw new Error('monto debe ser mayor a 0');
+        const gastoPendiente = queryRunner.manager.create(Gasto, {
+          ...gastoData,
+          monto,
+          moneda: { id: monedaId },
+          formaPago: null,
+          estado: GastoEstado.PENDIENTE,
+        });
+        await setEntityUserTracking(dataSource, gastoPendiente, getCurrentUser()?.id, false);
+        const savedPendiente = await queryRunner.manager.save(Gasto, gastoPendiente);
+        await queryRunner.commitTransaction();
+        return savedPendiente;
+      }
 
       // ===== Rama CUENTA_BANCARIA: debita cuenta_bancaria.saldo, sin caja mayor =====
       if (destinoTipo === GastoDestinoTipo.CUENTA_BANCARIA) {
@@ -1300,6 +1357,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
 
   ipcMain.handle('anular-gasto', async (_event: any, id: number, motivo: string) => {
     await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
+    await bloquearSiPagoConsolidado(dataSource, PagoOrigenTipo.GASTO, id, `El gasto #${id}`);
     const queryRunner = dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -2597,6 +2655,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         cuentaBancariaIds: number[];
         mostrarCuentasPorPagar?: boolean;
         mostrarCuentasPorCobrar?: boolean;
+        /** Tope de descuento al cobrar CPC, en % del cobro. null = sin tope. */
+        descuentoCpcMaxPorcentaje?: number | null;
       }
     ) => {
       await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
@@ -2637,6 +2697,12 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         config.cuentasBancariasOrden = JSON.stringify(cbIds);
         config.mostrarCuentasPorPagar = data?.mostrarCuentasPorPagar === true;
         config.mostrarCuentasPorCobrar = data?.mostrarCuentasPorCobrar === true;
+        // Vacío = sin tope. Se acota a [0, 100]: un tope de 150% no significa nada
+        // y uno negativo bloquearía cualquier descuento sin decirlo.
+        const topeRaw = data?.descuentoCpcMaxPorcentaje;
+        config.descuentoCpcMaxPorcentaje = topeRaw == null || topeRaw === ('' as any)
+          ? null
+          : Math.min(100, Math.max(0, Number(topeRaw)));
 
         const saved = await queryRunner.manager.save(CajaMayorConfiguracion, config);
         await queryRunner.commitTransaction();

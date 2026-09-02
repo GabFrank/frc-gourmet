@@ -102,7 +102,7 @@
 
     <mat-form-field appearance="outline" style="width: 100%; margin-top: 12px">
       <mat-label>OBSERVACIÓN LIBRE</mat-label>
-      <input matInput [formControl]="observacionLibreControl" placeholder="Ej: sin sal, bien cocido..." />
+      <input matInput [formControl]="observacionLibreControl" maxlength="500" placeholder="Ej: sin sal, bien cocido..." />
     </mat-form-field>
   </div>
 </mat-dialog-content>

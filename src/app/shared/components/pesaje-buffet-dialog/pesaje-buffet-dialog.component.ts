@@ -1,4 +1,4 @@
-import { Component, Inject, OnInit } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, Inject, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -19,6 +19,17 @@ export interface PesajeBuffetDialogData {
   // Peso bruto prellenado (ej: leído de etiqueta EAN-13 de balanza).
   pesoInicialGramos?: number;
 }
+
+/**
+ * Demora antes de enfocar AGREGAR cuando el peso vino de una etiqueta de balanza.
+ *
+ * El lector de códigos termina el escaneo con un Enter, que es justo lo que abre
+ * este diálogo. Si el botón tomara el foco de inmediato, ese mismo Enter (o el
+ * rebote del lector) lo dispararía y el ítem entraría a la cuenta sin que el
+ * cajero llegue a ver el peso. Durante la espera el foco queda en el campo de
+ * peso, donde un Enter suelto no hace nada (el diálogo no tiene <form>).
+ */
+const FOCO_AGREGAR_DELAY_MS = 400;
 
 export interface PesajeBuffetDialogResult {
   pesoBrutoGramos: number;
@@ -46,7 +57,10 @@ export interface PesajeBuffetDialogResult {
     MatInputModule,
   ],
 })
-export class PesajeBuffetDialogComponent implements OnInit {
+export class PesajeBuffetDialogComponent implements OnInit, AfterViewInit, OnDestroy {
+  @ViewChild('btnAgregar', { read: ElementRef }) btnAgregar?: ElementRef<HTMLButtonElement>;
+  private focoTimer: any = null;
+
   pesoBruto = 0; // gramos
   tara = 0; // gramos
   precioPorKg = 0;
@@ -84,6 +98,26 @@ export class PesajeBuffetDialogComponent implements OnInit {
 
   ngOnInit(): void {
     this.recalcular();
+  }
+
+  /**
+   * Con el peso ya leído de la etiqueta, al cajero sólo le queda confirmar: se
+   * le pasa el foco a AGREGAR para que lo haga con Enter, pero recién después de
+   * `FOCO_AGREGAR_DELAY_MS` para no comerse el Enter del propio lector.
+   *
+   * Si el diálogo se abrió a mano (sin peso), el foco se queda en el campo de
+   * peso — que es lo que hay que completar — y AGREGAR está deshabilitado.
+   */
+  ngAfterViewInit(): void {
+    if (!(Number(this.data.pesoInicialGramos) > 0)) return;
+    this.focoTimer = setTimeout(() => {
+      this.focoTimer = null;
+      if (this.puedeAgregar) this.btnAgregar?.nativeElement?.focus();
+    }, FOCO_AGREGAR_DELAY_MS);
+  }
+
+  ngOnDestroy(): void {
+    if (this.focoTimer) clearTimeout(this.focoTimer);
   }
 
   onPesoChange(): void {

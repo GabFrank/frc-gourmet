@@ -2,7 +2,7 @@
 
 Módulo que hace sonar la música del local sin que nadie la administre. Nació de un problema concreto del dueño: **no tiene tiempo de armar y renovar playlists**, y con un solo local ya es molesto — con varios, imposible.
 
-Docs de producto: [`docs/INVESTIGACION-MUSICA-AMBIENTAL.md`](../../../../docs/INVESTIGACION-MUSICA-AMBIENTAL.md) (proveedores y restricciones legales/técnicas), [`docs/PLAN-MUSICA-SPOTIFY.md`](../../../../docs/PLAN-MUSICA-SPOTIFY.md) (arquitectura), [`docs/DISENO-OPERATIVO-MUSICA.md`](../../../../docs/DISENO-OPERATIVO-MUSICA.md) (cómo se configura y cómo decide la IA).
+Docs de producto: [`docs/INVESTIGACION-MUSICA-AMBIENTAL.md`](../../../../docs/INVESTIGACION-MUSICA-AMBIENTAL.md) (proveedores y restricciones legales/técnicas), [`docs/DISENO-OPERATIVO-MUSICA.md`](../../../../docs/DISENO-OPERATIVO-MUSICA.md) (cómo se configura y cómo decide la IA).
 
 ---
 
@@ -197,6 +197,49 @@ El brief del local dice *"nada triste"* y había **45 temas `MELANCOLICO`** sona
 
 **Por qué no Chosic ni Every Noise At Once:** ninguno tiene API pública. Every Noise quedó congelado cuando su autor dejó Spotify a fines de 2023. Consumirlos sería scraping — frágil, contra sus términos, y deuda de mantenimiento en un sistema que corre solo en el local.
 
+## 3.quinquies El descubridor lee el catálogo (2026-08-15)
+
+**El bug.** `construirContexto` leía `bloque.generosPreferidos` — el texto libre que el catálogo de estilos vino a reemplazar en F4 — y **nunca veía `BloqueEstiloMezcla`, ni los estilos apagados, ni el voto del dueño**. Es el mismo bug que §3.bis arregló en el planner: se arregló ahí y el descubrimiento quedó leyendo la tabla vieja.
+
+Explica el número de §5: **PAGODE tenía 6 temas contra una cuota del 40%**, porque la IA jamás supo que esa cuota existía. Sin ese dato el modelo propone lo que más abunda en su entrenamiento, que es indie anglo.
+
+**El fix.** El déficit va **primero** en el prompt, con horas y cantidad de temas por estilo. Se toma el **máximo** entre bloques, no la suma: la misma música sirve para el almuerzo del lunes y el del martes, y sumar los 31 bloques diría que faltan 60 h de pagode cuando alcanza con cubrir el bloque más exigente.
+
+**Panel "¿Qué va a buscar?"** en Mi estilo, con handler propio (`musica-descubrimiento-criterio`) que **no** llama a la IA. Usa la misma `construirContexto()` que arma el prompt: si consultara por su cuenta, en dos cambios diría una cosa y el prompt haría otra.
+
+### Voto y apagado de estilos
+
+Dos decisiones distintas, deliberadamente separadas:
+
+| Acción | Dónde vive | Qué hace |
+|---|---|---|
+| **Voto** (`musica_estilos.preferencia`, -1/0/1) | columna nueva | sólo alimenta el prompt del descubrimiento |
+| **Apagar** | fila en `musica_vetos` con `tipo = ESTILO` | saca sus temas de todas las playlists |
+
+El voto **no** mueve cuánto suena: eso lo decide `BloqueEstiloMezcla`. Con dos perillas sobre lo mismo, ninguna sería predecible.
+
+Apagar no necesitó columna: reusa el veto por estilo que §3.bis ya había construido y que `pasaVetos()` respeta por id. La fila se **reusa** al prender y apagar — si no, diez toggles dejarían diez filas. Y **no toca el estado de los temas**: si el veto los marcara `VETADO`, desvetar no podría distinguirlos de los que el dueño descartó uno por uno.
+
+`estilosVetados()` mira sólo los vetos **globales** (`bloqueId` null): un veto acotado a un bloque no puede mostrar como apagado un estilo que suena 6 de los 7 días.
+
+### Fuentes explícitas
+
+`AUTOMATICO` (default, lo de siempre) · `PROMPT` · `ESTILO` · `TEMA` · `PLAYLIST`.
+
+Las cuatro dirigidas usan `construirPromptDirigido()`, **no** una variante del automático. El punto de elegir una fuente explícita es que el criterio acumulado no mande: pedir covers de bossa con el pagode en déficit devolvía pagode. Lo único que se conserva son las **prohibiciones** — proponer un artista vetado gasta llamadas a Spotify y el filtro lo descarta igual, así que omitirlas sería sólo ruido.
+
+## 3.sexies Plan del día al arrancar
+
+La generación automática **ya existía**, pero era **perezosa**: vivía dentro de `getPlanBloque()`, o sea que corría recién cuando el runtime necesitaba reproducir **y** estando dentro de un bloque horario.
+
+Consecuencia real: local abre 09:00, primer bloque 11:00 → el plan se generaba a las 11:00, justo cuando ya tenía que sonar. Y `generarPlanDelDia()` llama a OpenAI y crea o sobreescribe hasta 15 playlists: tarda minutos.
+
+`asegurarPlanDelDia()` corre desde `iniciarRuntimeMusica` (sin bloquear el arranque) y otra vez al cruzar la medianoche local. Es **idempotente** — regenerar pisaría playlists de un día que quizá ya empezó a sonar. Las guardas se chequean **antes** de gastar OpenAI, en orden de costo: módulo habilitado → plan inexistente → bloques del día → repertorio aprobado → client id → conexión. Devuelven el **motivo** en vez de tirar: que el local no terminó de configurarse no es un error del sistema.
+
+El resultado vive en `EstadoRuntime.planDelDia` y se muestra en la pestaña Programación. Antes un fallo era invisible: el local abría en silencio.
+
+La generación perezosa **sigue existiendo** como red, para el caso de que esto falle o el día cambie entre dos heartbeats.
+
 ## 4. Gotchas
 
 1. **El pool es portable, las playlists no.** Los `spotifyId` son universales: lo importado con una cuenta sirve con otra. Pero las playlists `FRC · …` se crean en la cuenta conectada — en desarrollo con cuenta personal, aparecen ahí.
@@ -219,7 +262,10 @@ El brief del local dice *"nada triste"* y había **45 temas `MELANCOLICO`** sona
 18. **El vocabulario del LLM deriva solo.** `energico` (51) y `energetico` (16) para el mismo concepto, en producción. El prompt es una sugerencia; la garantía es `normalizarAnimo()` / `normalizarEscenas()` al escribir. Todo eje semántico nuevo necesita su enum y su normalizador, no solo una línea en el prompt.
 19. **El ánimo prohibido no se relaja.** El planner relaja BPM y valencia cuando falta material, pero `animosEvitar` se respeta siempre. Es deliberado: preferimos playlist corta antes que un tema de despecho en el almuerzo familiar.
 20. **La escena es preferencia, no filtro.** Convertirla en filtro duro vacía el bloque: la cobertura por escena es muy despareja (`TARDE` 204 temas, `ALMUERZO` 38, `APERTURA` 1).
-21. **El listener loopback del OAuth hay que cancelarlo a mano.** Espera hasta `OAUTH_TIMEOUT_MS` (3 min) y nada más lo cierra: abandonar el flujo dejaba el puerto tomado **por la propia app**, y el reintento moría con `EADDRINUSE` mostrando un error que culpaba a otro programa. Hoy `cancelarConexionSpotify()` lo aborta, lo llaman el `ngOnDestroy` de la pantalla y el propio `conectarSpotify()` antes de bindear. Ojo: `server.close()` **no** basta si hay conexiones abiertas — va con `closeAllConnections()`, y la respuesta HTML se termina de mandar antes de cortar el socket.
+21. **Las playlists AJENAS no se pueden leer, y eso limita la fuente `PLAYLIST` del descubrimiento.** Es el gotcha 3 aplicado a otra función: Spotify sólo devuelve `items` de playlists de la cuenta conectada. Pegar el link de *Bossa Nova Covers 2026* **no** va a leer sus temas. La fuente degrada a nombre + descripción y **lo avisa en la UI** — fallar callado haría pensar que la función no sirve.
+22. **`estaConectado()` no alcanza para saber si se puede hablar con Spotify.** Sólo mira el refresh token de keytar; el `spotifyClientId` vive en `app-settings` y los dos se pierden por separado. Con un token viejo y sin client id, cualquier cosa que llame a `spotifyApi` explota desde adentro en vez de fallar con un mensaje útil. `asegurarPlanDelDia` chequea las dos mitades. Lo destapó un test que corría en una máquina con un token viejo en el keychain.
+23. **El voto de un estilo NO cambia cuánto suena.** Es sólo para el descubridor. Quien decide cuánto suena es `BloqueEstiloMezcla`. Si alguna vez se conectan, van a ser dos perillas peleando por lo mismo.
+24. **El listener loopback del OAuth hay que cancelarlo a mano.** Espera hasta `OAUTH_TIMEOUT_MS` (3 min) y nada más lo cierra: abandonar el flujo dejaba el puerto tomado **por la propia app**, y el reintento moría con `EADDRINUSE` mostrando un error que culpaba a otro programa. Hoy `cancelarConexionSpotify()` lo aborta, lo llaman el `ngOnDestroy` de la pantalla y el propio `conectarSpotify()` antes de bindear. Ojo: `server.close()` **no** basta si hay conexiones abiertas — va con `closeAllConnections()`, y la respuesta HTML se termina de mandar antes de cortar el socket.
 
 ---
 
@@ -249,6 +295,8 @@ Reparto real, muy sesgado a lo anglo: `INDIE 53 · POP 47 · ROCK 44 · BOSSA/MP
 
 Dos hallazgos del mismo día: los 278 aprobados están **todos clasificados** (cero sin estilo), y el estilo `BOSSA / MPB` tiene los alias `MPB` y `POP BRASILENO` **vacíos** — los 27 temas vienen etiquetados `BOSSA NOVA` a secas, así que el nombre del estilo miente.
 
+**El techo sigue siendo el repertorio, no el criterio.** §3.quinquies mejora mucho *con qué* se pide música, pero no agrega un solo tema por sí solo: hay que correr rondas de descubrimiento. Ahora van dirigidas, pero llenar PAGODE sigue siendo correr el descubridor varias veces.
+
 **Pendiente:**
 - **Semilla que declara su estilo.** La procedencia es el discriminador más barato y confiable: un tema que entró por la playlist *Bossa Nova Covers* **es** un cover, y eso es un hecho del origen, no una inferencia. Requiere columna en `MusicaSemilla` + migración. Con la cadena de precedencia ya en su lugar, entraría entre manual y agente.
 - **Dashboard música ↔ ventas** por bloque (los datos ya se registran en `TrackLog`).
@@ -263,4 +311,37 @@ Dos hallazgos del mismo día: los 278 aprobados están **todos clasificados** (c
 | Comando | Qué cubre |
 |---|---|
 | `npm run test:musica-estilos` | Normalización de géneros, siembra idempotente, `estiloFijado`, **precedencia manual › agente › género** (que reclasificar no pise al agente, y que quitar la corrección manual vuelva al agente en vez de dejar el tema sin estilo), **desacuerdos**, validación de mezcla, cálculo de déficit, medianoche como fin de bloque. Corre migraciones sobre SQLite limpia |
+| `npm run test:musica-descubrimiento` | Que el descubridor lea el catálogo: déficit, votos y estilos apagados llegando al contexto y al prompt; que un estilo apagado no pida material; y que las **fuentes dirigidas** ignoren el criterio acumulado pero conserven las prohibiciones. `construirPrompt` y `construirPromptDirigido` son puras, así que se verifica el texto final sin tocar OpenAI |
+| `npm run test:musica-plan-automatico` | Las guardas de `asegurarPlanDelDia` en orden de costo, y la **idempotencia** (que no regenere un plan que quizá ya está sonando). La generación real necesita Spotify y OpenAI, así que no se ejercita |
 | `npm run test:musica-cuotas` | El algoritmo de cuotas: proporciones, **intercalado** (que la bossa no salga toda junta), cuota sin material, límite por artista, sin repetidos. Más los **ejes semánticos**: que el ánimo prohibido no entre ni siquiera en modo relajado, y que la escena preferida ordene sin dejar la playlist corta. Función pura, sin red ni base |
+
+---
+
+## 7. Lo que el plan original propuso y NO se construyó
+
+El plan técnico de 2026-08-07 (`docs/PLAN-MUSICA-SPOTIFY.md`, ya borrado — vive en
+`git log`) planteó tres cosas que la implementación descartó a conciencia. Están
+acá para que nadie las reintroduzca creyendo que faltan:
+
+| Propuesto | Qué pasó |
+|---|---|
+| Interfaz `ProveedorMusica` (`conectar` / `reproducir` / …) con `SpotifyProvider` detrás, "obligatoria desde el día 1" para poder cambiar de proveedor | **No existe.** `spotify.service.ts` se usa directo. Cambiar de proveedor hoy toca el runtime y el planner. Se aceptó el costo: lo que de verdad sobrevive a un cambio de proveedor es el **repertorio propio** (`musica_tracks`) y el criterio del LLM, no la firma de los métodos |
+| Entidad `MusicaCuenta` con `clientId` y `refreshToken` en base | **No existe.** El `spotifyClientId` vive en `app-settings.json` y el refresh token en **keytar**. Consecuencia real: las dos mitades se pierden por separado — ver gotcha 22 |
+| Entidad `ZonaAudio` (zona lógica → `deviceId`, volumen y horario por zona) | **No existe.** Se decidió una sola zona; el device se guarda en configuración. Multi-zona implica multi-cuenta Premium (una cuenta = un stream), así que no es sólo agregar una tabla |
+
+También vale al revés: el plan daba por hecho que `search` alcanzaba para armar el
+pool "paginando con consultas variadas". No alcanzó — de ahí salió la decisión 1.5
+(el LLM descubre, Spotify resuelve), que no estaba en el plan.
+
+**Lo que sí sobrevivió intacto:** shuffle y repeat se apagan por API al iniciar
+(`spotify.service.ts:538`) porque la secuencia la decide el planner; el watchdog del
+device; y el modo manual cuando alguien toca el Spotify del PC a mano.
+
+### Fuentes externas (verificadas 2026-08)
+
+Cuando algo de la API deje de funcionar, empezar por acá — Spotify podó dos veces en
+20 meses y no avisa dentro del producto:
+
+- [Web API Changelog feb-2026](https://developer.spotify.com/documentation/web-api/references/changes/february-2026) · [guía de migración](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide) · [changelog jul-2026](https://developer.spotify.com/documentation/web-api/references/changes/july-2026) · [cambios nov-2024](https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api)
+- [Quota modes](https://developer.spotify.com/documentation/web-api/concepts/quota-modes) · [cuotas de Development Mode, jul-2026](https://developer.spotify.com/blog/2026-07-23-web-api-quota-updates) — la cuota se cuenta **por cuenta de developer** (hasta 25 client ids), no por app
+- Reemplazo de `audio-features`: ReccoBeats (el que usamos). Respaldos evaluados y no probados: GetSongBPM, Deezer, Cyanite

@@ -126,7 +126,7 @@ console.log(`💵 Costo total calculado: ${costoTotal}`);
 ## Cuando todo lo demás falla
 
 1. **Backup de BD**: copiar `frc-gourmet.db` a `frc-gourmet.db.bak-debug-YYYYMMDD-HHMM` antes de cualquier delete.
-2. **Restart limpio**: cerrar Electron, `npm run electron:serve-tsc`, `npm start` (lo corre el usuario).
+2. **Restart limpio**: cerrar Electron, `npm run electron:serve-tsc`, `npm start`. Lo hace el agente (SKILL.md regla #1); matar antes lo viejo, que retiene el 7070 (`lsof -ti:7070`).
 3. **Última opción**: borrar `frc-gourmet.db` → la app crea una nueva vacía. Sólo si hay backup y el usuario lo aprobó.
 
 ## Trampas conocidas no obvias

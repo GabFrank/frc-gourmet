@@ -55,7 +55,20 @@ export class Receta extends BaseModel {
   // Virtual property for principal sale price
   precioPrincipal?: number;
 
+  // Virtual: producto al que esta vinculada esta receta, resuelto por
+  // `producto.receta_id` (la fuente de verdad real del vinculo 1:1).
+  // Lo llenan `get-receta` y `get-recetas-with-filters`. Usar ESTE campo, no
+  // `producto` (ver abajo).
+  productoVinculado?: { id: number; nombre: string } | null;
+
   // Relationships
+  // ⚠️ DEPRECADO: la columna `receta.producto_id` NO se escribe desde ninguna
+  // parte de la app y es siempre NULL. Nacio junto con `Producto.receta` en el
+  // refactor de 2026-03 como un 1:1 con DOS owning sides (cada uno con su
+  // propia columna), y solo prospero `producto.receta_id`.
+  // Para "el producto de esta receta" usar la virtual `productoVinculado`.
+  // Para las recetas de un producto CON variaciones, usar `productoVariacion`.
+  // No se borra la columna porque las migraciones del proyecto son aditivas.
   @OneToOne(() => Producto, producto => producto.receta)
   @JoinColumn({ name: 'producto_id' })
   producto?: Producto;

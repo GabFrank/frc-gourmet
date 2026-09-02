@@ -30,6 +30,7 @@ import { VentaItemAdicional } from '../../src/app/database/entities/ventas/venta
 import { VentaItemSabor } from '../../src/app/database/entities/ventas/venta-item-sabor.entity';
 import { VentaItemObservacion } from '../../src/app/database/entities/ventas/venta-item-observacion.entity';
 import { VentaItemIngredienteModificacion } from '../../src/app/database/entities/ventas/venta-item-ingrediente-modificacion.entity';
+import { componerDetalleVariacion, componerEncabezadoComanda } from '../utils/nombre-variacion.utils';
 import { Printer } from '../../src/app/database/entities/printer.entity';
 import { SectorImpresora, SectorImpresoraRol } from '../../src/app/database/entities/ventas/sector-impresora.entity';
 import { ProductoSector } from '../../src/app/database/entities/productos/producto-sector.entity';
@@ -38,15 +39,19 @@ import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity
 import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { Delivery } from '../../src/app/database/entities/ventas/delivery.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import {
   TicketSpec, TicketLine,
-  ticketText, ticketSeparador, ticketBlank, ticketKv, ticketColumns,
+  ticketText, ticketSeparador, ticketBlank, ticketKv, ticketColumns, ticketCantidad,
   ticketLineasFirma, ticketHeaderEmpresa,
   ticketFmtMonto, ticketFmtFecha, ticketFmtFechaHora,
   printTicketSpec, printerWidthToChars, monedaSimboloAscii,
+  crearFormateadorMonedas, ticketRubroMultimoneda, FormateadorMonedas,
+  tasaVsPrincipal, montoAPrincipal,
 } from '../utils/ticket.utils';
+import { obtenerPagosRegistrados, buildBloquePagosRegistrados } from '../utils/pagos-ticket.utils';
 import { broadcastPrinterEvent, PrinterEventPayload } from '../utils/printer-events.utils';
 import { computeResumenCaja } from '../utils/resumen-caja.utils';
 
@@ -151,9 +156,213 @@ async function registrarImpresion(
   await repo.save(item);
 }
 
+/**
+ * Encabezado de identificacion de un ticket: MESA y/o COMANDA.
+ *
+ * Antes era un `if (mesa) / else if (comanda) / else PARA LLEVAR`, asi que una
+ * comanda CON mesa nunca imprimia su numero: dos cuentas en la misma mesa
+ * producian dos tickets identicos y el mozo no sabia cual era cual. Ahora salen
+ * las dos referencias cuando existen las dos.
+ *
+ * Funcion pura para poder testearla sin hardware, igual que
+ * `buildVentaTicketLines`.
+ */
+export function buildEncabezadoUbicacion(
+  mesaNumero: number | null | undefined,
+  comandaRef: string | null | undefined,
+  ticketText: (t: string, o?: any) => any,
+): any[] {
+  const lines: any[] = [];
+  const hayMesa = mesaNumero !== null && mesaNumero !== undefined && `${mesaNumero}` !== '';
+  const hayComanda = !!comandaRef;
+
+  if (!hayMesa && !hayComanda) {
+    lines.push(ticketText('PARA LLEVAR', { align: 'C', bold: true, size: 'tall' }));
+    return lines;
+  }
+  if (hayMesa) {
+    lines.push(ticketText('MESA', { align: 'C' }));
+    lines.push(ticketText(String(mesaNumero), { align: 'C', bold: true, size: 'big' }));
+  }
+  if (hayComanda) {
+    // Con mesa, la comanda va en tamano normal: la mesa es la referencia de
+    // ubicacion y la comanda desempata entre cuentas de esa misma mesa.
+    lines.push(ticketText('COMANDA', { align: 'C' }));
+    lines.push(ticketText(String(comandaRef), {
+      align: 'C', bold: true, size: hayMesa ? 'tall' : 'big',
+    }));
+  }
+  return lines;
+}
+
+/**
+ * Texto de una `VentaItemObservacion` para la comanda de cocina.
+ *
+ * `observacionLibre` gana: la fila de la nota libre cuelga del sentinel
+ * `NOTA DEL CLIENTE`, y lo que le importa a cocina es el texto escrito, no el
+ * nombre del sentinel. Antes esto leía `o.descripcion` — un campo que
+ * **no existe** en la entidad — así que la nota libre nunca llegaba a imprimirse.
+ */
+export function textoObservacionParaTicket(o: any): string {
+  return String(o?.observacionLibre || o?.observacion?.descripcion || '').toUpperCase().trim();
+}
+
 function safeParseJson(s: string): any[] {
   try { const v = JSON.parse(s); return Array.isArray(v) ? v : []; }
   catch { return []; }
+}
+
+
+
+/**
+ * Parte un texto de detalle en varias líneas que entren en el ancho dado.
+ *
+ * `ticketColumns` TRUNCA lo que no entra, y en una impresora de 58mm la
+ * descripción tiene ~26 columnas: «GRANDE · 1/2 CALABRESA + 1/2 4 QUESOS»
+ * salía cortado en «GRANDE · 1/2 CALABRESA +», o sea que el cliente no veía la
+ * mitad que pidió. Cortar por palabra y seguir abajo es lo mínimo aceptable
+ * para algo que el cliente usa para verificar su pedido.
+ */
+function envolverDetalle(texto: string, ancho: number): string[] {
+  const limpio = String(texto || '').trim();
+  if (!limpio) return [];
+  if (limpio.length <= ancho) return [limpio];
+
+  const salida: string[] = [];
+  let actual = '';
+  for (const palabra of limpio.split(/\s+/)) {
+    // Una palabra sola más larga que el ancho se corta duro: no hay alternativa.
+    if (palabra.length > ancho) {
+      if (actual) { salida.push(actual); actual = ''; }
+      for (let i = 0; i < palabra.length; i += ancho) salida.push(palabra.slice(i, i + ancho));
+      continue;
+    }
+    if (!actual) actual = palabra;
+    else if (actual.length + 1 + palabra.length <= ancho) actual += ' ' + palabra;
+    else { salida.push(actual); actual = palabra; }
+  }
+  if (actual) salida.push(actual);
+  return salida;
+}
+
+/** Detalle de cada ítem vendido, para armar el ticket o la comanda. */
+export interface DetalleDeItems {
+  /** Adicionales, ya con el prefijo `+`. */
+  adicionalesByItem: Map<number, string[]>;
+  /** Observaciones (predefinidas y nota libre), con el prefijo `>>`. */
+  observacionesByItem: Map<number, string[]>;
+  /** Ingredientes sacados, sin prefijo: cada ticket decide cómo destacarlos. */
+  removidosByItem: Map<number, string[]>;
+  /** Cambios de ingrediente, en formato `X POR Y`. */
+  cambiosByItem: Map<number, string[]>;
+  /** Variación: tamaño + sabores con su proporción. */
+  pizzaByItem: Map<number, { presentacion: string; mostrarPresentacion: boolean; sabores: { nombre: string; proporcion: number }[] }>;
+}
+
+/**
+ * Carga de una sola vez los modificadores de un conjunto de `VentaItem`.
+ *
+ * Vivía adentro de `printComandaInternal`, así que la comanda de cocina era el
+ * único ticket que mostraba la variación, los ingredientes sacados y las
+ * observaciones: el ticket del cliente imprimía sólo el nombre del producto —
+ * «1 PIZZA» en vez de «1 PIZZA GRANDE CALABRESA, sin cebolla». Extraída acá la
+ * usan los tres tickets.
+ *
+ * Nunca lanza: si los modificadores fallan, el ticket sale igual sin ellos. Es
+ * preferible un ticket incompleto a un ticket que no sale.
+ */
+export async function cargarDetalleDeItems(
+  dataSource: DataSource,
+  itemIds: number[],
+): Promise<DetalleDeItems> {
+  const adicionalesByItem = new Map<number, string[]>();
+  const observacionesByItem = new Map<number, string[]>();
+  // Se separan las remociones (SIN X) de los cambios (CAMBIAR X POR Y) para
+  // darle a cada una el énfasis que corresponde en el ticket de cocina.
+  const removidosByItem = new Map<number, string[]>();
+  const cambiosByItem = new Map<number, string[]>();
+  // Pizzas (producto con variación): tamaño + sabores por mitad, para imprimirlos
+  // en grande y separados en la comanda.
+  const pizzaByItem = new Map<number, { presentacion: string; mostrarPresentacion: boolean; sabores: { nombre: string; proporcion: number }[] }>();
+  const pushMap = (m: Map<number, string[]>, k: number, v: string) => {
+    if (!m.has(k)) m.set(k, []);
+    m.get(k)!.push(v);
+  };
+  if (itemIds.length > 0) {
+    try {
+      const adics = await dataSource.getRepository(VentaItemAdicional).find({
+        where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+        relations: ['adicional', 'ventaItem'],
+      });
+      for (const a of adics) {
+        const iid = (a as any).ventaItem?.id;
+        if (!iid) continue;
+        const cant = Number((a as any).cantidad || 1);
+        const nom = ((a as any).adicional?.nombre || 'ADICIONAL').toUpperCase();
+        // Sin prefijo: la comanda de cocina lo muestra como «ADD X» y el ticket
+        // del cliente como «+ X». Cada uno pone el suyo.
+        pushMap(adicionalesByItem, iid, cant > 1 ? `${cant}x ${nom}` : nom);
+      }
+
+      const obs = await dataSource.getRepository(VentaItemObservacion).find({
+        where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+        relations: ['observacion', 'ventaItem'],
+      });
+      for (const o of obs) {
+        const iid = (o as any).ventaItem?.id;
+        if (!iid) continue;
+        const txt = textoObservacionParaTicket(o);
+        // Sin prefijo: la comanda lo marca con «>>»; el ticket del cliente lo
+        // muestra tal cual. Cada uno decide su énfasis.
+        if (txt) pushMap(observacionesByItem, iid, txt);
+      }
+
+      const mods = await dataSource.getRepository(VentaItemIngredienteModificacion).find({
+        where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+        relations: ['recetaIngrediente', 'recetaIngrediente.ingrediente', 'ingredienteReemplazo', 'ventaItem'],
+      });
+      for (const m of mods) {
+        const iid = (m as any).ventaItem?.id;
+        if (!iid) continue;
+        const ing = String((m as any).recetaIngrediente?.ingrediente?.nombre || (m as any).recetaIngrediente?.descripcion || 'INGREDIENTE').toUpperCase();
+        if ((m as any).tipoModificacion === 'REMOVIDO') {
+          pushMap(removidosByItem, iid, ing);
+        } else {
+          const rep = String((m as any).ingredienteReemplazo?.nombre || '').toUpperCase();
+          pushMap(cambiosByItem, iid, rep ? `${ing} POR ${rep}` : ing);
+        }
+      }
+
+      // Sabores de pizza (VentaItemSabor): tamaño + cada mitad, para la comanda.
+      const vsabores = await dataSource.getRepository(VentaItemSabor).find({
+        where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+        relations: ['ventaItem', 'recetaPresentacion', 'recetaPresentacion.sabor', 'recetaPresentacion.presentacion'],
+      });
+      for (const vs of vsabores) {
+        const iid = (vs as any).ventaItem?.id;
+        const saborNombre = String((vs as any).recetaPresentacion?.sabor?.nombre || '').toUpperCase().trim();
+        if (!iid || !saborNombre) continue;
+        if (!pizzaByItem.has(iid)) {
+          const pres = (vs as any).recetaPresentacion?.presentacion;
+          pizzaByItem.set(iid, {
+            presentacion: String(pres?.nombre || '').toUpperCase().trim(),
+            // El operador puede marcar que el nombre de esta parte no figure:
+            // hay presentaciones de relleno («TRADICIONAL») que sólo existen
+            // porque el nombre es obligatorio.
+            mostrarPresentacion: pres?.mostrarEnNombre !== false,
+            sabores: [],
+          });
+        }
+        if ((vs as any).recetaPresentacion?.sabor?.mostrarEnNombre === false) continue;
+        pizzaByItem.get(iid)!.sabores.push({ nombre: saborNombre, proporcion: Number((vs as any).proporcion) || 0 });
+      }
+    } catch (e) {
+      // Los modificadores son opcionales: si fallan, se imprime la comanda igual.
+      console.warn('[cargarDetalleDeItems] no se pudieron cargar los modificadores del ítem:', e);
+    }
+  }
+
+  return { adicionalesByItem, observacionesByItem, removidosByItem, cambiosByItem, pizzaByItem };
 }
 
 // ============================================================
@@ -226,15 +435,24 @@ export async function printComandaInternal(
 
   const venta = await dataSource.getRepository(Venta).findOne({
     where: { id: ventaId },
-    relations: ['mesa', 'comanda'],
+    relations: ['mesa', 'comanda', 'delivery'],
   });
   if (!venta) {
     return { ok: false, printed, errors: [{ message: `Venta ${ventaId} no encontrada` }] };
   }
   const mesa: any = (venta as any).mesa;
   const comanda: any = (venta as any).comanda;
-  if (!mesa?.id && !comanda?.id) {
-    // Venta sin mesa ni comanda → no aplica ticket de cocina.
+  // Mismo predicado que los hooks de KDS: van a cocina mesa, comanda, delivery y
+  // los pedidos de la web. La única que no va es la venta rápida de mostrador.
+  //
+  // Este gate estaba desalineado con los otros dos: el `ComandaItem` se creaba
+  // —así que la pantalla de cocina sí mostraba el pedido— pero acá se cortaba y
+  // el papel no salía nunca, devolviendo `ok: true` sin ningún error. Un
+  // delivery jamás imprimió su comanda por esto.
+  const tieneDelivery = !!(venta as any).delivery?.id;
+  const vieneDeLaWeb = ((venta as any).canalOrigen ?? 'LOCAL') !== 'LOCAL';
+  if (!mesa?.id && !comanda?.id && !tieneDelivery && !vieneDeLaWeb) {
+    // Venta directa de mostrador → no aplica ticket de cocina.
     return { ok: true, printed, errors };
   }
 
@@ -273,82 +491,9 @@ export async function printComandaInternal(
   // 1.b Cargar modificadores por ítem (adicionales, observaciones, opcionales/
   // modificaciones de ingredientes) para mostrarlos en la comanda de cocina.
   const itemIds = itemsAImprimir.map(i => i.id);
-  const adicionalesByItem = new Map<number, string[]>();
-  const observacionesByItem = new Map<number, string[]>();
-  // Se separan las remociones (SIN X) de los cambios (CAMBIAR X POR Y) para
-  // darle a cada una el énfasis que corresponde en el ticket de cocina.
-  const removidosByItem = new Map<number, string[]>();
-  const cambiosByItem = new Map<number, string[]>();
-  // Pizzas (producto con variación): tamaño + sabores por mitad, para imprimirlos
-  // en grande y separados en la comanda.
-  const pizzaByItem = new Map<number, { presentacion: string; sabores: { nombre: string; proporcion: number }[] }>();
-  const pushMap = (m: Map<number, string[]>, k: number, v: string) => {
-    if (!m.has(k)) m.set(k, []);
-    m.get(k)!.push(v);
-  };
-  if (itemIds.length > 0) {
-    try {
-      const adics = await dataSource.getRepository(VentaItemAdicional).find({
-        where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
-        relations: ['adicional', 'ventaItem'],
-      });
-      for (const a of adics) {
-        const iid = (a as any).ventaItem?.id;
-        if (!iid) continue;
-        const cant = Number((a as any).cantidad || 1);
-        const nom = ((a as any).adicional?.nombre || 'ADICIONAL').toUpperCase();
-        pushMap(adicionalesByItem, iid, cant > 1 ? `ADD ${cant}x ${nom}` : `ADD ${nom}`);
-      }
-
-      const obs = await dataSource.getRepository(VentaItemObservacion).find({
-        where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
-        relations: ['observacion', 'ventaItem'],
-      });
-      for (const o of obs) {
-        const iid = (o as any).ventaItem?.id;
-        if (!iid) continue;
-        const txt = String((o as any).descripcion || (o as any).observacion?.descripcion || '').toUpperCase().trim();
-        if (txt) pushMap(observacionesByItem, iid, `>> ${txt}`);
-      }
-
-      const mods = await dataSource.getRepository(VentaItemIngredienteModificacion).find({
-        where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
-        relations: ['recetaIngrediente', 'recetaIngrediente.ingrediente', 'ingredienteReemplazo', 'ventaItem'],
-      });
-      for (const m of mods) {
-        const iid = (m as any).ventaItem?.id;
-        if (!iid) continue;
-        const ing = String((m as any).recetaIngrediente?.ingrediente?.nombre || (m as any).recetaIngrediente?.descripcion || 'INGREDIENTE').toUpperCase();
-        if ((m as any).tipoModificacion === 'REMOVIDO') {
-          pushMap(removidosByItem, iid, ing);
-        } else {
-          const rep = String((m as any).ingredienteReemplazo?.nombre || '').toUpperCase();
-          pushMap(cambiosByItem, iid, rep ? `${ing} POR ${rep}` : ing);
-        }
-      }
-
-      // Sabores de pizza (VentaItemSabor): tamaño + cada mitad, para la comanda.
-      const vsabores = await dataSource.getRepository(VentaItemSabor).find({
-        where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
-        relations: ['ventaItem', 'recetaPresentacion', 'recetaPresentacion.sabor', 'recetaPresentacion.presentacion'],
-      });
-      for (const vs of vsabores) {
-        const iid = (vs as any).ventaItem?.id;
-        const saborNombre = String((vs as any).recetaPresentacion?.sabor?.nombre || '').toUpperCase().trim();
-        if (!iid || !saborNombre) continue;
-        if (!pizzaByItem.has(iid)) {
-          pizzaByItem.set(iid, {
-            presentacion: String((vs as any).recetaPresentacion?.presentacion?.nombre || '').toUpperCase().trim(),
-            sabores: [],
-          });
-        }
-        pizzaByItem.get(iid)!.sabores.push({ nombre: saborNombre, proporcion: Number((vs as any).proporcion) || 0 });
-      }
-    } catch (e) {
-      // Los modificadores son opcionales: si fallan, se imprime la comanda igual.
-      console.warn('[printComandaInternal] no se pudieron cargar modificadores del ítem:', e);
-    }
-  }
+  const {
+    adicionalesByItem, observacionesByItem, removidosByItem, cambiosByItem, pizzaByItem,
+  } = await cargarDetalleDeItems(dataSource, itemIds);
 
   // 2. Cargar M2M producto_sectores para todos los producto_id involucrados
   const productoIds = Array.from(new Set(
@@ -462,15 +607,7 @@ export async function printComandaInternal(
       ticketText(ticketFmtFechaHora(new Date()), { align: 'C' }),
       ticketSeparador('='),
     ];
-    if (mesa?.numero) {
-      lines.push(ticketText('MESA', { align: 'C' }));
-      lines.push(ticketText(String(mesa.numero), { align: 'C', bold: true, size: 'big' }));
-    } else if (refComanda) {
-      lines.push(ticketText('COMANDA', { align: 'C' }));
-      lines.push(ticketText(String(refComanda), { align: 'C', bold: true, size: 'big' }));
-    } else {
-      lines.push(ticketText('PARA LLEVAR', { align: 'C', bold: true, size: 'tall' }));
-    }
+    lines.push(...buildEncabezadoUbicacion(mesa?.numero, refComanda, ticketText));
     lines.push(ticketText(`TICKET #${ventaId}`, { align: 'C', bold: true, size: 'tall' }));
     lines.push(ticketSeparador('='));
 
@@ -478,12 +615,23 @@ export async function printComandaInternal(
       const v = j.item;
       const nombre = ((v as any).producto?.nombre || 'PRODUCTO').toUpperCase();
       const qty = Number(v.cantidad || 1);
-      lines.push(ticketText(`${qty}  ${nombre}`, { bold: true, size: 'tall' }));
+      // `2  x  PIZZA`: la x separada del número, no pegada. Ata la cantidad al
+      // producto sin leerse como parte del número, y queda en la misma
+      // posición en todas las líneas aunque una diga 1 y la otra 12.
+      lines.push(ticketText(`${ticketCantidad(qty)}${nombre}`, { bold: true, size: 'tall' }));
       const pizza = pizzaByItem.get(v.id);
       if (pizza && pizza.sabores.length) {
         // Pizza: tamaño y cada mitad en GRANDE, uno por línea.
-        const tamano = `${nombre} ${pizza.presentacion}`.trim();
-        lines.push(ticketText(tamano, { bold: true, size: 'tall' }));
+        // El tamaño se omite si el operador marcó que su nombre no figura: hay
+        // presentaciones de relleno («TRADICIONAL») que existen sólo porque el
+        // nombre es obligatorio, y repetirlas en la comanda es ruido.
+        const tamano = componerEncabezadoComanda(
+          nombre, pizza.presentacion, pizza.mostrarPresentacion,
+        );
+        // Vacío = no hay tamaño que mostrar (sin presentación, o destildada).
+        if (tamano) {
+          lines.push(ticketText(tamano, { bold: true, size: 'tall' }));
+        }
         const n = pizza.sabores.length;
         const iguales = pizza.sabores.every(s => Math.abs(s.proporcion - pizza.sabores[0].proporcion) < 0.001);
         for (const s of pizza.sabores) {
@@ -504,8 +652,8 @@ export async function printComandaInternal(
         lines.push(ticketText(`CAMBIAR ${c}`, { bold: true }));
       }
       // AGREGAR — en negrita para diferenciar de las observaciones.
-      for (const t of (adicionalesByItem.get(v.id) || [])) lines.push(ticketText(`   ${t}`, { bold: true }));
-      for (const t of (observacionesByItem.get(v.id) || [])) lines.push(ticketText(`   ${t}`));
+      for (const t of (adicionalesByItem.get(v.id) || [])) lines.push(ticketText(`   ADD ${t}`, { bold: true }));
+      for (const t of (observacionesByItem.get(v.id) || [])) lines.push(ticketText(`   >> ${t}`));
       lines.push(ticketBlank());
     }
 
@@ -588,53 +736,99 @@ async function getSectorNombre(dataSource: DataSource, sectorId: number): Promis
  * cuántos principal vale 1 unidad de la otra moneda. Toma la más reciente
  * (`cambios` viene ordenado por createdAt DESC). 0 si no hay.
  */
-function buscarCotizacion(cambios: any[], principal: any, moneda: any): number {
-  if (!principal || !moneda) return 0;
-  const c = (cambios || []).find((x: any) =>
-    (x.monedaOrigen?.id === principal.id && x.monedaDestino?.id === moneda.id) ||
-    (x.monedaOrigen?.id === moneda.id && x.monedaDestino?.id === principal.id));
-  return c ? Number(c.compraLocal || 0) : 0;
-}
+const buscarCotizacion = tasaVsPrincipal;
 
 /** Convierte un valor expresado en `moneda` a la moneda principal. */
-function convertirAPrincipal(valor: number, moneda: any, principal: any, cambios: any[]): number {
-  if (!moneda || !principal || moneda.id === principal.id) return valor;
-  const rate = buscarCotizacion(cambios, principal, moneda);
-  return rate > 0 ? valor * rate : valor; // 1 moneda = rate principal
+const convertirAPrincipal = montoAPrincipal;
+
+/**
+ * Adicionales/extras **activos** de cada ítem, ya formateados (`2x TOCINO` /
+ * `TOCINO`), indexados por `ventaItem.id`. Mismo criterio que la comanda de
+ * cocina: `activo = false` es un extra dado de baja y no se muestra.
+ *
+ * Best-effort: si la consulta falla, devuelve un mapa vacío — el ticket se
+ * imprime igual, sin el detalle de extras.
+ */
+async function getAdicionalesActivosPorItem(
+  dataSource: DataSource,
+  itemIds: number[],
+): Promise<Map<number, string[]>> {
+  const porItem = new Map<number, string[]>();
+  if (itemIds.length === 0) return porItem;
+  try {
+    const adics = await dataSource.getRepository(VentaItemAdicional).find({
+      where: { ventaItem: { id: TIn(itemIds) } as any, activo: true },
+      relations: ['adicional', 'ventaItem'],
+    });
+    for (const a of adics) {
+      const iid = (a as any).ventaItem?.id;
+      if (!iid) continue;
+      const cant = Number((a as any).cantidad || 1);
+      const nom = ((a as any).adicional?.nombre || 'ADICIONAL').toUpperCase();
+      if (!porItem.has(iid)) porItem.set(iid, []);
+      porItem.get(iid)!.push(cant > 1 ? `${cant}x ${nom}` : nom);
+    }
+  } catch (e) {
+    console.warn('[getAdicionalesActivosPorItem] no se pudieron cargar los extras del ítem:', e);
+  }
+  return porItem;
 }
 
-export async function printVentaTicketInternal(
+/** Resultado de armar el contenido del ticket de venta / pre-cuenta. */
+export interface VentaTicketBuild {
+  lines: TicketLine[];
+  /** Bruto de los ítems impresos (precio + adicionales, sin descuentos). */
+  bruto: number;
+  /** Descuento de nivel ítem de los ítems impresos. */
+  descItems: number;
+  /** Descuento total (ítems + ajustes del pago). */
+  descuentoTotal: number;
+  /** Total en moneda principal, tal como sale impreso. */
+  totalPrincipal: number;
+  /** Cantidad de ítems que entraron al ticket (excluye cancelados). */
+  itemsImpresos: number;
+}
+
+/**
+ * Arma el contenido del ticket de venta (o pre-cuenta) de una `Venta`, sin
+ * tocar impresoras. Separado de `printVentaTicketInternal` para poder testear
+ * el contenido sin hardware.
+ *
+ * **Sólo entran los ítems `estado = ACTIVO`**: un ítem cancelado en el PdV no
+ * se imprime ni suma a los totales — mismo criterio que la comanda de cocina,
+ * el cobro (`cobrar-venta-dialog`), el descuento de stock y los reportes.
+ * Afecta directo al TOTAL: `Venta.total` **no se persiste nunca** (ver el
+ * cálculo de `totalPrincipal` abajo), así que el total impreso sale siempre del
+ * cálculo local y un ítem cancelado lo inflaba, tanto en la pre-cuenta como en
+ * el comprobante post-cobro.
+ *
+ * Devuelve `null` si la venta no existe.
+ */
+export async function buildVentaTicketLines(
   dataSource: DataSource,
   ventaId: number,
-  opts: { printerId?: number; isPrecuenta?: boolean; dispositivoId?: number } = {},
-): Promise<ImpresionResultado> {
-  const errors: ImpresionResultado['errors'] = [];
-
+  opts: { width: number; isPrecuenta?: boolean },
+): Promise<VentaTicketBuild | null> {
   const venta = await dataSource.getRepository(Venta).findOne({
     where: { id: ventaId },
-    relations: ['cliente', 'cliente.persona', 'mesa', 'formaPago', 'dispositivo', 'pago'],
+    relations: ['cliente', 'cliente.persona', 'mesa', 'comanda', 'formaPago', 'pago', 'delivery'],
   });
-  if (!venta) {
-    return { ok: false, printed: [], errors: [{ message: `Venta ${ventaId} no encontrada` }] };
-  }
-
-  // Resolver dispositivoId: opts gana, sino el de la venta
-  const dispositivoId = opts.dispositivoId ?? (venta as any).dispositivo?.id;
+  if (!venta) return null;
 
   const items = await dataSource.getRepository(VentaItem).find({
-    where: { venta: { id: ventaId } as any },
+    where: { venta: { id: ventaId } as any, estado: EstadoVentaItem.ACTIVO },
     relations: ['producto', 'presentacion'],
   });
 
-  const rolTicket = opts.isPrecuenta ? SectorImpresoraRol.PRECUENTA : SectorImpresoraRol.TICKET_VENTA;
-  const printer = await getPrinterByRol(dataSource, rolTicket, { printerId: opts.printerId, dispositivoId })
-    // Fallback: si pidió PRECUENTA y no hay, intentar con TICKET_VENTA
-    || (opts.isPrecuenta ? await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, { printerId: opts.printerId, dispositivoId }) : null);
-  if (!printer) {
-    return { ok: false, printed: [], errors: [{ message: 'No hay impresora configurada para tickets de venta' }] };
-  }
+  // Adicionales/extras activos de esos ítems, para detallarlos bajo el producto.
+  // El monto NO se imprime por adicional: en pizzas `VentaItem.precioAdicionales`
+  // está ponderado por la proporción de cada sabor, así que la suma de los
+  // `precioCobrado` de las filas no coincidiría con lo que se cobra.
+  const {
+    adicionalesByItem, observacionesByItem, removidosByItem, cambiosByItem, pizzaByItem,
+  } = await cargarDetalleDeItems(dataSource, items.map(i => i.id));
 
-  const width = printerWidthToChars(printer.width);
+  const width = opts.width;
   const headerLines = await ticketHeaderEmpresa(dataSource, width, { showTimbrado: !opts.isPrecuenta });
 
   // Monedas activas + cotizaciones para mostrar los totales en cada moneda.
@@ -674,23 +868,34 @@ export async function printVentaTicketInternal(
         else if ((d as any).tipo === TipoDetalle.AUMENTO) aumPago += valP;
       }
     } catch (e) {
-      console.warn('[printVentaTicketInternal] no se pudieron cargar ajustes del pago:', e);
+      console.warn('[buildVentaTicketLines] no se pudieron cargar ajustes del pago:', e);
     }
   }
   const descuentoTotal = descItems + descPago;
+
+  // Costo del envío: cargo de la venta, no un ítem. Va como línea propia en el
+  // bloque de totales. `decimal` → string en Postgres, de ahí el Number().
+  const costoDelivery = Number((venta as any).costoDelivery ?? 0) || 0;
+  // OJO: hoy `Venta.total` NO se escribe en ningún flujo del repo — ni al cobrar
+  // (`cobrar-venta-dialog` manda estado/formaPago/pago/fechaCierre, sin total),
+  // ni en la venta a crédito. La rama de abajo es defensiva por si algún día se
+  // persiste; el camino real SIEMPRE es el recálculo local. Por eso el ítem
+  // cancelado inflaba también el comprobante post-cobro, no sólo la pre-cuenta.
   const totalPrincipal = Number((venta as any).total) > 0
     ? Number((venta as any).total)
-    : bruto - descItems - descPago + aumPago;
+    : bruto - descItems - descPago + aumPago + costoDelivery;
 
   const lines: TicketLine[] = [...headerLines];
 
-  // MESA en grande — identifica el pedido de un vistazo (reemplaza el título
-  // "PRE-CUENTA", que era redundante).
-  const mesaNro = (venta.mesa as any)?.numero;
-  if (mesaNro) {
+  // MESA y/o COMANDA en grande — identifica el pedido de un vistazo (reemplaza el
+  // título "PRE-CUENTA", que era redundante). La comanda no aparecia NUNCA en
+  // este ticket: dos cuentas de la misma mesa salian identicas.
+  const mesaNro = (venta.mesa as any)?.numero ?? null;
+  const comandaObj: any = (venta as any).comanda;
+  const comandaRef = comandaObj?.codigo || (comandaObj?.numero ? `#${comandaObj.numero}` : null);
+  if (mesaNro || comandaRef) {
     lines.push(ticketSeparador('='));
-    lines.push(ticketText('MESA', { align: 'C' }));
-    lines.push(ticketText(String(mesaNro), { align: 'C', bold: true, size: 'big' }));
+    lines.push(...buildEncabezadoUbicacion(mesaNro, comandaRef, ticketText));
   }
 
   lines.push(ticketSeparador('='));
@@ -710,7 +915,9 @@ export async function printVentaTicketInternal(
   // espacio). Con anchos chicos (32/40 col) floor(width*0.12) daba 3-4 → sin
   // separación. TOTAL usa 12 col fijos.
   const totalW = 12;
-  const cantW = Math.max(5, Math.min(6, Math.floor(width * 0.12)));
+  // 6 fijo: es lo que necesita `ticketCantidad` para dejar la x separada del
+  // número y alineada entre líneas. Con 5 la x quedaba pegada al producto.
+  const cantW = 6;
   const descW = width - cantW - totalW;
   lines.push(ticketSeparador('-'));
   lines.push(ticketColumns([
@@ -726,18 +933,61 @@ export async function printVentaTicketInternal(
     const total = qty * precio - qty * Number(it.descuentoUnitario || 0);
     const nombre = (it.producto?.nombre || 'PRODUCTO').toUpperCase();
     lines.push(ticketColumns([
-      { text: String(qty), width: cantW, align: 'L' },
+      { text: ticketCantidad(qty, cantW), width: cantW, align: 'L' },
       { text: nombre, width: descW, align: 'L' },
       { text: ticketFmtMonto(total), width: totalW, align: 'R' },
     ]));
+
+    // El detalle va en líneas propias debajo, no pegado al nombre: en una
+    // impresora de 58mm la descripción tiene 15 columnas, así que
+    // «PAPAS FRITAS GRANDE BACON Y CHEDDAR» no entra ni de cerca en la línea
+    // del precio. Todo lo de abajo es sangrado y sin importe.
+    const anchoDetalle = descW + totalW - 2;
+    const detalle = (txt: string) => {
+      for (const parte of envolverDetalle(txt, anchoDetalle)) {
+        lines.push(ticketColumns([
+          { text: '', width: cantW, align: 'L' },
+          { text: `  ${parte}`, width: descW + totalW, align: 'L' },
+        ]));
+      }
+    };
+
+    // Variación (tamaño + sabor). Con más de un sabor sale la fracción de cada
+    // mitad, que es lo que el cliente pidió y por lo que se le cobró.
+    const variacion = pizzaByItem.get(it.id);
+    if (variacion) {
+      const txt = componerDetalleVariacion(variacion.presentacion, variacion.sabores, {
+        mostrarPresentacion: variacion.mostrarPresentacion,
+      });
+      if (txt) detalle(txt);
+    } else if ((it as any).ensambladoDescripcion) {
+      // Productos armados por el PdV que no pasan por RecetaPresentacion.
+      detalle(String((it as any).ensambladoDescripcion).toUpperCase());
+    }
+
+    // Ingredientes sacados: le sirven al cliente para verificar que su pedido
+    // salió como lo pidió. Sin el video invertido de la comanda, que es énfasis
+    // para quien cocina.
+    for (const ing of (removidosByItem.get(it.id) || [])) detalle(`SIN ${ing}`);
+    for (const c of (cambiosByItem.get(it.id) || [])) detalle(`CAMBIAR ${c}`);
+
+    // Extras: SIN importe propio. Su precio ya está sumado dentro del TOTAL de
+    // la línea del producto (`precioAdicionales`), así que mostrarlo al lado
+    // haría creer que se cobra aparte.
+    for (const extra of (adicionalesByItem.get(it.id) || [])) detalle(`+ ${extra}`);
+
+    for (const obs of (observacionesByItem.get(it.id) || [])) detalle(obs);
   }
 
   lines.push(ticketSeparador('-'));
-  if (descuentoTotal > 0) {
+  if (descuentoTotal > 0 || costoDelivery > 0) {
     lines.push(ticketKv('SUBTOTAL', `Gs. ${ticketFmtMonto(bruto)}`));
+  }
+  if (descuentoTotal > 0) {
     lines.push(ticketKv('DESCUENTO', `Gs. -${ticketFmtMonto(descuentoTotal)}`));
   }
   if (aumPago > 0) lines.push(ticketKv('AUMENTO', `Gs. ${ticketFmtMonto(aumPago)}`));
+  if (costoDelivery > 0) lines.push(ticketKv('ENVIO', `Gs. ${ticketFmtMonto(costoDelivery)}`));
   lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(totalPrincipal)}`, true));
 
   // Totales en las demás monedas configuradas (según cotización vigente).
@@ -755,7 +1005,32 @@ export async function printVentaTicketInternal(
     lines.push(...totalesMonedaLines);
   }
 
-  if (!opts.isPrecuenta && venta.formaPago) {
+  // Formas de pago.
+  //
+  // En un DELIVERY se imprime el desglose completo, con la misma organización
+  // (forma de pago agrupando, moneda adentro) que el resumen de cierre de caja:
+  // el pedido puede tener plata cargada de antemano y tanto el que entrega como
+  // el cajero que finaliza necesitan ver qué se registró antes. Va también en la
+  // pre-cuenta, que es justamente el papel que mira el cajero antes de cerrar.
+  //
+  // En el resto de las ventas se mantiene la línea única histórica: acá el cobro
+  // ocurre de una sola vez y frente al cajero, así que el desglose no agrega
+  // nada y alarga el ticket.
+  const esDelivery = !!(venta as any).delivery?.id;
+  let bloquePagos: TicketLine[] = [];
+  if (esDelivery) {
+    const todasLasMonedas = await monedaRepo.find();
+    const pagos = await obtenerPagosRegistrados(dataSource, ventaId, principalMoneda, cambios);
+    bloquePagos = buildBloquePagosRegistrados(
+      pagos,
+      crearFormateadorMonedas(todasLasMonedas),
+      width,
+      opts.isPrecuenta ? 'PAGOS REGISTRADOS' : 'FORMAS DE PAGO',
+    );
+  }
+  if (bloquePagos.length) {
+    lines.push(...bloquePagos);
+  } else if (!opts.isPrecuenta && venta.formaPago) {
     lines.push(ticketKv('FORMA PAGO', (venta.formaPago as any).nombre || (venta.formaPago as any).descripcion || ''));
   }
 
@@ -766,7 +1041,58 @@ export async function printVentaTicketInternal(
     lines.push(ticketText('GRACIAS POR SU COMPRA', { align: 'C', bold: true }));
   }
 
-  const spec: TicketSpec = { printerWidth: width, lines, cutAtEnd: true };
+  return {
+    lines,
+    bruto,
+    descItems,
+    descuentoTotal,
+    totalPrincipal,
+    itemsImpresos: items.length,
+  };
+}
+
+export async function printVentaTicketInternal(
+  dataSource: DataSource,
+  ventaId: number,
+  opts: { printerId?: number; isPrecuenta?: boolean; dispositivoId?: number } = {},
+): Promise<ImpresionResultado> {
+  const venta = await dataSource.getRepository(Venta).findOne({
+    where: { id: ventaId },
+    relations: ['dispositivo'],
+  });
+  if (!venta) {
+    return { ok: false, printed: [], errors: [{ message: `Venta ${ventaId} no encontrada` }] };
+  }
+
+  // Resolver dispositivoId: opts gana, sino el de la venta
+  const dispositivoId = opts.dispositivoId ?? (venta as any).dispositivo?.id;
+
+  const rolTicket = opts.isPrecuenta ? SectorImpresoraRol.PRECUENTA : SectorImpresoraRol.TICKET_VENTA;
+  const printer = await getPrinterByRol(dataSource, rolTicket, { printerId: opts.printerId, dispositivoId })
+    // Fallback: si pidió PRECUENTA y no hay, intentar con TICKET_VENTA
+    || (opts.isPrecuenta ? await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, { printerId: opts.printerId, dispositivoId }) : null);
+  if (!printer) {
+    return { ok: false, printed: [], errors: [{ message: 'No hay impresora configurada para tickets de venta' }] };
+  }
+
+  const width = printerWidthToChars(printer.width);
+  const build = await buildVentaTicketLines(dataSource, ventaId, { width, isPrecuenta: opts.isPrecuenta });
+  if (!build) {
+    return { ok: false, printed: [], errors: [{ message: `Venta ${ventaId} no encontrada` }] };
+  }
+
+  // Sin ítems activos no hay nada que mostrar: imprimir sólo el encabezado y un
+  // "TOTAL Gs. 0" gasta papel y confunde. Pasa cuando se cancelaron todos los
+  // ítems de la venta. El caller muestra el mensaje (snackbar en el PdV).
+  if (build.itemsImpresos === 0) {
+    return {
+      ok: false,
+      printed: [],
+      errors: [{ printerId: printer.id, message: 'La venta no tiene ítems activos para imprimir' }],
+    };
+  }
+
+  const spec: TicketSpec = { printerWidth: width, lines: build.lines, cutAtEnd: true };
   const res = await printTicketSpec(printer, spec);
 
   if (!res.ok) {
@@ -844,10 +1170,60 @@ async function printReciboCobroCuotaInternal(
 // REGISTRO DE HANDLERS IPC
 // ============================================================
 
+/**
+ * Detalle de variación de un conjunto de ítems, para pantalla.
+ *
+ * Los tickets ya componen esto mismo con `cargarDetalleDeItems`, pero el panel
+ * de detalle del delivery mostraba sólo `producto.nombre` — «1 PIZZA» donde el
+ * papel decía «1 PIZZA · GRANDE · 1/2 CALABRESA + 1/2 MARGUERITA, sin cebolla».
+ * El cajero leía en pantalla algo distinto de lo que el cliente tenía en la
+ * mano, que es justo cuando aparecen los reclamos que nadie puede resolver.
+ *
+ * Devuelve un objeto plano por item id: lo mismo que imprime el ticket, sin
+ * los prefijos de papel, para que la vista decida cómo mostrarlo.
+ */
+export async function detalleVariacionDeItems(
+  dataSource: DataSource,
+  itemIds: number[],
+): Promise<Record<number, {
+  variacion: string;
+  removidos: string[];
+  cambios: string[];
+  adicionales: string[];
+  observaciones: string[];
+}>> {
+  const out: Record<number, any> = {};
+  if (!itemIds?.length) return out;
+
+  const det = await cargarDetalleDeItems(dataSource, itemIds);
+  for (const id of itemIds) {
+    const pizza = det.pizzaByItem.get(id);
+    out[id] = {
+      variacion: pizza
+        ? componerDetalleVariacion(pizza.presentacion, pizza.sabores, {
+            mostrarPresentacion: pizza.mostrarPresentacion,
+          })
+        : '',
+      removidos: det.removidosByItem.get(id) ?? [],
+      cambios: det.cambiosByItem.get(id) ?? [],
+      // Los prefijos `+` y `>>` son cosa del papel: en pantalla el estilo lo
+      // pone el CSS.
+      adicionales: (det.adicionalesByItem.get(id) ?? []).map((a) => a.replace(/^\+\s*/, '')),
+      observaciones: (det.observacionesByItem.get(id) ?? []).map((o) => o.replace(/^>>\s*/, '')),
+    };
+  }
+  return out;
+}
+
 export function registerDocumentosTicketsHandlers(
   dataSource: DataSource,
   getCurrentUser: GetCurrentUser,
 ) {
+  /** Detalle de variación de los ítems de una venta, para el panel del PdV. */
+  ipcMain.handle('get-detalle-variacion-items', async (_e: any, itemIds: number[]) => {
+    return await detalleVariacionDeItems(dataSource, itemIds || []);
+  });
+
 
   // ─── COMANDA (ticket de cocina) ─────────────────────────────────────────
   // Recibe `ventaId`. La venta debe tener mesa o comanda asignada.
@@ -980,33 +1356,14 @@ export function registerDocumentosTicketsHandlers(
     });
   });
 
-  // ─── ETIQUETA DELIVERY ──────────────────────────────────────────────────
-  ipcMain.handle('print-etiqueta-delivery', async (_event, params: {
-    deliveryId: number;
-    cliente?: string;
-    direccion?: string;
-    telefono?: string;
-    printerId?: number;
-  }) => {
-    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_PDV', 'DOCUMENTOS_IMPRIMIR_TICKET']);
-    const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, { printerId: params.printerId });
-    if (!printer) return { ok: false, printed: [], errors: [{ message: 'Sin impresora' }] };
-    const width = printerWidthToChars(printer.width);
-    const lines: TicketLine[] = [
-      ticketText(`DELIVERY #${params.deliveryId}`, { align: 'C', bold: true, size: 'tall' }),
-      ticketSeparador('-'),
-      ticketKv('CLIENTE', (params.cliente || '—').toUpperCase()),
-      ticketKv('TEL', params.telefono || '—'),
-      ticketBlank(),
-      ticketText('DIRECCIÓN:', { bold: true }),
-      ticketText((params.direccion || '—').toUpperCase()),
-    ];
-    const res = await printTicketSpec(printer, { printerWidth: width, lines });
-    return res.ok
-      ? { ok: true, printed: [{ itemId: params.deliveryId, sectorId: null, printerId: printer.id, printerName: printer.name }], errors: [] }
-      : { ok: false, printed: [], errors: [{ printerId: printer.id, message: res.error || 'Error' }] };
-  });
-
+  // ─── TICKET DELIVERY ────────────────────────────────────────────────────
+  // Reemplaza a la vieja `print-etiqueta-delivery`, que era código muerto (no
+  // estaba en preload.ts ni en el mapa de canales, así que nadie podía
+  // invocarla) y además imprimía sólo cliente/tel/dirección: sin ítems, sin
+  // totales y sin cuánto cobrar, es decir inútil para el repartidor.
+  // El handler IPC vive ahora en `delivery.handler.ts`
+  // (`delivery-imprimir-ticket`); acá abajo queda el armado del ticket, en
+  // `printDeliveryTicketInternal`.
   // ─── ACREDITACIÓN POS ───────────────────────────────────────────────────
   ipcMain.handle('print-acreditacion-pos-ticket', async (_event, params: {
     acreditacionId: number;
@@ -1240,38 +1597,28 @@ export async function printCierreCajaInternal(
   if (!printer) return { ok: false, printed: [], errors: [{ message: 'Sin impresora' }] };
   const width = printerWidthToChars(printer.width);
 
-  // Mapa moneda → { decimales, simbolo ASCII } para formateo correcto por moneda.
+  // Formateo por moneda (símbolo ASCII + decimales). El armado del rubro
+  // multimoneda vive en `ticket.utils` desde 2026-08: lo comparte con el bloque
+  // de pagos registrados de los tickets de delivery, para que las dos vistas de
+  // "forma de pago + moneda" no puedan divergir.
   const monedas = await dataSource.getRepository(Moneda).find();
-  const monedaInfo: { [id: number]: { decimales: number; simbolo: string } } = {};
-  for (const m of monedas) {
-    monedaInfo[m.id] = { decimales: Number((m as any).decimales) || 0, simbolo: monedaSimboloAscii(m) };
-  }
-  const fmtMoneda = (monedaId: number, monto: number): string => {
-    const info = monedaInfo[monedaId] || { decimales: 0, simbolo: '' };
-    return `${info.simbolo} ${ticketFmtMonto(monto, info.decimales)}`.trim();
-  };
-  const simboloMoneda = (monedaId: number): string => (monedaInfo[monedaId]?.simbolo || '');
-  const fmtMontoMoneda = (monedaId: number, monto: number): string =>
-    ticketFmtMonto(monto, monedaInfo[monedaId]?.decimales ?? 0);
+  const fmtMonedas = crearFormateadorMonedas(monedas);
+  const fmtMoneda = (monedaId: number, monto: number): string => fmtMonedas.fmt(monedaId, monto);
+  // `costo_delivery` se guarda en la moneda principal, así que el bloque de
+  // delivery necesita su id para formatear con los decimales correctos.
+  const monedaPrincipalTicket = Number(monedas.find((m: any) => m.principal)?.id ?? 0);
 
-  // Renderiza un total/rubro etiquetado que puede tener varias monedas:
-  //  - 1 moneda  → una sola línea "ETIQUETA .......... Gs 5.300.000"
-  //  - N monedas → la ETIQUETA va como encabezado y cada moneda indentada
-  //    debajo (sin repetir la etiqueta), igual que el bloque de ARQUEO.
+  // `anchoClave`: las etiquetas de este ticket son nombres de forma de pago y de
+  // categoría de gasto, o sea texto libre. Sin truncar, uno largo desborda las
+  // 32 columnas de una 58mm y deja el importe huérfano en la línea siguiente —
+  // el mismo problema que ya se resolvía en el bloque de delivery.
+  const anchoClaveCierre = Math.max(8, width - 14);
   const pushTotalMultimoneda = (
     label: string,
     montos: { monedaId: number; total: number }[],
     bold = false,
   ): void => {
-    if (montos.length === 0) return;
-    if (montos.length === 1) {
-      lines.push(ticketKv(label, fmtMoneda(montos[0].monedaId, montos[0].total), bold));
-      return;
-    }
-    lines.push(ticketText(label, { bold }));
-    for (const m of montos) {
-      lines.push(ticketKv(`  ${simboloMoneda(m.monedaId)}`, fmtMontoMoneda(m.monedaId, m.total), bold));
-    }
+    lines.push(...ticketRubroMultimoneda(label, montos, fmtMonedas, { bold, anchoClave: anchoClaveCierre }));
   };
 
   const caja = resumen.caja as any;
@@ -1367,6 +1714,27 @@ export async function printCierreCajaInternal(
     );
   }
 
+  // ── Delivery ──────────────────────────────────────────────
+  // Va después de las ventas y antes del arqueo: no mueve plata del cajón por
+  // sí mismo (el cobro del envío ya está dentro de las ventas por forma de
+  // pago), es información de cierre del turno. `pendientes` es lo que más
+  // importa acá: cuántos pedidos quedan en la calle cuando se cierra.
+  const dv = resumen.delivery;
+  if (dv && (dv.envios > 0 || dv.retiros > 0 || dv.cancelados > 0)) {
+    lines.push(ticketSeparador('-'));
+    lines.push(ticketText('DELIVERY', { align: 'C', bold: true }));
+    lines.push(ticketKv('ENVIOS', String(dv.envios)));
+    lines.push(ticketKv('RETIROS', String(dv.retiros)));
+    if (dv.cancelados > 0) lines.push(ticketKv('CANCELADOS', String(dv.cancelados)));
+    if (dv.anticipados > 0) lines.push(ticketKv('COBRO ANTICIPADO', String(dv.anticipados)));
+    // El costo del envío se congela en la moneda principal, así que no pasa por
+    // el rubro multimoneda: es un solo número.
+    lines.push(ticketKv('COBRO DE ENVIOS', fmtMoneda(monedaPrincipalTicket, dv.cobroEnvios), true));
+    if (dv.pendientes > 0) {
+      lines.push(ticketText(`ATENCION: ${dv.pendientes} SIN ENTREGAR`, { align: 'C', bold: true }));
+    }
+  }
+
   // ── Retiros ───────────────────────────────────────────────
   if (resumen.retiros.length > 0) {
     lines.push(ticketSeparador('-'));
@@ -1400,13 +1768,13 @@ export async function printCierreCajaInternal(
     lines.push(ticketText('Sin datos de conteo', { align: 'C' }));
   } else {
     for (const id of arqueoMonedaIds) {
-      const info = monedaInfo[id];
+      const simbolo = fmtMonedas.simbolo(id);
       const apertura = resumen.conteoApertura.find(c => c.monedaId === id)?.total || 0;
       const cierre = resumen.conteoCierre.find(c => c.monedaId === id)?.total || 0;
       const esperado = resumen.esperadoPorMoneda[id] || 0;
       const diferencia = resumen.diferenciaPorMoneda[id] || 0;
       lines.push(ticketSeparador('.'));
-      lines.push(ticketText((info?.simbolo || `MONEDA ${id}`).toUpperCase(), { bold: true }));
+      lines.push(ticketText((simbolo || `MONEDA ${id}`).toUpperCase(), { bold: true }));
       lines.push(ticketKv('  MONTO APERTURA', fmtMoneda(id, apertura)));
       lines.push(ticketKv('  MONTO CIERRE', fmtMoneda(id, cierre)));
       lines.push(ticketKv('  ESPERADO', fmtMoneda(id, esperado)));
@@ -1420,4 +1788,367 @@ export async function printCierreCajaInternal(
   return res.ok
     ? { ok: true, printed: [{ itemId: caja?.id ?? cajaId, sectorId: null, printerId: printer.id, printerName: printer.name }], errors: [] }
     : { ok: false, printed: [], errors: [{ printerId: printer.id, message: res.error || 'Error' }] };
+}
+
+// ============================================================
+// TICKET DE DELIVERY (comanda de reparto)
+// ============================================================
+
+/**
+ * Ticket que se lleva el repartidor.
+ *
+ * A diferencia del comprobante de venta, tiene que responder tres preguntas de
+ * un vistazo: **a dónde va**, **qué lleva** y **cuánto tiene que cobrar**. La
+ * vieja `print-etiqueta-delivery` sólo cubría la primera — y ni siquiera se
+ * podía invocar, no estaba expuesta en `preload.ts`.
+ *
+ * El costo del envío sale como línea propia: es un cargo de la venta
+ * (`Venta.costoDelivery`, congelado al asignar la zona), no un ítem del
+ * pedido, así que no puede ir mezclado con los productos.
+ *
+ * Desde 2026-08 imprime además **lo que ya se cobró** (cobro anticipado, rondas
+ * de cobro parcial, un pedido de la web pagado online) y, si queda algo
+ * pendiente, el número grande pasa a ser el SALDO en vez del total.
+ */
+export interface DeliveryTicketBuild {
+  lines: TicketLine[];
+  /** Total a pagar por el pedido, ya con descuentos/aumentos y envío. */
+  total: number;
+  /** Neto ya cobrado (PAGO − VUELTO), en moneda principal. */
+  yaPagado: number;
+  /** Lo que falta cobrar. Negativo = sobrepago, hay vuelto que entregar. */
+  saldo: number;
+  itemsImpresos: number;
+}
+
+/**
+ * Arma las líneas del ticket de reparto/retiro.
+ *
+ * Separado de `printDeliveryTicketInternal` (que sólo resuelve la impresora y
+ * manda a imprimir) para poder testear el contenido sin hardware, igual que
+ * `buildVentaTicketLines`. Devuelve `null` si el delivery no existe.
+ */
+export async function buildDeliveryTicketLines(
+  dataSource: DataSource,
+  deliveryId: number,
+  opts: { width: number },
+): Promise<DeliveryTicketBuild | null> {
+  const delivery = await dataSource.getRepository(Delivery).findOne({
+    where: { id: deliveryId },
+    relations: [
+      'precioDelivery',
+      'cliente',
+      'cliente.persona',
+      'entregadoPorFuncionario',
+      'entregadoPorFuncionario.persona',
+    ],
+  });
+  if (!delivery) return null;
+
+  // El builder no resuelve la impresora: eso quedó en
+  // `printDeliveryTicketInternal`, que es donde vive el ruteo por dispositivo.
+  const venta = await dataSource.getRepository(Venta).findOne({
+    where: { delivery: { id: deliveryId } },
+    relations: ['pago'],
+  });
+
+  const width = opts.width;
+  const headerLines = await ticketHeaderEmpresa(dataSource, width, { showTimbrado: false });
+
+  const items = venta
+    ? await dataSource.getRepository(VentaItem).find({
+        where: { venta: { id: venta.id } as any, estado: EstadoVentaItem.ACTIVO },
+        relations: ['producto', 'presentacion'],
+      })
+    : [];
+  const {
+    adicionalesByItem, observacionesByItem, removidosByItem, cambiosByItem, pizzaByItem,
+  } = await cargarDetalleDeItems(dataSource, items.map((i) => i.id));
+
+  // Monedas + cotizaciones: se cargan una sola vez y sirven tanto para los
+  // totales en otras monedas como para convertir los pagos ya registrados.
+  const monedaRepo = dataSource.getRepository(Moneda);
+  const [principalMoneda, monedasActivas, todasLasMonedas, cambios] = await Promise.all([
+    monedaRepo.findOne({ where: { principal: true } as any }),
+    monedaRepo.find({ where: { activo: true } as any }),
+    monedaRepo.find(),
+    dataSource.getRepository(MonedaCambio).find({
+      where: { activo: true } as any,
+      relations: ['monedaOrigen', 'monedaDestino'],
+      order: { createdAt: 'DESC' } as any,
+    }),
+  ]);
+  const fmtMonedas = crearFormateadorMonedas(todasLasMonedas);
+
+  let bruto = 0;
+  let descuentoItems = 0;
+  for (const it of items) {
+    const qty = Number(it.cantidad || 1);
+    bruto += qty * (Number(it.precioVentaUnitario || 0) + Number(it.precioAdicionales || 0));
+    descuentoItems += qty * Number(it.descuentoUnitario || 0);
+  }
+
+  // Ajustes a nivel de pago (descuento/aumento global del cobro). El ticket de
+  // delivery los ignoraba y el comprobante de venta sí los aplica: el mismo
+  // pedido salía impreso con dos totales distintos. Con el saldo a cobrar esa
+  // diferencia deja de ser cosmética — el repartidor cobraría un descuento que
+  // el cajero ya otorgó.
+  let descPago = 0;
+  let aumPago = 0;
+  const pagoId = (venta as any)?.pago?.id;
+  if (pagoId) {
+    try {
+      const ajustes = await dataSource.getRepository(PagoDetalle).find({
+        where: { pago: { id: pagoId } as any, activo: true },
+        relations: ['moneda'],
+      });
+      for (const d of ajustes) {
+        const valP = convertirAPrincipal(Number((d as any).valor || 0), (d as any).moneda, principalMoneda, cambios);
+        if ((d as any).tipo === TipoDetalle.DESCUENTO) descPago += valP;
+        else if ((d as any).tipo === TipoDetalle.AUMENTO) aumPago += valP;
+      }
+    } catch (e) {
+      console.warn('[buildDeliveryTicketLines] no se pudieron cargar ajustes del pago:', e);
+    }
+  }
+
+  // `costoDelivery` es `decimal`: en Postgres llega como string. Sin `Number()`
+  // se concatenaría en vez de sumarse.
+  const costoEnvio = Number(venta?.costoDelivery ?? 0) || 0;
+  const total = bruto - descuentoItems - descPago + aumPago + costoEnvio;
+
+  // Pagos ya registrados: cobro anticipado, rondas de cobro parcial, o un
+  // pedido de la web ya pagado.
+  const pagos = venta
+    ? await obtenerPagosRegistrados(dataSource, venta.id, principalMoneda, cambios)
+    : { lineas: [], vueltos: [], totalEnPrincipal: 0, hayPagos: false, sinCotizacion: false };
+  const yaPagado = pagos.totalEnPrincipal;
+  // Sin `Math.max(0, …)`: un sobrepago sin línea de VUELTO da saldo negativo, y
+  // eso NO es "pagado", es plata que hay que devolverle al cliente. Aplastarlo a
+  // cero lo hacía desaparecer del papel.
+  const saldo = total - yaPagado;
+
+  const cobrada = venta?.estado === 'CONCLUIDA';
+  const nombreCliente = (delivery.nombre
+    || (delivery.cliente as any)?.persona?.nombre
+    || '—').toUpperCase();
+  const repartidor = (delivery.entregadoPorFuncionario as any)?.persona?.nombre;
+
+  // Mismo ticket para las dos formas de entrega, con el modo anunciado arriba:
+  // quien lo agarra tiene que saber de un vistazo si esto sale a la calle o
+  // espera en el mostrador. Lo que cambia es sólo lo que depende de que
+  // alguien lo lleve — dirección, zona y repartidor —, que en un retiro no
+  // existe y se omite en vez de imprimirse en blanco.
+  const esRetiro = (delivery as any).modo === 'RETIRO';
+
+  const lines: TicketLine[] = [...headerLines];
+  lines.push(ticketSeparador('='));
+  lines.push(ticketText(esRetiro ? 'RETIRO EN LOCAL' : 'DELIVERY',
+    { align: 'C', bold: true, size: 'tall' }));
+  lines.push(ticketText(`N° ${deliveryId}${venta ? ` · VENTA #${venta.id}` : ''}`, { align: 'C' }));
+  lines.push(ticketText(ticketFmtFechaHora(delivery.fechaAbierto || new Date()), { align: 'C' }));
+  lines.push(ticketSeparador('='));
+
+  // Bloque de entrega. La dirección va en su propia línea a ancho completo:
+  // en 32 columnas un `ticketKv` la truncaría justo donde importa.
+  lines.push(ticketKv('CLIENTE', nombreCliente));
+  lines.push(ticketKv('TEL', delivery.telefono || '—'));
+  if (!esRetiro) {
+    lines.push(ticketText('DIRECCION:', { bold: true }));
+    lines.push(ticketText((delivery.direccion || '—').toUpperCase()));
+  }
+  if (delivery.observacion) {
+    lines.push(ticketText('OBSERVACION:', { bold: true }));
+    lines.push(ticketText(delivery.observacion.toUpperCase()));
+  }
+  if (!esRetiro && delivery.precioDelivery?.descripcion) {
+    lines.push(ticketKv('ZONA', String(delivery.precioDelivery.descripcion).toUpperCase()));
+  }
+  if (!esRetiro && repartidor) lines.push(ticketKv('REPARTIDOR', String(repartidor).toUpperCase()));
+
+  // Ítems, con el mismo layout de columnas que el comprobante de venta.
+  const totalW = 12;
+  // 6 fijo: es lo que necesita `ticketCantidad` para dejar la x separada del
+  // número y alineada entre líneas. Con 5 la x quedaba pegada al producto.
+  const cantW = 6;
+  const descW = width - cantW - totalW;
+  lines.push(ticketSeparador('-'));
+  lines.push(ticketColumns([
+    { text: 'CANT', width: cantW, align: 'L' },
+    { text: 'DESCRIPCION', width: descW, align: 'L' },
+    { text: 'TOTAL', width: totalW, align: 'R' },
+  ]));
+  lines.push(ticketSeparador('-'));
+  for (const it of items) {
+    const qty = Number(it.cantidad || 1);
+    const precio = Number(it.precioVentaUnitario || 0) + Number(it.precioAdicionales || 0);
+    const totalLinea = qty * precio - qty * Number(it.descuentoUnitario || 0);
+    lines.push(ticketColumns([
+      { text: ticketCantidad(qty, cantW), width: cantW, align: 'L' },
+      { text: (it.producto?.nombre || 'PRODUCTO').toUpperCase(), width: descW, align: 'L' },
+      { text: ticketFmtMonto(totalLinea), width: totalW, align: 'R' },
+    ]));
+    // Mismo detalle que el ticket de venta: en delivery el cliente recibe esta
+    // hoja y es su única forma de verificar que le mandaron lo que pidió.
+    const anchoDetalle = descW + totalW - 2;
+    const detalle = (txt: string) => {
+      for (const parte of envolverDetalle(txt, anchoDetalle)) {
+        lines.push(ticketColumns([
+          { text: '', width: cantW, align: 'L' },
+          { text: `  ${parte}`, width: descW + totalW, align: 'L' },
+        ]));
+      }
+    };
+    const variacion = pizzaByItem.get(it.id);
+    if (variacion) {
+      const txt = componerDetalleVariacion(variacion.presentacion, variacion.sabores, {
+        mostrarPresentacion: variacion.mostrarPresentacion,
+      });
+      if (txt) detalle(txt);
+    } else if ((it as any).ensambladoDescripcion) {
+      detalle(String((it as any).ensambladoDescripcion).toUpperCase());
+    }
+    for (const ing of (removidosByItem.get(it.id) || [])) detalle(`SIN ${ing}`);
+    for (const c of (cambiosByItem.get(it.id) || [])) detalle(`CAMBIAR ${c}`);
+    for (const extra of (adicionalesByItem.get(it.id) || [])) detalle(`+ ${extra}`);
+    for (const obs of (observacionesByItem.get(it.id) || [])) detalle(obs);
+  }
+  if (items.length === 0) {
+    lines.push(ticketText('(SIN ITEMS CARGADOS)', { align: 'C' }));
+  }
+
+  lines.push(ticketSeparador('-'));
+  if (descuentoItems > 0 || descPago > 0 || aumPago > 0 || costoEnvio > 0) {
+    lines.push(ticketKv('SUBTOTAL', `Gs. ${ticketFmtMonto(bruto)}`));
+  }
+  const descuentoTotal = descuentoItems + descPago;
+  if (descuentoTotal > 0) lines.push(ticketKv('DESCUENTO', `Gs. -${ticketFmtMonto(descuentoTotal)}`));
+  if (aumPago > 0) lines.push(ticketKv('AUMENTO', `Gs. ${ticketFmtMonto(aumPago)}`));
+  if (costoEnvio > 0) lines.push(ticketKv('ENVIO', `Gs. ${ticketFmtMonto(costoEnvio)}`));
+  lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(total)}`, true));
+
+  // El total en las demás monedas, igual que el ticket de venta.
+  //
+  // Acá pesa más que en el mostrador: el repartidor cobra en la puerta, sin
+  // sistema y sin nadie a quien preguntarle. Si el cliente paga en reales,
+  // tener el número ya convertido en el papel es la diferencia entre cobrar
+  // bien y sacar la cuenta de memoria en la vereda.
+  //
+  // Cuando hay algo cobrado de antemano, lo que se convierte es el SALDO: es el
+  // número que el repartidor va a pedir en la puerta.
+  const montoEnOtrasMonedas = (montoPrincipal: number, etiqueta: string): TicketLine[] => {
+    const out: TicketLine[] = [];
+    for (const m of (monedasActivas || [])) {
+      if ((m as any).id === (principalMoneda as any)?.id) continue;
+      const rate = buscarCotizacion(cambios, principalMoneda, m);
+      if (!rate || rate <= 0) continue;
+      const label = String((m as any).denominacion || (m as any).simbolo || '').toUpperCase();
+      out.push(ticketKv(
+        `${etiqueta} ${label}`,
+        ticketFmtMonto(montoPrincipal / rate, Number((m as any).decimales) || 0),
+      ));
+    }
+    return out;
+  };
+  const totalesOtras = montoEnOtrasMonedas(total, 'TOTAL');
+  if (totalesOtras.length) {
+    lines.push(ticketSeparador('-'));
+    lines.push(...totalesOtras);
+  }
+
+  // Desglose de lo ya cobrado, con la misma organización (forma de pago
+  // agrupando, moneda adentro) que el resumen de cierre de caja.
+  lines.push(...buildBloquePagosRegistrados(pagos, fmtMonedas, width));
+
+  // Lo más importante del ticket: si el repartidor cobra o no, y cuánto.
+  //
+  // ⚠️ El ORDEN de las ramas importa. `sinCotizacion` va antes que el chequeo de
+  // saldo: sin tasa, `yaPagado` cuenta las divisas 1 a 1 con el guaraní, así que
+  // un adelanto de USD 500 sobre un pedido de Gs. 500.000 daba saldo 0 y el
+  // ticket salía "PAGADO — NO COBRAR". Que es el desenlace más caro posible.
+  lines.push(ticketSeparador('='));
+  if (cobrada) {
+    lines.push(ticketText('PAGADO — NO COBRAR', { align: 'C', bold: true, size: 'tall' }));
+  } else if (pagos.sinCotizacion) {
+    lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(total)}`));
+    lines.push(ticketText('VERIFICAR EN CAJA', { align: 'C', bold: true, size: 'tall' }));
+    lines.push(ticketText('HAY PAGOS EN OTRA MONEDA', { align: 'C' }));
+    lines.push(ticketText('SIN COTIZACION VIGENTE', { align: 'C' }));
+  } else if (saldo < -0.5) {
+    // Sobrepago: no hay nada que cobrar y sí algo que devolver.
+    lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(total)}`));
+    lines.push(ticketKv('YA PAGADO', `Gs. -${ticketFmtMonto(yaPagado)}`));
+    lines.push(ticketText('VUELTO A ENTREGAR', { align: 'C', bold: true }));
+    lines.push(ticketText(`Gs. ${ticketFmtMonto(-saldo)}`, { align: 'C', bold: true, size: 'tall' }));
+  } else if (saldo <= 0.5) {
+    lines.push(ticketText('PAGADO — NO COBRAR', { align: 'C', bold: true, size: 'tall' }));
+  } else if (pagos.hayPagos) {
+    // Con plata ya cobrada, el número grande NO puede ser el total: el
+    // repartidor cobraría de más. Se imprimen los tres números para que la
+    // cuenta sea verificable en la puerta.
+    lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(total)}`));
+    lines.push(ticketKv('YA PAGADO', `Gs. -${ticketFmtMonto(yaPagado)}`));
+    lines.push(ticketText('SALDO A COBRAR', { align: 'C', bold: true }));
+    lines.push(ticketText(`Gs. ${ticketFmtMonto(saldo)}`, { align: 'C', bold: true, size: 'tall' }));
+    for (const l of montoEnOtrasMonedas(saldo, 'SALDO')) lines.push(l);
+  } else {
+    lines.push(ticketText('A COBRAR', { align: 'C', bold: true }));
+    lines.push(ticketText(`Gs. ${ticketFmtMonto(total)}`, { align: 'C', bold: true, size: 'tall' }));
+    // Y el monto a cobrar en cada moneda, que es lo que el repartidor mira
+    // cuando el cliente saca la plata.
+    for (const l of totalesOtras) lines.push(l);
+  }
+  lines.push(ticketSeparador('='));
+  lines.push(ticketBlank());
+
+  return { lines, total, yaPagado, saldo, itemsImpresos: items.length };
+}
+
+export async function printDeliveryTicketInternal(
+  dataSource: DataSource,
+  deliveryId: number,
+  opts: { printerId?: number; dispositivoId?: number } = {},
+): Promise<ImpresionResultado> {
+  const venta = await dataSource.getRepository(Venta).findOne({
+    where: { delivery: { id: deliveryId } },
+    relations: ['dispositivo'],
+  });
+
+  // Igual que `printVentaTicketInternal`: gana el dispositivo del request, y si
+  // el caller no lo pasó se cae al de la venta. Sin ninguno de los dos,
+  // `getPrinterByRol` no puede resolver `Dispositivo.printerTicket` y termina
+  // imprimiendo por la impresora isDefault — en un local con dos cajas, el
+  // ticket salía por la de la otra.
+  const dispositivoId = opts.dispositivoId ?? (venta as any)?.dispositivo?.id;
+
+  const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, {
+    printerId: opts.printerId,
+    dispositivoId,
+  });
+  if (!printer) {
+    return { ok: false, printed: [], errors: [{ message: 'No hay impresora configurada para tickets de venta' }] };
+  }
+
+  const width = printerWidthToChars(printer.width);
+  const build = await buildDeliveryTicketLines(dataSource, deliveryId, { width });
+  if (!build) {
+    return { ok: false, printed: [], errors: [{ message: `Delivery ${deliveryId} no encontrado` }] };
+  }
+
+  const res = await printTicketSpec(printer, { printerWidth: width, lines: build.lines, cutAtEnd: true });
+  if (!res.ok) {
+    broadcastPrinterEvent({
+      level: 'error',
+      handler: 'delivery-imprimir-ticket',
+      entityRef: { tipo: 'VENTA', id: venta?.id ?? deliveryId },
+      errors: [{ printerId: printer.id, message: res.error || 'Error desconocido' }],
+      message: `No se pudo imprimir el ticket del delivery ${deliveryId}`,
+    });
+    return { ok: false, printed: [], errors: [{ printerId: printer.id, message: res.error || 'Error desconocido' }] };
+  }
+  return {
+    ok: true,
+    printed: [{ itemId: deliveryId, sectorId: null, printerId: printer.id, printerName: printer.name }],
+    errors: [],
+  };
 }

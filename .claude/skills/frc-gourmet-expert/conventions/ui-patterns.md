@@ -329,3 +329,54 @@ Por defecto, la lista de Caja Mayor **oculta los contra-movimientos** (filas con
 Toggle "Ver anulaciones": muestra también los contra-movimientos con chip naranja `↩ ANULACION DE #X` y fondo rojizo claro.
 
 Backend: `get-caja-mayor-movimientos` acepta `incluirAnulaciones` (default false). Cada item se decora con `.anulacion: { id, fecha, motivo, responsableNombre }` si fue anulado. (`project_caja_mayor_anulaciones_ux`)
+
+
+## Dos trampas del padrón de dashboards que no dan error (2026-09)
+
+Las dos cuestan una tarde porque **no rompen la compilación ni tiran excepción**:
+el AOT pasa, la pantalla carga, y lo que falta simplemente no está.
+
+### `<app-dash-section-header>` NO proyecta contenido
+
+No tiene `<ng-content>`. Cualquier hijo que le metas adentro **desaparece en
+silencio**:
+
+```html
+<!-- ❌ el toggle nunca se renderiza -->
+<app-dash-section-header icon="grid_on" title="Horas pico">
+  <div class="mi-toggle">…</div>
+</app-dash-section-header>
+
+<!-- ✅ hermano, dentro de un flex -->
+<div class="hm-head">
+  <app-dash-section-header icon="grid_on" title="Horas pico"></app-dash-section-header>
+  <div class="mi-toggle">…</div>
+</div>
+```
+
+`<app-dash-chart-card>` **sí** proyecta (ahí es donde van los
+`<span class="dashboard-range-chip">`), así que la regla no es uniforme: mirá el
+componente antes de asumir.
+
+### `--primary-color` NO es un token global
+
+No está en `src/styles/theme-variables.scss`. **Cada componente define el suyo**
+en su `:host` (por ejemplo `reporte-periodo-control` tiene ahí el rojo de marca).
+Un botón que use `var(--primary-color)` desde un componente que no lo declaró
+sale **transparente**, sin advertencia.
+
+Para un chip activo/inactivo, reusá el padrón en vez de inventar tokens:
+
+```html
+<button type="button" class="dashboard-range-chip"
+        [class.range-chip-active]="activo" (click)="elegir()">Todos</button>
+```
+
+`.dashboard-range-chip` sí es global: `src/styles.scss` hace
+`@import './app/shared/styles/dashboard'`. Ojo que ese import **no lleva el guion
+bajo**, así que grepear `_dashboard` no lo encuentra y es fácil concluir —mal—
+que el partial no está cargado.
+
+Mismo cuidado con cualquier `var(--algo)`: si el token no existe, el navegador
+usa el fallback (o nada) sin chistar. `--hover-color` no existe; el real es
+`--hover-bg`.

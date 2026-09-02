@@ -183,6 +183,16 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+// Fila de cards de igual peso (3 rankings uno al lado del otro, por ejemplo),
+// para los dashboards que no tienen un chart que justifique la asimetria de
+// .dashboard-main-content. Colapsa igual que el resto en pantallas chicas.
+.dashboard-cards-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  min-width: 0;
+}
+
 .dashboard-col-left {
   display: flex;
   flex-direction: column;
@@ -346,6 +356,22 @@
   &:hover {
     background: var(--hover-bg);
   }
+
+  // Solo los rankings que declaran [clickable] llevan cursor: el hover de
+  // fondo existe siempre (es feedback de lectura), el puntero no.
+  &.ranking-item-clickable {
+    cursor: pointer;
+
+    .dashboard-ranking-name {
+      text-decoration: underline;
+      text-decoration-color: transparent;
+      transition: text-decoration-color 0.15s;
+    }
+
+    &:hover .dashboard-ranking-name {
+      text-decoration-color: currentColor;
+    }
+  }
 }
 
 .dashboard-ranking-rank {
@@ -472,6 +498,10 @@
     grid-template-columns: 1fr;
   }
 
+  .dashboard-cards-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .dashboard-stats-row {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -483,6 +513,10 @@
   }
 
   .dashboard-stats-row {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-cards-row {
     grid-template-columns: 1fr;
   }
 

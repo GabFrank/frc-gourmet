@@ -40,6 +40,7 @@
               }
             ],
             "styles": [
+              "node_modules/leaflet/dist/leaflet.css",
               "src/styles.scss"
             ],
             "scripts": [],
@@ -49,7 +50,8 @@
               "debug",
               "buffer",
               "sha.js",
-              "pdfjs-dist/legacy/build/pdf"
+              "pdfjs-dist/legacy/build/pdf",
+              "leaflet"
             ]
           },
           "configurations": {
@@ -137,7 +139,8 @@
             "styles": [
               "src/styles.scss"
             ],
-            "scripts": []
+            "scripts": [],
+            "karmaConfig": "karma.conf.js"
           }
         },
         "lint": {

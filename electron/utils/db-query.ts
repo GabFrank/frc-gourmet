@@ -18,6 +18,42 @@ import type { DataSource } from 'typeorm';
  * preferí TypeORM QueryBuilder, que ya maneja portabilidad nativamente vía
  * placeholders `:name`.
  */
+/**
+ * Formato en que SQLite guarda las fechas: `YYYY-MM-DD HH:MM:SS`, en UTC.
+ *
+ * TypeORM escribe `created_at` con el literal `datetime('now')`, que en SQLite
+ * es UTC y SIN la `T` ni la `Z`. Los handlers, en cambio, arman los limites de
+ * un rango con `Date.toISOString()` — `2026-08-24T03:00:00.000Z`.
+ *
+ * SQLite compara esas columnas como TEXTO, y ahi el espacio (0x20) ordena ANTES
+ * que la `T` (0x54): `'2026-08-24 09:40:12' >= '2026-08-24T03:00:00.000Z'` da
+ * FALSO. Una fila creada hoy quedaba fuera del rango "hoy" — el filtro no fallaba,
+ * devolvia cero. En Postgres no pasa: ahi la columna es `timestamp` de verdad y
+ * el driver castea el ISO, asi que el bug solo se ve en modo standalone.
+ *
+ * Se normaliza el LIMITE (no la columna) para no perder el indice.
+ */
+const ISO_Z = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+
+/**
+ * Normaliza un LIMITE de fecha al formato en que SQLite guarda `created_at`.
+ *
+ * Exportada porque `dbQuery` no es el único camino a la base: los handlers que
+ * usan QueryBuilder (`getVentasByDateRange`) arman su propio `WHERE` y quedaban
+ * fuera de esta normalización, con el mismo bug silencioso de devolver cero.
+ * En Postgres no hace falta (la columna es `timestamp` de verdad), así que el
+ * caller debe aplicarla sólo cuando el driver es SQLite.
+ */
+export function limiteFechaSqlite(v: any): any {
+  return aFormatoSqlite(v);
+}
+
+function aFormatoSqlite(v: any): any {
+  if (typeof v === 'string' && ISO_Z.test(v)) return v.slice(0, 19).replace('T', ' ');
+  if (v instanceof Date) return v.toISOString().slice(0, 19).replace('T', ' ');
+  return v;
+}
+
 export async function dbQuery<T = any>(
   ds: DataSource,
   sql: string,
@@ -27,6 +63,7 @@ export async function dbQuery<T = any>(
   if (driver === 'postgres') {
     let i = 0;
     sql = sql.replace(/\?/g, () => `$${++i}`);
+    return ds.query(sql, params);
   }
-  return ds.query(sql, params);
+  return ds.query(sql, params?.map(aFormatoSqlite));
 }

@@ -2,9 +2,56 @@
 
 Sistema integral de gestión de empleados. ~40 entidades, 15 handlers. Implementado en 8 fases.
 
-→ Plan original: `docs/plan-rrhh-comisiones.md`.
+## Por qué el modelo es este (decisiones de diseño, 2026-05)
+
+El plan original resolvió ocho preguntas antes de escribir una entidad. Siguen
+vigentes, y cada tanto alguien propone lo contrario:
+
+| Tema | Qué se hizo | Por qué no la alternativa |
+|---|---|---|
+| **Préstamos a funcionarios** | **Extender `CuentaPorPagar`** (`funcionario_id` nullable + tipo `PRESTAMO_FUNCIONARIO`) | Una entidad `PrestamoFuncionario` paralela duplicaba ~500 líneas: generación de cuotas, estados, `pagar-cpp-cuota` (que ya emite `EGRESO_CUOTA_PRESTAMO`) y el `pagar-cuota-dialog` |
+| **Atribución de la venta** | `vendedor_id` FK explícita en `Venta` (y opcional en `VentaItem`) | `createdBy` es quien cargó la venta —cajero o supervisor—, no el mozo. Con mesas de mozos rotativos las comisiones serían inverificables |
+| **Vales** | Entidad `Vale` propia, con ciclo `SOLICITADO → CONFIRMADO → DESCONTADO → ANULADO` | Un `CajaMayorMovimiento` suelto no tiene ciclo de vida y no permite listar "vales pendientes de descuento" |
+| **Adelanto de salario** | Flag `esAdelanto` sobre `Vale` | El 95% del flujo es idéntico; sólo cambia la categoría contable en la liquidación |
+| **Liquidación de sueldo** | Entidad propia `LiquidacionSueldo`, **no** extender `Gasto` | `Gasto` apunta a un Proveedor y tiene otro flujo. La liquidación tiene N ítems de haberes/descuentos, aprobación, recibo y lote de pago. Sí reusa `EGRESO_SALARIO` y `actualizarSaldoCajaMayor` |
+| **Motivos de vale/bono** | Catálogos planos propios (`MotivoVale`, `MotivoBono`, `LiquidacionConcepto`) | `GastoCategoria` es un árbol para contabilidad de terceros; un vale a un funcionario tiene otra semántica |
+| **Permisos** | `Permission` + `RolePermission` consultables | No hardcodear en guards: activa el `Role`/`UsuarioRole` que estaba infrautilizado y lo vuelve configurable por admin |
+| **Documentos del funcionario** | Filesystem en `userData/funcionario-documentos/{id}/` + entidad `FuncionarioDocumento` | Mismo patrón que `profile-images/` y `producto-images/`. La base no debe cargar PDFs grandes |
+
+**Trazabilidad bidireccional:** por eso `CajaMayorMovimiento` lleva columnas
+nullable `vale_id`, `liquidacion_sueldo_id`, `liquidacion_comision_id` y
+`cuenta_por_cobrar_cuota_id` — desde el movimiento se llega al origen y al revés.
+Y por eso **toda anulación de un egreso de RRHH pasa por
+`anular-caja-mayor-movimiento`** (que genera el contra-movimiento con
+`referenciaAnulacion`) y después revierte el estado de la entidad origen, en vez de
+tocar saldos a mano.
+
 
 ⚠️ Las entidades de RRHH y de **comisiones** viven todas en `src/app/database/entities/rrhh/` (no hay carpeta `entities/comisiones/`). Las **páginas** de comisiones, en cambio, están en `src/app/pages/comisiones/` (`reglas/`, `equipos/`, `liquidaciones/`), separadas de `src/app/pages/rrhh/`.
+
+## Pago de vales (desde 2026-08)
+
+El vale se **crea** en `SOLICITADO` (sin mover plata) y se **paga** desde Caja
+Mayor → **Pagar Vales**, el wizard único que también cubre gastos, compras y
+salarios. Ahí se pueden entregar **varios vales en un solo egreso**.
+
+- El hub de egresos ya no abre el alta en "modo confirmar": crea el vale y listo.
+- En la lista de vales, la acción de fila **"Confirmar" pasó a "Pagar"** y abre el
+  wizard con ese vale preseleccionado.
+- **Un vale pagado por un pago consolidado no se puede anular desde Vales**: su
+  `movimientoId` queda en `null` (el evento puede tener N movimientos), así que
+  `anular-vale` lo bloquea y manda a anular el pago. Sin ese bloqueo el vale
+  quedaría `ANULADO` sin devolver un guaraní.
+- Al anular el evento, el vale vuelve a **`SOLICITADO`** (no a `ANULADO`): la deuda
+  con el funcionario sigue viva, lo que se deshizo es la entrega de la plata.
+
+Los canales `crear-vale-confirmado` y `confirmar-vale` **siguen vivos**: los usa la
+PWA mobile, que no tiene pantalla de pago diferido. El `modoConfirmar` del diálogo
+de desktop quedó sin entrada (borrarlo está en el backlog).
+
+Detalle del subsistema → [financiero-caja-mayor.md](financiero-caja-mayor.md)
+§ Pago consolidado.
+
 
 ## Estructura general
 

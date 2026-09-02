@@ -1,0 +1,58 @@
+h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tipo-destino {
+  width: 100%;
+
+  ::ng-deep .mat-button-toggle {
+    flex: 1;
+  }
+
+  mat-icon {
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+}
+
+.ayuda {
+  margin: 12px 0 0;
+  color: var(--text-secondary);
+}
+
+.estado-vacio {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-secondary);
+}
+
+.destinos-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.destino-button {
+  position: relative;
+  width: 60px !important;
+  height: 60px !important;
+  font-size: 18px;
+  font-weight: bold;
+
+  &.ocupado {
+    // Ocupada = ya tiene cuenta abierta; transferir ahi une las dos cuentas.
+    border: 2px solid var(--warning-color);
+  }
+
+  .marca-ocupado {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+  }
+}

@@ -12,13 +12,15 @@
     </p>
 
     <div class="variaciones-list" formArrayName="variaciones">
-      <div *ngFor="let variacion of variacionesControls; let i = index; trackBy: trackById"
-           [formGroupName]="i" class="variacion-item">
+      <div *ngFor="let variacion of variacionesInfo; let i = index; trackBy: trackById"
+           [formGroupName]="i" class="variacion-item"
+           [class.variacion-bloqueada]="variacion.bloqueada">
 
         <mat-checkbox formControlName="seleccionada" class="variacion-checkbox"></mat-checkbox>
 
         <div class="variacion-nombre">
-          <span>{{ variacion.value.nombre }}</span>
+          <span>{{ variacion.nombre }}</span>
+          <span class="variacion-motivo" *ngIf="variacion.bloqueada">{{ variacion.motivoBloqueo }}</span>
         </div>
 
         <mat-form-field class="variacion-cantidad" appearance="outline">
@@ -27,11 +29,16 @@
         </mat-form-field>
       </div>
     </div>
+
+    <p class="dialog-nota" *ngIf="hayBloqueadas">
+      Las variaciones deshabilitadas ya tienen este ingrediente (o comparten la receta que
+      estás editando), por eso no se pueden volver a agregar.
+    </p>
   </mat-dialog-content>
 
   <mat-dialog-actions class="dialog-actions" align="end">
     <button mat-stroked-button (click)="onCancel()">Cancelar</button>
-    <button mat-flat-button color="primary" [disabled]="form.invalid || loading" (click)="onSave()">
+    <button mat-flat-button color="primary" [disabled]="form.invalid || !haySeleccionables" (click)="onSave()">
       <mat-icon>save</mat-icon>
       <span>Guardar Cambios</span>
     </button>

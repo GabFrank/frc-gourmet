@@ -415,6 +415,16 @@
   color: var(--success-color, #2e7d32);
 }
 
+// Detalle de un producto con variación (ej. "2 tamaños · 3 sabores"), debajo
+// del rango de precios "desde – hasta".
+.pedido-variaciones {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+}
+
 .pedido-precio-unidad {
   font-size: 0.82rem;
   font-weight: 600;

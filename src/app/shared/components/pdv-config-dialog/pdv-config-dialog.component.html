@@ -73,6 +73,31 @@
 
     <mat-divider></mat-divider>
 
+    <!-- Sección: Jornada comercial -->
+    <div class="config-section">
+      <div class="section-title">
+        <mat-icon>schedule</mat-icon>
+        JORNADA COMERCIAL
+      </div>
+
+      <div class="config-row">
+        <mat-form-field appearance="outline" class="field-small">
+          <mat-label>Inicio de la jornada (hora)</mat-label>
+          <input matInput type="number" formControlName="inicioJornadaHora" min="0" max="23">
+          <mat-hint>Un día va de esta hora a la misma del día siguiente. 0 = día calendario.</mat-hint>
+          <mat-error *ngIf="configForm.get('inicioJornadaHora')?.invalid">Tiene que ser una hora entre 0 y 23</mat-error>
+        </mat-form-field>
+      </div>
+
+      <p class="config-nota">
+        Las cajas del turno noche cruzan las 00:00 y siguen hasta las 2 AM. Con el corte a
+        medianoche, ese turno aparecía partido en dos días distintos en los dashboards y en los
+        reportes. Afecta a todos los totales por período, no sólo al resumen de ventas.
+      </p>
+    </div>
+
+    <mat-divider></mat-divider>
+
     <!-- Sección: Caja -->
     <div class="config-section">
       <div class="section-title">
@@ -120,6 +145,14 @@
       </div>
 
       <div class="config-row">
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="deliveryHabilitado" color="primary">
+            Módulo de delivery habilitado
+          </mat-checkbox>
+        </div>
+      </div>
+
+      <div class="config-row">
         <mat-form-field appearance="outline" class="field-small">
           <mat-label>Tiempo amarillo (min)</mat-label>
           <input matInput type="number" formControlName="deliveryTiempoAmarillo" min="1">
@@ -131,6 +164,121 @@
           <input matInput type="number" formControlName="deliveryTiempoRojo" min="1">
           <mat-hint>Alerta critica</mat-hint>
         </mat-form-field>
+
+        <mat-form-field appearance="outline" class="field-medium">
+          <mat-label>Zona por defecto</mat-label>
+          <mat-select formControlName="deliveryPrecioDefaultId">
+            <mat-option [value]="null">La de menor valor</mat-option>
+            <mat-option *ngFor="let p of preciosDelivery" [value]="p.id">
+              {{ p.descripcion }} — {{ p.valor | number:'1.0-2' }}
+            </mat-option>
+          </mat-select>
+          <mat-hint>Preseleccionada al cargar un delivery</mat-hint>
+        </mat-form-field>
+      </div>
+
+      <div class="config-row">
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="deliveryRequiereDireccion" color="primary">
+            Dirección obligatoria
+          </mat-checkbox>
+        </div>
+
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="deliveryRequiereRepartidor" color="primary">
+            Repartidor obligatorio
+          </mat-checkbox>
+        </div>
+
+        <mat-form-field appearance="outline" *ngIf="configForm.get('deliveryRequiereRepartidor')?.value">
+          <mat-label>EXIGIRLO AL</mat-label>
+          <mat-select formControlName="deliveryRepartidorEtapa">
+            <mat-option value="EN_CAMINO">Enviar el pedido</mat-option>
+            <mat-option value="ENTREGADO">Finalizar el pedido</mat-option>
+          </mat-select>
+          <mat-hint>Con "Finalizar", el pedido puede salir sin repartidor y se registra al volver</mat-hint>
+        </mat-form-field>
+
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="deliveryCobroAnticipadoDefault" color="primary">
+            Cobro anticipado por defecto
+          </mat-checkbox>
+        </div>
+      </div>
+
+      <div class="config-row">
+        <mat-form-field appearance="outline" class="field-small">
+          <mat-label>Mín. dígitos del teléfono</mat-label>
+          <input matInput type="number" formControlName="deliveryTelefonoMinDigitos" min="1" max="15">
+          <mat-hint>Para habilitar el alta</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="field-small">
+          <mat-label>Filas por página</mat-label>
+          <input matInput type="number" formControlName="deliveryPageSize" min="5" max="100">
+          <mat-hint>En la lista de deliveries</mat-hint>
+        </mat-form-field>
+
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="deliveryMostrarPendientesOtrasCajas" color="primary">
+            Mostrar pendientes de otros turnos
+          </mat-checkbox>
+        </div>
+      </div>
+
+      <div class="config-row">
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="deliveryAutoImprimirAlCrear" color="primary">
+            Imprimir el ticket al crear el delivery
+          </mat-checkbox>
+        </div>
+
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="deliveryAutoImprimirAlEnviar" color="primary">
+            Imprimir el ticket al enviar (EN CAMINO)
+          </mat-checkbox>
+        </div>
+      </div>
+
+      <div class="config-row config-hint-row">
+        <mat-icon class="hint-icon">info</mat-icon>
+        <span>Las zonas de entrega y sus precios se administran en
+          <strong>Ventas → Precios de Delivery</strong>.</span>
+      </div>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <!-- Sección: Caja compartida entre terminales -->
+    <div class="config-section">
+      <div class="section-title">
+        <mat-icon>devices</mat-icon>
+        CAJA COMPARTIDA ENTRE TERMINALES
+      </div>
+
+      <div class="config-row">
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="permitirPagosTerminalAjena" color="primary">
+            Permitir registrar pagos en terminales que no abrieron la caja
+          </mat-checkbox>
+        </div>
+
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="permitirFinalizarTerminalAjena" color="primary">
+            Permitir finalizar ventas en terminales que no abrieron la caja
+          </mat-checkbox>
+        </div>
+      </div>
+
+      <div class="config-row config-hint-row">
+        <mat-icon class="hint-icon">info</mat-icon>
+        <span>Una caja se abre en una terminal, pero cualquier otra puede unirse
+          para lanzar items. Por defecto el cobro queda reservado a la terminal
+          que la abrió. Son dos permisos separados: se puede habilitar que el
+          mozo registre las formas de pago y que el cajero sea el único que
+          finaliza. El dinero se acredita siempre a la caja abierta, sin importar
+          qué terminal cobró. <strong>Se aplica al volver a abrir el PdV o al
+          próximo cobro.</strong></span>
       </div>
     </div>
 

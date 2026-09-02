@@ -90,6 +90,10 @@ export class MusicaProgramacionComponent implements OnInit {
   instruccion = '';
   ultimoPlan: { resumen: string; advertencias: string[] } | null = null;
 
+  /** Resultado de la generación automática del plan de hoy. */
+  estadoPlanAutomatico = '';
+  planAutomaticoOk = false;
+
   constructor(
     private musicaService: MusicaService,
     private snackBar: MatSnackBar,
@@ -98,6 +102,7 @@ export class MusicaProgramacionComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await this.cargar();
+    await this.cargarEstadoPlanAutomatico();
   }
 
   async cargar(): Promise<void> {
@@ -319,6 +324,32 @@ export class MusicaProgramacionComponent implements OnInit {
   }
 
   // ─────────── Plan ───────────
+
+  /**
+   * Cómo salió la generación automática de hoy.
+   *
+   * El plan se genera solo al arrancar el sistema. Antes eso pasaba en silencio
+   * y un fallo sólo se notaba cuando el local abría sin música, así que acá se
+   * dice si salió y, si no, por qué.
+   */
+  async cargarEstadoPlanAutomatico(): Promise<void> {
+    try {
+      const runtime = await this.musicaService.getRuntimeEstado();
+      const p = runtime.planDelDia;
+      if (!p) {
+        this.estadoPlanAutomatico = '';
+      } else if (p.generado) {
+        this.estadoPlanAutomatico = `El plan del ${p.fecha} se generó solo al iniciar el sistema.`;
+      } else {
+        this.estadoPlanAutomatico = `No se generó el plan de hoy automáticamente: ${p.motivo}`;
+      }
+      this.planAutomaticoOk = !!p?.generado || p?.motivo === 'YA HAY PLAN PARA HOY.';
+    } catch {
+      // El estado del runtime es informativo: si no responde, la pantalla
+      // sigue sirviendo para generar el plan a mano.
+      this.estadoPlanAutomatico = '';
+    }
+  }
 
   async generarPlan(): Promise<void> {
     this.generando = true;

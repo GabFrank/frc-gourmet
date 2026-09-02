@@ -35,8 +35,8 @@ export class CheckoutPage implements OnInit, OnDestroy {
   enviando = false;
   error: string | null = null;
 
-  // Ubicación (mapa)
-  manual = false;
+  // Ubicación (mapa). El pin es obligatorio para DELIVERY: sin coordenadas no
+  // hay zona que resolver y el envío no se puede cotizar.
   lat: number | null = null;
   lng: number | null = null;
   direccionMapa = '';
@@ -45,6 +45,14 @@ export class CheckoutPage implements OnInit, OnDestroy {
 
   costoEnvio = 0;
   total = 0;
+
+  // Cotización del envío. La resuelve el servidor a partir del pin: la zona es
+  // un dato interno del local y el cliente no la elige.
+  cotizando = false;
+  cubierto: boolean | null = null;
+  zonaNombre: string | null = null;
+  montoMinimoZona = 0;
+  private cotizarT: any = null;
 
   ngOnInit(): void {
     if (this.mesa.enMesa) {
@@ -70,7 +78,6 @@ export class CheckoutPage implements OnInit, OnDestroy {
   }
 
   private initMapaLazy(): void {
-    if (this.manual) return;
     setTimeout(() => this.initMapa(), 60);
   }
 
@@ -96,6 +103,8 @@ export class CheckoutPage implements OnInit, OnDestroy {
     this.lat = c.lat; this.lng = c.lng;
     clearTimeout(this.geocodeT);
     this.geocodeT = setTimeout(() => this.reverseGeocode(c.lat, c.lng), 500);
+    clearTimeout(this.cotizarT);
+    this.cotizarT = setTimeout(() => this.cotizarEnvio(c.lat, c.lng), 500);
   }
 
   private async reverseGeocode(lat: number, lng: number): Promise<void> {
@@ -115,17 +124,31 @@ export class CheckoutPage implements OnInit, OnDestroy {
     );
   }
 
-  setUbicacion(manual: boolean): void {
-    if (this.manual === manual) return;
-    this.manual = manual;
-    if (this.manual) { if (this.map) { this.map.remove(); this.map = null; } }
-    else if (this.tipo === 'DELIVERY') this.initMapaLazy();
+  recomputar(): void {
+    if (this.tipo !== 'DELIVERY') this.costoEnvio = 0;
+    this.total = this.cart.subtotal + this.costoEnvio;
   }
 
-  recomputar(): void {
-    // El envío se cotiza cuando la tienda acepta el pedido (según la ubicación).
-    this.costoEnvio = 0;
-    this.total = this.cart.subtotal + this.costoEnvio;
+  /**
+   * Pregunta al servidor cuánto sale el envío a este punto. Es sólo una
+   * previsualización para que el cliente decida con el precio a la vista: el
+   * monto que se cobra lo recalcula el backend al crear el pedido.
+   */
+  private cotizarEnvio(lat: number, lng: number): void {
+    if (this.tipo !== 'DELIVERY') return;
+    this.cotizando = true;
+    this.api.call<any>('envio.cotizar', [lat, lng]).subscribe({
+      next: (res) => {
+        this.cotizando = false;
+        if (!res?.success) { this.cubierto = null; return; }
+        this.cubierto = res.cubierto !== false;
+        this.zonaNombre = res.zona?.nombre ?? null;
+        this.montoMinimoZona = Number(res.montoMinimo) || 0;
+        this.costoEnvio = this.cubierto ? (Number(res.costoEnvio) || 0) : 0;
+        this.recomputar();
+      },
+      error: () => { this.cotizando = false; this.cubierto = null; },
+    });
   }
 
   irLogin(): void {
@@ -171,14 +194,23 @@ export class CheckoutPage implements OnInit, OnDestroy {
     }
 
     const coords = this.lat != null && this.lng != null;
-    const direccionFinal = this.manual
-      ? this.direccion.trim()
-      : (this.direccionMapa || (coords ? `UBICACIÓN GPS: ${this.lat!.toFixed(5)}, ${this.lng!.toFixed(5)}` : ''));
+    // El pin manda: la dirección escrita es un complemento para el repartidor,
+    // no un sustituto. Sin coordenadas no hay zona que resolver y el envío no se
+    // puede cotizar.
+    const direccionFinal = [
+      this.direccion.trim(),
+      this.direccionMapa,
+    ].filter(Boolean).join(' · ')
+      || (coords ? `UBICACIÓN GPS: ${this.lat!.toFixed(5)}, ${this.lng!.toFixed(5)}` : '');
     if (this.tipo === 'DELIVERY') {
-      if (this.manual) {
-        if (!direccionFinal) { this.error = 'Ingresá tu dirección.'; return; }
-      } else if (!coords) {
-        this.error = 'Mové el mapa para marcar tu ubicación.'; return;
+      if (!coords) { this.error = 'Mové el mapa para marcar dónde entregamos.'; return; }
+      if (this.cubierto === false) {
+        this.error = 'Todavía no llegamos a esa zona. Podés elegir Retiro, o escribirnos.';
+        return;
+      }
+      if (this.montoMinimoZona > 0 && this.cart.subtotal < this.montoMinimoZona) {
+        this.error = `El mínimo para tu zona es ${this.montoMinimoZona}. Tu pedido suma ${this.cart.subtotal}.`;
+        return;
       }
     }
     this.enviando = true;
@@ -190,7 +222,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
       notas: this.notas.trim() || null,
       metodoPago: 'EFECTIVO',
     };
-    if (this.tipo === 'DELIVERY' && !this.manual && coords) {
+    if (this.tipo === 'DELIVERY' && coords) {
       payload.latitud = this.lat; payload.longitud = this.lng;
     }
     this.api.call<any>('pedido.crear', [payload]).subscribe({
@@ -209,6 +241,8 @@ export class CheckoutPage implements OnInit, OnDestroy {
       case 'falta_ubicacion': return 'Indicá dónde entregamos: marcá el mapa o escribí tu dirección.';
       case 'falta_zona_delivery': return 'Elegí una zona de entrega.';
       case 'falta_direccion': return 'Ingresá la dirección.';
+      case 'falta_ubicacion_mapa': return 'Marcá en el mapa dónde entregamos.';
+      case 'fuera_de_cobertura': return 'Todavía no llegamos a esa zona. Podés elegir Retiro, o escribirnos.';
       case 'monto_minimo_global': return `El pedido mínimo es ${res.montoMinimo}. Tu subtotal es ${res.subtotal}.`;
       case 'tienda_cerrada': return 'La tienda está cerrada en este momento.';
       case 'pickup_no_disponible': return 'El retiro no está disponible.';

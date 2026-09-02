@@ -28,7 +28,7 @@ Entity (.entity.ts) → Handler (electron/handlers/*.handler.ts) → preload.ts 
 
 - **preload.ts** (raíz del repo) expone la API vía `contextBridge.exposeInMainWorld('api', {...})`, incluyendo un canal genérico `callIpc(channel, ...args) → ipcRenderer.invoke(channel, ...args)` además de métodos tipados.
 - **RepositoryService** es **abstracto**: `repository-ipc.service.ts` (IPC, usado en standalone/server) y `repository-http.service.ts` (esqueleto). En `mode=client` del desktop, el preload monkey-patchea `ipcRenderer.invoke` para rutear a HTTP; el factory de `app.module.ts` sigue devolviendo `RepositoryIpcService`.
-- En la **PWA mobile** (browser, sin preload) se instala un shim `window.api` (Proxy) que mapea método → canal y hace `POST /api/rpc`. Ver `docs/arquitectura/mobile-pwa-plan.md`.
+- En la **PWA mobile** (browser, sin preload) se instala un shim `window.api` (Proxy) que mapea método → canal y hace `POST /api/rpc`. Ver `.claude/skills/frc-gourmet-expert/architecture/mobile-pwa.md`.
 
 ### 1.2 Servidor HTTP (modo server)
 
@@ -136,7 +136,7 @@ Handlers por área (lista no exhaustiva de canales):
 
 ## 6. Mobile PWA
 
-App Angular separada en **`projects/mobile`**, servida por el nodo `server` y consumida por LAN/WAN (mesh Tailscale/headscale). Reutiliza lógica de datos vía path-alias `@frc/shared-core`, **no** reutiliza UI del desktop. Estado y olas administrativas en [`mobile-pwa-plan.md`](./mobile-pwa-plan.md) y [`mobile-pwa-skill-notes.md`](./mobile-pwa-skill-notes.md).
+App Angular separada en **`projects/mobile`**, servida por el nodo `server` y consumida por LAN/WAN (mesh Tailscale/headscale). Reutiliza lógica de datos vía path-alias `@frc/shared-core`, **no** reutiliza UI del desktop. Estado y olas administrativas en [`mobile-pwa-skill-notes.md`](./mobile-pwa-skill-notes.md).
 
 ---
 
@@ -158,8 +158,8 @@ App Angular separada en **`projects/mobile`**, servida por el nodo `server` y co
 ## 8. Referencias
 
 - [`entities-list.mdc`](./entities-list.mdc) — lista de entidades por dominio
-- [`mobile-pwa-plan.md`](./mobile-pwa-plan.md) · [`mobile-pwa-skill-notes.md`](./mobile-pwa-skill-notes.md) — cliente PWA
-- [`../plan-cliente-servidor.md`](../plan-cliente-servidor.md) — diseño cliente/servidor (implementado)
+- [`mobile-pwa-skill-notes.md`](./mobile-pwa-skill-notes.md) — cobertura del cliente PWA por ola
+- `.claude/skills/frc-gourmet-expert/architecture/cliente-servidor.md` — diseño cliente/servidor (implementado), con las alternativas que se descartaron
 - [`../guia-funcionamiento-punto-de-venta.md`](../guia-funcionamiento-punto-de-venta.md) — funcionamiento del PdV
 - [`../buffet-por-kilo.md`](../buffet-por-kilo.md) — buffet por peso + precios programados
 - [`../RELEASE.md`](../RELEASE.md) — proceso de release

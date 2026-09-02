@@ -35,6 +35,8 @@ import {
 import { readIaConfig } from '../utils/ia-config.utils';
 import { readAppSettings } from '../utils/app-settings.utils';
 import { spotifyApi } from './spotify.service';
+import { calcularDeficit, listarEstilos } from './musica-estilos.service';
+import { extraerIdSpotify } from './musica-pool.service';
 
 /**
  * Defaults; se sobreescriben desde Configuracion (musica.avanzado).
@@ -48,6 +50,38 @@ const MAX_RECHAZOS_EN_PROMPT = 40;
 /** Descarta intros, skits y sets largos que no sirven de fondo. */
 const DURACION_MIN_MS_DEFAULT = 60_000;
 const DURACION_MAX_MS_DEFAULT = 600_000;
+
+/**
+ * De donde sale el criterio de la ronda.
+ *
+ * `AUTOMATICO` es todo lo que el local ya dijo (brief, cuotas, votos, vetos,
+ * rechazos). Las otras cuatro existen porque a veces el dueno sabe exactamente
+ * que quiere y el criterio acumulado le estorba: pedir covers de bossa cuando
+ * el deficit grita pagode daba siempre pagode.
+ */
+export type FuenteDescubrimiento = 'AUTOMATICO' | 'PROMPT' | 'ESTILO' | 'TEMA' | 'PLAYLIST';
+
+export interface OpcionesFuente {
+  fuente?: FuenteDescubrimiento;
+  /** `PROMPT`: lo que el dueno escribio. Reemplaza al criterio acumulado. */
+  prompt?: string;
+  /** `ESTILO`: id del catalogo. */
+  estiloId?: number;
+  /** `ESTILO`: genero crudo, opcional, para acotar mas. */
+  genero?: string;
+  /** `TEMA`: nombre libre o URL de Spotify. `PLAYLIST`: URL de Spotify. */
+  referencia?: string;
+}
+
+/** Lo que se logro leer de la referencia, para explicarlo en el resultado. */
+export interface ReferenciaResuelta {
+  /** Texto que efectivamente entra al prompt. */
+  descripcion: string;
+  /** Temas de ejemplo que se pudieron leer. Puede venir vacio. */
+  ejemplos: string[];
+  /** Por que no se pudieron leer los temas, cuando aplica. */
+  advertencia?: string;
+}
 
 export interface CandidatoIa {
   artista: string;
@@ -65,12 +99,36 @@ export interface ResultadoDescubrimiento {
   filtrados: number;
   detalleFiltrados: string[];
   agregadosDetalle: Array<{ artista: string; tema: string; motivo?: string }>;
+  /** Con que fuente se corrio la ronda. */
+  fuente: FuenteDescubrimiento;
+  /** Que se pudo leer de la referencia, cuando la fuente la usa. */
+  referencia?: ReferenciaResuelta;
 }
 
 /* ─────────────────────── Contexto del local ─────────────────────── */
 
-interface ContextoMusical {
+/** Cuanto material falta de un estilo, sumado sobre todos los bloques. */
+export interface FaltanteEstilo {
+  estiloNombre: string;
+  /** Descripcion del catalogo: lo que distingue este estilo de otro del mismo genero. */
+  descripcion?: string;
+  /** Horas que piden las cuotas y no existen en el repertorio. */
+  faltanteHoras: number;
+  tracksFaltantes: number;
+  tracksDisponibles: number;
+}
+
+export interface ContextoMusical {
+  /** @deprecated Texto libre del bloque; lo reemplazo el catalogo de estilos. */
   generosPreferidos: string[];
+  /** Estilos del catalogo con voto positivo. */
+  estilosQueGustan: string[];
+  /** Estilos con voto negativo: no prohibidos, solo desaconsejados. */
+  estilosQueGustanMenos: string[];
+  /** Estilos apagados con un veto global: prohibidos, como los generos vetados. */
+  estilosVetados: string[];
+  /** Lo que las cuotas piden y el repertorio no tiene. Ordenado por urgencia. */
+  faltantes: FaltanteEstilo[];
   generosVetados: string[];
   artistasVetados: string[];
   artistasEnPool: string[];
@@ -79,16 +137,24 @@ interface ContextoMusical {
   bloques: Array<{ nombre: string; energia: number; generos: string[]; notas?: string }>;
 }
 
-async function construirContexto(
+/**
+ * Reune todo lo que el local ya dijo sobre su musica.
+ *
+ * ESTA EXPORTADA A PROPOSITO: la pantalla "Mi estilo" la usa para mostrar el
+ * criterio ANTES de descubrir. Si el panel se armara con otra consulta, en dos
+ * cambios diria una cosa y el prompt haria otra.
+ */
+export async function construirContexto(
   dataSource: DataSource,
   bloque?: BloqueProgramacion | null,
+  factorDuracion = 1.5,
 ): Promise<ContextoMusical> {
   const vetoRepo = dataSource.getRepository(MusicaVeto);
   const trackRepo = dataSource.getRepository(MusicaTrack);
   const bloqueRepo = dataSource.getRepository(BloqueProgramacion);
   const feedbackRepo = dataSource.getRepository(MusicaFeedback);
 
-  const vetos = await vetoRepo.find({ where: { activo: true } });
+  const vetos = await vetoRepo.find({ where: { activo: true }, relations: ['estilo'] });
   const bloques = bloque
     ? [bloque]
     : await bloqueRepo.find({ where: { activo: true }, order: { diaSemana: 'ASC' } });
@@ -117,13 +183,63 @@ async function construirContexto(
     order: { fecha: 'DESC' },
   });
 
-  // Los generos preferidos salen de la grilla: son los que el dueno ya eligio
-  // bloque por bloque, no una lista aparte que habria que mantener.
+  // Texto libre de la grilla. Se conserva porque los bloques viejos todavia lo
+  // tienen cargado, pero el criterio real ahora es el catalogo de estilos.
   const generosPreferidos = new Set<string>();
   for (const b of bloques) for (const g of b.generosPreferidos || []) generosPreferidos.add(g);
 
+  // ─────────── El catalogo de estilos ───────────
+  //
+  // ESTO ES LO QUE FALTABA. El descubridor leia `generosPreferidos` — el texto
+  // libre que el catalogo vino a reemplazar en F4 — y nunca veia ni las cuotas
+  // por bloque, ni los estilos apagados, ni el voto del dueno. Por eso el
+  // repertorio crecia donde el modelo tenia mas material de entrenamiento
+  // (indie anglo) en vez de donde las cuotas lo pedian: medido en produccion,
+  // PAGODE tenia 6 temas contra una cuota del 40%.
+  const catalogo = await listarEstilos(dataSource);
+  const estilosQueGustan = catalogo.filter((e) => e.preferencia > 0 && !e.vetado).map((e) => e.nombre);
+  const estilosQueGustanMenos = catalogo
+    .filter((e) => e.preferencia < 0 && !e.vetado)
+    .map((e) => e.nombre);
+  const estilosVetadosNombres = catalogo.filter((e) => e.vetado).map((e) => e.nombre);
+
+  // Deficit: cuanta musica piden las cuotas y no existe. Es el dato que
+  // convierte "proponeme musica linda" en "faltan 2 horas de pagode".
+  const descripcionPorEstilo = new Map(catalogo.map((e) => [e.nombre, e.descripcion || undefined]));
+  const disponiblePorEstilo = new Map(catalogo.map((e) => [e.nombre, e.tracks]));
+  const acumulado = new Map<string, { faltanteMs: number; tracksFaltantes: number }>();
+  for (const d of await calcularDeficit(dataSource, factorDuracion, bloque?.id)) {
+    for (const e of d.estilos) {
+      if (e.faltanteMs <= 0) continue;
+      const prev = acumulado.get(e.estiloNombre) || { faltanteMs: 0, tracksFaltantes: 0 };
+      // Se toma el MAXIMO y no la suma: la misma musica sirve para el almuerzo
+      // del lunes y el del martes. Sumar los 31 bloques diria que faltan 60
+      // horas de pagode cuando alcanza con cubrir el bloque mas exigente.
+      acumulado.set(e.estiloNombre, {
+        faltanteMs: Math.max(prev.faltanteMs, e.faltanteMs),
+        tracksFaltantes: Math.max(prev.tracksFaltantes, e.tracksFaltantes),
+      });
+    }
+  }
+  const faltantes: FaltanteEstilo[] = Array.from(acumulado.entries())
+    // Un estilo apagado no necesita material: pedirlo seria gastar la ronda en
+    // musica que nunca va a sonar.
+    .filter(([nombre]) => !estilosVetadosNombres.includes(nombre))
+    .map(([estiloNombre, v]) => ({
+      estiloNombre,
+      descripcion: descripcionPorEstilo.get(estiloNombre),
+      faltanteHoras: Math.round((v.faltanteMs / 3600000) * 10) / 10,
+      tracksFaltantes: v.tracksFaltantes,
+      tracksDisponibles: disponiblePorEstilo.get(estiloNombre) ?? 0,
+    }))
+    .sort((a, b) => b.faltanteHoras - a.faltanteHoras);
+
   return {
     generosPreferidos: Array.from(generosPreferidos),
+    estilosQueGustan,
+    estilosQueGustanMenos,
+    estilosVetados: estilosVetadosNombres,
+    faltantes,
     generosVetados: vetos.filter((v) => v.tipo === TipoVeto.GENERO).map((v) => v.valor),
     artistasVetados: vetos
       .filter((v) => v.tipo === TipoVeto.ARTISTA)
@@ -140,7 +256,7 @@ async function construirContexto(
   };
 }
 
-function construirPrompt(ctx: ContextoMusical, cantidad: number, brief?: string): string {
+export function construirPrompt(ctx: ContextoMusical, cantidad: number, brief?: string): string {
   const lineas: string[] = [];
 
   lineas.push(
@@ -151,6 +267,27 @@ function construirPrompt(ctx: ContextoMusical, cantidad: number, brief?: string)
 
   if (brief) {
     lineas.push('SOBRE EL LOCAL (escrito por el dueno):', brief, '');
+  }
+
+  // Lo que falta va PRIMERO y con numeros: es la unica seccion que le dice al
+  // modelo donde poner el esfuerzo. Sin esto proponia lo que mas abunda en su
+  // entrenamiento y las cuotas del planner se quedaban sin material.
+  if (ctx.faltantes.length) {
+    lineas.push(
+      'LO QUE MAS FALTA (esto es lo que el local NECESITA, priorizalo sobre todo lo demas):',
+    );
+    for (const f of ctx.faltantes.slice(0, 8)) {
+      lineas.push(
+        `- ${f.estiloNombre}: faltan ~${f.faltanteHoras} h (${f.tracksFaltantes} temas). ` +
+          `Hoy tiene ${f.tracksDisponibles}.` +
+          (f.descripcion ? ` Es: ${f.descripcion}` : ''),
+      );
+    }
+    lineas.push(
+      'Reparti las propuestas en proporcion a lo que falta: el estilo que encabeza la lista',
+      'tiene que ser el mas representado en tu respuesta.',
+      '',
+    );
   }
 
   if (ctx.bloques.length) {
@@ -164,13 +301,25 @@ function construirPrompt(ctx: ContextoMusical, cantidad: number, brief?: string)
     lineas.push('');
   }
 
+  if (ctx.estilosQueGustan.length) {
+    lineas.push(`LO QUE MAS LE GUSTA: ${ctx.estilosQueGustan.join(', ')}`, '');
+  }
+  if (ctx.estilosQueGustanMenos.length) {
+    lineas.push(
+      `LE GUSTA MENOS (no esta prohibido, pero proponé poco): ${ctx.estilosQueGustanMenos.join(', ')}`,
+      '',
+    );
+  }
   if (ctx.generosPreferidos.length) {
-    lineas.push(`ESTILOS QUE LE GUSTAN: ${ctx.generosPreferidos.join(', ')}`, '');
+    lineas.push(`TAMBIEN NOMBRO: ${ctx.generosPreferidos.join(', ')}`, '');
   }
 
   lineas.push(
     'PROHIBIDO (no propongas nada de esto, es motivo de rechazo inmediato):',
     `- Generos: ${ctx.generosVetados.join(', ') || '—'}`,
+    // Un estilo apagado es tan prohibido como un genero vetado, y hasta ahora
+    // no llegaba al prompt: el dueno lo apagaba y la IA lo seguia proponiendo.
+    `- Estilos que el local apago: ${ctx.estilosVetados.join(', ') || '—'}`,
     `- Artistas: ${ctx.artistasVetados.join(', ') || '—'}`,
     '- Canciones con contenido explicito, vulgar o de doble sentido (es un local familiar).',
     '- Canciones tristes, melancolicas o de despecho: el ambiente tiene que ser alegre.',
@@ -219,6 +368,174 @@ function construirPrompt(ctx: ContextoMusical, cantidad: number, brief?: string)
     '  suavizada. Si el artista es de rap, hip hop o trap, el genero es "rap" aunque el tema',
     '  puntual suene melodico. Declarar un genero equivocado para esquivar un veto es una',
     '  respuesta INCORRECTA: si el artista pertenece a un genero vetado, NO lo propongas.',
+    '',
+    'Devolvé SOLO JSON con esta forma:',
+    '{"candidatos":[{"artista":"","tema":"","genero":"","escenas":["almuerzo"],"motivo":"por que encaja, breve"}]}',
+  );
+
+  return lineas.join('\n');
+}
+
+/* ─────────────────────── Fuentes dirigidas ─────────────────────── */
+
+/**
+ * Resuelve la referencia de un TEMA de ejemplo.
+ *
+ * Si es una URL de Spotify se consulta la API para tener el artista y el titulo
+ * REALES: el dueno pega el link de un tema que le gusto y muchas veces no
+ * recuerda como se llama, asi que mandarle la URL cruda al modelo no serviria
+ * de nada.
+ */
+async function resolverTemaReferencia(
+  userDataPath: string,
+  referencia: string,
+): Promise<ReferenciaResuelta> {
+  const texto = (referencia || '').trim();
+  if (!texto) throw new Error('FALTA EL TEMA DE EJEMPLO.');
+
+  const ref = extraerIdSpotify(texto);
+  if (!ref || ref.tipo !== 'track') {
+    // Nombre libre: el modelo conoce catalogo, no necesita que lo resolvamos.
+    return { descripcion: texto, ejemplos: [texto] };
+  }
+
+  try {
+    const t = await spotifyApi(userDataPath, 'GET', `/tracks/${ref.id}`);
+    const artista = (t?.artists || []).map((a: any) => a.name).join(', ');
+    const nombre = `${artista} — ${t?.name}`;
+    return { descripcion: nombre, ejemplos: [nombre] };
+  } catch {
+    // Un fallo de Spotify no tiene por que abortar la ronda: se sigue con lo
+    // que el dueno escribio.
+    return {
+      descripcion: texto,
+      ejemplos: [],
+      advertencia: 'NO SE PUDO LEER EL TEMA EN SPOTIFY: SE USA EL TEXTO TAL CUAL.',
+    };
+  }
+}
+
+/** Cuantos temas de la playlist de referencia se le muestran al modelo. */
+const EJEMPLOS_DE_PLAYLIST = 25;
+
+/**
+ * Resuelve la referencia de una PLAYLIST de ejemplo.
+ *
+ * OJO, LIMITE DURO Y VERIFICADO: Spotify solo devuelve `items` de playlists de
+ * las que la cuenta conectada es DUEÑA o COLABORADORA. Desde feb-2026 las
+ * ajenas devuelven la metadata sin los temas, y en Development Mode responden
+ * 403 directo; las editoriales (`37i9dQZF…`) dan 404 desde nov-2024.
+ *
+ * O sea que pegar el link de "Bossa Nova Covers 2026" NO va a poder leer sus
+ * temas. Se degrada a nombre + descripcion, que el modelo muchas veces conoce,
+ * y se AVISA — fallar callado haria pensar que la fuente no sirve.
+ */
+async function resolverPlaylistReferencia(
+  userDataPath: string,
+  referencia: string,
+): Promise<ReferenciaResuelta> {
+  const ref = extraerIdSpotify((referencia || '').trim());
+  if (!ref || ref.tipo !== 'playlist') {
+    throw new Error(
+      'PEGÁ LA URL DE UNA PLAYLIST DE SPOTIFY (open.spotify.com/playlist/...).',
+    );
+  }
+
+  let nombre = '';
+  let descripcionPlaylist = '';
+  try {
+    const meta = await spotifyApi(
+      userDataPath,
+      'GET',
+      `/playlists/${ref.id}?fields=name,description`,
+    );
+    nombre = meta?.name || '';
+    descripcionPlaylist = meta?.description || '';
+  } catch {
+    /* Ni la metadata: se maneja abajo. */
+  }
+
+  const ejemplos: string[] = [];
+  let advertencia: string | undefined;
+  try {
+    const items = await spotifyApi(
+      userDataPath,
+      'GET',
+      `/playlists/${ref.id}/items?limit=${EJEMPLOS_DE_PLAYLIST}&fields=items(track(name,artists(name)))`,
+    );
+    for (const it of items?.items || []) {
+      const t = it?.track;
+      if (!t?.name) continue;
+      ejemplos.push(`${(t.artists || []).map((a: any) => a.name).join(', ')} — ${t.name}`);
+    }
+  } catch {
+    /* Esperado para playlists ajenas: se avisa abajo. */
+  }
+
+  if (!ejemplos.length) {
+    advertencia =
+      'NO SE PUDIERON LEER LOS TEMAS: SPOTIFY SOLO LOS DEVUELVE PARA PLAYLISTS DE TU PROPIA ' +
+      'CUENTA. SE USA EL NOMBRE Y LA DESCRIPCIÓN COMO REFERENCIA.';
+  }
+
+  const etiqueta = [nombre, descripcionPlaylist].filter(Boolean).join(' — ');
+  if (!etiqueta && !ejemplos.length) {
+    throw new Error(
+      'NO SE PUDO LEER NADA DE ESA PLAYLIST. PROBÁ CON UNA DE TU CUENTA, O USÁ UN TEMA DE EJEMPLO.',
+    );
+  }
+
+  return { descripcion: etiqueta || `playlist ${ref.id}`, ejemplos, advertencia };
+}
+
+/**
+ * Prompt de una ronda DIRIGIDA.
+ *
+ * Se construye aparte y no como variante del automatico a proposito: el punto
+ * de elegir una fuente explicita es que el criterio acumulado NO mande. Meterlo
+ * igual "por las dudas" devolveria lo mismo de siempre y la funcion no serviria
+ * para nada.
+ *
+ * Lo unico que se conserva de `ctx` son las prohibiciones: proponer un artista
+ * vetado gasta llamadas a Spotify y el filtro lo descarta igual, asi que
+ * omitirlas no daria mas libertad, solo mas ruido.
+ */
+export function construirPromptDirigido(
+  ctx: ContextoMusical,
+  cantidad: number,
+  pedido: { titulo: string; detalle: string[] },
+): string {
+  const lineas: string[] = [
+    'Sos el curador musical de un restaurante. El dueño te está pidiendo algo CONCRETO,',
+    'y ese pedido manda sobre cualquier otra consideración de estilo.',
+    '',
+    pedido.titulo,
+    ...pedido.detalle,
+    '',
+    'PROHIBIDO igual (esto no se negocia):',
+    `- Generos: ${ctx.generosVetados.join(', ') || '—'}`,
+    `- Estilos que el local apago: ${ctx.estilosVetados.join(', ') || '—'}`,
+    `- Artistas: ${ctx.artistasVetados.join(', ') || '—'}`,
+    '- Canciones con contenido explicito, vulgar o de doble sentido (es un local familiar).',
+    '',
+  ];
+
+  if (ctx.artistasEnPool.length) {
+    lineas.push(
+      'YA TIENE ESTOS ARTISTAS (proponé otros, salvo que el pedido nombre a uno de ellos):',
+      ctx.artistasEnPool.join(', '),
+      '',
+    );
+  }
+
+  lineas.push(
+    `Proponé ${cantidad} canciones. Reglas:`,
+    '- No mas de 1 tema por artista en toda la lista.',
+    '- Canciones que existan en Spotify, con el nombre exacto del artista y del tema.',
+    '- Si no llegás a la cantidad pedida SIN salirte de lo que te pidieron, devolvé menos.',
+    '  Rellenar con otra cosa es una respuesta INCORRECTA.',
+    '- El campo "genero" tiene que ser el genero REAL Y PRINCIPAL del artista, no una etiqueta',
+    '  suavizada para esquivar un veto.',
     '',
     'Devolvé SOLO JSON con esta forma:',
     '{"candidatos":[{"artista":"","tema":"","genero":"","escenas":["almuerzo"],"motivo":"por que encaja, breve"}]}',
@@ -365,10 +682,124 @@ async function generosDelArtista(userDataPath: string, artistaId?: string): Prom
 
 /* ─────────────────────── Flujo principal ─────────────────────── */
 
+/**
+ * Elige el prompt segun la fuente y resuelve la referencia si hace falta.
+ *
+ * Separado del flujo principal porque es lo unico que cambia entre fuentes:
+ * la resolucion en Spotify, los filtros y el guardado son identicos.
+ */
+async function armarPrompt(
+  dataSource: DataSource,
+  userDataPath: string,
+  ctx: ContextoMusical,
+  cantidad: number,
+  fuente: FuenteDescubrimiento,
+  opts?: OpcionesFuente & { brief?: string },
+): Promise<{ prompt: string; referencia?: ReferenciaResuelta }> {
+  switch (fuente) {
+    case 'PROMPT': {
+      const texto = (opts?.prompt || '').trim();
+      if (!texto) throw new Error('ESCRIBÍ QUÉ MÚSICA QUERÉS BUSCAR.');
+      return {
+        prompt: construirPromptDirigido(ctx, cantidad, {
+          titulo: 'LO QUE TE PIDE:',
+          detalle: [texto],
+        }),
+      };
+    }
+
+    case 'ESTILO': {
+      if (!opts?.estiloId && !opts?.genero) {
+        throw new Error('ELEGÍ UN ESTILO O UN GÉNERO PARA BUSCAR.');
+      }
+      const estilo = opts.estiloId
+        ? (await listarEstilos(dataSource)).find((e) => e.id === opts.estiloId)
+        : null;
+      if (opts.estiloId && !estilo) throw new Error('ESE ESTILO YA NO EXISTE.');
+      if (estilo?.vetado) {
+        // Sin este chequeo la ronda entera se gasta en musica que el planner
+        // no va a elegir nunca.
+        throw new Error(
+          `"${estilo.nombre}" ESTÁ APAGADO: VOLVÉ A HABILITARLO ANTES DE BUSCAR MÚSICA SUYA.`,
+        );
+      }
+
+      const detalle: string[] = [];
+      if (estilo) {
+        detalle.push(`Quiere mas musica del estilo "${estilo.nombre}".`);
+        // La descripcion del catalogo es lo que distingue dos estilos del mismo
+        // genero ("bossa covers" vs "bossa clasica"): sin ella el modelo no
+        // tiene con que elegir. Es el mismo dato que ya usa el etiquetador.
+        if (estilo.descripcion) detalle.push(`Ese estilo es: ${estilo.descripcion}`);
+        if (estilo.alias.length) {
+          detalle.push(`Generos que incluye: ${estilo.alias.slice(0, 12).join(', ')}.`);
+        }
+      }
+      if (opts.genero) detalle.push(`Acotalo al genero: ${opts.genero}.`);
+
+      return {
+        prompt: construirPromptDirigido(ctx, cantidad, {
+          titulo: 'LO QUE TE PIDE:',
+          detalle,
+        }),
+      };
+    }
+
+    case 'TEMA': {
+      const referencia = await resolverTemaReferencia(userDataPath, opts?.referencia || '');
+      return {
+        prompt: construirPromptDirigido(ctx, cantidad, {
+          titulo: 'LO QUE TE PIDE — musica en la linea de este tema:',
+          detalle: [
+            `Tema de referencia: ${referencia.descripcion}`,
+            'Proponé temas que compartan su clima, su epoca y su instrumentacion.',
+            'Podés incluir otros temas del mismo artista solo si son claramente afines.',
+          ],
+        }),
+        referencia,
+      };
+    }
+
+    case 'PLAYLIST': {
+      const referencia = await resolverPlaylistReferencia(userDataPath, opts?.referencia || '');
+      const detalle = [`Playlist de referencia: ${referencia.descripcion}`];
+      if (referencia.ejemplos.length) {
+        detalle.push(
+          'Algunos de sus temas:',
+          referencia.ejemplos.join(' | '),
+          'Proponé musica del MISMO tipo, sin repetir estos.',
+        );
+      } else {
+        // Sin los temas, el unico anclaje es el nombre. Se le dice al modelo
+        // que es lo que tiene, en vez de dejarlo adivinar que le falta algo.
+        detalle.push(
+          'No se pudieron leer sus temas, asi que guiate por el nombre y la descripcion:',
+          'si conocés esa playlist, proponé musica del tipo que la caracteriza.',
+        );
+      }
+      return {
+        prompt: construirPromptDirigido(ctx, cantidad, {
+          titulo: 'LO QUE TE PIDE — musica en la linea de esta playlist:',
+          detalle,
+        }),
+        referencia,
+      };
+    }
+
+    default:
+      return { prompt: construirPrompt(ctx, cantidad, opts?.brief) };
+  }
+}
+
 export async function descubrirMusica(
   dataSource: DataSource,
   userDataPath: string,
-  opts?: { cantidad?: number; bloqueId?: number; brief?: string; usuarioId?: number },
+  opts?: {
+    cantidad?: number;
+    bloqueId?: number;
+    brief?: string;
+    usuarioId?: number;
+  } & OpcionesFuente,
 ): Promise<ResultadoDescubrimiento> {
   const trackRepo = dataSource.getRepository(MusicaTrack);
   const vetoRepo = dataSource.getRepository(MusicaVeto);
@@ -378,12 +809,25 @@ export async function descubrirMusica(
     ? await bloqueRepo.findOne({ where: { id: opts.bloqueId } })
     : null;
 
-  const ctx = await construirContexto(dataSource, bloque);
+  const ctx = await construirContexto(
+    dataSource,
+    bloque,
+    readAppSettings(userDataPath).musica.avanzado?.factorDuracion || 1.5,
+  );
   const cantidad =
     opts?.cantidad ||
     readAppSettings(userDataPath).musica.avanzado?.candidatosPorRonda ||
     CANDIDATOS_POR_RONDA;
-  const prompt = construirPrompt(ctx, cantidad, opts?.brief);
+
+  const fuente: FuenteDescubrimiento = opts?.fuente || 'AUTOMATICO';
+  const { prompt, referencia } = await armarPrompt(
+    dataSource,
+    userDataPath,
+    ctx,
+    cantidad,
+    fuente,
+    opts,
+  );
   const candidatos = await pedirCandidatosAlModelo(userDataPath, prompt);
 
   const { musica } = readAppSettings(userDataPath);
@@ -407,6 +851,8 @@ export async function descubrirMusica(
     filtrados: 0,
     detalleFiltrados: [],
     agregadosDetalle: [],
+    fuente,
+    referencia,
   };
 
   for (const c of candidatos) {

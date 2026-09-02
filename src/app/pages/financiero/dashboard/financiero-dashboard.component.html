@@ -222,6 +222,35 @@
         </div>
       </div>
 
+      <!-- Cajas Mayor activas -->
+      <div class="dashboard-card">
+        <app-dash-section-header
+          icon="account_balance_wallet"
+          title="Cajas Mayor activas"
+          [badge]="cajasMayorActivas.length"
+          badgeColor="info">
+        </app-dash-section-header>
+        <mat-divider></mat-divider>
+
+        <div *ngIf="!loading && cajasMayorActivas.length === 0" class="dashboard-empty-state">
+          <mat-icon>info_outline</mat-icon>
+          <span>No hay cajas mayor abiertas</span>
+        </div>
+
+        <div class="dashboard-alert-list" *ngIf="cajasMayorActivas.length > 0">
+          <div *ngFor="let cm of cajasMayorActivas"
+               class="dashboard-alert-item alert-info caja-mayor-item"
+               (click)="abrirCajaMayor(cm)">
+            <mat-icon>account_balance_wallet</mat-icon>
+            <div class="dashboard-alert-info">
+              <span class="dashboard-alert-title">{{ cm.nombre }}</span>
+              <span class="dashboard-alert-detail">{{ cm.saldoTexto }}</span>
+            </div>
+            <mat-icon class="caja-mayor-chevron">chevron_right</mat-icon>
+          </div>
+        </div>
+      </div>
+
       <!-- Cajas abiertas -->
       <div class="dashboard-card">
         <app-dash-section-header

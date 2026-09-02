@@ -269,7 +269,17 @@ GastoDetalle {
 
 ### Crear gasto (transacción atómica)
 
-`create-gasto` (`caja-mayor.handler.ts`). El estado del gasto queda en `PAGADO`. Bifurca por `destinoTipo`:
+`create-gasto` (`caja-mayor.handler.ts`). Bifurca por `diferido` y luego por `destinoTipo`:
+
+**Rama DIFERIDA (`diferido: true`, la que usa el desktop desde 2026-08):** el gasto
+nace `PENDIENTE`, con `monedaId`/`monto` **directos** (no derivados de `detalles[]`),
+y **no asienta nada**. Se paga después con el pago consolidado.
+
+> El contrato **no cambió** para quien manda datos de pago: la app mobile llama a
+> este mismo canal con `detalles[]` y forma de pago esperando asiento inmediato, y
+> no tiene pantalla de pago diferido. Por eso la rama nueva es **opt-in**.
+
+Con datos de pago (sin `diferido`), el estado queda en `PAGADO` y bifurca por `destinoTipo`:
 
 **Rama CAJA_MAYOR (default):**
 1. Crear Gasto (monto = suma de detalles).
@@ -286,6 +296,199 @@ GastoDetalle {
 ### Anular gasto
 
 `anular-gasto`: por cada detalle, crear contra-mov AJUSTE_POSITIVO. Estado del Gasto → CANCELADO. (Para gastos con destino CUENTA_BANCARIA, la reversión es sobre el saldo de la cuenta.)
+
+## Pago consolidado de obligaciones (2026-08)
+
+**Todo pago de una obligación se hace desde Caja Mayor**, en un único wizard, y ya
+no dentro del diálogo de alta de cada cosa. Un evento salda N obligaciones del
+mismo concepto cobrando con M líneas de pago.
+
+### Por qué existe
+
+El asiento "si CAJA_MAYOR {mov + saldo} si no {debitar banco + mov bancario}"
+estaba escrito **cinco** veces (`create-gasto`, `crear-vale-confirmado`,
+`confirmar-vale`, `pagar-liquidacion-sueldo`, `aplicarPagoCpoCuota`), cada una con
+su propia UI de "elegir fuente". Y no se podían pagar 3 gastos con un solo egreso:
+eran 3 movimientos sueltos.
+
+### Entidades
+
+- **`PagoConsolidado`** (`pagos_consolidados`): cabecera — `concepto`
+  (`COMPRA|GASTO|VALE|LIQUIDACION_SUELDO`), `descripcion` compuesta,
+  `monedaDeuda`, `montoTotal`, `cantidadItems`, `estado` (`ACTIVO|ANULADO`).
+- **`PagoConsolidadoDetalle`** (`pagos_consolidados_detalles`): **una fila por
+  (obligación × línea de pago)** — producto cartesiano. Es lo que permite
+  responder a la vez *cuánto recibió cada obligación* (`SUM(montoImputado)
+  GROUP BY origenId`) y *de dónde salió cada guaraní* (`SUM(montoOrigen)` por
+  línea). Guarda `cotizacion` y `montoImputado` del momento del pago, para que la
+  anulación sea determinística.
+- **`cajas_mayor_movimientos.pago_consolidado_id`**: ancla del movimiento al evento.
+- Migración `AddPagoConsolidado` (aditiva; el `ADD COLUMN` usa `getTable`, no
+  `IF NOT EXISTS`, que es inválido en SQLite).
+
+### Reglas de negocio
+
+| Regla | Por qué |
+|---|---|
+| **Un evento = un concepto** | El movimiento conserva el `TipoMovimiento` real (`EGRESO_GASTO`, `EGRESO_VALE`, `EGRESO_SALARIO`, `EGRESO_CUOTA_COMPRA`, `INGRESO_COBRO_CLIENTE`), así los reportes por tipo siguen cuadrando |
+| **Una sola moneda de deuda** por evento | Para que "total a pagar/cobrar" sea un número |
+| **Un solo beneficiario** en compras y en cobros | Un pago = un proveedor; un cobro = un cliente (`CONCEPTO_BENEFICIARIO_UNICO`) |
+| **Sólo las cuotas admiten pago/cobro parcial** | Compras y cobro a cliente sí; un gasto/vale/liquidación va entero |
+| **Una liquidación por vez** | Su neteo tiene que quedar atado a un evento propio |
+| Fuentes: `CAJA_MAYOR`, `CUENTA_BANCARIA` y `DESCUENTO` | Cheque sigue por `emitir-cheque`. `DESCUENTO` sólo en el cobro a cliente |
+
+### Los 5 conceptos y la dirección del dinero (2026-08)
+
+`PagoConcepto` tiene 5 valores. Cuatro son **egresos**; `COBRO_CLIENTE` es el
+único **ingreso**: sus obligaciones son cuotas de `CuentaPorCobrar` y su
+movimiento es `INGRESO_COBRO_CLIENTE`.
+
+En `pagos_consolidados`, "pago" significa **evento de liquidación de deuda**; la
+dirección la da el concepto, no la tabla. El motor casi no necesitó cambios: el
+asiento de caja ya derivaba el signo de `esIngreso(tipoMovimiento)` y la
+anulación del lado caja también. Lo que estaba a fuego en dirección egreso era
+**el tramo bancario**, que ahora acredita/debita según la dirección.
+
+⚠️ **`CONCEPTO_ES_INGRESO` es un espejo de `esIngreso(adapter.tipoMovimiento)`.**
+Existe aparte porque el renderer no puede importar `electron/caja-mayor-utils`.
+Si se agrega un concepto, las dos tienen que coincidir —
+`scripts/test-pago-consolidado.ts` lo verifica para los 5.
+
+### Descuento (sólo en el cobro a cliente)
+
+Una línea de `fuente: 'DESCUENTO'` **condona deuda sin mover plata**: cubre parte
+del total para que la cuota quede saldada, pero no genera movimiento de caja ni
+de banco. Sí genera fila de `PagoConsolidadoDetalle`, que es lo que permite
+responder después "de esta cuota, cuánto entró y cuánto se perdonó".
+
+- Va **siempre última en el reparto FIFO** (`ordenarLineasParaReparto`): el
+  efectivo imputa primero y lo condonado cae sobre el remanente.
+- Va en la **moneda de la deuda con cotización 1**: perdonar deuda en otra moneda
+  no significa nada.
+- En la cuenta corriente del cliente se registra como **`AJUSTE_NEGATIVO`**, no
+  como `PAGO`: los dos bajan la deuda, pero el estado de cuenta tiene que poder
+  decir cuánto pagó y cuánto se le perdonó.
+- Controles: permiso **`CPC_DESCUENTO`** (no está en ningún rol plantilla — lo
+  asigna el ADMIN), **motivo obligatorio**, **nunca el 100%** (para eso está
+  `cancelar-cuenta-por-cobrar`), y **tope %** por caja
+  (`CajaMayorConfiguracion.descuentoCpcMaxPorcentaje`, null = sin tope).
+- **Redondeo del tope**: tanto el frontend (`descuento-dialog.component.ts`) como
+  el backend (`pago-consolidado.handler.ts`) usan `redondear(totalDeuda * topePct / 100, decimalesMoneda)`
+  de `shared/utils/pago-consolidado.util.ts`. El tope se valida sobre valores ya
+  redondeados a la unidad mínima de la moneda (0 decimales para PYG, 2 para USD).
+  No usar `Math.floor` ni dejar sin redondear: genera incoherencias frontend/backend
+  (#272).
+
+⚠️ El tope **no puede depender de un campo omitible**: `cajaMayorContextoId` es
+obligatorio cuando hay descuento y tiene que existir, y el tope aplicado es el
+**más restrictivo** entre el del contexto y el de cada caja por la que realmente
+entra plata. Con un `if (cajaCtxId)` alcanzaba con no mandarlo para quedar sin
+límite, y `/api/rpc` es default-allow.
+
+### Handler y adaptadores
+
+`electron/handlers/pago-consolidado.handler.ts` — 4 canales
+(`get-obligaciones-pendientes`, `registrar-pago-consolidado`,
+`get-pago-consolidado-detalle`, `anular-pago-consolidado`). **Permiso por
+concepto**: `COMPRAS_GESTIONAR` / `CAJA_MAYOR_OPERAR` / `RRHH_VALE_CONFIRMAR` /
+`RRHH_LIQUIDACION_PAGAR` / `CPC_COBRAR`, también en los `get-*` (el listado de
+liquidaciones expone la nómina). El descuento suma `CPC_DESCUENTO` aparte.
+
+`pago-consolidado-adapters.ts` — un adaptador por concepto con `listarPendientes`,
+`leerYBloquear`, `aplicar`, `revertir` y `columnaReferencia`. **Ninguno toca
+caja**: el asiento vive sólo en el handler.
+
+Orden del `registrar`, todo en una transacción:
+1. Releer cada obligación **con lock pesimista** (Postgres) y validar contra el
+   saldo real — nunca contra el que mandó el cliente. El adaptador de cobro
+   lockea en orden total **cuota → CPC → cliente**: `cpc.montoCobrado` y
+   `cliente.saldoActual` son read-modify-write sobre agregados compartidos.
+   `validarSeleccion` además rechaza la misma obligación **repetida** en `items`.
+2. Validar el descuento (permiso, motivo, 100%, tope) — antes de las cotizaciones.
+3. Resolver cotizaciones faltantes (bidireccional); si no hay, error.
+4. Validar que las líneas cubran la deuda (tolerancia por moneda).
+5. Crear la cabecera.
+6. **Un asiento por grupo** `(fuente, caja|cuenta, moneda, formaPago)`. Las
+   líneas `DESCUENTO` se excluyen: no hay movimiento que crear.
+7. Reordenar las líneas (descuento último) y repartir FIFO → filas de detalle.
+8. `aplicar` de cada adaptador con lo **realmente imputado**, y cuánto de eso
+   fue descuento.
+
+⚠️ El reordenamiento se hace **reasignando la variable**
+(`lineas = ordenarLineasParaReparto(lineas)`) antes de repartir. `FilaReparto.lineaIdx`
+es una posición dentro del array que recibió `repartirFifo`, y se usa después
+para construir el detalle y el desglose por fuente: repartir sobre un array e
+indexar sobre otro no rompe nada visible, **miente** sobre cuánto pagó el cliente
+y cuánto se le perdonó. `grupos` está indexado por contenido (`claveGrupo`), así
+que reordenar no lo afecta.
+
+> Si el evento cubre **una sola** obligación, el movimiento además setea la
+> columna de referencia clásica (`gasto`, `valeId`, `cuentaPorPagarCuotaId`,
+> `liquidacionSueldoId`), porque `get-movimientos-caja-mayor-consolidados` filtra
+> por proveedor vía `gasto.proveedor_id` y compone la observación rica con
+> `m.gasto`.
+
+### Aritmética: `shared/utils/pago-consolidado.util.ts`
+
+TS puro (re-exportado en `electron/utils/`), lo comparten handler y componente.
+`repartirFifo` garantiza **por construcción**, no por tolerancia:
+
+1. lo imputado a cada obligación suma exactamente su monto;
+2. lo que sale por cada línea suma exactamente lo que el usuario escribió.
+
+El residuo entre "líneas convertidas" y "obligaciones" se absorbe **antes** de
+repartir, ajustando la capacidad de la última línea. Sin eso, pagar 99,99 USD con
+una línea de 250.000 Gs deja una obligación PARCIAL por un centavo. Trabaja en
+unidades mínimas enteras. Tests: `npm run test:pago-consolidado` (90 asserts) y
+`npm run test:cobro-cpc-consolidado` (63, E2E del concepto de ingreso).
+
+### Anulación
+
+`anular-pago-consolidado` revierte **el evento entero**: contra-movimiento
+`AJUSTE_POSITIVO` por cada movimiento distinto (un `Set`: un movimiento cubre
+varias filas), acredita las cuentas bancarias, y llama al `revertir` de cada
+adaptador.
+
+⚠️ **Bloqueos cruzados** — sin esto la misma plata vuelve dos veces:
+
+| Handler | Bloqueo |
+|---|---|
+| `anular-caja-mayor-movimiento` | si el movimiento tiene `pagoConsolidadoId`. **El chequeo va ANTES** que las ramas por columna de referencia (con 1 item también las setea, y la rama del vale revierte directo en vez de bloquear) |
+| `anular-vale` | primera sentencia. Un vale pagado por el evento tiene `movimientoId` en **null**: sin el bloqueo quedaría ANULADO sin devolver un guaraní |
+| `anular-gasto` | ídem |
+| `anular-liquidacion-sueldo` | ídem: su reversa de caja va por `liq.movimientoId`, que queda null |
+| `anular-cobro-cpc-cuota` | ídem, con `PagoOrigenTipo.CPC_CUOTA` |
+
+Los bloqueos **se liberan** al anular el evento.
+
+### UI
+
+- `pagar-obligaciones-dialog/` — wizard de 3 pasos (seleccionar / formas de pago /
+  revisar), híbrido tab-dialog, parametrizado por `concepto`. Sirve **pagos y
+  cobros**: las etiquetas salen de una tabla `ETIQUETAS` por dirección
+  (`Monto a cobrar`, `Confirmar cobro`, …), no de ifs sueltos.
+  El **descuento va en un botón propio** que abre el `descuento-dialog` del PdV
+  (% o monto + motivo + resumen, extendido con tope): no es una opción del select
+  *Fuente*, porque condonar deuda no es una fuente de fondos y ahí "Completar"
+  se volvería un botón de perdonar todo de un clic. Cambiar la selección
+  **descarta el descuento** con aviso: se calculó sobre un total que ya no existe.
+  El permiso se precomputa suscribiéndose a `codigos$`, nunca se llama desde el
+  template. En un cobro no corre `confirmarSaldosNegativos` (entra plata); sí
+  corre al **anular** uno, desde el diálogo de detalle.
+- `detalle-pago-consolidado-dialog/` — qué obligaciones cubrió y con qué líneas;
+  desde ahí se anula. Se abre desde el menú ⋮ del movimiento.
+- `registrar-egreso-dialog` — tarjetas nuevas **Pagar Gastos**, **Pagar Vales**,
+  **Pagar Salarios**; **Pagar Compras** ahora abre el genérico.
+- `registrar-ingreso-dialog` — la tarjeta **Cobrar a Cliente** abre el mismo
+  wizard con `concepto = COBRO_CLIENTE`.
+- `pagar-compras-dialog/` y `cobrar-cpc-rapido-dialog/` **fueron eliminados**.
+
+Ninguno necesita hoja en `MENU_TREE`: son diálogos contextuales.
+
+Tests: `npm run test:pago-consolidado` (aritmética) y
+`npm run test:pago-consolidado-e2e` (42 asserts sobre SQLite: multi-moneda,
+parcial, banco, bloqueos, anulación, cotización invertida).
+Manual: `docs/testing/TESTING-CHECKLIST-PAGO-CONSOLIDADO.md`.
 
 ## Retiros de Caja
 
@@ -379,7 +582,87 @@ Nunca ambas a la vez.
 
 > **TRANSFERENCIA_BANCARIA (transferencia interna banco→banco, 2026-07):** transferencia entre dos cuentas bancarias, opcionalmente de monedas distintas (con cotización). Reutiliza `OperacionFinanciera` (los campos `cuentaBancariaOrigen`/`Destino` + `cotizacion` ya existían). Solo mueve saldo bancario — no genera `CajaMayorMovimiento`, así que el **bloque de diferencia se omite** (no hay caja donde imputarla; guardado con `if (cajaMayorDiferenciaId && ...)`). Anulación: revierte AMBAS cuentas (AJUSTE_POSITIVO en origen, AJUSTE_NEGATIVO en destino). Guardas: origen ≠ destino, ambas cuentas deben existir. Permiso `CAJA_MAYOR_OPERAR` (reusa el handler `create-operacion-financiera`). ⚠️ **SQLite tenía un CHECK** en `tipo_operacion` que rechazaba valores nuevos: la migración `DropCheckTipoOperacionFinanciera` recrea la tabla soltando ese CHECK (Postgres ya era `varchar` libre). Tests: `npm run test:transferencia-bancaria` (flujo + saldos + anulación), `npm run test:operacion-financiera` (validador). En el diálogo la moneda de cada lado se hereda de su cuenta (no se pisan entre sí, a diferencia de depósito/retiro); la cotización solo aparece cuando las monedas difieren.
 
-**Diálogo `create-operacion-financiera-dialog` (form único con validators por tipo).** En DEPOSITO/RETIRO la moneda **se hereda de la cuenta bancaria** (no se elige en la UI). Reglas de campos requeridos por tipo en `operacion-financiera-validacion.util.ts` (fuente única para validador + test). **Fix 2026-07 (PR #199):** el botón "Registrar" quedaba deshabilitado en Retiro/Depósito porque solo se seteaba UNA de las dos monedas (la requerida del otro lado quedaba `null`). Ahora al elegir la cuenta bancaria se setean **ambas** monedas (origen y destino) — misma divisa a los dos lados en efectivo. Test: `npm run test:operacion-financiera`.
+### Validación de campos por tipo (fuente única)
+
+**Dos superficies, una sola regla:** el diálogo de escritorio
+`create-operacion-financiera-dialog` y la pantalla PWA
+`operacion-financiera-nuevo.page.ts` derivan TODO de
+`operacion-financiera-validacion.util.ts` (re-exportado por `@frc/shared-core`
+para el mobile). Estructuras:
+
+| Constante | Responde |
+|---|---|
+| `CAMPOS_REQUERIDOS[tipo]` | qué controles llevan `Validators.required` |
+| `LADOS_CAJA_MAYOR[tipo]` | **qué lado MUEVE caja mayor** ⇒ su forma de pago es EFECTIVO fija |
+| `CAJAS_EN_UI[tipo]` | qué selects de caja mayor se muestran |
+| `CUENTAS_EN_UI[tipo]` | qué selects de cuenta bancaria se muestran |
+| `MONEDAS_EN_UI[tipo]` | qué monedas elige el usuario (el resto se heredan de la cuenta) |
+| `COTIZACION_EN_UI[tipo]` | `SIEMPRE` / `SI_MONEDAS_DISTINTAS` / `NUNCA` |
+| `fuenteDelCampo(tipo, campo)` | **el invariante**: `UI`, `CUENTA_BANCARIA`, `EFECTIVO` o `null` |
+| `camposFaltantes()` / `validarCoherencia()` / `etiquetaDe()` | mensajes concretos al guardar |
+
+⚠️ **`LADOS_CAJA_MAYOR` NO es `CAJAS_EN_UI`.** En `CAMBIO_DIVISA` los DOS lados
+mueven caja mayor (egreso en una moneda + ingreso en otra) pero es la MISMA caja,
+así que la UI muestra **un solo select** (el de origen). Confundirlos es el bug
+de abajo.
+
+**Invariante que hay que respetar siempre:** todo campo requerido debe tener una
+fuente que lo pueble. Si `fuenteDelCampo()` devuelve `null` para un campo
+requerido, el formulario queda inválido para siempre y el botón "Registrar" no se
+habilita nunca — **sin ningún campo marcado en rojo**, porque el control ni se
+renderiza para ese tipo. `npm run test:operacion-financiera` (122 asserts)
+recorre el invariante campo por campo y tipo por tipo; falla si se rompe.
+
+**Fixes históricos (no repetir):**
+- **PR #199 (2026-07):** "Registrar" deshabilitado en Retiro/Depósito porque al
+  elegir la cuenta bancaria se seteaba UNA sola moneda y la requerida del otro
+  lado quedaba `null`. → `monedasDesdeCuentaBancaria()` setea **ambas**.
+- **2026-08 (PWA):** `CAMBIO_DIVISA` era **imposible de guardar** en la PWA:
+  `formaPagoDestinoId` es requerido (el handler lo usa para el movimiento de
+  INGRESO y para `actualizarSaldo`; la columna es `nullable: false`) pero la
+  pantalla lo seteaba sólo si había select de caja destino. → usar
+  `LADOS_CAJA_MAYOR`, no la visibilidad del select.
+- **2026-08 (ambas):** al cambiar de tipo se limpiaban las monedas pero sólo se
+  re-derivaban desde `cuentaBancaria*Id.valueChanges`. Si el select de cuenta
+  sobrevivía al cambio (RETIRO↔TRANSF. BANCARIA comparten cuenta origen;
+  DEPOSITO↔TRANSF. BANCARIA comparten cuenta destino) la moneda quedaba `null` y
+  era **irrecuperable**: reelegir la misma opción en un `mat-select` **no emite
+  `valueChanges`** (Material sólo propaga si cambió la selección). → resincronizar
+  las monedas heredadas después de cambiar de tipo.
+- **2026-08 (escritorio):** `applyValidators()` cambiaba validadores pero nunca
+  los VALORES, así que la cuenta bancaria de un depósito seguía en `form.value`
+  al pasar a un cambio de divisa y el handler la persistía como relación bogus.
+  → `limpiarCamposDelTipo()`.
+- **2026-08 (PWA):** el bloque *Diferencia* se mostraba en `TRANSFERENCIA_BANCARIA`,
+  donde el backend lo descarta en silencio (`cajaMayorDiferenciaId` es null porque
+  no hay caja). → se oculta y se neutraliza al cambiar de tipo.
+
+**Forma de pago de los tramos de caja:** siempre EFECTIVO. La regla vive en
+`src/app/shared/utils/forma-pago-efectivo.util.ts` (fuente única desktop + PWA,
+exportada por `@frc/shared-core`):
+
+- `formasPagoDeCaja(formas)` — pool: activas que **mueven caja** (fallback: todas
+  las activas si ninguna declara el flag).
+- `formasPagoEfectivoDeCaja(formas)` — las **ofrecibles en un select**: del pool,
+  las de nombre EFECTIVO. `movimentaCaja` solo no alcanza (deja pasar formas que
+  no son efectivo) y el nombre solo tampoco (ignora `activo`). Nunca devuelve
+  vacío si hay alguna usable.
+- `formaPagoEfectivo(formas)` — la que se preselecciona / usa la PWA.
+
+Si no hay ninguna, ambas superficies muestran un aviso en vez de dejar el
+formulario muerto.
+
+⚠️ **La regla se cumple en todas las pantallas, pero cinco la reimplementan a
+mano.** `create-edit-gasto-dialog`, `create-edit-entrada-varia-dialog`,
+`pagar-cuota-dialog` (CPP), `edit-movimiento-dialog` y `create-retiro-caja-dialog`
+filtran con un `.filter(f => f.nombre.includes('EFECTIVO'))` inline en vez de
+llamar al util. El select sale bien, pero **ignoran `activo` y `movimentaCaja`** y
+pueden quedar vacíos sin avisar. Migrarlos a `formasPagoEfectivoDeCaja()` está en
+el backlog. (`create-operacion-financiera-dialog` ya usa el util; los desaparecidos
+`pagar-compras-dialog` y `confirmar-vale-dialog` se fueron con el pago
+consolidado.)
+
+Manual de pruebas: [`docs/testing/TESTING-CHECKLIST-OPERACIONES-FINANCIERAS.md`](../../../../docs/testing/TESTING-CHECKLIST-OPERACIONES-FINANCIERAS.md).
 
 ## Cuentas Por Pagar / Cobrar
 
@@ -396,11 +679,12 @@ Nunca ambas a la vez.
 - `list-cajas-mayor/` — listar abiertas/cerradas.
 - `create-edit-caja-mayor/` — CRUD.
 - `caja-mayor-detalle/` — vista operativa.
-- `registrar-ingreso-dialog/` — entrada varia o retiro caja.
-- `registrar-egreso-dialog/` — hub de EGRESOS. Lanza 6 sub-diálogos: `CreateEditGastoDialogComponent` (gasto), `CreateEditValeDialogComponent` (card "Registrar Vale" → handler atómico `crear-vale-confirmado` en `vales.handler.ts`), `CrearCompraSimplificadaDialogComponent` (compra simplificada), `PagarComprasDialogComponent` (pago multi-cuota CPP), `EmitirChequeDialogComponent` (emitir cheque), `CreateOperacionFinancieraDialogComponent`. Además crea mov directo (`create-caja-mayor-movimiento`) / movimiento bancario.
+- `registrar-ingreso-dialog/` — hub de INGRESOS: retiro de caja, entrada varia, operación financiera, **cobrar a cliente** (abre el wizard consolidado) y ajuste de saldo.
+- `registrar-egreso-dialog/` — hub de EGRESOS, en **grid** de tarjetas. Lanza: `CreateEditGastoDialogComponent` (alta diferida, gasto PENDIENTE), `CrearCompraSimplificadaDialogComponent` (sin pago), `CreateEditValeDialogComponent` (alta, vale SOLICITADO), `PagarObligacionesDialogComponent` (los 4 conceptos de pago; el 5º, el cobro, se abre desde el hub de ingresos), `EmitirChequeDialogComponent`, `CreateOperacionFinancieraDialogComponent`, `EgresoCajaInicialDialogComponent`, y el ajuste de saldo resuelto en el propio diálogo.
 - `edit-movimiento-dialog/` — editar/anular movimiento.
-- `configurar-caja-mayor-dialog/` — qué FPs y cuentas mostrar (M:M).
-- `pagar-compras-dialog/` — pago multi-cuota CPP.
+- `configurar-caja-mayor-dialog/` — qué FPs y cuentas mostrar (M:M) + tope de descuento al cobrar CPC.
+- `pagar-obligaciones-dialog/` — **wizard único de pago y cobro** (compras/gastos/vales/salarios/cobro a cliente).
+- `detalle-pago-consolidado-dialog/` — desglose de un pago consolidado.
 - `egreso-caja-inicial-dialog/` — sembrar efectivo a la apertura de una caja PdV (EGRESO_CAJA_INICIAL).
 - `abrir-caja-desde-conteo-dialog/` — abrir caja reutilizando el conteo del egreso inicial.
 - Sub-carpetas: `gastos/`, `entradas-varias/`, `retiros/`, `operaciones-financieras/`, `bancos/`, `cheques/`, `pos/`, `cuentas-por-pagar/`, `cuentas-por-cobrar/`.

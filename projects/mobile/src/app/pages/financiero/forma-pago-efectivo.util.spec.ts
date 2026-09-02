@@ -1,4 +1,4 @@
-import { formaPagoEfectivo } from './forma-pago-efectivo.util';
+import { formaPagoEfectivo, formasPagoDeCaja, formasPagoEfectivoDeCaja } from '@frc/shared-core';
 
 const EFECTIVO = { id: 1, nombre: 'EFECTIVO', activo: true, movimentaCaja: true, principal: false };
 const TARJETA = { id: 2, nombre: 'TARJETA', activo: true, movimentaCaja: false, principal: false };
@@ -44,5 +44,38 @@ describe('formaPagoEfectivo (regla fuente Caja Mayor = efectivo)', () => {
 
   it('match de EFECTIVO case-insensitive y por substring', () => {
     expect(formaPagoEfectivo([{ id: 8, nombre: 'Efectivo Gs', activo: true, movimentaCaja: true }])?.id).toBe(8);
+  });
+});
+
+describe('formasPagoDeCaja / formasPagoEfectivoDeCaja (pool de un tramo de Caja Mayor)', () => {
+  it('el pool son las activas que mueven caja', () => {
+    const r = formasPagoDeCaja([TARJETA, CAJA_PRINCIPAL, EFECTIVO, EFECTIVO_INACTIVO]);
+    expect(r.map((f) => f.id).sort()).toEqual([1, 5]);
+  });
+
+  it('cae a todas las activas si ninguna declara movimentaCaja', () => {
+    const a = { id: 20, nombre: 'EFECTIVO', activo: true };
+    const b = { id: 21, nombre: 'TARJETA', activo: true };
+    expect(formasPagoDeCaja([a, b]).map((f) => f.id)).toEqual([20, 21]);
+  });
+
+  it('las opciones ofrecibles son sólo las de nombre EFECTIVO dentro del pool', () => {
+    // `movimentaCaja` solo no alcanza: CAJA_PRINCIPAL mueve caja pero no es efectivo.
+    const r = formasPagoEfectivoDeCaja([TARJETA, CAJA_PRINCIPAL, EFECTIVO]);
+    expect(r.map((f) => f.id)).toEqual([EFECTIVO.id]);
+  });
+
+  it('nunca deja el select vacío: cae a la mejor opción si ninguna se llama EFECTIVO', () => {
+    const r = formasPagoEfectivoDeCaja([TARJETA, CAJA_PRINCIPAL]);
+    expect(r.map((f) => f.id)).toEqual([CAJA_PRINCIPAL.id]);
+  });
+
+  it('devuelve vacío si no hay ninguna forma usable', () => {
+    expect(formasPagoEfectivoDeCaja([EFECTIVO_INACTIVO])).toEqual([]);
+    expect(formasPagoEfectivoDeCaja([])).toEqual([]);
+  });
+
+  it('ignora las inactivas', () => {
+    expect(formasPagoEfectivoDeCaja([EFECTIVO_INACTIVO, EFECTIVO]).map((f) => f.id)).toEqual([EFECTIVO.id]);
   });
 });

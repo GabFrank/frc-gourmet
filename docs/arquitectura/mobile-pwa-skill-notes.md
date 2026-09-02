@@ -12,7 +12,7 @@ Leyenda: ⬜ pendiente · 🟦 en progreso · ✅ hecho · ⛔ bloqueado (acció
 
 ### F0 — Cimientos ✅
 - ✅ Branch `feat/mobile-pwa-cliente` creada
-- ✅ Plan persistido (`docs/arquitectura/mobile-pwa-plan.md`)
+- ✅ Arquitectura y decisiones en `.claude/skills/frc-gourmet-expert/architecture/mobile-pwa.md`
 - ✅ Este doc de notas creado
 - ✅ `projects/mobile` (application) scaffold — standalone bootstrap, sin NgModule
 - ✅ Path-alias `@frc/shared-core` + barrel `src/app/shared-core/public-api.ts`

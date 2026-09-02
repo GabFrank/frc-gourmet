@@ -60,7 +60,80 @@ export interface TicketSpec {
 // BUILDERS (composición de specs)
 // ============================================================
 
+/**
+ * Deja el texto en algo que una impresora térmica pueda imprimir de verdad.
+ *
+ * El charset por defecto es **CP437**, y todo lo que no entra ahí la librería
+ * lo manda como `?`. Es un fallo silencioso: el ticket sale, nadie ve un error,
+ * y en el papel aparece un signo de pregunta donde iba un carácter.
+ *
+ * Verificado contra CP437 el 2026-08-25:
+ * - Se pierden: `×` `—` `–` `→` `€` `₲` `✓` y **`Á`**.
+ * - Sobreviven: `á é í ó ú ñ Ñ ü É ¿ ¡ · º °`.
+ *
+ * El `·` entra en esa lista pero igual se degrada a `-`: existe en CP437, pero
+ * en térmica de 203dpi queda casi invisible, y el separador de variación
+ * («GRANDE · BACON») es justo donde tiene que leerse.
+ *
+ * Lo de `Á` es lo que más muerde, porque **todos los strings van en
+ * UPPERCASE**: un cliente llamado «Ángel» se imprimía «?NGEL». No es un caso
+ * de borde, es cualquier nombre con tilde en la primera letra.
+ *
+ * Estrategia: primero un mapa explícito para los tipográficos (donde hay un
+ * equivalente ASCII obvio y mejor que perder el carácter), y después
+ * descomposición Unicode para las vocales acentuadas que el charset no tiene —
+ * «ÁNGEL» sale «ANGEL», que se lee, en vez de «?NGEL», que no.
+ *
+ * No se usa `iconv` para decidir qué se pierde a propósito: sería exacto pero
+ * ata este helper a una dependencia transitiva de la librería de impresión.
+ */
+const REEMPLAZOS_TICKET: Record<string, string> = {
+  '×': 'x', '·': '-', '—': '-', '–': '-', '‑': '-',
+  '→': '->', '←': '<-', '…': '...',
+  '“': '"', '”': '"', '‘': "'", '’': "'", '«': '"', '»': '"',
+  '€': 'EUR', '₲': 'Gs.', '✓': 'OK', '✗': 'X', '•': '*',
+};
+
+/** Los no-ASCII que CP437 SÍ tiene y conviene conservar. */
+const SEGUROS_CP437 = 'áéíóúñÑüÉ¿¡ºÀÂÄÅÇÈÊËÌÎÏÔÖÒÙÛÜßæÆôöòûùÿÖÜ¢£¥₧ƒªí°';
+
+export function sanitizarParaTicket(texto: string): string {
+  if (!texto) return texto;
+  let out = '';
+  for (const ch of texto) {
+    if (ch.charCodeAt(0) < 128) { out += ch; continue; }
+    if (REEMPLAZOS_TICKET[ch] !== undefined) { out += REEMPLAZOS_TICKET[ch]; continue; }
+    if (SEGUROS_CP437.includes(ch)) { out += ch; continue; }
+    // Última chance: sacarle el acento. `Á` → `A`, que se lee.
+    const plano = ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    out += plano.charCodeAt(0) < 128 ? plano : '?';
+  }
+  return out;
+}
+
+/**
+ * La cantidad de un ítem, con la `x` separada del número.
+ *
+ * `1x   PIZZA` pega la x al número y se lee como parte de él; `1  x   PIZZA`
+ * la deja como lo que es, un separador entre la cantidad y el producto. En un
+ * ticket angosto y leído de reojo, esa distancia es la diferencia entre ver
+ * «uno por pizza» y ver «1x» como un código.
+ *
+ * Devuelve un bloque de ancho fijo para que las cantidades queden alineadas
+ * entre sí en columna: la `x` cae siempre en la misma posición, aunque una
+ * línea diga 1 y la siguiente 12.
+ */
+export function ticketCantidad(qty: number | string, ancho: number = 6): string {
+  const n = String(qty);
+  // La x va después del número, dejando al menos un espacio, y el resto se
+  // rellena a la derecha. Con una cantidad larga (12) el bloque no se rompe:
+  // empuja la x un lugar en vez de desbordar la columna.
+  const posX = Math.max(n.length + 1, Math.floor(ancho / 2));
+  return (n.padEnd(posX, ' ') + 'x').padEnd(ancho, ' ');
+}
+
 export function ticketText(text: string, opts: Omit<Extract<TicketLine, { type: 'text' }>, 'type' | 'text'> = {}): TicketLine {
+  text = sanitizarParaTicket(text);
   return { type: 'text', text, ...opts };
 }
 
@@ -73,10 +146,15 @@ export function ticketBlank(count: number = 1): TicketLine {
 }
 
 export function ticketKv(key: string, value: string, bold = false): TicketLine {
+  key = sanitizarParaTicket(key);
+  value = sanitizarParaTicket(value);
   return { type: 'kv', key, value, bold };
 }
 
 export function ticketColumns(cols: { text: string; width: number; align?: TicketAlign }[]): TicketLine {
+  // Sanear ANTES de medir: `→` pasa a `->` y `…` a `...`, así que hacerlo
+  // después del cálculo de padding correría las columnas.
+  cols = cols.map((c) => ({ ...c, text: sanitizarParaTicket(c.text) }));
   return { type: 'columns', cols };
 }
 
@@ -693,4 +771,118 @@ export function ticketFmtFechaHora(d?: Date | string | null): string {
       hour: '2-digit', minute: '2-digit',
     });
   } catch { return ''; }
+}
+
+// ============================================================
+// MONTOS MULTIMONEDA EN UN TICKET
+// ============================================================
+
+/**
+ * Formateadores por moneda para un ticket.
+ *
+ * Se arma una sola vez por ticket a partir de las `Moneda` de la base, y de ahí
+ * salen tanto el símbolo ASCII (`₲` sale como `?` en una térmica) como la
+ * cantidad de decimales de cada moneda.
+ */
+export interface FormateadorMonedas {
+  /** "Gs. 150.000" — símbolo + monto. */
+  fmt(monedaId: number, monto: number): string;
+  /** "Gs." — sólo el símbolo ASCII. */
+  simbolo(monedaId: number): string;
+  /** "150.000" — sólo el monto, con los decimales de esa moneda. */
+  monto(monedaId: number, monto: number): string;
+}
+
+/** Construye el formateador desde la lista de `Moneda` de la base. */
+export function crearFormateadorMonedas(monedas: any[]): FormateadorMonedas {
+  const info: { [id: number]: { decimales: number; simbolo: string } } = {};
+  for (const m of monedas || []) {
+    info[m.id] = { decimales: Number((m as any).decimales) || 0, simbolo: monedaSimboloAscii(m) };
+  }
+  return {
+    fmt: (monedaId: number, monto: number) => {
+      const i = info[monedaId] || { decimales: 0, simbolo: '' };
+      return `${i.simbolo} ${ticketFmtMonto(monto, i.decimales)}`.trim();
+    },
+    simbolo: (monedaId: number) => info[monedaId]?.simbolo || '',
+    monto: (monedaId: number, monto: number) => ticketFmtMonto(monto, info[monedaId]?.decimales ?? 0),
+  };
+}
+
+/**
+ * Renderiza un rubro etiquetado que puede tener montos en varias monedas.
+ *
+ *   - 1 moneda  → una sola línea:  `ETIQUETA .......... Gs. 5.300.000`
+ *   - N monedas → la ETIQUETA va como encabezado y cada moneda indentada
+ *     debajo, sin repetir la etiqueta:
+ *
+ *         ETIQUETA
+ *           Gs. ................ 5.300.000
+ *           $ ....................... 120
+ *
+ * Es **la** organización de forma de pago + moneda del proyecto: la usan el
+ * resumen de cierre de caja (ticket y la imagen que se manda por WhatsApp) y,
+ * desde 2026-08, el bloque de pagos registrados de los tickets de delivery.
+ * Vivía embebida en `printCierreCajaInternal`; se extrajo acá para que las dos
+ * no puedan divergir.
+ *
+ * `anchoClave` trunca la etiqueta: `ticketKv` no trunca, así que una forma de
+ * pago larga ("TRANSFERENCIA BANCARIA BBVA") desbordaba las 32 columnas de una
+ * impresora de 58mm y dejaba el importe huérfano en la línea siguiente.
+ */
+export function ticketRubroMultimoneda(
+  label: string,
+  montos: { monedaId: number; total: number }[],
+  fmt: FormateadorMonedas,
+  opts: { bold?: boolean; anchoClave?: number } = {},
+): TicketLine[] {
+  if (!montos || montos.length === 0) return [];
+  const bold = opts.bold === true;
+  // Se sanea ANTES de truncar: `sanitizarParaTicket` puede EXPANDIR (`→` → `->`,
+  // `…` → `...`), así que truncar sobre el label crudo dejaba pasar etiquetas que
+  // después del saneo volvían a desbordar la línea.
+  const limpio = sanitizarParaTicket(label);
+  const etiqueta = opts.anchoClave && limpio.length > opts.anchoClave
+    ? limpio.slice(0, opts.anchoClave)
+    : limpio;
+
+  if (montos.length === 1) {
+    return [ticketKv(etiqueta, fmt.fmt(montos[0].monedaId, montos[0].total), bold)];
+  }
+  const lines: TicketLine[] = [ticketText(etiqueta, { bold })];
+  for (const m of montos) {
+    lines.push(ticketKv(`  ${fmt.simbolo(m.monedaId)}`, fmt.monto(m.monedaId, m.total), bold));
+  }
+  return lines;
+}
+
+/**
+ * Cotización (`compraLocal`) entre la moneda principal y otra: cuántos
+ * principal vale 1 unidad de la otra moneda. Toma la más reciente (la lista de
+ * `MonedaCambio` viene ordenada por `createdAt DESC`). Devuelve 0 si no hay.
+ *
+ * ⚠️ Trata el par como **simétrico**: usa `compraLocal` tanto para
+ * principal→moneda como para moneda→principal. `moneda.utils.ts` sí distingue
+ * los dos sentidos (`getCotizacionBidireccional`), pero es async y hace una
+ * query por conversión — inservible acá, donde el ticket precarga los cambios
+ * una sola vez y convierte N líneas. Se mantiene la semántica histórica del
+ * ticket a propósito: cambiarla movería los totales impresos de todas las
+ * ventas en moneda extranjera.
+ *
+ * Nombre distinto del de `moneda.utils.ts` justamente para que la colisión sea
+ * imposible de cometer por accidente.
+ */
+export function tasaVsPrincipal(cambios: any[], principal: any, moneda: any): number {
+  if (!principal || !moneda) return 0;
+  const c = (cambios || []).find((x: any) =>
+    (x.monedaOrigen?.id === principal.id && x.monedaDestino?.id === moneda.id) ||
+    (x.monedaOrigen?.id === moneda.id && x.monedaDestino?.id === principal.id));
+  return c ? Number(c.compraLocal || 0) : 0;
+}
+
+/** Convierte un valor expresado en `moneda` a la moneda principal. */
+export function montoAPrincipal(valor: number, moneda: any, principal: any, cambios: any[]): number {
+  if (!moneda || !principal || moneda.id === principal.id) return valor;
+  const rate = tasaVsPrincipal(cambios, principal, moneda);
+  return rate > 0 ? valor * rate : valor; // 1 moneda = rate principal
 }

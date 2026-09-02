@@ -15,11 +15,13 @@ import { MatDividerModule } from '@angular/material/divider';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CreateEditEntradaVariaDialogComponent } from '../entradas-varias/create-edit-entrada-varia/create-edit-entrada-varia-dialog.component';
+import { PagarObligacionesDialogComponent } from '../pagar-obligaciones-dialog/pagar-obligaciones-dialog.component';
+import { PagoConcepto } from 'src/app/database/entities/financiero/pago-consolidado-enums';
 import { CreateOperacionFinancieraDialogComponent } from '../operaciones-financieras/create-operacion-financiera/create-operacion-financiera-dialog.component';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
 
-type IngresoTipo = 'AJUSTE' | 'RETIRO_CAJA' | 'ENTRADA_VARIA' | 'OPERACION_FINANCIERA' | null;
+type IngresoTipo = 'AJUSTE' | 'RETIRO_CAJA' | 'ENTRADA_VARIA' | 'OPERACION_FINANCIERA' | 'COBRO_CLIENTE' | null;
 
 @Component({
   selector: 'app-registrar-ingreso-dialog',
@@ -79,6 +81,13 @@ export class RegistrarIngresoDialogComponent implements OnInit {
       descripcion: 'Cambio de divisa, retiro bancario, transferencia entre cajas',
       icono: 'swap_horiz',
       color: '#6a1b9a',
+    },
+    {
+      tipo: 'COBRO_CLIENTE' as IngresoTipo,
+      titulo: 'Cobrar a Cliente',
+      descripcion: 'Cobrar una o varias cuotas pendientes de un cliente, con descuento opcional',
+      icono: 'payments',
+      color: '#00695c',
     },
     {
       tipo: 'AJUSTE' as IngresoTipo,
@@ -187,6 +196,17 @@ export class RegistrarIngresoDialogComponent implements OnInit {
   }
 
   seleccionarTipo(tipo: IngresoTipo): void {
+    if (tipo === 'COBRO_CLIENTE') {
+      // Mismo wizard consolidado que los pagos: un cobro es el quinto concepto del
+      // motor, no un diálogo aparte.
+      this.dialogRef?.close(false);
+      this.dialog.open(PagarObligacionesDialogComponent, {
+        width: '1000px',
+        maxWidth: '96vw',
+        data: { concepto: PagoConcepto.COBRO_CLIENTE, cajaMayorId: this.cajaMayorId },
+      });
+      return;
+    }
     if (tipo === 'ENTRADA_VARIA') {
       this.dialogRef?.close(false);
       this.dialog.open(CreateEditEntradaVariaDialogComponent, {

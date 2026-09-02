@@ -173,7 +173,10 @@ No listar todos los pasos de una. (`feedback_pruebas_ui_paso_a_paso`)
 
 ## Avisar reinicio
 
-Después de cada cambio, indicar al usuario:
+**El reinicio lo hace el agente** desde 2026-08-11 (SKILL.md regla #1), pero hay
+que avisarlo igual: si el usuario tiene la app abierta, su instancia quedó vieja.
+
+Después de cada cambio, indicar:
 
 | Cambio en | Reinicio |
 |---|---|

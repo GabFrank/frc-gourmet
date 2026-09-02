@@ -27,7 +27,7 @@ async function hasColumn(
  *
  * Ambos default false: por defecto ningún producto se expone online hasta que
  * el operador lo marca desde la pantalla "Carta Online". Portable SQLite/Postgres.
- * Ver docs/arquitectura/webapp-pedidos-plan.md.
+ * Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 export class AddOnlineFieldsToProducto1783520460210 implements MigrationInterface {
   name = 'AddOnlineFieldsToProducto1783520460210';

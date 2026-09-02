@@ -2,6 +2,7 @@ import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import { Cliente } from '../personas/cliente.entity';
 import { Usuario } from '../personas/usuario.entity';
+import { Funcionario } from '../rrhh/funcionario.entity';
 import { PrecioDelivery } from './precio-delivery.entity';
 
 /**
@@ -13,6 +14,21 @@ export enum DeliveryEstado {
   EN_CAMINO = 'EN_CAMINO',
   ENTREGADO = 'ENTREGADO',
   CANCELADO = 'CANCELADO'
+}
+
+/**
+ * Cómo llega el pedido a manos del cliente.
+ *
+ * `RETIRO` es un pedido que el cliente pasa a buscar: comparte todo con un
+ * delivery —cliente, ítems, cocina, cobro, cancelación— salvo las tres cosas
+ * que dependen de que alguien lo lleve: dirección, costo de envío y
+ * repartidor. Modelarlo como un modo de `Delivery` en vez de una entidad
+ * aparte es lo que hace que la lista, el footer, el cobro y la impresión
+ * funcionen sin enseñarles nada nuevo.
+ */
+export enum DeliveryModo {
+  DELIVERY = 'DELIVERY',
+  RETIRO = 'RETIRO',
 }
 
 /**
@@ -47,6 +63,20 @@ export class Delivery extends BaseModel {
   })
   estado!: DeliveryEstado;
 
+  /**
+   * `DELIVERY` (se reparte) o `RETIRO` (el cliente lo pasa a buscar).
+   *
+   * Default `DELIVERY`: todo lo que existía antes de esta columna era un
+   * reparto, así que la migración no cambia el sentido de ningún registro.
+   */
+  @Column({
+    name: 'modo',
+    type: 'varchar',
+    enum: DeliveryModo,
+    default: DeliveryModo.DELIVERY,
+  })
+  modo!: DeliveryModo;
+
   @Column({ name: 'fecha_abierto' })
   fechaAbierto!: Date;
 
@@ -68,7 +98,18 @@ export class Delivery extends BaseModel {
   @Column({ name: 'cobro_anticipado', default: false })
   cobroAnticipado!: boolean;
 
+  /**
+   * @deprecated El repartidor se modela como `Funcionario`, no como `Usuario`:
+   * un repartidor rara vez tiene usuario del sistema. La columna se conserva
+   * (nunca llegó a escribirse: el botón ENVIAR tenía un TODO) para no romper
+   * instalaciones existentes. Usar `entregadoPorFuncionario`.
+   */
   @ManyToOne(() => Usuario, { nullable: true })
   @JoinColumn({ name: 'entregado_por' })
   entregadoPor?: Usuario;
+
+  /** Repartidor que llevó el pedido. Se asigna al pasar a EN_CAMINO. */
+  @ManyToOne(() => Funcionario, { nullable: true })
+  @JoinColumn({ name: 'entregado_por_funcionario_id' })
+  entregadoPorFuncionario?: Funcionario;
 } 

@@ -47,7 +47,11 @@
         <!-- Price Column -->
         <ng-container matColumnDef="precio">
           <th mat-header-cell *matHeaderCellDef>PRECIO</th>
-          <td mat-cell *matCellDef="let producto" style="text-align: center;">{{producto.principalPrecio?.valor || 0 | number:'1.0-2'}}
+          <td mat-cell *matCellDef="let producto" style="text-align: center;">
+            <ng-container *ngIf="producto.esRangoVariacion; else precioUnicoBuscador">
+              {{producto.precioLista | number:'1.0-2'}} – {{producto.precioListaHasta | number:'1.0-2'}}
+            </ng-container>
+            <ng-template #precioUnicoBuscador>{{producto.precioLista | number:'1.0-2'}}</ng-template>
           </td>
         </ng-container>
 

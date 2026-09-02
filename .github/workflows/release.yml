@@ -92,7 +92,13 @@ jobs:
         # Visual Studio 2026 (v18), que el @electron/node-gyp pineado no reconoce
         # ("unsupported version: 18") y rompe el rebuild nativo (node-printer) al
         # empaquetar. windows-2022 mantiene un VS que node-gyp si soporta.
-        os: [windows-2022, ubuntu-latest]
+        #
+        # Linux salió de la matriz el 2026-08-25: la flota es 100% Windows y
+        # cada release gastaba un runner completo en un AppImage que nadie
+        # descargaba. El target sigue declarado en package.json, así que
+        # `npm run electron:build` local sigue pudiendo generarlo si algún día
+        # hace falta — lo que se retira es el build automático del release.
+        os: [windows-2022]
     runs-on: ${{ matrix.os }}
     steps:
       # Checkout exacto al tag que semantic-release acaba de crear — evita race
@@ -189,7 +195,9 @@ jobs:
             echo "[signpath] secret no configurado, fallback a publish unsigned."
           fi
 
-      # Path A — sin SignPath (linux siempre, windows cuando no hay token)
+      # Path A — sin SignPath. Con Linux fuera de la matriz esto queda sólo
+      # para el caso de Windows sin token de firma configurado.
+      # La condición se deja tal cual: si Linux vuelve a la matriz, sigue valiendo.
       - name: Build & publish installer (unsigned)
         if: matrix.os != 'windows-2022' || steps.signpath.outputs.enabled != 'true'
         shell: bash
@@ -261,7 +269,6 @@ jobs:
           name: installers-${{ matrix.os }}
           path: |
             release/*.exe
-            release/*.AppImage
             release/*.yml
             release/latest*.yml
             release/alpha*.yml

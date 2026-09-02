@@ -4,7 +4,7 @@
  * Frontera de código que comparten el desktop (Electron) y la PWA mobile
  * (`projects/mobile`). Por ahora re-exporta los archivos en su ubicación
  * original bajo `src/app/**` vía path-alias (migración incremental: ver
- * `docs/arquitectura/mobile-pwa-plan.md`). El desktop sigue importando por
+ * `.claude/skills/frc-gourmet-expert/architecture/mobile-pwa.md`). El desktop sigue importando por
  * sus rutas relativas; el mobile importa SIEMPRE por `@frc/shared-core`.
  *
  * Regla: acá va código compartible. Lo acoplado a Electron NO se exporta
@@ -18,7 +18,7 @@
 
 // --- Contrato de datos + impl IPC (reusada como HTTP en mobile vía shim) ---
 export { RepositoryService } from '../database/repository.service';
-export type { LoginResult, ClienteFilters } from '../database/repository.service';
+export type { LoginResult, ClienteFilters, DashboardVentasFiltro, CajaSelectorItem } from '../database/repository.service';
 export { RepositoryIpcService } from '../database/repository-ipc.service';
 
 // --- Servicios Angular reutilizables ---
@@ -77,13 +77,35 @@ export type { Moneda } from '../database/entities/financiero/moneda.entity';
 export type { Persona } from '../database/entities/personas/persona.entity';
 
 // --- Utilidades de dominio (datos puros, sin Angular/Electron) ---
+// Mensaje legible de un error del backend (desenvuelve el prefijo de IPC).
+export { mensajeDeError } from '../shared/utils/error-message.util';
+// Forma de pago EFECTIVO (fuente única desktop + mobile).
+export { formaPagoEfectivo, formasPagoDeCaja, formasPagoEfectivoDeCaja } from '../shared/utils/forma-pago-efectivo.util';
 // Reglas de validación de Operación Financiera (fuente única desktop + mobile).
 export {
   CAMPOS_REQUERIDOS,
   CAMPOS_MONEDA,
+  CAMPOS_FORMA_PAGO,
   MONEDAS_EN_UI,
+  LADOS_CAJA_MAYOR,
+  CAJAS_EN_UI,
+  CUENTAS_EN_UI,
+  COTIZACION_EN_UI,
+  TIPOS_OPERACION,
+  ETIQUETAS_CAMPOS,
   usaCuentaBancaria,
   usaDosCuentasBancarias,
   monedasDesdeCuentaBancaria,
+  formaPagoEsEfectivoFijo,
+  monedaSeHeredaDeCuenta,
+  fuenteDelCampo,
+  etiquetaDe,
+  camposFaltantes,
+  validarCoherencia,
 } from '../pages/financiero/caja-mayor/operaciones-financieras/create-operacion-financiera/operacion-financiera-validacion.util';
-export type { TipoOperacionFinanciera } from '../pages/financiero/caja-mayor/operaciones-financieras/create-operacion-financiera/operacion-financiera-validacion.util';
+export type {
+  TipoOperacionFinanciera,
+  LadoOperacion,
+  PorLado,
+  FuenteCampo,
+} from '../pages/financiero/caja-mayor/operaciones-financieras/create-operacion-financiera/operacion-financiera-validacion.util';

@@ -1,5 +1,29 @@
 # Dominio: RRHH — Liquidaciones y Comisiones
 
+## Pago de la liquidación (desde 2026-08)
+
+El botón **Pagar** del detalle abre el wizard de Caja Mayor
+(`pagar-obligaciones-dialog`, concepto `LIQUIDACION_SUELDO`) con esa liquidación
+preseleccionada. **Una por vez**: su neteo tiene que quedar atado a un evento propio.
+
+El neteo (vales → `DESCONTADO`, cuotas CPP de préstamo, cuotas CPC de consumo con
+`Cliente.saldoActual` y `MovimientoCliente`, aguinaldo, comisiones, venta de
+vacaciones) se extrajo a **`aplicarEstadoPagoLiquidacion`** /
+**`revertirEstadoPagoLiquidacion`** (`liquidacion-sueldo.handler.ts`), sin cambios
+de comportamiento. El handler viejo `pagar-liquidacion-sueldo` sigue existiendo y
+llama a la función extraída — lo usa la PWA mobile.
+
+⚠️ **Una liquidación pagada por el pago consolidado deja `movimientoId` y
+`cuentaBancariaId` en `null` a propósito**: el evento puede haber generado N
+movimientos y la entidad sólo tiene lugar para uno. Por eso
+`anular-liquidacion-sueldo` la bloquea y la reversa la hace
+`anular-pago-consolidado`. La reversa de caja del handler viejo (que va por
+`liq.movimientoId`) **se quedó donde estaba**: moverla rompería la anulación de
+las liquidaciones que NO se pagaron por el evento.
+
+Detalle → [financiero-caja-mayor.md](financiero-caja-mayor.md) § Pago consolidado.
+
+
 ## Liquidación de Sueldo
 
 ```typescript
@@ -276,6 +300,15 @@ EquipoComisionRegla {
 
 > El funcionario **debe** tener `usuario_id`; si no, la evaluación lanza error (las ventas se atribuyen por usuario).
 
+> ⚠️ **Nunca leer `Venta.total`**: esa columna no se escribe en ningún flujo del
+> repo. Hasta 2026-08 `totalMontoVentaLocal` salía de ahí, así que valía 0 y la
+> regla `META_VENTA_LOCAL` **no pagaba nunca, en silencio** (issue #239). El
+> total de una venta se calcula desde los ítems con
+> `electron/utils/venta-total.utils.ts`, que es el único lugar donde vive esa
+> cuenta: `sqlTotalLineaItem` para la línea — ojo, **el adicional es por unidad y
+> va dentro del × cantidad** — y `getTotalesPorVenta` / `sumarTotalesDeVentas`
+> para el total neto de los descuentos y aumentos globales del cobro.
+
 ```
 1. Query venta_items JOIN ventas (SQL crudo):
    - v.estado = 'CONCLUIDA'
@@ -286,8 +319,9 @@ EquipoComisionRegla {
 
 2. Métricas:
    - totalUnidades        = SUM(vi.cantidad)
-   - totalMontoProductos  = SUM(precioUnitario×cant − descuentoUnitario×cant + precioAdicionales)
-   - totalMontoVentaLocal = SUM(v.total) de las ventas únicas tocadas
+   - totalMontoProductos  = SUM((precioUnitario + precioAdicionales − descuentoUnitario) × cantidad)
+   - totalMontoVentaLocal = suma del total COMPLETO de las ventas únicas tocadas,
+                            vía `sumarTotalesDeVentas` (venta-total.utils)
 
 3. Evaluar requisitos (cada ReglaComisionRequisito) → factorRequisitos:
    FOR EACH requisito:
@@ -388,7 +422,7 @@ Export con exceljs (Excel) y pdfmake (PDF).
 
 ## Verificación end-to-end
 
-`docs/plan-rrhh-comisiones.md` § 6 — secuencia de 20 pasos:
+Secuencia de 20 pasos que recorre el módulo entero (del plan original de RRHH, 2026-05):
 
 1. Seed permisos, asignar a ADMIN.
 2. Alta Funcionario A MOZO 2.500.000.

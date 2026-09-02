@@ -209,10 +209,44 @@ export class AuthService {
     } catch { /* fallback standalone */ }
 
     if (mode === 'client') {
+      // Red de seguridad: no dar por buena una sesión que el transporte no
+      // puede usar.
+      //
+      // El estado de sesión de la UI vive en localStorage y sobrevive al cierre
+      // de la app; los tokens del modo cliente viven en memoria del preload y
+      // mueren con el proceso. Restaurar el usuario sin mirar los tokens
+      // producía una sesión zombi: la app mostraba el nombre y el avatar
+      // leídos del disco mientras cada llamada salía sin `Authorization` y
+      // volvía rechazada. Nada la corregía, porque el evento que dispara el
+      // logout automático no se emite en Electron.
+      //
+      // Desde 2026-08 el preload rehidrata la sesión desde el refresh token
+      // persistido, así que lo normal es que acá ya haya token. Si igual no
+      // hay —vencido a los 30 días, revocado, o servidor caído— se limpia y se
+      // manda al login, que es honesto, en vez de un panel vacío que aparenta
+      // funcionar.
+      //
+      // En la web `/admin` este chequeo no molesta: ese shim sí persiste sus
+      // tokens en localStorage y los recarga al arrancar.
+      await this.esperarRehidratacionCliente();
+      if (!this.transporteTieneCredenciales()) {
+        // No hace falta navegar: `clearSession()` deja el `BehaviorSubject` en
+        // null y `app.component` ya reacciona a eso yendo al login. Un segundo
+        // navigate a la misma URL sería un no-op.
+        console.warn('[auth] sesión cacheada sin tokens en el transporte: se limpia.');
+        this.clearSession();
+        return;
+      }
       try {
         const user = JSON.parse(userJson) as Usuario;
         this.sessionId = parsedSessionId;
         this.currentUserSubject.next(user);
+        // No hace falta repoblar roles/permisos acá: `PermissionService` se
+        // suscribe a `currentUser$` y los pide al servidor
+        // (`getPermissionsByUser`) cada vez que el usuario cambia. Nada en la
+        // UI lee `usuario.roles` — de hecho la entidad ni siquiera tiene esa
+        // propiedad. El sidenav aparecía vacío por la sesión zombi (esa
+        // llamada también salía sin token), no por el objeto cacheado.
       } catch {
         this.clearSession();
       }
@@ -233,6 +267,43 @@ export class AuthService {
     } catch (error) {
       console.error('restoreSession error:', error);
       this.clearSession();
+    }
+  }
+
+  /**
+   * Espera a que el preload termine de rehidratar la sesión desde el refresh
+   * token persistido, si esa capacidad existe.
+   *
+   * Sin esto habría una carrera: `AuthService` se construye apenas arranca
+   * Angular y podría preguntar por el token antes de que la rehidratación
+   * termine, y limpiar una sesión que sí era recuperable.
+   *
+   * El `?.` no es defensivo por gusto: la web `/admin` usa otro shim de
+   * `window.api` que no tiene este método (allá los tokens se recargan de
+   * `localStorage` de forma síncrona), y en modo standalone esta rama ni
+   * siquiera se ejecuta.
+   */
+  private async esperarRehidratacionCliente(): Promise<void> {
+    try {
+      const api = (window as any).api;
+      if (typeof api?.ensureSessionRehydrated === 'function') {
+        await api.ensureSessionRehydrated();
+      }
+    } catch (e) {
+      console.warn('[auth] rehidratación de sesión falló:', e);
+    }
+  }
+
+  /** ¿El transporte tiene con qué autenticar la próxima llamada? */
+  private transporteTieneCredenciales(): boolean {
+    try {
+      const api = (window as any).api;
+      // Si el shim no expone el método, no se puede afirmar que falten
+      // credenciales: se deja pasar en vez de desloguear a ciegas.
+      if (typeof api?.getAccessToken !== 'function') return true;
+      return !!api.getAccessToken();
+    } catch {
+      return true;
     }
   }
 

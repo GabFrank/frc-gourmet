@@ -24,6 +24,7 @@ Cada pantalla trae un **control de período** común (`app-reporte-periodo-contr
 - **`reportes-periodo.util.ts`** — `resolverPeriodo(params, now?)` → `{ actual, anterior|null, label, labelAnterior }`. `variacionPct(actual, anterior)` (null si base 0). **Regla de comparación:** `month`/`prevMonth` → mes calendario anterior; `month` se recorta al mismo día (mes-a-fecha), `prevMonth` toma el **mes anterior COMPLETO**; el resto → ventana de igual longitud inmediatamente anterior.
 - **`reportes-ventas.helper.ts`** — `construirReporteVentasCierre`. Series de tendencia, día de semana, heatmap, productos, mix, combinaciones, meseros.
 - **`reportes-finanzas.helper.ts`** — `construirReporteFinanzasCierre`. Flujo de caja, composición, gastos, aging, POS, vencimientos.
+- **`reportes-delivery.helper.ts`** (2026-08-28) — motor de métricas de delivery/retiro. `construirBloqueDelivery` devuelve el bloque completo (KPIs + comparativo, mix por canal, zonas, repartidores, tiempos/SLA, cancelaciones, cobro anticipado, origen del reparto) y `construirReporteVentasCierre` lo incorpora al payload como `delivery`, más 4 KPIs (`envios`, `retiros`, `ingresoEnvios`, `ticketPromedioDelivery`) dentro de `kpis` para que el frontend los arme con el mismo `buildKpiCard` que el resto. **Lo consumen también** `get-dashboard-ventas-kpis` (chips) y `computeResumenCaja` (bloque del cierre), vía `kpisDelivery` / `deliveriesEnCamino` / `resumenDeliveryCaja`. Ver §8.
 - Reutiliza helpers **exportados** de `dashboard-ventas.handler.ts`: `getMonedaPrincipalId`, `getCotizacionMap`, `sumaVentasRango`, `desgloseVentasRango`, `filtroRango`, tipo `VentaFiltro`.
 
 ### Frontend (`src/app/pages/reportes/`)
@@ -47,6 +48,33 @@ Grupo top-level **`grp-reportes`** (icon `assessment`) en `menu-tree.ts`, entre 
 
 Cuando el período de comparación tiene más cubetas que el actual (mes anterior más largo), las cubetas sobrantes se **pliegan en el último punto** para que la línea punteada siga sumando el total completo del anterior.
 
+### Jornada comercial — `resolverPeriodo` comparte el ancla de los dashboards
+
+`resolverPeriodo()` tenía su **propia aritmética de días** (`startOfDay`/`endOfDay`),
+independiente de `dashboard-rangos.util.ts`. Cuando se agregó la jornada comercial
+(día de 07:00 a 06:59, ver `domains/dashboards.md` §7.6) y los reportes no se
+enteraron, **una venta de la 01:30 aparecía en días distintos según la pantalla**:
+el dashboard la contaba en la jornada de ayer y el reporte en el día calendario de
+hoy. Es el mismo desfase card/chart que ya se había corregido una vez, ahora entre
+pantallas.
+
+Hoy los orquestadores leen `getInicioJornada(dataSource)` y lo pasan:
+`resolverPeriodo(params, new Date(), inicioJornada)`. `inicioJornada = 0`
+reproduce exactamente el día calendario.
+
+**La ventana de comparación también.** El bloque `if (comparar)` armaba
+`anterior` con medianoche fija mientras `actual` ya usaba la jornada: con corte a
+las 07:00 la comparación salía **24 h más larga** y el % de variación quedaba
+sesgado. Y el día de corte se leía de `hasta.getDate()`, que con la jornada
+encendida ya rodó al día calendario siguiente (la jornada del 19 cierra el 20 a
+las 06:59). Es el **default de la pantalla** (`comparar = true`, rango `month`),
+así que se veía siempre. Cubierto por los casos `[I]` de `test:reportes-periodo`
+— la suite pasaba con el bug porque ninguno miraba la longitud de `anterior`.
+
+**fix relacionado:** los rangos `custom` corrían un día. `new Date('2026-07-15')`
+es UTC-medianoche, que en Paraguay es el 14 a la noche. Se parsea con
+`parseFechaLocal()` del util compartido.
+
 ## 4. Wiring IPC (4 capas)
 
 `repository.service.ts` (abstract) + `repository-ipc.service.ts` (impl standalone/server) + `repository-http.service.ts` (**stubs que lanzan "no implementado" en modo client** — pendiente) + `preload.ts` (3 métodos) + `api-channel-map.generated.ts` (regenerar con `npm run generate:web-api`). Métodos: `getReporteVentasCierre`, `getReporteFinanzasCierre`, `enviarReporteWhatsapp`.
@@ -56,6 +84,8 @@ Cuando el período de comparación tiene más cubetas que el actual (mes anterio
 - `npm run test:reportes-periodo` — unit determinístico de `resolverPeriodo`/`variacionPct` (sin DB; cubre el recorte mes-a-fecha y el mes-completo de `prevMonth`).
 - `npm run test:reporte-ventas` — e2e SQLite: KPIs, día de semana, top productos + margen, mix, combinaciones, tendencia, comparativo.
 - `npm run test:reporte-finanzas` — e2e SQLite: KPIs, exclusión de anulaciones, composición, gastos, aging CPP, POS, vencimientos, flujo.
+- `npm run test:reporte-delivery` — e2e SQLite del motor de delivery (57 asserts): KPIs, mix por canal, zonas, repartidores, SLA, cancelaciones, multimoneda, cierre de caja, comparativo. Incluye los dos invariantes de §8.
+- `npm run test:canal-venta` — compara el `CASE` de SQL contra el clasificador de TypeScript caso por caso.
 
 ## 6. Versión mobile (PWA)
 
@@ -73,3 +103,162 @@ El mismo hub existe en la **PWA mobile** (`projects/mobile/src/app/pages/reporte
 - Modo **client** (HTTP): los 3 métodos aún lanzan error — no están portados. Si se necesita en cliente, implementar en `repository-http.service.ts`.
 - Los charts requieren `Chart.register(...registerables)` (lo hace `reporte-visual.ts` como side-effect del módulo) — sin eso, bubble y bar+line mixto no renderizan.
 - WhatsApp: `sendWhatsappMedia` solo manda imágenes → se envía el primer gráfico como PNG + caption de KPIs; reutiliza `buildEvolutionConfig()` + `getEvolutionApiKey()` + destino de cierre de caja.
+
+
+## 8. Delivery y retiro en los informes (2026-08-28)
+
+Hasta esta fecha **ninguna pantalla de informes sabía que el delivery existía**:
+cero menciones a delivery, `canal_origen`, `costo_delivery` o zona en
+`reportes-*.helper.ts`, `dashboard-ventas.handler.ts` y `resumen-caja.utils.ts`.
+Los datos estaban todos en la base; nadie los leía.
+
+### El canal es una sola definición, en dos lenguajes
+
+`src/app/shared/utils/canal-venta.util.ts` (TS puro, lo usan backend y
+renderer) define **SALÓN / MOSTRADOR / DELIVERY / RETIRO**, y
+`electron/utils/canal-venta.utils.ts` lo re-exporta agregando el `CASE` SQL
+equivalente (`canalVentaExpr`), el filtro (`condicionCanal`) y el join
+(`joinDeliveryCanal`).
+
+Son dos implementaciones de la misma regla y por eso `npm run test:canal-venta`
+las compara **fila por fila** contra la base — el mismo resguardo que
+`CONCEPTO_ES_INGRESO` / `esIngreso()` en el pago consolidado.
+
+Dos detalles que no son obvios:
+
+- **El reparto gana sobre la mesa.** Si un delivery quedara además con mesa (un
+  arrastre de datos), clasificarlo como SALÓN lo borraría de los informes de
+  delivery, que es el error caro.
+- **Un canal desconocido no abre el filtro.** `condicionCanal('DELIVERI')`
+  devuelve `1 = 0`, no "todo": un typo que muestra el universo entero parece
+  que funcionó.
+
+⚠️ **El canal NO es `Venta.canalOrigen`** (LOCAL / WEB / QR_MESA), que dice por
+qué puerta entró el pedido. Un delivery puede ser LOCAL (lo cargó el cajero por
+teléfono) o WEB. Se cruzan, no se reemplazan — `origenDeLosRepartos` es
+justamente ese cruce.
+
+### Criterios del motor (leer antes de tocar)
+
+- **La ventana es `ventas.created_at`, para todo.** Contar los envíos por
+  `fecha_entregado` sonaba mejor ("envíos entregados en el mes") pero rompe la
+  reconciliación: `envíos × ticket promedio` dejaría de dar la facturación de
+  delivery del mismo período. El label dice "envíos", no "entregados".
+- **La plata sale de `pagos_detalles`** (`PAGO − VUELTO`, `pd.activo`,
+  convertido con `cotMap`), igual que `sumaVentasRango`. **La excepción es el
+  envío**, que sale de `ventas.costo_delivery`: es un monto congelado y un pago
+  mixto no dice qué parte era el envío.
+- **Todo pasa por un `FiltroVentas`**, no por un rango: el reporte filtra por
+  período y el dashboard por **caja abierta** (la "Opción B" que evita que un
+  turno que cruza medianoche reinicie el total). Lo que varía es el filtro, no
+  la aritmética.
+- **`cancelacionesDelivery` es la única función que mira ventas CANCELADAS** —
+  `delivery-cancelar` cancela también la venta. El resto parte de `concluidas()`.
+  Hay un assert dedicado a que una cancelada no se cuele en ninguna otra métrica.
+- **Los tiempos se restan en JS**, no con date-diff de SQL: `EXTRACT(EPOCH…)` y
+  `julianday()` no se parecen, y ramificar por driver cuatro etapas es más
+  frágil que traer los timestamps.
+- **Una etapa sin sus dos extremos no cuenta como cero.** La máquina de estados
+  permite ABIERTO → EN_CAMINO sin pasar por PARA_ENTREGA; rellenar el despacho
+  con cero diría que fue instantáneo cuando no existió.
+- **Ciclo de imports:** `dashboard-ventas.handler` → `reportes-delivery.helper`,
+  nunca al revés. Por eso el helper **redeclara** `FiltroVentas` en vez de
+  importar `VentaFiltro`.
+
+### Invariantes que cubre el test
+
+1. La suma del mix por canal **es** la facturación del reporte (si un canal
+   contara de más, la dona y el KPI dirían cosas distintas).
+2. Una venta cancelada no aparece en ninguna métrica salvo la de cancelaciones.
+
+### Bloque del cierre de caja
+
+`computeResumenCaja` devuelve `delivery: ResumenDeliveryCaja` (envíos, retiros,
+cancelados, cobro de envíos, anticipados y **pendientes** al cerrar), así que
+aparece de una vez en el diálogo, el ticket impreso y la imagen de WhatsApp.
+No reusa `kpisDelivery`: el cierre no necesita facturación por canal, y
+arrastrar la conversión multimoneda obligaría al util del arqueo a depender del
+mapa de cotizaciones.
+
+### La pantalla (desktop)
+
+Cuatro KPIs (Envíos, Retiros, Ingreso por envíos, Ticket prom. delivery) en una
+**fila propia** debajo de la general: la grilla de arriba es de 5 columnas y
+meter 9 cards dejaba una segunda fila coja. El PDF y el caption de WhatsApp leen
+`kpisExport` (`kpis` + `kpisDelivery`), así que ven las dos filas.
+
+Cinco tarjetas entre "Ingeniería de menú" y "Combinaciones", todas bajo
+`*ngIf="hayDelivery"` — un local que no reparte no ve media pantalla vacía:
+
+| Tarjeta | Notas |
+|---|---|
+| **Mix por canal** | Dona + tabla + notas al pie con cobro anticipado y origen (WEB/LOCAL). Se pintan los 4 canales aunque alguno esté en cero: la ausencia es el dato. |
+| **Envíos por zona** | Barras + tabla (envíos, facturación, envío cobrado, tiempo prom.). Un tiempo `null` se muestra `—`, no `0`: nadie entregó, no fue instantáneo. |
+| **Repartidores** | `<app-dash-ranking>`, ordenado por entregas. |
+| **Tiempos de entrega** | Barras promedio/mediana por etapa + 3 chips de SLA con **color y etiqueta juntos** (nunca color solo). Los umbrales del chip vienen del backend, así que el texto dice los minutos reales configurados. |
+| **Cancelaciones** | Cantidad, tasa, monto no facturado y top de motivos. |
+
+Además: la **tendencia** gana una tercera serie "Delivery" (sólo si hubo alguno
+— una línea en cero le roba lectura a las otras dos), y el **heatmap** gana un
+toggle Todos / Solo delivery, porque de noche el reparto sigue y el salón baja:
+mezcladas, las dos curvas se promedian en una que no describe a ninguna.
+
+Dos cosas que costaron y conviene no repetir:
+
+- **`<app-dash-section-header>` no proyecta contenido** (no tiene `<ng-content>`).
+  Meter el toggle adentro lo hacía desaparecer en silencio; va como hermano, en
+  un `.hm-head` flex.
+- **`--primary-color` NO es un token global** en este proyecto: cada componente
+  define el suyo (`reporte-periodo-control` tiene el rojo de marca en su
+  `:host`). Un botón propio que lo usara salía transparente. El toggle reusa
+  `.dashboard-range-chip` / `.range-chip-active`, que sí es global vía
+  `styles.scss` → `@import './app/shared/styles/dashboard'` (sin guion bajo, por
+  eso no aparece grepeando `_dashboard`).
+
+La paleta categórica del repo se validó con el validador de `dataviz` para los 4
+canales: pasa en claro (con el WARN de contraste que ya cubren la leyenda con %
+y la tabla). En **oscuro**, dos pasos (naranja y amarillo) quedan fuera de la
+banda de luminosidad recomendada — es de la paleta preexistente, compartida con
+el mix de forma de pago, y cambiarla acá dejaría dos donas con paletas distintas
+en la misma pantalla. Anotado como pendiente, no tocado.
+
+### La pantalla (mobile / PWA)
+
+Las mismas métricas, mobile-first y sin backend nuevo: KPIs en fila propia, mix
+por canal (dona), zonas y repartidores como listas con `mat-progress-bar`, SLA
+como chips y cancelaciones como texto + motivos. Se omiten, igual que el resto
+del reporte mobile, el heatmap por canal y cualquier gráfico de burbujas.
+
+Manual de pruebas: [`docs/testing/TESTING-CHECKLIST-INFORMES-DELIVERY.md`](../../../../docs/testing/TESTING-CHECKLIST-INFORMES-DELIVERY.md).
+
+
+### Lo que encontró la auditoría (2026-09-01)
+
+Cuatro bugs reales que los tests originales no atrapaban. Valen como recordatorio
+de qué mirar la próxima vez que se agregue un agregado sobre `ventas`:
+
+- **Un agregado que clona un QueryBuilder hereda sus joins.** `totales.costoDelivery`
+  del historial salía de `qb.clone().select('SUM(...)')`, y `qb` tenía
+  `leftJoinAndSelect('venta.items')` — que es `@OneToMany`. `.select()` reemplaza
+  las columnas pero **no quita los joins**, así que un envío de 15.000 en una venta
+  de 3 ítems sumaba 45.000. El fixture tenía un ítem por venta, o sea factor 1, y el
+  test pasaba. Hoy los filtros viven en una función `aplicarFiltros(builder)` que
+  comparten las dos consultas, y la de totales arma su propio builder sin ese join.
+- **`getVentasByDateRange` comparaba ISO contra el formato de SQLite.** El mismo bug
+  que `dbQuery` ya corregía, reintroducido porque este handler arma el `WHERE` con
+  QueryBuilder. En standalone, el filtro "hoy" del Historial devolvía **cero**.
+  `limiteFechaSqlite()` se exportó desde `db-query.ts` para que haya una sola
+  definición del formato.
+- **Hidratar una entidad publica todos sus campos.** `leftJoinAndSelect` del
+  `Funcionario` repartidor exponía sueldo, IPS y cuenta bancaria en la respuesta de
+  una lista de ventas, sobre un canal sin `ensurePermission`. Ahora va `leftJoin` +
+  `addSelect(['repartidor.id', 'repartidorPersona.id', 'repartidorPersona.nombre'])`.
+- **`envioRecaudado` no aplicaba el filtro de canal** que sus callers usaban para
+  todo lo demás, así que sumaba también los retiros. Inofensivo hoy (los tres
+  caminos que crean un delivery fuerzan `costoDelivery = 0` en un retiro) pero
+  latente. La condición vive ahora en la constante `SOLO_ENVIOS`.
+
+**Hueco de cobertura que queda:** los tres scripts nuevos corren sólo contra SQLite.
+El riesgo de `decimal`-como-string de Postgres (documentado en el encabezado del
+motor) no está cubierto por ningún test — el CI sí corre la migración contra
+Postgres, pero no las métricas. Ver `reference/known-bugs.md`.

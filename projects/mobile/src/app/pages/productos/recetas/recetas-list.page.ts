@@ -61,7 +61,10 @@ export class RecetasListPage implements OnInit {
           nombre: r.nombre,
           costoFmt: Number(r.costoCalculado || 0).toLocaleString('es-PY', { maximumFractionDigits: 0 }),
           activo: r.activo !== false,
-          completa: !!r.producto,
+          // `productoVinculado` (virtual sobre `producto.receta_id`), no
+          // `r.producto` (columna deprecada, siempre NULL: marcaba TODAS las
+          // recetas como "pre-receta").
+          completa: !!r.productoVinculado,
         }));
         this.loading = false;
       },

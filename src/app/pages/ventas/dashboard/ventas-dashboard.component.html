@@ -23,7 +23,7 @@
     </app-dash-stat-chip>
     <app-dash-stat-chip
       icon="payments"
-      [value]="formatPYG(totalHoyPYG) + ' Gs'"
+      [value]="totalHoyTexto"
       [label]="labelTotal"
       [loading]="loading"
       [clickable]="!!desgloseVentasHoy"
@@ -31,7 +31,7 @@
     </app-dash-stat-chip>
     <app-dash-stat-chip
       icon="confirmation_number"
-      [value]="formatPYG(ticketPromedio) + ' Gs'"
+      [value]="ticketPromedioTexto"
       label="Ticket promedio"
       [loading]="loading">
     </app-dash-stat-chip>
@@ -39,6 +39,35 @@
       icon="table_restaurant"
       [value]="mesasOcupadas + ' / ' + mesasTotal"
       label="Mesas ocupadas"
+      [loading]="loading">
+    </app-dash-stat-chip>
+  </div>
+
+  <!-- Delivery: fila propia, sólo si el local reparte o tiene pedidos en la calle -->
+  <div class="dashboard-stats-row" *ngIf="hayDelivery">
+    <app-dash-stat-chip
+      icon="two_wheeler"
+      [value]="enviosHoy"
+      label="Envíos"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="shopping_bag"
+      [value]="retirosHoy"
+      label="Retiros"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="local_shipping"
+      [value]="enCaminoAhora"
+      label="En camino ahora"
+      [color]="enCaminoAhora > 0 ? 'warning' : 'primary'"
+      [loading]="loading">
+    </app-dash-stat-chip>
+    <app-dash-stat-chip
+      icon="delivery_dining"
+      [value]="ingresoEnviosTexto"
+      label="Cobrado en envíos"
       [loading]="loading">
     </app-dash-stat-chip>
   </div>
@@ -110,7 +139,7 @@
                 <mat-icon>trending_up</mat-icon>
                 <div class="caja-detail-text">
                   <span class="detail-label">Venta total</span>
-                  <span class="detail-value highlight">{{ formatPYG(caja.ventaTotal) }} Gs</span>
+                  <span class="detail-value highlight">{{ caja.ventaTotalTexto }}</span>
                 </div>
               </div>
               <div class="caja-detail-item">
@@ -141,7 +170,7 @@
     <!-- Col derecha -->
     <div class="dashboard-col-right">
       <app-dash-ranking
-        title="Top productos vendidos"
+        [title]="tituloTopProductos"
         icon="emoji_events"
         [items]="topProductos"
         emptyText="Sin datos del periodo">

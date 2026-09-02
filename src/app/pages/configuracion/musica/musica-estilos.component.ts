@@ -172,6 +172,70 @@ export class MusicaEstilosComponent implements OnInit {
     }
   }
 
+  /**
+   * Pulgar arriba/abajo. Votar dos veces lo mismo lo deja en neutro, que es lo
+   * esperable de un toggle y evita necesitar un tercer botón "sin opinión".
+   *
+   * Sólo orienta al descubridor: no cambia cuánto suena el estilo.
+   */
+  async votar(e: EstiloVista, valor: number): Promise<void> {
+    const nuevo = e.preferencia === valor ? 0 : valor;
+    try {
+      await this.musicaService.setPreferenciaEstilo(e.id, nuevo);
+      e.preferencia = nuevo;
+      const msg =
+        nuevo === 1
+          ? `MÁS DE ${e.nombre} EN LAS PRÓXIMAS BÚSQUEDAS`
+          : nuevo === -1
+            ? `MENOS DE ${e.nombre} EN LAS PRÓXIMAS BÚSQUEDAS`
+            : `VOTO QUITADO DE ${e.nombre}`;
+      this.snackBar.open(msg, 'OK', { duration: 2500 });
+    } catch (err: any) {
+      this.mostrarError(err);
+    }
+  }
+
+  /**
+   * Apaga o vuelve a encender un estilo entero. Es reversible y no toca los
+   * temas, pero saca material de todas las playlists de una — se confirma
+   * mostrando cuántos temas se apagan.
+   */
+  alternarVeto(e: EstiloVista): void {
+    if (!e.vetado) {
+      const ref = this.dialog.open(ConfirmationDialogComponent, {
+        data: {
+          title: 'Que no suene',
+          message:
+            `¿Sacar "${e.nombre}" del generador de playlists?\n\n` +
+            `Sus ${e.tracks} temas dejan de entrar en cualquier bloque. ` +
+            'No se borra nada: podés volver a habilitarlo cuando quieras.',
+        },
+      });
+      ref.afterClosed().subscribe(async (ok) => {
+        if (ok) await this.aplicarVeto(e, true);
+      });
+      return;
+    }
+    // Volver a habilitar no saca nada de ningún lado: no necesita confirmación.
+    void this.aplicarVeto(e, false);
+  }
+
+  private async aplicarVeto(e: EstiloVista, vetar: boolean): Promise<void> {
+    try {
+      const r = await this.musicaService.vetarEstilo(e.id, vetar);
+      e.vetado = r.vetado;
+      this.snackBar.open(
+        vetar
+          ? `${e.nombre} NO VA A SONAR (${r.tracksAfectados} TEMAS)`
+          : `${e.nombre} VUELVE A SONAR`,
+        'OK',
+        { duration: 4000 },
+      );
+    } catch (err: any) {
+      this.mostrarError(err);
+    }
+  }
+
   /** Nombre, descripción y géneros del estilo. */
   editarEstilo(e: EstiloVista): void {
     const ref = this.dialog.open(MusicaEstiloEditarDialogComponent, {

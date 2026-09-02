@@ -26,6 +26,8 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { aplicarPagoCpoCuota } from './cuentas-por-pagar.handler';
 import { ensurePermission } from '../utils/auth.utils';
+import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
+import { Venta } from '../../src/app/database/entities/ventas/venta.entity';
 
 // ===== Helpers internos =====
 
@@ -1337,28 +1339,86 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     return await repo.findOne({ where: { id }, relations: ['caja', 'detalles', 'compras', 'createdBy', 'updatedBy'] });
   });
 
+  // `Pago`/`PagoDetalle` estan marcadas @deprecated para compras, pero son el
+  // libro de pagos del COBRO DE VENTA. El guard quedo en COMPRAS_GESTIONAR, que
+  // el rol CAJERO no tiene: no podia agregar una linea de cobro en el PdV.
+  //
+  // Aceptan los dos permisos porque los dos flujos siguen vivos, PERO sobre un
+  // registro que YA existe hay que mirar de que dominio es: un Pago vinculado a
+  // una Compra es un pago a proveedor, y editarlo o borrarlo sigue siendo
+  // COMPRAS_GESTIONAR. Sin esto, quien solo tiene VENTAS_COBRAR podia editar y
+  // borrar el historial de pagos a proveedores pasando un id cualquiera.
+  const PERMISOS_PAGO = ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR'];
+
+  /** Un Pago vinculado a alguna Compra pertenece al dominio de compras. */
+  const esPagoDeCompra = async (pagoId: number): Promise<boolean> => {
+    if (!pagoId) return false;
+    const n = await dataSource
+      .getRepository(Compra)
+      .count({ where: { pago: { id: pagoId } } as any });
+    return n > 0;
+  };
+
+  /**
+   * Permiso para operar sobre un Pago existente: el debil si es de venta, el de
+   * compras si el Pago cuelga de una Compra.
+   */
+  const ensurePermisoPagoExistente = async (pagoId: number): Promise<void> => {
+    const permisos = (await esPagoDeCompra(pagoId)) ? ['COMPRAS_GESTIONAR'] : PERMISOS_PAGO;
+    await ensurePermission(dataSource, getCurrentUser, permisos);
+  };
+
+  /**
+   * Gate de terminal ajena para las mutaciones sobre un `Pago` que YA existe.
+   *
+   * A diferencia de `createPago`/`createPagoDetalle`, acá no hay flag opt-in: se
+   * deriva del propio pago. Sin esto quedaba una asimetría fea —crear una línea
+   * de dinero estaba gateado y modificarla o borrarla no— y por `/api/rpc`
+   * directo se podía cambiar el efectivo esperado de una caja ajena.
+   *
+   * El discriminador es **positivo**: sólo se gatea si el `Pago` cuelga de una
+   * `Venta`. Un pago de compra, o uno huérfano, pasa sin gate. Se eligió así y
+   * no por "no es de compra" porque el diálogo de compras crea el `Pago` ANTES
+   * de vincularlo a la `Compra`: en esa ventana un pago de compra legítimo se
+   * habría visto como pago de venta y habría quedado bloqueado.
+   */
+  const ensureTerminalPagoDeVenta = async (event: any, pagoId: number): Promise<void> => {
+    if (!pagoId) return;
+    const venta = await dataSource.getRepository(Venta).findOne({
+      where: { pago: { id: pagoId } } as any,
+      relations: ['caja'],
+    });
+    if (!venta) return; // no es un pago de venta: fuera del alcance del gate
+    await assertTerminalPuedeOperar(dataSource, event, (venta.caja as any)?.id ?? null, 'PAGO');
+  };
+
+  /** Idem para una línea: resuelve primero a qué Pago pertenece. */
+  const ensureTerminalPagoDetalle = async (event: any, detalleId: number): Promise<void> => {
+    const detalle = await dataSource
+      .getRepository(PagoDetalle)
+      .findOne({ where: { id: detalleId }, relations: ['pago'] });
+    await ensureTerminalPagoDeVenta(event, (detalle?.pago as any)?.id ?? 0);
+  };
+
+  /** Idem, resolviendo antes a que Pago pertenece la linea. */
+  const ensurePermisoPagoDetalle = async (detalleId: number): Promise<void> => {
+    const detalle = await dataSource
+      .getRepository(PagoDetalle)
+      .findOne({ where: { id: detalleId }, relations: ['pago'] });
+    await ensurePermisoPagoExistente((detalle?.pago as any)?.id ?? 0);
+  };
+
   ipcMain.handle('createPago', async (_event: any, data: any) => {
-    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
-    // Cobro de venta: solo el dispositivo donde se abrio la caja puede cobrar.
-    // El flag `validarDispositivoCaja` lo envia unicamente el flujo de cobro de
-    // venta (cobrar-venta-dialog). Los pagos de compra no lo mandan, asi que no
-    // se ven afectados. Se descarta el flag antes de persistir el Pago.
+    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR']);
+    // Cobro de venta: por default sólo la terminal donde se abrió la caja puede
+    // registrar pagos, salvo que `PdvConfig.permitirPagosTerminalAjena` lo
+    // habilite. El flag `validarDispositivoCaja` lo envía únicamente el flujo de
+    // cobro de venta (cobrar-venta-dialog / cobro rápido). Los pagos de compra
+    // no lo mandan, así que no se ven afectados. Se descarta antes de persistir.
     const { validarDispositivoCaja, ...pagoData } = data ?? {};
     if (validarDispositivoCaja) {
       const cajaId = pagoData?.caja?.id ?? pagoData?.caja ?? null;
-      const cajaRepo = dataSource.getRepository(Caja);
-      const caja = cajaId
-        ? await cajaRepo.findOne({ where: { id: cajaId }, relations: ['dispositivo'] })
-        : null;
-      const dispositivoCajaId = caja?.dispositivo?.id ?? null;
-      const deviceActual = resolveRequestDeviceId(_event);
-      // Bloquea SOLO cuando se puede determinar positivamente que el dispositivo
-      // actual difiere del dueño de la caja. Si el dispositivo actual no se puede
-      // resolver (standalone sin device configurado), no se bloquea para no
-      // romper el cobro en instalaciones de un solo equipo.
-      if (deviceActual != null && dispositivoCajaId != null && deviceActual !== dispositivoCajaId) {
-        throw new Error('COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO');
-      }
+      await assertTerminalPuedeOperar(dataSource, _event, cajaId, 'PAGO');
     }
     const repo = dataSource.getRepository(Pago);
     const entity = repo.create(pagoData);
@@ -1367,17 +1427,26 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('updatePago', async (_event: any, id: number, data: any) => {
-    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
+    await ensurePermisoPagoExistente(id);
+    await ensureTerminalPagoDeVenta(_event, id);
     const repo = dataSource.getRepository(Pago);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`Pago ID ${id} not found`);
-    repo.merge(entity, data);
+    // `caja` NUNCA se re-asigna después de crear el Pago, y dejar que el merge
+    // la acepte es lo que hacía al gate por terminal auto-derrotable:
+    // `Pago.caja` es lo ÚNICO que lee el gate de `createPagoDetalle`, así que
+    // un `updatePago(id, { caja: null })` lo desactivaba para todas las líneas
+    // siguientes con una llamada de apariencia inocente. `detalles` se descarta
+    // por la misma razón: las líneas se manejan por sus propios canales.
+    const { caja: _cajaIgnorada, detalles: _detallesIgnorados, ...pagoData } = data ?? {};
+    repo.merge(entity, pagoData);
     await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
     return await repo.save(entity);
   });
 
   ipcMain.handle('deletePago', async (_event: any, id: number) => {
-    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
+    await ensurePermisoPagoExistente(id);
+    await ensureTerminalPagoDeVenta(_event, id);
     const repo = dataSource.getRepository(Pago);
     const entity = await repo.findOne({ where: { id }, relations: ['detalles'] });
     if (!entity) throw new Error(`Pago ID ${id} not found`);
@@ -1390,17 +1459,40 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
 
   ipcMain.handle('getPagoDetalles', async (_event: any, pagoId: number) => {
     const repo = dataSource.getRepository(PagoDetalle);
+    // `maquinaPosId` / `cuentaBancariaId` son columnas escalares de la entidad:
+    // vienen en el select sin relación extra, y son las que permiten reconstruir
+    // el destino de acreditación al reabrir el diálogo de cobro.
     return await repo.find({ where: { pago: { id: pagoId } as any }, relations: ['moneda', 'formaPago'], order: { id: 'ASC' } });
   });
 
   ipcMain.handle('createPagoDetalle', async (_event: any, data: any) => {
-    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
+    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_COBRAR', 'COMPRAS_GESTIONAR']);
+    // Mismo gate que `createPago`: sin esto, una terminal ajena que encuentra el
+    // `Pago` ya creado (cobro anticipado de delivery, diálogo reabierto) podía
+    // seguir agregando líneas de dinero aunque el gate de creación la hubiera
+    // rechazado.
+    //
+    // La caja se resuelve SIEMPRE server-side desde el id del pago: el payload
+    // del renderer trae el `pago` tal como lo devolvió `getVenta`, que no carga
+    // `pago.caja`, así que confiar en `data.pago.caja` dejaría el gate en no-op.
+    const { validarDispositivoCaja, ...detalleData } = data ?? {};
+    if (validarDispositivoCaja) {
+      const pagoId = detalleData?.pago?.id ?? detalleData?.pago ?? null;
+      const pago = pagoId
+        ? await dataSource.getRepository(Pago).findOne({
+            where: { id: Number(pagoId) },
+            relations: ['caja'],
+          })
+        : null;
+      await assertTerminalPuedeOperar(dataSource, _event, (pago?.caja as any)?.id ?? null, 'PAGO');
+    }
     const repo = dataSource.getRepository(PagoDetalle);
-    return await repo.save(repo.create(data));
+    return await repo.save(repo.create(detalleData));
   });
 
   ipcMain.handle('updatePagoDetalle', async (_event: any, id: number, data: any) => {
-    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
+    await ensurePermisoPagoDetalle(id);
+    await ensureTerminalPagoDetalle(_event, id);
     const repo = dataSource.getRepository(PagoDetalle);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`PagoDetalle ID ${id} not found`);
@@ -1409,10 +1501,19 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   });
 
   ipcMain.handle('deletePagoDetalle', async (_event: any, id: number) => {
-    await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
+    await ensurePermisoPagoDetalle(id);
+    await ensureTerminalPagoDetalle(_event, id);
     const repo = dataSource.getRepository(PagoDetalle);
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`PagoDetalle ID ${id} not found`);
+    // Una línea imputada a una ronda de cobro parcial no se borra sola: el
+    // borrado se llevaba la plata pero dejaba vivos el `CobroParcialItem` y el
+    // `montoCubierto`, así que el ítem seguía figurando PAGADO y bloqueado
+    // mientras el saldo del ticket subía. La ronda se deshace por su propio
+    // canal, que recomputa la cobertura.
+    if (entity.cobroParcialId != null) {
+      throw new Error('PAGO_DETALLE_EN_COBRO_PARCIAL');
+    }
     await repo.remove(entity);
     return { success: true, affected: 1 };
   });

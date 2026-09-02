@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
-import { Observable, Subject } from 'rxjs';
+import { Observable, Subject, firstValueFrom } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
@@ -216,7 +216,8 @@ export class ProductoRecetaComponent implements OnInit, OnDestroy {
 
       return {
         ingrediente,
-        nombre: ingrediente.ingrediente?.nombre || 'Producto no encontrado',
+        // `ingrediente` es nullable: puede ser un ítem solo-descripción.
+        nombre: ingrediente.ingrediente?.nombre || ingrediente.descripcion || 'Producto no encontrado',
         tipo: ingrediente.ingrediente?.tipo || '',
         cantidadFormateada: `${cantidad} ${unidad}`,
         costoFormateado: costo
@@ -344,57 +345,37 @@ export class ProductoRecetaComponent implements OnInit, OnDestroy {
       width: '400px',
       data: {
         title: 'Desvincular Receta',
-        message: `¿Estás seguro de que quieres desvincular la receta "${this.receta.nombre}" del producto "${this.producto.nombre}"?`,
+        // La advertencia importa: el producto resuelve su precio de venta y su
+        // descuento de stock a traves de la receta vinculada.
+        message: `¿Estás seguro de que quieres desvincular la receta "${this.receta.nombre}" del producto "${this.producto.nombre}"?\n\nEl producto quedará sin precio de venta calculado por receta y sin descuento de stock por receta. La receta NO se elimina: queda libre para asignarse a otro producto.`,
         confirmText: 'Sí, Desvincular',
         cancelText: 'Cancelar'
       }
     });
 
-    confirmDialog.afterClosed().subscribe(result => {
+    confirmDialog.afterClosed().pipe(takeUntil(this.destroy$)).subscribe(result => {
       if (result) {
         this.loading = true;
-
         const productoId = this.producto!.id!;
-        const recetaId = this.receta!.id!;
 
-        // Actualizar la receta para desvincularla del producto
-        const recetaData = {
-          ...this.receta,
-          productoId: null
-        };
-
-        // Actualizar la receta
-        this.repositoryService.updateReceta(recetaId, recetaData).subscribe({
-          next: (updatedReceta) => {
-
-            // También actualizar el producto para mantener la relación bidireccional
-            const productoData = {
-              ...this.producto,
-              recetaId: null
-            };
-
-            this.repositoryService.updateProducto(productoId, productoData).subscribe({
-              next: (updatedProducto) => {
-                // Agregar un pequeño delay para asegurar que la base de datos se actualice
-                setTimeout(() => {
-                  this.resetRecetaData();
-                  this.loading = false;
-                  this.snackBar.open('Receta desvinculada correctamente', 'Cerrar', { duration: 2000 });
-                }, 500);
-              },
-              error: (error: any) => {
-                console.error('Error actualizando producto:', error);
-                this.snackBar.open('Error al actualizar el producto', 'Cerrar', { duration: 3000 });
-                this.loading = false;
-              }
-            });
-          },
-          error: (error: any) => {
-            console.error('Error desvinculando receta:', error);
-            this.snackBar.open('Error al desvincular la receta', 'Cerrar', { duration: 3000 });
-            this.loading = false;
-          }
-        });
+        // Una sola llamada atomica: antes eran dos updates encadenados
+        // (receta + producto) que podian dejar estado a medio aplicar.
+        this.repositoryService.desvincularRecetaDeProducto(productoId)
+          .pipe(takeUntil(this.destroy$))
+          .subscribe({
+            next: () => {
+              // Recargar el producto: si solo reseteamos el estado local,
+              // `this.producto.receta` queda stale apuntando a la receta ya
+              // desvinculada.
+              this.loadProductoData(productoId);
+              this.snackBar.open('Receta desvinculada correctamente', 'Cerrar', { duration: 2000 });
+            },
+            error: (error: any) => {
+              console.error('Error desvinculando receta:', error);
+              this.snackBar.open(error?.message || 'Error al desvincular la receta', 'Cerrar', { duration: 4000 });
+              this.loading = false;
+            }
+          });
       }
     });
   }
@@ -420,44 +401,21 @@ export class ProductoRecetaComponent implements OnInit, OnDestroy {
         activo: { trueValue: 'Sí', falseValue: 'No' }
       },
       showActiveFilter: true,
+      // Filtrado, busqueda y paginacion ocurren en SQL (`get-recetas-asignables`).
+      // Antes se traia la tabla ENTERA por IPC en cada tecla y se filtraba en el
+      // renderer con `!receta.producto`, que ademas leia una columna deprecada y
+      // siempre NULL: no filtraba nada y dejaba elegir recetas ya ocupadas.
       searchFn: async (query: string, page: number, pageSize: number, activeFilter?: 'all' | 'active' | 'inactive') => {
         try {
-          // Obtener todas las recetas
-          const recetas = await this.repositoryService.getRecetas().toPromise();
-
-          if (!recetas) {
-            return { items: [], total: 0 };
-          }
-
-          let filteredRecetas = recetas;
-
-          // Filtrar por query si se proporciona
-          if (query && query.trim()) {
-            const searchTerm = query.toLowerCase().trim();
-            filteredRecetas = recetas.filter(receta =>
-              receta.nombre.toLowerCase().includes(searchTerm) ||
-              (receta.descripcion && receta.descripcion.toLowerCase().includes(searchTerm))
-            );
-          }
-
-          // Filtrar por estado activo/inactivo
-          if (activeFilter && activeFilter !== 'all') {
-            const isActive = activeFilter === 'active';
-            filteredRecetas = filteredRecetas.filter(receta => receta.activo === isActive);
-          }
-
-          // Filtrar recetas que no estén asignadas a otros productos
-          filteredRecetas = filteredRecetas.filter(receta => !receta.producto);
-
-          // Aplicar paginación
-          const startIndex = page * pageSize;
-          const endIndex = startIndex + pageSize;
-          const paginatedRecetas = filteredRecetas.slice(startIndex, endIndex);
-
-          return {
-            items: paginatedRecetas,
-            total: filteredRecetas.length
-          };
+          const activo = activeFilter === 'all' || !activeFilter ? null : activeFilter === 'active';
+          const result = await firstValueFrom(this.repositoryService.getRecetasAsignables({
+            productoId: this.producto?.id ?? null,
+            search: query,
+            activo,
+            page,
+            pageSize
+          }));
+          return { items: result?.items || [], total: result?.total || 0 };
         } catch (error) {
           console.error('Error searching recetas:', error);
           return { items: [], total: 0 };
@@ -494,50 +452,27 @@ export class ProductoRecetaComponent implements OnInit, OnDestroy {
       }
     });
 
-    confirmDialog.afterClosed().subscribe(result => {
+    confirmDialog.afterClosed().pipe(takeUntil(this.destroy$)).subscribe(result => {
       if (result) {
         this.loading = true;
-
         const productoId = this.producto!.id!;
 
-        // Actualizar la receta para asignarla al producto
-        const recetaData = {
-          ...receta,
-          productoId: productoId
-        };
-
-        // Actualizar la receta
-        this.repositoryService.updateReceta(receta.id!, recetaData).subscribe({
-          next: (updatedReceta) => {
-
-            // También actualizar el producto para mantener la relación bidireccional
-            const productoData = {
-              ...this.producto,
-              recetaId: receta.id
-            };
-
-            this.repositoryService.updateProducto(productoId, productoData).subscribe({
-              next: (updatedProducto) => {
-                // Agregar un pequeño delay para asegurar que la base de datos se actualice
-                setTimeout(() => {
-                  // Recargar los datos del producto para mostrar la receta asignada
-                  this.loadProductoData(productoId);
-                  this.snackBar.open('Receta asignada correctamente', 'Cerrar', { duration: 2000 });
-                }, 500);
-              },
-              error: (error: any) => {
-                console.error('Error actualizando producto:', error);
-                this.snackBar.open('Error al actualizar el producto', 'Cerrar', { duration: 3000 });
-                this.loading = false;
-              }
-            });
-          },
-          error: (error: any) => {
-            console.error('Error asignando receta:', error);
-            this.snackBar.open('Error al asignar la receta', 'Cerrar', { duration: 3000 });
-            this.loading = false;
-          }
-        });
+        // Una sola llamada atomica. El handler ademas valida que la receta siga
+        // libre y devuelve un mensaje legible, en vez del
+        // "UNIQUE constraint failed: producto.receta_id" crudo del driver.
+        this.repositoryService.vincularRecetaAProducto(productoId, receta.id!)
+          .pipe(takeUntil(this.destroy$))
+          .subscribe({
+            next: () => {
+              this.loadProductoData(productoId);
+              this.snackBar.open('Receta asignada correctamente', 'Cerrar', { duration: 2000 });
+            },
+            error: (error: any) => {
+              console.error('Error asignando receta:', error);
+              this.snackBar.open(error?.message || 'Error al asignar la receta', 'Cerrar', { duration: 4000 });
+              this.loading = false;
+            }
+          });
       }
     });
   }

@@ -23,12 +23,90 @@ export class PdvConfig extends BaseModel {
   @Column({ name: 'umbral_diferencia_alta', type: 'decimal', precision: 10, scale: 2, default: 15 })
   umbralDiferenciaAlta!: number;
 
+  // ─── Delivery ───────────────────────────────────────────────────────────
+  // Toda esta sección se edita desde Configuración del PdV → pestaña Delivery.
+
   // Umbrales de tiempo de espera delivery (minutos)
   @Column({ name: 'delivery_tiempo_amarillo', type: 'int', default: 30 })
   deliveryTiempoAmarillo!: number;
 
   @Column({ name: 'delivery_tiempo_rojo', type: 'int', default: 60 })
   deliveryTiempoRojo!: number;
+
+  /** Si false, el botón DELIVERY no se renderiza en el PdV. */
+  @Column({ name: 'delivery_habilitado', type: 'boolean', default: true })
+  deliveryHabilitado!: boolean;
+
+  /**
+   * Zona de entrega preseleccionada al crear un delivery. Si es null se
+   * preselecciona la de menor valor (comportamiento histórico).
+   */
+  @Column({ name: 'delivery_precio_default_id', type: 'int', nullable: true })
+  deliveryPrecioDefaultId?: number | null;
+
+  /** Estado inicial del toggle COBRO ANTICIPADO en el alta de un delivery. */
+  @Column({ name: 'delivery_cobro_anticipado_default', type: 'boolean', default: false })
+  deliveryCobroAnticipadoDefault!: boolean;
+
+  /** Exigir dirección para dar de alta un delivery. */
+  @Column({ name: 'delivery_requiere_direccion', type: 'boolean', default: false })
+  deliveryRequiereDireccion!: boolean;
+
+  /**
+   * El repartidor es bloqueante. La etapa en la que bloquea la define
+   * `deliveryRepartidorEtapa`; este flag sólo dice si el candado existe.
+   */
+  @Column({ name: 'delivery_requiere_repartidor', type: 'boolean', default: true })
+  deliveryRequiereRepartidor!: boolean;
+
+  /**
+   * En qué etapa se exige el repartidor, cuando `deliveryRequiereRepartidor`
+   * está activo: `EN_CAMINO` (hay que elegirlo para enviar) o `ENTREGADO` (el
+   * pedido puede salir sin repartidor pero no se finaliza sin registrarlo).
+   */
+  @Column({ name: 'delivery_repartidor_etapa', type: 'varchar', length: 20, default: 'EN_CAMINO' })
+  deliveryRepartidorEtapa!: 'EN_CAMINO' | 'ENTREGADO';
+
+  /** Mínimo de dígitos del teléfono para habilitar el alta. */
+  @Column({ name: 'delivery_telefono_min_digitos', type: 'int', default: 4 })
+  deliveryTelefonoMinDigitos!: number;
+
+  /** Filas por página en la lista de deliveries. */
+  @Column({ name: 'delivery_page_size', type: 'int', default: 20 })
+  deliveryPageSize!: number;
+
+  /**
+   * Si true, la lista muestra además los deliveries en estado no terminal de
+   * otras cajas (turnos anteriores), para que ninguno quede huérfano.
+   */
+  @Column({ name: 'delivery_mostrar_pendientes_otras_cajas', type: 'boolean', default: true })
+  deliveryMostrarPendientesOtrasCajas!: boolean;
+
+  /** Al crear el delivery → imprimir el ticket de reparto automáticamente. */
+  @Column({ name: 'delivery_auto_imprimir_al_crear', type: 'boolean', default: false })
+  deliveryAutoImprimirAlCrear!: boolean;
+
+  /** Al pasar a EN_CAMINO → imprimir el ticket de reparto automáticamente. */
+  @Column({ name: 'delivery_auto_imprimir_al_enviar', type: 'boolean', default: false })
+  deliveryAutoImprimirAlEnviar!: boolean;
+
+  /**
+   * Hora en que arranca la JORNADA COMERCIAL (0–23).
+   *
+   * Los turnos noche cruzan las 00:00 y llegan hasta las 02:00, así que el día
+   * calendario parte las ventas de un mismo turno en dos. Con 7, la jornada del
+   * día D va de `D 07:00:00.000` a `D+1 06:59:59.999`, y una venta de la 01:30
+   * cuenta para el día anterior — que es como lo piensa el negocio.
+   *
+   * ⚠️ **0 = día calendario**, el comportamiento previo a 2026-08. Es la vía de
+   * escape si algo no cuadra: se pone 0 y todos los dashboards vuelven a cortar
+   * a medianoche, sin desplegar nada.
+   *
+   * Aplica a fechas de TRANSACCIÓN (cuándo pasó), nunca a fechas de vencimiento
+   * (cuándo vence): un cheque vence el día X, no "en la jornada X".
+   */
+  @Column({ name: 'inicio_jornada_hora', type: 'int', default: 7 })
+  inicioJornadaHora!: number;
 
   // Comandas
   @Column({ name: 'pdv_tab_default', type: 'varchar', default: 'MESAS' })
@@ -100,4 +178,32 @@ export class PdvConfig extends BaseModel {
   // Número internacional (ej. 595991123456) o JID de grupo (…@g.us).
   @Column({ name: 'whatsapp_cierre_caja_destino', type: 'varchar', length: 120, nullable: true })
   whatsappCierreCajaDestino?: string | null;
+
+  // ─── Caja compartida entre terminales ───────────────────────────────────
+  // Una caja se abre en UNA terminal (`Caja.dispositivo`), pero cualquier otra
+  // puede unirse a ella para lanzar ítems. Históricamente el cobro quedaba
+  // reservado a la terminal dueña, sin excepción. Estos dos flags devuelven esa
+  // decisión al local: hay negocios donde el mozo cobra en la tablet y el
+  // arqueo lo hace el cajero, y otros donde eso es exactamente lo que se quiere
+  // impedir.
+  //
+  // Son independientes a propósito: "cargar las formas de pago" y "cerrar la
+  // venta" son dos actos distintos, y el caso real más pedido es justamente
+  // permitir el primero y no el segundo (el repartidor registra lo que cobró,
+  // el cajero revisa y finaliza).
+  //
+  // Ambos default `false` = conducta previa a 2026-08, así que actualizar no
+  // cambia el comportamiento de ninguna instalación.
+  //
+  // ⚠️ El dinero se acredita SIEMPRE a la caja abierta, sin importar qué
+  // terminal cobró: estos flags no mueven plata de caja, sólo dicen quién puede
+  // operar sobre ella.
+
+  /** Permitir registrar líneas de cobro desde terminales que no abrieron la caja. */
+  @Column({ name: 'permitir_pagos_terminal_ajena', type: 'boolean', default: false })
+  permitirPagosTerminalAjena!: boolean;
+
+  /** Permitir finalizar (concluir) ventas desde terminales que no abrieron la caja. */
+  @Column({ name: 'permitir_finalizar_terminal_ajena', type: 'boolean', default: false })
+  permitirFinalizarTerminalAjena!: boolean;
 }

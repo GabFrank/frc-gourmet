@@ -4,8 +4,31 @@ Cliente web mobile/tablet en el **mismo workspace** (`projects/mobile`), que con
 Fastify del **modo server** por HTTP. UI **100% nueva** mobile-first (no reutiliza nada del desktop);
 sí reutiliza la **lógica de datos**. Branch de desarrollo: `feat/mobile-pwa-cliente`.
 
-> Estado/bitácora viva: `docs/arquitectura/mobile-pwa-plan.md` y `docs/arquitectura/mobile-pwa-skill-notes.md`.
+> Bitácora de cobertura por ola: `docs/arquitectura/mobile-pwa-skill-notes.md`.
 > README operativo: `projects/mobile/README.md`.
+
+## Las siete decisiones que fijan la forma de la PWA (2026-05)
+
+| Tema | Elección | Por qué |
+|---|---|---|
+| Estructura | App Angular **separada** (`projects/mobile`) + librería `@frc/shared-core` | Se comparte lógica de datos, **nunca** UI |
+| Red LAN/WAN | Un solo hostname del **mesh headscale** con TLS | Tailscale rutea directo por LAN en el local y por relay cuando es remoto: LAN-first sin configurar nada |
+| Hosting del bundle | Lo sirve el **propio Fastify** del nodo `server` | Un solo artefacto, un solo update |
+| Alcance MVP | Paridad CRUD de todo lo administrativo, **excepto** Sistema/Configuración | |
+| Offline | Sin server no hay acción: pantalla "sin conexión". El SW sólo cachea el app-shell | Una cola de escritura offline contra un backend transaccional es otro proyecto |
+| UI | 100% nueva, sin reusar componentes ni diálogos del desktop | |
+| Librería compartida | Migración **incremental** por path-alias | Mover todo de una habría tocado el desktop entero |
+
+**Servicios del desktop que se reusan tal cual** (no dependen de Electron): `AuthService`,
+`ThemeService`, `PermissionService`, `TabsService`, `CurrencyConfigService`,
+`UnitConversionService`, `PaginatorIntlEs`.
+**Los que NO van al mobile** porque dependen de Electron o de `window.api`:
+`PrinterService`, `DatabaseService`, `UpdateService`, `AppModeService` (va como token),
+`DocumentoService`, `RepositoryIpcService`.
+
+⚠️ **Pendiente de infraestructura, no de código:** el TLS del mesh depende de si la
+versión de headscale soporta `tailscale serve`/cert; si no, hace falta Caddy o una CA
+privada. Es acción manual del usuario en su entorno.
 
 ## Workspace multi-proyecto
 
@@ -14,6 +37,26 @@ Código compartido vía **path-alias** `@frc/shared-core` → `src/app/shared-co
 (barrel que re-exporta browser-safe: entities, enums, `RepositoryService` abstract,
 `RepositoryIpcService`, `AuthService`, `PermissionService`, `ThemeService`, `AppModeService` como token).
 Migración incremental: el desktop sigue importando por rutas relativas; el mobile SIEMPRE por el alias.
+
+## El shim HTTP y la forma de los argumentos (`API_ARG_SHAPE`)
+
+`scripts/generate-mobile-api-map.js` parsea `preload.ts` y emite **dos** mapas, no uno:
+
+- `API_CHANNEL_MAP` — método de `window.api` → canal IPC.
+- `API_ARG_SHAPE` — los métodos donde preload **no pasa sus parámetros tal cual** sino que los empaqueta en un objeto.
+
+El segundo existe por un bug que costó encontrar. Preload hace:
+
+```ts
+changePassword: async (usuarioId, currentPassword, newPassword) =>
+  ipcRenderer.invoke('change-password', { usuarioId, currentPassword, newPassword })
+```
+
+pero el shim manda `params: [...args]` literalmente, así que el handler recibía `usuarioId` **suelto** como payload y devolvía `PAYLOAD INVALIDO`. **El cambio de contraseña obligatorio de la PWA estaba roto**, y con él otros 9 métodos de la misma forma: `saveProfileImage`, `deleteFile`, `readFileBase64`, `openFileWithSystem`, `openBase64File` y las tres llamadas del upload por QR.
+
+Los dos shims (`src/app/web/api-http.ts` y `projects/mobile/src/app/core/data/api-http.ts`) reconstruyen el objeto con `conformarArgs()` antes de invocar.
+
+⚠️ **Si agregás un método a `preload.ts` que transforme sus argumentos de una forma que no sea el objeto shorthand `{ a, b }`** — un spread, un literal, un `.map()` — el generador **avisa por consola** y NO lo traduce. Ignorar ese aviso deja el método roto sobre HTTP y funcionando en Electron, que es la combinación más difícil de diagnosticar. Regenerar siempre con `node scripts/generate-mobile-api-map.js` tras tocar el preload.
 
 ## Capa de datos (lo importante)
 
@@ -65,8 +108,66 @@ CRUD: RRHH (Cargos, Turnos, MotivosVale, Feriados, Personas, Usuarios+roles, Fun
 TipoCliente), Productos (Familias, Subfamilias, Adicionales), Compras (Cat. compra), Financiero (Cat. gasto).
 Read-only: Vales, Liquidaciones, Penalizaciones, Bonos, Aguinaldos, Asistencias, Horas extra, Permisos,
 Notificaciones, Cajas, CxC, Compras, Proveedores, Productos, Comisiones (reglas/equipos/liq).
-**Diferido:** Sabores/Recetas (variaciones), Monedas (sin handler create),
+**Recetas:** `pages/productos/recetas/` tiene listado + edición (datos, ingredientes,
+pasos) y **vincular/desvincular producto** (`vincular-receta-a-producto` /
+`desvincular-receta-de-producto`). El chip Completa/Pre-receta y el producto vinculado
+se leen de la virtual `receta.productoVinculado`, **nunca** de `receta.producto`
+(columna deprecada, siempre NULL — leerla marcaba TODAS las recetas como pre-receta).
+→ [../domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
+
+**Diferido:** Sabores y variaciones (sabor × tamaño), Monedas (sin handler create),
 Préstamos, Config RRHH.
+
+> ⚠️ **Diálogos con campos de texto en el celular: `autoFocus: false`.** `MatDialog`
+> enfoca por defecto el primer elemento tabbable al abrir. En un celular eso abre el
+> teclado del sistema, que tapa media pantalla — y si el diálogo carga sus datos
+> async, el único campo presente al abrir suele ser justamente el input de texto, así
+> que el teclado salta y tapa los ítems que aparecen un instante después. Regla:
+> `autoFocus: false` en el `open()` (ya lo hacían `home.page` y `qr-upload.page`), y
+> los campos de texto **al final** del template y detrás de `*ngIf="!cargando"`.
+> Excepción: un diálogo cuyo único propósito es escribir algo (peso del buffet,
+> observación de la comanda) puede querer el foco desde el arranque.
+
+## Ventas mobile: el flow de pizza está completo (2026-08-17)
+
+`projects/mobile/src/app/pages/ventas/mesas/` replica el flow del PdV desktop para
+`ELABORADO_CON_VARIACION`. Piezas y su equivalente desktop:
+
+| Mobile | Desktop |
+|---|---|
+| `seleccionar-variacion-dialog.component.ts` | `shared/components/seleccionar-variacion-dialog/` |
+| `agregar-item-dialog.component.ts` (personalización) | `shared/components/personalizar-producto-dialog/` |
+| `tomar-pedido.page.ts` → `persistirPersonalizacion()` | `pdv.component.ts` → `persistirPersonalizacion` / `…ConSabor` |
+| `variacion-precio.util.ts` (+ spec) | cálculo inline en el diálogo + `addVariacionItem` |
+
+Cubre: tamaño → sabores (tope `Producto.maxVariacionesSimultaneas ?? pizzaMaxSabores`,
+que llega ya resuelto en `variacionConfig` del payload de búsqueda/atajos; con tope 1
+la selección es única y se oculta el "(hasta N)"; **si queda un solo sabor con precio
+se autoselecciona** sin abrir la personalización; los sabores sin precio no se listan) →
+personalización por sabor (**ingredientes opcionales quitados, cambiables
+intercambiados**, adicionales, observaciones, nota libre) → proporciones ajustables
+(±10% compensado, tope 10–90%) → cantidad. Persiste `VentaItem` + un `VentaItemSabor`
+por sabor, con adicionales / observaciones / `VentaItemIngredienteModificacion`
+colgados del ítem y **con FK `ventaItemSabor`** para saber a qué mitad pertenecen.
+
+**Reglas de plata (idénticas al desktop, testeadas en `variacion-precio.util.spec.ts`):**
+el precio base **no** se pondera (la pizza es del mismo tamaño se divida como se
+divida) y sale de `pizzaEstrategiaPrecio`; **adicionales y costo sí se ponderan por
+proporción** — un extra en media pizza cuesta la mitad. Hasta 2026-08 mobile los
+cobraba enteros, o sea cobraba de más que el desktop.
+
+**Limitación compartida con el desktop:** una pizza ya agregada no se puede
+re-personalizar (el producto con variación no tiene receta propia; las recetas viven
+por `RecetaPresentacion`). Desde el detalle de la mesa sólo se edita cantidad y
+observaciones. No es un gap de mobile.
+
+En la lista de productos, un `ELABORADO_CON_VARIACION` muestra el **rango**
+`desde – hasta` (campo `variacionResumen` del payload) más un detalle
+`N tamaños · N sabores`, y no muestra conversiones de moneda (serían ambiguas).
+
+Tests: `npm run test:variacion-mobile` (estructura persistida) y el spec del util
+dentro de `npm run test:mobile`. Checklist manual:
+`docs/testing/TESTING-CHECKLIST-MOBILE-VARIACION.md`.
 
 ## Cobertura Caja Mayor mobile (actualizado 2026-07-28)
 
@@ -192,6 +293,25 @@ Patrón: búsqueda siempre visible + panel colapsable.
   `.crud-filter-actions` (Limpiar / Aplicar). "Aplicar" cierra el panel y ejecuta la búsqueda.
 - Contador de activos en el componente (`contarFiltros()`), recomputado en `filtros.valueChanges`.
 - Ejemplo de referencia: `pages/compras/compras/compras-list.page.*`.
+- El patrón **también sirve sin búsqueda**: el resumen de ventas
+  (`pages/ventas/resumen/ventas-resumen.page.*`) usa la misma fila y el mismo panel,
+  con el rótulo del período ocupando el lugar del campo de búsqueda.
+
+## Resumen de ventas: filtros de fecha y caja (2026-08-24)
+
+`Ventas → Resumen` filtra por fecha, por caja (multi-selección) o por las dos a la vez.
+Detalle del contrato en `domains/dashboards.md` §7.7; lo que hay que saber al tocar la
+pantalla:
+
+- **Sin filtro se manda el string `'today'`, no un objeto vacío.** El comportamiento
+  por defecto (el total sigue a la caja abierta) depende de la AUSENCIA de filtro.
+- **El rótulo del período sale de `filtroAplicado`, no del formulario.** Lo que el
+  usuario escribe ("15/07") y lo que se consulta (15/07 07:00 → 16/07 06:59, por la
+  jornada comercial) no son lo mismo; mostrar el primero esconde el corte.
+- **"Sin resultados" ≠ error.** La consulta anduvo y el período no tiene ventas.
+- La lista de cajas se pide con `getCajasSelector` y **no se recarga con el filtro**:
+  si dependiera del período, elegir una caja podría sacarla de la lista y dejar al
+  usuario sin poder deseleccionarla.
 
 ## Reglas al construir pantallas
 

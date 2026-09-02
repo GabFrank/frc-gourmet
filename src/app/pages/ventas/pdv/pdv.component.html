@@ -189,9 +189,19 @@
             <mat-icon>place</mat-icon>
             {{ selectedMesa.sector?.nombre || 'Sin sector' }}
           </span>
-          <span class="mesa-status" [ngClass]="selectedMesa.reservado ? 'status-reserved' : selectedMesa.estado === 'DISPONIBLE' ? 'status-available' : 'status-occupied'">
-            {{ selectedMesa.reservado ? 'Reservada' : selectedMesa.estado === 'DISPONIBLE' ? 'Disponible' : 'Ocupada' }}
-          </span>
+          <span class="mesa-status" [ngClass]="mesaDetalleClase">{{ mesaDetalleTexto }}</span>
+          <!-- Comandas sentadas en esta mesa: se abren desde acá, sin ir a
+               buscarlas por número a la otra pestaña. -->
+          <button
+            mat-stroked-button
+            class="mesa-comanda-chip"
+            *ngFor="let c of selectedMesa.comandas"
+            (click)="abrirComandaDeMesa(c)"
+            [matTooltip]="'Abrir la comanda ' + c.numero"
+          >
+            <mat-icon>receipt_long</mat-icon>
+            {{ c.numero }}
+          </button>
         </div>
 
         <!-- Fila 2: Cliente + extras -->
@@ -461,11 +471,11 @@
                       <ng-container *ngFor="let mod of item.ingredientesModificados">
                         <span class="mod-chip removido" *ngIf="mod.tipoModificacion === 'REMOVIDO'">
                           <mat-icon class="mod-chip-icon">remove_circle</mat-icon>
-                          SIN {{ mod.recetaIngrediente?.ingrediente?.nombre }}
+                          SIN {{ mod.recetaIngrediente?.ingrediente?.nombre || mod.recetaIngrediente?.descripcion }}
                         </span>
                         <span class="mod-chip intercambiado" *ngIf="mod.tipoModificacion === 'INTERCAMBIADO'">
                           <mat-icon class="mod-chip-icon">swap_horiz</mat-icon>
-                          {{ mod.recetaIngrediente?.ingrediente?.nombre }} → {{ mod.ingredienteReemplazo?.nombre }}
+                          {{ mod.recetaIngrediente?.ingrediente?.nombre || mod.recetaIngrediente?.descripcion }} → {{ mod.ingredienteReemplazo?.nombre }}
                         </span>
                       </ng-container>
                     </div>
@@ -491,7 +501,7 @@
                     <div class="detail-section-chips">
                       <span *ngFor="let ov of item.observacionesVinculadas" class="mod-chip observacion">
                         <mat-icon class="mod-chip-icon">comment</mat-icon>
-                        {{ ov.observacion?.descripcion || ov.observacionLibre }}
+                        {{ ov.observacionLibre || ov.observacion?.descripcion }}
                       </span>
                     </div>
                   </div>
@@ -613,25 +623,27 @@
     <!-- Bottom buttons: modo normal -->
     <div class="action-buttons" *ngIf="!moverItemsMode">
       <button
+        *appHasPermission="'VENTAS_COBRAR'"
         mat-raised-button
         color="primary"
         class="action-button"
-        [disabled]="!hasActiveVenta || !hasActiveItems"
+        [disabled]="!hasActiveVenta || !hasActiveItems || (!puedeCobrar && !puedeFinalizarVenta)"
         (click)="cobrarVenta()"
         data-testid="pdv-btn-cobrar"
-        matTooltip="Cobrar (F1)"
+        [matTooltip]="tooltipCobrar"
       >
         <mat-icon>paid</mat-icon>
         <span>COBRAR</span>
       </button>
       <button
+        *appHasPermission="'VENTAS_COBRAR'"
         mat-raised-button
         color="primary"
         class="action-button"
-        [disabled]="!hasActiveVenta || !hasActiveItems"
+        [disabled]="!hasActiveVenta || !hasActiveItems || !puedeCobrar || !puedeFinalizarVenta"
         (click)="cobroRapido()"
         data-testid="pdv-btn-cobro-rapido"
-        matTooltip="Cobro rápido (F2)"
+        [matTooltip]="tooltipCobroRapido"
       >
         <mat-icon>flash_on</mat-icon>
         <span>COBRO RÁPIDO</span>
@@ -681,6 +693,18 @@
     <!-- display selected caja data, caja id, fecha apertura, estado -->
     <mat-card class="caja-data-card">
       <mat-card-content>
+        <!-- Caja abierta en otra terminal: aviso persistente. El snackbar de
+             bienvenida dura 6s y hay tres estados posibles; esto queda a la
+             vista todo el turno. -->
+        <div class="caja-info-row terminal-ajena-row" *ngIf="avisoTerminal">
+          <div class="caja-info-item">
+            <mat-icon>devices</mat-icon>
+            <div class="caja-info-content">
+              <span class="info-label">Terminal</span>
+              <span class="info-value">{{ avisoTerminal }}</span>
+            </div>
+          </div>
+        </div>
         <div class="caja-info-row">
           <div class="caja-info-item">
             <mat-icon>point_of_sale</mat-icon>
@@ -858,17 +882,9 @@
                 style="height: 60px !important; width: 60px !important"
                 *ngFor="let mesa of mesas"
                 (click)="selectMesa(mesa)"
-                [class.table-active]="mesa.estado === 'DISPONIBLE'"
-                [class.table-inactive]="mesa.estado !== 'DISPONIBLE'"
-                [class.table-reserved]="mesa.reservado"
+                [ngClass]="mesa._claseEstado"
                 [class.table-selected]="selectedMesa?.id === mesa.id"
-                [matTooltip]="
-                  mesa.reservado
-                    ? 'Mesa reservada'
-                    : mesa.estado === 'DISPONIBLE'
-                    ? 'Mesa disponible'
-                    : 'Mesa ocupada'
-                "
+                [matTooltip]="mesa._tooltip || ''"
                 [matBadge]="mesa.comandas?.length"
                 [matBadgeHidden]="!mesa.comandas?.length"
                 matBadgeColor="accent"
@@ -923,14 +939,16 @@
 
     <!-- Bottom action buttons -->
     <div class="bottom-buttons" *ngIf="!moverItemsMode">
-      <!-- Botones para MESA seleccionada -->
-      <ng-container *ngIf="!selectedComanda">
+      <!-- Botones para MESA seleccionada. La venta rápida y el delivery quedan
+           fuera: el mostrador no es un contenedor del salón, y antes el botón
+           TRANSFERIR se renderizaba igual pero no hacía nada. -->
+      <ng-container *ngIf="!selectedComanda && !ventaRapidaActual">
         <button
           mat-raised-button
           color="primary"
           class="bottom-button"
-          [disabled]="!hasActiveVenta || deliveryActual"
-          (click)="transferirMesa()"
+          [disabled]="!hasActiveVenta"
+          (click)="transferirCuenta()"
           data-testid="pdv-btn-transferir"
         >
           <mat-icon>swap_horiz</mat-icon>
@@ -940,7 +958,7 @@
           mat-raised-button
           color="primary"
           class="bottom-button"
-          [disabled]="!hasActiveVenta || !hasActiveItems || deliveryActual"
+          [disabled]="!hasActiveVenta || !hasActiveItems"
           (click)="moverItems()"
           data-testid="pdv-btn-mover"
         >
@@ -966,10 +984,22 @@
           color="primary"
           class="bottom-button"
           [disabled]="!selectedComanda?.venta"
-          (click)="transferirComandaAMesa()"
+          (click)="transferirCuenta()"
+          data-testid="pdv-btn-transferir-comanda"
         >
-          <mat-icon>table_restaurant</mat-icon>
-          <span>A MESA</span>
+          <mat-icon>swap_horiz</mat-icon>
+          <span>TRANSFERIR</span>
+        </button>
+        <button
+          mat-raised-button
+          color="primary"
+          class="bottom-button"
+          [disabled]="!selectedComanda?.venta || !hasActiveItems"
+          (click)="moverItems()"
+          data-testid="pdv-btn-mover-comanda"
+        >
+          <mat-icon>drive_file_move</mat-icon>
+          <span>MOVER ITEMS</span>
         </button>
       </ng-container>
 
@@ -997,6 +1027,7 @@
         </button>
       </mat-menu>
       <button
+        *ngIf="deliveryHabilitado"
         mat-raised-button
         color="primary"
         class="bottom-button"
@@ -1005,6 +1036,21 @@
       >
         <mat-icon>delivery_dining</mat-icon>
         <span>DELIVERY</span>
+        <!-- Dos contadores distintos: repartos vivos (naranja) y pedidos de la
+             web esperando aceptación (rojo). `matBadge` se ancla al elemento
+             que lo declara, así que colgado del icono y del texto los círculos
+             caían sobre el medio del botón; acá van posicionados contra la
+             esquina superior derecha, que es donde el ojo los busca. -->
+        <span class="pdv-badges" *ngIf="deliveriesPendientesCount || pedidosOnlinePendientesCount">
+          <span class="pdv-badge pdv-badge-web"
+                *ngIf="tiendaOnlineActiva && pedidosOnlinePendientesCount"
+                matTooltip="Pedidos de la web por aceptar"
+          >{{ pedidosOnlinePendientesCount }}</span>
+          <span class="pdv-badge pdv-badge-repartos"
+                *ngIf="deliveriesPendientesCount"
+                matTooltip="Repartos sin concluir"
+          >{{ deliveriesPendientesCount }}</span>
+        </span>
       </button>
       <button
         mat-raised-button

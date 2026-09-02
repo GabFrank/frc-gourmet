@@ -18,7 +18,7 @@ Nombre de archivo: **`<epoch-millis>-<Descripcion>.ts`**, con la clase `Descripc
 
 - **El timestamp DEBE ser el epoch en milisegundos real** (precisión de ms), no un número redondeado a mano.
   - `npm run migration:generate` / `migration:create` ya lo asignan solos (usan `Date.now()`). **No lo edites a un número redondo.**
-  - Si escribís la migración a mano, generá el valor con: `date +%s%3N`.
+  - Si escribís la migración a mano, generá el valor con `date +%s%3N` (Linux) o `python3 -c "import time;print(int(time.time()*1000))"` (macOS: `%3N` es GNU, BSD `date` devuelve la `N` literal y el nombre de clase queda inválido).
 - **Por qué:** varias migraciones viejas usan timestamps redondeados espaciados de a `1e8` (`...100000000`, `...500000000`). Eso hace que dos ramas no mergeadas elijan el "siguiente número redondo" y **colisionen** al integrar. Un epoch-ms real es único y, al ser mayor que cualquier redondeado previo, **ordena correctamente** al final. **No imites los timestamps redondeados.**
 
 ## Flujo developer

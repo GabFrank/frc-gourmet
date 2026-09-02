@@ -38,4 +38,15 @@ export class CajaMayorConfiguracion extends BaseModel {
    */
   @Column({ name: 'cuentas_bancarias_orden', type: 'text', nullable: true })
   cuentasBancariasOrden?: string | null;
+
+  /**
+   * Tope del descuento que se puede conceder al cobrar una cuenta por cobrar,
+   * como porcentaje del total del cobro. NULL = sin tope.
+   *
+   * Vive en la configuracion de la caja mayor y no en un ajuste global porque es
+   * una regla operativa del puesto: el cobro se registra parado en una caja, y el
+   * wizard manda cual es como contexto del evento.
+   */
+  @Column({ name: 'descuento_cpc_max_porcentaje', type: 'decimal', precision: 5, scale: 2, nullable: true })
+  descuentoCpcMaxPorcentaje?: number | null;
 }

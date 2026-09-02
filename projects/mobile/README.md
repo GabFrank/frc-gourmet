@@ -3,7 +3,7 @@
 Cliente web mobile/tablet de FRC Gourmet. Vive en el **mismo workspace** que el desktop
 (Electron) y consume el **mismo backend** (Fastify del modo `server`) por HTTP.
 
-> Plan y bitácora completos: [`../../docs/arquitectura/mobile-pwa-plan.md`](../../docs/arquitectura/mobile-pwa-plan.md)
+> Arquitectura y bitácora: [`../../.claude/skills/frc-gourmet-expert/architecture/mobile-pwa.md`](../../.claude/skills/frc-gourmet-expert/architecture/mobile-pwa.md)
 > y [`../../docs/arquitectura/mobile-pwa-skill-notes.md`](../../docs/arquitectura/mobile-pwa-skill-notes.md).
 
 ## Arquitectura en una imagen

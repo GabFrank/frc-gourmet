@@ -8,6 +8,13 @@
 - El backend hace **match 1:N** en memoria contra todos los rostros activos (similitud **coseno** + umbral absoluto + margen contra el 2º mejor). Lógica pura en `electron/utils/face-match.ts` (testeada).
 - **No se guarda la imagen** del rostro — solo el embedding (`JSON.stringify(number[])`). El `thumbnailUrl` opcional es solo auditoría.
 
+**Por qué on-device y no en el servidor** (decisión de 2026-07, sigue vigente): menor
+latencia (no viaja un JPEG por la LAN), privacidad (el vector de ~4 KB no es
+reversible a foto) y sobre todo **evita `@tensorflow/tfjs-node`** — la dependencia
+nativa que rompería el empaquetado de Electron. Por eso el match 1:N del server es
+JS plano y no usa ML: la parte pesada ya se hizo en el browser. Los modelos (~8–15 MB)
+los cachea el service worker.
+
 ## Modelo de datos
 
 | Entity | Tabla | Campos clave |
@@ -54,3 +61,15 @@
 - Si cambia `MODEL_NAME`/`DIMENSION`, los embeddings viejos quedan incompatibles → hay que **re-enrolar** a todos (el campo `modelo` versiona esto).
 - El fichaje requiere **secure context** (HTTPS o localhost) para acceder a la cámara — relevante para el kiosco PWA en LAN.
 - El liveness es **server-authoritative**: el cliente manda los scores pero el backend decide; no confiar en un "ok" del cliente.
+- **La iluminación es la causa #1 de fallos.** Enrolar con la luz real de la
+  entrada y montar el tablet sin contraluz vale más que bajar el umbral.
+- **Gemelos y hermanos parecidos** son el caso que rompe un umbral absoluto solo:
+  por eso `elegirMejorMatch` exige además **margen contra el 2º candidato**
+  (`FACIAL_MARGEN_MIN`). Bajarlo para "que reconozca más rápido" es exactamente
+  cómo se ficha por otro.
+- **Tablets baratos:** input chico y detección sólo de cara; sin eso la captura se
+  arrastra.
+- **Los modelos hay que descargarlos una vez** desde RRHH → Reconocimiento facial →
+  Descargar modelos (van a `userData/face-models/`, servidos por HTTP). Sin eso
+  todas las pantallas de rostro muestran error, y el síntoma no dice que falten
+  modelos.

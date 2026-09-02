@@ -2,6 +2,20 @@
 
 <mat-dialog-content>
   <div class="form-container">
+    <!-- El cajero atiende el teléfono sin saber qué va a pedir el cliente, así
+         que el alta es una sola y el modo se elige acá. RETIRAR saca del form
+         la dirección y el precio de envío, que dejan de existir. -->
+    <mat-button-toggle-group class="modo-toggle" [value]="modo"
+      (change)="onModoChange($event.value)" [disabled]="isEditMode"
+      [matTooltip]="tooltipModo">
+      <mat-button-toggle value="DELIVERY">
+        <mat-icon>delivery_dining</mat-icon> DELIVERY
+      </mat-button-toggle>
+      <mat-button-toggle value="RETIRO">
+        <mat-icon>shopping_bag</mat-icon> RETIRAR
+      </mat-button-toggle>
+    </mat-button-toggle-group>
+
     <!-- Teléfono con autocomplete + botón buscar -->
     <div class="telefono-row">
       <mat-form-field appearance="outline" class="telefono-field">
@@ -40,21 +54,25 @@
     <!-- Nombre -->
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>NOMBRE</mat-label>
-      <input matInput #nombreInput [(ngModel)]="nombre" placeholder="Nombre del cliente (opcional)"
-        (keydown.enter)="focusDireccion()" />
+      <input matInput #nombreInput [(ngModel)]="nombre" (ngModelChange)="onCampoChange()"
+        [placeholder]="esRetiro ? 'Nombre del cliente' : 'Nombre del cliente (opcional)'"
+        (keydown.enter)="esRetiro ? focusObservacion() : focusDireccion()" />
+      <mat-hint *ngIf="esRetiro">Obligatorio: identifica el pedido en el mostrador</mat-hint>
     </mat-form-field>
 
     <!-- Dirección -->
-    <mat-form-field appearance="outline" class="full-width">
+    <mat-form-field appearance="outline" class="full-width" *ngIf="!esRetiro">
       <mat-label>DIRECCIÓN</mat-label>
-      <textarea matInput #direccionInput [(ngModel)]="direccion" rows="2" placeholder="Dirección de entrega"
-        (keydown.enter)="focusPrecio(); $event.preventDefault()"></textarea>
+      <textarea matInput #direccionInput [(ngModel)]="direccion" (ngModelChange)="onCampoChange()" rows="2"
+        placeholder="Dirección de entrega" (keydown.enter)="focusPrecio(); $event.preventDefault()"></textarea>
+      <mat-hint *ngIf="requiereDireccion">Obligatoria</mat-hint>
     </mat-form-field>
 
     <!-- Precio Delivery -->
-    <mat-form-field appearance="outline" class="full-width">
+    <mat-form-field appearance="outline" class="full-width" *ngIf="!esRetiro">
       <mat-label>PRECIO DELIVERY</mat-label>
-      <mat-select #precioSelect [(value)]="precioDeliveryId"
+      <mat-select #precioSelect [(value)]="precioDeliveryId" [disabled]="zonaBloqueada"
+        (selectionChange)="onCampoChange()"
         (keydown.enter)="focusObservacion(); $event.preventDefault()">
         <mat-option [value]="null">SIN CARGO</mat-option>
         <mat-option *ngFor="let p of preciosDelivery" [value]="p.id">
@@ -73,17 +91,21 @@
     <!-- Cobro anticipado -->
     <mat-slide-toggle [(ngModel)]="cobroAnticipado" tabindex="-1">COBRO ANTICIPADO</mat-slide-toggle>
 
-    <!-- Advertencia cambio de precio -->
+    <!-- Cambio de zona: ahora SI recalcula el cobro (venta.costoDelivery). -->
     <div *ngIf="precioDeliveryCambio" class="precio-warning">
       <mat-icon>warning</mat-icon>
-      <span>El cambio de precio de delivery puede afectar el valor de cobro final.</span>
+      <span>Al guardar, el costo de envío de la venta se actualiza al de la zona nueva.</span>
+    </div>
+    <div *ngIf="zonaBloqueada" class="precio-warning">
+      <mat-icon>lock</mat-icon>
+      <span>La venta de este delivery ya fue cerrada: la zona no se puede cambiar sin anular el cobro.</span>
     </div>
   </div>
 </mat-dialog-content>
 
 <mat-dialog-actions align="end">
   <button mat-button (click)="cancelar()" tabindex="-1">CANCELAR</button>
-  <button mat-raised-button color="primary" #confirmarBtn (click)="confirmar()" [disabled]="!canConfirm"
+  <button mat-raised-button color="primary" #confirmarBtn (click)="confirmar()" [disabled]="!puedeConfirmar"
     (keydown.enter)="confirmar()">
     <mat-icon>{{ isEditMode ? 'save' : 'add' }}</mat-icon>
     {{ processing ? 'PROCESANDO...' : isEditMode ? 'GUARDAR' : 'CREAR DELIVERY' }}
