@@ -39,7 +39,7 @@ describe('DescuentoDialogComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('debe habilitar APLICAR cuando el descuento es exactamente el tope (caso no entero)', () => {
+  it('debe habilitar APLICAR cuando el descuento es exactamente el tope (caso no entero)', (done) => {
     // Arrange: cuota ₲17.550, tope 5% → 878 redondeado
     const subtotal = 17550;
     const topePct = 5;
@@ -55,19 +55,23 @@ describe('DescuentoDialogComponent', () => {
 
     const instance = dialogRef.componentInstance;
 
-    // Act: pedir exactamente el 5%
-    instance.form.patchValue({ tipoDescuento: 'porcentaje', porcentaje: 5, motivo: 'PRUEBA' });
-    instance.recalcular();
+    // Esperar a que se inicialice
+    setTimeout(() => {
+      // Act: pedir exactamente el 5%
+      instance.form.patchValue({ tipoDescuento: 'porcentaje', porcentaje: 5, motivo: 'PRUEBA' });
+      instance.recalcular();
 
-    // Assert
-    expect(instance.montoDescuento).toBe(esperado);
-    expect(instance.excedeTope).toBe(false);
-    expect(instance.form.valid).toBe(true);
+      // Assert
+      expect(instance.montoDescuento).toBe(esperado);
+      expect(instance.excedeTope).toBe(false);
+      expect(instance.form.valid).toBe(true);
 
-    dialogRef.close();
+      dialogRef.close();
+      done();
+    }, 100);
   });
 
-  it('debe calcular maxMonto correctamente con tope porcentual', () => {
+  it('debe calcular maxMonto correctamente con tope porcentual', (done) => {
     const dialogRef = dialog.open(DescuentoDialogComponent, {
       data: {
         subtotal: 20000,
@@ -78,14 +82,17 @@ describe('DescuentoDialogComponent', () => {
 
     const instance = dialogRef.componentInstance;
 
-    // 20000 * 10% = 2000.00 (con 2 decimales)
-    expect(instance.maxMonto).toBe(2000);
-    expect(instance.topeTexto).toContain('10%');
+    setTimeout(() => {
+      // 20000 * 10% = 2000.00 (con 2 decimales)
+      expect(instance.maxMonto).toBe(2000);
+      expect(instance.topeTexto).toContain('10%');
 
-    dialogRef.close();
+      dialogRef.close();
+      done();
+    }, 100);
   });
 
-  it('debe redondear montoDescuento a decimales de la moneda (PYG = 0)', () => {
+  it('debe redondear montoDescuento a decimales de la moneda (PYG = 0)', (done) => {
     const dialogRef = dialog.open(DescuentoDialogComponent, {
       data: {
         subtotal: 15000,
@@ -95,17 +102,20 @@ describe('DescuentoDialogComponent', () => {
 
     const instance = dialogRef.componentInstance;
 
-    // 15000 * 3.5% = 525 (redondeado, sin decimales)
-    instance.form.patchValue({ tipoDescuento: 'porcentaje', porcentaje: 3.5, motivo: 'TEST' });
-    instance.recalcular();
+    setTimeout(() => {
+      // 15000 * 3.5% = 525 (redondeado, sin decimales)
+      instance.form.patchValue({ tipoDescuento: 'porcentaje', porcentaje: 3.5, motivo: 'TEST' });
+      instance.recalcular();
 
-    expect(instance.montoDescuento).toBe(525);
-    expect(Number.isInteger(instance.montoDescuento)).toBe(true);
+      expect(instance.montoDescuento).toBe(525);
+      expect(Number.isInteger(instance.montoDescuento)).toBe(true);
 
-    dialogRef.close();
+      dialogRef.close();
+      done();
+    }, 100);
   });
 
-  it('debe bloquear APLICAR cuando el descuento supera el tope', () => {
+  it('debe bloquear APLICAR cuando el descuento supera el tope', (done) => {
     const dialogRef = dialog.open(DescuentoDialogComponent, {
       data: {
         subtotal: 10000,
@@ -116,13 +126,16 @@ describe('DescuentoDialogComponent', () => {
 
     const instance = dialogRef.componentInstance;
 
-    // Pedir 6% (600) > tope (500)
-    instance.form.patchValue({ tipoDescuento: 'porcentaje', porcentaje: 6, motivo: 'TEST' });
-    instance.recalcular();
+    setTimeout(() => {
+      // Pedir 6% (600) > tope (500)
+      instance.form.patchValue({ tipoDescuento: 'porcentaje', porcentaje: 6, motivo: 'TEST' });
+      instance.recalcular();
 
-    expect(instance.montoDescuento).toBe(600);
-    expect(instance.excedeTope).toBe(true);
+      expect(instance.montoDescuento).toBe(600);
+      expect(instance.excedeTope).toBe(true);
 
-    dialogRef.close();
+      dialogRef.close();
+      done();
+    }, 100);
   });
 });
