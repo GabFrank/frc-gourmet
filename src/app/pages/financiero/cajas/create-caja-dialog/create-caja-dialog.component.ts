@@ -25,6 +25,7 @@ import { catchError, finalize } from 'rxjs/operators';
 import { AuthService } from 'src/app/services/auth.service';
 import { VentaEstado } from 'src/app/database/entities/ventas/venta.entity';
 import { TipoDetalle } from 'src/app/database/entities/compras/pago-detalle.entity';
+import { analizarCajasAbiertas, AvisoCajaAbierta } from 'src/app/shared/utils/caja-apertura.util';
 
 interface MonedaConfig {
   moneda: Moneda;
@@ -103,6 +104,14 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   conteoCierreDetalles: ConteoDetalle[] = [];
 
   excludeDispositivoId: number | null = null;
+  /** Aviso de que ya hay una caja abierta en OTRA terminal. Pre-computado: la
+   *  regla dura #4 prohíbe funciones y getters en el template. */
+  avisoCajaAbierta: AvisoCajaAbierta = { hayOtrasAbiertas: false, terminalesOcupadas: [], mensaje: '', detalle: [] };
+  /** Segundo click sobre CONFIRMAR cuando hay otra caja abierta. No es un
+   *  `confirm()` nativo (regla dura #8): es estado del propio formulario. */
+  aperturaConfirmada = false;
+  /** Texto del botón de cierre del wizard. Pre-computado (regla dura #4). */
+  textoBotonAbrir = 'ABRIR CAJA';
 
   // Cierre summary
   cierreCompleted = false;
@@ -792,6 +801,15 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
     return obs;
   }
 
+  /** Regla dura #4: el template no llama funciones, así que el texto se precomputa. */
+  private actualizarTextoBotonAbrir(): void {
+    if (this.dialogMode === 'conteo') { this.textoBotonAbrir = 'GUARDAR CONTEO'; return; }
+    if (this.loading) { this.textoBotonAbrir = 'PROCESANDO...'; return; }
+    this.textoBotonAbrir = this.avisoCajaAbierta.hayOtrasAbiertas && !this.aperturaConfirmada
+      ? 'ABRIR UNA SEGUNDA CAJA'
+      : 'ABRIR CAJA';
+  }
+
   onSubmit(): void {
     // Sync all form values to stores before submission
     this.syncFormValuesToStores();
@@ -811,9 +829,24 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
       return;
     }
 
+    // Ya hay una caja abierta en otra terminal: primer click advierte, segundo
+    // abre. No es un `confirm()` nativo (regla dura #8): es estado del propio
+    // formulario, y el banner de arriba ya explica el porqué.
+    if (this.avisoCajaAbierta.hayOtrasAbiertas && !this.aperturaConfirmada) {
+      this.aperturaConfirmada = true;
+      this.actualizarTextoBotonAbrir();
+      this.snackBar.open(
+        'Ya hay otra caja abierta. Volvé a tocar el botón para abrir una segunda igual.',
+        'ENTENDIDO',
+        { duration: 6000 },
+      );
+      return;
+    }
+
     // Regular flow for creating a new caja
     console.log('Submitting in create mode');
     this.loading = true;
+    this.actualizarTextoBotonAbrir();
 
     const dispositivoId = this.cajaInfoForm.get('dispositivoId')?.value;
 
@@ -900,17 +933,13 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
         // Filter to only display active dispositivos with isCaja=true
         this.dispositivos = dispositivos.filter(d => d.activo && d.isCaja);
 
-        // If we have an excluded dispositivo ID, filter it out or mark it as disabled
-        if (this.excludeDispositivoId) {
-          // Check for open cajas on each dispositivo
-          this.checkOpenCajas();
-        } else {
-          this.loading = false;
-          // After loading dispositivos, try to find current device by MAC address
-          this.detectCurrentDevice();
-          // Load monedas after dispositivos are loaded
-          this.loadMonedas();
-        }
+        // `checkOpenCajas()` corre SIEMPRE. Antes estaba colgado de
+        // `excludeDispositivoId`, así que en el camino más común —abrir caja sin
+        // tener una propia abierta— no filtraba nada: el desplegable ofrecía
+        // terminales que ya tenían caja abierta y nadie avisaba que el día se
+        // estaba partiendo en dos. Fue así como la PC de delivery abrió una
+        // segunda caja en producción.
+        this.checkOpenCajas();
       },
       error => {
         console.error('Error loading dispositivos:', error);
@@ -1576,39 +1605,45 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   }
 
   // Add a method to check for open cajas for each dispositivo
+  /**
+   * Filtra las terminales que ya tienen caja abierta y arma el aviso.
+   *
+   * ⚠️ Usa `get-cajas-abiertas`, NO `get-cajas`. El segundo no tiene `where` ni
+   * `LIMIT` y arrastra seis relaciones eager incluidos los dos conteos completos
+   * — el propio handler lo documenta como anti-patrón al lado de su definición.
+   * Como ahora esto corre en cada apertura, la consulta cara no va más.
+   */
   private checkOpenCajas(): void {
-    // Get all cajas to check for open ones
-    this.repositoryService.getCajas().subscribe(
-      cajas => {
-        // Filter cajas by estado = ABIERTO and filter by dispositivo
-        const openCajas = cajas.filter(caja => caja.estado === 'ABIERTO');
+    this.repositoryService.getCajasAbiertas().subscribe(
+      openCajas => {
+        const deviceId = (window as any).api?.getDeviceId
+          ? (window as any).api.getDeviceId()
+          : null;
+        this.avisoCajaAbierta = analizarCajasAbiertas(openCajas || [], deviceId);
+        this.actualizarTextoBotonAbrir();
 
-        // Create a map of dispositivo IDs with open cajas
-        const openDispositivoIds = new Set(openCajas.map(caja =>
-          caja.dispositivo?.id).filter(id => id !== undefined));
+        const openDispositivoIds = new Set<number>(this.avisoCajaAbierta.terminalesOcupadas);
+        // El excluido llega de `list-cajas` cuando el usuario ya tenía una caja
+        // abierta y eligió "abrir otra": esa terminal tampoco se puede reelegir.
+        if (this.excludeDispositivoId) openDispositivoIds.add(this.excludeDispositivoId);
 
-        // Include the excluded dispositivo ID if provided
-        if (this.excludeDispositivoId && !openDispositivoIds.has(this.excludeDispositivoId)) {
-          openDispositivoIds.add(this.excludeDispositivoId);
-        }
-
-        // Filter out dispositivos that already have open cajas
-        this.dispositivos = this.dispositivos.filter(dispositivo =>
-          !openDispositivoIds.has(dispositivo.id));
+        this.dispositivos = this.dispositivos.filter(d => !openDispositivoIds.has(d.id));
 
         this.loading = false;
-
-        // After filtering dispositivos, try to find current device by MAC address
         this.detectCurrentDevice();
-
-        // Load monedas after dispositivos are loaded
         this.loadMonedas();
       },
       error => {
+        // Fail-open a propósito: no poder leer las cajas abiertas no debe
+        // impedir abrir una. Pero el aviso queda vacío, así que se avisa de la
+        // degradación en vez de fingir que no hay ninguna abierta.
         console.error('Error checking open cajas:', error);
+        this.snackBar.open(
+          'No se pudieron verificar las cajas abiertas. Confirmá a mano que no haya otra abierta.',
+          'ENTENDIDO',
+          { duration: 8000 },
+        );
         this.loading = false;
-
-        // Even in case of error, continue loading
         this.detectCurrentDevice();
         this.loadMonedas();
       }

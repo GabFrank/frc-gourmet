@@ -93,6 +93,7 @@
     "test:ticket-venta": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-ticket-venta-e2e.ts",
     "test:mesa-ocupacion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-mesa-ocupacion-e2e.ts",
     "test:kpis-filtros": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-kpis-filtros-e2e.ts",
+    "test:caja-apertura": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-caja-apertura.ts",
     "test:mesa-estado": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-mesa-estado-derivado.ts",
     "test:transferencia-pdv": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-transferencia-pdv-e2e.ts",
     "test:roles-pdv": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-roles-pdv-e2e.ts",

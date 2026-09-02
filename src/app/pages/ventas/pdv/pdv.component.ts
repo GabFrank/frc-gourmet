@@ -321,8 +321,26 @@ export class PdvComponent implements OnInit, OnDestroy {
     try {
       cajasAbiertas = (await firstValueFrom(this.repositoryService.getCajasAbiertas())) || [];
     } catch (e) {
+      // ⚠️ Un error NO es "no hay cajas". Antes el catch dejaba la lista vacía y
+      // el flujo caía al else, que ofrece "No hay una caja abierta, ¿desea abrir
+      // una nueva?" — una afirmación falsa cuando la consulta simplemente falló.
+      // En modo cliente alcanza un timeout, y de ahí salió una segunda caja
+      // abierta en producción. Ante la duda no se ofrece abrir nada.
       console.error('Error obteniendo cajas abiertas:', e);
-      cajasAbiertas = [];
+      const mensaje = (e as any)?.message?.replace(/^Error invoking remote method '[^']+':\s*Error:\s*/, '')
+        || 'Error desconocido';
+      this.dialog.open(ConfirmationDialogComponent, {
+        width: '460px',
+        disableClose: true,
+        data: {
+          title: 'NO SE PUDO CONSULTAR LAS CAJAS',
+          message: `No se pudo leer el estado de las cajas abiertas, así que no se sabe si hay una en curso.\n\n${mensaje}\n\nRevisá la conexión con el servidor y volvé a abrir el PdV. Si abrís una caja a ciegas podés terminar con dos abiertas.`,
+          confirmText: 'ENTENDIDO',
+          showCancel: false,
+        },
+      });
+      this.tabsService.removeTabById('pdv');
+      return;
     }
 
     if (cajasAbiertas.length === 1) {

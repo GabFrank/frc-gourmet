@@ -467,6 +467,24 @@
           <div *ngIf="!cierreCompleted" class="resumen-scroll-container">
             <h3 class="compact-title">{{ dialogMode === 'conteo' ? 'RESUMEN DE CIERRE' : 'CONFIRMAR APERTURA DE CAJA' }}</h3>
 
+            <!-- Ya hay caja abierta en otra terminal: advertencia, no bloqueo.
+                 Varias cajas simultáneas son legítimas; lo que faltaba era que
+                 no pasara por accidente. -->
+            <div class="aviso-caja-abierta"
+                 *ngIf="dialogMode !== 'conteo' && avisoCajaAbierta.hayOtrasAbiertas">
+              <div class="aviso-titulo">
+                <mat-icon>warning</mat-icon>
+                <span>{{ avisoCajaAbierta.mensaje }}</span>
+              </div>
+              <ul class="aviso-detalle">
+                <li *ngFor="let linea of avisoCajaAbierta.detalle">{{ linea }}</li>
+              </ul>
+              <p class="aviso-pie">
+                Si lo que querías era cobrar sobre esa caja, cerrá esta ventana y
+                abrí el PdV: se une solo a la caja que ya está abierta.
+              </p>
+            </div>
+
             <div class="resumen-cards-container">
               <!-- Ventas por forma de pago (solo en cierre) -->
               <div class="resumen-card" *ngIf="dialogMode === 'conteo' && ventasSummary">
@@ -552,7 +570,7 @@
                 [disabled]="loading || cajaInfoForm.invalid"
               >
                 <mat-icon>check</mat-icon>
-                {{ dialogMode === 'conteo' ? 'GUARDAR CONTEO' : loading ? 'PROCESANDO...' : 'ABRIR CAJA' }}
+                {{ textoBotonAbrir }}
               </button>
             </div>
           </div>

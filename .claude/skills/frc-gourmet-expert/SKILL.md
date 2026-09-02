@@ -295,6 +295,7 @@ Detalles → [workflows/todos-pendientes.md](workflows/todos-pendientes.md).
 - Habla **español** (rioplatense/paraguayo). Respondé en español salvo que escriba en otro idioma.
 - Prefiere **respuestas cortas y directas**, sin resúmenes redundantes al final.
 - Le gusta probar **paso a paso** — una acción por turno, no listas largas de pasos para hacer todo de una.
+- **Toda pregunta va por `AskUserQuestion`, siempre.** No preguntar en prosa al final de un mensaje: además de ser más fácil de leer y responder, la herramienta **dispara una notificación** y la pregunta en texto plano se pierde. Aplica también a las de sí/no y a las de "¿arranco?" — no sólo a las de varias opciones. Pedido explícito del usuario (2026-09-02).
 - Usa **dark theme** generalmente. Verificar siempre que los cambios visuales funcionen en ambos.
 - **Lo que distingue dev de producción es la MÁQUINA, no el nombre del archivo.** En el iMac de Gabriel, `userData/frc-gourmet.db` es una **BD de desarrollo**: se puede escribir, pagar, anular y romper sin miedo. La instalación productiva corre en **otra PC** y muy probablemente tenga ese mismo nombre de archivo, así que el nombre no sirve para distinguirlas. A producción sólo se llega vía PR a alpha (y luego master).
 

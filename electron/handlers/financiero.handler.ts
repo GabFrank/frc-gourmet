@@ -676,7 +676,22 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
       }
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
-      return await repo.save(entity);
+      const guardada = await repo.save(entity);
+
+      // Aviso informativo (NO bloqueante): quedó más de una caja abierta. Varias
+      // cajas simultáneas son legítimas —dos cajeros, dos cajones— pero que pase
+      // sin que nadie se entere no lo es: en producción la PC de delivery abrió
+      // una segunda y el día terminó partido en dos. El desktop además lo
+      // advierte antes de abrir; esto es para que cualquier otro cliente
+      // (PWA, `/api/rpc`) tenga el dato sin duplicar la regla.
+      if ((guardada as any)?.estado === CajaEstado.ABIERTO) {
+        const abiertas = await repo.count({ where: { estado: CajaEstado.ABIERTO } });
+        if (abiertas > 1) {
+          console.warn(`[create-caja] quedaron ${abiertas} cajas abiertas simultáneamente`);
+          (guardada as any).avisoCajasAbiertas = abiertas;
+        }
+      }
+      return guardada;
     } catch (error) {
       console.error('Error creating caja:', error);
       throw error;
