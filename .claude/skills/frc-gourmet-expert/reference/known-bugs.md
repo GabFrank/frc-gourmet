@@ -1032,3 +1032,45 @@ mayoría de los mayores están cerrados. **Lo que quedó abierto:**
   con relaciones genera un LEFT JOIN y `FOR UPDATE` no se puede aplicar sobre el
   lado nullable de un outer join. Tomar el lock en una consulta aparte, sin
   relaciones (ver `venta-reversa.utils.ts`).
+
+
+## Encontrados por la auditoría de los informes de delivery (2026-09-01)
+
+Dos hallazgos **preexistentes** que la auditoría destapó y que se dejaron sin
+arreglar a propósito, porque exceden el alcance del PR que los encontró.
+
+### `getVentasByDateRange` hidrata entidades completas sobre un canal sin permiso
+
+`electron/handlers/ventas.handler.ts` — el handler **no tiene `ensurePermission`**
+y **no está en `BLOCKED_CHANNELS`** del router RPC, que es default-allow. Cualquier
+usuario con un JWT válido puede invocarlo.
+
+El PR de informes de delivery corrigió su propia parte (el repartidor ahora va con
+`leftJoin` + `addSelect` de `id` y `nombre`, en vez de arrastrar `salarioBase`,
+`numeroIps` y `cuentaBancariaPropia` del `Funcionario` y el documento de su
+`Persona`). Pero queda lo de antes:
+
+- `.leftJoinAndSelect('venta.createdBy', 'createdBy')` hidrata `Usuario`, y
+  **`Usuario.password` es un `@Column()` común, sin `select: false`** — o sea que
+  el hash de la contraseña del cajero viaja en cada fila de la lista de ventas.
+- Lo mismo con `cliente.persona`: documento, dirección y teléfono del cliente.
+
+Arreglarlo es acotar los `select` de esos joins y/o poner un `ensurePermission`.
+Lo segundo cambia quién puede usar el Historial de Ventas, así que necesita
+decidir el permiso primero.
+
+### Cancelar una venta con delivery desde el Historial deja el `Delivery` vivo
+
+El botón *Cancelar* del historial llama al `updateVenta` genérico, que pone
+`venta.estado = CANCELADA` pero **nunca toca `Delivery.estado`** (el camino que sí
+lo sincroniza es `delivery-cancelar`).
+
+El reparto queda entonces en tierra de nadie para los informes: no cuenta como
+envío (todas las métricas filtran `CONCLUIDA`), no cuenta como cancelación
+(`cancelacionesDelivery` exige además `d.estado = 'CANCELADO'`), y en el cierre de
+caja suma a **pendientes**, así que el ticket avisa "SIN ENTREGAR" por un pedido
+que en realidad se canceló.
+
+Las dos salidas razonables: que `updateVenta` sincronice el delivery, o que el
+historial no ofrezca cancelar una venta con `delivery_id` y mande al diálogo de
+delivery, que ya hace la reversa completa.

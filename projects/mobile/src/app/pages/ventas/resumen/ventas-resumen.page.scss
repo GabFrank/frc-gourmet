@@ -70,6 +70,13 @@
   border-color: color-mix(in srgb, var(--error-color) 35%, var(--border-color));
 }
 
+/* Pedidos en la calle: se resalta porque es lo único operativo de la fila —
+   pide una acción ahora, no describe el período. */
+.stat-card.stat-alerta {
+  background: color-mix(in srgb, var(--warning-color) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--warning-color) 35%, var(--border-color));
+}
+
 .stat-label {
   font-size: 0.78rem;
   color: var(--text-secondary);

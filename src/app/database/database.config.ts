@@ -243,6 +243,7 @@ import { DeliveryModoRetiro1787677459724 } from './migrations/1787677459724-Deli
 import { PdvConfigTerminalAjena1787842650376 } from './migrations/1787842650376-PdvConfigTerminalAjena';
 import { PagoDetalleDestinoAcreditacion1787842699124 } from './migrations/1787842699124-PagoDetalleDestinoAcreditacion';
 import { CobroConsolidadoCpc1787848148246 } from './migrations/1787848148246-CobroConsolidadoCpc';
+import { BackfillZonaDeliveryPedidosOnline1787877249492 } from './migrations/1787877249492-BackfillZonaDeliveryPedidosOnline';
 import { AddPagoCuotaCppDetalle1785320463398 } from './migrations/1785320463398-AddPagoCuotaCppDetalle';
 import { AddEgresoCajaToPagoCuotaDetalle1785335253817 } from './migrations/1785335253817-AddEgresoCajaToPagoCuotaDetalle';
 import { AddVacacionVentas1779600000000 } from './migrations/1779600000000-AddVacacionVentas';
@@ -714,6 +715,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     PdvConfigTerminalAjena1787842650376,
     PagoDetalleDestinoAcreditacion1787842699124,
     CobroConsolidadoCpc1787848148246,
+    BackfillZonaDeliveryPedidosOnline1787877249492,
   ];
 }
 

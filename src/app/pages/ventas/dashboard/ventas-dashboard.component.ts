@@ -108,6 +108,16 @@ export class VentasDashboardComponent implements OnInit {
   totalHoyTexto = '0 Gs';
   ticketPromedioTexto = '0 Gs';
 
+  // ── Delivery ──
+  // Siguen el MISMO filtro que el total (caja abierta o período), salvo
+  // `enCamino`, que es estado operativo y no depende del período mirado.
+  enviosHoy = 0;
+  retirosHoy = 0;
+  enCaminoAhora = 0;
+  ingresoEnviosTexto = '0 Gs';
+  /** Sin repartos no se muestran las chips: cuatro ceros no informan nada. */
+  hayDelivery = false;
+
   // --- Rango ---
   // 'today' grafica por hora; el resto por dia/semana/mes (ver bucketsForRango).
   rangoSeleccionado: Rango = 'week';
@@ -160,6 +170,15 @@ export class VentasDashboardComponent implements OnInit {
         this.ticketPromedio = kpis.ticketPromedio || 0;
         this.totalHoyTexto = `${this.formatPYG(this.totalHoyPYG)} Gs`;
         this.ticketPromedioTexto = `${this.formatPYG(this.ticketPromedio)} Gs`;
+        const dv = kpis.delivery || {};
+        this.enviosHoy = dv.envios || 0;
+        this.retirosHoy = dv.retiros || 0;
+        this.enCaminoAhora = dv.enCamino || 0;
+        this.ingresoEnviosTexto = `${this.formatPYG(dv.ingresoEnvios || 0)} Gs`;
+        // `enCamino` cuenta para mostrar la fila aunque el período elegido no
+        // tenga repartos: si hay pedidos en la calle, el cajero tiene que verlo.
+        this.hayDelivery = this.enviosHoy > 0 || this.retirosHoy > 0 || this.enCaminoAhora > 0;
+
         this.mesasOcupadas = kpis.mesasOcupadas || 0;
         this.mesasTotal = kpis.mesasTotal || 0;
         this.comandasPendientes = kpis.comandasPendientes || 0;

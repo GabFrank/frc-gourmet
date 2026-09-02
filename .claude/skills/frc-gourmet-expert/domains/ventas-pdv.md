@@ -621,6 +621,50 @@ Hoy el costo entra en el total del cobro, en `getEstadoCobroVenta` y en el
 comprobante como línea `ENVIO`. **No modelarlo como `VentaItem`**: fue evaluado
 y descartado porque ensucia stock, costo/rentabilidad, comisiones y KDS.
 
+### La zona se sella en el `Delivery`; el costo no se recalcula con ella
+
+Son dos datos distintos y conviene no mezclarlos:
+
+```
+delivery.precioDelivery  =  ZONA   (identidad del reparto, para agrupar)
+venta.costoDelivery      =  MONTO  (lo que se cobró, congelado)
+```
+
+⚠️ **Hasta 2026-08-28 el reparto que venía de la tienda online nacía SIN ZONA.**
+`materializarPedidoOnlineEnVenta` pasaba el costo congelado del pedido a
+`crearDeliveryEnTx` pero no `precioDeliveryId`: la zona quedaba únicamente en
+`pedidos_online.zona_delivery_id` y del lado del PdV el reparto figuraba sin
+zona. No se notaba porque nadie agrupaba por zona; en cuanto los informes
+cuentan envíos por zona, **todo el canal web cae en "SIN ZONA"** y parece que
+sólo el mostrador tiene zonas.
+
+Hoy el alta sella la zona resolviendo `pedido.zonaDelivery.precioDelivery`, que
+es la tarifa compartida entre los dos canales. **El costo se sigue tomando
+congelado del pedido**, nunca recalculado desde la zona: la tarifa pudo cambiar
+entre el checkout y la aceptación, y el cliente vio la vieja. Si tocás la
+materialización, mantené esa asimetría.
+
+Detalles: la relación se carga como `'zonaDelivery', 'zonaDelivery.precioDelivery'`
+(sin la anidada no hay id que sellar); un RETIRO nunca sella zona; y las zonas
+anteriores a la unificación de tarifas tienen `precioDelivery` en null, así que
+no hay nada que sellar. La migración `BackfillZonaDeliveryPedidosOnline` recupera
+los repartos que ya se habían creado sin zona sin pisar los que sí la tienen.
+Test: `npm run test:zona-delivery-online`.
+
+### El delivery ahora alimenta los informes
+
+Desde 2026-08-28 los cinco lugares que cuentan ventas saben del reparto: el
+reporte de cierre de mes, el dashboard de Ventas, el resumen de la PWA, el
+cierre de caja (diálogo + ticket + imagen de WhatsApp) y el historial de ventas.
+Todo sale de un motor único, `electron/handlers/reportes-delivery.helper.ts`, y
+la clasificación del canal de una fuente compartida
+(`src/app/shared/utils/canal-venta.util.ts`).
+
+Si tocás `Delivery`, `venta.costoDelivery` o la máquina de estados, mirá primero
+[domains/reportes.md](reportes.md) §8: los criterios de conteo (ventana por
+`ventas.created_at`, plata desde `pagos_detalles`, cancelaciones aparte) están
+ahí y hay tests que los fijan.
+
 ### La máquina de estados es del backend
 
 `delivery.handler.ts` es el dueño. `updateDelivery` (el CRUD genérico) **rechaza**

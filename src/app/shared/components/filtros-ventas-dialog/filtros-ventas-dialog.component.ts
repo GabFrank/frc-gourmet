@@ -17,6 +17,8 @@ import { Moneda } from '../../../database/entities/financiero/moneda.entity';
 import { PdvMesa } from '../../../database/entities/ventas/pdv-mesa.entity';
 import { Dispositivo } from '../../../database/entities/financiero/dispositivo.entity';
 
+import { CANAL_VENTA_ORDEN, CANAL_VENTA_LABEL, ORIGEN_VENTA_LABEL } from '../../utils/canal-venta.util';
+
 export interface FiltrosAvanzados {
   mozoId?: number;
   formasPagoIds?: number[];
@@ -28,6 +30,14 @@ export interface FiltrosAvanzados {
   tieneDescuento?: string;
   /** F5 paso 4: filtrar por dispositivo (multi-PC). */
   dispositivoId?: number;
+  /** Canal de entrega: SALON / MOSTRADOR / DELIVERY / RETIRO. */
+  canal?: string;
+  /** Zona de entrega (`precios_delivery.id`). */
+  zonaId?: number;
+  /** Repartidor (`funcionarios.id`). */
+  repartidorId?: number;
+  /** Puerta de entrada del pedido: LOCAL / WEB / QR_MESA. Ortogonal al canal. */
+  canalOrigen?: string;
 }
 
 @Component({
@@ -56,6 +66,15 @@ export class FiltrosVentasDialogComponent implements OnInit {
   monedas: Moneda[] = [];
   mesas: PdvMesa[] = [];
   dispositivos: Dispositivo[] = [];
+  zonas: Array<{ id: number; descripcion: string }> = [];
+  repartidores: Array<{ id: number; nombre: string }> = [];
+  /** Opciones fijas; el label sale de la fuente única del canal. */
+  canales = CANAL_VENTA_ORDEN.map((c) => ({ valor: c as string, label: CANAL_VENTA_LABEL[c] }));
+  origenes = [
+    { valor: 'LOCAL', label: ORIGEN_VENTA_LABEL['LOCAL'] },
+    { valor: 'WEB', label: ORIGEN_VENTA_LABEL['WEB'] },
+    { valor: 'QR_MESA', label: ORIGEN_VENTA_LABEL['QR_MESA'] },
+  ];
 
   // Autocomplete mozo
   mozoControl = new FormControl('');
@@ -71,6 +90,10 @@ export class FiltrosVentasDialogComponent implements OnInit {
   valorMax: number | null = null;
   tieneDescuento: string = '';
   dispositivoId: number | null = null;
+  canal: string = '';
+  zonaId: number | null = null;
+  repartidorId: number | null = null;
+  canalOrigen: string = '';
 
   constructor(
     public dialogRef: MatDialogRef<FiltrosVentasDialogComponent>,
@@ -88,16 +111,22 @@ export class FiltrosVentasDialogComponent implements OnInit {
       this.valorMax = data.valorMax ?? null;
       this.tieneDescuento = data.tieneDescuento || '';
       this.dispositivoId = data.dispositivoId || null;
+      this.canal = data.canal || '';
+      this.zonaId = data.zonaId || null;
+      this.repartidorId = data.repartidorId || null;
+      this.canalOrigen = data.canalOrigen || '';
     }
   }
 
   async ngOnInit(): Promise<void> {
-    const [usuarios, formasPago, monedas, mesas, dispositivos] = await Promise.all([
+    const [usuarios, formasPago, monedas, mesas, dispositivos, zonas, repartidores] = await Promise.all([
       firstValueFrom(this.repositoryService.getUsuarios()),
       firstValueFrom(this.repositoryService.getFormasPago()),
       firstValueFrom(this.repositoryService.getMonedas()),
       firstValueFrom(this.repositoryService.getPdvMesas()),
       firstValueFrom(this.repositoryService.getDispositivos()),
+      firstValueFrom(this.repositoryService.getPreciosDelivery()),
+      firstValueFrom(this.repositoryService.deliveryListarRepartidores()),
     ]);
     this.usuarios = usuarios.filter((u: any) => u.activo);
     this.filteredUsuarios = [...this.usuarios];
@@ -105,6 +134,10 @@ export class FiltrosVentasDialogComponent implements OnInit {
     this.monedas = monedas;
     this.mesas = mesas.filter((m: any) => m.activo).sort((a: any, b: any) => a.numero - b.numero);
     this.dispositivos = (dispositivos || []).filter((d: any) => d.activo);
+    // Las zonas inactivas se conservan si ya se usaron: un reparto viejo sigue
+    // apuntando a su zona, y sacarla del filtro lo vuelve imposible de buscar.
+    this.zonas = (zonas || []).map((z: any) => ({ id: z.id, descripcion: String(z.descripcion || '').toUpperCase() }));
+    this.repartidores = (repartidores || []).map((r: any) => ({ id: r.id, nombre: r.nombre }));
 
     // Restaurar mozo seleccionado
     if (this.mozoId) {
@@ -154,6 +187,10 @@ export class FiltrosVentasDialogComponent implements OnInit {
     }
     if (this.tieneDescuento) result.tieneDescuento = this.tieneDescuento;
     if (this.dispositivoId) result.dispositivoId = this.dispositivoId;
+    if (this.canal) result.canal = this.canal;
+    if (this.zonaId) result.zonaId = this.zonaId;
+    if (this.repartidorId) result.repartidorId = this.repartidorId;
+    if (this.canalOrigen) result.canalOrigen = this.canalOrigen;
     this.dialogRef.close(result);
   }
 
@@ -169,6 +206,10 @@ export class FiltrosVentasDialogComponent implements OnInit {
     this.valorMax = null;
     this.tieneDescuento = '';
     this.dispositivoId = null;
+    this.canal = '';
+    this.zonaId = null;
+    this.repartidorId = null;
+    this.canalOrigen = '';
     this.dialogRef.close({} as FiltrosAvanzados);
   }
 

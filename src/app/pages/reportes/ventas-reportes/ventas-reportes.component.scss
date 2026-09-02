@@ -62,9 +62,66 @@
 }
 
 @media (max-width: 1080px) {
-  .reportes-kpis { grid-template-columns: repeat(2, 1fr); }
+  .reportes-kpis, .reportes-kpis.kpis-delivery { grid-template-columns: repeat(2, 1fr); }
   .col-12, .col-7, .col-5, .col-6 { grid-column: span 12; }
 }
+
+/* ── Delivery y retiro ── */
+/* Cuatro KPIs propios: la grilla general es de 5 y mezclarlos dejaba una
+   segunda fila coja. Se separa también conceptualmente. */
+.reportes-kpis.kpis-delivery { grid-template-columns: repeat(4, 1fr); margin-top: -8px; }
+
+.rep-sep { margin-top: 6px; }
+
+/* Tabla auxiliar debajo de un gráfico: más chica que la principal. */
+.reportes-tabla.tabla-compacta {
+  margin-top: 14px; font-size: 12.5px;
+  td { padding: 7px 0; }
+  .mix-dot { margin-right: 7px; }
+}
+
+.zonas-chart, .tiempos-chart { height: 220px; position: relative; }
+
+/* Notas al pie de una tarjeta (cobro anticipado, origen del reparto). */
+.rep-notas { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 13px; }
+.rep-nota {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; color: var(--text-disabled); font-weight: 600;
+  mat-icon { font-size: 15px; width: 15px; height: 15px; }
+}
+
+/* SLA: color + etiqueta siempre juntos, nunca color solo. */
+.sla-chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.sla-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--border-color); border-radius: 999px; padding: 6px 13px;
+  background: var(--background-color);
+}
+.sla-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.sla-label { font-size: 12px; color: var(--text-secondary); }
+.sla-valor { font-size: 13px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.sla-pct { font-size: 11.5px; color: var(--text-disabled); font-variant-numeric: tabular-nums; }
+
+/* Cancelaciones */
+.canc-resumen { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px; }
+.canc-num { display: flex; flex-direction: column; gap: 3px; }
+.canc-valor { font-size: 22px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.canc-label { font-size: 11.5px; color: var(--text-disabled); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.canc-motivos { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 220px; }
+.canc-motivo {
+  display: flex; justify-content: space-between; gap: 12px;
+  font-size: 12.5px; color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color); padding-bottom: 5px;
+  &:last-child { border-bottom: none; }
+}
+.canc-motivo-cant { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Selector de canal del heatmap. Usa `.dashboard-range-chip` del padrón de
+   dashboards en vez de un botón propio: así se ve igual que los chips de rango
+   que el usuario ya conoce, y no depende de `--primary-color`, que en este
+   proyecto NO es global (cada componente define el suyo; acá no existe). */
+.hm-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.hm-canal { display: inline-flex; gap: 4px; }
 
 /* ── Modo presentación (pantalla completa) ── */
 .reportes-container.presentando {

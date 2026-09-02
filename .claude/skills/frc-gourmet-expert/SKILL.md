@@ -76,7 +76,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | **Impresoras térmicas** | [domains/cocina-impresion.md](domains/cocina-impresion.md) |
 | **Qué imprime el sistema y para qué** (catálogo de los 13 tickets, ruteo por rol de impresora, convenciones de formato) | [domains/tickets-impresos.md](domains/tickets-impresos.md) |
 | **Dashboards** (padrón unificado, componentes shared, handlers KPI) | [domains/dashboards.md](domains/dashboards.md) |
-| **Reportes de cierre de mes** (hub Ventas + Finanzas, período comparativo, presentación/PDF/WhatsApp, series por rango local) | [domains/reportes.md](domains/reportes.md) |
+| **Reportes de cierre de mes** (hub Ventas + Finanzas, período comparativo, presentación/PDF/WhatsApp, series por rango local, **bloque de delivery/retiro y canal de venta**) | [domains/reportes.md](domains/reportes.md) |
 | Reglas de código (UPPERCASE, no func en templates, colores) | [conventions/coding-rules.md](conventions/coding-rules.md) |
 | Patrones UI (mat-menu acciones, tab/dialog híbrido, full-height) | [conventions/ui-patterns.md](conventions/ui-patterns.md) |
 | Bugs comunes y workarounds (TypeORM null, fechas UTC, mat-chip) | [conventions/pitfalls-typeorm-electron.md](conventions/pitfalls-typeorm-electron.md) |
@@ -162,6 +162,78 @@ Tres cosas que conviene no volver a aprender por las malas:
 
 Tests: `npm run test:cobro-cpc-consolidado` (63), `test:pago-consolidado` (90),
 `test:pagar-obligaciones-dialog` (19). Manual: `docs/testing/TESTING-CHECKLIST-COBRO-CONSOLIDADO-CPC.md`.
+
+### Sesión 2026-08-28 — Delivery y retiro en los informes de venta
+
+El módulo de delivery estaba completo y auditado desde agosto, pero **la capa de
+informes no lo conocía**: cero menciones a delivery, `canal_origen`,
+`costo_delivery` o zona en `reportes-*.helper.ts`, `dashboard-ventas.handler.ts`
+y `resumen-caja.utils.ts`. Los datos estaban todos en la base y nadie los leía.
+
+Ahora los cinco lugares que cuentan ventas saben del reparto —reporte de cierre
+de mes (4 KPIs + 5 tarjetas: mix por canal, zonas, repartidores, SLA,
+cancelaciones), dashboard de Ventas, resumen de la PWA, cierre de caja (diálogo +
+ticket + imagen de WhatsApp) e historial (columna Canal, 4 filtros nuevos y
+totales del resultado filtrado)— y todos leen el **mismo motor**,
+`electron/handlers/reportes-delivery.helper.ts`. Detalles →
+[domains/reportes.md](domains/reportes.md) §8,
+[domains/dashboards.md](domains/dashboards.md) §7.8,
+`docs/planes/PLAN-INFORMES-DELIVERY.md`.
+
+Cuatro cosas que conviene no volver a aprender por las malas:
+
+- **El reparto que venía de la tienda online nacía sin zona.**
+  `materializarPedidoOnlineEnVenta` pasaba el costo congelado pero no
+  `precioDeliveryId`; la zona quedaba sólo en `pedidos_online`. No se notaba
+  porque nadie agrupaba por zona — al hacerlo, **todo el canal web caía en "SIN
+  ZONA"**. Un informe nuevo no sólo muestra datos: revela los que nunca se
+  estaban guardando bien.
+- **La ventana de conteo se elige por reconciliación, no por naturalidad.**
+  Contar los envíos por `fecha_entregado` suena mejor que por `created_at`, pero
+  rompe que `envíos × ticket promedio` dé la facturación de delivery del mismo
+  período. El KPI se llama "envíos", no "entregados", y eso es a propósito.
+- **El canal se define UNA vez, en dos lenguajes.**
+  `src/app/shared/utils/canal-venta.util.ts` (TS, para el renderer) y el `CASE`
+  SQL de `electron/utils/canal-venta.utils.ts` son la misma regla;
+  `npm run test:canal-venta` las compara fila por fila contra la base, igual que
+  `CONCEPTO_ES_INGRESO` / `esIngreso()` en el pago consolidado. `condicionCanal`
+  usa `EXISTS` para no exigir join y poder pegarse a consultas que ya existían.
+- **Dos tests calculaban el período con jornada 0** mientras el reporte usa la
+  jornada comercial (default 07:00). Entre las 00:00 y las 06:59 del día 1 de
+  cada mes miraban meses distintos y la variación salía `null`. Siete horas por
+  mes de rojo, y fue justo la ventana en la que se corrió la suite. Cualquier
+  test que ubique datos por período tiene que leer `getInicioJornada()` de la
+  misma fuente que el código que prueba.
+
+**La auditoría del PR encontró tres bugs ALTA que los tests no atrapaban**, y uno
+de ellos no era de la feature:
+
+- **`totales.costoDelivery` del historial se multiplicaba por la cantidad de
+  ítems.** El agregado salía de `qb.clone().select('SUM(...)')` y `qb` tenía el
+  join a `venta.items` (`@OneToMany`): `.select()` cambia las columnas pero **no
+  quita los joins**. El fixture tenía un ítem por venta —factor 1— así que el
+  test pasaba. Regla que queda: **nunca clonar un builder con joins `@OneToMany`
+  para un agregado**.
+- **`getVentasByDateRange` publicaba datos de RRHH.** `leftJoinAndSelect` del
+  `Funcionario` repartidor hidrata la entidad **entera**: sueldo, IPS y cuenta
+  bancaria, más el documento de su `Persona`. Y ese handler no tiene
+  `ensurePermission` ni está en `BLOCKED_CHANNELS`. Hidratar una entidad publica
+  todos sus campos: en un canal abierto, usar `leftJoin` + `addSelect`.
+- **En standalone, el filtro "hoy" del Historial devolvía CERO.** El límite iba
+  en ISO y `created_at` se guarda `YYYY-MM-DD HH:MM:SS`; el espacio ordena antes
+  que la `T`. Es el mismo bug que `dbQuery` ya corregía, reintroducido porque ese
+  handler arma el `WHERE` con QueryBuilder. `limiteFechaSqlite()` se exportó
+  desde `db-query.ts` como fuente única del formato. **Preexistente, no de este
+  PR.**
+
+Quedaron sin arreglar, por exceder el alcance, dos hallazgos preexistentes del
+mismo handler (el hash de password que viaja vía `createdBy`, y que cancelar
+desde el Historial deja el `Delivery` vivo) → [reference/known-bugs.md](reference/known-bugs.md).
+
+Tests: `test:reporte-delivery` (90), `test:canal-venta` (25),
+`test:zona-delivery-online` (11). Manual:
+`docs/testing/TESTING-CHECKLIST-INFORMES-DELIVERY.md`. Trampas de UI que costaron
+una tarde → [conventions/ui-patterns.md](conventions/ui-patterns.md).
 
 ### Reauditoría integral 2026-07-26 (subsistemas nuevos)
 

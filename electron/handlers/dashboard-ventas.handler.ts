@@ -266,6 +266,13 @@ export async function desgloseVentasRango(
   return { totalGs, porMoneda, porFormaPago };
 }
 
+/**
+ * Métricas de delivery del dashboard. La importación va en un solo sentido —
+ * este handler consume el motor de delivery, y el motor NO importa nada de acá
+ * (redeclara su propio `FiltroVentas`) justamente para que no haya ciclo.
+ */
+import { kpisDelivery, deliveriesEnCamino } from './reportes-delivery.helper';
+
 export function registerDashboardVentasHandlers(
   dataSource: DataSource,
   _getCurrentUser: () => Usuario | null,
@@ -343,6 +350,19 @@ export function registerDashboardVentasHandlers(
       const desgloseHoy = await desgloseVentasRango(dataSource, monedaPrincipalId, filtroHoy);
       const totalHoyPYG = desgloseHoy.totalGs;
       const ticketPromedio = ventasHoy > 0 ? Math.round(totalHoyPYG / ventasHoy) : 0;
+
+      // 1.b Delivery — usa `filtroHoy`, el MISMO filtro que el total de la card.
+      // Si usara el filtro del período, la card diría "12 envíos" al lado de un
+      // total que corresponde a otra ventana; es el desfase card/chart de
+      // siempre, ahora entre dos cards de la misma fila.
+      const cotMapDelivery = await getCotizacionMap(dataSource, monedaPrincipalId);
+      const kpisDeliveryHoy = await kpisDelivery(
+        dataSource,
+        { monPrincipal: monedaPrincipalId, cotMap: cotMapDelivery, isPg: dataSource.options.type === 'postgres' },
+        filtroHoy,
+      );
+      // Sin período: es estado operativo, no del rango que se esté mirando.
+      const enCaminoAhora = await deliveriesEnCamino(dataSource);
 
       // 2. Mesas
       const mesaRepo = dataSource.getRepository(PdvMesa);
@@ -499,6 +519,16 @@ export function registerDashboardVentasHandlers(
         ventasPorPeriodo: periodoData,
         // Desglose del total de hoy por moneda y forma de pago (todo en Gs).
         desgloseVentasHoy: desgloseHoy,
+        // Chips de delivery. `enCamino` es lo único acá que ignora el filtro:
+        // dice cuántos pedidos hay en la calle en este momento.
+        delivery: {
+          envios: kpisDeliveryHoy.envios,
+          retiros: kpisDeliveryHoy.retiros,
+          ingresoEnvios: kpisDeliveryHoy.ingresoEnvios,
+          facturacionDelivery: kpisDeliveryHoy.facturacionDelivery,
+          ticketPromedioDelivery: kpisDeliveryHoy.ticketPromedioDelivery,
+          enCamino: enCaminoAhora,
+        },
         // true → el total/desglose corresponde a las cajas abiertas (Opción B);
         // false → al día calendario (fallback sin cajas abiertas). El front usa
         // esto para el label de la card ("Total en caja" vs "Total hoy").
