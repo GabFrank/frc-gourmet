@@ -26,8 +26,18 @@ export async function getMonedaPrincipal(dataSource: DataSource): Promise<Moneda
 }
 
 /**
- * Tasa (compraLocal) para convertir de `origenId` a `destinoId`. 1 si son la
+ * Tasa (`compraLocal`) para convertir de `origenId` a `destinoId`. 1 si son la
  * misma moneda; null si no hay cotización activa registrada.
+ *
+ * **Busca el par en las dos direcciones.** `compraLocal` significa siempre
+ * "cuántas unidades de la moneda local vale 1 unidad de la otra" — no depende de
+ * cómo quedó cargada la fila. Y las filas existen en ambos sentidos: el ABM abre
+ * los cambios desde una moneda y esa queda como `monedaOrigen`, así que según
+ * desde dónde la cargue el operador el par sale (GS→USD) o (USD→GS).
+ *
+ * Antes se buscaba una sola dirección: si la fila estaba al revés, esto devolvía
+ * null y los callers reportaban "sin cotización" con la cotización cargada. El
+ * ticket (`documentos-tickets.handler`) y el PWA mobile ya buscaban en ambas.
  */
 export async function getCotizacionCompraLocal(
   dataSource: DataSource,
@@ -35,10 +45,16 @@ export async function getCotizacionCompraLocal(
   destinoId: number,
 ): Promise<number | null> {
   if (origenId === destinoId) return 1;
-  const cambio = await dataSource.getRepository(MonedaCambio).findOne({
-    where: { monedaOrigen: { id: origenId } as any, monedaDestino: { id: destinoId } as any, activo: true },
-    order: { createdAt: 'DESC' as any },
-  });
+  const repo = dataSource.getRepository(MonedaCambio);
+  const cambio =
+    (await repo.findOne({
+      where: { monedaOrigen: { id: origenId } as any, monedaDestino: { id: destinoId } as any, activo: true },
+      order: { createdAt: 'DESC' as any },
+    })) ||
+    (await repo.findOne({
+      where: { monedaOrigen: { id: destinoId } as any, monedaDestino: { id: origenId } as any, activo: true },
+      order: { createdAt: 'DESC' as any },
+    }));
   const tasa = cambio ? Number(cambio.compraLocal) : 0;
   return tasa > 0 ? tasa : null;
 }

@@ -13,6 +13,8 @@ import { CuentaPorPagarTipo, CuentaPorPagarEstado } from '../../src/app/database
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { dbQuery } from '../utils/db-query';
 import { getMonedaPrincipal, getCotizacionCompraLocal } from '../utils/moneda.utils';
+import { getTotalesPorVenta } from '../utils/venta-total.utils';
+import { fechaParamSql } from '../utils/date.utils';
 
 export function registerDashboardRrhhHandlers(
   dataSource: DataSource,
@@ -134,18 +136,37 @@ export function registerDashboardRrhhHandlers(
       } catch (_e) { /* optional */ }
 
       // 8. top5Vendedores del periodo
+      //
+      // El monto sale de los ítems (`getTotalesPorVenta`), no de `Venta.total`:
+      // esa columna no se escribe nunca, así que el ranking mostraba 0 para
+      // todos y el ORDER BY quedaba arbitrario (issue #239). El filtro de fecha
+      // tampoco puede usar `strftime`, que es sólo SQLite — en Postgres tiraba
+      // error y el `catch` de abajo dejaba el widget vacío en silencio.
       const top5Vendedores: any[] = [];
       try {
-        const raw = await dbQuery(dataSource, `
-          SELECT v.vendedor_id, SUM(v.total) as totalVendido, COUNT(*) as cantVentas
+        const finMes = new Date(anio, mes, 0, 23, 59, 59, 999);
+        const ventasPeriodo: any[] = await dbQuery(dataSource, `
+          SELECT v.id as id, v.vendedor_id as vendedor_id
           FROM ventas v
           WHERE v.estado = 'CONCLUIDA'
-            AND strftime('%Y-%m', v.created_at) = '${periodo}'
+            AND v.created_at >= ? AND v.created_at <= ?
             AND v.vendedor_id IS NOT NULL
-          GROUP BY v.vendedor_id
-          ORDER BY totalVendido DESC
-          LIMIT 5
-        `);
+        `, [fechaParamSql(dataSource, fechaInicio), fechaParamSql(dataSource, finMes)]);
+
+        const totalesPorVenta = await getTotalesPorVenta(dataSource, ventasPeriodo.map((v) => Number(v.id)));
+        const acum = new Map<number, { totalVendido: number; cantVentas: number }>();
+        for (const v of ventasPeriodo) {
+          const uid = Number(v.vendedor_id);
+          const prev = acum.get(uid) || { totalVendido: 0, cantVentas: 0 };
+          prev.totalVendido += totalesPorVenta.get(Number(v.id)) || 0;
+          prev.cantVentas += 1;
+          acum.set(uid, prev);
+        }
+        const raw = Array.from(acum.entries())
+          .map(([vendedor_id, d]) => ({ vendedor_id, totalVendido: d.totalVendido, cantVentas: d.cantVentas }))
+          .sort((a, b) => b.totalVendido - a.totalVendido)
+          .slice(0, 5);
+
         for (const row of raw) {
           const usuario = await dataSource.getRepository(Usuario).findOne({
             where: { id: row.vendedor_id },

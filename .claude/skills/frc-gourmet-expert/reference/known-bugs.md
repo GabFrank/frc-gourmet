@@ -681,30 +681,46 @@ también detalla ahora los adicionales activos. Test: `npm run test:ticket-venta
 venta arranca filtrando `estado = ACTIVO` — es lo que hacen comanda, cobro, stock,
 comisiones, reportes y factura legal. Un `find` sin filtro es el bug.
 
-### `Venta.total` nunca se persiste → comisiones META_VENTA_LOCAL y "Top 5 Vendedores" siempre en 0
+### ✅ RESUELTO — `Venta.total` no se persiste: la comisión META_VENTA_LOCAL no pagaba nunca (2026-08-17, issue #239)
 
-**Descubierto** auditando el ticket de venta (2026-08-17). **Pendiente** → issue
-[#239](https://github.com/GabFrank/frc-gourmet/issues/239). No se arregló ahí para no
-mezclar dominios.
+**Hecho de base que sigue vigente:** la columna `ventas.total` **no se escribe en
+ningún flujo del repo** — ni al cobrar (`cobrar-venta-dialog` manda
+estado/formaPago/pago/fechaCierre) ni en la venta a crédito. **Nunca la leas.**
+El total de una venta se calcula desde sus ítems.
 
-**Hecho de base:** la columna `ventas.total` (`Venta.total`, nullable) **no se escribe en
-ningún flujo del repo**. Al cobrar, `cobrar-venta-dialog` hace
-`updateVenta({ estado, formaPago, pago, fechaCierre })` sin `total`; la venta a crédito
-tampoco lo setea. A diferencia de `Compra.total` o `PedidoOnline.total`, que sí se
-persisten. Quien necesite el total de una venta tiene que sumar sus `VentaItem` activos.
+**Síntomas que causaba:** `META_VENTA_LOCAL` comparaba `0 >= meta` → con una meta
+> 0 no pagaba nunca, en silencio; y el widget "Top 5 Vendedores" del dashboard
+RRHH mostraba 0 para todos, con el `ORDER BY` sobre esa columna.
 
-**Consecuencias detectadas:**
+**Fix:** `electron/utils/venta-total.utils.ts` — único lugar donde se calcula:
 
-- `comisiones.handler.ts` — `totalMontoVentaLocal` se acumula desde `v.total as "ventaTotal"`,
-  así que queda 0. La regla `TipoReglaComision.META_VENTA_LOCAL` compara
-  `totalMontoVentaLocal >= metaMontoLocal`: con una meta > 0 **nunca paga**, en silencio.
-- `dashboard-rrhh.handler.ts` — `SELECT v.vendedor_id, SUM(v.total) as totalVendido … GROUP BY
-  v.vendedor_id` para el widget "Top 5 Vendedores": todos los montos salen 0.
+- `sqlTotalLineaItem(alias)` → `(unitario + adicionales − descuento) × cantidad`.
+  **El adicional es POR UNIDAD**: antes `comisiones` y `equipos-comision` lo
+  dejaban afuera del `× cantidad` y 2 hamburguesas con extra queso contaban un
+  solo extra.
+- `getTotalesPorVenta(ds, ventaIds)` / `sumarTotalesDeVentas` → ítems ACTIVOS
+  netos de los descuentos y aumentos globales del cobro (`PagoDetalle`),
+  convertidos a la moneda principal. Criterio elegido por el usuario: los
+  descuentos globales son comunes y contar el bruto inflaría la meta.
 
-**Fix posible (a decidir):** o se empieza a persistir `Venta.total` al concluir la venta
-(y hay que decidir si es bruto o neto de ajustes del pago), o esos dos consumidores pasan
-a sumar `VentaItem` activos como hacen los reportes (`reportes-ventas.helper.ts`). La
-segunda opción no necesita migración ni backfill de las ventas históricas.
+Test: `npm run test:comision-meta-venta`.
+
+**De paso se arreglaron:** el `strftime` del Top 5 (sólo SQLite, en Postgres
+tiraba error tragado por un `catch`) y `getCotizacionCompraLocal`, que buscaba la
+cotización en una sola dirección — ver abajo.
+
+### ✅ RESUELTO — La cotización cargada "al revés" no se encontraba (2026-08-17)
+
+`getCotizacionCompraLocal` (`electron/utils/moneda.utils.ts`) buscaba el par
+`(origen, destino)` en **una sola dirección**. El ABM de cambios abre los pares
+desde la moneda que estés viendo, así que la fila queda `(GS→USD)` o `(USD→GS)`
+según por dónde la cargue el operador: si estaba al revés, el util devolvía
+`null` y los callers reportaban **"sin cotización" teniendo la cotización
+cargada** (resumen financiero del funcionario, nómina del dashboard RRHH).
+
+`compraLocal` significa siempre "cuántas unidades de la local vale 1 de la otra",
+sin importar cómo quedó la fila — así lo interpretan el ticket y el PWA mobile,
+que ya buscaban en ambas direcciones. Ahora el util también.
 
 ### `create-factura` no revalida que los ítems facturados sean ACTIVO de la venta
 
