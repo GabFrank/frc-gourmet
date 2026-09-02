@@ -27,6 +27,7 @@ import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compra
 import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { printVentaTicketInternal, printPagareCpcTicketInternal } from './documentos-tickets.handler';
+import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
 import { PagoOrigenTipo } from '../../src/app/database/entities/financiero/pago-consolidado-enums';
 import { bloquearSiPagoConsolidado } from './pago-consolidado-guard';
@@ -1024,15 +1025,22 @@ export function registerCuentasPorCobrarHandlers(
       // el ticket de venta.
       const imprimirPagare = data?.imprimirPagare === true;
       if (imprimirPagare) {
+        // ⚠️ El dispositivo se resuelve ACÁ, no adentro del `setImmediate`: ahí
+        // dentro no hay `_event` del cual sacarlo. Es la misma trampa que dejó
+        // el ticket de delivery saliendo por la impresora `isDefault` (ver
+        // `reference/known-bugs.md`), y este caller había quedado afuera de
+        // aquel barrido: el pagaré de una venta cobrada en la terminal de
+        // delivery salía por la impresora de la caja principal.
+        const dispositivoId = resolveRequestDeviceId(_event) ?? undefined;
         setImmediate(async () => {
           try {
             const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
             if (pdvConfig?.autoImprimirTicketVenta) {
-              await printVentaTicketInternal(dataSource, venta.id);
+              await printVentaTicketInternal(dataSource, venta.id, { dispositivoId });
             }
             // Pequeña pausa para que el ticket salga primero en la térmica.
             await new Promise(r => setTimeout(r, 600));
-            await printPagareCpcTicketInternal(dataSource, cpcSaved.id);
+            await printPagareCpcTicketInternal(dataSource, cpcSaved.id, { dispositivoId });
           } catch (e: any) {
             console.warn('[cobrar-venta-credito] auto-print:', e?.message || e);
           }

@@ -23,7 +23,7 @@ import * as fs from 'fs';
 import { DataSource } from 'typeorm';
 
 import { getDataSourceOptions } from '../src/app/database/database.config';
-import { printDeliveryTicketInternal } from '../electron/handlers/documentos-tickets.handler';
+import { printDeliveryTicketInternal, printPagareCpcTicketInternal } from '../electron/handlers/documentos-tickets.handler';
 import { installHandlerRegistry, invokeHandlerWithContext } from '../electron/utils/handler-registry';
 import { registerDeliveryHandlers } from '../electron/handlers/delivery.handler';
 
@@ -155,6 +155,73 @@ async function main() {
     ok(res?.errors?.[0]?.printerId === printerCaja2.id,
       'D: el ticket sale por la impresora de la caja que lo pidió (el bug: salía por la isDefault)',
       res?.errors?.[0]);
+  }
+
+  // ── [E] El pagaré de venta a crédito ─────────────────────────────────────
+  // MISMO BUG, OTRO CALLER. `cobrar-venta-credito` llamaba a
+  // `printPagareCpcTicketInternal` sin dispositivo, y a diferencia de los otros
+  // dos builders éste NO tenía fallback a `venta.dispositivo`: se iba derecho a
+  // la `isDefault`. El pagaré de una venta cobrada en la terminal de delivery
+  // salía por la impresora de la caja principal, y el repartidor se iba sin él.
+  //
+  // ⚠️ Lo que NO cubre este bloque: que `cobrar-venta-credito` resuelva el
+  // dispositivo del request antes del `setImmediate`. La impresión ahí corre
+  // desacoplada y su error se traga un `catch`, así que desde afuera no se puede
+  // observar qué impresora eligió. Eso va al manual de pruebas. El fallback de
+  // acá abajo es lo que igual salva el caso aunque un caller se olvide.
+  console.log('\n[E] Pagaré CPC: ruteo por dispositivo\n');
+  {
+    const { CuentaPorCobrar } = E('financiero/cuenta-por-cobrar.entity');
+    const { Cliente } = E('personas/cliente.entity');
+    const { Persona } = E('personas/persona.entity');
+    const { Moneda } = E('financiero/moneda.entity');
+
+    const personaCli: any = await save(Persona, { nombre: 'CLIENTE PAGARE' });
+    const cliente: any = await save(Cliente, { persona: personaCli, activo: true, credito: true });
+    const moneda: any = await save(Moneda, {
+      nombre: 'GUARANI', simbolo: 'Gs', denominacion: 'PYG', principal: true, activo: true, decimales: 0,
+    });
+
+    /** CPC ligada a una venta, con o sin dispositivo en esa venta. */
+    async function crearCpc(dispositivo?: any) {
+      const venta: any = await save(Venta, {
+        total: 50000, estado: 'CONCLUIDA', ...(dispositivo ? { dispositivo } : {}),
+      });
+      return await save(CuentaPorCobrar, {
+        cliente, tipo: 'CREDITO_VENTA', descripcion: 'TEST', montoTotal: 50000,
+        montoCobrado: 0, moneda, fechaInicio: new Date(), cantidadCuotas: 1,
+        estado: 'ACTIVO', ventaId: venta.id,
+      });
+    }
+
+    async function impresoraPagare(cpcId: number, opts: any): Promise<number | undefined> {
+      const res: any = await printPagareCpcTicketInternal(ds, cpcId, opts);
+      return res?.errors?.[0]?.printerId ?? res?.printed?.[0]?.printerId;
+    }
+
+    const cpcConDisp = await crearCpc(caja2);
+    ok(await impresoraPagare(cpcConDisp.id, {}) === printerCaja2.id,
+      'E: sin opts, el pagaré cae al dispositivo de la venta (ERA EL BUG: iba a la isDefault)');
+    ok(await impresoraPagare(cpcConDisp.id, { dispositivoId: cajaSinImpresora.id }) === printerDefault.id,
+      'E: un dispositivo sin printerTicket sigue cayendo a la isDefault');
+    ok(await impresoraPagare(cpcConDisp.id, { printerId: printerDefault.id }) === printerDefault.id,
+      'E: un printerId explícito le gana al dispositivo de la venta');
+
+    const cpcSinDisp = await crearCpc();
+    ok(await impresoraPagare(cpcSinDisp.id, {}) === printerDefault.id,
+      'E: venta sin dispositivo → isDefault (comportamiento previo intacto)');
+    ok(await impresoraPagare(cpcSinDisp.id, { dispositivoId: caja2.id }) === printerCaja2.id,
+      'E: el dispositivo del request manda sobre una venta que no lo tiene');
+
+    // Borde: una CPC cuya venta no existe (dato viejo o borrado) no debe romper
+    // la impresión — el pagaré tiene que salir igual, por la default.
+    const cpcHuerfana: any = await save(CuentaPorCobrar, {
+      cliente, tipo: 'CREDITO_VENTA', descripcion: 'HUERFANA', montoTotal: 1000,
+      montoCobrado: 0, moneda, fechaInicio: new Date(), cantidadCuotas: 1,
+      estado: 'ACTIVO', ventaId: 999999,
+    });
+    ok(await impresoraPagare(cpcHuerfana.id, {}) === printerDefault.id,
+      'E: una CPC cuya venta no existe no rompe la impresión');
   }
 
   await ds.destroy();

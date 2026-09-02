@@ -1462,9 +1462,25 @@ export async function printPagareCpcTicketInternal(
   });
   if (!cpc) return { ok: false, printed: [], errors: [{ message: `CPC ${cpcId} no encontrada` }] };
 
+  // Igual que `printVentaTicketInternal` y `printDeliveryTicketInternal`: gana el
+  // dispositivo del request, y si el caller no lo pasó se cae al de la venta.
+  // Sin ninguno de los dos, `getPrinterByRol` no puede resolver
+  // `Dispositivo.printerTicket` (paso 2 está guardado por `if (opts.dispositivoId
+  // && esRolTicket)`) y termina en la impresora `isDefault` — en un local con dos
+  // cajas, el pagaré salía por la de la otra. Este builder era el único de los
+  // tres sin el fallback.
+  let dispositivoId = opts.dispositivoId;
+  if (dispositivoId == null && (cpc as any).ventaId) {
+    const venta = await dataSource.getRepository(Venta).findOne({
+      where: { id: (cpc as any).ventaId },
+      relations: ['dispositivo'],
+    });
+    dispositivoId = (venta as any)?.dispositivo?.id;
+  }
+
   const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, {
     printerId: opts.printerId,
-    dispositivoId: opts.dispositivoId,
+    dispositivoId,
   });
   if (!printer) return { ok: false, printed: [], errors: [{ message: 'Sin impresora TICKET_VENTA' }] };
 
