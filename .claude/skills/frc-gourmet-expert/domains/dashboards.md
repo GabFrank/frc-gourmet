@@ -173,7 +173,7 @@ Cada dashboard tiene un IPC único `get-dashboard-{dominio}-kpis(filtros?)` que 
 
 | Handler | IPC | Filtros |
 |---|---|---|
-| `electron/handlers/dashboard-ventas.handler.ts` | `get-dashboard-ventas-kpis` | `rango: Rango` (default `'week'`) |
+| `electron/handlers/dashboard-ventas.handler.ts` | `get-dashboard-ventas-kpis` | `rango: Rango` (default `'week'`) o `KpisFiltro` — devuelve además el bloque `delivery` (ver §7.8) |
 | `electron/handlers/dashboard-compras.handler.ts` | `get-dashboard-compras-kpis` | `rango: Rango` (default `'month'`) |
 | `electron/handlers/dashboard-productos.handler.ts` | `get-dashboard-productos-kpis` | `rango: Rango` (default `'month'`) |
 | `electron/handlers/dashboard-financiero.handler.ts` | `get-dashboard-financiero-kpis` | — |
@@ -416,7 +416,7 @@ Ejemplo del SCSS de Ventas (sólo lo específico):
 5. **SCSS** sólo con lo específico del componente (no duplicar lo común).
 6. **Permiso** `XXX_DASHBOARD_VER` al seed de `permissions.handler.ts`.
 7. **Abrir desde** `app.component.ts` con `openXxxDashboardTab()` y agregar al sidenav.
-8. **Testing**: `npm run build` para TS, `npm start` lo corre el usuario.
+8. **Testing**: `npm run build` para TS; `npm start` para verlo en la app (lo corre el agente, SKILL.md regla #1).
 
 ## 11. Datos disponibles por dominio (qué hay y qué no)
 
@@ -435,3 +435,24 @@ Si el usuario pide un KPI nuevo, primero verificar si los datos existen:
 - **Commit:** `2a061d8 feat(dashboards): padron unificado para los 7 dashboards + KPIs reales`.
 - **Archivos creados:** 14 (1 partial SCSS + 5 handlers + 5 componentes shared con HTML + helper chart-theme + this doc skill).
 - **Archivos modificados:** 30 (7 dashboards × 3 archivos + main.ts + preload.ts + repository.service.ts + permissions.handler.ts + seed-system.ts + styles.scss).
+
+
+## 7.8 Chips de delivery en el dashboard de ventas (2026-08-28)
+
+`get-dashboard-ventas-kpis` devuelve `delivery: { envios, retiros,
+ingresoEnvios, facturacionDelivery, ticketPromedioDelivery, enCamino }`.
+
+Lo calcula `kpisDelivery` de `reportes-delivery.helper.ts` — el **mismo** motor
+que el reporte de cierre de mes, para que las dos pantallas no cuenten los
+envíos distinto. Se le pasa **`filtroHoy`**, el mismo filtro que el total de la
+card: con el filtro del período, la card habría dicho "12 envíos" al lado de un
+total de otra ventana — el desfase card/chart de siempre, ahora entre dos cards
+de la misma fila.
+
+**`enCamino` es la excepción y es deliberada:** ignora todo filtro de período.
+Es un dato operativo — cuántos pedidos hay en la calle sin cerrar en este
+momento — y no depende del mes que esté mirando el dashboard.
+
+La importación va en un solo sentido (`dashboard-ventas.handler` →
+`reportes-delivery.helper`); el helper redeclara su propio `FiltroVentas` en vez
+de importar `VentaFiltro` justamente para no cerrar el ciclo.

@@ -372,6 +372,12 @@ responder después "de esta cuota, cuánto entró y cuánto se perdonó".
   asigna el ADMIN), **motivo obligatorio**, **nunca el 100%** (para eso está
   `cancelar-cuenta-por-cobrar`), y **tope %** por caja
   (`CajaMayorConfiguracion.descuentoCpcMaxPorcentaje`, null = sin tope).
+- **Redondeo del tope**: tanto el frontend (`descuento-dialog.component.ts`) como
+  el backend (`pago-consolidado.handler.ts`) usan `redondear(totalDeuda * topePct / 100, decimalesMoneda)`
+  de `shared/utils/pago-consolidado.util.ts`. El tope se valida sobre valores ya
+  redondeados a la unidad mínima de la moneda (0 decimales para PYG, 2 para USD).
+  No usar `Math.floor` ni dejar sin redondear: genera incoherencias frontend/backend
+  (#272).
 
 ⚠️ El tope **no puede depender de un campo omitible**: `cajaMayorContextoId` es
 obligatorio cuando hay descuento y tiene que existir, y el tope aplicado es el

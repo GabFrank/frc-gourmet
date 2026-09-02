@@ -35,6 +35,19 @@ import type { DataSource } from 'typeorm';
  */
 const ISO_Z = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
+/**
+ * Normaliza un LIMITE de fecha al formato en que SQLite guarda `created_at`.
+ *
+ * Exportada porque `dbQuery` no es el único camino a la base: los handlers que
+ * usan QueryBuilder (`getVentasByDateRange`) arman su propio `WHERE` y quedaban
+ * fuera de esta normalización, con el mismo bug silencioso de devolver cero.
+ * En Postgres no hace falta (la columna es `timestamp` de verdad), así que el
+ * caller debe aplicarla sólo cuando el driver es SQLite.
+ */
+export function limiteFechaSqlite(v: any): any {
+  return aFormatoSqlite(v);
+}
+
 function aFormatoSqlite(v: any): any {
   if (typeof v === 'string' && ISO_Z.test(v)) return v.slice(0, 19).replace('T', ' ');
   if (v instanceof Date) return v.toISOString().slice(0, 19).replace('T', ' ');

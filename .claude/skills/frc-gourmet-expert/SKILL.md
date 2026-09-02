@@ -41,7 +41,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 
 | Pregunta | Cargar |
 |---|---|
-| **Ciclo de implementación de una feature o fix** (proceso obligatorio de punta a punta) | [workflows/ciclo-implementacion.md](workflows/ciclo-implementacion.md) |
+| **Ciclo de implementación de una feature o fix** (los 12 pasos obligatorios de punta a punta, con las dos auditorías por agentes; **dueño único del checklist de terminado**) | [workflows/ciclo-implementacion.md](workflows/ciclo-implementacion.md) |
 | Cómo está estructurado el proyecto, qué hace cada capa | [architecture/overview.md](architecture/overview.md) |
 | Cómo añadir una nueva entidad de punta a punta | [workflows/add-new-entity.md](workflows/add-new-entity.md) |
 | **Archivos, imágenes, adjuntos, visor de docs** (`app://`, `<app-file-upload>`, `<app-document-viewer>`, thumbnails, entity `Adjunto`) | [domains/archivos-y-adjuntos.md](domains/archivos-y-adjuntos.md) |
@@ -76,13 +76,13 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | **Impresoras térmicas** | [domains/cocina-impresion.md](domains/cocina-impresion.md) |
 | **Qué imprime el sistema y para qué** (catálogo de los 13 tickets, ruteo por rol de impresora, convenciones de formato) | [domains/tickets-impresos.md](domains/tickets-impresos.md) |
 | **Dashboards** (padrón unificado, componentes shared, handlers KPI) | [domains/dashboards.md](domains/dashboards.md) |
-| **Reportes de cierre de mes** (hub Ventas + Finanzas, período comparativo, presentación/PDF/WhatsApp, series por rango local) | [domains/reportes.md](domains/reportes.md) |
+| **Reportes de cierre de mes** (hub Ventas + Finanzas, período comparativo, presentación/PDF/WhatsApp, series por rango local, **bloque de delivery/retiro y canal de venta**) | [domains/reportes.md](domains/reportes.md) |
 | Reglas de código (UPPERCASE, no func en templates, colores) | [conventions/coding-rules.md](conventions/coding-rules.md) |
 | Patrones UI (mat-menu acciones, tab/dialog híbrido, full-height) | [conventions/ui-patterns.md](conventions/ui-patterns.md) |
 | Bugs comunes y workarounds (TypeORM null, fechas UTC, mat-chip) | [conventions/pitfalls-typeorm-electron.md](conventions/pitfalls-typeorm-electron.md) |
 | Cómo debuggear un bug en X dominio | [workflows/debug-checklist.md](workflows/debug-checklist.md) |
 | Verificar BD SQLite manualmente | [workflows/verificacion-bd-sqlite.md](workflows/verificacion-bd-sqlite.md) |
-| **Cómo proceder ante un feature/bug: DoD + registro** (checklist de terminado, dónde registrar, política de issues) | [workflows/definition-of-done.md](workflows/definition-of-done.md) |
+| **Dónde se registra cada cosa (SSOT) + política de issues + regla de oro** | [workflows/definition-of-done.md](workflows/definition-of-done.md) |
 | TODOs pendientes del proyecto | [workflows/todos-pendientes.md](workflows/todos-pendientes.md) |
 | Árbol completo del sidenav | [reference/menu-sidenav-tree.md](reference/menu-sidenav-tree.md) |
 | Lista de handlers IPC con responsabilidades | [reference/handlers-index.md](reference/handlers-index.md) |
@@ -111,17 +111,17 @@ Estas las debo respetar SIEMPRE, sin que el usuario las repita:
 11. **No live filtering** — botón "Filtrar" explícito, salvo que el usuario pida lo contrario.
 12. **No `mat-sort-header`** sin pedido explícito.
 13. **Pruebas UI paso a paso** — un solo paso por turno, esperar confirmación, verificar BD entre pasos. ([feedback_pruebas_ui_paso_a_paso](#))
-14. **Avisar siempre** si el usuario debe reiniciar la app: backend (`electron/handlers/`, `preload.ts`, `main.ts`, nuevas entidades, `database.config.ts`) → reinicio. Solo Angular templates/scss/ts → hot reload. ([feedback_reiniciar_app](#))
+14. **Avisar siempre si el cambio requiere reiniciar la app**: backend (`electron/handlers/`, `preload.ts`, `main.ts`, nuevas entidades, `database.config.ts`) → reinicio. Solo Angular templates/scss/ts → hot reload. Desde 2026-08-11 **el reinicio lo hace el agente** (regla #1), pero el aviso sigue: el usuario tiene que saber que su instancia abierta quedó vieja. ([feedback_reiniciar_app](#))
 15. **Para nulear columna en TypeORM:** `(entity as any).campo = null`, NUNCA `undefined` (no genera UPDATE). ([feedback_typeorm_null_undefined](#))
 16. **Cada diálogo, un propósito** — no mezclar conceptos. ([feedback_separar_conceptos](#))
 17. **Componente de tabla con scroll local** — usar el patrón full-height de [conventions/ui-patterns.md](conventions/ui-patterns.md), no el scroll global de la tab.
 18. **Si el componente es muy grande para mat-dialog** — convertir a híbrido tab/dialog. ([feedback_componente_hibrido_tab_dialog](#))
 19. **Dashboards: padrón unificado obligatorio** — usar `<app-dash-stat-chip>`, `<app-dash-quick-action>`, `<app-dash-ranking>`, `<app-dash-section-header>`, `<app-dash-chart-card>` de `shared/components/dashboard/`; estilos comunes en `_dashboard.scss`; chart options vía `getDashboardChartOptions()`. Detalles → [domains/dashboards.md](domains/dashboards.md).
 20. **Si el usuario menciona trabajo paralelo de otro agente** — usar `git worktree add` (no `checkout` en el directorio principal). El checkout cambia el filesystem para todos los procesos. ([feedback_git_worktree_paralelo](#))
-21. **Toda feature o fix sigue el ciclo de implementación obligatorio, sin que haga falta pedirlo.** Iniciar desde `develop` remoto → skill → análisis → plan (con tests) → aprobación → implementación por fases con **commit+push al cerrar cada fase** → **revisión por agentes auditores** (Agent tool, siempre `model: "sonnet"`) → **batería completa de tests** → **`npm run check` (AOT)** → manual de pruebas + docs + skill + backlog → commit/push → **PR a `develop` directamente** → **esperar el CI en verde antes de dar por terminado**. Todo el trabajo va a **un solo PR** salvo pedido en contra. Es el flujo por defecto: el usuario no lo va a volver a explicar. Detalle completo → [workflows/ciclo-implementacion.md](workflows/ciclo-implementacion.md).
+21. **Toda feature o fix sigue el ciclo de implementación obligatorio, sin que haga falta pedirlo.** Iniciar desde `develop` remoto → skill → análisis → **plan escrito en `docs/planes/`** (con tests) → **auditoría del plan (2 agentes, ejes distintos)** → aprobación → implementación por fases con **commit+push al cerrar cada fase** → **auditoría de la implementación (3 agentes fijos + condicionales por `git diff`)**, siempre `model: "sonnet"` → **`npm run test:all`** → **`npm run check` (AOT)** → manual de pruebas + docs + skill + backlog → commit/push → **PR a `develop` directamente** → **esperar el CI en verde sobre el head actual antes de dar por terminado**. **Si un paso no se puede cumplir, se avisa; nunca se saltea en silencio ni se reescribe el plan para taparlo.** Todo el trabajo va a **un solo PR** salvo pedido en contra. Es el flujo por defecto: el usuario no lo va a volver a explicar. Detalle completo → [workflows/ciclo-implementacion.md](workflows/ciclo-implementacion.md).
 22. **Todo handler que MUTA datos lleva `ensurePermission`** — como PRIMERA sentencia del `try`: `await ensurePermission(dataSource, getCurrentUser, 'CODIGO');` (de `../utils/auth.utils`). Aplica a create/update/delete/anular/aprobar/confirmar/generar/pagar/registrar/asignar, etc. **`/api/rpc` es default-allow**: cualquier cliente con un JWT válido puede invocar el handler; el guard por-handler es la ÚNICA frontera real (el frontend con `*appHasPermission` no cuenta). Los `get-*`/`list-*` de sólo lectura no lo necesitan. Si el código de permiso no existe, agregarlo a `SEED_PERMISOS` en `permissions.handler.ts`. La auditoría 2026-07 encontró ~35 handlers sensibles sin este guard — no repetir. Ver [reference/known-bugs.md](reference/known-bugs.md) (gotchas) y [workflows/add-new-entity.md](workflows/add-new-entity.md).
 23. **Toda pantalla navegable nueva debe estar en el árbol de menú único.** El sidenav Y el buscador global se renderizan desde la **fuente única** `MENU_TREE` (`src/app/services/menu-tree.ts`). Un `MenuNode` es rama (`children`, hasta 3 niveles) u hoja (`action`). Cada hoja declara `enSidenav` / `enBuscador` (ambos default true) para elegir dónde aparece — ej. acciones *Crear …* van con `enSidenav: false` (solo buscador). Hoja: `{ id, label, icon, keywords, permiso, esConfig, action: { component, title, tabId, data } }`; para diálogos-destino `action.mode: 'dialog'` + `dialogConfig`. NO incluir diálogos contextuales (edit/create/confirm/selector/detalle/...). El ADMIN puede sobreescribir visibilidad (sidenav/buscador) y orden por id desde *Configuración → Configuración del menú* (`SISTEMA_MENU_CONFIGURAR`, entidad `MenuConfig`); los overrides se aplican sobre el árbol sin tocar código. Si no se agrega la hoja, la pantalla funciona pero NO aparece ni en sidenav ni en buscador. Detalles → [domains/menu-sidenav.md](domains/menu-sidenav.md).
-24. **Ningún cambio está terminado sin su documentación.** Todo feature/bug sigue la **Definición de Terminado** → [workflows/definition-of-done.md](workflows/definition-of-done.md): leer el código real antes, `ensurePermission` + migración cuando aplique, `npm run check` antes de pushear, **actualizar los docs de dominio afectados** (doc nuevo + fila en §2 si es subsistema nuevo), **actualizar la skill si el cambio invalida algo que ella afirma o cambia una convención**, y **mover el ítem en el backlog** (`todos-pendientes.md` para features, `reference/known-bugs.md` para bugs — esos son la fuente de verdad, no GitHub). GitHub issues **solo** para reportes externos, backlog que no se hace ahora, o algo que necesita discusión/varios PRs; el conventional commit + PR a `develop` es el registro de lo hecho. Código sin su doc actualizada = incompleto.
+24. **Ningún cambio está terminado sin su documentación.** El checklist ordenado está en [workflows/ciclo-implementacion.md](workflows/ciclo-implementacion.md) (paso 11); dónde se registra cada cosa y la regla de oro, en [workflows/definition-of-done.md](workflows/definition-of-done.md). En concreto: leer el código real antes, `ensurePermission` + migración cuando aplique, `npm run check` antes de pushear, **revisar los índices de `reference/`** (¿enum nuevo? ¿handler nuevo? ¿entidad? ¿pantalla?), **actualizar los docs de dominio afectados** (doc nuevo + fila en §2 si es subsistema nuevo), **actualizar la skill si el cambio invalida algo que ella afirma o cambia una convención**, y **mover el ítem en el backlog** (`todos-pendientes.md` para features, `reference/known-bugs.md` para bugs — esos son la fuente de verdad, no GitHub). GitHub issues **solo** para reportes externos, backlog que no se hace ahora, o algo que necesita discusión/varios PRs; el conventional commit + PR a `develop` es el registro de lo hecho. Código sin su doc actualizada = incompleto.
 
 ---
 
@@ -161,6 +161,78 @@ Tres cosas que conviene no volver a aprender por las malas:
 
 Tests: `npm run test:cobro-cpc-consolidado` (63), `test:pago-consolidado` (90),
 `test:pagar-obligaciones-dialog` (19). Manual: `docs/testing/TESTING-CHECKLIST-COBRO-CONSOLIDADO-CPC.md`.
+
+### Sesión 2026-08-28 — Delivery y retiro en los informes de venta
+
+El módulo de delivery estaba completo y auditado desde agosto, pero **la capa de
+informes no lo conocía**: cero menciones a delivery, `canal_origen`,
+`costo_delivery` o zona en `reportes-*.helper.ts`, `dashboard-ventas.handler.ts`
+y `resumen-caja.utils.ts`. Los datos estaban todos en la base y nadie los leía.
+
+Ahora los cinco lugares que cuentan ventas saben del reparto —reporte de cierre
+de mes (4 KPIs + 5 tarjetas: mix por canal, zonas, repartidores, SLA,
+cancelaciones), dashboard de Ventas, resumen de la PWA, cierre de caja (diálogo +
+ticket + imagen de WhatsApp) e historial (columna Canal, 4 filtros nuevos y
+totales del resultado filtrado)— y todos leen el **mismo motor**,
+`electron/handlers/reportes-delivery.helper.ts`. Detalles →
+[domains/reportes.md](domains/reportes.md) §8,
+[domains/dashboards.md](domains/dashboards.md) §7.8,
+`docs/planes/PLAN-INFORMES-DELIVERY.md`.
+
+Cuatro cosas que conviene no volver a aprender por las malas:
+
+- **El reparto que venía de la tienda online nacía sin zona.**
+  `materializarPedidoOnlineEnVenta` pasaba el costo congelado pero no
+  `precioDeliveryId`; la zona quedaba sólo en `pedidos_online`. No se notaba
+  porque nadie agrupaba por zona — al hacerlo, **todo el canal web caía en "SIN
+  ZONA"**. Un informe nuevo no sólo muestra datos: revela los que nunca se
+  estaban guardando bien.
+- **La ventana de conteo se elige por reconciliación, no por naturalidad.**
+  Contar los envíos por `fecha_entregado` suena mejor que por `created_at`, pero
+  rompe que `envíos × ticket promedio` dé la facturación de delivery del mismo
+  período. El KPI se llama "envíos", no "entregados", y eso es a propósito.
+- **El canal se define UNA vez, en dos lenguajes.**
+  `src/app/shared/utils/canal-venta.util.ts` (TS, para el renderer) y el `CASE`
+  SQL de `electron/utils/canal-venta.utils.ts` son la misma regla;
+  `npm run test:canal-venta` las compara fila por fila contra la base, igual que
+  `CONCEPTO_ES_INGRESO` / `esIngreso()` en el pago consolidado. `condicionCanal`
+  usa `EXISTS` para no exigir join y poder pegarse a consultas que ya existían.
+- **Dos tests calculaban el período con jornada 0** mientras el reporte usa la
+  jornada comercial (default 07:00). Entre las 00:00 y las 06:59 del día 1 de
+  cada mes miraban meses distintos y la variación salía `null`. Siete horas por
+  mes de rojo, y fue justo la ventana en la que se corrió la suite. Cualquier
+  test que ubique datos por período tiene que leer `getInicioJornada()` de la
+  misma fuente que el código que prueba.
+
+**La auditoría del PR encontró tres bugs ALTA que los tests no atrapaban**, y uno
+de ellos no era de la feature:
+
+- **`totales.costoDelivery` del historial se multiplicaba por la cantidad de
+  ítems.** El agregado salía de `qb.clone().select('SUM(...)')` y `qb` tenía el
+  join a `venta.items` (`@OneToMany`): `.select()` cambia las columnas pero **no
+  quita los joins**. El fixture tenía un ítem por venta —factor 1— así que el
+  test pasaba. Regla que queda: **nunca clonar un builder con joins `@OneToMany`
+  para un agregado**.
+- **`getVentasByDateRange` publicaba datos de RRHH.** `leftJoinAndSelect` del
+  `Funcionario` repartidor hidrata la entidad **entera**: sueldo, IPS y cuenta
+  bancaria, más el documento de su `Persona`. Y ese handler no tiene
+  `ensurePermission` ni está en `BLOCKED_CHANNELS`. Hidratar una entidad publica
+  todos sus campos: en un canal abierto, usar `leftJoin` + `addSelect`.
+- **En standalone, el filtro "hoy" del Historial devolvía CERO.** El límite iba
+  en ISO y `created_at` se guarda `YYYY-MM-DD HH:MM:SS`; el espacio ordena antes
+  que la `T`. Es el mismo bug que `dbQuery` ya corregía, reintroducido porque ese
+  handler arma el `WHERE` con QueryBuilder. `limiteFechaSqlite()` se exportó
+  desde `db-query.ts` como fuente única del formato. **Preexistente, no de este
+  PR.**
+
+Quedaron sin arreglar, por exceder el alcance, dos hallazgos preexistentes del
+mismo handler (el hash de password que viaja vía `createdBy`, y que cancelar
+desde el Historial deja el `Delivery` vivo) → [reference/known-bugs.md](reference/known-bugs.md).
+
+Tests: `test:reporte-delivery` (90), `test:canal-venta` (25),
+`test:zona-delivery-online` (11). Manual:
+`docs/testing/TESTING-CHECKLIST-INFORMES-DELIVERY.md`. Trampas de UI que costaron
+una tarde → [conventions/ui-patterns.md](conventions/ui-patterns.md).
 
 ### Reauditoría integral 2026-07-26 (subsistemas nuevos)
 
@@ -256,7 +328,7 @@ con el bug reintroducido. Vive en `npm run test:locks-pg`. Tests:
 - **Multimoneda RRHH (capa de resumen) MERGED (PR #198):** nuevo helper backend **`electron/utils/moneda.utils.ts`** (`convertirAPrincipal` / `getCotizacionCompraLocal` / `getMonedaPrincipal`) — antes no existía uno reutilizable. `get-funcionario-resumen-financiero` y `dashboard-rrhh.totalNominaMes` **convierten a PYG** con la cotización (`MonedaCambio.compraLocal`); la UI muestra la moneda real por línea y avisa `sinCotizacion`. Test: `npm run test:resumen-multimoneda`. ⚠️ **Bug de raíz pendiente:** `LiquidacionItem`/`LiquidacionFinalItem` **no tienen columna moneda** → el cálculo de liquidación (sueldo/final) todavía netea/suma monedas distintas como iguales. Requiere migración + decisión de política (convertir vs bloquear). Ver [reference/known-bugs.md](reference/known-bugs.md).
 - **Validación de Operaciones Financieras (2026-08):** en la PWA el **cambio de divisa no se podía guardar nunca** — `formaPagoDestinoId` es requerido pero la pantalla lo seteaba sólo si había select de *caja destino*, y en un cambio de divisa el ingreso vuelve a la MISMA caja (no hay tal select). La fuente única `operacion-financiera-validacion.util.ts` ahora distingue **`LADOS_CAJA_MAYOR`** (qué lado mueve caja ⇒ forma de pago efectivo fija) de **`CAJAS_EN_UI`** (qué select se muestra), suma `CUENTAS_EN_UI`/`COTIZACION_EN_UI` y el invariante **`fuenteDelCampo()`**: todo campo requerido tiene que tener una fuente que lo pueble (UI, cuenta bancaria o efectivo). También se arregló que al cambiar de tipo se perdía la moneda heredada de una cuenta bancaria que sobrevivía al cambio (reelegir la misma opción en un `mat-select` **no emite `valueChanges`**), que el escritorio arrastraba valores del tipo anterior, y que el bloque *Diferencia* se mostraba en transferencia bancaria donde el backend lo descarta. `formaPagoEfectivo` se mudó a `src/app/shared/utils/`. Tests: `npm run test:operacion-financiera` (122 asserts, antes 20 y pasaba con el bug), `npm run test:mobile`. → [domains/financiero-caja-mayor.md](domains/financiero-caja-mayor.md).
 - **Delivery del PdV auditado y cerrado (2026-08-24):** el módulo estaba implementado pero **nunca se usó en producción**; la auditoría completa (`docs/DIAGNOSTICO-DELIVERY.md`) encontró 26 problemas, cuatro bloqueantes. El peor: **el costo del envío no se cobraba nunca** — el diálogo de cobro sumaba sólo `ítems − descuento` y la zona de entrega era decorativa. Ahora hay `ventas.costo_delivery` (monto **congelado**, no derivado de la FK) que entra en el cobro, en `getEstadoCobroVenta` y en el comprobante. Nuevo **`delivery.handler.ts`** con la **máquina de estados en backend** (`updateDelivery` rechaza `estado` y timestamps; `/api/rpc` es default-allow, así que el guard del handler era la única frontera) y **`delivery-cancelar` transaccional** vía el util reusable `electron/utils/venta-reversa.utils.ts` (ítems + `PagoDetalle` + `CobroParcial` + CPC + stock), con permiso propio `VENTAS_DELIVERY_CANCELAR_COBRADO` si la venta ya estaba cobrada. **Cancelar es terminal**: reabrir estaba roto de raíz (el stock revertido no se reactiva nunca). El **repartidor pasó a ser `Funcionario`** (el botón ENVIAR tenía un `// TODO` y nunca asignaba a nadie) y el **ticket de reparto se imprime de verdad** (el handler que existía era código muerto). `ConfirmationDialogComponent` **implementa `showInput`** (devuelve el string): sin eso, todos los deliveries cancelados quedaban con motivo `'SIN MOTIVO'`. 11 opciones nuevas en la config del PdV. Test: `npm run test:delivery` (46 asserts). → [domains/ventas-pdv.md](domains/ventas-pdv.md) sección Delivery.
-- **Fix operaciones financieras (PR #199, abierto):** en el diálogo Nueva Operación Financiera, el botón "Registrar" quedaba deshabilitado en **Retiro** y **Depósito** bancario porque la moneda requerida del lado sin UI (se hereda de la cuenta bancaria) quedaba `null`. Fix: al elegir la cuenta se setean **ambas** monedas (origen y destino). Campos requeridos extraídos a `operacion-financiera-validacion.util.ts` (fuente única para validador + test). Test: `npm run test:operacion-financiera`.
+- **Fix operaciones financieras (PR #199, mergeado 2026-07-21):** en el diálogo Nueva Operación Financiera, el botón "Registrar" quedaba deshabilitado en **Retiro** y **Depósito** bancario porque la moneda requerida del lado sin UI (se hereda de la cuenta bancaria) quedaba `null`. Fix: al elegir la cuenta se setean **ambas** monedas (origen y destino). Campos requeridos extraídos a `operacion-financiera-validacion.util.ts` (fuente única para validador + test). Test: `npm run test:operacion-financiera`.
 
 ### Snapshot previo (2026-05-15)
 

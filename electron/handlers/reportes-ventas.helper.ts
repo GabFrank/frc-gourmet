@@ -3,20 +3,23 @@ import { dbQuery } from '../utils/db-query';
 import { VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
 import { EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
 import {
-  getMonedaPrincipalId, getCotizacionMap, sumaVentasRango, desgloseVentasRango, filtroRango,
+  getMonedaPrincipalId, getCotizacionMap, sumaVentasRango, desgloseVentasRango, filtroRango, filtroY,
 } from './dashboard-ventas.handler';
+import { CanalVenta, condicionCanal } from '../utils/canal-venta.utils';
 import { resolverPeriodo, variacionPct, RangoFechas } from './reportes-periodo.util';
+import { construirBloqueDelivery, CotizacionCtx } from './reportes-delivery.helper';
 import type { ReportePeriodoParams } from './reportes.handler';
 import { getInicioJornada } from './dashboard-ventas.handler';
 
 const DIAS_LUN_PRIMERO = [1, 2, 3, 4, 5, 6, 0]; // strftime/EXTRACT DOW: 0=Dom..6=Sáb
 const DIAS_LABEL = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
-interface CotCtx {
-  monPrincipal: number;
-  cotMap: { [id: number]: number };
-  isPg: boolean;
-}
+/**
+ * El contexto de cotización se define en `reportes-delivery.helper.ts` y se
+ * aliasea acá: las dos mitades del reporte comparten el mismo `cotMap`, y
+ * duplicar la interfaz invitaba a que una ganara un campo que la otra no.
+ */
+type CotCtx = CotizacionCtx;
 
 /** Expresiones de fecha driver-aware. created_at se guarda como se persiste
  * (ISO/UTC en SQLite, timestamp en Postgres); las franjas horarias siguen ese
@@ -76,28 +79,42 @@ function listaDias(r: RangoFechas): Date[] {
 /** Suma en Gs de un tramo [inicioDia, finDia] (día calendario local) con la
  * misma función que el KPI de facturación → la serie reconcilia con el KPI y se
  * evita el desfase UTC/local de un GROUP BY por fecha extraída en SQL. */
-async function sumaTramoGs(ds: DataSource, ctx: CotCtx, primerDia: Date, ultimoDia: Date): Promise<number> {
+async function sumaTramoGs(
+  ds: DataSource, ctx: CotCtx, primerDia: Date, ultimoDia: Date, soloDelivery = false,
+): Promise<number> {
   const desde = new Date(primerDia); desde.setHours(0, 0, 0, 0);
   const hasta = new Date(ultimoDia); hasta.setHours(23, 59, 59, 999);
-  const { suma } = await sumaVentasRango(ds, ctx.monPrincipal, filtroRango(desde.toISOString(), hasta.toISOString()), ctx.cotMap);
+  // `condicionCanal` no necesita join, así que se puede pegar al mismo
+  // `sumaVentasRango` que usa el KPI: la serie de delivery se calcula por el
+  // MISMO camino que el total, y por construcción nunca puede superarlo.
+  const canal = soloDelivery
+    ? { sql: condicionCanal(CanalVenta.DELIVERY), params: [] as any[] }
+    : null;
+  const { suma } = await sumaVentasRango(
+    ds, ctx.monPrincipal,
+    filtroY(filtroRango(desde.toISOString(), hasta.toISOString()), canal),
+    ctx.cotMap,
+  );
   return suma;
 }
 
 /** Cubetas de la serie de un rango: diaria si ≤ 45 días, o en ventanas de 7
  * días si es más largo. Cada cubeta se suma con una sola consulta por rango
  * (evita cientos de consultas por día en rangos largos). */
-async function serieCubetas(ds: DataSource, ctx: CotCtx, r: RangoFechas, usarSemanas: boolean): Promise<{ labels: string[]; valores: number[] }> {
+async function serieCubetas(
+  ds: DataSource, ctx: CotCtx, r: RangoFechas, usarSemanas: boolean, soloDelivery = false,
+): Promise<{ labels: string[]; valores: number[] }> {
   const dias = listaDias(r);
   const labels: string[] = []; const valores: number[] = [];
   if (!usarSemanas) {
     for (const dia of dias) {
-      valores.push(await sumaTramoGs(ds, ctx, dia, dia));
+      valores.push(await sumaTramoGs(ds, ctx, dia, dia, soloDelivery));
       labels.push(`${dia.getDate()}`);
     }
   } else {
     for (let i = 0; i < dias.length; i += 7) {
       const grupo = dias.slice(i, i + 7);
-      valores.push(await sumaTramoGs(ds, ctx, grupo[0], grupo[grupo.length - 1]));
+      valores.push(await sumaTramoGs(ds, ctx, grupo[0], grupo[grupo.length - 1], soloDelivery));
       labels.push(`S${Math.floor(i / 7) + 1}`);
     }
   }
@@ -122,7 +139,11 @@ async function serieTendencia(ds: DataSource, ctx: CotCtx, actual: RangoFechas, 
       anteriorArr[anteriorArr.length - 1] += p.valores.slice(a.valores.length).reduce((s, v) => s + v, 0);
     }
   }
-  return { labels: a.labels, actual: a.valores, anterior: anteriorArr };
+  // Tercera serie: sólo delivery, sobre las MISMAS cubetas. Responde "¿el canal
+  // crece o está estancado?", que con una sola línea agregada no se puede ver.
+  const soloDelivery = await serieCubetas(ds, ctx, actual, usarSemanas, true);
+
+  return { labels: a.labels, actual: a.valores, anterior: anteriorArr, delivery: soloDelivery.valores };
 }
 
 // ─────────────────────── Día de semana ───────────────────────
@@ -148,11 +169,15 @@ async function ventasPorDiaSemana(ds: DataSource, ctx: CotCtx, r: RangoFechas) {
 }
 
 // ─────────────────────── Horas pico ───────────────────────
-async function horasPico(ds: DataSource, ctx: CotCtx, r: RangoFechas) {
+async function horasPico(ds: DataSource, ctx: CotCtx, r: RangoFechas, soloDelivery = false) {
+  // La curva del delivery no es la del salón: de noche el reparto sigue y el
+  // salón baja. Mezcladas, las dos se promedian en una curva que no describe a
+  // ninguna de las dos, así que el heatmap se puede pedir filtrado por canal.
+  const filtroCanal = soloDelivery ? ` AND ${condicionCanal(CanalVenta.DELIVERY)}` : '';
   const rows: any[] = await dbQuery(ds, `
     SELECT ${dowExpr(ctx.isPg)} as dow, ${hourExpr(ctx.isPg)} as hora, COUNT(DISTINCT v.id) as cnt
     FROM ventas v
-    WHERE v.estado = ? AND v.created_at >= ? AND v.created_at <= ?
+    WHERE v.estado = ? AND v.created_at >= ? AND v.created_at <= ?${filtroCanal}
     GROUP BY ${dowExpr(ctx.isPg)}, ${hourExpr(ctx.isPg)}
   `, [VentaEstado.CONCLUIDA, r.desde.toISOString(), r.hasta.toISOString()]);
   let minH = 23, maxH = 0; let hayDatos = false;
@@ -289,14 +314,16 @@ export async function construirReporteVentasCierre(
   const kAct = await kpisVentas(dataSource, ctx, actual);
   const kAnt = anterior ? await kpisVentas(dataSource, ctx, anterior) : null;
 
-  const [tendencia, diaSemana, hp, prods, mix, combos, mes] = await Promise.all([
+  const [tendencia, diaSemana, hp, hpDelivery, prods, mix, combos, mes, delivery] = await Promise.all([
     serieTendencia(dataSource, ctx, actual, anterior),
     ventasPorDiaSemana(dataSource, ctx, actual),
     horasPico(dataSource, ctx, actual),
+    horasPico(dataSource, ctx, actual, true),
     productos(dataSource, actual),
     mixPago(dataSource, ctx, actual),
     combinaciones(dataSource, actual),
     meseros(dataSource, ctx, actual),
+    construirBloqueDelivery(dataSource, ctx, actual, anterior),
   ]);
 
   return {
@@ -309,10 +336,25 @@ export async function construirReporteVentasCierre(
       // Margen es un porcentaje: la "variación" es la diferencia en puntos.
       margenPct: { valor: kAct.margenPct, variacion: kAnt ? +(kAct.margenPct - kAnt.margenPct).toFixed(1) : null, esPuntos: true },
       mesas: conDelta(kAct.mesas, kAnt?.mesas ?? null),
+      // Los de delivery viajan en `kpis` y no colgados de `delivery` para que
+      // el frontend los arme con el mismo `buildKpiCard` que el resto — y para
+      // que entren solos al PDF y al caption de WhatsApp, que leen las cards.
+      envios: conDelta(delivery.kpis.envios, delivery.kpisAnterior?.envios ?? null),
+      retiros: conDelta(delivery.kpis.retiros, delivery.kpisAnterior?.retiros ?? null),
+      ingresoEnvios: conDelta(delivery.kpis.ingresoEnvios, delivery.kpisAnterior?.ingresoEnvios ?? null),
+      ticketPromedioDelivery: conDelta(
+        delivery.kpis.ticketPromedioDelivery,
+        delivery.kpisAnterior?.ticketPromedioDelivery ?? null,
+      ),
     },
+    delivery,
     tendencia,
     diaSemana,
     horasPico: hp,
+    // Mismo eje de horas que `horasPico` sólo si ambos tienen datos en las
+    // mismas franjas; el frontend lo trata como una matriz aparte, no como un
+    // subconjunto, justamente para no asumirlo.
+    horasPicoDelivery: hpDelivery,
     topProductos: prods.topProductos,
     menuEngineering: prods.menuEngineering,
     mixPago: mix,

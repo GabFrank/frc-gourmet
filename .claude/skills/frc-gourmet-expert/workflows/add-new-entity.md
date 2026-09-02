@@ -85,7 +85,7 @@ En la práctica, para una entidad nueva conviene escribir **una sola migración 
 ### Reglas de la migración
 
 - **Nombre del archivo:** `<epoch-millis>-<Descripcion>.ts`, clase `Descripcion<epoch-millis>` (ej. `1782606189440-AddMiEntidad.ts` → `class AddMiEntidad1782606189440`).
-- **Timestamp = epoch-ms real.** Obtenelo con `date +%s%3N` (o dejá que `migration:generate` lo asigne). **NUNCA un número redondeado** a mano (ej. `1780500000000`): los redondeados colisionan entre ramas no mergeadas. ⚠️ Las migraciones viejas del repo usan números redondeados — **no las imites**.
+- **Timestamp = epoch-ms real.** Obtenelo con `date +%s%3N` en Linux, o `python3 -c "import time;print(int(time.time()*1000))"` en macOS — **`%3N` es GNU y BSD `date` no lo soporta**: devuelve la `N` literal pegada (`17871698783N`) y produce un nombre de clase inválido. También sirve dejar que `migration:generate` lo asigne. **NUNCA un número redondeado** a mano (ej. `1780500000000`): los redondeados colisionan entre ramas no mergeadas. ⚠️ Las migraciones viejas del repo usan números redondeados — **no las imites**.
 - **Driver-aware:** ramificar por `queryRunner.connection.options.type === 'postgres'` cuando el SQL difiera entre SQLite y Postgres.
 - **Aditiva:** sin `DROP`/`RENAME` sin estrategia de 2 versiones. Preferir `IF NOT EXISTS`.
 - Editar SOLO el `.ts` (el `.js` se genera). Nunca modificar una migración ya mergeada — agregar una nueva.
@@ -373,7 +373,7 @@ openMiEntidadesTab() {
 
 ## 10. Reiniciar la app
 
-Cambios en `electron/handlers/`, `preload.ts`, `main.ts`, nueva entidad, nueva migración o `database.config.ts` requieren **reinicio completo de la app** (el usuario lo hace manualmente; ver [conventions/coding-rules.md](../conventions/coding-rules.md)). Al reiniciar corre la migración nueva.
+Cambios en `electron/handlers/`, `preload.ts`, `main.ts`, nueva entidad, nueva migración o `database.config.ts` requieren **reinicio completo de la app** (lo hace el agente desde 2026-08-11, SKILL.md regla #1, pero se avisa igual; ver [conventions/coding-rules.md](../conventions/coding-rules.md)). Al reiniciar corre la migración nueva.
 
 ## 11. Verificar
 

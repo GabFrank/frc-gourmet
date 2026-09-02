@@ -90,6 +90,43 @@
         </mat-option>
       </mat-select>
     </mat-form-field>
+
+    <!-- Canal de entrega -->
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>CANAL</mat-label>
+      <mat-select [(value)]="canal">
+        <mat-option value="">TODOS</mat-option>
+        <mat-option *ngFor="let c of canales" [value]="c.valor">{{ c.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <!-- Zona de entrega -->
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>ZONA DE ENTREGA</mat-label>
+      <mat-select [(value)]="zonaId">
+        <mat-option [value]="null">TODAS</mat-option>
+        <mat-option *ngFor="let z of zonas" [value]="z.id">{{ z.descripcion }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <!-- Repartidor -->
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>REPARTIDOR</mat-label>
+      <mat-select [(value)]="repartidorId">
+        <mat-option [value]="null">TODOS</mat-option>
+        <mat-option *ngFor="let r of repartidores" [value]="r.id">{{ r.nombre }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <!-- Origen del pedido: es ORTOGONAL al canal (un delivery puede ser LOCAL
+         si lo cargó el cajero, o WEB si entró por la tienda). -->
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>ORIGEN DEL PEDIDO</mat-label>
+      <mat-select [(value)]="canalOrigen">
+        <mat-option value="">TODOS</mat-option>
+        <mat-option *ngFor="let o of origenes" [value]="o.valor">{{ o.label }}</mat-option>
+      </mat-select>
+    </mat-form-field>
   </div>
 </mat-dialog-content>
 

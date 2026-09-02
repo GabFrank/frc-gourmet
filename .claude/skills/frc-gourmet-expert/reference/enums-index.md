@@ -78,6 +78,16 @@ PdvMesaEstado = DISPONIBLE | OCUPADO
 
 // (en delivery.entity.ts)
 DeliveryEstado = ABIERTO | PARA_ENTREGA | EN_CAMINO | ENTREGADO | CANCELADO
+DeliveryModo   = DELIVERY | RETIRO        // se reparte / lo pasa a buscar
+
+// (en shared/utils/canal-venta.util.ts — NO es una columna: se DERIVA)
+// Cómo llegó el pedido a manos del cliente. Fuente única compartida entre el
+// backend (que además tiene el CASE SQL equivalente en
+// electron/utils/canal-venta.utils.ts) y el renderer. El reparto gana sobre la
+// mesa, y un delivery sin `modo` cuenta como DELIVERY.
+CanalVenta = SALON | MOSTRADOR | DELIVERY | RETIRO
+// ⚠️ Distinto de `Venta.canalOrigen` (LOCAL | WEB | QR_MESA), que dice por qué
+// PUERTA entró el pedido. Se cruzan, no se reemplazan.
 
 // (en venta-item-ingrediente-modificacion.entity.ts)
 TipoModificacionIngrediente = REMOVIDO | INTERCAMBIADO

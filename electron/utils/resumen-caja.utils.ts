@@ -17,6 +17,7 @@ import { EgresoCaja } from '../../src/app/database/entities/financiero/egreso-ca
 import { RetiroCaja } from '../../src/app/database/entities/financiero/retiro-caja.entity';
 import { RetiroCajaOrigen } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { dbQuery } from './db-query';
+import { resumenDeliveryCaja, ResumenDeliveryCaja } from '../handlers/reportes-delivery.helper';
 
 export interface ResumenCajaConteoMoneda {
   monedaId: number;
@@ -40,6 +41,12 @@ export interface ResumenCaja {
   gastos: any[];
   egresos: any[];
   retiros: any[];
+  /**
+   * Envíos y retiros del turno. Se calcula con el mismo motor que los informes
+   * (`reportes-delivery.helper`) para que el cierre del cajero y el reporte del
+   * gerente no cuenten los envíos distinto.
+   */
+  delivery: ResumenDeliveryCaja;
 }
 
 /**
@@ -279,5 +286,6 @@ export async function computeResumenCaja(dataSource: DataSource, cajaId: number)
     gastos,
     egresos,
     retiros,
+    delivery: await resumenDeliveryCaja(dataSource, cajaId),
   };
 }

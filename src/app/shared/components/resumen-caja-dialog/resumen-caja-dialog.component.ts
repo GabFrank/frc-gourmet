@@ -28,6 +28,8 @@ export interface ResumenCajaDialogData {
 export class ResumenCajaDialogComponent implements OnInit {
   loading = true;
   resumen: any = null;
+  /** Sin repartos la card no se muestra: cinco ceros no le dicen nada al cajero. */
+  hayDelivery = false;
   duracion = '-';
 
   // Umbrales
@@ -50,6 +52,8 @@ export class ResumenCajaDialogComponent implements OnInit {
       }
 
       this.resumen = await firstValueFrom(this.repositoryService.getResumenCaja(this.data.cajaId));
+      const dv = this.resumen?.delivery;
+      this.hayDelivery = !!dv && (dv.envios > 0 || dv.retiros > 0 || dv.cancelados > 0);
       this.duracion = this.calcDuracion();
     } catch (error) {
       console.error('Error loading resumen caja:', error);
