@@ -1277,6 +1277,19 @@ export class RepositoryHttpService extends RepositoryService {
   }): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.deleteRecetaIngredienteMultiplesVariaciones() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  agregarIngredienteMultiplesVariaciones(data: {
+    recetaIngredienteId: number;
+    variaciones: Array<{ variacionId: number; cantidad: number }>;
+  }): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.agregarIngredienteMultiplesVariaciones() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getRecetasConIngrediente(data: {
+    recetaIds: number[];
+    ingredienteId?: number | null;
+    descripcion?: string | null;
+  }): Observable<number[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getRecetasConIngrediente() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getRecetaIngredientesActivos(recetaId: number): Observable<RecetaIngrediente[]> {
     return throwError(() => new Error(`RepositoryHttpService.getRecetaIngredientesActivos() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

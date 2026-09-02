@@ -476,6 +476,42 @@ en ese caso — sí cuando el usuario tilda un sabor a mano, que es el
 comportamiento de siempre. Con `maxSabores = 1` se oculta el "(max N)" y tocar
 otro sabor **reemplaza** al elegido.
 
+## Asistente "agregar ingrediente a otras variaciones" (2026-08)
+
+Al agregar un ingrediente en la receta de una variación, `gestion-recetas` abre
+`confirmar-agregar-ingrediente-dialog` y, si el usuario acepta,
+`gestionar-ingrediente-multi-variacion-dialog` para copiarlo a las otras variaciones del sabor.
+
+**Todo el guardado lo hace el handler transaccional `agregar-ingrediente-multiples-variaciones`**
+(`recetas.handler.ts`, `ensurePermission('INGREDIENTES_GESTIONAR')`). Recibe
+`{ recetaIngredienteId, variaciones: [{variacionId, cantidad}] }` y:
+
+- resuelve variación → receta y **deduplica** las recetas destino,
+- **excluye la receta de origen** (variaciones que comparten receta con la actual),
+- **omite las recetas que ya tienen ese ingrediente ACTIVO** (por `ingrediente_id`, o por
+  `descripcion` si es un ítem solo-descripción). Si la fila existe pero está **desactivada**
+  (`delete-receta-ingrediente` hace soft delete la primera vez y `get-receta-ingredientes` **no
+  filtra `activo`**, así que insertar al lado volvería a mostrarla repetida), la **reactiva** con
+  la cantidad nueva en vez de insertar otra,
+- **normaliza la cantidad** de la unidad del usuario (`unidadOriginal`) a la unidad base
+  (`unidad`) con `normalizarCantidadIngrediente`,
+- hace el chequeo de duplicado **dentro** de la transacción (no hay índice único
+  `(receta_id, ingrediente_id)` que lo ataje a nivel de BD) y recalcula el costo de cada receta
+  afectada al salir,
+- devuelve `{ agregadas, recetasAfectadas, omitidasPorDuplicado, omitidasPorRecetaCompartida, omitidasSinReceta }`.
+
+Helpers:
+- **`get-recetas-con-ingrediente(ingredienteId?, descripcion?)`** — devuelve las
+  `{variacionId, variacionNombre, recetaId}` que **ya tienen** ese ingrediente (usa
+  **ambos** campos en el OR), para que el diálogo pueda deshabilitar esas variaciones
+  desde el comienzo. Filtra activo y carga las relaciones necesarias (variación → producto).
+- **`delete-receta-ingrediente-multiples-variaciones({variaciones: [...]})`** — es el
+  borrado en lote, equivalente simétrico del agregado (corre en la transacción de borrar
+  y NO pregunta de nuevo; la confirmación fue para el borrado).
+
+Tests: `npm run test:ingrediente-multi-variacion` (16/16). Manual:
+`docs/testing/TESTING-CHECKLIST-INGREDIENTE-MULTI-VARIACION.md`.
+
 ## Reparación de recetas compartidas (`d9cbba3`)
 
 **No es una migración** (por el riesgo de un deep-clone corriendo en cada arranque): es un handler de mantenimiento **manual/opt-in**.

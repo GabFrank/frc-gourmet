@@ -44,6 +44,7 @@
     "test:receta-por-variacion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-receta-por-variacion-e2e.ts",
     "test:reparar-recetas": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-reparar-recetas-e2e.ts",
     "test:receta-ingrediente": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-receta-ingrediente-e2e.ts",
+    "test:ingrediente-multi-variacion": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-ingrediente-multi-variacion-e2e.ts",
     "test:cobro-parcial": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-cobro-parcial-e2e.ts",
     "test:funcionario-vales": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-funcionario-vales-e2e.ts",
     "test:resumen-multimoneda": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-resumen-multimoneda-e2e.ts",

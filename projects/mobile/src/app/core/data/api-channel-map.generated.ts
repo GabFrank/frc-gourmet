@@ -3,7 +3,7 @@
  * AUTO-GENERADO por scripts/generate-mobile-api-map.js — NO editar a mano.
  * Mapa método de window.api → canal IPC (extraído de preload.ts).
  * Regenerar tras tocar preload.ts: `node scripts/generate-mobile-api-map.js`.
- * Total: 861 métodos.
+ * Total: 863 métodos.
  */
 export const API_CHANNEL_MAP: Record<string, string> = {
   "abrirCajaDesdeConteo": "abrir-caja-desde-conteo",
@@ -13,6 +13,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "actualizarCostoReceta": "actualizar-costo-receta",
   "actualizarPorcentajeMiembro": "actualizar-porcentaje-miembro",
   "addPrinter": "add-printer",
+  "agregarIngredienteMultiplesVariaciones": "agregar-ingrediente-multiples-variaciones",
   "agregarItemLiquidacion": "agregar-item-liquidacion",
   "agregarItemManualLiquidacionComision": "agregar-item-manual-liquidacion-comision",
   "agregarMiembroEquipo": "agregar-miembro-equipo",
@@ -591,6 +592,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getRecetas": "get-recetas",
   "getRecetasAsignables": "get-recetas-asignables",
   "getRecetasByEstado": "get-recetas-by-estado",
+  "getRecetasConIngrediente": "get-recetas-con-ingrediente",
   "getRecetasIdsPorVariacionIds": "get-recetas-ids-por-variacion-ids",
   "getRecetasWithFilters": "get-recetas-with-filters",
   "getRecetasWithIngredientes": "get-recetas-with-ingredientes",

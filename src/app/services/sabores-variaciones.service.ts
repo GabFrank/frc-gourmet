@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
-import { Observable, BehaviorSubject, combineLatest, forkJoin, of } from 'rxjs';
-import { map, tap, catchError, switchMap } from 'rxjs/operators';
+import { Observable, BehaviorSubject, combineLatest, forkJoin } from 'rxjs';
+import { map, tap, catchError } from 'rxjs/operators';
 import { RepositoryService } from '../database/repository.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { RecetaIngrediente } from '../database/entities/productos/receta-ingrediente.entity';
@@ -592,80 +592,35 @@ export class SaboresVariacionesService {
   }
 
   /**
-   * ✅ NUEVO: Agregar un ingrediente a múltiples variaciones (recetas) a la vez.
+   * Agrega un ingrediente ya existente a las recetas de otras variaciones del sabor.
+   *
+   * Todo el trabajo lo hace el handler `agregar-ingrediente-multiples-variaciones`
+   * en una transacción: deduplica recetas destino, excluye la receta de origen,
+   * omite las que ya tienen el ingrediente y normaliza la cantidad a la unidad base.
+   * Antes esto era un `createRecetaIngrediente` suelto por variación sin ninguna
+   * validación, y duplicaba filas cuando dos variaciones compartían receta o cuando
+   * se corría el asistente desde más de una variación.
+   *
+   * `cantidad` viaja en la unidad que ve el usuario (`unidadOriginal`).
    */
   agregarIngredienteMultiplesVariaciones(
     ingredienteOriginal: RecetaIngrediente,
     nuevosIngredientes: Array<{ variacionId: number; cantidad: number }>
-  ): Observable<RecetaIngrediente[]> {
+  ): Observable<any> {
     this._loading$.next(true);
 
-    // 1. Obtener los IDs de las recetas para las variaciones seleccionadas
-    const variacionIds = nuevosIngredientes.map(i => i.variacionId);
-    return this.repositoryService.getRecetasIdsPorVariacionIds(variacionIds).pipe(
-      switchMap((mapeoRecetas: { [variacionId: number]: number }) => {
-        // 2. Crear un array de observables para las operaciones de creación
-        const operacionesCreacion = nuevosIngredientes.map((nuevoIngrediente: { variacionId: number; cantidad: number }) => {
-          const recetaId = mapeoRecetas[nuevoIngrediente.variacionId];
-          if (!recetaId) {
-            // Si no se encuentra una receta, se omite o se maneja el error
-            console.warn(`No se encontró receta para la variación ${nuevoIngrediente.variacionId}`);
-            return of(null as any); // Retorna un observable nulo que se completa inmediatamente
-          }
-
-          // 3. Preparar los datos para el nuevo ingrediente
-          // ✅ CORREGIDO: Usar la unidad original en lugar de la convertida
-          const unidadParaGuardar = ingredienteOriginal.unidadOriginal || ingredienteOriginal.unidad;
-          const datosNuevoIngrediente: Partial<RecetaIngrediente> = {
-            receta: { id: recetaId } as any, // Cast temporal para compatibilidad
-            cantidad: nuevoIngrediente.cantidad,
-            unidad: unidadParaGuardar, // ✅ Usar unidad original
-            unidadOriginal: ingredienteOriginal.unidadOriginal, // ✅ Mantener unidad original
-            // ✅ FIX: propagar descripción (item sin producto) y los flags; sin esto,
-            // un ingrediente "solo descripción" enviaba ni ingredienteId ni descripción
-            // → el backend lanzaba "Debe indicar un ingrediente o una descripción".
-            descripcion: ingredienteOriginal.descripcion,
-            costoUnitario: ingredienteOriginal.costoUnitario,
-            costoTotal: nuevoIngrediente.cantidad * (ingredienteOriginal.costoUnitario || 0),
-            esExtra: ingredienteOriginal.esExtra,
-            esOpcional: ingredienteOriginal.esOpcional,
-            esCambiable: ingredienteOriginal.esCambiable,
-            porcentajeAprovechamiento: ingredienteOriginal.porcentajeAprovechamiento,
-            esIngredienteBase: ingredienteOriginal.esIngredienteBase,
-          };
-          // Sólo vincular el producto ingrediente si existe (si no, queda "solo descripción").
-          const ingId = ingredienteOriginal.ingrediente?.id ?? (ingredienteOriginal as any).ingredienteId;
-          if (ingId) {
-            (datosNuevoIngrediente as any).ingrediente = { id: ingId };
-          }
-
-          // ✅ DEBUG: Log de los datos que se van a enviar
-          console.log(`🔍 [agregarIngredienteMultiplesVariaciones] Datos para variación ${nuevoIngrediente.variacionId}:`, {
-            recetaId,
-            ingredienteId: ingredienteOriginal.ingrediente?.id,
-            cantidad: nuevoIngrediente.cantidad,
-            unidad: unidadParaGuardar, // ✅ Unidad que se va a guardar
-            unidadOriginal: ingredienteOriginal.unidadOriginal, // ✅ Unidad original
-            unidadOriginalIngrediente: ingredienteOriginal.unidad, // ✅ Unidad del ingrediente original (convertida)
-            costoUnitario: ingredienteOriginal.costoUnitario
-          });
-
-          return this.repositoryService.createRecetaIngrediente(datosNuevoIngrediente);
-        });
-
-        // Filtrar observables nulos antes de ejecutar
-        const operacionesValidas = operacionesCreacion.filter((op): op is Observable<RecetaIngrediente> => op !== null);
-        if (operacionesValidas.length === 0) {
-          return of([] as RecetaIngrediente[]); // No hay operaciones válidas
-        }
-
-        // 4. Ejecutar todas las operaciones en paralelo
-        return forkJoin(operacionesValidas);
-      }),
-      tap((resultados: RecetaIngrediente[]) => {
+    return this.repositoryService.agregarIngredienteMultiplesVariaciones({
+      recetaIngredienteId: ingredienteOriginal.id!,
+      variaciones: nuevosIngredientes
+    }).pipe(
+      tap((resultado: any) => {
         this._loading$.next(false);
-        this.showSuccess(`${resultados.length} ingredientes agregados a otras variaciones`);
-        console.log('✅ Ingredientes agregados en múltiples variaciones:', resultados);
+        const omitidas =
+          (resultado?.omitidasPorDuplicado?.length || 0) +
+          (resultado?.omitidasPorRecetaCompartida?.length || 0) +
+          (resultado?.omitidasSinReceta?.length || 0);
+        const detalleOmitidas = omitidas > 0 ? ` (${omitidas} omitidas: ya lo tenían o comparten receta)` : '';
+        this.showSuccess(`${resultado?.agregadas || 0} variaciones actualizadas${detalleOmitidas}`);
       }),
       catchError((error: any) => {
         this._loading$.next(false);
@@ -675,6 +630,16 @@ export class SaboresVariacionesService {
       })
     );
   }
+
+  /** Recetas (de las candidatas) que ya tienen este ingrediente. */
+  getRecetasConIngrediente(
+    recetaIds: number[],
+    ingredienteId?: number | null,
+    descripcion?: string | null
+  ): Observable<number[]> {
+    return this.repositoryService.getRecetasConIngrediente({ recetaIds, ingredienteId, descripcion });
+  }
+
 
   // ✅ MÉTODOS AUXILIARES PARA UI
 
