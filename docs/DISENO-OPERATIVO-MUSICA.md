@@ -1,7 +1,7 @@
 # Diseño operativo — Música ambiental (cómo se configura y cómo decide la IA)
 
 **Fecha:** 2026-08-10
-**Complementa:** [PLAN-MUSICA-SPOTIFY.md](PLAN-MUSICA-SPOTIFY.md) (arquitectura técnica) e [INVESTIGACION-MUSICA-AMBIENTAL.md](INVESTIGACION-MUSICA-AMBIENTAL.md) (proveedores y restricciones).
+**Complementa:** [INVESTIGACION-MUSICA-AMBIENTAL.md](INVESTIGACION-MUSICA-AMBIENTAL.md) (proveedores y restricciones). La arquitectura construida está en la skill: `.claude/skills/frc-gourmet-expert/domains/musica-ambiental.md`.
 **Qué define este doc:** qué carga el usuario, cómo se arma el repertorio, qué decide la IA y cuándo, y qué ve en pantalla.
 
 ---
@@ -354,7 +354,7 @@ Sobre lo ya listado en el plan técnico:
 
 ---
 
-## 8. Fases revisadas (reemplaza a §8 del plan técnico de F2/F3)
+## 8. Fases revisadas
 
 | Fase | Contenido | Criterio de terminado |
 |---|---|---|

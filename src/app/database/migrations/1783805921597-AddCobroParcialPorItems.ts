@@ -26,7 +26,7 @@ async function hasColumn(
  * - `cobros_parciales`: ronda de cobro parcial (anulable) con factor y cash.
  * - `cobro_parcial_items`: imputación en bruto de cada ronda sobre un ítem.
  *
- * Portable SQLite/Postgres, aditiva. Ver docs/PLAN-COBRO-PARCIAL-POR-ITEMS.md.
+ * Portable SQLite/Postgres, aditiva. Ver .claude/skills/frc-gourmet-expert/domains/ventas-pdv.md.
  */
 export class AddCobroParcialPorItems1783805921597 implements MigrationInterface {
   name = 'AddCobroParcialPorItems1783805921597';

@@ -11,7 +11,7 @@ import { registerPublicOperation } from '../server/public-routes';
  *
  * `tienda.config` (público): el storefront lee apertura, tipos de pedido,
  * prep-time, mínimo y branding. `update-tienda-online-config` (admin) la edita.
- * Ver docs/arquitectura/webapp-pedidos-plan.md.
+ * Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 
 const PERM = 'PEDIDOS_ONLINE_CONFIGURAR';

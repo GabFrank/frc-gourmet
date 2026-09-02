@@ -4,8 +4,31 @@ Cliente web mobile/tablet en el **mismo workspace** (`projects/mobile`), que con
 Fastify del **modo server** por HTTP. UI **100% nueva** mobile-first (no reutiliza nada del desktop);
 sí reutiliza la **lógica de datos**. Branch de desarrollo: `feat/mobile-pwa-cliente`.
 
-> Estado/bitácora viva: `docs/arquitectura/mobile-pwa-plan.md` y `docs/arquitectura/mobile-pwa-skill-notes.md`.
+> Bitácora de cobertura por ola: `docs/arquitectura/mobile-pwa-skill-notes.md`.
 > README operativo: `projects/mobile/README.md`.
+
+## Las siete decisiones que fijan la forma de la PWA (2026-05)
+
+| Tema | Elección | Por qué |
+|---|---|---|
+| Estructura | App Angular **separada** (`projects/mobile`) + librería `@frc/shared-core` | Se comparte lógica de datos, **nunca** UI |
+| Red LAN/WAN | Un solo hostname del **mesh headscale** con TLS | Tailscale rutea directo por LAN en el local y por relay cuando es remoto: LAN-first sin configurar nada |
+| Hosting del bundle | Lo sirve el **propio Fastify** del nodo `server` | Un solo artefacto, un solo update |
+| Alcance MVP | Paridad CRUD de todo lo administrativo, **excepto** Sistema/Configuración | |
+| Offline | Sin server no hay acción: pantalla "sin conexión". El SW sólo cachea el app-shell | Una cola de escritura offline contra un backend transaccional es otro proyecto |
+| UI | 100% nueva, sin reusar componentes ni diálogos del desktop | |
+| Librería compartida | Migración **incremental** por path-alias | Mover todo de una habría tocado el desktop entero |
+
+**Servicios del desktop que se reusan tal cual** (no dependen de Electron): `AuthService`,
+`ThemeService`, `PermissionService`, `TabsService`, `CurrencyConfigService`,
+`UnitConversionService`, `PaginatorIntlEs`.
+**Los que NO van al mobile** porque dependen de Electron o de `window.api`:
+`PrinterService`, `DatabaseService`, `UpdateService`, `AppModeService` (va como token),
+`DocumentoService`, `RepositoryIpcService`.
+
+⚠️ **Pendiente de infraestructura, no de código:** el TLS del mesh depende de si la
+versión de headscale soporta `tailscale serve`/cert; si no, hace falta Caddy o una CA
+privada. Es acción manual del usuario en su entorno.
 
 ## Workspace multi-proyecto
 

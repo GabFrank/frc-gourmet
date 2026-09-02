@@ -9,7 +9,7 @@ import { Cliente } from '../personas/cliente.entity';
  * (WhatsApp); opcionalmente el cliente define email + password. Puede vincularse
  * a un `Cliente` interno para historial/crédito/facturación, pero no lo exige.
  *
- * Ver docs/arquitectura/webapp-pedidos-plan.md (Fase 2).
+ * Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 @Entity('cuentas_cliente')
 export class CuentaCliente extends BaseModel {

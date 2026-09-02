@@ -3,7 +3,7 @@
  *
  * Un pago consolidado salda N obligaciones del MISMO concepto en un solo evento,
  * cobrando con N lineas (multi-moneda x multi-forma). Ver
- * `docs/planes/PLAN-PAGO-CONSOLIDADO-CAJA-MAYOR.md`.
+ * `.claude/skills/frc-gourmet-expert/domains/financiero-caja-mayor.md`.
  */
 
 /**

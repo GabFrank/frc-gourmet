@@ -341,7 +341,7 @@ firma. La condición del workflow se dejó intacta por si Linux vuelve.
 
 ### Fallback si SignPath OSS no aprueba
 
-Plan B documentado en `docs/plan-cliente-servidor.md` decision #5: **Azure Trusted Signing** (~$10/mes), integracion via Action equivalente. Reemplazar el step `Sign Windows installer with SignPath` por el de Azure; el resto del flujo se mantiene.
+Plan B decidido en 2026-05: **Azure Trusted Signing** (~$10/mes), integracion via Action equivalente. Reemplazar el step `Sign Windows installer with SignPath` por el de Azure; el resto del flujo se mantiene. SignPath OSS se eligio primero porque el repo publico califica y es gratis.
 
 ### Probar el path de SignPath localmente
 

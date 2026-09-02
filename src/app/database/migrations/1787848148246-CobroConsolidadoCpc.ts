@@ -22,7 +22,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Aditiva y driver-aware. `ADD COLUMN ... IF NOT EXISTS` es invalido en SQLite,
  * asi que se consulta el esquema antes de cada ALTER.
  *
- * Ver docs/MIGRATIONS.md y docs/planes/PLAN-COBRO-CONSOLIDADO-CPC.md.
+ * Ver docs/MIGRATIONS.md y .claude/skills/frc-gourmet-expert/domains/financiero-cpp-cpc.md.
  */
 export class CobroConsolidadoCpc1787848148246 implements MigrationInterface {
   name = 'CobroConsolidadoCpc1787848148246';

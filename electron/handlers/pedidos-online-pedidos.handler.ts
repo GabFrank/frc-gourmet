@@ -29,7 +29,7 @@ import { ipEnRangosLan } from '../utils/ip-lan.util';
  * (no confía en el precio que manda el cliente) y valida disponibilidad online +
  * monto mínimo por zona. El pedido entra RECIBIDO y aparece en la bandeja del PdV.
  *
- * Ver docs/arquitectura/webapp-pedidos-plan.md (Fase 3).
+ * Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 
 const ONLINE_TIPO = 'ONLINE';

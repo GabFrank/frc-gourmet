@@ -165,13 +165,24 @@ CuentaPorCobrarCuota {
 
 ### Cobro consolidado desde Caja Mayor (2026-08)
 
-El botón **Ingreso → Cobrar a Cliente** de Caja Mayor ya no abre un diálogo propio: abre el **wizard consolidado** (`pagar-obligaciones-dialog`) con `concepto = COBRO_CLIENTE`, que es el quinto concepto del motor de pago consolidado y el único de sentido **INGRESO**. Permite cobrar **varias cuotas de un mismo cliente** en un solo evento, con N líneas (multi-moneda × multi-forma × caja/banco) y un **descuento** opcional. Detalles → [financiero-caja-mayor.md](financiero-caja-mayor.md) y `docs/planes/PLAN-COBRO-CONSOLIDADO-CPC.md`.
+El botón **Ingreso → Cobrar a Cliente** de Caja Mayor ya no abre un diálogo propio: abre el **wizard consolidado** (`pagar-obligaciones-dialog`) con `concepto = COBRO_CLIENTE`, que es el quinto concepto del motor de pago consolidado y el único de sentido **INGRESO**. Permite cobrar **varias cuotas de un mismo cliente** en un solo evento, con N líneas (multi-moneda × multi-forma × caja/banco) y un **descuento** opcional. Detalles → [financiero-caja-mayor.md](financiero-caja-mayor.md).
 
 Reglas propias del concepto:
 
 - **Un cobro = un cliente** (`CONCEPTO_BENEFICIARIO_UNICO`), y admite **cobro parcial** de una cuota.
 - **Cuota reservada por una liquidación de sueldo**: si `cuota.liquidacionId` apunta a una liquidación en `BORRADOR` o `APROBADA`, la cuota sale **bloqueada** y el backend la rechaza. La reserva se hace al *generar el borrador* y congela el monto, así que cobrarla en efectivo mientras tanto la cobraba dos veces (una por caja y otra descontada del sueldo). Con la liquidación `PAGADA` la reserva ya se consumió y el residual se cobra normal.
 - **Locks** en orden total cuota → CPC → cliente: `cpc.montoCobrado` y `cliente.saldoActual` son read-modify-write sobre agregados compartidos.
+
+**Conviven cuatro caminos para cobrar una cuota de CPC**, y sólo el primero pasa por el wizard:
+
+| Camino | Qué abre | Multi-cuota / descuento |
+|---|---|---|
+| Caja Mayor → Ingreso → Cobrar a Cliente | `pagar-obligaciones-dialog` (`COBRO_CLIENTE`) | **sí** |
+| `cuenta-por-cobrar-detalle` | `cobrar-cuota-dialog`, una cuota | no |
+| `cliente-detalle` | `cobrar-cuota-dialog`, una cuota | no |
+| PWA mobile | `cobrar-cpc-cuota` por `/api/rpc` | no |
+
+Un cajero parado en la ficha del cliente **no llega al cobro múltiple desde ahí**. El wizard ya acepta `origenIdsPreseleccionados`, así que ofrecerlo desde esas dos pantallas es cableado, no diseño — está en el backlog.
 
 ### Cobro de CPC vía liquidación de sueldo (funcionario-cliente, 2026-07)
 

@@ -5,7 +5,7 @@ import { CuentaCliente } from './cuenta-cliente.entity';
 /**
  * Refresh token de CLIENTE FINAL (storefront). Igual patrón que el de staff
  * (`RefreshToken`) pero atado a `CuentaCliente`: el plain vive en el cliente,
- * la BD guarda el sha256. Ver docs/arquitectura/webapp-pedidos-plan.md.
+ * la BD guarda el sha256. Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 @Entity('customer_refresh_tokens')
 export class CustomerRefreshToken extends BaseModel {

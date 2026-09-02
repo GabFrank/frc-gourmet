@@ -1,6 +1,6 @@
 # Pedidos Online / Storefront (webapp pública de clientes)
 
-> Subsistema tipo iFood: **PWA pública** para que clientes finales hagan pedidos, con superficie HTTP **aislada** (`/pub/*`), **auth de cliente propia** (separada del staff) y **bandeja de aceptación** en el PdV. Plan de referencia: `docs/arquitectura/webapp-pedidos-plan.md` (Fases 0–E). Solo corre en **modo `server`** (Fastify + `/tienda`). Introducido 2026-07-08+.
+> Subsistema tipo iFood: **PWA pública** para que clientes finales hagan pedidos, con superficie HTTP **aislada** (`/pub/*`), **auth de cliente propia** (separada del staff) y **bandeja de aceptación** en el PdV. Solo corre en **modo `server`** (Fastify + `/tienda`). Introducido 2026-07-08+.
 
 ## Proyecto storefront (tercer proyecto Angular)
 
@@ -151,6 +151,50 @@ PICKUP y DELIVERY **ya llegan a la operación**. Lo que cambió:
 - **GeoJSON va en `[lng, lat]`.** Invertirlo es el error clásico; hay un test que
   lo cubre.
 
+### La caja a la que entra un pedido web
+
+`materializarPedidoOnlineEnVenta` acepta un `cajaId` opcional; si no viene, usa **la
+única caja abierta**. Con **ninguna** abierta falla con `no_hay_caja_abierta`, y con
+**más de una** con `caja_ambigua_especificar_cajaId` — o sea que aceptar un pedido web
+en un local con dos cajas abiertas exige decir cuál. No hay caja virtual "ONLINE": la
+venta web entra a la misma caja que la del mostrador, y por eso aparece en su arqueo.
+
+### Para qué existe este módulo (posicionamiento, 2026-07)
+
+El storefront no compite con PedidosYa: lo **desplaza**. Lo que lo justifica frente a
+un marketplace es **0% de comisión y 0 fee por pedido** (el POS ya es nuestro),
+guaraníes sin decimales con USD/BRL nativos, **delivery propio de primera clase** sin
+depender de una flota ajena, sin lock-in de hardware, **pago local y efectivo contra
+entrega**, y **WhatsApp** como canal — dominante en Paraguay y ausente en las
+plataformas pensadas para EE.UU. Varias decisiones que parecen huecos (no hay
+pasarela, el pago es efectivo, no se pide RUC) son esa postura, no deuda.
+
+Lo que sí se copió de los maduros: menú de fuente única con snapshot publicable, 86ing
+en tiempo real, QR de mesa como PWA, zonas de delivery, tracking por estado y cuenta de
+cliente con historial.
+
+### Hosting: hoy túnel, mañana edge cloud
+
+El `mode=server` es una PC en LAN sin TLS, y una web pública necesita ambas cosas. La
+estrategia decidida en 2026-07 tiene dos etapas y **hoy corre la primera**:
+
+1. **Túnel seguro (actual).** Cloudflare Tunnel expone el nodo `server`: TLS, dominio y
+   protección DDoS **sin abrir puertos ni IP pública**. Reutiliza toda la infra
+   existente. La contra es real: **la PC tiene que estar prendida y online**, porque
+   cada navegación de la carta la golpea.
+2. **Edge cloud (post-MVP, no construido).** Separar lecturas de escrituras, que es el
+   patrón de Deliverect/Toast: la PC **publica un snapshot del menú** al cloud y el
+   cloud sirve la carta sin tocarla (≈95% del tráfico); los pedidos y los webhooks de
+   pago entran a una **cola durable** en el cloud, y **la PC se conecta hacia afuera**
+   (nunca se expone). La fuente de verdad sigue siendo la PC.
+
+⚠️ **Por eso el diseño es "edge-ready" desde ahora, y hay que mantenerlo así:** los
+endpoints `/pub/*` son **idempotentes**, el precio y el stock se **congelan en el
+pedido** (snapshot en `PedidoOnlineItem`, para que no haya disputa si el precio cambia
+mientras el cliente arma el carrito), y el menú se modela como snapshot publicable
+aunque hoy se sirva directo. Romper cualquiera de las tres convierte la migración en
+un rediseño.
+
 ### Concurrencia: dónde están las costuras
 
 `aceptar-pedido-online` escribe `estado = ACEPTADO` **sin lock** y recién
@@ -184,10 +228,37 @@ al día. El operador destraba un desfasaje repitiendo la acción.
   sin dashboard. Y el storefront no pide RUC en ningún lado.
 - `BANCARD`/`UPAY`/`PAGOPAR` y `CanalPedidoOnline.WHATSAPP` siguen declarados sin
   implementación — el pago es efectivo contra entrega y es una decisión cerrada.
-- Falta **pantalla de curación de la carta**: publicar es un toggle por producto,
-  y las categorías del storefront son las `Familia`/`Subfamilia` del stock.
+- Falta **pantalla de curación de la carta**, y no es sólo una pantalla que falta:
+  la carta online es **un espejo del inventario con un filtro de visibilidad**.
+  `menu.page.ts` toma `categoriaId` directo del producto, así que las categorías
+  que ve el cliente son las `Familia`/`Subfamilia` internas — «BEBIDAS» termina
+  siendo el inventario alfabético del bar (shots sueltos, chopps y gaseosas
+  mezclados). Un toggle masivo no lo arregla: hace falta una **categorización
+  propia de la tienda** (un `categoriaOnline` con 5-8 valores curados) además de
+  la grilla con publicar/pausar en lote, orden propio e imagen. Y publicar hoy es
+  un toggle enterrado en el form de cada producto
+  (`producto-informacion-general.component.html`): armar el menú son 148
+  formularios. De 218 productos de producción **sólo 4 tienen imagen**, así que el
+  cuello real es contenido, no código.
+- **`horariosJson` no tiene UI.** El switch maestro `activa` es lo único que se
+  puede tocar; los horarios quedan como dato muerto hasta que exista la pantalla.
+- **La tarifa es plana por zona y es una decisión, no una carencia**: cotizar por
+  distancia recorrida no mueve la aguja en una ciudad de este tamaño.
 - Sin índice en `pedidos_online.cuenta_cliente_id`, sin único en
   `cuentas_cliente.email`, y `presentacion.activo` no se filtra en el menú.
+- **`siguienteNumero` es `count()+1` con un retry que se traga *cualquier* error
+  seis veces** (`pedidos-online-pedidos.handler.ts`), no sólo la colisión del
+  índice único. El índice único evita el número duplicado; el retry ciego puede
+  esconder otra falla.
+- **Diseñador de zonas:** no se puede borrar un vértice suelto (sólo deshacer el
+  último o borrar todo), y **un polígono que se cruza a sí mismo no se detecta ni
+  se avisa** — con la regla par-impar queda una zona muerta que el dueño no ve en
+  el mapa.
+- **Accesibilidad del storefront:** prácticamente cero `alt` en imágenes y dos
+  `aria-label` en todo el proyecto.
+- **Nominatim se llama sin identificar** desde `checkout.page.ts`. Su política es
+  1 req/s con `User-Agent` con contacto; sin eso el bloqueo es por IP — el mismo
+  problema que ya se resolvió para MusicBrainz.
 
 **Archivos clave:** `entities/pedidos-online/*`, `electron/utils/geo.utils.ts`, `electron/utils/delivery-alta.utils.ts`, `src/app/pages/ventas/pedidos-online/mapa-zonas-dialog/`, `src/app/shared/components/delivery-dialog/`, `electron/handlers/pedidos-online*.handler.ts` (5), `electron/server/public-routes.ts` + `server.ts`, `electron/utils/customer-jwt.utils.ts` + `whatsapp-sender.ts`, `main.ts` (storefrontRoot `:225-234`, `startServer` `:246`), `electron/utils/register-all-handlers.ts:178-183`, `pages/ventas/pedidos-online/list-pedidos-online.component.ts`, `projects/storefront/src/app/`.
 

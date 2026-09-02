@@ -23,7 +23,7 @@ import { registerPublicOperation } from '../server/public-routes';
  *  - auth.me           → datos de la cuenta actual (requiere JWT de cliente)
  *  - auth.perfil.update→ setear nombre/email/password (requiere JWT de cliente)
  *
- * Ver docs/arquitectura/webapp-pedidos-plan.md (Fase 2).
+ * Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 
 const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutos

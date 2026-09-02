@@ -19,7 +19,7 @@ import {
  * y `venta_id` queda vinculado. Precios/costos se **congelan** en los items para
  * evitar disputas si el catálogo cambia después.
  *
- * Ver docs/arquitectura/webapp-pedidos-plan.md (Fase 3-4).
+ * Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 @Entity('pedidos_online')
 export class PedidoOnline extends BaseModel {

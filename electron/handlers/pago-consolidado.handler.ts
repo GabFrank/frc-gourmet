@@ -9,7 +9,7 @@
  * logica de estado de cada tipo de deuda vive en `pago-consolidado-adapters.ts`,
  * y la aritmetica del reparto en `shared/utils/pago-consolidado.util.ts`.
  *
- * Ver `docs/planes/PLAN-PAGO-CONSOLIDADO-CAJA-MAYOR.md`.
+ * Ver `.claude/skills/frc-gourmet-expert/domains/financiero-caja-mayor.md`.
  */
 import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';

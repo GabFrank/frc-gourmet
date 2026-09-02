@@ -8,7 +8,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * (múltiples NULL son distintos en SQLite y Postgres).
  *
  * Postgres: ALTER COLUMN DROP NOT NULL. SQLite: rebuild de tabla (no soporta
- * ALTER COLUMN). Ver docs/arquitectura/webapp-pedidos-plan.md.
+ * ALTER COLUMN). Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 export class CuentaClienteTelefonoNullable1783740826975 implements MigrationInterface {
   name = 'CuentaClienteTelefonoNullable1783740826975';

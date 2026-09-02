@@ -3,7 +3,7 @@
  *
  * Alcance de F0: validar de punta a punta que FRC Gourmet puede controlar la
  * musica del local. Todavia NO hay entidades, ni programacion por franja, ni
- * agente: la config vive en app-settings + keytar. Ver docs/PLAN-MUSICA-SPOTIFY.md.
+ * agente: la config vive en app-settings + keytar. Ver .claude/skills/frc-gourmet-expert/domains/musica-ambiental.md.
  *
  * El reproductor es la app de Spotify Desktop instalada en esta PC, controlada
  * por Spotify Connect. Esta app es el control remoto.

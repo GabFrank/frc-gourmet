@@ -2,7 +2,7 @@
 
 Módulo que hace sonar la música del local sin que nadie la administre. Nació de un problema concreto del dueño: **no tiene tiempo de armar y renovar playlists**, y con un solo local ya es molesto — con varios, imposible.
 
-Docs de producto: [`docs/INVESTIGACION-MUSICA-AMBIENTAL.md`](../../../../docs/INVESTIGACION-MUSICA-AMBIENTAL.md) (proveedores y restricciones legales/técnicas), [`docs/PLAN-MUSICA-SPOTIFY.md`](../../../../docs/PLAN-MUSICA-SPOTIFY.md) (arquitectura), [`docs/DISENO-OPERATIVO-MUSICA.md`](../../../../docs/DISENO-OPERATIVO-MUSICA.md) (cómo se configura y cómo decide la IA).
+Docs de producto: [`docs/INVESTIGACION-MUSICA-AMBIENTAL.md`](../../../../docs/INVESTIGACION-MUSICA-AMBIENTAL.md) (proveedores y restricciones legales/técnicas), [`docs/DISENO-OPERATIVO-MUSICA.md`](../../../../docs/DISENO-OPERATIVO-MUSICA.md) (cómo se configura y cómo decide la IA).
 
 ---
 
@@ -314,3 +314,34 @@ Dos hallazgos del mismo día: los 278 aprobados están **todos clasificados** (c
 | `npm run test:musica-descubrimiento` | Que el descubridor lea el catálogo: déficit, votos y estilos apagados llegando al contexto y al prompt; que un estilo apagado no pida material; y que las **fuentes dirigidas** ignoren el criterio acumulado pero conserven las prohibiciones. `construirPrompt` y `construirPromptDirigido` son puras, así que se verifica el texto final sin tocar OpenAI |
 | `npm run test:musica-plan-automatico` | Las guardas de `asegurarPlanDelDia` en orden de costo, y la **idempotencia** (que no regenere un plan que quizá ya está sonando). La generación real necesita Spotify y OpenAI, así que no se ejercita |
 | `npm run test:musica-cuotas` | El algoritmo de cuotas: proporciones, **intercalado** (que la bossa no salga toda junta), cuota sin material, límite por artista, sin repetidos. Más los **ejes semánticos**: que el ánimo prohibido no entre ni siquiera en modo relajado, y que la escena preferida ordene sin dejar la playlist corta. Función pura, sin red ni base |
+
+---
+
+## 7. Lo que el plan original propuso y NO se construyó
+
+El plan técnico de 2026-08-07 (`docs/PLAN-MUSICA-SPOTIFY.md`, ya borrado — vive en
+`git log`) planteó tres cosas que la implementación descartó a conciencia. Están
+acá para que nadie las reintroduzca creyendo que faltan:
+
+| Propuesto | Qué pasó |
+|---|---|
+| Interfaz `ProveedorMusica` (`conectar` / `reproducir` / …) con `SpotifyProvider` detrás, "obligatoria desde el día 1" para poder cambiar de proveedor | **No existe.** `spotify.service.ts` se usa directo. Cambiar de proveedor hoy toca el runtime y el planner. Se aceptó el costo: lo que de verdad sobrevive a un cambio de proveedor es el **repertorio propio** (`musica_tracks`) y el criterio del LLM, no la firma de los métodos |
+| Entidad `MusicaCuenta` con `clientId` y `refreshToken` en base | **No existe.** El `spotifyClientId` vive en `app-settings.json` y el refresh token en **keytar**. Consecuencia real: las dos mitades se pierden por separado — ver gotcha 22 |
+| Entidad `ZonaAudio` (zona lógica → `deviceId`, volumen y horario por zona) | **No existe.** Se decidió una sola zona; el device se guarda en configuración. Multi-zona implica multi-cuenta Premium (una cuenta = un stream), así que no es sólo agregar una tabla |
+
+También vale al revés: el plan daba por hecho que `search` alcanzaba para armar el
+pool "paginando con consultas variadas". No alcanzó — de ahí salió la decisión 1.5
+(el LLM descubre, Spotify resuelve), que no estaba en el plan.
+
+**Lo que sí sobrevivió intacto:** shuffle y repeat se apagan por API al iniciar
+(`spotify.service.ts:538`) porque la secuencia la decide el planner; el watchdog del
+device; y el modo manual cuando alguien toca el Spotify del PC a mano.
+
+### Fuentes externas (verificadas 2026-08)
+
+Cuando algo de la API deje de funcionar, empezar por acá — Spotify podó dos veces en
+20 meses y no avisa dentro del producto:
+
+- [Web API Changelog feb-2026](https://developer.spotify.com/documentation/web-api/references/changes/february-2026) · [guía de migración](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide) · [changelog jul-2026](https://developer.spotify.com/documentation/web-api/references/changes/july-2026) · [cambios nov-2024](https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api)
+- [Quota modes](https://developer.spotify.com/documentation/web-api/concepts/quota-modes) · [cuotas de Development Mode, jul-2026](https://developer.spotify.com/blog/2026-07-23-web-api-quota-updates) — la cuota se cuenta **por cuenta de developer** (hasta 25 client ids), no por app
+- Reemplazo de `audio-features`: ReccoBeats (el que usamos). Respaldos evaluados y no probados: GetSongBPM, Deezer, Cyanite

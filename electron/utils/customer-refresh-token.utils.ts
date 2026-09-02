@@ -6,7 +6,7 @@ import { CuentaCliente } from '../../src/app/database/entities/pedidos-online/cu
 /**
  * Refresh tokens de CLIENTE FINAL (storefront). Mismo patrón que
  * `refresh-token.utils` (staff): el plain se devuelve al cliente, la BD guarda
- * el sha256. Rotación en cada uso. Ver docs/arquitectura/webapp-pedidos-plan.md.
+ * el sha256. Rotación en cada uso. Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
  */
 
 const REFRESH_TOKEN_BYTES = 48;

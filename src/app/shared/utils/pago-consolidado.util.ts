@@ -9,7 +9,8 @@
  * Hay que decidir que porcion de cada linea cubre a que obligacion, sin que se
  * pierda ni aparezca un guarani por redondeo.
  *
- * Ver `docs/planes/PLAN-PAGO-CONSOLIDADO-CAJA-MAYOR.md`.
+ * Ver `.claude/skills/frc-gourmet-expert/domains/financiero-caja-mayor.md`
+ * (seccion "Pago consolidado de obligaciones").
  */
 
 import {

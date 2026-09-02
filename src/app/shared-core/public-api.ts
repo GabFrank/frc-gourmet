@@ -4,7 +4,7 @@
  * Frontera de código que comparten el desktop (Electron) y la PWA mobile
  * (`projects/mobile`). Por ahora re-exporta los archivos en su ubicación
  * original bajo `src/app/**` vía path-alias (migración incremental: ver
- * `docs/arquitectura/mobile-pwa-plan.md`). El desktop sigue importando por
+ * `.claude/skills/frc-gourmet-expert/architecture/mobile-pwa.md`). El desktop sigue importando por
  * sus rutas relativas; el mobile importa SIEMPRE por `@frc/shared-core`.
  *
  * Regla: acá va código compartible. Lo acoplado a Electron NO se exporta

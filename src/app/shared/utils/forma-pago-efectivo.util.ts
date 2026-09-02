@@ -37,7 +37,7 @@ export function formasPagoDeCaja(formas: any[]): any[] {
  * Opciones ofrecibles en un select de forma de pago cuya fuente es Caja Mayor:
  * las del pool de caja **cuyo nombre es EFECTIVO**. `movimentaCaja` solo no
  * alcanza — deja pasar formas que no son efectivo pero mueven caja (regla
- * documentada en `docs/TODO-forma-pago-efectivo-desktop.md`).
+ * documentada en `.claude/skills/frc-gourmet-expert/domains/financiero-caja-mayor.md`).
  *
  * Si ninguna coincide por nombre se devuelve la que elige `formaPagoEfectivo()`
  * (o vacío si no hay ninguna usable), para no dejar el select sin opciones.
