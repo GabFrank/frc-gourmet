@@ -882,6 +882,12 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     // aplicarían al pedido equivocado, en silencio.
     const objetivo = this.selectedDelivery;
 
+    // Guard: un retiro no se envía (no tiene transición a EN_CAMINO).
+    if (objetivo.modo === 'RETIRO') {
+      this.snackBar.open('Un retiro no se envía: usá FINALIZAR', 'CERRAR', { duration: 3000 });
+      return;
+    }
+
     let repartidores: { id: number; nombre: string; cargo: string | null }[] = [];
     try {
       repartidores = await firstValueFrom(this.repositoryService.deliveryListarRepartidores());

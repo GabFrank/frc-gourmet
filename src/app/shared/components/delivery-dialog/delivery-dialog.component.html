@@ -304,10 +304,10 @@
       <button mat-raised-button color="primary" (click)="marcarListoParaEntrega()" *ngIf="isAbierto">
         <mat-icon>check</mat-icon> LISTO
       </button>
-      <button mat-raised-button color="primary" (click)="enviar()" *ngIf="isParaEntrega">
+      <button mat-raised-button color="primary" (click)="enviar()" *ngIf="isParaEntrega && !esRetiroSeleccionado">
         <mat-icon>delivery_dining</mat-icon> ENVIAR
       </button>
-      <button mat-raised-button color="primary" (click)="finalizar()" *ngIf="isEnCamino">
+      <button mat-raised-button color="primary" (click)="finalizar()" *ngIf="isEnCamino || (isParaEntrega && esRetiroSeleccionado)">
         <mat-icon>done_all</mat-icon> FINALIZAR
       </button>
 
