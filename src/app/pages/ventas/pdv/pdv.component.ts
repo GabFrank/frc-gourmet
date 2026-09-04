@@ -354,6 +354,8 @@ export class PdvComponent implements OnInit, OnDestroy {
       const cajaDialogRef = this.dialog.open(CreateCajaDialogComponent, {
         width: '80vw',
         height: '80vh',
+        maxWidth: '100vw',
+        maxHeight: '100vh',
         disableClose: true,
       });
       cajaDialogRef.afterClosed().subscribe(async (cajaResult) => {
@@ -2412,6 +2414,8 @@ export class PdvComponent implements OnInit, OnDestroy {
     const dialogRef = this.dialog.open(CreateCajaDialogComponent, {
       width: '80vw',
       height: '80vh',
+      maxWidth: '100vw',
+      maxHeight: '100vh',
       disableClose: true,
       data: { mode: 'conteo', cajaId: this.caja.id },
     });
