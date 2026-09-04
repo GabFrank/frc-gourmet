@@ -287,12 +287,11 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
 
       this.armarColaWeb();
 
-      // Reset en éxito (F4)
+      // Reset en éxito (F4 fix bloqueante auditoría UI)
+      const wasBackedOff = this.pollIntervalMs > 15000;
       this.pollIntervalMs = 15000;
-      // Si había backoff activo y ahora volvió a andar, recrear el interval
-      // con el intervalo default de 15s (enmienda auditoría B)
-      if (this.needsIntervalUpdate) {
-        this.needsIntervalUpdate = false;
+      if (wasBackedOff) {
+        // Estaba en backoff, recrear interval con el intervalo default
         this.recreatePollInterval();
       }
     } catch (e) {
@@ -314,7 +313,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     } finally {
       // Enmienda auditoría B: recrear interval fuera del try/catch, una sola
       // vez, evitando race si entran 429 concurrentes mientras se procesa el
-      // primero
+      // primero. Solo aplica tras 429 (needsIntervalUpdate=true del catch).
       if (this.needsIntervalUpdate) {
         this.needsIntervalUpdate = false;
         this.recreatePollInterval();
