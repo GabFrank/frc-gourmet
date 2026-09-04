@@ -59,7 +59,7 @@ config se lee al abrir, no en caliente).
 | 2b.3 | Poné sólo el teléfono, sin nombre | **CREAR DELIVERY** queda deshabilitado |
 | 2b.4 | Agregá el nombre y creá | Se crea. En la lista: chip **RETIRAR**, canal **LOCAL**, envío 0 |
 | 2b.5 | Seleccionalo y mirá el footer | Todos habilitados **menos REPARTIDOR**, que además explica por qué al pasar el mouse |
-| 2b.6 | Abrí el menú **ESTADO** | Ofrece `PARA_ENTREGA` y `ENTREGADO`. **No** ofrece `EN_CAMINO` |
+| 2b.6 | Marcá **LISTO** (→ PARA_ENTREGA) y mirá el footer | El botón de avance dice **FINALIZAR**. El botón **ENVIAR no está visible**. Abrí el menú **ESTADO**: ofrece `ENTREGADO` y `ABIERTO`, **no** `EN_CAMINO` |
 | 2b.7 | Cobralo con **PAGO** | Se cobra por el mismo diálogo que un delivery, con envío en cero |
 | 2b.8 | Marcá **PARA_ENTREGA** y mirá la columna ESPERA | El reloj **se congela** y la fila deja de ponerse roja: falta que venga el cliente, y eso no depende del local |
 | 2b.9 | Volvé a *NUEVO DELIVERY* → **RETIRAR** → volvé a **DELIVERY** | Reaparecen DIRECCIÓN y PRECIO, vacíos |

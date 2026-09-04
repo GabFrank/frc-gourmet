@@ -221,6 +221,18 @@ async function main() {
     ok(!atras.fechaEnCamino, 'B: al retroceder se limpia fechaEnCamino');
   }
   {
+    // Un retiro en PARA_ENTREGA NO puede pasar a EN_CAMINO (nadie lo lleva).
+    const { delivery: retiro }: any = await crearDelivery({ modo: 'RETIRO', nombre: 'CLIENTE RETIRO' });
+    await invokeHandler('delivery-cambiar-estado', retiro.id, 'PARA_ENTREGA');
+
+    let err = '';
+    try {
+      await invokeHandler('delivery-cambiar-estado', retiro.id, 'EN_CAMINO', { funcionarioId: repartidor.id });
+    } catch (e: any) { err = e.message; }
+    ok(/Transición no permitida/.test(err), 'B: retiro PARA_ENTREGA → EN_CAMINO se rechaza', err);
+    ok(/ENTREGADO.*ABIERTO/.test(err), 'B: el mensaje lista las transiciones válidas', err);
+  }
+  {
     // Entregar exige la venta cobrada.
     const { delivery, venta }: any = await crearDelivery();
     await agregarItem(venta.id, 20000);

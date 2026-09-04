@@ -940,7 +940,9 @@ Una sola fila. Campos:
 > - **`EN_CAMINO` no existe** para un retiro: `transicionesDe(modo)` en
 >   `delivery.handler.ts` tiene su propia tabla, espejada en el front.
 > - **El candado del repartidor no aplica**: nadie lo lleva.
-> - El **único botón del footer** que un retiro no puede usar es REPARTIDOR.
+> - Los botones del footer que un retiro no puede usar son **REPARTIDOR** y
+>   **ENVIAR**. En estado `PARA_ENTREGA` un retiro usa **FINALIZAR** en lugar
+>   de ENVIAR (abre el cobro si no está cobrado, y después marca `ENTREGADO`).
 >   Cobra, edita ítems, imprime y se cancela por los mismos botones — el cobro
 >   nunca fue distinto, es el mismo diálogo con el envío en cero.
 > - El **reloj se congela** al marcar `PARA_ENTREGA`: de ahí en más falta que
