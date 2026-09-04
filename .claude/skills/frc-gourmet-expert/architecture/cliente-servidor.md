@@ -76,7 +76,9 @@ keyGenerator: (request) => {
 
 El poll de `cargarPedidosOnline()` (cada 15s) detecta HTTP 429 y aplica backoff exponencial: 15s → 30s → 60s → 120s (tope). Resetea a 15s en éxito.
 
-**Patrón anti-race (enmienda auditoría):** flag `needsIntervalUpdate` + recreación del interval en `finally` fuera del `catch`, evitando timers huérfanos ante 429 concurrentes.
+**Patrón anti-race (enmiendas auditoría):**
+- **Tras 429:** flag `needsIntervalUpdate` + recreación del interval en `finally` fuera del `catch`, evitando timers huérfanos ante 429 concurrentes.
+- **En éxito:** detecta si `wasBackedOff` (pollIntervalMs > 15000) antes de resetear, y si lo estaba, recrea el interval inmediatamente. Sin esto el interval quedaba atascado en el tiempo de backoff para siempre.
 
 ### Consideraciones de producción
 
