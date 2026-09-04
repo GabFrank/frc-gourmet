@@ -86,9 +86,10 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   cierreBilleteValuesStore: { [key: string]: number } = {};
 
   // Conteo resumido: en vez de contar por denominación, se carga un total por
-  // moneda. Por defecto completo. Se persiste como un ConteoDetalle por moneda
-  // con `monto` (cantidad 0, apuntando a un billete portador).
-  conteoResumido = false;
+  // moneda. Por defecto RESUMIDO en create (alivia crash de render masivo de
+  // form-fields). Se persiste como un ConteoDetalle por moneda con `monto`
+  // (cantidad 0, apuntando a un billete portador).
+  conteoResumido = true;
   cierreResumido = false;
   resumidoTotals: { [monedaId: number]: number } = {};
   cierreResumidoTotals: { [monedaId: number]: number } = {};
@@ -1040,9 +1041,17 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
                 this.loadConteoData(conteoId);
               } else {
                 // Normal mode - initialize fields and update
-              this.initConteoFields();
-                this.updatePropertiesForTemplate();
-                this.loading = false;
+              // Diferir initConteoFields y loading=false para evitar render masivo
+              // de form-fields en el mismo tick que monta stepper/tabs
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  if (!this.conteoResumido) {
+                    this.initConteoFields();
+                  }
+                  this.updatePropertiesForTemplate();
+                  this.loading = false;
+                });
+              });
               }
             }, error => {
               console.error('Error loading monedas data:', error);
@@ -1061,6 +1070,11 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   }
 
   private initConteoFields(): void {
+    // Si modo resumido, no crear form-fields individuales (alivia crash)
+    if (this.conteoResumido) {
+      return;
+    }
+    
     if (!this.activeCurrency || !this.activeCurrency.billetes || this.activeCurrency.billetes.length === 0) {
       return;
     }
