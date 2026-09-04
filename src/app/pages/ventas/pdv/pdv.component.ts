@@ -352,8 +352,8 @@ export class PdvComponent implements OnInit, OnDestroy {
   private ofrecerAbrirCaja(preguntar: boolean): void {
     const abrir = () => {
       const cajaDialogRef = this.dialog.open(CreateCajaDialogComponent, {
-        width: '80vw',
-        height: '80vh',
+        width: '60vw',
+        height: '60vh',
         maxWidth: '100vw',
         maxHeight: '100vh',
         disableClose: true,
@@ -2412,8 +2412,8 @@ export class PdvComponent implements OnInit, OnDestroy {
 
     // Abrir diálogo de cierre con conteo de billetes (mismo componente que apertura)
     const dialogRef = this.dialog.open(CreateCajaDialogComponent, {
-      width: '80vw',
-      height: '80vh',
+      width: '60vw',
+      height: '60vh',
       maxWidth: '100vw',
       maxHeight: '100vh',
       disableClose: true,

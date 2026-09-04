@@ -150,8 +150,8 @@ export class ListCajaDialogComponent implements OnInit {
   
   toggleNewCajaForm(): void {
     const dialogRef = this.dialog.open(CreateCajaDialogComponent, {
-      width: '70vw',
-      height: '75vh',
+      width: '60vw',
+      height: '60vh',
       maxWidth: '100vw',
       maxHeight: '100vh'
     });

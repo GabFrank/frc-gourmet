@@ -301,8 +301,8 @@ export class ListCajasComponent implements OnInit {
 
   goToConteo(caja: Caja): void {
     const dialogRef = this.dialog.open(CreateCajaDialogComponent, {
-      width: '80vw',
-      height: '80vh',
+      width: '60vw',
+      height: '60vh',
       maxWidth: '100vw',
       maxHeight: '100vh',
       disableClose: true,
@@ -343,8 +343,8 @@ export class ListCajasComponent implements OnInit {
     if (!motivo) return;
 
     const dialogRef = this.dialog.open(CreateCajaDialogComponent, {
-      width: '80vw',
-      height: '80vh',
+      width: '60vw',
+      height: '60vh',
       maxWidth: '100vw',
       maxHeight: '100vh',
       disableClose: true,
@@ -482,8 +482,8 @@ export class ListCajasComponent implements OnInit {
 
   private openCreateCajaDialog(excludeDispositivoId?: number): void {
     const dialogRef = this.dialog.open(CreateCajaDialogComponent, {
-      width: '80vw',
-      height: '80vh',
+      width: '60vw',
+      height: '60vh',
       maxWidth: '100vw',
       maxHeight: '100vh',
       disableClose: true,
