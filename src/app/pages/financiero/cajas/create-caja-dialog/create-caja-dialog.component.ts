@@ -643,9 +643,11 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   }
 
   private navigateToCierreStep(): void {
-    if (this.dialogMode !== 'conteo' || !this.stepper) return;
+    if (this.dialogMode !== 'conteo') return;
+    if (!this.stepper) return;
     this.isLinear = false;
     setTimeout(() => {
+      if (!this.stepper) return;
       // Mark apertura step as completed so SIGUIENTE works from cierre step
       this.stepper.steps.toArray().forEach((step, i) => {
         if (i < 1) {
@@ -1401,7 +1403,7 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
                   this.initConteoCierreFields();
                 }
                 this.navigateToCierreStep();
-              }, 500);
+              }, 1000);
             }
 
             // Load ventas summary for cierre resumen
