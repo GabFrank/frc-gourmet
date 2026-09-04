@@ -14,6 +14,84 @@ Configurable desde *Sistema → Modo de operación* (`app-settings.json:mode`):
 
 Settings unificadas en `userData/app-settings.json`. Password DB en **keytar** (no en el JSON).
 
+## Rate limiting diferenciado (2026-09)
+
+**Problema resuelto:** HTTP 429 "Rate limit exceeded" en el módulo delivery del PdV cuando múltiples superficies (desktop client, PWA mobile, web admin, storefront público) compartían una sola IP externa bajo túnel Cloudflare.
+
+**Configuración anterior:** `@fastify/rate-limit` con `max: 300` req/min global, key = IP del cliente. Todas las superficies compartían el mismo bucket de 300 req/min.
+
+**Solución implementada (F1-F4, 2026-09):**
+
+### F1: allowList (rutas exceptuadas del rate limit)
+
+Rutas sin límite:
+- Health checks: `/api/version`, `/api/health`, `/api/client-config`
+- Assets públicos: `/face-models/*`, `/pub/producto-image/*`
+- Assets estáticos SPA: `.js`, `.css`, `.html`, `.ico`, `.woff`, `.map`, etc.
+- Deep-links SPA GET: navegación del router Angular (fallback a `index.html`)
+
+**NUNCA exceptuar `/api/rpc`** — es el canal principal de staff autenticado y debe estar protegido.
+
+### F2: max diferenciado por ruta
+
+| Ruta | Límite | Propósito |
+|---|---|---|
+| `/api/auth/*` | 30 req/min | Anti-brute-force login |
+| `/pub/*` | 200 req/min | Storefront público (clientes finales) |
+| `/api/rpc` | 600 req/min | Staff autenticado (el doble del anterior) |
+| Resto | 300 req/min | Default |
+
+### F3: keyGenerator por device_id/user
+
+**Staff autenticado:** bucket por `device_id` (preferido) > `id` (usuario) > IP (fallback).  
+**Anónimo:** bucket por IP.
+
+**Implementación:**
+```typescript
+keyGenerator: (request) => {
+  const authHeader = request.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return request.ip;
+  
+  try {
+    const token = authHeader.substring(7);
+    // jwt.decode (sintáctico), NO verify — el middleware de auth verifica después
+    const decoded = jwt.decode(token);
+    if (!decoded || typeof decoded !== 'object') return request.ip;
+    
+    const deviceId = (decoded as any).device_id;
+    const userId = (decoded as any).id;  // El JWT usa 'id', no 'sub'
+    
+    if (deviceId) return `device:${deviceId}`;
+    if (userId) return `user:${userId}`;
+    return request.ip;
+  } catch {
+    return request.ip;
+  }
+}
+```
+
+**Resultado:** Cada terminal staff tiene su propio bucket de 600 req/min. Varias cajas bajo el mismo túnel Cloudflare **ya no comparten límite**.
+
+### F4: Backoff exponencial en poll del delivery dialog
+
+El poll de `cargarPedidosOnline()` (cada 15s) detecta HTTP 429 y aplica backoff exponencial: 15s → 30s → 60s → 120s (tope). Resetea a 15s en éxito.
+
+**Patrón anti-race (enmienda auditoría):** flag `needsIntervalUpdate` + recreación del interval en `finally` fuera del `catch`, evitando timers huérfanos ante 429 concurrentes.
+
+### Consideraciones de producción
+
+1. **TRUST_PROXY requerido:** Sin `TRUST_PROXY=true` (env var), el `keyGenerator` lee siempre la IP del proxy (127.0.0.1 o IP interna de Cloudflare), no la del cliente. La separación de buckets NO funciona sin esto.
+
+   **Validar en alpha:** `electron/server/server.ts` líneas 86-92 leen `process.env.TRUST_PROXY`. Si el server está detrás de Cloudflare, setear `TRUST_PROXY=true` en el ambiente.
+
+2. **Reinicio necesario:** Cambios en `electron/server/server.ts` (F1-F3) requieren **reiniciar el server** en `mode=server`. Los clientes NO necesitan reinicio (el rate limit es server-side).
+
+3. **`/pub/*` exige auth:** Si alguna ruta `/pub` fuera anónima (no exige JWT de cliente), documentarlo y no bajar la defensa del límite de 200 req/min.
+
+4. **Tests:** Suite `npm run test:rate-limit-e2e` cubre lógica básica. Validación final en alpha con checklist manual (plan §5.2).
+
+---
+
 ## Por qué está hecho así (decisiones de 2026-05, siguen vigentes)
 
 Cuatro alternativas que se evaluaron y se descartaron. Están acá porque cada tanto
