@@ -134,19 +134,6 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
       // Check if we have an excluded dispositivo ID (for preventing multiple cajas per device)
       this.excludeDispositivoId = data.excludeDispositivoId;
     }
-
-    // Initialize forms
-    this.initForms();
-
-    // Set dialog size
-    this.dialogRef.updateSize('80vw', '80vh');
-
-    // Remove the max-width and max-height restrictions
-    const dialogContainer = document.querySelector('.cdk-dialog-container') as HTMLElement;
-    if (dialogContainer) {
-      dialogContainer.style.maxWidth = 'none';
-      dialogContainer.style.maxHeight = 'none';
-    }
   }
 
   // Lifecycle hooks
