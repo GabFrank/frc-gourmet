@@ -37,6 +37,7 @@
       <p>Cargando datos...</p>
     </div>
     <mat-stepper
+      *ngIf="!loading"
       [linear]="isLinear"
       #stepper
       class="compact-stepper"

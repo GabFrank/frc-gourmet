@@ -301,8 +301,10 @@ export class ListCajasComponent implements OnInit {
 
   goToConteo(caja: Caja): void {
     const dialogRef = this.dialog.open(CreateCajaDialogComponent, {
-      width: '80vw',
-      height: '80vh',
+      width: '60vw',
+      height: '60vh',
+      maxWidth: '100vw',
+      maxHeight: '100vh',
       disableClose: true,
       data: { cajaId: caja.id, mode: 'conteo' }
     });
@@ -341,8 +343,10 @@ export class ListCajasComponent implements OnInit {
     if (!motivo) return;
 
     const dialogRef = this.dialog.open(CreateCajaDialogComponent, {
-      width: '80vw',
-      height: '80vh',
+      width: '60vw',
+      height: '60vh',
+      maxWidth: '100vw',
+      maxHeight: '100vh',
       disableClose: true,
       data: { cajaId: caja.id, mode: 'conteo', ajuste: true },
     });
@@ -478,8 +482,10 @@ export class ListCajasComponent implements OnInit {
 
   private openCreateCajaDialog(excludeDispositivoId?: number): void {
     const dialogRef = this.dialog.open(CreateCajaDialogComponent, {
-      width: '80vw',
-      height: '80vh',
+      width: '60vw',
+      height: '60vh',
+      maxWidth: '100vw',
+      maxHeight: '100vh',
       disableClose: true,
       data: { excludeDispositivoId }
     });

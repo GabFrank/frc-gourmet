@@ -86,9 +86,10 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   cierreBilleteValuesStore: { [key: string]: number } = {};
 
   // Conteo resumido: en vez de contar por denominación, se carga un total por
-  // moneda. Por defecto completo. Se persiste como un ConteoDetalle por moneda
-  // con `monto` (cantidad 0, apuntando a un billete portador).
-  conteoResumido = false;
+  // moneda. Por defecto RESUMIDO en create (alivia crash de render masivo de
+  // form-fields). Se persiste como un ConteoDetalle por moneda con `monto`
+  // (cantidad 0, apuntando a un billete portador).
+  conteoResumido = true;
   cierreResumido = false;
   resumidoTotals: { [monedaId: number]: number } = {};
   cierreResumidoTotals: { [monedaId: number]: number } = {};
@@ -133,19 +134,6 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
 
       // Check if we have an excluded dispositivo ID (for preventing multiple cajas per device)
       this.excludeDispositivoId = data.excludeDispositivoId;
-    }
-
-    // Initialize forms
-    this.initForms();
-
-    // Set dialog size
-    this.dialogRef.updateSize('80vw', '80vh');
-
-    // Remove the max-width and max-height restrictions
-    const dialogContainer = document.querySelector('.cdk-dialog-container') as HTMLElement;
-    if (dialogContainer) {
-      dialogContainer.style.maxWidth = 'none';
-      dialogContainer.style.maxHeight = 'none';
     }
   }
 
@@ -656,9 +644,11 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   }
 
   private navigateToCierreStep(): void {
-    if (this.dialogMode !== 'conteo' || !this.stepper) return;
+    if (this.dialogMode !== 'conteo') return;
+    if (!this.stepper) return;
     this.isLinear = false;
     setTimeout(() => {
+      if (!this.stepper) return;
       // Mark apertura step as completed so SIGUIENTE works from cierre step
       this.stepper.steps.toArray().forEach((step, i) => {
         if (i < 1) {
@@ -1051,9 +1041,17 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
                 this.loadConteoData(conteoId);
               } else {
                 // Normal mode - initialize fields and update
-              this.initConteoFields();
-                this.updatePropertiesForTemplate();
-                this.loading = false;
+              // Diferir initConteoFields y loading=false para evitar render masivo
+              // de form-fields en el mismo tick que monta stepper/tabs
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  if (!this.conteoResumido) {
+                    this.initConteoFields();
+                  }
+                  this.updatePropertiesForTemplate();
+                  this.loading = false;
+                });
+              });
               }
             }, error => {
               console.error('Error loading monedas data:', error);
@@ -1072,6 +1070,11 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   }
 
   private initConteoFields(): void {
+    // Si modo resumido, no crear form-fields individuales (alivia crash)
+    if (this.conteoResumido) {
+      return;
+    }
+    
     if (!this.activeCurrency || !this.activeCurrency.billetes || this.activeCurrency.billetes.length === 0) {
       return;
     }
@@ -1414,7 +1417,7 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
                   this.initConteoCierreFields();
                 }
                 this.navigateToCierreStep();
-              }, 500);
+              }, 1000);
             }
 
             // Load ventas summary for cierre resumen
