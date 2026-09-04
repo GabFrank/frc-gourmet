@@ -484,6 +484,8 @@ export class ListCajasComponent implements OnInit {
     const dialogRef = this.dialog.open(CreateCajaDialogComponent, {
       width: '80vw',
       height: '80vh',
+      maxWidth: '100vw',
+      maxHeight: '100vh',
       disableClose: true,
       data: { excludeDispositivoId }
     });
