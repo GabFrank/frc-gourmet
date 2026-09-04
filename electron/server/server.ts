@@ -18,6 +18,7 @@ import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
+import * as jwt from 'jsonwebtoken';
 import { existsSync, readFileSync, mkdirSync } from 'fs';
 import * as path from 'path';
 import { DataSource } from 'typeorm';
@@ -108,10 +109,62 @@ async function buildInstance(
     credentials: true,
   });
 
-  // Rate limiting basico — anti-brute-force de login y anti-DDoS accidental
+  // Rate limiting diferenciado — F1+F2+F3 (2026-09)
+  // F1: allowList exceptúa rutas no sensibles (assets, health, deep-links SPA)
+  // F2: max como función aplica límites por superficie:
+  //     - /api/auth/*: 30 req/min (anti-brute-force)
+  //     - /pub/*: 200 req/min (storefront público)
+  //     - /api/rpc: 600 req/min (staff autenticado)
+  //     - resto: 300 req/min (default actual)
+  // F3: keyGenerator separa buckets: device_id/user para staff, IP para anónimos
   await fastify.register(rateLimit, {
-    max: 300,           // 300 requests
+    max: (request) => {
+      const path = request.url.split('?')[0];
+      if (path.startsWith('/api/auth/')) return 30;   // Estricto: login protegido
+      if (path.startsWith('/pub/')) return 200;       // Medio: storefront público
+      if (path === '/api/rpc') return 600;            // Generoso: staff autenticado
+      return 300; // Default resto
+    },
     timeWindow: '1 minute',
+    allowList: (request) => {
+      const path = request.url.split('?')[0];
+      // Health checks y version
+      const specialPaths = ['/api/version', '/api/health', '/api/client-config'];
+      if (specialPaths.includes(path)) return true;
+      // Assets públicos: modelos IA, imágenes de producto
+      if (path.startsWith('/face-models/')) return true;
+      if (path.startsWith('/pub/producto-image/')) return true;
+      // Assets estáticos SPA: .js, .css, .html, .ico, .woff, etc.
+      if (/\.(js|css|html|ico|png|jpg|jpeg|gif|svg|woff2?|ttf|eot|map|json)$/i.test(path)) return true;
+      // Deep-links SPA GET (enmienda auditoría): no son llamadas sensibles, son navegación
+      // del router Angular servida como fallback al index.html del SPA
+      if (request.method === 'GET' && !path.startsWith('/api/')) return true;
+      // NUNCA exceptuar /api/rpc (enmienda auditoría)
+      return false;
+    },
+    keyGenerator: (request) => {
+      const authHeader = request.headers['authorization'];
+      if (!authHeader || !authHeader.startsWith('Bearer ')) return request.ip;
+
+      try {
+        const token = authHeader.substring(7);
+        // jwt.decode (sintáctico), NO verify (criptográfico) — el middleware de
+        // auth verifica después. Acá solo extraemos el identificador para el bucket.
+        const decoded = jwt.decode(token);
+        if (!decoded || typeof decoded !== 'object') return request.ip;
+
+        // Enmienda auditoría A: el JWT usa 'id', no 'sub'
+        const deviceId = (decoded as any).device_id;
+        const userId = (decoded as any).id;
+
+        // Prioridad: device_id (terminal física) > user id > IP
+        if (deviceId) return `device:${deviceId}`;
+        if (userId) return `user:${userId}`;
+        return request.ip;
+      } catch {
+        return request.ip; // Token inválido: fallback a IP
+      }
+    },
   });
 
   // JWT plugin (decora fastify.authenticate)

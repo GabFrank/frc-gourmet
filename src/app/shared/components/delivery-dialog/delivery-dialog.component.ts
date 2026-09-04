@@ -178,6 +178,17 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   avisoTooltip = 'Pedidos de la web';
   procesandoPedidoId: number | null = null;
   private pedidosInterval: any;
+  /**
+   * F4 (backoff exponencial ante 429): intervalo del poll en ms. Crece de 15s
+   * a 120s cuando el server responde 429, resetea a 15s en éxito.
+   */
+  private pollIntervalMs = 15000;
+  /**
+   * Enmienda auditoría B (backoff sin race): flag que indica que el intervalo
+   * cambió y hay que recrear el interval fuera del catch, evitando timers
+   * huérfanos ante 429 concurrentes.
+   */
+  private needsIntervalUpdate = false;
 
   constructor(
     public dialogRef: MatDialogRef<DeliveryDialogComponent>,
@@ -275,10 +286,52 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
         .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
       this.armarColaWeb();
+
+      // Reset en éxito (F4 fix bloqueante auditoría UI)
+      const wasBackedOff = this.pollIntervalMs > 15000;
+      this.pollIntervalMs = 15000;
+      if (wasBackedOff) {
+        // Estaba en backoff, recrear interval con el intervalo default
+        this.recreatePollInterval();
+      }
     } catch (e) {
+      const es429 = (e as any)?.message?.includes('429') || (e as any)?.message?.includes('Too Many Requests');
+      if (es429) {
+        // F4 (backoff): duplicar intervalo hasta 120s max ante rate limit
+        const nuevoIntervalo = Math.min(this.pollIntervalMs * 2, 120000);
+        if (nuevoIntervalo !== this.pollIntervalMs) {
+          this.pollIntervalMs = nuevoIntervalo;
+          // Enmienda auditoría B: marcar que necesita recrear interval FUERA
+          // del catch, evitando timers huérfanos si entra 429 concurrente
+          this.needsIntervalUpdate = true;
+          console.warn(`[delivery-dialog] Rate limit 429, backoff a ${this.pollIntervalMs / 1000}s`);
+        }
+      }
       // Un fallo del poll no puede romper la pantalla de delivery, que es lo
       // que el cajero está usando para trabajar.
       console.warn('No se pudieron cargar los pedidos online:', e);
+    } finally {
+      // Enmienda auditoría B: recrear interval fuera del try/catch, una sola
+      // vez, evitando race si entran 429 concurrentes mientras se procesa el
+      // primero. Solo aplica tras 429 (needsIntervalUpdate=true del catch).
+      if (this.needsIntervalUpdate) {
+        this.needsIntervalUpdate = false;
+        this.recreatePollInterval();
+      }
+    }
+  }
+
+  /**
+   * Enmienda auditoría B: método separado para recrear el interval del poll,
+   * evita timers huérfanos ante 429 concurrentes.
+   */
+  private recreatePollInterval(): void {
+    if (this.pedidosInterval) {
+      clearInterval(this.pedidosInterval);
+      this.pedidosInterval = null;
+    }
+    if (this.tiendaActiva) {
+      this.pedidosInterval = setInterval(() => this.cargarPedidosOnline(), this.pollIntervalMs);
     }
   }
 
