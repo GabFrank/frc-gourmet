@@ -731,6 +731,35 @@ function createWindow(): void {
     initAutoUpdater(win);
   }
 
+  // FASE 2: Interceptar cierre de ventana (botón X)
+  win.on('close', (event) => {
+    // Si forceQuit = true, dejar que cierre (salida desde tray o FASE 3 confirmación)
+    if (forceQuit) {
+      console.log('[window] close: forceQuit=true, dejando cerrar');
+      return;
+    }
+
+    // Leer settings para determinar el modo
+    try {
+      const settings = readAppSettings(app.getPath('userData'));
+
+      // Opción A: tray solo en mode=server
+      if (settings.mode === 'server' && isTrayActive()) {
+        // Minimizar a tray sin preguntar (FASE 3 agregará el diálogo)
+        event.preventDefault();
+        win?.hide();
+        console.log('[window] close: mode=server + tray activo → minimizar a bandeja');
+        return;
+      }
+
+      // Client/standalone: dejar que cierre normal (sin tray)
+      console.log(`[window] close: mode=${settings.mode}, sin tray → cerrar normal`);
+    } catch (e) {
+      console.error('[window] close: error leyendo settings:', e);
+      // Si no se pueden leer settings, dejar que cierre normal
+    }
+  });
+
   // Event when the window is closed.
   win.on('closed', () => {
     win = null;
