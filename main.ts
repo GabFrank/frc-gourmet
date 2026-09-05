@@ -55,12 +55,20 @@ import { getDbPassword } from './electron/utils/db-password.utils';
 import type { DbConnectionOverride } from './src/app/database/database.config';
 // Auto-updater
 import { initAutoUpdater } from './electron/utils/auto-updater';
+// Tray icon manager (FASE 1)
+import { createTray, destroyTray, isTrayActive } from './electron/utils/tray-manager';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
 // Unificado en recetas.handler: sabores y variaciones
 
 let win: BrowserWindow | null;
 let splashWin: BrowserWindow | null = null;
 let dbService: DatabaseService;
+
+/**
+ * FASE 1: Flag para indicar que el quit es intencional (evita loops de preventDefault).
+ * Se setea true cuando el usuario confirma "Cerrar completamente" o "Salir" del tray.
+ */
+let forceQuit = false;
 
 // Remove JWT constants as they are moved
 // const JWT_SECRET = 'frc-gourmet-secret-key';
@@ -795,6 +803,35 @@ function registerClientRefreshTokenHandlers(): void {
   });
 }
 
+/**
+ * ENMIENDA 1: Single Instance Lock.
+ *
+ * Previene que se abran múltiples instancias de la app (ej: usuario hace doble-click
+ * en el .exe mientras la primera instancia está minimizada a tray).
+ *
+ * Si ya hay una instancia corriendo:
+ * - La segunda se cierra automáticamente
+ * - La primera restaura su ventana y se enfoca
+ *
+ * CRÍTICO: debe llamarse ANTES de app.on('ready').
+ */
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  console.log('[single-instance] Ya hay una instancia corriendo. Cerrando esta instancia.');
+  app.quit();
+} else {
+  // Alguien intentó abrir una segunda instancia: enfocar la ventana existente
+  app.on('second-instance', (_event, _commandLine, _workingDirectory) => {
+    console.log('[single-instance] Segunda instancia detectada. Enfocando ventana existente.');
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      if (!win.isVisible()) win.show();
+      win.focus();
+    }
+  });
+}
+
 // Initialize the database when the app is ready
 app.on('ready', () => {
   registerAppProtocol();
@@ -847,11 +884,44 @@ app.on('ready', () => {
 
   initializeDatabase();
   createWindow();
+
+  // FASE 1: Crear tray icon (solo en mode=server — Opción A)
+  // El tray permite que el servidor siga corriendo cuando se cierra la ventana.
+  // Client/standalone mantienen comportamiento legacy (sin tray).
+  try {
+    const settings = readAppSettings(app.getPath('userData'));
+    if (settings.mode === 'server') {
+      const tray = createTray(
+        settings.mode,
+        win,
+        () => {
+          // Callback onQuitRequested: FASE 3 agregará confirmación antes de quit
+          forceQuit = true;
+          app.quit();
+        },
+      );
+      if (tray) {
+        console.log('[tray] Tray icon creado para mode=server');
+      } else {
+        console.warn('[tray] No se pudo crear el tray icon (no afecta funcionalidad)');
+      }
+    } else {
+      console.log(`[tray] Modo '${settings.mode}': sin tray (Opción A)`);
+    }
+  } catch (e) {
+    console.error('[tray] Error al crear tray:', e);
+  }
 });
 
 // Quit when all windows are closed.
 app.on('window-all-closed', () => {
-  // On macOS specific behavior
+  // FASE 2: Si hay tray activo, NO terminar la app (queda en segundo plano)
+  if (isTrayActive()) {
+    console.log('[window] Todas las ventanas cerradas, pero tray activo — app sigue en segundo plano');
+    return;
+  }
+
+  // Comportamiento legacy (sin tray): cerrar app
   if (process.platform !== 'darwin') {
     // Stop Fastify server (idempotente — si nunca arranco no hace nada)
     stopServer().catch(() => {});
@@ -864,6 +934,8 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  // FASE 1: Destruir tray antes de terminar la app
+  destroyTray();
   // Stop server explicitly antes de quit (cubrira el caso macOS donde el handler
   // de window-all-closed no termina la app)
   stopServer().catch(() => {});

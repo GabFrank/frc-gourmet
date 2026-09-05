@@ -176,6 +176,35 @@ export interface UiSettings {
   zoomFactor: number;
 }
 
+/**
+ * Configuración de comportamiento de ventana y bandeja del sistema.
+ * Solo aplica en mode=server (Opción A: client/standalone mantienen comportamiento legacy).
+ */
+export interface WindowBehaviorSettings {
+  /**
+   * Estrategia al cerrar la ventana (botón X o Cmd+Q):
+   * - 'ask': mostrar diálogo con opciones (default en mode=server)
+   * - 'minimize': minimizar a tray sin preguntar
+   * - 'close': cerrar completamente sin preguntar (con confirmación extra)
+   *
+   * El checkbox "No volver a preguntar" del diálogo cambia esto de 'ask' a la opción elegida.
+   * REVERSIBLE: el usuario puede editar app-settings.json manualmente o (futuro) desde UI.
+   */
+  closeAction: 'ask' | 'minimize' | 'close';
+
+  /**
+   * Auto-start al login del sistema operativo (setLoginItemSettings).
+   * Solo tiene efecto en mode=server.
+   */
+  autoStart: boolean;
+
+  /**
+   * Iniciar minimizado a la bandeja (requiere autoStart=true).
+   * Útil para que el server arranque en segundo plano sin mostrar ventana.
+   */
+  startMinimized: boolean;
+}
+
 export interface AppSettings {
   mode: AppMode;
   database: DatabaseSettings;
@@ -185,6 +214,11 @@ export interface AppSettings {
   ia: IaSettings;
   musica: MusicaSettings;
   ui: UiSettings;
+  /**
+   * Configuración de comportamiento de ventana y tray (solo mode=server).
+   * Opción A: client/standalone NO usan tray, mantienen cierre legacy.
+   */
+  windowBehavior?: WindowBehaviorSettings;
   /**
    * F5 paso 3: dispositivo "fisico" identificado para este proceso.
    * - standalone/server: el PC donde corre la app (selección manual).
@@ -241,6 +275,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   ui: {
     zoomFactor: 1,
+  },
+  windowBehavior: {
+    closeAction: 'ask',
+    autoStart: false,
+    startMinimized: false,
   },
   deviceId: null,
   timezone: 'America/Asuncion',
