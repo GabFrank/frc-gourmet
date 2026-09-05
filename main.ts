@@ -36,7 +36,7 @@ import { seedInitialData } from './electron/utils/seed-data';
 import { runBootstrapMigrations } from './electron/utils/db-migrations-bootstrap';
 import { seedSystemData } from './electron/utils/seed-system';
 import { migratePlaintextPasswords } from './electron/utils/migrate-passwords';
-import { readAppSettings, updateAppSettings } from './electron/utils/app-settings.utils';
+import { readAppSettings, updateAppSettings, writeAppSettings } from './electron/utils/app-settings.utils';
 import {
   readClientRefreshToken, writeClientRefreshToken, clearClientRefreshToken,
 } from './electron/utils/client-refresh-token.utils';
@@ -1091,6 +1091,56 @@ app.on('ready', () => {
             console.log('[auto-start] ventana oculta (startMinimized=true)');
           }
         }, 500);
+      }
+
+      // FASE EXTRA: Prompt de auto-start en primer arranque (mode=server)
+      // Preguntar solo una vez si el usuario quiere auto-start al login.
+      // Si autoStart ya está explícitamente configurado, marcar prompted=true sin preguntar.
+      const autoStartPrompted = settings.windowBehavior?.autoStartPrompted ?? false;
+      const autoStartExplicit = settings.windowBehavior?.autoStart !== undefined;
+
+      if (!autoStartPrompted) {
+        if (autoStartExplicit) {
+          // Migración suave: si autoStart ya está seteado manualmente, solo marcar prompted
+          console.log('[auto-start] autoStart ya configurado manualmente, marcando prompted=true');
+          const updated = readAppSettings(app.getPath('userData'));
+          updated.windowBehavior = {
+            ...(updated.windowBehavior || {}),
+            closeAction: updated.windowBehavior?.closeAction ?? 'ask',
+            autoStart: updated.windowBehavior?.autoStart ?? false,
+            startMinimized: updated.windowBehavior?.startMinimized ?? false,
+            autoStartPrompted: true,
+          };
+          writeAppSettings(app.getPath('userData'), updated);
+        } else {
+          // Primera vez: preguntar al usuario
+          console.log('[auto-start] Primera ejecución, preguntando al usuario sobre auto-start');
+          setTimeout(async () => {
+            try {
+              const { showAutoStartPrompt } = await import('./electron/utils/window-close-dialog');
+              const wantsAutoStart = await showAutoStartPrompt(win);
+              
+              console.log(`[auto-start] Usuario eligió: ${wantsAutoStart ? 'Sí' : 'No'}`);
+
+              // Persistir decisión
+              const updated = readAppSettings(app.getPath('userData'));
+              updated.windowBehavior = {
+                ...(updated.windowBehavior || {}),
+                closeAction: updated.windowBehavior?.closeAction ?? 'ask',
+                autoStart: wantsAutoStart,
+                startMinimized: updated.windowBehavior?.startMinimized ?? false,
+                autoStartPrompted: true,
+              };
+              writeAppSettings(app.getPath('userData'), updated);
+
+              // Aplicar auto-start inmediatamente
+              setAutoStart(wantsAutoStart, false);
+              console.log('[auto-start] Configuración guardada y aplicada');
+            } catch (err) {
+              console.error('[auto-start] Error mostrando prompt:', err);
+            }
+          }, 1000); // Esperar a que la ventana esté completamente lista
+        }
       }
     } else {
       console.log(`[tray] Modo '${settings.mode}': sin tray (Opción A)`);

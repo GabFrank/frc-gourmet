@@ -203,6 +203,13 @@ export interface WindowBehaviorSettings {
    * Útil para que el server arranque en segundo plano sin mostrar ventana.
    */
   startMinimized: boolean;
+
+  /**
+   * Si ya se preguntó al usuario sobre auto-start en el primer arranque.
+   * Evita volver a preguntar en cada inicio. Si falta (undefined) y autoStart
+   * ya está explícitamente seteado, se asume que el usuario ya lo configuró.
+   */
+  autoStartPrompted?: boolean;
 }
 
 export interface AppSettings {
@@ -280,6 +287,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     closeAction: 'ask',
     autoStart: false,
     startMinimized: false,
+    autoStartPrompted: false,
   },
   deviceId: null,
   timezone: 'America/Asuncion',

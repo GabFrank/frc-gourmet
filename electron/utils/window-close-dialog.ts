@@ -93,3 +93,32 @@ export async function showFinalConfirmation(
 
   return result.response === 1; // true si eligió "Cerrar servidor"
 }
+
+/**
+ * Prompt de auto-start en el primer arranque (mode=server).
+ *
+ * Pregunta al usuario si quiere que FRC Gourmet arranque automáticamente
+ * al iniciar el sistema operativo.
+ *
+ * @param win - BrowserWindow para el diálogo modal
+ * @returns true si elige Sí (auto-start), false si elige No
+ */
+export async function showAutoStartPrompt(
+  win: BrowserWindow | null,
+): Promise<boolean> {
+  const result = await dialog.showMessageBox(win || undefined!, {
+    type: 'question',
+    title: 'FRC Gourmet — Inicio Automático',
+    message: '¿Abrir FRC Gourmet al iniciar la PC?',
+    detail:
+      'En modo servidor, esto mantiene el backend siempre disponible para las cajas, dispositivos móviles y PWA conectados.\n\n' +
+      'Puedes cambiar esta configuración más adelante editando app-settings.json.',
+    // UX: No a la izquierda (default seguro), Sí a la derecha (preferido para server)
+    buttons: ['No', 'Sí, iniciar con el sistema'],
+    defaultId: 1, // Default = Sí (server debería estar siempre arriba)
+    cancelId: 0,  // Escape = No (no forzar auto-start)
+    noLink: true,
+  });
+
+  return result.response === 1; // true si eligió "Sí"
+}
