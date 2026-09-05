@@ -1095,15 +1095,37 @@ app.on('ready', () => {
 
       // FASE EXTRA: Prompt de auto-start en primer arranque (mode=server)
       // Preguntar solo una vez si el usuario quiere auto-start al login.
-      // Si autoStart ya está explícitamente configurado, marcar prompted=true sin preguntar.
+      //
+      // IMPORTANTE: NO usar settings.windowBehavior?.autoStart !== undefined,
+      // porque readAppSettings() hace deepMerge con defaults → autoStart siempre
+      // está definido incluso si el JSON crudo no lo tiene.
+      //
+      // Gate único: si autoStartPrompted === false → preguntar.
+      // Migración suave opcional: leer JSON crudo para detectar si autoStart
+      // fue seteado manualmente (tiene la clave propia) sin autoStartPrompted.
       const autoStartPrompted = settings.windowBehavior?.autoStartPrompted ?? false;
-      const autoStartExplicit = settings.windowBehavior?.autoStart !== undefined;
 
       if (!autoStartPrompted) {
-        if (autoStartExplicit) {
-          // Migración suave: si autoStart ya está seteado manualmente, solo marcar prompted
+        // Leer JSON crudo para detectar si autoStart fue configurado manualmente
+        const userDataPath = app.getPath('userData');
+        const settingsPath = path.join(userDataPath, 'app-settings.json');
+        let rawHasAutoStart = false;
+
+        try {
+          if (fs.existsSync(settingsPath)) {
+            const rawJson = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+            // Verificar si el JSON crudo tiene windowBehavior.autoStart como clave propia
+            rawHasAutoStart = rawJson.windowBehavior?.hasOwnProperty('autoStart') ?? false;
+          }
+        } catch (err) {
+          console.warn('[auto-start] Error leyendo JSON crudo:', err);
+        }
+
+        if (rawHasAutoStart) {
+          // Migración suave: autoStart ya está configurado manualmente
+          // → solo marcar autoStartPrompted=true sin preguntar
           console.log('[auto-start] autoStart ya configurado manualmente, marcando prompted=true');
-          const updated = readAppSettings(app.getPath('userData'));
+          const updated = readAppSettings(userDataPath);
           updated.windowBehavior = {
             ...(updated.windowBehavior || {}),
             closeAction: updated.windowBehavior?.closeAction ?? 'ask',
@@ -1111,7 +1133,7 @@ app.on('ready', () => {
             startMinimized: updated.windowBehavior?.startMinimized ?? false,
             autoStartPrompted: true,
           };
-          writeAppSettings(app.getPath('userData'), updated);
+          writeAppSettings(userDataPath, updated);
         } else {
           // Primera vez: preguntar al usuario
           console.log('[auto-start] Primera ejecución, preguntando al usuario sobre auto-start');
@@ -1123,7 +1145,7 @@ app.on('ready', () => {
               console.log(`[auto-start] Usuario eligió: ${wantsAutoStart ? 'Sí' : 'No'}`);
 
               // Persistir decisión
-              const updated = readAppSettings(app.getPath('userData'));
+              const updated = readAppSettings(userDataPath);
               updated.windowBehavior = {
                 ...(updated.windowBehavior || {}),
                 closeAction: updated.windowBehavior?.closeAction ?? 'ask',
@@ -1131,7 +1153,7 @@ app.on('ready', () => {
                 startMinimized: updated.windowBehavior?.startMinimized ?? false,
                 autoStartPrompted: true,
               };
-              writeAppSettings(app.getPath('userData'), updated);
+              writeAppSettings(userDataPath, updated);
 
               // Aplicar auto-start inmediatamente
               setAutoStart(wantsAutoStart, false);
