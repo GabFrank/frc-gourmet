@@ -23,6 +23,11 @@ export interface CloseDialogResult {
 /**
  * Muestra el diálogo de cierre con 3 opciones.
  *
+ * UX: Botones ordenados de izquierda a derecha por peligrosidad:
+ * - Cerrar completamente (peligroso, desconecta todo)
+ * - Reiniciar (medio, reconecta rápido)
+ * - Minimizar a bandeja (seguro, default/Escape)
+ *
  * @param win - BrowserWindow para el diálogo modal
  * @param mode - Modo de operación (afecta el mensaje de advertencia)
  * @returns Promesa con la acción elegida y si marcó "no preguntar"
@@ -43,15 +48,17 @@ export async function showCloseDialog(
     title: 'Cerrar FRC Gourmet',
     message: '¿Qué deseas hacer?',
     detail,
-    buttons: ['Minimizar a bandeja', 'Reiniciar', 'Cerrar completamente'],
-    defaultId: 0, // Default = Minimizar (ENMIENDA 7)
-    cancelId: 0, // Esc = Minimizar
+    // UX: orden de botones por peligrosidad (izq → der: peligroso → seguro)
+    buttons: ['Cerrar completamente', 'Reiniciar', 'Minimizar a bandeja'],
+    defaultId: 2, // Default = Minimizar (botón derecho, acción segura)
+    cancelId: 2,  // Escape = Minimizar (acción segura)
     checkboxLabel: 'No volver a preguntar',
     checkboxChecked: false,
     noLink: true,
   });
 
-  const actions: CloseAction[] = ['minimize', 'restart', 'close'];
+  // Mapeo de índice de botón → acción
+  const actions: CloseAction[] = ['close', 'restart', 'minimize'];
   const action = actions[result.response];
 
   return {
