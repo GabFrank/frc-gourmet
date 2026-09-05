@@ -59,6 +59,8 @@ import { initAutoUpdater } from './electron/utils/auto-updater';
 import { createTray, destroyTray, isTrayActive } from './electron/utils/tray-manager';
 // Window close dialog (FASE 3)
 import { showCloseDialog, showFinalConfirmation } from './electron/utils/window-close-dialog';
+// Auto-start manager (FASE 4)
+import { setAutoStart } from './electron/utils/auto-start-manager';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
 // Unificado en recetas.handler: sabores y variaciones
 
@@ -1031,6 +1033,12 @@ app.on('ready', () => {
   try {
     const settings = readAppSettings(app.getPath('userData'));
     if (settings.mode === 'server') {
+      // FASE 4: Configurar auto-start al login (ENMIENDA 8)
+      const autoStart = settings.windowBehavior?.autoStart ?? false;
+      const startMinimized = settings.windowBehavior?.startMinimized ?? false;
+      setAutoStart(autoStart, startMinimized);
+      console.log(`[auto-start] configurado: autoStart=${autoStart}, startMinimized=${startMinimized}`);
+
       const tray = createTray(
         settings.mode,
         win,
@@ -1044,6 +1052,17 @@ app.on('ready', () => {
         console.log('[tray] Tray icon creado para mode=server');
       } else {
         console.warn('[tray] No se pudo crear el tray icon (no afecta funcionalidad)');
+      }
+
+      // FASE 4: Si startMinimized=true, ocultar ventana (solo queda tray)
+      if (startMinimized && tray) {
+        // Esperar a que la ventana esté lista antes de ocultarla
+        setTimeout(() => {
+          if (win && !win.isDestroyed()) {
+            win.hide();
+            console.log('[auto-start] ventana oculta (startMinimized=true)');
+          }
+        }, 500);
       }
     } else {
       console.log(`[tray] Modo '${settings.mode}': sin tray (Opción A)`);
