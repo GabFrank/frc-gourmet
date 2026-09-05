@@ -56,7 +56,7 @@ import type { DbConnectionOverride } from './src/app/database/database.config';
 // Auto-updater
 import { initAutoUpdater } from './electron/utils/auto-updater';
 // Tray icon manager (FASE 1)
-import { createTray, destroyTray, isTrayActive } from './electron/utils/tray-manager';
+import { createTray, updateTrayMenu, destroyTray, isTrayActive } from './electron/utils/tray-manager';
 // Window close dialog (FASE 3)
 import { showCloseDialog, showFinalConfirmation } from './electron/utils/window-close-dialog';
 // Auto-start manager (FASE 4)
@@ -1050,6 +1050,34 @@ app.on('ready', () => {
       );
       if (tray) {
         console.log('[tray] Tray icon creado para mode=server');
+
+        // P1 FIX: Actualizar menú del tray para agregar "Reiniciar"
+        updateTrayMenu(
+          win,
+          // onRestartRequested: mismo path que el diálogo (await stopServer → relaunch → quit)
+          async () => {
+            console.log('[tray] Reiniciar solicitado desde menú');
+            // ENMIENDA 2: esperar stopServer() antes de relaunch
+            await stopServer().catch((e) => console.error('[tray] stopServer error:', e));
+            forceQuit = true;
+            app.relaunch();
+            app.quit();
+          },
+          // onQuitRequested: confirmación si mode=server (mismo que botón "Salir" actual)
+          async () => {
+            console.log('[tray] Salir solicitado desde menú');
+            // En mode=server, confirmar antes de cerrar (igual que diálogo)
+            const confirmed = await showFinalConfirmation(win);
+            if (confirmed) {
+              console.log('[tray] usuario confirmó salir');
+              forceQuit = true;
+              app.quit();
+            } else {
+              console.log('[tray] usuario canceló salir');
+            }
+          },
+        );
+        console.log('[tray] Menú actualizado con Mostrar / Reiniciar / Salir');
       } else {
         console.warn('[tray] No se pudo crear el tray icon (no afecta funcionalidad)');
       }
