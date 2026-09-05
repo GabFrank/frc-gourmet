@@ -36,7 +36,7 @@ import { seedInitialData } from './electron/utils/seed-data';
 import { runBootstrapMigrations } from './electron/utils/db-migrations-bootstrap';
 import { seedSystemData } from './electron/utils/seed-system';
 import { migratePlaintextPasswords } from './electron/utils/migrate-passwords';
-import { readAppSettings, updateAppSettings } from './electron/utils/app-settings.utils';
+import { readAppSettings, updateAppSettings, writeAppSettings } from './electron/utils/app-settings.utils';
 import {
   readClientRefreshToken, writeClientRefreshToken, clearClientRefreshToken,
 } from './electron/utils/client-refresh-token.utils';
@@ -55,12 +55,31 @@ import { getDbPassword } from './electron/utils/db-password.utils';
 import type { DbConnectionOverride } from './src/app/database/database.config';
 // Auto-updater
 import { initAutoUpdater } from './electron/utils/auto-updater';
+// Tray icon manager (FASE 1)
+import { createTray, updateTrayMenu, destroyTray, isTrayActive } from './electron/utils/tray-manager';
+// Window close dialog (FASE 3)
+import { showCloseDialog, showFinalConfirmation } from './electron/utils/window-close-dialog';
+// Auto-start manager (FASE 4)
+import { setAutoStart } from './electron/utils/auto-start-manager';
 // ✅ NUEVOS HANDLERS PARA ARQUITECTURA CON VARIACIONES
 // Unificado en recetas.handler: sabores y variaciones
 
 let win: BrowserWindow | null;
 let splashWin: BrowserWindow | null = null;
 let dbService: DatabaseService;
+
+/**
+ * FASE 1: Flag para indicar que el quit es intencional (evita loops de preventDefault).
+ * Se setea true cuando el usuario confirma "Cerrar completamente" o "Salir" del tray.
+ */
+let forceQuit = false;
+
+/**
+ * FASE 3 / ENMIENDA 3: Flag para evitar mostrar el diálogo múltiples veces.
+ * Si el usuario ya vio el diálogo (via botón X o Cmd+Q), no mostrarlo de nuevo
+ * en el mismo ciclo de cierre.
+ */
+let quitRequested = false;
 
 // Remove JWT constants as they are moved
 // const JWT_SECRET = 'frc-gourmet-secret-key';
@@ -723,6 +742,137 @@ function createWindow(): void {
     initAutoUpdater(win);
   }
 
+  // FASE 2: Interceptar cierre de ventana (botón X)
+  // FASE 3: Agregar diálogo con 3 opciones
+  win.on('close', async (event) => {
+    // Si forceQuit = true, dejar que cierre (salida desde tray o confirmación final)
+    if (forceQuit) {
+      console.log('[window] close: forceQuit=true, dejando cerrar');
+      return;
+    }
+
+    // ENMIENDA 3: evitar mostrar el diálogo múltiples veces en el mismo ciclo
+    if (quitRequested) {
+      console.log('[window] close: quitRequested=true, evitando diálogo duplicado');
+      return;
+    }
+
+    // Siempre prevenir el cierre para poder mostrar el diálogo o minimizar
+    event.preventDefault();
+
+    // Leer settings para determinar el modo y closeAction
+    let settings;
+    try {
+      settings = readAppSettings(app.getPath('userData'));
+    } catch (e) {
+      console.error('[window] close: error leyendo settings:', e);
+      // Si no se pueden leer settings, dejar que cierre normal (fallback seguro)
+      forceQuit = true;
+      win?.close();
+      return;
+    }
+
+    // Opción A: tray y diálogo solo en mode=server
+    if (settings.mode !== 'server' || !isTrayActive()) {
+      console.log(`[window] close: mode=${settings.mode}, sin tray → cerrar normal`);
+      forceQuit = true;
+      win?.close();
+      return;
+    }
+
+    // Determinar acción según closeAction persistida
+    const closeAction = settings.windowBehavior?.closeAction || 'ask';
+
+    if (closeAction === 'minimize') {
+      // Minimizar sin preguntar (usuario ya eligió "no preguntar" antes)
+      console.log('[window] close: closeAction=minimize → minimizar a bandeja');
+      win?.hide();
+      return;
+    }
+
+    if (closeAction === 'close') {
+      // Cerrar sin preguntar, pero confirmar impacto en mode=server
+      console.log('[window] close: closeAction=close → confirmar cierre');
+      quitRequested = true;
+      const confirmed = await showFinalConfirmation(win);
+      if (confirmed) {
+        console.log('[window] close: usuario confirmó cierre');
+        forceQuit = true;
+        // ENMIENDA 2: esperar stopServer() antes de terminar
+        await stopServer().catch((e) => console.error('[window] stopServer error:', e));
+        win?.close();
+      } else {
+        console.log('[window] close: usuario canceló cierre');
+        quitRequested = false;
+      }
+      return;
+    }
+
+    // closeAction === 'ask': mostrar diálogo con 3 opciones
+    console.log('[window] close: closeAction=ask → mostrar diálogo');
+    quitRequested = true;
+
+    try {
+      const result = await showCloseDialog(win, settings.mode);
+      console.log(`[window] close: usuario eligió '${result.action}', dontAskAgain=${result.dontAskAgain}`);
+
+      // Si marcó "no volver a preguntar", persistir la acción elegida (ENMIENDA 5)
+      // NOTA: "Reiniciar" NO se persiste (no tiene sentido que siempre reinicie)
+      if (result.dontAskAgain && (result.action === 'minimize' || result.action === 'close')) {
+        try {
+          updateAppSettings(app.getPath('userData'), (current) => ({
+            ...current,
+            windowBehavior: {
+              closeAction: result.action as 'minimize' | 'close',
+              autoStart: current.windowBehavior?.autoStart ?? false,
+              startMinimized: current.windowBehavior?.startMinimized ?? false,
+            },
+          }));
+          console.log(`[window] closeAction persistido: ${result.action}`);
+        } catch (e) {
+          console.error('[window] error persistiendo closeAction:', e);
+        }
+      }
+
+      // Ejecutar la acción elegida
+      switch (result.action) {
+        case 'minimize':
+          console.log('[window] acción: minimizar a bandeja');
+          win?.hide();
+          quitRequested = false;
+          break;
+
+        case 'restart':
+          console.log('[window] acción: reiniciar');
+          // ENMIENDA 2: esperar stopServer() antes de relaunch
+          await stopServer().catch((e) => console.error('[window] stopServer error:', e));
+          forceQuit = true;
+          app.relaunch();
+          app.quit();
+          break;
+
+        case 'close':
+          // Confirmación extra antes de cerrar en mode=server
+          console.log('[window] acción: cerrar (pidiendo confirmación extra)');
+          const confirmed = await showFinalConfirmation(win);
+          if (confirmed) {
+            console.log('[window] usuario confirmó cierre');
+            forceQuit = true;
+            // ENMIENDA 2: esperar stopServer() antes de quit
+            await stopServer().catch((e) => console.error('[window] stopServer error:', e));
+            win?.close();
+          } else {
+            console.log('[window] usuario canceló cierre');
+            quitRequested = false;
+          }
+          break;
+      }
+    } catch (e) {
+      console.error('[window] close: error en diálogo:', e);
+      quitRequested = false;
+    }
+  });
+
   // Event when the window is closed.
   win.on('closed', () => {
     win = null;
@@ -795,6 +945,35 @@ function registerClientRefreshTokenHandlers(): void {
   });
 }
 
+/**
+ * ENMIENDA 1: Single Instance Lock.
+ *
+ * Previene que se abran múltiples instancias de la app (ej: usuario hace doble-click
+ * en el .exe mientras la primera instancia está minimizada a tray).
+ *
+ * Si ya hay una instancia corriendo:
+ * - La segunda se cierra automáticamente
+ * - La primera restaura su ventana y se enfoca
+ *
+ * CRÍTICO: debe llamarse ANTES de app.on('ready').
+ */
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  console.log('[single-instance] Ya hay una instancia corriendo. Cerrando esta instancia.');
+  app.quit();
+} else {
+  // Alguien intentó abrir una segunda instancia: enfocar la ventana existente
+  app.on('second-instance', (_event, _commandLine, _workingDirectory) => {
+    console.log('[single-instance] Segunda instancia detectada. Enfocando ventana existente.');
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      if (!win.isVisible()) win.show();
+      win.focus();
+    }
+  });
+}
+
 // Initialize the database when the app is ready
 app.on('ready', () => {
   registerAppProtocol();
@@ -847,11 +1026,161 @@ app.on('ready', () => {
 
   initializeDatabase();
   createWindow();
+
+  // FASE 1: Crear tray icon (solo en mode=server — Opción A)
+  // El tray permite que el servidor siga corriendo cuando se cierra la ventana.
+  // Client/standalone mantienen comportamiento legacy (sin tray).
+  try {
+    const settings = readAppSettings(app.getPath('userData'));
+    if (settings.mode === 'server') {
+      // FASE 4: Configurar auto-start al login (ENMIENDA 8)
+      const autoStart = settings.windowBehavior?.autoStart ?? false;
+      const startMinimized = settings.windowBehavior?.startMinimized ?? false;
+      setAutoStart(autoStart, startMinimized);
+      console.log(`[auto-start] configurado: autoStart=${autoStart}, startMinimized=${startMinimized}`);
+
+      const tray = createTray(
+        settings.mode,
+        win,
+        () => {
+          // Callback onQuitRequested: FASE 3 agregará confirmación antes de quit
+          forceQuit = true;
+          app.quit();
+        },
+      );
+      if (tray) {
+        console.log('[tray] Tray icon creado para mode=server');
+
+        // P1 FIX: Actualizar menú del tray para agregar "Reiniciar"
+        updateTrayMenu(
+          win,
+          // onRestartRequested: mismo path que el diálogo (await stopServer → relaunch → quit)
+          async () => {
+            console.log('[tray] Reiniciar solicitado desde menú');
+            // ENMIENDA 2: esperar stopServer() antes de relaunch
+            await stopServer().catch((e) => console.error('[tray] stopServer error:', e));
+            forceQuit = true;
+            app.relaunch();
+            app.quit();
+          },
+          // onQuitRequested: confirmación si mode=server (mismo que botón "Salir" actual)
+          async () => {
+            console.log('[tray] Salir solicitado desde menú');
+            // En mode=server, confirmar antes de cerrar (igual que diálogo)
+            const confirmed = await showFinalConfirmation(win);
+            if (confirmed) {
+              console.log('[tray] usuario confirmó salir');
+              forceQuit = true;
+              app.quit();
+            } else {
+              console.log('[tray] usuario canceló salir');
+            }
+          },
+        );
+        console.log('[tray] Menú actualizado con Mostrar / Reiniciar / Salir');
+      } else {
+        console.warn('[tray] No se pudo crear el tray icon (no afecta funcionalidad)');
+      }
+
+      // FASE 4: Si startMinimized=true, ocultar ventana (solo queda tray)
+      if (startMinimized && tray) {
+        // Esperar a que la ventana esté lista antes de ocultarla
+        setTimeout(() => {
+          if (win && !win.isDestroyed()) {
+            win.hide();
+            console.log('[auto-start] ventana oculta (startMinimized=true)');
+          }
+        }, 500);
+      }
+
+      // FASE EXTRA: Prompt de auto-start en primer arranque (mode=server)
+      // Preguntar solo una vez si el usuario quiere auto-start al login.
+      //
+      // IMPORTANTE: NO usar settings.windowBehavior?.autoStart !== undefined,
+      // porque readAppSettings() hace deepMerge con defaults → autoStart siempre
+      // está definido incluso si el JSON crudo no lo tiene.
+      //
+      // Gate único: si autoStartPrompted === false → preguntar.
+      // Migración suave opcional: leer JSON crudo para detectar si autoStart
+      // fue seteado manualmente (tiene la clave propia) sin autoStartPrompted.
+      const autoStartPrompted = settings.windowBehavior?.autoStartPrompted ?? false;
+
+      if (!autoStartPrompted) {
+        // Leer JSON crudo para detectar si autoStart fue configurado manualmente
+        const userDataPath = app.getPath('userData');
+        const settingsPath = path.join(userDataPath, 'app-settings.json');
+        let rawHasAutoStart = false;
+
+        try {
+          if (fs.existsSync(settingsPath)) {
+            const rawJson = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+            // Verificar si el JSON crudo tiene windowBehavior.autoStart como clave propia
+            rawHasAutoStart = rawJson.windowBehavior?.hasOwnProperty('autoStart') ?? false;
+          }
+        } catch (err) {
+          console.warn('[auto-start] Error leyendo JSON crudo:', err);
+        }
+
+        if (rawHasAutoStart) {
+          // Migración suave: autoStart ya está configurado manualmente
+          // → solo marcar autoStartPrompted=true sin preguntar
+          console.log('[auto-start] autoStart ya configurado manualmente, marcando prompted=true');
+          const updated = readAppSettings(userDataPath);
+          updated.windowBehavior = {
+            ...(updated.windowBehavior || {}),
+            closeAction: updated.windowBehavior?.closeAction ?? 'ask',
+            autoStart: updated.windowBehavior?.autoStart ?? false,
+            startMinimized: updated.windowBehavior?.startMinimized ?? false,
+            autoStartPrompted: true,
+          };
+          writeAppSettings(userDataPath, updated);
+        } else {
+          // Primera vez: preguntar al usuario
+          console.log('[auto-start] Primera ejecución, preguntando al usuario sobre auto-start');
+          setTimeout(async () => {
+            try {
+              const { showAutoStartPrompt } = await import('./electron/utils/window-close-dialog');
+              const wantsAutoStart = await showAutoStartPrompt(win);
+              
+              console.log(`[auto-start] Usuario eligió: ${wantsAutoStart ? 'Sí' : 'No'}`);
+
+              // Persistir decisión
+              const updated = readAppSettings(userDataPath);
+              updated.windowBehavior = {
+                ...(updated.windowBehavior || {}),
+                closeAction: updated.windowBehavior?.closeAction ?? 'ask',
+                autoStart: wantsAutoStart,
+                startMinimized: updated.windowBehavior?.startMinimized ?? false,
+                autoStartPrompted: true,
+              };
+              writeAppSettings(userDataPath, updated);
+
+              // Aplicar auto-start inmediatamente
+              setAutoStart(wantsAutoStart, false);
+              console.log('[auto-start] Configuración guardada y aplicada');
+            } catch (err) {
+              console.error('[auto-start] Error mostrando prompt:', err);
+            }
+          }, 1000); // Esperar a que la ventana esté completamente lista
+        }
+      }
+    } else {
+      console.log(`[tray] Modo '${settings.mode}': sin tray (Opción A)`);
+    }
+  } catch (e) {
+    console.error('[tray] Error al crear tray:', e);
+  }
 });
 
 // Quit when all windows are closed.
 app.on('window-all-closed', () => {
-  // On macOS specific behavior
+  // FASE 2: Si hay tray activo, NO terminar la app (queda en segundo plano)
+  if (isTrayActive()) {
+    console.log('[window] Todas las ventanas cerradas, pero tray activo — app sigue en segundo plano');
+    return;
+  }
+
+  // Comportamiento legacy (sin tray): cerrar app
   if (process.platform !== 'darwin') {
     // Stop Fastify server (idempotente — si nunca arranco no hace nada)
     stopServer().catch(() => {});
@@ -863,10 +1192,97 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('before-quit', () => {
-  // Stop server explicitly antes de quit (cubrira el caso macOS donde el handler
-  // de window-all-closed no termina la app)
-  stopServer().catch(() => {});
+app.on('before-quit', async (event) => {
+  // FASE 3 / FASE 7: Interceptar Cmd+Q y otros orígenes de quit
+  // Si forceQuit o quitRequested ya están true, dejar que cierre
+  if (forceQuit || quitRequested) {
+    console.log('[before-quit] forceQuit o quitRequested=true, procediendo con quit');
+    // FASE 1: Destruir tray antes de terminar la app
+    destroyTray();
+    // Stop server explicitly antes de quit (cubrira el caso macOS donde el handler
+    // de window-all-closed no termina la app)
+    await stopServer().catch(() => {});
+    return;
+  }
+
+  // Si el diálogo no se ha mostrado aún, interceptar y mostrar
+  try {
+    const settings = readAppSettings(app.getPath('userData'));
+
+    // Solo interceptar en mode=server con tray activo (Opción A)
+    if (settings.mode !== 'server' || !isTrayActive()) {
+      console.log('[before-quit] sin tray o no server, dejando quit normal');
+      return;
+    }
+
+    // Prevenir quit para mostrar diálogo
+    event.preventDefault();
+    quitRequested = true;
+
+    console.log('[before-quit] interceptando (Cmd+Q u otro origen), mostrando diálogo');
+
+    // Mismo flujo que win.on('close')
+    const closeAction = settings.windowBehavior?.closeAction || 'ask';
+
+    if (closeAction === 'minimize') {
+      win?.hide();
+      quitRequested = false;
+      return;
+    }
+
+    if (closeAction === 'close') {
+      const confirmed = await showFinalConfirmation(win);
+      if (confirmed) {
+        forceQuit = true;
+        app.quit();
+      } else {
+        quitRequested = false;
+      }
+      return;
+    }
+
+    // closeAction === 'ask'
+    const result = await showCloseDialog(win, settings.mode);
+
+    // Solo persistir si es 'minimize' o 'close' (no 'restart')
+    if (result.dontAskAgain && (result.action === 'minimize' || result.action === 'close')) {
+      updateAppSettings(app.getPath('userData'), (current) => ({
+        ...current,
+        windowBehavior: {
+          closeAction: result.action as 'minimize' | 'close',
+          autoStart: current.windowBehavior?.autoStart ?? false,
+          startMinimized: current.windowBehavior?.startMinimized ?? false,
+        },
+      }));
+    }
+
+    switch (result.action) {
+      case 'minimize':
+        win?.hide();
+        quitRequested = false;
+        break;
+
+      case 'restart':
+        await stopServer().catch((e) => console.error('[before-quit] stopServer error:', e));
+        forceQuit = true;
+        app.relaunch();
+        app.quit();
+        break;
+
+      case 'close':
+        const confirmed = await showFinalConfirmation(win);
+        if (confirmed) {
+          forceQuit = true;
+          app.quit();
+        } else {
+          quitRequested = false;
+        }
+        break;
+    }
+  } catch (e) {
+    console.error('[before-quit] error en diálogo:', e);
+    quitRequested = false;
+  }
 });
 
 app.on('activate', () => {
