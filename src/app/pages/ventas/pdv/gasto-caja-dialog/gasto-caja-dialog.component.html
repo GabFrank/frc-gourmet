@@ -30,7 +30,7 @@
 
       <mat-form-field appearance="outline" class="gc-moneda">
         <mat-label>Moneda</mat-label>
-        <mat-select formControlName="monedaId" [required]="!isEditing">
+        <mat-select formControlName="monedaId" [required]="!isEditing" [disabled]="isEditing">
           <mat-option *ngFor="let m of monedas" [value]="m.id">{{ m.denominacion }}</mat-option>
         </mat-select>
         <mat-hint *ngIf="isEditing">No se puede cambiar al editar</mat-hint>
@@ -40,7 +40,7 @@
     <div class="gc-row">
       <mat-form-field appearance="outline" class="gc-fp">
         <mat-label>Forma de pago</mat-label>
-        <mat-select formControlName="formaPagoId" [required]="!isEditing">
+        <mat-select formControlName="formaPagoId" [required]="!isEditing" [disabled]="isEditing">
           <mat-option *ngFor="let f of formasPago" [value]="f.id">{{ f.nombre }}</mat-option>
         </mat-select>
         <mat-hint *ngIf="isEditing">No se puede cambiar al editar</mat-hint>
