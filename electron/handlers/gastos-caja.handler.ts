@@ -63,4 +63,51 @@ export function registerGastosCajaHandlers(
     await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
     return await repo.save(entity);
   });
+
+  // Editar un gasto activo (solo admin y gerente)
+  ipcMain.handle('edit-gasto-caja', async (_event, gastoId: number, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+    const repo = dataSource.getRepository(GastoCaja);
+    const cu = getCurrentUser();
+
+    const entity = await repo.findOneBy({ id: gastoId });
+    if (!entity) throw new Error(`Gasto de caja ${gastoId} no encontrado`);
+    if (entity.estado === 'ANULADO') {
+      throw new Error('No se puede editar un gasto anulado. Creá uno nuevo si hace falta.');
+    }
+
+    // Validar datos editables
+    const nuevoMonto = data.monto != null ? Number(data.monto) : entity.monto;
+    if (!nuevoMonto || nuevoMonto <= 0) {
+      throw new Error('El monto debe ser mayor a cero');
+    }
+    if (data.descripcion && !String(data.descripcion).trim()) {
+      throw new Error('La descripción no puede estar vacía');
+    }
+
+    // Actualizar campos editables: monto, descripción, categoría
+    entity.monto = nuevoMonto;
+    if (data.descripcion != null) {
+      entity.descripcion = String(data.descripcion).toUpperCase().trim();
+    }
+    if (data.gastoCategoriaId !== undefined) {
+      entity.gastoCategoria = data.gastoCategoriaId ? ({ id: data.gastoCategoriaId } as any) : null;
+    }
+
+    // Auditoría: updatedBy + updatedAt (BaseModel)
+    await setEntityUserTracking(dataSource, entity, cu?.id, true);
+    return await repo.save(entity);
+  });
+
+  // Obtener un gasto por ID (para edición)
+  ipcMain.handle('get-gasto-caja', async (_event, gastoId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_PDV', 'FINANCIERO_CAJA_VER']);
+    const repo = dataSource.getRepository(GastoCaja);
+    const entity = await repo.findOne({
+      where: { id: gastoId },
+      relations: ['gastoCategoria', 'moneda', 'formaPago', 'caja'],
+    });
+    if (!entity) throw new Error(`Gasto de caja ${gastoId} no encontrado`);
+    return entity;
+  });
 }
