@@ -163,9 +163,20 @@
       </div>
       <div class="resumen-card-body">
         <div class="tile-grid" *ngIf="resumen.gastos?.length">
-          <div class="tile" *ngFor="let g of resumen.gastos">
-            <span class="tile-label">{{ g.descripcion }}{{ g.categoria ? ' · ' + g.categoria : '' }}</span>
-            <span class="tile-value">{{ g.monedaSimbolo }} {{ g.monto | number:'1.0-2' }}</span>
+          <div class="tile tile-with-action" *ngFor="let g of resumen.gastos">
+            <div class="tile-content">
+              <span class="tile-label">{{ g.descripcion }}{{ g.categoria ? ' · ' + g.categoria : '' }}</span>
+              <span class="tile-value">{{ g.monedaSimbolo }} {{ g.monto | number:'1.0-2' }}</span>
+            </div>
+            <button
+              *appHasPermission="'FINANCIERO_CAJA_GESTIONAR'"
+              mat-icon-button
+              class="tile-action-button"
+              [disabled]="g.estado !== 'ACTIVO'"
+              [matTooltip]="g.estado === 'ACTIVO' ? 'Editar gasto' : 'No se puede editar (gasto anulado)'"
+              (click)="editarGasto(g)">
+              <mat-icon>edit</mat-icon>
+            </button>
           </div>
         </div>
         <div *ngIf="!resumen.gastos?.length" class="placeholder-text">SIN GASTOS REGISTRADOS</div>
