@@ -13,6 +13,8 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 
 import { RepositoryService } from 'src/app/database/repository.service';
+import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 /**
  * Registra un gasto pagado con el efectivo de la caja de venta (PdV).
@@ -33,6 +35,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
     MatNativeDateModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    CurrencyInputDirective,
   ],
   templateUrl: './gasto-caja-dialog.component.html',
   styleUrls: ['./gasto-caja-dialog.component.scss'],
@@ -49,6 +52,7 @@ export class CreateGastoCajaDialogComponent implements OnInit {
   gastoCategorias: any[] = [];
   monedas: any[] = [];
   formasPago: any[] = [];
+  decimalesMoneda = 0;
 
   constructor(
     private fb: FormBuilder,
@@ -80,7 +84,17 @@ export class CreateGastoCajaDialogComponent implements OnInit {
       this.form.get('formaPagoId')?.disable();
     }
 
+    // Reaccionar a cambios de moneda para actualizar decimales
+    this.form.get('monedaId')?.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
+
     this.loadLookups();
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.form?.get('monedaId')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   private async loadLookups(): Promise<void> {

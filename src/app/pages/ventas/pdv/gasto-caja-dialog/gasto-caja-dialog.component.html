@@ -23,7 +23,7 @@
     <div class="gc-row">
       <mat-form-field appearance="outline" class="gc-monto">
         <mat-label>Monto</mat-label>
-        <input matInput type="number" formControlName="monto" min="0" required />
+        <input matInput type="text" inputmode="decimal" formControlName="monto" appCurrencyInput [decimals]="decimalesMoneda" required />
         <mat-error *ngIf="form.get('monto')?.hasError('required')">Ingresá el monto</mat-error>
         <mat-error *ngIf="form.get('monto')?.hasError('min')">Debe ser mayor a cero</mat-error>
       </mat-form-field>
