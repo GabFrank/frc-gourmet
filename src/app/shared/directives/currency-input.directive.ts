@@ -61,6 +61,14 @@ export class CurrencyInputDirective implements OnInit, OnDestroy {
     setTimeout(() => this.el.nativeElement.select(), 0);
   }
 
+  @HostListener('keydown', ['$event'])
+  onKeydown(e: KeyboardEvent): void {
+    // Bloquear punto y coma en monedas sin decimales
+    if (this.decimals === 0 && (e.key === '.' || e.key === ',')) {
+      e.preventDefault();
+    }
+  }
+
   @HostListener('blur')
   onBlur(): void {
     const parsed = this.parseInput(this.el.nativeElement.value);
@@ -75,9 +83,23 @@ export class CurrencyInputDirective implements OnInit, OnDestroy {
 
   @HostListener('input', ['$event'])
   onInput(_e: Event): void {
+    // Limpiar separadores decimales en monedas sin decimales
+    let rawValue = this.el.nativeElement.value;
+    if (this.decimals === 0 && (rawValue.includes('.') || rawValue.includes(','))) {
+      // Eliminar separadores manteniendo el cursor
+      const cursorPos = this.el.nativeElement.selectionStart || 0;
+      const cleanedValue = rawValue.replace(/[.,]/g, '');
+      this.el.nativeElement.value = cleanedValue;
+      // Ajustar cursor: retroceder por cada separador eliminado antes del cursor
+      const deletedBefore = (rawValue.substring(0, cursorPos).match(/[.,]/g) || []).length;
+      const newPos = Math.max(0, cursorPos - deletedBefore);
+      this.el.nativeElement.setSelectionRange(newPos, newPos);
+      rawValue = cleanedValue;
+    }
+
     // Mientras escribe, parsear y propagar al model SIN empujar al view (eso sobrescribiria
     // lo que esta tipeando el usuario y rompe la edicion de "." y ",").
-    const parsed = this.parseInput(this.el.nativeElement.value);
+    const parsed = this.parseInput(rawValue);
     this.writingFromControl = true;
     if (this.ngControl?.control) {
       this.ngControl.control.setValue(parsed, {
