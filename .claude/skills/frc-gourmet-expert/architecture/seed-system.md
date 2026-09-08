@@ -58,6 +58,14 @@ Idempotente por `codigo`.
 | Función | Qué siembra | Notas |
 |---|---|---|
 | `seedAdminUserAndRole` | Persona "ADMINISTRADOR SISTEMA" + Usuario `admin/admin` + Rol ADMINISTRADOR con TODOS los permisos | Solo si tabla `usuarios` vacía |
+
+### Login de QA (dev local)
+
+- Usuario `admin`, password `admin123`.
+- El seed inicial sigue siendo `admin/admin` solo si la tabla `usuarios` está vacía. Si ya hay filas, el seed no pisa el password. En modo dev se resetea el hash en Postgres (`frc_gourmet_dev`) a `admin123` y `must_change_password = false`.
+- Nota local: `/home/box/.config/gourmet/admin-pass` debe decir `admin123`.
+- `TEST_GERENTE` / `TEST_CAJERO` / `TEST_MOZO` solo si se corrió `npm run seed:dev-roles -- --confirmar`.
+
 | `syncAdminPermissions` | Asegura que ADMINISTRADOR tenga TODOS los permisos seedeados (corre cada arranque, idempotente) | Clave cuando se agregan permisos nuevos |
 | `seedRolesPlantilla` | Roles `GERENTE` (operativo full salvo sistema), `CAJERO` (PdV + **cobrar** + **operar su caja del turno** + facturar + cajón), `MOZO` (atender mesas y transferir cuentas; **no toca plata**) con permisos curados. Sólo **agrega** los faltantes, nunca quita: los roles custom no se autocorrigen. Auditado con `npm run test:roles-pdv` → [auth-permissions.md](auth-permissions.md) | Idempotente por `descripcion`; no toca roles ya existentes |
 | `seedTipoCliente` | Solo `CONSUMIDOR FINAL` | Reducido 2026-05-11 (antes FRECUENTE 5% / CORPORATIVO 10% con descuentos hardcoded) |
