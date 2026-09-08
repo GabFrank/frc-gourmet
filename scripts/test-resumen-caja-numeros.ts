@@ -177,6 +177,8 @@ async function main() {
   const resumenSqlite: any = await computeResumenCaja(ds, caja.id);
   ok(resumenSqlite.efectivoPorMoneda[gs.id] === efectivoGs, 'el efectivo coincide con el de Postgres');
   ok(resumenSqlite.esperadoPorMoneda[gs.id] === esperadoGs, 'el esperado coincide');
+  const gastoSqlite = resumenSqlite.gastos?.find((g: any) => g.descripcion === 'GASTO PRUEBA');
+  ok(gastoSqlite?.estado === 'ACTIVO', 'el gasto SQLite también incluye estado ACTIVO', gastoSqlite);
 
   console.log(`\n[resumen-caja-numeros] ${passed} OK, ${failed} fallidos`);
   await ds.destroy();

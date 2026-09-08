@@ -28,10 +28,12 @@ La edición de gastos de caja está restringida por permisos:
 
 El botón de editar en el listado de gastos:
 
-- Solo se muestra para gastos con estado `ACTIVO`
-- Está disponible incluso cuando la caja está cerrada
+- Se renderiza siempre (con el permiso `FINANCIERO_CAJA_GESTIONAR`)
+- Está habilitado solo para gastos con estado `ACTIVO`
+- Los gastos anulados tienen el botón deshabilitado
+- Funciona incluso cuando la caja está cerrada
 - El resumen de caja lee los gastos `ACTIVO` de forma dinámica desde la base de datos
-- El payload del resumen incluye el campo `estado` para habilitar/deshabilitar el botón de edición correctamente
+- El payload del resumen incluye el campo `estado` para habilitar/deshabilitar el botón correctamente
 
 ## Restricciones de Edición
 
