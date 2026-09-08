@@ -99,6 +99,8 @@ async function main() {
   const { Pago } = E('compras/pago.entity');
   const { PagoDetalle } = E('compras/pago-detalle.entity');
   const { Venta } = E('ventas/venta.entity');
+  const { GastoCaja } = E('financiero/gasto-caja.entity');
+  const { GastoCategoria } = E('financiero/gasto-categoria.entity');
 
   const save = (ent: any, data: any) => ds.getRepository(ent).save(ds.getRepository(ent).create(data as any) as any);
 
@@ -137,6 +139,14 @@ async function main() {
   await mkVenta([{ fp: tarjeta, valor: 80000 }]);
   await mkVenta([{ fp: efectivo, valor: 40000 }, { fp: efectivo, valor: 20000, tipo: 'VUELTO' }]);
 
+  // Gasto de caja: 10.000 Gs en efectivo (descuenta del esperado)
+  const categoria: any = await save(GastoCategoria, { nombre: 'SERVICIOS', activo: true });
+  await save(GastoCaja, {
+    caja: { id: caja.id }, gastoCategoria: { id: categoria.id },
+    descripcion: 'GASTO PRUEBA', monto: 10000, moneda: { id: gs.id },
+    formaPago: { id: efectivo.id }, fecha: new Date(), estado: 'ACTIVO',
+  });
+
   // ── Con el DataSource "Postgres" ──────────────────────────────────────────
   console.log('\n[1] Resumen con decimales como string (Postgres)');
   const resumen: any = await computeResumenCaja(comoPostgres(ds), caja.id);
@@ -153,13 +163,22 @@ async function main() {
   ok(totalGs === 300000, 'total de ventas = 300.000 (incluye tarjeta, neto de vuelto)', totalGs);
   ok(aperturaGs === 500000, 'el conteo de apertura suma 500.000', aperturaGs);
   ok(Number.isFinite(esperadoGs), 'el esperado NO es NaN', esperadoGs);
-  ok(esperadoGs === 720000, 'esperado = apertura 500.000 + efectivo 220.000', esperadoGs);
+  // Esperado = apertura 500.000 + efectivo 220.000 - gasto 10.000 = 710.000
+  ok(esperadoGs === 710000, 'esperado = apertura 500k + efectivo 220k - gasto 10k', esperadoGs);
+
+  // Verificar que el gasto aparece en el payload con estado ACTIVO
+  ok(resumen.gastos && resumen.gastos.length > 0, 'el resumen incluye gastos de la caja');
+  const gasto = resumen.gastos.find((g: any) => g.descripcion === 'GASTO PRUEBA');
+  ok(gasto != null, 'el gasto GASTO PRUEBA está en el payload', resumen.gastos);
+  ok(gasto?.estado === 'ACTIVO', 'el gasto en el payload incluye estado ACTIVO', gasto);
 
   // ── Contra el DataSource normal (SQLite): mismo resultado ─────────────────
   console.log('\n[2] Mismo resumen contra SQLite: idéntico');
   const resumenSqlite: any = await computeResumenCaja(ds, caja.id);
   ok(resumenSqlite.efectivoPorMoneda[gs.id] === efectivoGs, 'el efectivo coincide con el de Postgres');
   ok(resumenSqlite.esperadoPorMoneda[gs.id] === esperadoGs, 'el esperado coincide');
+  const gastoSqlite = resumenSqlite.gastos?.find((g: any) => g.descripcion === 'GASTO PRUEBA');
+  ok(gastoSqlite?.estado === 'ACTIVO', 'el gasto SQLite también incluye estado ACTIVO', gastoSqlite);
 
   console.log(`\n[resumen-caja-numeros] ${passed} OK, ${failed} fallidos`);
   await ds.destroy();
