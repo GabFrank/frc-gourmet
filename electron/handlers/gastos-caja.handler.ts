@@ -101,7 +101,7 @@ export function registerGastosCajaHandlers(
 
   // Obtener un gasto por ID (para edición)
   ipcMain.handle('get-gasto-caja', async (_event, gastoId: number) => {
-    await ensurePermission(dataSource, getCurrentUser, ['VENTAS_PDV', 'FINANCIERO_CAJA_VER']);
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
     const repo = dataSource.getRepository(GastoCaja);
     const entity = await repo.findOne({
       where: { id: gastoId },
