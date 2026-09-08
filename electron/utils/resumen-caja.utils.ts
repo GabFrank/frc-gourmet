@@ -176,6 +176,7 @@ export async function computeResumenCaja(dataSource: DataSource, cajaId: number)
     }
     return {
       id: g.id,
+      estado: g.estado,
       descripcion: g.descripcion,
       monto,
       monedaId,
