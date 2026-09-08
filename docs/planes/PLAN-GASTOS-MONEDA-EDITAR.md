@@ -189,42 +189,49 @@ El backend debe **ya** rechazar o truncar decimales en monedas sin decimales. In
 
 ---
 
-## Feature B: Editar gastos y recalcular cierre
+## Feature B: Editar gastos de caja (GastoCaja) y recalcular cierre
 
-### Alcance
+### Alcance DEFINITIVO (post-decisiones de Gabriel)
 
 **Qué hace:**
 
-- El **administrador** o **gerente** puede editar gastos existentes:
-  - Monto, descripción, categoría, fecha, proveedor, forma de pago, moneda.
-  - Montos de `GastoDetalle` (si el gasto es multi-moneda/multi-FP).
-- Al guardar, el sistema:
-  1. Revierte los movimientos de `CajaMayorMovimiento` del monto viejo.
-  2. Actualiza los saldos de `CajaMayorSaldo`.
-  3. Crea nuevos movimientos con el monto corregido.
-  4. Persiste auditoría (usuario, timestamp, monto anterior).
-- Los reportes y cierres leen los saldos actualizados automáticamente.
+- El **administrador** o **gerente** puede editar gastos de caja existentes (`GastoCaja`):
+  - **Campos editables:** monto, descripción, categoría.
+  - **Campos NO editables (por simplicidad):** fecha, moneda, forma de pago.
+- Al guardar:
+  1. Actualizar el registro de `GastoCaja` con los nuevos valores.
+  2. Registrar auditoría vía `updatedBy` + `updatedAt` (campos de `BaseModel`).
+- El resumen de cierre (`computeResumenCaja`) actualiza automáticamente:
+  - Lee gastos con `estado = 'ACTIVO'` (línea 166-188 de `resumen-caja.utils.ts`).
+  - Suma montos actuales → NO hay snapshots persistidos que recalcular.
 
 **Qué NO hace:**
 
-- NO permite editar gastos pagados desde cuenta bancaria (`destinoTipo = CUENTA_BANCARIA`) — estos deben anularse y recrearse (restricción ya existente en `edit-gasto`).
-- NO permite borrar gastos (anular sigue siendo la única forma de eliminar lógicamente).
-- NO cambia el flujo de alta diferida (Feature A es independiente de Feature B).
+- NO edita `Gasto` de Caja Mayor (handler `edit-gasto` ya existe; fuera de alcance).
+- NO permite borrar gastos (anular con `anular-gasto-caja` sigue siendo el único camino).
+- NO cambia fecha/moneda/forma de pago (simplifica validación y evita romper conteos).
+- NO requiere migración (usa `updatedBy` + `updatedAt` de `BaseModel`).
 
 ### Permisos
 
-**Handler existente:** `edit-gasto` (línea 1456-1584 de `caja-mayor.handler.ts`) ya existe y pide `CAJA_MAYOR_OPERAR`.
+**Handler:** `edit-gasto-caja` (a crear) debe validar con `ensurePermission`.
 
-**Roles que tienen `CAJA_MAYOR_OPERAR`:**
+**Verificar permiso real del handler `create-gasto-caja`:**
+- Línea 19 de `gastos-caja.handler.ts`: `ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV')`.
 
-- ✅ **ADMINISTRADOR** (tiene todos los permisos por `syncAdminPermissions`)
-- ✅ **GERENTE** (línea 500 de `seed-system.ts`)
-- ❌ **CAJERO** (NO lo tiene — correcto, no debe editar gastos)
-- ❌ **MOZO** (NO lo tiene)
+**¿Admin y gerente tienen `VENTAS_PDV`?**
+- **GERENTE:** SÍ (línea 480 de `seed-system.ts`).
+- **ADMINISTRADOR:** SÍ (tiene todos los permisos).
+- **CAJERO:** SÍ (línea 527 de `seed-system.ts`).
 
-**Decisión:** Mantener permiso existente `CAJA_MAYOR_OPERAR`. Admin y gerente ya pueden editar; no hace falta crear permiso nuevo.
+**Problema:** El permiso `VENTAS_PDV` lo tiene también el cajero, pero Gabriel especificó "solo admin y gerente".
 
-**UI:** El botón "Editar" en la lista de gastos ya existe y llama `editGasto()` — solo revisar que esté correctamente gateado con `*appHasPermission="'CAJA_MAYOR_OPERAR'"`.
+**Opciones:**
+1. Crear permiso nuevo `VENTAS_GASTO_CAJA_EDITAR` (solo admin + gerente).
+2. Usar `VENTAS_PDV` y confiar en la UI (botón no visible para cajero).
+3. Usar `FINANCIERO_CAJA_GESTIONAR` (admin + gerente; línea 499 de seed).
+
+**Decisión:** Usar `FINANCIERO_CAJA_GESTIONAR` — es el permiso de "gestionar cajas" que admin + gerente tienen y cajero NO (línea 540 de seed: cajero solo tiene `FINANCIERO_CAJA_VER` + `FINANCIERO_CAJA_OPERAR`).
 
 ### Auditoría de cambios
 
@@ -256,12 +263,18 @@ Solo agregar `montoAnterior` y reutilizar `updatedBy` + `updatedAt` de `BaseMode
 
 ### Recalcular cierre de caja
 
-**Cómo funciona actualmente:**
+**Cómo funciona actualmente (confirmado por lectura de código):**
 
-- El cierre de una caja PdV genera un `RetiroCaja` con detalles por moneda/FP.
-- Ese retiro se ingresa a Caja Mayor (`ingresar-retiro-caja`, línea ~1676 de `caja-mayor.handler.ts`), creando movimientos `INGRESO_RETIRO_CAJA` o `INGRESO_CIERRE_CAJA`.
-- Los gastos de una caja PdV son `GastoCaja` (tabla separada, handler `gastos-caja.handler.ts`) — **NO son `Gasto`**.
-- Los `Gasto` (Caja Mayor) NO afectan directamente el cierre de una caja PdV.
+- El cierre de una caja PdV se computa on-the-fly en `computeResumenCaja` (`electron/utils/resumen-caja.utils.ts`).
+- NO hay snapshots persistidos de totales de gastos.
+- El resumen lee todos los gastos con `estado = 'ACTIVO'` (línea 166-170).
+- Suma montos de gastos en efectivo y calcula esperado como: `apertura + efectivo - gastoEfectivo - egresoEfectivo - retiroEfectivo`.
+
+**Conclusión:**
+
+- Al editar un gasto (actualizar su `monto`), el resumen **recalcula automáticamente** porque lee las filas activas de la BD.
+- NO hace falta "recalcular cierre persistido" — no existe tal cosa.
+- El ticket de cierre, imagen de WhatsApp, y reportes de mes se generan on-demand llamando a `computeResumenCaja`.
 
 **Confusión en el requerimiento:**
 
@@ -345,116 +358,103 @@ El handler `edit-gasto` (línea 1456-1584) ya hace:
 
 ---
 
-## Fases de implementación
-
-### Fase 0: Investigación y decisiones
-
-**Entregable:** Respuestas de Gabriel a preguntas abiertas.
-
-**Preguntas:**
-
-1. Feature A: ¿Opción A (extender `CurrencyInputDirective`) u Opción B (nueva directiva)?
-2. Feature B: ¿Auditoría completa (migración de campos) o mínima (reutilizar `updatedBy`)?
-3. Feature B: Confirmar tipo de gasto (¿`GastoCaja` o `Gasto`?).
-4. Feature B: ¿Qué reportes mostraban el monto incorrecto? (para test de verificación).
-
-**Tiempo estimado:** 1 interacción con Gabriel.
-
----
+## Fases de implementación (ACTUALIZADAS)
 
 ### Fase 1: Feature A — Guard de inputs sin decimales
 
 **Tareas:**
 
-1. **Inventario completo de inputs:** `grep -r "appCurrencyInput" src/ projects/mobile/`.
-2. **Implementar guard:**
-   - Si Opción A: Agregar `@HostListener('keydown')` y `@HostListener('paste')` a `CurrencyInputDirective`.
-   - Si Opción B: Crear `NoDecimalSeparatorDirective` + aplicar en todos los inputs inventariados.
-3. **Test manual:**
-   - Abrir formulario de gasto, seleccionar PYG (decimales=0).
+1. **Extender `CurrencyInputDirective`:**
+   - Agregar `@HostListener('keydown', ['$event'])`: si `decimals === 0` y tecla es `.` o `,` → `preventDefault()`.
+   - Agregar `@HostListener('input', ['$event'])`: si `decimals === 0`, limpiar `.` y `,` del valor sin romper el cursor.
+2. **Test manual:**
+   - Abrir formulario de gasto de caja, seleccionar PYG (`decimales=0`).
    - Intentar tipear `.` → bloqueado.
    - Copiar "1.234.567" y pegar → se limpia a "1234567".
-   - Cambiar a USD (decimales=2) → `.` y `,` funcionan normal.
+   - Cambiar a USD (`decimales=2`) → `.` y `,` funcionan normal.
+3. **Build:** `npm run build` (o solo `npm run electron:serve-tsc` si no toca renderer).
 4. **Commit:** "feat(monedas): bloquear separadores decimales en monedas sin decimales"
 
-**Riesgos:**
-
-- Muchos inputs dispersos (10+ componentes) — fácil olvidar alguno.
-- Mobile PWA tiene su propio `CurrencyInputDirective` (verificar si es copia o import del desktop).
-
-**Mitigación:** Script de verificación que busque `appCurrencyInput` sin la nueva directiva (si Opción B).
+**Archivos:**
+- `src/app/shared/directives/currency-input.directive.ts`
 
 ---
 
-### Fase 2: Feature B — Auditoría (si Gabriel confirma completa)
+### Fase 2: Feature B — Handler y entidad
 
 **Tareas:**
 
-1. **Migración:** Agregar columnas `monto_anterior`, `descripcion_anterior`, `editado_por_id`, `fecha_edicion` a `gastos`.
-   - Driver-aware (SQLite + Postgres).
-   - Nombre: `<epoch-ms>-AuditoriaGasto.ts`.
-   - Registrar en `getMigrations()` de `database.config.ts`.
-2. **Entity:** Agregar campos a `Gasto` (`gasto.entity.ts`).
-3. **Handler:** Modificar `edit-gasto` (antes del merge, línea ~1518) para capturar valores viejos.
-4. **UI (opcional):** Tooltip/chip en lista de gastos mostrando "Editado por X el Y" si `fechaEdicion` existe.
-5. **Commit:** "feat(gastos): auditoría de ediciones"
+1. **Handler `edit-gasto-caja`:**
+   - Archivo: `electron/handlers/gastos-caja.handler.ts`.
+   - Validar con `ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR')`.
+   - Buscar gasto por ID + validar que existe y está ACTIVO.
+   - Actualizar: `monto`, `descripcion`, `gastoCategoriaId`.
+   - NO editar: `fecha`, `moneda`, `formaPago`, `caja`.
+   - `setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true)` (isUpdate=true).
+   - Guardar.
+2. **Registrar handler:** Ya está en `registerGastosCajaHandlers` — solo agregar el `ipcMain.handle`.
+3. **Build:** `npm run electron:serve-tsc`.
+4. **Commit:** "feat(gastos-caja): handler para editar gastos de caja"
 
-**Si Gabriel elige auditoría mínima:** Saltar esta fase.
+**Archivos:**
+- `electron/handlers/gastos-caja.handler.ts`
 
 ---
 
-### Fase 3: Feature B — Verificar recálculo de cierre
+### Fase 3: Feature B — UI
 
 **Tareas:**
 
-1. **Investigar handlers de reportes:**
-   - `get-dashboard-caja-mayor-kpis` (dashboard-caja-mayor.handler.ts).
-   - `get-movimientos-caja-mayor-consolidados` (usado por la lista de movimientos).
-   - Reporte de cierre de mes (si existe handler específico para gastos).
-2. **Verificar que lean movimientos actualizados:**
-   - ¿Cachean saldos de algún snapshot persistido?
-   - Si cachean: Invalidar cache al editar gasto.
-3. **Test E2E:**
-   - Crear gasto de 1M Gs.
-   - Verificar que dashboard muestre "Gastos del mes: 1M".
-   - Editar a 730k.
-   - Verificar que dashboard muestre "Gastos del mes: 730k" (sin reiniciar la app).
-4. **Commit:** "fix(gastos): verificar recálculo automático de reportes tras edición"
+1. **Modificar `CreateGastoCajaDialogComponent`:**
+   - Agregar input `@Input() gastoId?: number` (para modo edición).
+   - Si `gastoId` existe: cargar gasto con `getGastoCaja(gastoId)` y popular form.
+   - Método `guardar()`: bifurcar — si `gastoId` → `editGastoCaja()`, sino → `createGastoCaja()`.
+   - Título dinámico: "Registrar gasto" vs "Editar gasto".
+2. **Preload (`preload.ts`):**
+   - Agregar `editGastoCaja: (id: number, data: any) => invoke('edit-gasto-caja', id, data)`.
+   - Agregar `getGastoCaja: (id: number) => invoke('get-gasto-caja', id)` (si no existe).
+3. **RepositoryService:**
+   - Agregar método abstracto + impl en `repository-ipc.service.ts`.
+4. **Botón "Editar" en listado de gastos del cajón:**
+   - Verificar dónde se lista (probablemente en `utilitarios-dialog` o componente de caja).
+   - Agregar botón con `*appHasPermission="'FINANCIERO_CAJA_GESTIONAR'"`.
+   - Al click: `dialog.open(CreateGastoCajaDialogComponent, { data: { gastoId, cajaId, cajaNombre } })`.
+5. **Build:** `npm run build`.
+6. **Commit:** "feat(gastos-caja): UI para editar gastos de caja"
 
-**Si la asunción de Caja Mayor es incorrecta:**
-
-- Investigar `GastoCaja` y `ResumenCaja`.
-- Implementar `edit-gasto-caja` análogo a `edit-gasto`.
-- Actualizar el plan con hallazgos.
+**Archivos:**
+- `src/app/pages/ventas/pdv/gasto-caja-dialog/gasto-caja-dialog.component.ts`
+- `src/app/pages/ventas/pdv/gasto-caja-dialog/gasto-caja-dialog.component.html`
+- `preload.ts`
+- `src/app/database/repository.service.ts`
+- `src/app/database/repository-ipc.service.ts`
+- (Componente que lista gastos — identificar y agregar botón)
 
 ---
 
-### Fase 4: Testing integral y manual de pruebas
+### Fase 4: Testing manual
 
 **Tareas:**
 
-1. **Manual de pruebas:** `docs/testing/TESTING-CHECKLIST-GASTOS-MONEDA.md`.
-   - Feature A: Probar con PYG, USD, BRL en cada tipo de input (al menos gastos, operaciones financieras, vales).
-   - Feature B: Los 4 escenarios descritos arriba.
-2. **Test unitario (opcional):**
-   - Mock de `CurrencyInputDirective` con `decimals=0` → simular keydown de `.` → verificar que `e.preventDefault()` se llama.
-3. **Verificar que NO haya regresión:**
-   - Inputs de USD/BRL siguen aceptando decimales.
-   - Gastos de cuenta bancaria siguen bloqueados para edición.
-4. **Commit:** "docs: manual de pruebas para gastos y monedas"
+1. **Feature A:**
+   - Abrir formulario de gasto, probar con PYG y USD.
+2. **Feature B:**
+   - Crear gasto de 1.000.000 Gs.
+   - Editar a 730.000 Gs.
+   - Verificar que resumen de cierre muestre el monto correcto.
+   - Verificar que `updatedBy` + `updatedAt` se actualizan.
+3. **Commit:** "test: verificar features A y B manualmente"
 
 ---
 
-### Fase 5: Documentación y skill
+### Fase 5: Documentación
 
 **Tareas:**
 
-1. **Actualizar `.claude/skills/frc-gourmet-expert/domains/financiero-caja-mayor.md`:**
-   - En §"Gastos", agregar nota sobre edición con auditoría.
-   - En §"Handler", actualizar que `edit-gasto` captura monto anterior.
-2. **Si se agrega directiva nueva:** Documentar en `conventions/coding-rules.md` que inputs de moneda usan `appCurrencyInput` + `appNoDecimalSeparator` cuando aplica.
-3. **Actualizar `reference/handlers-index.md`:** Confirmar que `edit-gasto` está listado con su permiso.
-4. **Commit:** "docs: actualizar skill con edición de gastos y guard de monedas"
+1. **Actualizar skill:**
+   - `domains/financiero-caja-mayor.md` → mencionar que gastos de caja son editables.
+   - O crear `domains/gastos-caja.md` si hace falta.
+2. **Commit:** "docs: actualizar plan y skill con features implementadas"
 
 ---
 
