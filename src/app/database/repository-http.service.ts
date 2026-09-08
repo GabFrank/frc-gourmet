@@ -1659,6 +1659,12 @@ export class RepositoryHttpService extends RepositoryService {
   getGastosCaja(cajaId: number, incluirAnulados?: boolean): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getGastosCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getGastoCaja(gastoId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getGastoCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  editGastoCaja(gastoId: number, data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.editGastoCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   anularGastoCaja(gastoId: number, motivo?: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.anularGastoCaja() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

@@ -1,12 +1,16 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
+import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 
 import { RepositoryService } from '../../../database/repository.service';
+import { PermissionService } from '../../../services/permission.service';
+import { HasPermissionDirective } from '../../directives/has-permission.directive';
+import { CreateGastoCajaDialogComponent } from 'src/app/pages/ventas/pdv/gasto-caja-dialog/gasto-caja-dialog.component';
 
 export interface ResumenCajaDialogData {
   cajaId: number;
@@ -23,6 +27,8 @@ export interface ResumenCajaDialogData {
     MatButtonModule,
     MatIconModule,
     MatDividerModule,
+    MatTooltipModule,
+    HasPermissionDirective,
   ],
 })
 export class ResumenCajaDialogComponent implements OnInit {
@@ -39,7 +45,9 @@ export class ResumenCajaDialogComponent implements OnInit {
   constructor(
     public dialogRef: MatDialogRef<ResumenCajaDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: ResumenCajaDialogData,
-    private repositoryService: RepositoryService
+    private repositoryService: RepositoryService,
+    private permissionService: PermissionService,
+    private dialog: MatDialog
   ) {}
 
   async ngOnInit(): Promise<void> {
@@ -85,5 +93,26 @@ export class ResumenCajaDialogComponent implements OnInit {
 
   cerrar(): void {
     this.dialogRef.close();
+  }
+
+  editarGasto(gasto: any): void {
+    if (!this.permissionService.has('FINANCIERO_CAJA_GESTIONAR')) return;
+    if (gasto.estado !== 'ACTIVO') return;
+
+    const ref = this.dialog.open(CreateGastoCajaDialogComponent, {
+      width: '560px',
+      disableClose: true,
+      data: {
+        cajaId: this.data.cajaId,
+        cajaNombre: this.resumen?.caja?.dispositivo?.nombre || `Caja #${this.data.cajaId}`,
+        gastoId: gasto.id,
+      },
+    });
+
+    ref.afterClosed().subscribe(result => {
+      if (result?.success) {
+        this.ngOnInit();
+      }
+    });
   }
 }

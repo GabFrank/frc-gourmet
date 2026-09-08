@@ -13,6 +13,8 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 
 import { RepositoryService } from 'src/app/database/repository.service';
+import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
+import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 
 /**
  * Registra un gasto pagado con el efectivo de la caja de venta (PdV).
@@ -33,6 +35,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
     MatNativeDateModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    CurrencyInputDirective,
   ],
   templateUrl: './gasto-caja-dialog.component.html',
   styleUrls: ['./gasto-caja-dialog.component.scss'],
@@ -43,10 +46,13 @@ export class CreateGastoCajaDialogComponent implements OnInit {
 
   cajaId = 0;
   cajaNombre = '';
+  gastoId: number | null = null;
+  isEditing = false;
 
   gastoCategorias: any[] = [];
   monedas: any[] = [];
   formasPago: any[] = [];
+  decimalesMoneda = 0;
 
   constructor(
     private fb: FormBuilder,
@@ -59,6 +65,8 @@ export class CreateGastoCajaDialogComponent implements OnInit {
   ngOnInit(): void {
     this.cajaId = this.data?.cajaId || 0;
     this.cajaNombre = this.data?.cajaNombre || '';
+    this.gastoId = this.data?.gastoId || null;
+    this.isEditing = !!this.gastoId;
 
     this.form = this.fb.group({
       gastoCategoriaId: [null],
@@ -69,7 +77,24 @@ export class CreateGastoCajaDialogComponent implements OnInit {
       fecha: [new Date(), Validators.required],
     });
 
+    // En modo edición, deshabilitar fecha, moneda, forma de pago
+    if (this.isEditing) {
+      this.form.get('fecha')?.disable();
+      this.form.get('monedaId')?.disable();
+      this.form.get('formaPagoId')?.disable();
+    }
+
+    // Reaccionar a cambios de moneda para actualizar decimales
+    this.form.get('monedaId')?.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
+
     this.loadLookups();
+  }
+
+  private recalcDecimalesMoneda(): void {
+    const id = this.form?.get('monedaId')?.value;
+    const m = this.monedas.find((x: any) => x.id === id);
+    const dec = Number(m?.decimales);
+    this.decimalesMoneda = Number.isFinite(dec) ? dec : 0;
   }
 
   private async loadLookups(): Promise<void> {
@@ -82,10 +107,33 @@ export class CreateGastoCajaDialogComponent implements OnInit {
       this.gastoCategorias = (categorias || []).filter((c: any) => c.activo !== false);
       this.monedas = monedas || [];
       this.formasPago = (formasPago || []).filter((f: any) => f.activo !== false);
-      this.preseleccionar();
+
+      if (this.isEditing && this.gastoId) {
+        await this.cargarGasto();
+      } else {
+        this.preseleccionar();
+      }
     } catch (e) {
       console.error('Error cargando datos del gasto:', e);
       this.snackBar.open('Error al cargar datos', 'Cerrar', { duration: 3000 });
+    }
+  }
+
+  private async cargarGasto(): Promise<void> {
+    try {
+      const gasto = await firstValueFrom(this.repositoryService.getGastoCaja(this.gastoId!));
+      this.form.patchValue({
+        gastoCategoriaId: gasto.gastoCategoria?.id || null,
+        descripcion: gasto.descripcion,
+        monto: Number(gasto.monto),
+        monedaId: gasto.moneda?.id || null,
+        formaPagoId: gasto.formaPago?.id || null,
+        fecha: gasto.fecha ? new Date(gasto.fecha) : new Date(),
+      });
+    } catch (e: any) {
+      console.error('Error cargando gasto:', e);
+      this.snackBar.open('Error al cargar el gasto', 'Cerrar', { duration: 3000 });
+      this.dialogRef?.close();
     }
   }
 
@@ -105,23 +153,35 @@ export class CreateGastoCajaDialogComponent implements OnInit {
     }
     this.saving = true;
     try {
-      const v = this.form.value;
-      await firstValueFrom(this.repositoryService.createGastoCaja({
-        cajaId: this.cajaId,
-        gastoCategoriaId: v.gastoCategoriaId || null,
-        descripcion: v.descripcion,
-        monto: Number(v.monto),
-        monedaId: v.monedaId,
-        formaPagoId: v.formaPagoId,
-        fecha: v.fecha,
-      }));
-      this.snackBar.open('Gasto registrado', 'Cerrar', { duration: 2500 });
+      const v = this.form.getRawValue(); // getRawValue incluye campos disabled
+
+      if (this.isEditing && this.gastoId) {
+        // Modo edición
+        await firstValueFrom(this.repositoryService.editGastoCaja(this.gastoId, {
+          descripcion: v.descripcion,
+          monto: Number(v.monto),
+          gastoCategoriaId: v.gastoCategoriaId || null,
+        }));
+        this.snackBar.open('Gasto actualizado', 'Cerrar', { duration: 2500 });
+      } else {
+        // Modo creación
+        await firstValueFrom(this.repositoryService.createGastoCaja({
+          cajaId: this.cajaId,
+          gastoCategoriaId: v.gastoCategoriaId || null,
+          descripcion: v.descripcion,
+          monto: Number(v.monto),
+          monedaId: v.monedaId,
+          formaPagoId: v.formaPagoId,
+          fecha: v.fecha,
+        }));
+        this.snackBar.open('Gasto registrado', 'Cerrar', { duration: 2500 });
+      }
       this.dialogRef?.close({ success: true });
     } catch (e: any) {
-      console.error('Error registrando gasto:', e);
+      console.error('Error guardando gasto:', e);
       const msg = e?.message?.includes('Error invoking remote method')
-        ? 'Error al registrar el gasto'
-        : e?.message || 'Error al registrar el gasto';
+        ? (this.isEditing ? 'Error al actualizar el gasto' : 'Error al registrar el gasto')
+        : e?.message || (this.isEditing ? 'Error al actualizar el gasto' : 'Error al registrar el gasto');
       this.snackBar.open(msg, 'Cerrar', { duration: 4000 });
     } finally {
       this.saving = false;
