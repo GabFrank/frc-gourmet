@@ -254,6 +254,14 @@ VENTA              #123
 ==============================
 ```
 
+### Encabezado: delivery/retiro (2026-09)
+
+`buildEncabezadoUbicacion` distingue el modo del delivery:
+- **`Delivery.modo === DELIVERY`** → imprime **"Delivery"** en grande
+- **`Delivery.modo === RETIRO`** → imprime **"Retirar en local"** en grande
+- Sin delivery (mostrador) → **"PARA LLEVAR"** (sin cambios)
+- Si coexisten delivery + mesa + comanda → **las tres referencias van en grande**
+
 El enrutamiento a estación (cocina, barra, parrilla, etc.) es **100% por la M2M `producto_sectores`** (ver abajo), NO por un campo `Producto.estacion` (ese campo no existe). El flag `Producto.requiereComanda` decide si el item se imprime; mesa/comanda solo deciden SI imprimir, no DÓNDE.
 
 ## Documentación existente
