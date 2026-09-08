@@ -1,7 +1,7 @@
 # Plan — Incluir `estado` en el payload de gastos del resumen de caja
 
-> Branch: `fix/gasto-caja-estado-resumen-cd00` · base `develop`
-> Estado: **plan aprobado** · NO implementado aún
+> Branch: `cursor/gasto-caja-estado-resumen-cd00` · base `develop`
+> Estado: **implementado** · PR #292 draft
 
 ## 1. Diagnóstico
 
