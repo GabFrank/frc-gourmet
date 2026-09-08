@@ -39,7 +39,7 @@ import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity
 import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
-import { Delivery } from '../../src/app/database/entities/ventas/delivery.entity';
+import { Delivery, DeliveryModo } from '../../src/app/database/entities/ventas/delivery.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import {
@@ -171,11 +171,31 @@ export function buildEncabezadoUbicacion(
   mesaNumero: number | null | undefined,
   comandaRef: string | null | undefined,
   ticketText: (t: string, o?: any) => any,
+  deliveryModo?: DeliveryModo | null,
 ): any[] {
   const lines: any[] = [];
   const hayMesa = mesaNumero !== null && mesaNumero !== undefined && `${mesaNumero}` !== '';
   const hayComanda = !!comandaRef;
+  const hayDelivery = !!deliveryModo;
 
+  // Caso DELIVERY o RETIRO: las tres referencias van en grande si coexisten
+  if (hayDelivery) {
+    const textoDelivery = deliveryModo === DeliveryModo.DELIVERY
+      ? 'Delivery'
+      : 'Retirar en local';
+    lines.push(ticketText(textoDelivery, { align: 'C', bold: true, size: 'big' }));
+    if (hayMesa) {
+      lines.push(ticketText('MESA', { align: 'C' }));
+      lines.push(ticketText(String(mesaNumero), { align: 'C', bold: true, size: 'big' }));
+    }
+    if (hayComanda) {
+      lines.push(ticketText('COMANDA', { align: 'C' }));
+      lines.push(ticketText(String(comandaRef), { align: 'C', bold: true, size: 'big' }));
+    }
+    return lines;
+  }
+
+  // Caso SIN delivery: lógica original sin cambios
   if (!hayMesa && !hayComanda) {
     lines.push(ticketText('PARA LLEVAR', { align: 'C', bold: true, size: 'tall' }));
     return lines;
@@ -592,6 +612,7 @@ export async function printComandaInternal(
   const refMesa = mesa?.numero ? `MESA ${mesa.numero}` : null;
   const refComanda = comanda?.codigo || (comanda?.numero ? `#${comanda.numero}` : null);
   const refStr = refMesa || (refComanda ? `COMANDA ${refComanda}` : 'PARA LLEVAR');
+  const deliveryModo = (venta as any).delivery?.modo ?? null;
 
   // 5. Por cada job: construir spec, imprimir, registrar
   for (const job of jobsByPrinter.values()) {
@@ -607,7 +628,7 @@ export async function printComandaInternal(
       ticketText(ticketFmtFechaHora(new Date()), { align: 'C' }),
       ticketSeparador('='),
     ];
-    lines.push(...buildEncabezadoUbicacion(mesa?.numero, refComanda, ticketText));
+    lines.push(...buildEncabezadoUbicacion(mesa?.numero, refComanda, ticketText, deliveryModo));
     lines.push(ticketText(`TICKET #${ventaId}`, { align: 'C', bold: true, size: 'tall' }));
     lines.push(ticketSeparador('='));
 

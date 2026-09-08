@@ -407,6 +407,51 @@ async function main() {
        'pedido de la web sin delivery (retiro): también le corresponde', rWeb);
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Test delivery/retiro en encabezado de comanda
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    console.log('\n[delivery/retiro en comanda]');
+    const { Delivery } = await import('../src/app/database/entities/ventas/delivery.entity');
+    const { buildEncabezadoUbicacion } = await import('../electron/handlers/documentos-tickets.handler');
+    const ticketText = (t: string, o?: any) => ({ type: 'text', text: t, ...o });
+
+    // Caso 1: delivery DELIVERY
+    const delDelivery: any = await ds.getRepository(Delivery).save(
+      ds.getRepository(Delivery).create({
+        estado: 'ABIERTO', modo: 'DELIVERY', telefono: '0981111111', fechaAbierto: new Date(),
+      } as any),
+    );
+    const linesDelivery = buildEncabezadoUbicacion(null, null, ticketText, delDelivery.modo);
+    const txtDelivery = render(linesDelivery, WIDTH);
+    ok(txtDelivery.includes('Delivery'), 'delivery DELIVERY: el ticket dice "Delivery"', txtDelivery);
+    ok(!txtDelivery.includes('PARA LLEVAR'), 'delivery DELIVERY: NO dice "PARA LLEVAR"', txtDelivery);
+
+    // Caso 2: delivery RETIRO
+    const delRetiro: any = await ds.getRepository(Delivery).save(
+      ds.getRepository(Delivery).create({
+        estado: 'ABIERTO', modo: 'RETIRO', telefono: '0981222222', fechaAbierto: new Date(),
+      } as any),
+    );
+    const linesRetiro = buildEncabezadoUbicacion(null, null, ticketText, delRetiro.modo);
+    const txtRetiro = render(linesRetiro, WIDTH);
+    ok(txtRetiro.includes('Retirar en local'), 'delivery RETIRO: el ticket dice "Retirar en local"', txtRetiro);
+    ok(!txtRetiro.includes('PARA LLEVAR'), 'delivery RETIRO: NO dice "PARA LLEVAR"', txtRetiro);
+
+    // Caso 3: mostrador sin delivery (no cambió)
+    const linesMostrador = buildEncabezadoUbicacion(null, null, ticketText, null);
+    const txtMostrador = render(linesMostrador, WIDTH);
+    ok(txtMostrador.includes('PARA LLEVAR'), 'mostrador sin delivery: sigue diciendo "PARA LLEVAR"', txtMostrador);
+    ok(!txtMostrador.includes('Delivery'), 'mostrador: NO dice "Delivery"', txtMostrador);
+
+    // Caso 4: mesa + delivery DELIVERY (ambos textos presentes, mesa no degradada)
+    const linesMesaDelivery = buildEncabezadoUbicacion(5, null, ticketText, delDelivery.modo);
+    const txtMesaDelivery = render(linesMesaDelivery, WIDTH);
+    ok(txtMesaDelivery.includes('Delivery'), 'mesa+delivery: incluye "Delivery"', txtMesaDelivery);
+    ok(txtMesaDelivery.includes('MESA') && txtMesaDelivery.includes('5'), 'mesa+delivery: incluye "MESA 5"', txtMesaDelivery);
+    ok(!txtMesaDelivery.includes('PARA LLEVAR'), 'mesa+delivery: NO dice "PARA LLEVAR"', txtMesaDelivery);
+  }
+
   await ds.destroy();
   console.log(`\n[ticket-venta] ${passed} OK, ${failed} FALLARON`);
   process.exit(failed > 0 ? 1 : 0);
