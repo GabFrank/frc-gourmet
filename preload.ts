@@ -3174,6 +3174,12 @@ contextBridge.exposeInMainWorld('api', {
   getGastosCaja: async (cajaId: number, incluirAnulados?: boolean): Promise<any[]> => {
     return await ipcRenderer.invoke('get-gastos-caja', cajaId, incluirAnulados);
   },
+  getGastoCaja: async (gastoId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-gasto-caja', gastoId);
+  },
+  editGastoCaja: async (gastoId: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('edit-gasto-caja', gastoId, data);
+  },
   anularGastoCaja: async (gastoId: number, motivo?: string): Promise<any> => {
     return await ipcRenderer.invoke('anular-gasto-caja', gastoId, motivo);
   },

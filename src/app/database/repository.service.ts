@@ -760,6 +760,8 @@ export abstract class RepositoryService {
   // Gastos de la caja de venta (PdV) — distintos de los gastos de Caja Mayor.
   abstract createGastoCaja(data: any): Observable<any>;
   abstract getGastosCaja(cajaId: number, incluirAnulados?: boolean): Observable<any[]>;
+  abstract getGastoCaja(gastoId: number): Observable<any>;
+  abstract editGastoCaja(gastoId: number, data: any): Observable<any>;
   abstract anularGastoCaja(gastoId: number, motivo?: string): Observable<any>;
   // Egresos de caja PdV (vales/compras pagados desde el cajón)
   abstract crearValeCaja(data: any): Observable<any>;
