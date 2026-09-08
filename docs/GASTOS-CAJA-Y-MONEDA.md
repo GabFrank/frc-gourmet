@@ -30,7 +30,8 @@ El botón de editar en el listado de gastos:
 
 - Solo se muestra para gastos con estado `ACTIVO`
 - Está disponible incluso cuando la caja está cerrada
-- El resumen de caja lee los gastos `ACTIVO` de forma dinámica (on-the-fly) desde la base de datos
+- El resumen de caja lee los gastos `ACTIVO` de forma dinámica desde la base de datos
+- El payload del resumen incluye el campo `estado` para habilitar/deshabilitar el botón de edición correctamente
 
 ## Restricciones de Edición
 
