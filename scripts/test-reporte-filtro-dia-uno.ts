@@ -11,8 +11,12 @@
  * - Venta del día 1 del mes siguiente → NO se incluye
  */
 
-import { createTestDatabase } from './lib/test-db';
+import 'reflect-metadata';
+import './_electron-mock';
+import * as path from 'path';
+import * as fs from 'fs';
 import { DataSource } from 'typeorm';
+import { getDataSourceOptions } from '../src/app/database/database.config';
 
 const ok = (cond: boolean, msg: string, data?: any) => {
   if (!cond) {
