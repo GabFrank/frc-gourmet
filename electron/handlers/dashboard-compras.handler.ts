@@ -28,7 +28,7 @@ export function registerDashboardComprasHandlers(
         FROM compras
         WHERE estado IN (?, ?)
           AND created_at >= ? AND created_at <= ?
-      `, [CompraEstado.FINALIZADO, CompraEstado.ACTIVO, desde.toISOString(), hasta.toISOString()]);
+      `, [CompraEstado.FINALIZADO, CompraEstado.ACTIVO, fechaParamSql(dataSource, desde), fechaParamSql(dataSource, hasta)]);
       const comprasMes = Number(totalMesRows?.[0]?.cnt || 0);
       const totalMesPYG = Number(totalMesRows?.[0]?.suma || 0);
 
@@ -63,7 +63,7 @@ export function registerDashboardComprasHandlers(
         GROUP BY pr.id, pr.razon_social, pr.nombre
         ORDER BY total DESC
         LIMIT 5
-      `, [CompraEstado.FINALIZADO, CompraEstado.ACTIVO, desde.toISOString(), hasta.toISOString()]);
+      `, [CompraEstado.FINALIZADO, CompraEstado.ACTIVO, fechaParamSql(dataSource, desde), fechaParamSql(dataSource, hasta)]);
       const maxTotal = topRows.reduce((m, r) => Math.max(m, Number(r.total || 0)), 0);
       const topProveedores = topRows.map(r => ({
         nombre: String(r.nombre || '').toUpperCase(),
@@ -116,7 +116,7 @@ export function registerDashboardComprasHandlers(
           FROM compras
           WHERE estado IN (?, ?)
             AND created_at >= ? AND created_at <= ?
-        `, [CompraEstado.FINALIZADO, CompraEstado.ACTIVO, bucket.desde.toISOString(), bucket.hasta.toISOString()]);
+        `, [CompraEstado.FINALIZADO, CompraEstado.ACTIVO, fechaParamSql(dataSource, bucket.desde), fechaParamSql(dataSource, bucket.hasta)]);
         labels.push(bucket.label);
         compras.push(Number(rows?.[0]?.suma || 0));
         cantidades.push(Number(rows?.[0]?.cnt || 0));

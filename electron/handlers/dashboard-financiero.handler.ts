@@ -6,6 +6,7 @@ import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { CajaMayorEstado } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { dbQuery } from '../utils/db-query';
+import { fechaParamSql } from '../utils/date.utils';
 
 export function registerDashboardFinancieroHandlers(
   dataSource: DataSource,
