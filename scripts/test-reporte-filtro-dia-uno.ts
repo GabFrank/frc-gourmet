@@ -41,59 +41,60 @@ async function main() {
   console.log('[test-reporte-filtro-dia-uno] Migraciones OK.\n');
   
   try {
-    // Crear usuarios, moneda, caja, etc. (seed mínimo)
-    await ds.query(`INSERT INTO usuarios (id, nickname, password, activo, must_change_password, created_at, updated_at) 
-                    VALUES (1, 'ADMIN', 'x', 1, 0, datetime('now'), datetime('now'))`);
+    // Crear entidades necesarias usando TypeORM
+    const { Usuario } = require('../src/app/database/entities/personas/usuario.entity');
+    const { Moneda } = require('../src/app/database/entities/financiero/moneda.entity');
+    const { FormasPago } = require('../src/app/database/entities/compras/forma-pago.entity');
+    const { Dispositivo } = require('../src/app/database/entities/financiero/dispositivo.entity');
+    const { Caja } = require('../src/app/database/entities/financiero/caja.entity');
+    const { Conteo } = require('../src/app/database/entities/financiero/conteo.entity');
+    const { Pago } = require('../src/app/database/entities/compras/pago.entity');
+    const { Venta } = require('../src/app/database/entities/ventas/venta.entity');
+    const { PagoDetalle } = require('../src/app/database/entities/compras/pago-detalle.entity');
     
-    await ds.query(`INSERT INTO monedas (id, nombre, simbolo, denominacion, principal, decimales, activo, created_at, updated_at)
-                    VALUES (1, 'GUARANÍES', 'Gs', 'PYG', 1, 0, 1, datetime('now'), datetime('now'))`);
+    const admin = await ds.getRepository(Usuario).save(ds.getRepository(Usuario).create({ nickname: 'ADMIN', password: 'x', activo: true } as any));
+    const pyg = await ds.getRepository(Moneda).save(ds.getRepository(Moneda).create({ denominacion: 'GUARANI', simbolo: 'Gs', principal: true, decimales: 0, activo: true } as any));
+    const efectivo = await ds.getRepository(FormasPago).save(ds.getRepository(FormasPago).create({ nombre: 'EFECTIVO', activo: true, movimentaCaja: true } as any));
+    const dispositivo = await ds.getRepository(Dispositivo).save(ds.getRepository(Dispositivo).create({ codigo: 'DEV1', nombre: 'Terminal 1', local: true, activo: true } as any));
+    const conteoApertura = await ds.getRepository(Conteo).save(ds.getRepository(Conteo).create({} as any));
+    const caja = await ds.getRepository(Caja).save(ds.getRepository(Caja).create({ fechaApertura: new Date('2026-08-01T07:00:00'), estado: 'ABIERTO', dispositivo, conteoApertura, activo: true } as any));
     
-    await ds.query(`INSERT INTO formas_pago (id, nombre, movimenta_caja, activo, created_at, updated_at)
-                    VALUES (1, 'EFECTIVO', 1, 1, datetime('now'), datetime('now'))`);
-    
-    await ds.query(`INSERT INTO dispositivos (id, codigo, nombre, local, activo, created_at, updated_at, created_by)
-                    VALUES (1, 'DEV1', 'Terminal 1', 1, 1, datetime('now'), datetime('now'), 1)`);
-    
-    await ds.query(`INSERT INTO cajas (id, fecha_apertura, estado, dispositivo_id, activo, created_at, updated_at, created_by)
-                    VALUES (1, '2026-08-01 07:00:00', 'ABIERTO', 1, 1, datetime('now'), datetime('now'), 1)`);
+    // Helper para crear venta + pago con fecha específica
+    const mkVenta = async (createdAt: Date, monto: number) => {
+      const pago = await ds.getRepository(Pago).save(ds.getRepository(Pago).create({ estado: 'PAGADO', activo: true } as any));
+      const venta = await ds.getRepository(Venta).save(ds.getRepository(Venta).create({ estado: 'CONCLUIDA', caja, pago } as any));
+      
+      // Actualizar created_at con el formato correcto para SQLite
+      await ds.query(`UPDATE ventas SET created_at = ? WHERE id = ?`, 
+        [createdAt.toISOString().slice(0, 19).replace('T', ' '), venta.id]);
+      
+      await ds.getRepository(PagoDetalle).save(ds.getRepository(PagoDetalle).create({ 
+        pago, valor: monto, tipo: 'PAGO', activo: true, formaPago: efectivo, moneda: pyg, descripcion: 'PAGO TEST' 
+      } as any));
+      
+      return venta;
+    };
     
     // Crear 3 ventas en agosto 2026:
     // - Venta A: día 1 (2026-08-01 10:00:00)
     // - Venta B: día 15 (2026-08-15 14:30:00)
     // - Venta C: día 1 del mes siguiente (2026-09-01 09:00:00)
-    
-    const fechaA = '2026-08-01 10:00:00';
-    const fechaB = '2026-08-15 14:30:00';
-    const fechaC = '2026-09-01 09:00:00';
-    
-    // Crear pagos y ventas
-    for (let i = 1; i <= 3; i++) {
-      await ds.query(`INSERT INTO pagos (id, estado, activo, created_at, updated_at, created_by)
-                      VALUES (${i}, 'CONCLUIDO', 1, datetime('now'), datetime('now'), 1)`);
-    }
+    const fechaA = new Date('2026-08-01T10:00:00');
+    const fechaB = new Date('2026-08-15T14:30:00');
+    const fechaC = new Date('2026-09-01T09:00:00');
     
     const montoA = 50000;
     const montoB = 75000;
     const montoC = 100000;
     
-    await ds.query(`INSERT INTO ventas (id, estado, caja_id, pago_id, created_at, updated_at, created_by)
-                    VALUES (1, 'CONCLUIDA', 1, 1, ?, datetime('now'), 1)`, [fechaA]);
-    await ds.query(`INSERT INTO ventas (id, estado, caja_id, pago_id, created_at, updated_at, created_by)
-                    VALUES (2, 'CONCLUIDA', 1, 2, ?, datetime('now'), 1)`, [fechaB]);
-    await ds.query(`INSERT INTO ventas (id, estado, caja_id, pago_id, created_at, updated_at, created_by)
-                    VALUES (3, 'CONCLUIDA', 1, 3, ?, datetime('now'), 1)`, [fechaC]);
-    
-    // Crear pagos_detalles
-    for (let i = 1; i <= 3; i++) {
-      const monto = i === 1 ? montoA : i === 2 ? montoB : montoC;
-      await ds.query(`INSERT INTO pagos_detalles (id, pago_id, valor, tipo, activo, forma_pago_id, moneda_id, created_at, updated_at)
-                      VALUES (${i}, ${i}, ${monto}, 'PAGO', 1, 1, 1, datetime('now'), datetime('now'))`);
-    }
+    const ventaA = await mkVenta(fechaA, montoA);
+    const ventaB = await mkVenta(fechaB, montoB);
+    const ventaC = await mkVenta(fechaC, montoC);
     
     console.log('\n📊 Ventas creadas:');
-    console.log(`  Venta A (día 1 agosto):     ${fechaA} → ${montoA} Gs`);
-    console.log(`  Venta B (día 15 agosto):    ${fechaB} → ${montoB} Gs`);
-    console.log(`  Venta C (día 1 septiembre): ${fechaC} → ${montoC} Gs`);
+    console.log(`  Venta A (día 1 agosto):     ${fechaA.toISOString().slice(0, 19).replace('T', ' ')} → ${montoA} Gs`);
+    console.log(`  Venta B (día 15 agosto):    ${fechaB.toISOString().slice(0, 19).replace('T', ' ')} → ${montoB} Gs`);
+    console.log(`  Venta C (día 1 septiembre): ${fechaC.toISOString().slice(0, 19).replace('T', ' ')} → ${montoC} Gs`);
     
     // Verificar que las fechas se guardaron en el formato correcto
     const stored: any[] = await ds.query(`SELECT id, created_at FROM ventas ORDER BY id`);
@@ -120,9 +121,9 @@ async function main() {
     );
     
     ok(ventasAgosto.length === 2, `Agosto debe contar 2 ventas (A+B), no ${ventasAgosto.length}`, ventasAgosto.map(v => v.id));
-    ok(ventasAgosto.some(v => v.id === 1), 'Venta A (día 1) SÍ se incluye');
-    ok(ventasAgosto.some(v => v.id === 2), 'Venta B (día 15) SÍ se incluye');
-    ok(!ventasAgosto.some(v => v.id === 3), 'Venta C (día 1 sept) NO se incluye en agosto');
+    ok(ventasAgosto.some(v => v.id === ventaA.id), 'Venta A (día 1) SÍ se incluye');
+    ok(ventasAgosto.some(v => v.id === ventaB.id), 'Venta B (día 15) SÍ se incluye');
+    ok(!ventasAgosto.some(v => v.id === ventaC.id), 'Venta C (día 1 sept) NO se incluye en agosto');
     
     // Verificar suma de montos
     const sumaPagos: any[] = await ds.query(`
@@ -153,30 +154,26 @@ async function main() {
     );
     
     ok(ventasSept.length === 1, `Septiembre debe contar 1 venta (C), no ${ventasSept.length}`, ventasSept.map(v => v.id));
-    ok(ventasSept.some(v => v.id === 3), 'Venta C (día 1 sept) SÍ se incluye en septiembre');
-    ok(!ventasSept.some(v => v.id === 1), 'Venta A (día 1 agosto) NO se incluye en septiembre');
-    ok(!ventasSept.some(v => v.id === 2), 'Venta B (día 15 agosto) NO se incluye en septiembre');
+    ok(ventasSept.some(v => v.id === ventaC.id), 'Venta C (día 1 sept) SÍ se incluye en septiembre');
+    ok(!ventasSept.some(v => v.id === ventaA.id), 'Venta A (día 1 agosto) NO se incluye en septiembre');
+    ok(!ventasSept.some(v => v.id === ventaB.id), 'Venta B (día 15 agosto) NO se incluye en septiembre');
     
     // Caso 3: Borde de timezone - venta a las 22:00 del 31 de julio
-    // Debe INCLUIRSE en agosto (es hora local, no UTC)
-    await ds.query(`INSERT INTO pagos (id, estado, activo, created_at, updated_at, created_by)
-                    VALUES (4, 'CONCLUIDO', 1, datetime('now'), datetime('now'), 1)`);
-    await ds.query(`INSERT INTO ventas (id, estado, caja_id, pago_id, created_at, updated_at, created_by)
-                    VALUES (4, 'CONCLUIDA', 1, 4, '2026-07-31 22:00:00', datetime('now'), 1)`);
-    await ds.query(`INSERT INTO pagos_detalles (id, pago_id, valor, tipo, activo, forma_pago_id, moneda_id, created_at, updated_at)
-                    VALUES (4, 4, 25000, 'PAGO', 1, 1, 1, datetime('now'), datetime('now'))`);
+    // Debe INCLUIRSE en julio (es hora local, no UTC)
+    const fechaJulio31 = new Date('2026-07-31T22:00:00');
+    const ventaD = await mkVenta(fechaJulio31, 25000);
     
     const ventasJulio: any[] = await ds.query(
       `SELECT id FROM ventas WHERE estado = 'CONCLUIDA' AND created_at >= ? AND created_at <= ?`,
       [fechaParamSql(ds, new Date(2026, 6, 1, 0, 0, 0)), fechaParamSql(ds, new Date(2026, 6, 31, 23, 59, 59, 999))]
     );
-    ok(ventasJulio.some(v => v.id === 4), 'Venta 22:00 del 31 julio SÍ se incluye en julio (hora local)');
+    ok(ventasJulio.some(v => v.id === ventaD.id), 'Venta 22:00 del 31 julio SÍ se incluye en julio (hora local)');
     
     const ventasAgosto2: any[] = await ds.query(
       `SELECT id FROM ventas WHERE estado = 'CONCLUIDA' AND created_at >= ? AND created_at <= ?`,
       [desdeSQL, hastaSQL]
     );
-    ok(!ventasAgosto2.some(v => v.id === 4), 'Venta 22:00 del 31 julio NO se incluye en agosto');
+    ok(!ventasAgosto2.some(v => v.id === ventaD.id), 'Venta 22:00 del 31 julio NO se incluye en agosto');
     
     console.log('\n✅ Test completado exitosamente');
     console.log('   - Día 1 del período se incluye correctamente');
