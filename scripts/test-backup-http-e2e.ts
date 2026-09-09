@@ -203,35 +203,50 @@ async function main() {
 
     // Test 4: backup-send-whatsapp por HTTP ignora destino arbitrario
     console.log('[Test 4] backup-send-whatsapp HTTP ignora opts.destino arbitrario');
-    // Este test verifica que el handler NO acepte destino del payload.
-    // Como no tenemos Evolution API configurada, el handler fallará por ese motivo,
-    // pero el comportamiento crítico es que NO intente usar opts.destino.
-    // El test más simple: invocar con destino arbitrario y verificar que falla
-    // por "Sin número de WhatsApp configurado" (config vacía) y NO por intentar
-    // enviar al destino del payload.
+    // Crear archivo de backup temporal y configurar destino
+    const fs = require('fs');
+    const path = require('path');
+    const backupDir = path.join(tmpdir, 'backups');
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+    const testBackupPath = path.join(backupDir, 'test-backup.db');
+    fs.writeFileSync(testBackupPath, 'fake backup content');
+
+    // Configurar destino WhatsApp en app-settings.json
+    const settingsPath = path.join(tmpdir, 'app-settings.json');
+    const settings = {
+      mode: 'standalone',
+      backup: {
+        whatsappDestino: '595991888888', // El destino configurado
+      },
+    };
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+    // Invocar con destino arbitrario diferente en el payload
     const sendRes = await makeRequest(`${baseUrl}/api/rpc`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${adminToken}` },
       body: {
         method: 'backup-send-whatsapp',
-        params: [{ fullPath: '/fake/path.db', destino: '595991999999' }],
+        params: [{ fullPath: testBackupPath, destino: '595991999999' }], // DISTINTO del config
       },
     });
-    // Debería fallar, pero NO debe intentar usar el destino del payload
-    // El mensaje esperado es "Archivo no encontrado" o "Sin número de WhatsApp configurado"
-    // NO debe ser un intento de enviar al 595991999999
-    if (sendRes.body.result) {
-      assert.ok(
-        sendRes.body.result.success === false,
-        'backup-send-whatsapp debería fallar sin config',
-      );
-      assert.ok(
-        sendRes.body.result.message &&
-        (sendRes.body.result.message.includes('Archivo no encontrado') ||
-         sendRes.body.result.message.includes('Sin número de WhatsApp configurado')),
-        `Mensaje esperado sobre archivo o config, got: ${sendRes.body.result.message}`,
-      );
-    }
+
+    // El handler debe fallar porque Evolution API no está configurada,
+    // pero si el fix funciona, intentó usar 595991888888 (config), NO 595991999999 (payload)
+    assert.ok(sendRes.body.result, 'backup-send-whatsapp debería devolver result');
+    assert.strictEqual(sendRes.body.result.success, false, 'Debería fallar sin Evolution API');
+    
+    // El mensaje debe ser sobre Evolution API, NO sobre archivo o destino
+    // Si llegó hasta aquí, pasó las validaciones de archivo y destino
+    assert.ok(
+      sendRes.body.result.message &&
+      sendRes.body.result.message.includes('Evolution API no configurada'),
+      `Debería fallar en Evolution API (pasó validaciones de archivo y destino), got: ${sendRes.body.result.message}`,
+    );
+
+    // Limpiar
+    fs.unlinkSync(testBackupPath);
+    fs.unlinkSync(settingsPath);
     console.log(' ✓');
 
     console.log('\n[test-backup-http-e2e] ✅ Todos los tests OK');
