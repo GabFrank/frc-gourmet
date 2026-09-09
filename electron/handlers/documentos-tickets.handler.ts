@@ -39,7 +39,7 @@ import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity
 import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-cambio.entity';
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
-import { Delivery } from '../../src/app/database/entities/ventas/delivery.entity';
+import { Delivery, DeliveryModo } from '../../src/app/database/entities/ventas/delivery.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import {
@@ -157,6 +157,30 @@ async function registrarImpresion(
 }
 
 /**
+ * Resuelve el modo del delivery desde una venta (si tiene delivery asociado).
+ */
+export function getDeliveryModoFromVenta(venta: any): DeliveryModo | null {
+  return venta?.delivery?.modo ?? null;
+}
+
+/**
+ * Arma las líneas de encabezado para el ticket de comanda (cocina).
+ * Combina mesa, comanda y modo delivery en un solo lugar.
+ * Si printComandaInternal deja de llamar esta función, el test que renderiza
+ * su salida falla porque el encabezado no incluirá delivery/retiro.
+ */
+export function buildComandaHeaderLines(
+  venta: any,
+  ticketText: (t: string, o?: any) => any,
+): any[] {
+  const mesa = venta?.mesa;
+  const comanda = venta?.comanda;
+  const refComanda = comanda?.codigo || (comanda?.numero ? `#${comanda.numero}` : null);
+  const deliveryModo = getDeliveryModoFromVenta(venta);
+  return buildEncabezadoUbicacion(mesa?.numero, refComanda, ticketText, deliveryModo);
+}
+
+/**
  * Encabezado de identificacion de un ticket: MESA y/o COMANDA.
  *
  * Antes era un `if (mesa) / else if (comanda) / else PARA LLEVAR`, asi que una
@@ -171,11 +195,31 @@ export function buildEncabezadoUbicacion(
   mesaNumero: number | null | undefined,
   comandaRef: string | null | undefined,
   ticketText: (t: string, o?: any) => any,
+  deliveryModo?: DeliveryModo | null,
 ): any[] {
   const lines: any[] = [];
   const hayMesa = mesaNumero !== null && mesaNumero !== undefined && `${mesaNumero}` !== '';
   const hayComanda = !!comandaRef;
+  const hayDelivery = !!deliveryModo;
 
+  // Caso DELIVERY o RETIRO: las tres referencias van en grande si coexisten
+  if (hayDelivery) {
+    const textoDelivery = deliveryModo === DeliveryModo.DELIVERY
+      ? 'Delivery'
+      : 'Retirar en local';
+    lines.push(ticketText(textoDelivery, { align: 'C', bold: true, size: 'big' }));
+    if (hayMesa) {
+      lines.push(ticketText('MESA', { align: 'C' }));
+      lines.push(ticketText(String(mesaNumero), { align: 'C', bold: true, size: 'big' }));
+    }
+    if (hayComanda) {
+      lines.push(ticketText('COMANDA', { align: 'C' }));
+      lines.push(ticketText(String(comandaRef), { align: 'C', bold: true, size: 'big' }));
+    }
+    return lines;
+  }
+
+  // Caso SIN delivery: lógica original sin cambios
   if (!hayMesa && !hayComanda) {
     lines.push(ticketText('PARA LLEVAR', { align: 'C', bold: true, size: 'tall' }));
     return lines;
@@ -592,6 +636,7 @@ export async function printComandaInternal(
   const refMesa = mesa?.numero ? `MESA ${mesa.numero}` : null;
   const refComanda = comanda?.codigo || (comanda?.numero ? `#${comanda.numero}` : null);
   const refStr = refMesa || (refComanda ? `COMANDA ${refComanda}` : 'PARA LLEVAR');
+  const deliveryModo = getDeliveryModoFromVenta(venta);
 
   // 5. Por cada job: construir spec, imprimir, registrar
   for (const job of jobsByPrinter.values()) {
@@ -607,7 +652,7 @@ export async function printComandaInternal(
       ticketText(ticketFmtFechaHora(new Date()), { align: 'C' }),
       ticketSeparador('='),
     ];
-    lines.push(...buildEncabezadoUbicacion(mesa?.numero, refComanda, ticketText));
+    lines.push(...buildComandaHeaderLines(venta, ticketText));
     lines.push(ticketText(`TICKET #${ventaId}`, { align: 'C', bold: true, size: 'tall' }));
     lines.push(ticketSeparador('='));
 
@@ -998,7 +1043,7 @@ export async function buildVentaTicketLines(
     if (!rate || rate <= 0) continue;
     const val = totalPrincipal / rate;
     const label = String((m as any).denominacion || (m as any).simbolo || '').toUpperCase();
-    totalesMonedaLines.push(ticketKv(`TOTAL ${label}`, ticketFmtMonto(val, Number((m as any).decimales) || 0)));
+    totalesMonedaLines.push(ticketKv(`TOTAL ${label}`, ticketFmtMonto(val, Number((m as any).decimales) || 0), true));
   }
   if (totalesMonedaLines.length) {
     lines.push(ticketSeparador('-'));

@@ -407,6 +407,67 @@ async function main() {
        'pedido de la web sin delivery (retiro): también le corresponde', rWeb);
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Test delivery/retiro en encabezado de comanda
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    console.log('\n[delivery/retiro en comanda]');
+    const { Delivery } = await import('../src/app/database/entities/ventas/delivery.entity');
+    const { buildComandaHeaderLines, getDeliveryModoFromVenta } = await import('../electron/handlers/documentos-tickets.handler');
+    const ticketText = (t: string, o?: any) => ({ type: 'text', text: t, ...o });
+
+    const delDelivery: any = await ds.getRepository(Delivery).save(
+      ds.getRepository(Delivery).create({
+        estado: 'ABIERTO', modo: 'DELIVERY', telefono: '0981111111', fechaAbierto: new Date(),
+      } as any),
+    );
+    const delRetiro: any = await ds.getRepository(Delivery).save(
+      ds.getRepository(Delivery).create({
+        estado: 'ABIERTO', modo: 'RETIRO', telefono: '0981222222', fechaAbierto: new Date(),
+      } as any),
+    );
+
+    // Test del helper
+    ok(getDeliveryModoFromVenta({ delivery: delDelivery }) === 'DELIVERY',
+       'helper: venta con delivery DELIVERY → "DELIVERY"');
+    ok(getDeliveryModoFromVenta({ delivery: delRetiro }) === 'RETIRO',
+       'helper: venta con delivery RETIRO → "RETIRO"');
+    ok(getDeliveryModoFromVenta({}) === null,
+       'helper: venta sin delivery → null');
+
+    // Test de buildComandaHeaderLines — ATRAPA EL OLVIDO
+    // Caso 1: delivery DELIVERY sin mesa
+    const ventaDel = { delivery: delDelivery };
+    const linesDel = buildComandaHeaderLines(ventaDel, ticketText);
+    const txtDel = render(linesDel, WIDTH);
+    ok(txtDel.includes('Delivery'), 
+       'buildComandaHeaderLines: delivery DELIVERY → "Delivery"', txtDel);
+    ok(!txtDel.includes('PARA LLEVAR'), 
+       'buildComandaHeaderLines: delivery DELIVERY → NO "PARA LLEVAR"', txtDel);
+
+    // Caso 2: delivery RETIRO sin mesa
+    const ventaRet = { delivery: delRetiro };
+    const linesRet = buildComandaHeaderLines(ventaRet, ticketText);
+    const txtRet = render(linesRet, WIDTH);
+    ok(txtRet.includes('Retirar en local'), 
+       'buildComandaHeaderLines: delivery RETIRO → "Retirar en local"', txtRet);
+    ok(!txtRet.includes('PARA LLEVAR'), 
+       'buildComandaHeaderLines: delivery RETIRO → NO "PARA LLEVAR"', txtRet);
+
+    // Caso 3: mostrador sin delivery
+    const linesMostrador = buildComandaHeaderLines({}, ticketText);
+    const txtMostrador = render(linesMostrador, WIDTH);
+    ok(txtMostrador.includes('PARA LLEVAR'), 
+       'buildComandaHeaderLines: mostrador → "PARA LLEVAR"', txtMostrador);
+
+    // Caso 4: mesa + delivery (coexisten)
+    const ventaMesaDel = { mesa: { numero: 5 }, delivery: delDelivery };
+    const linesMesaDel = buildComandaHeaderLines(ventaMesaDel, ticketText);
+    const txtMesaDel = render(linesMesaDel, WIDTH);
+    ok(txtMesaDel.includes('Delivery') && txtMesaDel.includes('MESA'), 
+       'buildComandaHeaderLines: mesa+delivery → ambos', txtMesaDel);
+  }
+
   await ds.destroy();
   console.log(`\n[ticket-venta] ${passed} OK, ${failed} FALLARON`);
   process.exit(failed > 0 ? 1 : 0);
