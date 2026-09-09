@@ -1043,7 +1043,7 @@ export async function buildVentaTicketLines(
     if (!rate || rate <= 0) continue;
     const val = totalPrincipal / rate;
     const label = String((m as any).denominacion || (m as any).simbolo || '').toUpperCase();
-    totalesMonedaLines.push(ticketKv(`TOTAL ${label}`, ticketFmtMonto(val, Number((m as any).decimales) || 0)));
+    totalesMonedaLines.push(ticketKv(`TOTAL ${label}`, ticketFmtMonto(val, Number((m as any).decimales) || 0), true));
   }
   if (totalesMonedaLines.length) {
     lines.push(ticketSeparador('-'));
