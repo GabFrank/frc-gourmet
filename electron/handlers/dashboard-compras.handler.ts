@@ -6,6 +6,7 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { dbQuery } from '../utils/db-query';
 import { Rango, rangoToFechas, bucketsForRango } from '../utils/dashboard-rangos.util';
 import { getInicioJornada } from './dashboard-ventas.handler';
+import { fechaParamSql } from '../utils/date.utils';
 
 export function registerDashboardComprasHandlers(
   dataSource: DataSource,
