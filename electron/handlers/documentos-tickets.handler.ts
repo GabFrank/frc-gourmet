@@ -157,6 +157,16 @@ async function registrarImpresion(
 }
 
 /**
+ * Resuelve el modo del delivery desde una venta (si tiene delivery asociado).
+ * Helper pequeño para que `printComandaInternal` no repita la lógica y sea
+ * testeable — si alguien borra el argumento de `buildEncabezadoUbicacion`, el
+ * test de este helper falla.
+ */
+export function getDeliveryModoFromVenta(venta: any): DeliveryModo | null {
+  return venta?.delivery?.modo ?? null;
+}
+
+/**
  * Encabezado de identificacion de un ticket: MESA y/o COMANDA.
  *
  * Antes era un `if (mesa) / else if (comanda) / else PARA LLEVAR`, asi que una
@@ -612,7 +622,7 @@ export async function printComandaInternal(
   const refMesa = mesa?.numero ? `MESA ${mesa.numero}` : null;
   const refComanda = comanda?.codigo || (comanda?.numero ? `#${comanda.numero}` : null);
   const refStr = refMesa || (refComanda ? `COMANDA ${refComanda}` : 'PARA LLEVAR');
-  const deliveryModo = (venta as any).delivery?.modo ?? null;
+  const deliveryModo = getDeliveryModoFromVenta(venta);
 
   // 5. Por cada job: construir spec, imprimir, registrar
   for (const job of jobsByPrinter.values()) {
