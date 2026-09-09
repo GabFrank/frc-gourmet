@@ -29,7 +29,16 @@ const ok = (cond: boolean, msg: string, data?: any) => {
 async function main() {
   console.log('Test: Filtro de fecha incluye día 1 correctamente');
   
-  const ds = await createTestDatabase('test-reporte-filtro-dia-uno');
+  const tmpDir = path.resolve(__dirname, '../.tmp');
+  if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+  const dbFile = path.join(tmpDir, 'test-reporte-filtro-dia-uno.db');
+  if (fs.existsSync(dbFile)) fs.unlinkSync(dbFile);
+
+  const baseOptions = getDataSourceOptions(tmpDir);
+  const ds = new DataSource({ ...(baseOptions as any), database: dbFile, synchronize: false, migrationsRun: false });
+  await ds.initialize();
+  await ds.runMigrations({ transaction: 'each' });
+  console.log('[test-reporte-filtro-dia-uno] Migraciones OK.\n');
   
   try {
     // Crear usuarios, moneda, caja, etc. (seed mínimo)
