@@ -35,13 +35,14 @@ async function makeRequest(
     headers: { 'Content-Type': 'application/json', ...headers },
     body: body ? JSON.stringify(body) : undefined,
   });
+  const status = res.status;
   let responseBody: any;
   try {
     responseBody = await res.json();
   } catch {
     responseBody = await res.text();
   }
-  return { status: res.status, body: responseBody };
+  return { status, body: responseBody };
 }
 
 function createToken(userId: number, deviceId: number): string {

@@ -113,13 +113,15 @@
               </button>
               <button *appHasPermission="'SISTEMA_BACKUP'" mat-stroked-button
                       (click)="createAndExport(false)"
-                      [disabled]="loading">
+                      [disabled]="loading || isRemote"
+                      [matTooltip]="isRemote ? 'No disponible en modo remoto (diálogo nativo del servidor)' : ''">
                 <mat-icon>file_download</mat-icon>
                 <span>Exportar BD a archivo...</span>
               </button>
               <button *appHasPermission="'SISTEMA_BACKUP'" mat-stroked-button
                       (click)="createAndExport(true)"
-                      [disabled]="loading">
+                      [disabled]="loading || isRemote"
+                      [matTooltip]="isRemote ? 'No disponible en modo remoto (diálogo nativo del servidor)' : ''">
                 <mat-icon>folder_zip</mat-icon>
                 <span>Exportar completo a archivo...</span>
               </button>
@@ -135,7 +137,8 @@
           <mat-card-content>
             <button *appHasPermission="'SISTEMA_BACKUP'" mat-flat-button color="warn"
                     (click)="restoreFromFile()"
-                    [disabled]="loading">
+                    [disabled]="loading || isRemote"
+                    [matTooltip]="isRemote ? 'Solo disponible en modo local' : ''">
               <mat-icon>restore</mat-icon>
               <span>{{ isPostgres ? 'Elegir archivo .dump, .sql o .frcbak...' : 'Elegir archivo .db o .frcbak...' }}</span>
             </button>
@@ -203,7 +206,9 @@
                       <mat-icon>more_vert</mat-icon>
                     </button>
                     <mat-menu #rowMenu="matMenu">
-                      <button *appHasPermission="'SISTEMA_BACKUP'" mat-menu-item (click)="restoreFromList(row)">
+                      <button *appHasPermission="'SISTEMA_BACKUP'" mat-menu-item (click)="restoreFromList(row)"
+                              [disabled]="isRemote"
+                              [matTooltip]="isRemote ? 'Solo disponible en modo local' : ''">
                         <mat-icon>restore</mat-icon>
                         <span>Restaurar este backup</span>
                       </button>
@@ -211,7 +216,9 @@
                         <mat-icon>send</mat-icon>
                         <span>Enviar por WhatsApp</span>
                       </button>
-                      <button *appHasPermission="'SISTEMA_BACKUP'" mat-menu-item (click)="deleteBackup(row)">
+                      <button *appHasPermission="'SISTEMA_BACKUP'" mat-menu-item (click)="deleteBackup(row)"
+                              [disabled]="isRemote"
+                              [matTooltip]="isRemote ? 'Solo disponible en modo local' : ''">
                         <mat-icon>delete</mat-icon>
                         <span>Eliminar</span>
                       </button>
@@ -335,7 +342,9 @@
                 <span class="dir-label">Carpeta de backups:</span>
                 <span class="dir-value mono">{{ config.customBackupDir || '(default: userData/backups)' }}</span>
               </div>
-              <button mat-stroked-button (click)="pickCustomBackupDir()">
+              <button mat-stroked-button (click)="pickCustomBackupDir()"
+                      [disabled]="isRemote"
+                      [matTooltip]="isRemote ? 'No disponible en modo remoto (diálogo nativo del servidor)' : ''">
                 <mat-icon>folder_open</mat-icon>
                 <span>Cambiar</span>
               </button>
@@ -357,7 +366,9 @@
             </div>
 
             <div class="form-row buttons-row">
-              <button *appHasPermission="'SISTEMA_BACKUP'" mat-flat-button color="primary" (click)="saveConfig()" [disabled]="loading">
+              <button *appHasPermission="'SISTEMA_BACKUP'" mat-flat-button color="primary" (click)="saveConfig()"
+                      [disabled]="loading || isRemote"
+                      [matTooltip]="isRemote ? 'Solo disponible en modo local' : ''">
                 <mat-icon>save</mat-icon>
                 <span>Guardar configuración</span>
               </button>
@@ -399,7 +410,9 @@
               </ul>
               <p>La app se reiniciará automáticamente.</p>
             </div>
-            <button *appHasPermission="'SISTEMA_BACKUP'" mat-flat-button color="warn" (click)="resetDatabase()" [disabled]="loading">
+            <button *appHasPermission="'SISTEMA_BACKUP'" mat-flat-button color="warn" (click)="resetDatabase()"
+                    [disabled]="loading || isRemote"
+                    [matTooltip]="isRemote ? 'Solo disponible en modo local' : ''">
               <mat-icon>delete_forever</mat-icon>
               <span>Resetear base de datos</span>
             </button>
