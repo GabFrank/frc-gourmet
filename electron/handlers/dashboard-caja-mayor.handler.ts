@@ -168,8 +168,8 @@ async function buildMovimientosPorRango(
   // no "en la jornada X".
   for (const bucket of bucketsForRango(rango, new Date(), inicioJornada)) {
     labels.push(bucket.label);
-    const desde = bucket.desde.toISOString();
-    const hasta = bucket.hasta.toISOString();
+    const desde = fechaParamSql(dataSource, bucket.desde);
+    const hasta = fechaParamSql(dataSource, bucket.hasta);
 
     const ingRows: any[] = await dbQuery(dataSource, `
       SELECT COALESCE(SUM(monto), 0) as suma
