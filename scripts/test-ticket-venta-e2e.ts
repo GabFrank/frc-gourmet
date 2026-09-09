@@ -413,10 +413,9 @@ async function main() {
   {
     console.log('\n[delivery/retiro en comanda]');
     const { Delivery } = await import('../src/app/database/entities/ventas/delivery.entity');
-    const { buildEncabezadoUbicacion, getDeliveryModoFromVenta } = await import('../electron/handlers/documentos-tickets.handler');
+    const { buildComandaHeaderLines, getDeliveryModoFromVenta } = await import('../electron/handlers/documentos-tickets.handler');
     const ticketText = (t: string, o?: any) => ({ type: 'text', text: t, ...o });
 
-    // Test del helper getDeliveryModoFromVenta
     const delDelivery: any = await ds.getRepository(Delivery).save(
       ds.getRepository(Delivery).create({
         estado: 'ABIERTO', modo: 'DELIVERY', telefono: '0981111111', fechaAbierto: new Date(),
@@ -428,75 +427,45 @@ async function main() {
       } as any),
     );
 
-    const ventaConDelivery = { delivery: delDelivery };
-    const ventaConRetiro = { delivery: delRetiro };
-    const ventaSinDelivery = {};
+    // Test del helper
+    ok(getDeliveryModoFromVenta({ delivery: delDelivery }) === 'DELIVERY',
+       'helper: venta con delivery DELIVERY → "DELIVERY"');
+    ok(getDeliveryModoFromVenta({ delivery: delRetiro }) === 'RETIRO',
+       'helper: venta con delivery RETIRO → "RETIRO"');
+    ok(getDeliveryModoFromVenta({}) === null,
+       'helper: venta sin delivery → null');
 
-    ok(getDeliveryModoFromVenta(ventaConDelivery) === 'DELIVERY',
-       'helper: venta con delivery DELIVERY → retorna "DELIVERY"');
-    ok(getDeliveryModoFromVenta(ventaConRetiro) === 'RETIRO',
-       'helper: venta con delivery RETIRO → retorna "RETIRO"');
-    ok(getDeliveryModoFromVenta(ventaSinDelivery) === null,
-       'helper: venta sin delivery → retorna null');
-    ok(getDeliveryModoFromVenta(null) === null,
-       'helper: venta null → retorna null');
+    // Test de buildComandaHeaderLines — ATRAPA EL OLVIDO
+    // Caso 1: delivery DELIVERY sin mesa
+    const ventaDel = { delivery: delDelivery };
+    const linesDel = buildComandaHeaderLines(ventaDel, ticketText);
+    const txtDel = render(linesDel, WIDTH);
+    ok(txtDel.includes('Delivery'), 
+       'buildComandaHeaderLines: delivery DELIVERY → "Delivery"', txtDel);
+    ok(!txtDel.includes('PARA LLEVAR'), 
+       'buildComandaHeaderLines: delivery DELIVERY → NO "PARA LLEVAR"', txtDel);
 
-    // Caso 1: delivery DELIVERY (test unitario)
-    const linesDelivery = buildEncabezadoUbicacion(null, null, ticketText, delDelivery.modo);
-    const txtDelivery = render(linesDelivery, WIDTH);
-    ok(txtDelivery.includes('Delivery'), 'delivery DELIVERY: el ticket dice "Delivery"', txtDelivery);
-    ok(!txtDelivery.includes('PARA LLEVAR'), 'delivery DELIVERY: NO dice "PARA LLEVAR"', txtDelivery);
+    // Caso 2: delivery RETIRO sin mesa
+    const ventaRet = { delivery: delRetiro };
+    const linesRet = buildComandaHeaderLines(ventaRet, ticketText);
+    const txtRet = render(linesRet, WIDTH);
+    ok(txtRet.includes('Retirar en local'), 
+       'buildComandaHeaderLines: delivery RETIRO → "Retirar en local"', txtRet);
+    ok(!txtRet.includes('PARA LLEVAR'), 
+       'buildComandaHeaderLines: delivery RETIRO → NO "PARA LLEVAR"', txtRet);
 
-    // Caso 2: delivery RETIRO (test unitario)
-    const linesRetiro = buildEncabezadoUbicacion(null, null, ticketText, delRetiro.modo);
-    const txtRetiro = render(linesRetiro, WIDTH);
-    ok(txtRetiro.includes('Retirar en local'), 'delivery RETIRO: el ticket dice "Retirar en local"', txtRetiro);
-    ok(!txtRetiro.includes('PARA LLEVAR'), 'delivery RETIRO: NO dice "PARA LLEVAR"', txtRetiro);
-
-    // Caso 3: mostrador sin delivery (no cambió)
-    const linesMostrador = buildEncabezadoUbicacion(null, null, ticketText, null);
+    // Caso 3: mostrador sin delivery
+    const linesMostrador = buildComandaHeaderLines({}, ticketText);
     const txtMostrador = render(linesMostrador, WIDTH);
-    ok(txtMostrador.includes('PARA LLEVAR'), 'mostrador sin delivery: sigue diciendo "PARA LLEVAR"', txtMostrador);
-    ok(!txtMostrador.includes('Delivery'), 'mostrador: NO dice "Delivery"', txtMostrador);
+    ok(txtMostrador.includes('PARA LLEVAR'), 
+       'buildComandaHeaderLines: mostrador → "PARA LLEVAR"', txtMostrador);
 
-    // Caso 4: mesa + delivery DELIVERY (ambos textos presentes, mesa no degradada)
-    const linesMesaDelivery = buildEncabezadoUbicacion(5, null, ticketText, delDelivery.modo);
-    const txtMesaDelivery = render(linesMesaDelivery, WIDTH);
-    ok(txtMesaDelivery.includes('Delivery'), 'mesa+delivery: incluye "Delivery"', txtMesaDelivery);
-    ok(txtMesaDelivery.includes('MESA') && txtMesaDelivery.includes('5'), 'mesa+delivery: incluye "MESA 5"', txtMesaDelivery);
-    ok(!txtMesaDelivery.includes('PARA LLEVAR'), 'mesa+delivery: NO dice "PARA LLEVAR"', txtMesaDelivery);
-
-    // Caso 5: END-TO-END con printComandaInternal — verifica que el callsite pasa el modo
-    // Si alguien borra el argumento de buildEncabezadoUbicacion en printComandaInternal,
-    // este test falla porque el texto renderizado NO contiene "Delivery"
-    const { Producto } = await import('../src/app/database/entities/productos/producto.entity');
-    const prodComanda = await ds.getRepository(Producto).save(
-      ds.getRepository(Producto).create({
-        nombre: 'PROD_TEST_COMANDA', activo: true, requiereComanda: true,
-        tipo: 'RETAIL', controlaStock: false,
-      } as any),
-    );
-
-    const ventaE2E: any = await ds.getRepository(Venta).save(
-      ds.getRepository(Venta).create({
-        estado: 'ABIERTA', delivery: { id: delDelivery.id },
-      } as any),
-    );
-    await ds.getRepository(VentaItem).save(ds.getRepository(VentaItem).create({
-      venta: { id: ventaE2E.id }, producto: { id: prodComanda.id },
-      cantidad: 1, precioVentaUnitario: 1000, precioCostoUnitario: 0, estado: 'ACTIVO',
-    } as any));
-
-    // printComandaInternal va a fallar buscando impresora/sector, pero eso no importa:
-    // el test verifica que si el spec se construyera, incluiría "Delivery".
-    // Como no hay impresora configurada, errors.length > 0, pero el modo se resolvió.
-    const resE2E = await printComandaInternal(ds, ventaE2E.id);
-    // Si el callsite NO pasara deliveryModo, el helper getDeliveryModoFromVenta no se
-    // llamaría y el encabezado saldría como "PARA LLEVAR" (porque no hay mesa ni comanda).
-    // Verificamos que el modo SÍ se resolvió correctamente:
-    const modoResuelto = getDeliveryModoFromVenta(ventaE2E);
-    ok(modoResuelto === 'DELIVERY',
-       'end-to-end: printComandaInternal resuelve modo DELIVERY desde venta con delivery', modoResuelto);
+    // Caso 4: mesa + delivery (coexisten)
+    const ventaMesaDel = { mesa: { numero: 5 }, delivery: delDelivery };
+    const linesMesaDel = buildComandaHeaderLines(ventaMesaDel, ticketText);
+    const txtMesaDel = render(linesMesaDel, WIDTH);
+    ok(txtMesaDel.includes('Delivery') && txtMesaDel.includes('MESA'), 
+       'buildComandaHeaderLines: mesa+delivery → ambos', txtMesaDel);
   }
 
   await ds.destroy();

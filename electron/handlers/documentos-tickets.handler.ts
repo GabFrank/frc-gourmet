@@ -158,12 +158,26 @@ async function registrarImpresion(
 
 /**
  * Resuelve el modo del delivery desde una venta (si tiene delivery asociado).
- * Helper pequeño para que `printComandaInternal` no repita la lógica y sea
- * testeable — si alguien borra el argumento de `buildEncabezadoUbicacion`, el
- * test de este helper falla.
  */
 export function getDeliveryModoFromVenta(venta: any): DeliveryModo | null {
   return venta?.delivery?.modo ?? null;
+}
+
+/**
+ * Arma las líneas de encabezado para el ticket de comanda (cocina).
+ * Combina mesa, comanda y modo delivery en un solo lugar.
+ * Si printComandaInternal deja de llamar esta función, el test que renderiza
+ * su salida falla porque el encabezado no incluirá delivery/retiro.
+ */
+export function buildComandaHeaderLines(
+  venta: any,
+  ticketText: (t: string, o?: any) => any,
+): any[] {
+  const mesa = venta?.mesa;
+  const comanda = venta?.comanda;
+  const refComanda = comanda?.codigo || (comanda?.numero ? `#${comanda.numero}` : null);
+  const deliveryModo = getDeliveryModoFromVenta(venta);
+  return buildEncabezadoUbicacion(mesa?.numero, refComanda, ticketText, deliveryModo);
 }
 
 /**
@@ -638,7 +652,7 @@ export async function printComandaInternal(
       ticketText(ticketFmtFechaHora(new Date()), { align: 'C' }),
       ticketSeparador('='),
     ];
-    lines.push(...buildEncabezadoUbicacion(mesa?.numero, refComanda, ticketText, deliveryModo));
+    lines.push(...buildComandaHeaderLines(venta, ticketText));
     lines.push(ticketText(`TICKET #${ventaId}`, { align: 'C', bold: true, size: 'tall' }));
     lines.push(ticketSeparador('='));
 
