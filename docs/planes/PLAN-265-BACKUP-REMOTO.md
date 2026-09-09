@@ -323,54 +323,63 @@ Los cambios en `electron/server/rpc-router.ts` (Fase 1) modifican el comportamie
 - Las operaciones destructivas siguen bloqueadas remotamente.
 - Los botones sin sentido remoto están deshabilitados con mensaje claro.
 
-## 8. Ambigüedades / Decisiones pendientes de Gabriel
+## 8. Decisiones de Gabriel (2026-09-09)
 
-### 1. `backup-create-and-export` — ¿Permitir o no?
+**Enmiendas aprobadas tras auditorías A (PASS-with-fixes) y B (FAIL):**
 
-**Situación:** El handler abre `showSaveDialog` en el **servidor**. Un cliente HTTP remoto dispara el diálogo pero no lo ve (se abre en el escritorio del servidor). Desde el punto de vista del cliente, la operación se cuelga esperando que alguien en el servidor responda al diálogo.
+### 1. Canales permitidos por HTTP (restringido)
 
-**Opciones:**
-- **A) Permitirlo igual** — El caso de uso es que el operador del servidor esté presente y vea el diálogo. Poco común.
-- **B) Bloquearlo por HTTP** — Dejarlo en `BLOCKED_CHANNELS`. El cliente remoto usa `backup-create` + `backup-send-whatsapp` en su lugar.
-- **C) Implementar variante HTTP** — `backup-create-and-download` que devuelva el archivo como stream HTTP en vez de abrir diálogo. **Alto esfuerzo**, fuera del alcance de este fix.
+**SOLO estos 3 canales:**
+- `backup-create` — generar backup en el servidor
+- `backup-trigger-auto-now` — forzar backup automático ya
+- `backup-send-whatsapp` — enviar backup por WhatsApp
 
-**Recomendación del plan:** Opción **B** — bloquear `backup-create-and-export` por HTTP. El caso de uso remoto se cubre con `backup-send-whatsapp`.
+**Bloqueados (se mantienen en deny-list):**
+- `backup-create-and-export` — `showSaveDialog` en el servidor = DoS, no tiene sentido remoto
+- `backup-config-set` — configuración sensible, solo local
+- `backup-restore`, `backup-db-reset`, `backup-clear-images`, `backup-delete` — destructivos
+- `backup-pick-folder`, `backup-pick-restore-file` — diálogos nativos del servidor
 
-**Este plan asume opción B.** Si Gabriel elige A, remover `backup-create-and-export` de la lista de permitidos en Fase 1.
+### 2. Seguridad: `backup-send-whatsapp` ignora destino del payload HTTP
 
-### 2. Auditoria de backups — ¿Agregar tabla de logs?
+**Cambio en handler:** En caller HTTP, **ignorar `opts.destino`**. Usar **solo `config.whatsappDestino`**.
 
-**Situación:** Hoy no hay registro persistente de quién generó/envió backups. Solo logs de consola.
+**Razón:** Un cliente HTTP autenticado no debe poder enviar el backup a un número arbitrario. El destino se configura en el servidor (`app-settings.backup.whatsappDestino`) y no se puede sobreescribir remotamente.
 
-**Propuesta fuera del alcance:** Entidad `BackupAuditoria` con `id`, `usuario_id`, `tipo` (crear/restaurar/enviar/borrar), `destino_whatsapp`, `tamano_bytes`, `created_at`.
+**Implementación:** Detectar si la llamada viene por HTTP (ausencia de contexto Electron) e ignorar `opts.destino` en ese caso.
 
-**¿Agregar ahora o en un PR aparte?**
+### 3. `ensurePermission` obligatorio
 
-**Recomendación del plan:** PR aparte. Este fix es mínimo y resuelve el bloqueo inmediato. La auditoría es una mejora de seguridad que puede venir después.
+Verificar que `SISTEMA_BACKUP` sea la primera sentencia en los 3 handlers permitidos. Ya está implementado (líneas 495, 746, 669 de `backup.handler.ts`).
 
-### 3. Mensaje UX — ¿Tooltip, banner o ambos?
+### 4. UI — deshabilitar botones bloqueados
 
-**Situación:** Fase 2 propone tooltip en los botones deshabilitados + banner informativo opcional.
+En modo remoto (`isRemote = true`):
+- Deshabilitar: restore, reset, delete, pick-folder, pick-restore-file, create-and-export, config-set
+- Mensaje claro: tooltip o banner
+- **NO dejar el error crudo `channel_bloqueado_para_http`**
 
-**¿Qué prefiere Gabriel?**
-- Solo tooltips (más limpio, menos intrusivo).
-- Solo banner (más visible, contexto completo).
-- Ambos (redundante pero claro).
+### 5. Test automatizado obligatorio
 
-**Recomendación del plan:** Ambos. El banner se muestra una vez al entrar, los tooltips al hover. No es redundante — son dos momentos de interacción distintos.
+**Cobertura mínima:**
+- Canales destructivos siguen respondiendo `channel_bloqueado_para_http` por `/api/rpc`
+- `backup-create` permitido con permiso `SISTEMA_BACKUP`
+- Sin permiso → HTTP 403
+- `backup-send-whatsapp` por HTTP no acepta `destino` arbitrario del payload
 
-### 4. Nombre del botón remoto — ¿Cambiar "Crear y exportar"?
+Si no hay harness HTTP completo, el test más chico que **falle** al sacar `backup-restore` de la deny-list.
 
-**Situación:** En modo remoto, "Crear y exportar..." da la impresión de descarga al cliente, pero guarda en el servidor.
+### 6. Reinicio requerido
 
-**Opciones:**
-- Renombrar a "Crear y guardar en servidor" cuando `isRemote === true`.
-- Dejarlo como está y confiar en el tooltip.
-- Bloquearlo directamente (opción B de la ambigüedad 1).
+**Server Y standalone** — `rpc-router.ts` se carga en ambos modos.
 
-**Recomendación del plan:** Si se permite el canal (opción A de ambigüedad 1), renombrar el botón.
+### 7. Fuera de alcance
+
+- **NO** implementar descarga HTTP del dump (opción C)
+- **NO** agregar tabla `BackupAuditoria` en este PR
+- **NO** `Closes #265` todavía — el issue se cierra tras validación en alpha
 
 ---
 
-**Fin del plan.** ✅  
-**Siguiente paso:** Revisión de Gabriel + aprobación. Una vez aprobado, ejecutar Fases 1-3, commit, push, PR a `develop`.
+**Estado del plan:** ✅ **Aprobado con enmiendas** (2026-09-09)  
+**Siguiente paso:** Implementación por fases, commit+push por fase.
