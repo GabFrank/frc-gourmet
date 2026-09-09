@@ -685,7 +685,10 @@ export function registerBackupHandlers(
         };
       }
 
-      const destinoRaw = (opts.destino || config.whatsappDestino || '').trim();
+      // Enmienda #2 (auditoría): en llamadas HTTP, ignorar opts.destino y usar solo config.
+      // Un cliente remoto no debe poder enviar backups a números arbitrarios.
+      const isHttp = (_e as any)?._http === true;
+      const destinoRaw = (isHttp ? config.whatsappDestino : (opts.destino || config.whatsappDestino) || '').trim();
       if (!destinoRaw) {
         return { success: false, message: 'Sin número de WhatsApp configurado. Cargalo en la pestaña de backup.' };
       }
