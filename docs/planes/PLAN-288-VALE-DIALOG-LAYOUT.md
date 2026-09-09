@@ -25,13 +25,20 @@ styles: [`
 `],
 ```
 
-**Llamadas al diálogo:**
-- `list-vales.component.ts` línea 192: `width: '780px'` ✅ funciona (780 > 720)
-- `pagar-obligaciones-dialog.component.ts` línea 712: `width: '700px'` ❌ **overflow** (700 < 720)
+**Llamadas al diálogo (3 callers):**
+- `list-vales.component.ts` línea 192: `width: '780px'` ✅ funciona (780 > 720 + padding)
+- `pagar-obligaciones-dialog.component.ts` línea 712: `width: '700px'` ❌ **overflow** (700 < 720 + padding)
+- `registrar-egreso-dialog.component.ts` línea 303: `width: '760px', maxWidth: '95vw'` ✅ **ya está bien** (760 > 720 + padding)
 
 ### Causa raíz identificada
 
-El `min-width: 720px` en `.dialog-content` **excede** el `width: '700px` del MatDialogConfig cuando se abre desde el wizard de pago consolidado. Esto fuerza al contenido a ser más ancho que el dialog, causando:
+El `min-width: 720px` en `.dialog-content` **más el padding de ~32px del mat-dialog-content** (16px × 2) excede el `width: '700px'` del MatDialogConfig cuando se abre desde el wizard de pago consolidado:
+
+**Ancho real del contenido:** 720px (min-width) + 32px (padding) = **752px**  
+**Ancho del dialog:** 700px  
+**Overflow:** 752 - 700 = **52px** → scroll horizontal visible
+
+Esto fuerza al contenido a ser más ancho que el dialog, causando:
 
 1. **Scroll horizontal visible** — el contenedor del dialog tiene `overflow-x: auto` implícito
 2. **Campo Funcionario desborda** — el `mat-select` con clase `.full` (grid-column: 1 / -1) hereda el ancho excesivo del contenedor padre y se sale del viewport del dialog
@@ -59,13 +66,17 @@ Este usa **ambos** `min-width` y `max-width`, evitando el overflow.
 
 1. **`src/app/pages/rrhh/vales/list-vales.component.ts`** línea 192
    - **Antes:** `width: '780px'`
-   - **Después:** `width: '760px'` (reducir a un valor más conservador y consistente)
+   - **Después:** `width: '760px'` (unificar a valor consistente)
 
 2. **`src/app/pages/financiero/caja-mayor/pagar-obligaciones-dialog/pagar-obligaciones-dialog.component.ts`** línea 712
-   - **Antes:** `width: '700px'`
-   - **Después:** `width: '760px'` (igualar con el otro caller)
+   - **Antes:** `width: '700px'` ❌ **este es el overflow**
+   - **Después:** `width: '760px'` (unificar)
 
-**Justificación:** 760px es suficiente para el grid 2 columnas + gap + padding (≈350px por columna), y deja 40px de margen respecto al `min-width` que tendremos en el contenido.
+3. **`src/app/pages/financiero/caja-mayor/registrar-egreso-dialog/registrar-egreso-dialog.component.ts`** línea 303
+   - **Antes:** `width: '760px', maxWidth: '95vh'` ✅ **ya está bien**
+   - **Después:** No modificar, solo verificar que sigue funcionando
+
+**Justificación:** 760px es suficiente para el grid 2 columnas + gap + padding (≈350px por columna). Con `max-width: 720px` en el contenido y 32px de padding del mat-dialog-content, el margen real es: **760 - 32 - 720 = 8px** (suficiente para evitar que el contenido alcance el borde del dialog).
 
 ### Fase 2: Ajustar estilos del contenido
 
@@ -104,12 +115,28 @@ styles: [`
 ```
 
 **Cambios clave:**
-- `.dialog-content`: Eliminar `min-width: 720px` → usar `width: 100%; max-width: 720px;` para que se ajuste al dialog sin excederlo
+- `.dialog-content`: **Eliminar `min-width: 720px`** → usar `width: 100%; max-width: 720px;` para que se ajuste al dialog sin excederlo
 - `.form`: Agregar `width: 100%; box-sizing: border-box;` para asegurar que el grid no crezca más allá del contenedor
 - `.full`: Agregar `max-width: 100%; box-sizing: border-box;` para evitar que los campos de ancho completo (Funcionario, Descripción) se desborden
 - `.fuente-toggle`: Agregar `width: 100%; box-sizing: border-box;` para contener el button toggle group
 
 **Razón de `box-sizing: border-box`:** Incluye padding y border en el ancho calculado, evitando que el contenido + padding exceda el 100%.
+
+### Fase 2.5: Truncar texto del trigger del mat-select Funcionario
+
+**Archivo:** `src/app/pages/rrhh/vales/create-edit-vale-dialog.component.ts` estilos
+
+Agregar clase para truncar el trigger del mat-select cuando el nombre del funcionario es muy largo:
+
+```typescript
+mat-select {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+```
+
+**Justificación:** Si un funcionario tiene nombre + apellido muy largo, el trigger debe truncar con ellipsis (`...`) para no causar overflow horizontal. El dropdown panel (overlay) puede mostrar el nombre completo sin afectar el layout del dialog.
 
 ### Fase 3: Verificar mat-select no causa overflow
 
@@ -146,18 +173,26 @@ styles: [`
 
 ## 3. Fases de implementación
 
-### Fase 1: Ajustar llamadas al dialog (2 archivos .ts)
-- Modificar width de `'780px'` a `'760px'` en `list-vales.component.ts`
-- Modificar width de `'700px'` a `'760px'` en `pagar-obligaciones-dialog.component.ts`
+### Fase 1: Ajustar llamadas al dialog (3 callers)
+- Modificar width de `'780px'` a `'760px'` en `list-vales.component.ts` línea 192
+- Modificar width de `'700px'` a `'760px'` en `pagar-obligaciones-dialog.component.ts` línea 712
+- **NO modificar** `registrar-egreso-dialog.component.ts` línea 303 (ya está bien con `'760px'` y `maxWidth: '95vw'`)
 
 ### Fase 2: Ajustar estilos inline del componente
 - Modificar el bloque `styles` en `create-edit-vale-dialog.component.ts`
-- Reemplazar `.dialog-content { min-width: 720px; }` por estilos responsive
+- **Eliminar** `.dialog-content { min-width: 720px; }` → usar `width: 100%; max-width: 720px; box-sizing: border-box;`
 - Agregar `max-width` y `box-sizing` a `.full`, `.form`, y `.fuente-toggle`
+- **Agregar** truncamiento del trigger del mat-select: `mat-select { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }`
 
-### Fase 3: Commit + Push
+### Fase 3: Commit del plan enmendado
+- Commit con mensaje: `docs(rrhh): enmendar plan #288 con hallazgos de auditoría`
+
+### Fase 4: Implementación
 - Commit con mensaje conventional: `fix(rrhh): eliminar overflow horizontal en diálogo crear vale/adelanto`
+
+### Fase 5: Push + Verificación
 - Push a `cursor/fix-288-vale-dialog-layout-2582`
+- `npm run build` para verificar compilación
 
 ---
 
@@ -175,31 +210,42 @@ styles: [`
 
 ### Escenario 2: Abrir desde pago consolidado
 1. Login como admin con permiso `RRHH_VALE_CREAR`
-2. Navegar a **Financiero → Caja Mayor → Pagar Obligaciones** (o usar el hub de egresos)
+2. Navegar a **Financiero → Caja Mayor → Pagar Obligaciones**
 3. Seleccionar concepto **VALE**
 4. Click en botón **+ Crear nuevo**
 5. **Verificar:**
-   - ✅ No hay scrollbar horizontal
+   - ✅ No hay scrollbar horizontal (este era el caso del overflow)
    - ✅ Campo Funcionario se ve completo sin desbordar
    - ✅ Todos los campos alineados en grid 2 columnas
    - ✅ Campos condicionales (Caja Mayor, Cuenta Bancaria) se muestran/ocultan correctamente sin romper layout
 
-### Escenario 3: Dark theme
+### Escenario 3: Abrir desde hub de egresos de Caja Mayor
+1. Login como admin
+2. Navegar a **Financiero → Caja Mayor → (tarjetas de acción en el dashboard)**
+3. Click en tarjeta **Registrar egreso** o similar (abre `registrar-egreso-dialog`)
+4. Seleccionar tipo **REGISTRAR_VALE**
+5. **Verificar:**
+   - ✅ No hay scrollbar horizontal (este caller ya estaba bien con 760px)
+   - ✅ Campo Funcionario se ve completo sin desbordar
+   - ✅ Todos los campos alineados en grid 2 columnas
+   - ✅ El `maxWidth: '95vw'` funciona correctamente en pantallas pequeñas
+
+### Escenario 4: Dark theme
 1. Cambiar a dark theme (toggle en header)
-2. Repetir escenarios 1 y 2
+2. Repetir escenarios 1, 2 y 3
 3. **Verificar:**
    - ✅ No hay scrollbar horizontal en dark theme
    - ✅ Colores del dialog se ven correctos (sin fondos blancos que delaten overflow)
    - ✅ El texto del campo Funcionario es legible (color correcto en dark)
 
-### Escenario 4: Nombres largos
+### Escenario 5: Nombres largos (truncamiento con ellipsis)
 1. En la BD de prueba, modificar un funcionario para tener nombre + apellido muy largo (ej: "JUAN PABLO SEBASTIAN GONZALEZ RODRIGUEZ MARTINEZ")
 2. Abrir el diálogo y seleccionar ese funcionario
 3. **Verificar:**
-   - ✅ El trigger del mat-select trunca el texto con ellipsis (`...`) sin causar overflow
-   - ✅ El dropdown panel muestra el nombre completo (puede ser más ancho que el dialog, está en overlay)
+   - ✅ El trigger del mat-select **trunca el texto con ellipsis** (`...`) sin causar overflow
+   - ✅ El dropdown panel (overlay) muestra el nombre completo sin afectar el layout del dialog
 
-### Escenario 5: Modo confirmar (modoConfirmar = true)
+### Escenario 6: Modo confirmar (modoConfirmar = true)
 Este modo se usa en mobile PWA (`projects/mobile/.../ops/vale-nuevo.page.ts`) pero NO tiene caller en desktop actualmente. El código existe pero la entrada desde `pagar-obligaciones-dialog` usa `data: {}` (no pasa `modoConfirmar: true`).
 
 **Acción:** Solo verificar visualmente que los campos condicionales no rompen:
@@ -246,7 +292,7 @@ Este modo se usa en mobile PWA (`projects/mobile/.../ops/vale-nuevo.page.ts`) pe
 
 ### Impacto
 - **Bajo**: Solo afecta estilos inline del componente + llamadas al MatDialog.open()
-- **Scope:** 1 componente + 2 callers
+- **Scope:** 1 componente + 3 callers (2 modificados, 1 verificado)
 - **Cambio de behavior:** Ninguno. La funcionalidad del dialog es idéntica, solo se arregla el layout.
 
 ### Riesgo
@@ -292,12 +338,13 @@ Los estilos globales de `styles.scss` ya manejan `.dark-theme .mat-mdc-dialog-co
 ## 8. Criterios de aceptación
 
 ### Debe cumplir
-1. ✅ No hay scrollbar horizontal visible en el dialog en **ninguno** de los 2 puntos de entrada (lista de vales, pago consolidado)
+1. ✅ No hay scrollbar horizontal visible en el dialog en **ninguno** de los 3 puntos de entrada (lista de vales, pago consolidado, hub de egresos)
 2. ✅ El campo Funcionario (mat-select con clase `.full`) se ve completo sin desbordar el panel
-3. ✅ El grid de 2 columnas se mantiene alineado (los campos no "saltan" de posición)
-4. ✅ Los campos `.full` (Funcionario, Descripción) ocupan el ancho completo del form sin causar overflow
-5. ✅ Funciona correctamente en **light theme y dark theme**
-6. ✅ El diálogo es visualmente consistente desde ambos puntos de entrada (mismo ancho, misma apariencia)
+3. ✅ El trigger del mat-select **trunca nombres largos con ellipsis** sin causar overflow
+4. ✅ El grid de 2 columnas se mantiene alineado (los campos no "saltan" de posición)
+5. ✅ Los campos `.full` (Funcionario, Descripción) ocupan el ancho completo del form sin causar overflow
+6. ✅ Funciona correctamente en **light theme y dark theme**
+7. ✅ El diálogo es visualmente consistente desde los 3 puntos de entrada (mismo ancho, misma apariencia)
 
 ### No debe romper
 1. ✅ Validaciones del form (campo requerido, monto > 0, etc.)
@@ -322,9 +369,10 @@ Esto hace el layout **responsive dentro del rango 760px (dialog) ↔ 720px (cont
 
 ### Por qué 760px para el dialog
 - Suficiente para grid 2 columnas: `(760 - 32 padding - 12 gap) / 2 ≈ 358px` por columna
-- Margen de 40px respecto a `max-width: 720px` del contenido → evita que el contenido alcance el borde
-- Consistente entre ambos callers → no depende de dónde se abre
+- **Margen real:** `760px (dialog) - 32px (padding mat-dialog-content) - 720px (max-width contenido) = 8px` → suficiente para evitar que el contenido alcance el borde del dialog
+- **Consistente entre los 3 callers** → no depende de dónde se abre
 - Conservador (no demasiado ancho) → funciona en resoluciones 1366x768 (laptop común)
+- **Corrige el overflow:** 700px (antes) < 720px + 32px = 752px → **52px de overflow**
 
 ### Evidencia del issue
 Captura del issue #288 muestra:
@@ -338,20 +386,30 @@ Esto confirma el diagnóstico: el `min-width: 720px` del contenido excede el `wi
 
 ## 10. Checklist de implementación
 
+### Plan enmendado (auditorías PASS-with-fixes)
+- [x] Corregir que son 3 callers, no 2
+- [x] Agregar `registrar-egreso-dialog.component.ts` (ya está bien, solo verificar)
+- [x] Corregir causa real: min-width 720px + padding 32px = 752px > 700px
+- [x] Corregir margen real: 8px, no 40px
+- [x] Agregar truncamiento del trigger del mat-select con ellipsis
+- [x] Agregar escenario de prueba desde hub de egresos
+
+### Implementación
 - [ ] Fase 1: Modificar `list-vales.component.ts` línea 192 (`width: '760px'`)
 - [ ] Fase 1: Modificar `pagar-obligaciones-dialog.component.ts` línea 712 (`width: '760px'`)
+- [ ] Fase 1: Verificar `registrar-egreso-dialog.component.ts` línea 303 (no modificar)
 - [ ] Fase 2: Modificar estilos inline en `create-edit-vale-dialog.component.ts`
-- [ ] Fase 3: Probar escenario 1 (lista de vales) en light theme
-- [ ] Fase 3: Probar escenario 1 en dark theme
-- [ ] Fase 3: Probar escenario 2 (pago consolidado) en light theme
-- [ ] Fase 3: Probar escenario 2 en dark theme
-- [ ] Fase 3: Probar escenario 4 (nombres largos)
-- [ ] Commit con mensaje conventional: `fix(rrhh): eliminar overflow horizontal en diálogo crear vale/adelanto`
+- [ ] Fase 2: Eliminar `min-width: 720px` del `.dialog-content`
+- [ ] Fase 2: Agregar truncamiento del mat-select
+- [ ] Commit plan enmendado: `docs(rrhh): enmendar plan #288 con hallazgos de auditoría`
+- [ ] Commit implementación: `fix(rrhh): eliminar overflow horizontal en diálogo crear vale/adelanto`
 - [ ] Push a `cursor/fix-288-vale-dialog-layout-2582`
-- [ ] Crear PR draft contra `develop` citando `Relacionado con #288`
+- [ ] `npm run build` para verificar compilación
+- [ ] Actualizar PR #294 con la implementación
 
 ---
 
 **Fecha de plan:** 2026-09-09  
+**Fecha de enmienda:** 2026-09-09 (auditorías PASS-with-fixes)  
 **Autor:** Claude (Cloud Agent)  
-**Revisión:** Pendiente aprobación de Gabriel
+**Revisión:** Aprobado por Gabriel para implementación
