@@ -10,7 +10,7 @@
 
 ## 1. Problema
 
-SQLite guarda columnas `datetime` (como `ventas.created_at`, `cajas_mayor_movimientos.fecha`) como **TEXT con formato `YYYY-MM-DD HH:MM:SS.000`** (espacio, sin `T` ni `Z`). 
+SQLite guarda columnas `datetime` (como `ventas.created_at`, `cajas_mayor_movimientos.fecha`) como **TEXT con formato `YYYY-MM-DD HH:MM:SS`** (espacio, sin `.000`, sin `T`, sin `Z`). El valor guardado es **UTC**. 
 
 Los handlers de reportes y dashboards comparan estas columnas contra límites generados con `Date.toISOString()`, que produce formato **`YYYY-MM-DDTHH:MM:SS.000Z`** (con `T` mayúscula).
 
@@ -38,12 +38,13 @@ Este helper **solo se usa en `dashboard-rrhh.handler.ts`** (líneas 154, 158). E
 
 **SÍ tocar:**
 - Handlers de reportes: `reportes-ventas.helper.ts`, `reportes-finanzas.helper.ts`, `reportes-delivery.helper.ts`
-- Handlers de dashboards: `dashboard-ventas.handler.ts`, `dashboard-productos.handler.ts`, `dashboard-caja-mayor.handler.ts`, `dashboard-financiero.handler.ts`
+- Handlers de dashboards: `dashboard-ventas.handler.ts`, `dashboard-productos.handler.ts`, `dashboard-caja-mayor.handler.ts`, `dashboard-financiero.handler.ts`, **`dashboard-compras.handler.ts`** (enmienda auditoría A)
 - Cualquier otro handler de reportes/dashboards que el grep demuestre con el mismo patrón
 
 **NO tocar:**
 - Facturación ni tickets (fuera del alcance del issue)
-- Uso de `.toISOString()` que NO compare contra columnas datetime (ej: timestamps de log, serialización JSON, fechas de cumpleaños que son `date` sin hora)
+- Uso de `.toISOString()` que NO compare contra columnas datetime (ej: timestamps de log, serialización JSON)
+- **Columnas `date` sin hora:** `Asistencia.fecha`, `Vale.fecha`, `Cheque.fecha_pago`, `PrecioCosto.fecha`, `CuentaPorPagarCuota.fecha_vencimiento` (enmienda 3)
 - Comparaciones que ya usan `fechaParamSql` correctamente
 
 ---
@@ -128,6 +129,18 @@ Este helper **solo se usa en `dashboard-rrhh.handler.ts`** (líneas 154, 158). E
 
 ---
 
+### 3.5b. `electron/handlers/dashboard-compras.handler.ts` (ENMIENDA AUDITORÍA A)
+
+| Línea | Función | Uso | Acción |
+|---|---|---|---|
+| ~30 | `get-dashboard-compras-kpis` | Comparaciones contra `compras.created_at` | Aplicar `fechaParamSql` |
+| ~62 | Similar | Similar | Aplicar `fechaParamSql` |
+| ~118 | Similar | Similar | Aplicar `fechaParamSql` |
+
+**Total:** ~3 sitios (verificar líneas exactas).
+
+---
+
 ### 3.6. `electron/handlers/dashboard-caja-mayor.handler.ts`
 
 | Línea | Función | Uso | Acción |
@@ -177,14 +190,24 @@ Este helper **solo se usa en `dashboard-rrhh.handler.ts`** (líneas 154, 158). E
 
 ## 4. Estrategia de implementación
 
+### ENMIENDAS (2026-09-09)
+
+1. **✅ Timezone verificado:** SQLite guarda datetime como `YYYY-MM-DD HH:MM:SS` (sin milisegundos) en **UTC**. Evidencia: `scripts/test-kpis-filtros-e2e.ts:144-148` verifica el formato exacto; línea 79 sella con `toISOString().slice(0, 19).replace('T', ' ')`. El helper `fechaParamSql` ya hace lo correcto: toma `toISOString()` (UTC) y normaliza el formato.
+2. **Incluir `dashboard-compras.handler.ts`** (~3 sitios, auditoría A).
+3. **NO tocar columnas `date`:** Asistencia.fecha, Vale.fecha, Cheque.fecha_pago, PrecioCosto.fecha, CuentaPorPagarCuota.fecha_vencimiento.
+4. **Preferir fin exclusivo:** `>= inicio AND < inicioDíaSiguiente`, salvo query existente con test que dependa del inclusivo.
+5. **Test E2E:** venta día 1, mitad de mes, día 1 del mes siguiente. Reporte cuenta exactamente las dos primeras.
+6. **NO tocar facturación ni tickets.**
+7. **Aviso en PR body:** Los números de reportes SQLite van a cambiar (incluyen día 1, dejan de incluir arrastre).
+8. **`npm run build` al cierre.** Correr test nuevo.
+
 ### Fase 1: Preparación del helper centralizado
 
-**Objetivo:** Evitar duplicar la lógica en cada query. Crear un wrapper alrededor de `fechaParamSql` que se pueda usar en queries crudas.
+**Objetivo:** Evitar duplicar la lógica en cada query.
 
 **Acción:**
-1. **Revisar si `fechaParamSql` actual alcanza** o hay que ajustarlo (parece que sí alcanza).
-2. **Exportar `fechaParamSql`** desde `date.utils.ts` si no está exportado.
-3. Crear en `date.utils.ts` un helper adicional **`fechasParamSql(dataSource, fechas: Date[])`** que devuelva un array de strings normalizados → simplifica queries con múltiples límites.
+1. **✅ `fechaParamSql` ya está correcto** — toma Date (construido en hora local), lo convierte a UTC con `toISOString()`, y normaliza el formato para SQLite.
+2. **✅ Ya está exportado** desde `date.utils.ts`.
 
 ### Fase 2: Fix de `filtroRango` en `dashboard-ventas.handler.ts`
 
@@ -379,9 +402,9 @@ Este helper **solo se usa en `dashboard-rrhh.handler.ts`** (líneas 154, 158). E
 ### Posiblemente actualizados:
 1. `.claude/skills/frc-gourmet-expert/reference/known-bugs.md` — si el bug estaba listado
 
-**Total archivos modificados:** 9-10  
-**Total archivos creados:** 3  
-**Total líneas de código afectadas:** ~35-40 sitios de comparación de fecha
+**Total archivos modificados:** 10-11 (+ dashboard-compras)  
+**Total archivos creados:** 2 (test E2E + este plan; NO crear CHANGELOG inventado)  
+**Total líneas de código afectadas:** ~38-43 sitios de comparación de fecha
 
 ---
 
