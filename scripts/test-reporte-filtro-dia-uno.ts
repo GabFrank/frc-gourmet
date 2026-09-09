@@ -106,24 +106,51 @@ async function main() {
     // Importar fechaParamSql dinámicamente
     const { fechaParamSql } = await import('../electron/utils/date.utils');
     
-    // Caso 1: Reporte de agosto completo (01-31)
+    // Caso 0: CONTRAEJEMPLO - Demostrar que el bug ocurre con toISOString() directo (con T)
+    console.log('\n🔬 CONTRAEJEMPLO: Filtro con toISOString() (bug original)');
     const desdeAgosto = new Date(2026, 7, 1, 0, 0, 0, 0); // Agosto = mes 7 (0-indexed)
     const hastaAgosto = new Date(2026, 7, 31, 23, 59, 59, 999);
+    
+    const desdeBuggy = desdeAgosto.toISOString(); // ❌ Con T: '2026-08-01T00:00:00.000Z'
+    const hastaBuggy = hastaAgosto.toISOString(); // ❌ Con T: '2026-08-31T23:59:59.999Z'
+    
+    console.log(`   String buggy: ${desdeBuggy} - ${hastaBuggy}`);
+    ok(desdeBuggy.includes('T'), 'String buggy contiene T (formato ISO con T)', desdeBuggy);
+    
+    const ventasAgostoBuggy: any[] = await ds.query(
+      `SELECT id FROM ventas WHERE estado = 'CONCLUIDA' AND created_at >= ? AND created_at <= ?`,
+      [desdeBuggy, hastaBuggy]
+    );
+    
+    // El bug: con T, SQLite compara ' ' < 'T', así que el día 1 se excluye
+    console.log(`   Ventas encontradas con bug: ${ventasAgostoBuggy.length} (esperado < 2 por el bug)`);
+    ok(!ventasAgostoBuggy.some(v => v.id === ventaA.id), 
+       '❌ Con toISOString() (T), venta del día 1 se EXCLUYE (bug #249)', 
+       ventasAgostoBuggy.map(v => v.id));
+    ok(ventasAgostoBuggy.length < 2,
+       `❌ Con toISOString() (T), cuenta ${ventasAgostoBuggy.length} < 2 ventas (falta día 1)`,
+       ventasAgostoBuggy.map(v => v.id));
+    
+    // Caso 1: FIX - Con fechaParamSql el filtro funciona correctamente
+    console.log('\n✅ FIX: Filtro con fechaParamSql (normalizado)');
     
     const desdeSQL = fechaParamSql(ds, desdeAgosto);
     const hastaSQL = fechaParamSql(ds, hastaAgosto);
     
-    console.log(`\n🔍 Filtro agosto: ${desdeSQL} - ${hastaSQL}`);
+    console.log(`   String correcto: ${desdeSQL} - ${hastaSQL}`);
+    ok(!desdeSQL.includes('T'), 'String correcto NO contiene T (normalizado para SQLite)', desdeSQL);
+    ok(desdeSQL.includes(' '), 'String correcto contiene espacio (formato SQLite)', desdeSQL);
     
     const ventasAgosto: any[] = await ds.query(
       `SELECT id, created_at FROM ventas WHERE estado = 'CONCLUIDA' AND created_at >= ? AND created_at <= ? ORDER BY id`,
       [desdeSQL, hastaSQL]
     );
     
-    ok(ventasAgosto.length === 2, `Agosto debe contar 2 ventas (A+B), no ${ventasAgosto.length}`, ventasAgosto.map(v => v.id));
-    ok(ventasAgosto.some(v => v.id === ventaA.id), 'Venta A (día 1) SÍ se incluye');
-    ok(ventasAgosto.some(v => v.id === ventaB.id), 'Venta B (día 15) SÍ se incluye');
-    ok(!ventasAgosto.some(v => v.id === ventaC.id), 'Venta C (día 1 sept) NO se incluye en agosto');
+    console.log(`   Ventas encontradas con fix: ${ventasAgosto.length}`);
+    ok(ventasAgosto.length === 2, `✅ Con fechaParamSql, agosto cuenta 2 ventas (A+B), no ${ventasAgosto.length}`, ventasAgosto.map(v => v.id));
+    ok(ventasAgosto.some(v => v.id === ventaA.id), '✅ Con fechaParamSql, venta A (día 1) SÍ se incluye');
+    ok(ventasAgosto.some(v => v.id === ventaB.id), '✅ Venta B (día 15) SÍ se incluye');
+    ok(!ventasAgosto.some(v => v.id === ventaC.id), '✅ Venta C (día 1 sept) NO se incluye en agosto');
     
     // Verificar suma de montos
     const sumaPagos: any[] = await ds.query(`
