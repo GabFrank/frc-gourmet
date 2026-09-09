@@ -42,11 +42,11 @@ async function main() {
   
   try {
     // Crear usuarios, moneda, caja, etc. (seed mínimo)
-    await ds.query(`INSERT INTO usuarios (id, nickname, active, must_change_password, created_at, updated_at) 
-                    VALUES (1, 'ADMIN', 1, 0, datetime('now'), datetime('now'))`);
+    await ds.query(`INSERT INTO usuarios (id, nickname, password, activo, must_change_password, created_at, updated_at) 
+                    VALUES (1, 'ADMIN', 'x', 1, 0, datetime('now'), datetime('now'))`);
     
-    await ds.query(`INSERT INTO monedas (id, nombre, simbolo, denominacion, principal, activo, created_at, updated_at)
-                    VALUES (1, 'GUARANÍES', 'Gs', 'PYG', 1, 1, datetime('now'), datetime('now'))`);
+    await ds.query(`INSERT INTO monedas (id, nombre, simbolo, denominacion, principal, decimales, activo, created_at, updated_at)
+                    VALUES (1, 'GUARANÍES', 'Gs', 'PYG', 1, 0, 1, datetime('now'), datetime('now'))`);
     
     await ds.query(`INSERT INTO formas_pago (id, nombre, movimenta_caja, activo, created_at, updated_at)
                     VALUES (1, 'EFECTIVO', 1, 1, datetime('now'), datetime('now'))`);
@@ -54,8 +54,8 @@ async function main() {
     await ds.query(`INSERT INTO dispositivos (id, codigo, nombre, local, activo, created_at, updated_at, created_by)
                     VALUES (1, 'DEV1', 'Terminal 1', 1, 1, datetime('now'), datetime('now'), 1)`);
     
-    await ds.query(`INSERT INTO cajas (id, fecha_apertura, estado, activo, dispositivo_id, created_at, updated_at, created_by)
-                    VALUES (1, datetime('2026-08-01 07:00:00'), 'ABIERTO', 1, 1, datetime('now'), datetime('now'), 1)`);
+    await ds.query(`INSERT INTO cajas (id, fecha_apertura, estado, dispositivo_id, activo, created_at, updated_at, created_by)
+                    VALUES (1, '2026-08-01 07:00:00', 'ABIERTO', 1, 1, datetime('now'), datetime('now'), 1)`);
     
     // Crear 3 ventas en agosto 2026:
     // - Venta A: día 1 (2026-08-01 10:00:00)
