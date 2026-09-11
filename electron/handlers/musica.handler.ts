@@ -1005,9 +1005,12 @@ export function registerMusicaHandlers(
    */
   ipcMain.handle('stream-token', async (_event, scope: StreamScope) => {
     const permisos =
-      scope === 'kds' ? ['COMANDAS_KDS_VER', 'COMANDAS_KDS_OPERAR'] : [PERM_VER, PERM_CONTROLAR];
+      scope === 'kds' || scope === 'pdv'
+        ? ['VENTAS_PDV']
+        : [PERM_VER, PERM_CONTROLAR];
     const usuario = await ensurePermission(dataSource, getCurrentUser, permisos);
-    return await emitirStreamToken(usuario.id, scope === 'kds' ? 'kds' : 'musica');
+    const scopeToken = scope === 'kds' ? 'kds' : scope === 'pdv' ? 'pdv' : 'musica';
+    return await emitirStreamToken(usuario.id, scopeToken);
   });
 
   // ───────────────── Runtime automatico ─────────────────
