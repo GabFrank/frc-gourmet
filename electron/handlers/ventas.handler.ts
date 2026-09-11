@@ -883,6 +883,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
         relations: ['caja'],
       });
+      
+      // P0-2: Gatear CUALQUIER cierre (CONCLUIDA o CANCELADA) si hay >1 ABIERTA.
+      // Invariante: no cerrar hermanas sin pago. Si hay múltiples cuentas, el
+      // cajero debe decidir qué hacer con cada una (transferir/unir/cancelar
+      // explícitamente). Cancelar una hermana silenciosamente es tan malo como
+      // concluirla sin pago (bug Alpha Don Franco 2026-09-10/11, venta 3771).
+      if (ventasAbiertas.length > 1) {
+        throw new Error('MESA_TIENE_OTRAS_VENTAS_ABIERTAS');
+      }
+      
       // Este handler pone CONCLUIDA con `repo.save` directo, sin pasar por
       // `updateVenta`: es un tercer camino de finalización y necesita el mismo
       // gate de terminal ajena. Sólo aplica al cierre por cobro (CONCLUIDA); la
@@ -1372,6 +1382,38 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           throw new Error(
             'No se puede cancelar una venta a crédito con cobros registrados. Anule primero los cobros de la cuenta por cobrar.',
           );
+        }
+      }
+
+      // P0-3: Guard ANTES del merge. Si la venta es de mesa (comanda IS NULL) y
+      // la transición es a CONCLUIDA, verificar que no haya otras ventas ABIERTAS
+      // en esa mesa. Sin esto, el merge asigna `estado = CONCLUIDA` y aunque el
+      // guard rechace después, la entidad ya está contaminada.
+      //
+      // Invariante: no concluir ventas de mesa con hermanas ABIERTAS.
+      // Fix para bug Alpha Don Franco 2026-09-10/11 (venta 3771 cerrada sin pago).
+      if (
+        data?.estado === VentaEstado.CONCLUIDA &&
+        estadoAnterior === VentaEstado.ABIERTA
+      ) {
+        // Necesitamos saber si es venta de mesa (comanda IS NULL). `findOneBy`
+        // no trae las relaciones, así que usamos la query cruda que ya existe.
+        const tieneComanda = (
+          await dataSource.query(`SELECT comanda_id AS cmd FROM ventas WHERE id = $1`.replace('$1', String(Number(id))))
+        )?.[0]?.cmd != null;
+
+        if (mesaDeLaVenta && !tieneComanda) {
+          const hermanas = await repo.count({
+            where: {
+              mesa: { id: mesaDeLaVenta },
+              estado: VentaEstado.ABIERTA,
+              comanda: IsNull(),
+              id: Not(id)
+            }
+          });
+          if (hermanas > 0) {
+            throw new Error('MESA_TIENE_OTRAS_VENTAS_ABIERTAS');
+          }
         }
       }
 
