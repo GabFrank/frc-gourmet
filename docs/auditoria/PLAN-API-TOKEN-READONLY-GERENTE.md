@@ -232,7 +232,7 @@ Crear un **token de servicio** (API key) con alcance explícito de lectura, sin 
    Content-Type: application/json
 
    {
-     "method": "get-ventas-by-date-range",
+     "method": "getVentasByDateRange",
      "params": [...]
    }
    ```
@@ -483,7 +483,7 @@ curl -X POST https://<server-url>/api/auth/login \
 
 # Capturar token de la response
 
-# Llamar get-ventas-by-date-range
+# Llamar getVentasByDateRange
 curl -X POST https://<server-url>/api/rpc \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
@@ -502,12 +502,12 @@ curl -X POST https://<server-url>/api/rpc \
 ```bash
 # Login (igual que arriba)
 
-# Llamar get-productos-for-sale-mode
+# Llamar get-productos-con-precio
 curl -X POST https://<server-url>/api/rpc \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "method": "get-productos-for-sale-mode",
+    "method": "get-productos-con-precio",
     "params": []
   }'
 
