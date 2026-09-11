@@ -17,7 +17,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { mensajeDeError } from 'src/app/shared/utils/error-message.util';
 import { FormControl, FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { Observable, of, firstValueFrom, async } from 'rxjs';
-import { debounceTime, distinctUntilChanged, map, startWith, switchMap } from 'rxjs/operators';
+import { debounceTime, distinctUntilChanged, map, startWith, switchMap, catchError } from 'rxjs/operators';
 import { animate, state, style, transition, trigger } from '@angular/animations';
 
 import { RepositoryService } from '../../../database/repository.service';
@@ -2023,6 +2023,21 @@ export class PdvComponent implements OnInit, OnDestroy {
               this.selectedMesa.estado = PdvMesaEstado.OCUPADO;
             }
             return createdVenta;
+          }),
+          catchError((error) => {
+            // P0-1: Error cuando ya existe venta ABIERTA en la mesa
+            if (error?.message?.includes('MESA_YA_TIENE_VENTA_ABIERTA')) {
+              this.snackBar.open(
+                'Esta mesa ya tiene una cuenta abierta. Verifique las ventas activas antes de abrir una nueva.',
+                'Cerrar',
+                { duration: 8000 }
+              );
+            } else if (error?.message?.includes('VENTA_MESA_DEBE_SER_RELACION')) {
+              this.snackBar.open('Error: formato de mesa inválido', 'Cerrar', { duration: 5000 });
+            } else {
+              this.snackBar.open(mensajeDeError(error), 'Cerrar', { duration: 5000 });
+            }
+            throw error;
           })
         ));
       } else {
@@ -2176,8 +2191,22 @@ export class PdvComponent implements OnInit, OnDestroy {
         }
         // Liberar mesa y limpiar estado completamente
         if (this.selectedMesa) {
-          // Cerrar cualquier venta huérfana abierta en esta mesa
-          await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CONCLUIDA, { validarDispositivoCaja: true }));
+          try {
+            // Cerrar cualquier venta huérfana abierta en esta mesa
+            await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CONCLUIDA, { validarDispositivoCaja: true }));
+          } catch (error: any) {
+            // P0-2: Error cuando hay múltiples ventas ABIERTAS en la mesa
+            if (error?.message?.includes('MESA_TIENE_OTRAS_VENTAS_ABIERTAS')) {
+              this.snackBar.open(
+                'Esta mesa tiene múltiples cuentas abiertas. Cierre o transfiera las otras cuentas primero.',
+                'Cerrar',
+                { duration: 8000 }
+              );
+            } else {
+              this.snackBar.open(mensajeDeError(error), 'Cerrar', { duration: 5000 });
+            }
+            throw error;
+          }
           this.updateMesaEstado(this.selectedMesa, PdvMesaEstado.DISPONIBLE);
           this.selectedMesa.venta = null as any;
         this.estamparMesa(this.selectedMesa as any);
