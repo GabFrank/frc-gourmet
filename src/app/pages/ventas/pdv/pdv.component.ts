@@ -126,7 +126,15 @@ type MesaVm = PdvMesa & { _claseEstado?: string; _tooltip?: string };
   ],
 })
 export class PdvComponent implements OnInit, OnDestroy {
-  private mesasRefreshInterval: any = null;
+  // SSE: reemplazo de polling
+  private mesasEventSource: EventSource | null = null;
+  private pendingMesaRefreshes = new Set<number>();
+  private pendingComandaRefreshes = new Set<number>();
+  private coalesceTimer: any;
+  private sseReconnectTimer: any;
+  private fallbackPollTimer: any;
+  private sseConnected = false;
+  
   private refreshingMesas = false;
 
   // Modo mover items
@@ -562,11 +570,8 @@ export class PdvComponent implements OnInit, OnDestroy {
       console.error('Error loading initial data:', error);
     }
 
-    // Auto-refresh mesas y comandas cada 1 segundo
-    this.mesasRefreshInterval = setInterval(() => {
-      this.refreshMesasSilent();
-      this.refreshComandasSilent();
-    }, 1000);
+    // SSE: conectar al stream de mesas/comandas en lugar de polling
+    this.conectarSSEMesas();
   }
 
   /**
@@ -631,9 +636,12 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    if (this.mesasRefreshInterval) {
-      clearInterval(this.mesasRefreshInterval);
-    }
+    // SSE: cerrar conexión y limpiar timers
+    this.desconectarSSEMesas();
+    if (this.coalesceTimer) clearTimeout(this.coalesceTimer);
+    if (this.sseReconnectTimer) clearTimeout(this.sseReconnectTimer);
+    if (this.fallbackPollTimer) clearInterval(this.fallbackPollTimer);
+    
     if (this.pedidosOnlineInterval) {
       clearInterval(this.pedidosOnlineInterval);
     }
@@ -3164,5 +3172,185 @@ export class PdvComponent implements OnInit, OnDestroy {
     return `${hours}h ${minutes}m`;
   }
 
+  // ────────────────────────────────────────────────────────────────────────────
+  // SSE: reemplazo del polling de 1s
+  // ────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Conecta al stream SSE de mesas/comandas (`/api/pdv/mesas/stream`).
+   * Al abrir, hace un snapshot inicial (`getPdvMesas`/`getComandas`).
+   * Cada evento `MESA_CAMBIO` o `COMANDA_CAMBIO` agenda un refresh coalescido.
+   * Fallback a polling 15s si el stream falla o se cierra.
+   */
+  private async conectarSSEMesas(): Promise<void> {
+    try {
+      // 1. Snapshot inicial (reemplaza el primer refreshMesas)
+      await this.refreshMesasSilent();
+      await this.refreshComandasSilent();
+
+      // 2. Solicitar stream-token con contexto 'pdv'
+      const tokenRes: any = await firstValueFrom(
+        this.repositoryService.callIpc('generate-stream-token', 'pdv')
+      );
+      const token = tokenRes?.token;
+      if (!token) {
+        console.warn('[SSE] No se pudo obtener stream-token, fallback a polling');
+        this.activarFallbackPolling();
+        return;
+      }
+
+      // 3. EventSource a /api/pdv/mesas/stream?token=...
+      const url = `/api/pdv/mesas/stream?token=${encodeURIComponent(token)}`;
+      this.mesasEventSource = new EventSource(url);
+
+      this.mesasEventSource.onopen = () => {
+        console.log('[SSE Mesas] Conectado');
+        this.sseConnected = true;
+        // Detener fallback si estaba corriendo
+        if (this.fallbackPollTimer) {
+          clearInterval(this.fallbackPollTimer);
+          this.fallbackPollTimer = null;
+        }
+      };
+
+      this.mesasEventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.tipo === 'MESA_CAMBIO' && payload.mesaId) {
+            this.pendingMesaRefreshes.add(payload.mesaId);
+            this.coalescerRefrescos();
+          } else if (payload.tipo === 'COMANDA_CAMBIO' && payload.comandaId) {
+            this.pendingComandaRefreshes.add(payload.comandaId);
+            this.coalescerRefrescos();
+          }
+        } catch (e) {
+          console.warn('[SSE Mesas] Error parseando evento:', e);
+        }
+      };
+
+      this.mesasEventSource.onerror = () => {
+        console.warn('[SSE Mesas] Error/cierre, reconectando en 5s...');
+        this.sseConnected = false;
+        this.desconectarSSEMesas();
+        // Reconexión con snapshot
+        this.sseReconnectTimer = setTimeout(() => this.conectarSSEMesas(), 5000);
+        // Fallback mientras reconecta
+        this.activarFallbackPolling();
+      };
+    } catch (error) {
+      console.error('[SSE Mesas] Error al conectar:', error);
+      this.activarFallbackPolling();
+    }
+  }
+
+  private desconectarSSEMesas(): void {
+    if (this.mesasEventSource) {
+      this.mesasEventSource.close();
+      this.mesasEventSource = null;
+    }
+    this.sseConnected = false;
+  }
+
+  /**
+   * Coalescer: agrupa ráfagas de eventos en un único refresh tras 300ms de calma.
+   * Evita N llamadas si llegan N eventos seguidos.
+   */
+  private coalescerRefrescos(): void {
+    if (this.coalesceTimer) clearTimeout(this.coalesceTimer);
+    this.coalesceTimer = setTimeout(() => {
+      this.ejecutarRefrescosPendientes();
+    }, 300);
+  }
+
+  /**
+   * Ejecuta los refreshes coalescidos. Merge selectivo: NO pisa `.venta` de
+   * `selectedPdvMesa` (línea ~775 del viejo código).
+   */
+  private async ejecutarRefrescosPendientes(): Promise<void> {
+    const mesasIds = Array.from(this.pendingMesaRefreshes);
+    const comandasIds = Array.from(this.pendingComandaRefreshes);
+    this.pendingMesaRefreshes.clear();
+    this.pendingComandaRefreshes.clear();
+
+    try {
+      // Refresh mesas cambiadas
+      if (mesasIds.length > 0) {
+        const nuevas: PdvMesa[] = await firstValueFrom(
+          this.repositoryService.callIpc('getPdvMesas', this.selectedSector?.id || null)
+        );
+        // Merge por ID
+        for (const id of mesasIds) {
+          const nueva = nuevas.find((m: any) => m.id === id);
+          if (nueva) {
+            const idx = this.mesas.findIndex((m: any) => m.id === id);
+            if (idx >= 0) {
+              // NO pisar .venta de selectedPdvMesa (ref línea ~775)
+              if (this.selectedPdvMesa?.id === id) {
+                // Merge parcial: actualizar estado, número, etc. pero NO .venta
+                const { venta: _ventaIgnorada, ...sinVenta } = nueva as any;
+                Object.assign(this.mesas[idx], sinVenta);
+                this.selectedPdvMesa = this.mesas[idx];
+              } else {
+                this.mesas[idx] = this.derivarEstadoVisual(nueva);
+                if (this.selectedMesa?.id === id) {
+                  this.selectedMesa = this.mesas[idx];
+                }
+              }
+            } else {
+              // Mesa nueva apareció
+              this.mesas.push(this.derivarEstadoVisual(nueva));
+            }
+          }
+        }
+        this.actualizarContadorMesas();
+      }
+
+      // Refresh comandas cambiadas
+      if (comandasIds.length > 0) {
+        const ocupadas: any[] = await firstValueFrom(
+          this.repositoryService.callIpc('getComandasOcupadas')
+        );
+        const disponibles: any[] = await firstValueFrom(
+          this.repositoryService.callIpc('getComandasDisponibles')
+        );
+        this.comandas = [...ocupadas, ...disponibles];
+        this.comandasOcupadasCount = ocupadas.length;
+      }
+    } catch (error) {
+      console.warn('[SSE] Error en refresh pendientes:', error);
+    }
+  }
+
+  /**
+   * Fallback a polling de 15s cuando el SSE no está disponible o falla.
+   * Al reconectar exitosamente, se detiene.
+   */
+  private activarFallbackPolling(): void {
+    if (this.fallbackPollTimer) return; // ya está corriendo
+    console.log('[SSE] Fallback: polling cada 15s');
+    this.fallbackPollTimer = setInterval(() => {
+      if (!this.sseConnected) {
+        this.refreshMesasSilent();
+        this.refreshComandasSilent();
+      }
+    }, 15000);
+  }
+
+  /**
+   * Helper: deriva el estado visual de una mesa (clase CSS + tooltip).
+   * Reemplaza getters prohibidos en templates.
+   */
+  private derivarEstadoVisual(mesa: PdvMesa): MesaVm {
+    const vm = mesa as MesaVm;
+    vm._claseEstado = derivarEstadoVisualMesa(mesa);
+    vm._tooltip = derivarEstadoDetalleMesa(mesa);
+    return vm;
+  }
+
+  private actualizarContadorMesas(): void {
+    this.mesasOcupadasCount = this.mesas.filter(
+      (m: any) => m.estado === PdvMesaEstado.OCUPADO
+    ).length;
+  }
 
 } 
