@@ -3189,10 +3189,9 @@ export class PdvComponent implements OnInit, OnDestroy {
       await this.refreshComandasSilent();
 
       // 2. Solicitar stream-token con contexto 'pdv'
-      const tokenRes: any = await firstValueFrom(
-        this.repositoryService.callIpc('generate-stream-token', 'pdv')
-      );
-      const token = tokenRes?.token;
+      const token = await (window as any).api.invokeIpc('stream-token', 'pdv')
+        .then((res: any) => res?.token)
+        .catch(() => null);
       if (!token) {
         console.warn('[SSE] No se pudo obtener stream-token, fallback a polling');
         this.activarFallbackPolling();
@@ -3276,27 +3275,25 @@ export class PdvComponent implements OnInit, OnDestroy {
       // Refresh mesas cambiadas (fetch por ID individual, no getPdvMesas entero)
       if (mesasIds.length > 0) {
         for (const id of mesasIds) {
-          const nueva: PdvMesa = await firstValueFrom(
-            this.repositoryService.callIpc('getPdvMesa', id)
-          );
+          const nueva: PdvMesa = await (window as any).api.invokeIpc('getPdvMesa', id);
           if (nueva) {
             const idx = this.mesas.findIndex((m: any) => m.id === id);
             if (idx >= 0) {
-              // NO pisar .venta de selectedPdvMesa (ref línea ~775)
-              if (this.selectedPdvMesa?.id === id) {
+              // NO pisar .venta de selectedMesa (línea ~775)
+              if (this.selectedMesa?.id === id) {
                 // Merge parcial: actualizar estado, número, etc. pero NO .venta
                 const { venta: _ventaIgnorada, ...sinVenta } = nueva as any;
                 Object.assign(this.mesas[idx], sinVenta);
-                this.selectedPdvMesa = this.mesas[idx];
+                this.selectedMesa = this.mesas[idx];
               } else {
-                this.mesas[idx] = this.derivarEstadoVisual(nueva);
+                this.mesas[idx] = this.estamparEstadoVisual(nueva);
                 if (this.selectedMesa?.id === id) {
                   this.selectedMesa = this.mesas[idx];
                 }
               }
             } else {
               // Mesa nueva apareció
-              this.mesas.push(this.derivarEstadoVisual(nueva));
+              this.mesas.push(this.estamparEstadoVisual(nueva));
             }
           }
         }
@@ -3305,12 +3302,8 @@ export class PdvComponent implements OnInit, OnDestroy {
 
       // Refresh comandas cambiadas
       if (comandasIds.length > 0) {
-        const ocupadas: any[] = await firstValueFrom(
-          this.repositoryService.callIpc('getComandasOcupadas')
-        );
-        const disponibles: any[] = await firstValueFrom(
-          this.repositoryService.callIpc('getComandasDisponibles')
-        );
+        const ocupadas: any[] = await (window as any).api.invokeIpc('getComandasOcupadas');
+        const disponibles: any[] = await (window as any).api.invokeIpc('getComandasDisponibles');
         this.comandas = [...ocupadas, ...disponibles];
         this.comandasOcupadasCount = ocupadas.length;
       }
@@ -3335,13 +3328,14 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Helper: deriva el estado visual de una mesa (clase CSS + tooltip).
+   * Helper: estampa el estado visual de una mesa (clase CSS + tooltip).
    * Reemplaza getters prohibidos en templates.
    */
-  private derivarEstadoVisual(mesa: PdvMesa): MesaVm {
+  private estamparEstadoVisual(mesa: PdvMesa): MesaVm {
     const vm = mesa as MesaVm;
-    vm._claseEstado = derivarEstadoVisualMesa(mesa);
-    vm._tooltip = derivarEstadoDetalleMesa(mesa);
+    const { clase, tooltip } = derivarEstadoVisualMesa(mesa);
+    vm._claseEstado = clase;
+    vm._tooltip = tooltip;
     return vm;
   }
 
