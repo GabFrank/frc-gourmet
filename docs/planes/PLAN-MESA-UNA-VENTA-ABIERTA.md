@@ -748,6 +748,182 @@ cierran sin pago. Caso real: Alpha Don Franco mesa 4, ventas 3738/3739/3771
 
 ---
 
+## 13. Enmiendas Post-Auditoría
+
+**Fecha**: 2026-09-11 14:31 UTC  
+**Fuente**: AUDIT-PLAN-MESA-UNA-VENTA-ABIERTA-A.md (PASS-with-fixes) + B.md (FAIL)  
+**Estado**: Aprobado para implementación
+
+### P0-1: Guard Dentro del Lock (CRÍTICO)
+
+**Hallazgo A**: El plan original proponía verificar `count()` dentro de `withMesaLock` pero no aclaraba explícitamente que debe ser **dentro de la transacción**.
+
+**Corrección**:
+```typescript
+// CORRECTO: guard dentro del lock Y de la transacción
+const crear = async (): Promise<any> => dataSource.transaction(async (manager) => {
+  // 1. Verificar PRIMERO (antes de crear)
+  if (ocupaMesa) {
+    const count = await manager.getRepository(Venta).count({
+      where: { mesa: { id: Number(mesaId) }, estado: VentaEstado.ABIERTA, comanda: IsNull() }
+    });
+    if (count > 0) throw new Error('MESA_YA_TIENE_VENTA_ABIERTA');
+  }
+  
+  // 2. Crear DESPUÉS
+  const repo = manager.getRepository(Venta);
+  const entity = repo.create(data);
+  // ...
+});
+
+// 3. Lock por mesa envuelve TODO
+return ocupaMesa ? await withMesaLock(Number(mesaId), crear) : await crear();
+```
+
+**Por qué P0**: Sin lock+transacción atómica, dos requests concurrentes pasan ambos el guard.
+
+### P0-2: Gatear CANCELACIÓN (No Solo CONCLUIDA)
+
+**Hallazgo A**: `cerrarVentasAbiertasMesa(mesaId, estado)` recibe estado variable. Si `estado = CANCELADA` y hay 2 ABIERTAS, **debe rechazar igual** — cancelar una hermana silenciosamente es tan malo como concluirla sin pago.
+
+**Corrección**:
+```typescript
+// ANTES (plan original): solo gateaba CONCLUIDA
+if (ventasAbiertas.length > 1 && estado === VentaEstado.CONCLUIDA) { ... }
+
+// DESPUÉS: gatear CUALQUIER cierre (CONCLUIDA o CANCELADA)
+if (ventasAbiertas.length > 1) {
+  throw new Error('MESA_TIENE_OTRAS_VENTAS_ABIERTAS');
+}
+```
+
+**Por qué P0**: Cancelar mesa desde UI con múltiples cuentas → silenciosamente cancela todas.
+
+### P0-3: Guard ANTES del Merge en `updateVenta`
+
+**Hallazgo B**: El plan proponía el guard "antes de `repo.save`", pero `updateVenta` hace `Object.assign(existingEntity, updateData)` **antes** de validar. Si `updateData` trae `estado: CONCLUIDA`, el merge ya lo asignó aunque el guard rechace después.
+
+**Corrección**:
+```typescript
+// Guard ANTES de Object.assign
+if (
+  updateData.estado === VentaEstado.CONCLUIDA &&
+  existingEntity.mesa?.id &&
+  !existingEntity.comanda?.id
+) {
+  const hermanas = await repo.count({
+    where: {
+      mesa: { id: existingEntity.mesa.id },
+      estado: VentaEstado.ABIERTA,
+      comanda: IsNull(),
+      id: Not(id)
+    }
+  });
+  if (hermanas > 0) throw new Error('MESA_TIENE_OTRAS_VENTAS_ABIERTAS');
+}
+
+// Merge DESPUÉS
+Object.assign(existingEntity, updateData);
+```
+
+**Por qué P0**: Sin esto, el merge contamina la entidad antes de validar.
+
+### P0-4: Normalizar `mesa_id` Suelto
+
+**Hallazgo A**: El payload puede venir como `{ mesa: { id: 5 } }` (forma TypeORM) o como `{ mesa_id: 5 }` (flat). La segunda forma evade el guard porque `data.mesa?.id` da `undefined`.
+
+**Corrección**:
+```typescript
+// Al inicio de createVenta, normalizar
+const mesaId = data?.mesa?.id ?? data?.mesaId ?? data?.mesa_id ?? null;
+
+// Rechazar si vino flat sin relación
+if ((data?.mesaId || data?.mesa_id) && !data?.mesa) {
+  throw new Error('VENTA_MESA_DEBE_SER_RELACION');
+}
+```
+
+**Por qué P0**: `/api/rpc` es default-allow; cliente puede mandar `mesa_id: 5` sin `mesa: { id }`.
+
+### P0-5: Cubrir `materializarPedidoOnlineEnVenta`
+
+**Hallazgo A**: Pedidos online de mesa (tipo `MESA` con `mesa_id`) crean venta dentro de su propia transacción. Si hay ABIERTA, debe rechazar igual.
+
+**Corrección**: Reusar el mismo helper transaccional, no duplicar lógica.
+
+```typescript
+// Extraer validación a función reutilizable
+async function assertNoVentaAbiertaEnMesa(
+  manager: EntityManager,
+  mesaId: number,
+  tieneComanda: boolean
+): Promise<void> {
+  if (!mesaId || tieneComanda) return;
+  
+  const count = await manager.getRepository(Venta).count({
+    where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() }
+  });
+  
+  if (count > 0) throw new Error('MESA_YA_TIENE_VENTA_ABIERTA');
+}
+
+// Usar en createVenta y en materializarPedidoOnlineEnVenta
+```
+
+**Por qué P0**: Pedidos online de mesa evaden el guard si no se cubre.
+
+### P1-6: UI Accionable (No Solo Badge)
+
+**Hallazgo A**: Badge `⚠ N CUENTAS` detecta pero no resuelve. El cajero queda trabado.
+
+**Corrección**: Al detectar múltiples:
+1. Diálogo `lista-ventas-mesa-dialog` con **acciones por venta**:
+   - ABRIR (seleccionar esa cuenta)
+   - TRANSFERIR (a otra mesa/comanda)
+   - CANCELAR (con motivo)
+2. Botón "RESOLVER" en badge → abre diálogo
+3. Snackbar en error de cobro → botón "VER CUENTAS"
+
+**Por qué P1**: Sin acciones, el cajero no puede desbloquear la mesa sin conocimiento técnico.
+
+### Cambios en Fases
+
+**Fase 1**: Agregar normalización `mesa_id` + helper `assertNoVentaAbiertaEnMesa`  
+**Fase 2**: Gatear cancelación (quitar `&& estado === CONCLUIDA`)  
+**Fase 3**: Guard antes de merge + cubrir `materializarPedidoOnlineEnVenta`  
+**Fase 5**: Diálogo con acciones (no solo badge) — botones ABRIR/TRANSFERIR/CANCELAR  
+
+### Tests Adicionales
+
+```typescript
+it('rechaza mesa_id suelto sin relación', async () => {
+  await expect(
+    createVenta({ mesa_id: 5, caja: { id: 1 } })
+  ).rejects.toThrow('VENTA_MESA_DEBE_SER_RELACION');
+});
+
+it('rechaza cancelar mesa con múltiples abiertas', async () => {
+  await createVentaDirecto({ mesa_id: 5 });
+  await createVentaDirecto({ mesa_id: 5 });
+  
+  await expect(
+    cerrarVentasAbiertasMesa(5, VentaEstado.CANCELADA)
+  ).rejects.toThrow('MESA_TIENE_OTRAS_VENTAS_ABIERTAS');
+});
+
+it('pedido online de mesa rechaza si ya hay abierta', async () => {
+  await createVenta({ mesa: { id: 5 }, caja: { id: 1 } });
+  
+  const pedido = await createPedidoOnline({ tipo: 'MESA', mesaId: 5 });
+  
+  await expect(
+    materializarPedidoOnlineEnVenta(pedido.id)
+  ).rejects.toThrow('MESA_YA_TIENE_VENTA_ABIERTA');
+});
+```
+
+---
+
 **Autor**: Claude Sonnet 4.5  
-**Revisión**: Pendiente  
-**Estado**: DRAFT — listo para auditoría
+**Revisión**: Auditorías A (PASS-with-fixes) + B (FAIL)  
+**Estado**: ENMENDADO — aprobado para implementación
