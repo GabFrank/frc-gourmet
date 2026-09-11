@@ -98,6 +98,7 @@
     "test:cobro-cpc-consolidado": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-cobro-cpc-consolidado-e2e.ts",
     "test:ticket-venta": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-ticket-venta-e2e.ts",
     "test:mesa-ocupacion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-mesa-ocupacion-e2e.ts",
+    "test:mesa-una-venta-abierta": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-mesa-una-venta-abierta-e2e.ts",
     "test:kpis-filtros": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-kpis-filtros-e2e.ts",
     "test:mesa-estado": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-mesa-estado-derivado.ts",
     "test:transferencia-pdv": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-transferencia-pdv-e2e.ts",
