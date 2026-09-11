@@ -914,6 +914,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       }
       // Cerrar las cuentas de la mesa cambia su ocupacion: el cache la sigue.
       if (ventasAbiertas.length > 0) await sincronizarEstadoMesa(mesaId);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      if (ventasAbiertas.length > 0) {
+        try {
+          const { emitMesaCambio } = await import('../utils/mesa-emit.utils');
+          await emitMesaCambio(dataSource, mesaId);
+        } catch (e) {
+          console.warn('[cerrarVentasAbiertasMesa] emit SSE falló:', e);
+        }
+      }
+      
       return ventasAbiertas.length;
     } catch (error) {
       console.error(`Error cerrando ventas abiertas de mesa ${mesaId}:`, error);
@@ -1442,6 +1453,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
 
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+        await emitVentaCambio(dataSource, id);
+      } catch (e) {
+        console.warn('[updateVenta] emit SSE falló:', e);
+      }
+
       // Cobrar o cancelar una venta de mesa CIERRA la cuenta propia de esa mesa,
       // asi que el cache `pdv_mesas.estado` tiene que seguirla. Es el evento mas
       // frecuente de todos y no lo estaba haciendo: la grilla se veia bien porque
@@ -1615,6 +1634,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       await validarVariacionDelItem(dataSource, data);
+      const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
       const repo = dataSource.getRepository(VentaItem);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -1642,6 +1662,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         await crearComandaItemsSiCorresponde(dataSource, (saved as any).id);
       } catch (e) {
         console.warn('[createVentaItem] hook KDS comanda-items falló:', e);
+      }
+
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const ventaId = (saved as any).venta?.id ?? (saved as any).venta_id ?? (saved as any).ventaId;
+        if (ventaId) {
+          await emitVentaCambio(dataSource, ventaId);
+        }
+      } catch (e) {
+        console.warn('[createVentaItem] emit SSE falló:', e);
       }
 
       return saved;
@@ -2574,7 +2604,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
       mesa.estado = estado as PdvMesaEstado;
       await setEntityUserTracking(dataSource, mesa, getCurrentUser()?.id, true);
-      return await mesaRepo.save(mesa);
+      const saved = await mesaRepo.save(mesa);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const { emitMesaCambio } = await import('../utils/mesa-emit.utils');
+        await emitMesaCambio(dataSource, mesaId);
+      } catch (e) {
+        console.warn('[set-pdv-mesa-estado] emit SSE falló:', e);
+      }
+      
+      return saved;
     } catch (error) {
       console.error(`Error cambiando estado de la mesa ${mesaId}:`, error);
       throw error;
@@ -2921,6 +2961,23 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // Ocupar el destino: si es mesa, ahora tiene una venta abierta encima.
       if (destino.tipo === 'MESA') {
         await ocuparMesaEnTx(manager, destino.id);
+      }
+
+      // ─── SSE: emitir eventos de cambio para origen Y destino ───────────────
+      try {
+        const { emitMesaCambio, emitComandaCambio } = await import('../utils/mesa-emit.utils');
+        if (origen.tipo === 'MESA') {
+          await emitMesaCambio(manager, origen.id);
+        } else {
+          await emitComandaCambio(manager, origen.id);
+        }
+        if (destino.tipo === 'MESA') {
+          await emitMesaCambio(manager, destino.id);
+        } else {
+          await emitComandaCambio(manager, destino.id);
+        }
+      } catch (e) {
+        console.warn('[transferir-venta-pdv] emit SSE falló:', e);
       }
 
       return {

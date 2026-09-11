@@ -197,9 +197,10 @@ async function buildInstance(
   // Subida por QR (sin JWT — el token de sesión es la credencial).
   registerQrUploadRoutes(fastify);
 
-  // KDS: stream SSE para pantallas web en tiempo real (auth por token en query)
-  registerKdsSseRoutes(fastify);
-  registerMusicaSseRoutes(fastify);
+  // SSE streams: auth por token efímero en query (EventSource no manda headers)
+  registerKdsSseRoutes(fastify);           // KDS cocina
+  registerMusicaSseRoutes(fastify);        // Música ambiental
+  registerMesaSseRoutes(fastify);          // Mesas y comandas PdV
 
   // Pedidos online: namespace público `/pub/*` con whitelist + JWT de cliente.
   // Separado de `/api/rpc` (staff). Se registra ANTES del static/SPA fallback
