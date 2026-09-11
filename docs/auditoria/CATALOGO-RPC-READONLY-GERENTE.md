@@ -615,7 +615,7 @@ El bot debe:
 
 1. **Incluir `deviceInfo` en el login** con un `device_id` único (ej. `'audit-bot-don-franco'`) para tener su propio bucket.
 2. **Respetar backoff** ante HTTP 429: exponencial 15s → 30s → 60s → 120s.
-3. **Batch de requests:** Priorizar handlers que devuelven múltiples registros (`get-ventas-by-date-range`) en lugar de loops de `get-venta`.
+3. **Batch de requests:** Priorizar handlers que devuelven múltiples registros (`getVentasByDateRange`) en lugar de loops de `getVenta(id)` por cada venta.
 
 ### 8.3 Handlers sin `ensurePermission`
 

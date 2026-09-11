@@ -430,7 +430,7 @@ Crear un **token de servicio** (API key) con alcance explícito de lectura, sin 
   curl -X POST https://<server-url>/api/rpc \
     -H "Authorization: Bearer <token>" \
     -H "Content-Type: application/json" \
-    -d '{"method":"get-ventas-by-date-range","params":["2026-09-01T00:00:00.000Z","2026-09-10T23:59:59.999Z",null]}'
+    -d '{"method":"getVentasByDateRange","params":["2026-09-01T00:00:00.000Z","2026-09-10T23:59:59.999Z",{"page":1,"pageSize":50}]}'
   ```
 - [ ] Verificar rate limit: 600 req/min con `device_id` único
 
@@ -488,8 +488,8 @@ curl -X POST https://<server-url>/api/rpc \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "method": "get-ventas-by-date-range",
-    "params": ["2026-09-10T07:00:00.000Z", "2026-09-11T06:59:59.999Z", null]
+    "method": "getVentasByDateRange",
+    "params": ["2026-09-10T07:00:00.000Z", "2026-09-11T06:59:59.999Z", {"page": 1, "pageSize": 50}]
   }'
 
 # Verificar response con ventas + totales
