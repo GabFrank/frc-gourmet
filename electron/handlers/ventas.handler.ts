@@ -155,6 +155,40 @@ async function withComandaLock<T>(comandaId: number, fn: () => Promise<T>): Prom
 }
 
 /**
+ * Invariante: máximo 1 venta ABIERTA (comanda IS NULL) por mesaId.
+ *
+ * Fix para el bug de multi-cuenta (Alpha Don Franco 2026-09-10/11): mesa 4 con
+ * ventas 3738/3739/3771 concurrentes → al cobrar 3739, la 3771 se cerró sin
+ * pago (montoCubierto = 0, pérdida 254k Gs).
+ *
+ * Este helper se reutiliza en `createVenta` y `materializarPedidoOnlineEnVenta`.
+ * Debe ejecutarse DENTRO de la transacción y del lock por mesa.
+ *
+ * @throws Error('MESA_YA_TIENE_VENTA_ABIERTA') si ya existe venta ABIERTA
+ */
+async function assertNoVentaAbiertaEnMesa(
+  manager: EntityManager,
+  mesaId: number,
+  tieneComanda: boolean
+): Promise<void> {
+  // No aplica si no hay mesa o si la venta cuelga de una comanda.
+  // Las comandas vinculadas a una mesa no cuentan como cuenta de mesa.
+  if (!mesaId || tieneComanda) return;
+
+  const count = await manager.getRepository(Venta).count({
+    where: {
+      mesa: { id: mesaId },
+      estado: VentaEstado.ABIERTA,
+      comanda: IsNull()
+    }
+  });
+
+  if (count > 0) {
+    throw new Error('MESA_YA_TIENE_VENTA_ABIERTA');
+  }
+}
+
+/**
  * Materializa un PedidoOnline en una Venta y lo manda a cocina.
  *
  * Dos caminos según el canal:
@@ -262,6 +296,12 @@ export async function materializarPedidoOnlineEnVenta(
         where: { mesa: { id: mesa.id }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
       });
       if (!venta) {
+        // P0-5: Guard antes de crear venta de pedido online de mesa.
+        // Invariante: máximo 1 venta ABIERTA (comanda IS NULL) por mesaId.
+        // Reutiliza el mismo helper que `createVenta` — el guard está dentro de
+        // la transacción y del lock por mesa (withMesaLock envuelve todo esto).
+        await assertNoVentaAbiertaEnMesa(qr.manager, mesa.id, false);
+
         venta = ventaRepo.create({
           estado: VentaEstado.ABIERTA,
           caja: { id: cajaId } as any,
@@ -849,6 +889,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
         relations: ['caja'],
       });
+      
+      // P0-2: Gatear CUALQUIER cierre (CONCLUIDA o CANCELADA) si hay >1 ABIERTA.
+      // Invariante: no cerrar hermanas sin pago. Si hay múltiples cuentas, el
+      // cajero debe decidir qué hacer con cada una (transferir/unir/cancelar
+      // explícitamente). Cancelar una hermana silenciosamente es tan malo como
+      // concluirla sin pago (bug Alpha Don Franco 2026-09-10/11, venta 3771).
+      if (ventasAbiertas.length > 1) {
+        throw new Error('MESA_TIENE_OTRAS_VENTAS_ABIERTAS');
+      }
+      
       // Este handler pone CONCLUIDA con `repo.save` directo, sin pasar por
       // `updateVenta`: es un tercer camino de finalización y necesita el mismo
       // gate de terminal ajena. Sólo aplica al cierre por cobro (CONCLUIDA); la
@@ -943,6 +993,15 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         ? resolveRequestDeviceId(_event)
         : null;
 
+      // P0-4: Normalizar mesa_id suelto → rechazar si vino flat sin relación.
+      // `/api/rpc` es default-allow; un cliente puede mandar `{ mesa_id: 5 }`
+      // sin `{ mesa: { id: 5 } }` para evadir el guard. La forma plana no crea
+      // la relación y `data.mesa?.id` da undefined.
+      const mesaId = data?.mesa?.id ?? data?.mesaId ?? data?.mesa_id ?? null;
+      if ((data?.mesaId || data?.mesa_id) && !data?.mesa) {
+        throw new Error('VENTA_MESA_DEBE_SER_RELACION');
+      }
+
       // La mesa se ocupa ACA, en la misma transaccion que crea la venta.
       //
       // Antes el frontend hacia una segunda llamada a `updatePdvMesa`, que exige
@@ -953,15 +1012,15 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // Solo aplica a la venta de mesa DIRECTA. Si la venta cuelga de una
       // comanda NO ocupa la mesa: el vinculo comanda->mesa es de ubicacion, no
       // de ocupacion (ver `mesaTieneCuentaPropia`).
-      // Sólo la forma `{ mesa: { id } }`: un `mesa_id` suelto no lo traduce
-      // `repo.create()` a la relación, así que la venta quedaría sin mesa y
-      // marcaríamos ocupada una mesa sin venta vinculada — justo el estado que
-      // este fix elimina.
-      const mesaId = data?.mesa?.id ?? null;
       const tieneComanda = !!data?.comanda?.id;
       const ocupaMesa = !!mesaId && !tieneComanda;
 
       const crear = async (): Promise<any> => dataSource.transaction(async (manager) => {
+        // P0-1: Guard DENTRO de la transacción, ANTES de crear la venta.
+        // Invariante: máximo 1 venta ABIERTA (comanda IS NULL) por mesaId.
+        // Fix para el bug de Alpha Don Franco 2026-09-10/11 (ventas 3738/3739/3771).
+        await assertNoVentaAbiertaEnMesa(manager, mesaId, tieneComanda);
+
         const repo = manager.getRepository(Venta);
         const entity: any = repo.create(data);
         await setEntityUserTracking(dataSource, entity, userId, false);
@@ -1329,6 +1388,38 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           throw new Error(
             'No se puede cancelar una venta a crédito con cobros registrados. Anule primero los cobros de la cuenta por cobrar.',
           );
+        }
+      }
+
+      // P0-3: Guard ANTES del merge. Si la venta es de mesa (comanda IS NULL) y
+      // la transición es a CONCLUIDA, verificar que no haya otras ventas ABIERTAS
+      // en esa mesa. Sin esto, el merge asigna `estado = CONCLUIDA` y aunque el
+      // guard rechace después, la entidad ya está contaminada.
+      //
+      // Invariante: no concluir ventas de mesa con hermanas ABIERTAS.
+      // Fix para bug Alpha Don Franco 2026-09-10/11 (venta 3771 cerrada sin pago).
+      if (
+        data?.estado === VentaEstado.CONCLUIDA &&
+        estadoAnterior === VentaEstado.ABIERTA
+      ) {
+        // Necesitamos saber si es venta de mesa (comanda IS NULL). `findOneBy`
+        // no trae las relaciones, así que usamos la query cruda que ya existe.
+        const tieneComanda = (
+          await dataSource.query(`SELECT comanda_id AS cmd FROM ventas WHERE id = $1`.replace('$1', String(Number(id))))
+        )?.[0]?.cmd != null;
+
+        if (mesaDeLaVenta && !tieneComanda) {
+          const hermanas = await repo.count({
+            where: {
+              mesa: { id: mesaDeLaVenta },
+              estado: VentaEstado.ABIERTA,
+              comanda: IsNull(),
+              id: Not(id)
+            }
+          });
+          if (hermanas > 0) {
+            throw new Error('MESA_TIENE_OTRAS_VENTAS_ABIERTAS');
+          }
         }
       }
 
