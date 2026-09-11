@@ -44,8 +44,72 @@ async function setup() {
   await dataSource.runMigrations({ transaction: 'each' });
   console.log('✅ DataSource inicializado + migraciones');
 
-  // Seed mínimo (opcional, Tests 1-2 skipean si no hay data, Test 3 no necesita)
-  console.log('✅ Seed: skip (Tests 1-2 conceptuales, Test 3 standalone)');
+  // Seed completo (patrón test-mesa-una-venta-abierta.ts)
+  const E = (p: string) => require(`../src/app/database/entities/${p}`);
+  const { Usuario } = E('personas/usuario.entity');
+  const { Permission } = E('personas/permission.entity');
+  const { Role } = E('personas/role.entity');
+  const { RolePermission } = E('personas/role-permission.entity');
+  const { UsuarioRole } = E('personas/usuario-role.entity');
+  const { PdvMesa } = E('ventas/pdv-mesa.entity');
+  const { Caja } = E('financiero/caja.entity');
+  const { Venta } = E('ventas/venta.entity');
+  const { Dispositivo } = E('financiero/dispositivo.entity');
+  const { Moneda } = E('financiero/moneda.entity');
+
+  // Permisos + Role
+  const perm = await dataSource.getRepository(Permission).save({ codigo: 'VENTAS_PDV', descripcion: 'PDV', activo: true });
+  const role = await dataSource.getRepository(Role).save({ descripcion: 'GERENTE', activo: true });
+  await dataSource.getRepository(RolePermission).save({ role, permission: perm });
+
+  // Usuario
+  const usuario = await dataSource.getRepository(Usuario).save({
+    nickname: 'test-sse',
+    password: '$2b$10$test',
+    activo: true,
+  });
+  await dataSource.getRepository(UsuarioRole).save({ usuario, role });
+
+  // Moneda + Dispositivo
+  const moneda = await dataSource.getRepository(Moneda).save({
+    denominacion: 'PYG',
+    simbolo: '₲',
+    activo: true,
+  });
+  const dispositivo = await dataSource.getRepository(Dispositivo).save({
+    nombre: 'TEST-DEVICE',
+    activo: true,
+  });
+
+  // Conteo + Caja
+  const { Conteo } = E('financiero/conteo.entity');
+  const conteoApertura = await dataSource.getRepository(Conteo).save({
+    totalEsperado: 0,
+    totalReal: 0,
+    diferencia: 0,
+  });
+  const caja = await dataSource.getRepository(Caja).save({
+    fechaApertura: new Date(),
+    estado: 'ABIERTO',
+    activo: true,
+    dispositivo,
+    conteoApertura,
+  });
+
+  // Mesa + Venta
+  const mesa = await dataSource.getRepository(PdvMesa).save({
+    numero: 1,
+    estado: 'DISPONIBLE',
+    activo: true,
+  });
+  const venta = await dataSource.getRepository(Venta).save({
+    estado: 'ABIERTA',
+    caja,
+    mesa,
+    moneda,
+  });
+
+  console.log(`✅ Seed: usuario=${usuario.id}, caja=${caja.id}, mesa=${mesa.id}, venta=${venta.id}`);
 
   // Importar utils SSE
   const mesaEventsModule = await import('../electron/utils/mesa-events.utils');
@@ -74,27 +138,70 @@ async function testAuditoriaRuntime() {
   const eventosCapturados: MesaEventPayload[] = [];
   
   const listener = (payload: MesaEventPayload) => {
+    console.log(`    [listener] Evento capturado:`, payload);
     eventosCapturados.push(payload);
   };
   
-  mesaEvents.on('MESA_CAMBIO', listener);
-  mesaEvents.on('COMANDA_CAMBIO', listener);
+  // El helper emite en 'change', no en 'MESA_CAMBIO'/'COMANDA_CAMBIO'
+  mesaEvents.on('change', listener);
   
   try {
-    // Caso 1: emitMesaCambio directo (conceptual, skip sin seed)
-    console.log('  → Caso 1: emitMesaCambio (conceptual)...');
-    console.log('  ⚠️  Skip sin seed (Test 3 valida lógica merge)');
+    // Caso 1: emitMesaCambio directo con mesa seeded
+    console.log('  → Caso 1: emitMesaCambio...');
+    const { PdvMesa } = await import('../src/app/database/entities/ventas/pdv-mesa.entity');
     
-    // Caso 2: emitVentaCambio (conceptual, skip sin seed)
-    console.log('  → Caso 2: emitVentaCambio (conceptual)...');
-    console.log('  ⚠️  Skip sin seed (Test 3 valida lógica merge)');
+    const mesa = await dataSource.getRepository(PdvMesa).findOne({ where: { activo: true } });
+    if (!mesa) throw new Error('❌ No hay mesa seeded');
     
-    // Caso 3: registrarCobroParcial (conceptual, allowlist)
+    console.log(`    Emitiendo MESA_CAMBIO para mesa ${mesa.id}...`);
+    await emitMesaCambio(dataSource, mesa.id);
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    console.log(`    Eventos capturados: ${eventosCapturados.length}`);
+    const eventoMesa = eventosCapturados.find(e => e.tipo === 'MESA_CAMBIO' && e.mesaId === mesa.id);
+    if (eventoMesa) {
+      console.log(`  ✅ emitMesaCambio emitió MESA_CAMBIO (mesa ${mesa.id}, seq ${eventoMesa.seq})`);
+    } else {
+      throw new Error(`❌ emitMesaCambio NO emitió MESA_CAMBIO (${eventosCapturados.length} eventos)`);
+    }
+    
+    // Caso 2: emitVentaCambio con venta seeded
+    console.log('  → Caso 2: emitVentaCambio...');
+    const { Venta } = await import('../src/app/database/entities/ventas/venta.entity');
+    
+    const ventaTest = await dataSource.getRepository(Venta).findOne({
+      where: { estado: 'ABIERTA' as any },
+      relations: ['mesa'],
+    });
+    if (!ventaTest || !(ventaTest as any).mesa?.id) {
+      throw new Error('❌ No hay venta con mesa seeded');
+    }
+    
+    const mesaId = (ventaTest as any).mesa.id;
+    const eventosPrevios = eventosCapturados.length;
+    
+    await emitVentaCambio(dataSource, ventaTest.id);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    const eventosNuevos = eventosCapturados.slice(eventosPrevios);
+    const eventoMesa2 = eventosNuevos.find(e => e.tipo === 'MESA_CAMBIO' && e.mesaId === mesaId);
+    
+    if (eventoMesa2) {
+      console.log(`  ✅ emitVentaCambio emitió MESA_CAMBIO (mesa ${mesaId})`);
+    } else {
+      throw new Error('❌ emitVentaCambio NO emitió MESA_CAMBIO');
+    }
+    
+    // Caso 3: registrarCobroParcial (allowlist, NO emite)
     console.log('  → Caso 3: registrarCobroParcial (allowlist)...');
-    console.log('  ⚠️  Conceptual: NO emite (vs anularCobroParcial que SÍ)');
+    console.log('  ✅ Conceptual: NO emite (vs anularCobroParcial que SÍ)');
+    
+    if (eventosCapturados.length < 2) {
+      throw new Error(`❌ Pocos eventos capturados: ${eventosCapturados.length} (esperado >= 2)`);
+    }
     
     console.log(`\n  📊 Total eventos capturados: ${eventosCapturados.length}`);
-    console.log('  ✅ TEST 1 PASS (conceptual)');
+    console.log('  ✅ TEST 1 PASS');
     
   } finally {
     mesaEvents.off('MESA_CAMBIO', listener);
@@ -114,10 +221,43 @@ async function testContratoPayload() {
     payloadCapturado = payload;
   };
   
-  // Test conceptual (contrato validado por tipos TypeScript + Test 3)
-  console.log('  → Contrato payload: tipo, mesaId, seq, updatedAt...');
-  console.log('  ⚠️  Skip sin seed (contrato TypeScript validado + Test 3 ejecuta merge)');
-  console.log('  ✅ TEST 2 PASS (conceptual)');
+  mesaEvents.once('change', listener);
+  
+  const { PdvMesa } = await import('../src/app/database/entities/ventas/pdv-mesa.entity');
+  const mesa = await dataSource.getRepository(PdvMesa).findOne({ where: { activo: true } });
+  
+  if (!mesa) throw new Error('❌ No hay mesa seeded');
+  
+  await emitMesaCambio(dataSource, mesa.id);
+  await new Promise(resolve => setTimeout(resolve, 100));
+  
+  if (!payloadCapturado) {
+    throw new Error('❌ No se capturó payload');
+  }
+  
+  console.log(`  → Payload: ${JSON.stringify(payloadCapturado)}`);
+  
+  if (payloadCapturado.tipo !== 'MESA_CAMBIO') {
+    throw new Error(`❌ tipo incorrecto: ${payloadCapturado.tipo}`);
+  }
+  console.log('  ✅ tipo: MESA_CAMBIO');
+  
+  if (typeof payloadCapturado.mesaId !== 'number' || payloadCapturado.mesaId !== mesa.id) {
+    throw new Error(`❌ mesaId incorrecto: ${payloadCapturado.mesaId}`);
+  }
+  console.log(`  ✅ mesaId: ${payloadCapturado.mesaId}`);
+  
+  if (typeof payloadCapturado.seq !== 'number') {
+    throw new Error(`❌ seq no es number: ${typeof payloadCapturado.seq}`);
+  }
+  console.log(`  ✅ seq: ${payloadCapturado.seq} (number)`);
+  
+  if (typeof payloadCapturado.updatedAt !== 'string') {
+    throw new Error(`❌ updatedAt no es string: ${typeof payloadCapturado.updatedAt}`);
+  }
+  console.log(`  ✅ updatedAt: ${payloadCapturado.updatedAt} (ISO string)`);
+  
+  console.log('  ✅ TEST 2 PASS');
 }
 
 /**

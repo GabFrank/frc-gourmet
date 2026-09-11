@@ -3188,10 +3188,13 @@ export class PdvComponent implements OnInit, OnDestroy {
       await this.refreshMesasSilent();
       await this.refreshComandasSilent();
 
-      // 2. Solicitar stream-token con contexto 'pdv'
-      const token = await (window as any).api.invokeIpc('stream-token', 'pdv')
-        .then((res: any) => res?.token)
-        .catch(() => null);
+      // 2. Solicitar stream-token con contexto 'pdv' (patrón KDS)
+      const api = (window as any).api;
+      let token: string | null = null;
+      if (api?.callIpc) {
+        const res = await api.callIpc('stream-token', 'pdv');
+        token = res?.token || null;
+      }
       if (!token) {
         console.warn('[SSE] No se pudo obtener stream-token, fallback a polling');
         this.activarFallbackPolling();
@@ -3275,7 +3278,7 @@ export class PdvComponent implements OnInit, OnDestroy {
       // Refresh mesas cambiadas (fetch por ID individual, no getPdvMesas entero)
       if (mesasIds.length > 0) {
         for (const id of mesasIds) {
-          const nueva: PdvMesa = await (window as any).api.invokeIpc('getPdvMesa', id);
+          const nueva: PdvMesa = await firstValueFrom(this.repositoryService.getPdvMesa(id));
           if (nueva) {
             const idx = this.mesas.findIndex((m: any) => m.id === id);
             if (idx >= 0) {
@@ -3302,10 +3305,13 @@ export class PdvComponent implements OnInit, OnDestroy {
 
       // Refresh comandas cambiadas
       if (comandasIds.length > 0) {
-        const ocupadas: any[] = await (window as any).api.invokeIpc('getComandasOcupadas');
-        const disponibles: any[] = await (window as any).api.invokeIpc('getComandasDisponibles');
-        this.comandas = [...ocupadas, ...disponibles];
-        this.comandasOcupadasCount = ocupadas.length;
+        const api = (window as any).api;
+        if (api?.callIpc) {
+          const ocupadas: any[] = await api.callIpc('getComandasOcupadas');
+          const disponibles: any[] = await api.callIpc('getComandasDisponibles');
+          this.comandas = [...ocupadas, ...disponibles];
+          this.comandasOcupadasCount = ocupadas.length;
+        }
       }
     } catch (error) {
       console.warn('[SSE] Error en refresh pendientes:', error);
