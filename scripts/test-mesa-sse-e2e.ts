@@ -7,13 +7,14 @@
  * 3. Merge helper: no pisa venta seleccionada
  */
 
+import 'reflect-metadata';
+import './_electron-mock';
+import * as path from 'path';
+import * as fs from 'fs';
 import { DataSource } from 'typeorm';
 import { EventEmitter } from 'events';
-import * as path from 'path';
 
-// Re-export para que el test pueda importar
-const projectRoot = path.join(__dirname, '..');
-process.env.FRC_TEST_MODE = 'true';
+import { getDataSourceOptions } from '../src/app/database/database.config';
 
 let dataSource: DataSource;
 let mesaEvents: EventEmitter;
@@ -31,17 +32,17 @@ interface MesaEventPayload {
 async function setup() {
   console.log('🔧 Setup: inicializando DataSource...');
   
-  // Importar database config
-  const { getDatabaseConfig } = await import('../src/app/database/database.config');
-  const config = getDatabaseConfig();
-  
-  dataSource = new DataSource({
-    ...config,
-    logging: false,
-  });
-  
+  // DataSource temporal (patrón test-mesa-una-venta-abierta.ts)
+  const tmpDir = path.resolve(__dirname, '../.tmp');
+  if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+  const dbFile = path.join(tmpDir, 'test-mesa-sse.db');
+  if (fs.existsSync(dbFile)) fs.unlinkSync(dbFile);
+
+  const base = getDataSourceOptions(tmpDir);
+  dataSource = new DataSource({ ...(base as any), database: dbFile, synchronize: false, migrationsRun: false });
   await dataSource.initialize();
-  console.log('✅ DataSource inicializado');
+  await dataSource.runMigrations({ transaction: 'each' });
+  console.log('✅ DataSource inicializado + migraciones');
 
   // Importar utils SSE
   const mesaEventsModule = await import('../electron/utils/mesa-events.utils');
