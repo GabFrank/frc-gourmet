@@ -155,6 +155,40 @@ async function withComandaLock<T>(comandaId: number, fn: () => Promise<T>): Prom
 }
 
 /**
+ * Invariante: máximo 1 venta ABIERTA (comanda IS NULL) por mesaId.
+ *
+ * Fix para el bug de multi-cuenta (Alpha Don Franco 2026-09-10/11): mesa 4 con
+ * ventas 3738/3739/3771 concurrentes → al cobrar 3739, la 3771 se cerró sin
+ * pago (montoCubierto = 0, pérdida 254k Gs).
+ *
+ * Este helper se reutiliza en `createVenta` y `materializarPedidoOnlineEnVenta`.
+ * Debe ejecutarse DENTRO de la transacción y del lock por mesa.
+ *
+ * @throws Error('MESA_YA_TIENE_VENTA_ABIERTA') si ya existe venta ABIERTA
+ */
+async function assertNoVentaAbiertaEnMesa(
+  manager: EntityManager,
+  mesaId: number,
+  tieneComanda: boolean
+): Promise<void> {
+  // No aplica si no hay mesa o si la venta cuelga de una comanda.
+  // Las comandas vinculadas a una mesa no cuentan como cuenta de mesa.
+  if (!mesaId || tieneComanda) return;
+
+  const count = await manager.getRepository(Venta).count({
+    where: {
+      mesa: { id: mesaId },
+      estado: VentaEstado.ABIERTA,
+      comanda: IsNull()
+    }
+  });
+
+  if (count > 0) {
+    throw new Error('MESA_YA_TIENE_VENTA_ABIERTA');
+  }
+}
+
+/**
  * Materializa un PedidoOnline en una Venta y lo manda a cocina.
  *
  * Dos caminos según el canal:
