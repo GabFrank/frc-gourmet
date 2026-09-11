@@ -3273,14 +3273,12 @@ export class PdvComponent implements OnInit, OnDestroy {
     this.pendingComandaRefreshes.clear();
 
     try {
-      // Refresh mesas cambiadas
+      // Refresh mesas cambiadas (fetch por ID individual, no getPdvMesas entero)
       if (mesasIds.length > 0) {
-        const nuevas: PdvMesa[] = await firstValueFrom(
-          this.repositoryService.callIpc('getPdvMesas', this.selectedSector?.id || null)
-        );
-        // Merge por ID
         for (const id of mesasIds) {
-          const nueva = nuevas.find((m: any) => m.id === id);
+          const nueva: PdvMesa = await firstValueFrom(
+            this.repositoryService.callIpc('getPdvMesa', id)
+          );
           if (nueva) {
             const idx = this.mesas.findIndex((m: any) => m.id === id);
             if (idx >= 0) {
