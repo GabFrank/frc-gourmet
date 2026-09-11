@@ -1715,6 +1715,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         }
       } catch (e) { console.warn('[updateVentaItem] KDS cancelar comanda-items falló:', e); }
 
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+        const ventaId = (entity as any).venta?.id ?? (entity as any).venta_id ?? (entity as any).ventaId;
+        if (ventaId) {
+          await emitVentaCambio(dataSource, ventaId);
+        }
+      } catch (e) {
+        console.warn('[updateVentaItem] emit SSE falló:', e);
+      }
+
       return saved;
     } catch (error) {
       console.error(`Error updating venta item ID ${id}:`, error);
@@ -1729,6 +1740,8 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(VentaItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
+      const ventaId = (entity as any).venta?.id ?? (entity as any).venta_id ?? (entity as any).ventaId;
+      
       // KDS: borrar ComandaItems del item antes para no dejar FK huérfana.
       try {
         await dataSource.getRepository(ComandaItem)
@@ -1738,6 +1751,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           .execute();
       } catch (e) { console.warn('[deleteVentaItem] KDS limpiar comanda-items falló:', e); }
       await repo.remove(entity);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      if (ventaId) {
+        try {
+          const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+          await emitVentaCambio(dataSource, ventaId);
+        } catch (e) {
+          console.warn('[deleteVentaItem] emit SSE falló:', e);
+        }
+      }
+      
       return true;
     } catch (error) {
       console.error(`Error deleting venta item ID ${id}:`, error);
@@ -1791,7 +1815,23 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       }
       payload.observacionLibre = nota ? nota.toUpperCase().slice(0, 500) : null;
       const entity = repo.create(payload);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+        const vItemId = (saved as any).ventaItem?.id ?? (saved as any).venta_item_id ?? (saved as any).ventaItemId;
+        if (vItemId) {
+          const vItem = await dataSource.getRepository(VentaItem).findOne({ where: { id: vItemId }, relations: ['venta'] });
+          if (vItem?.venta?.id) {
+            await emitVentaCambio(dataSource, (vItem.venta as any).id);
+          }
+        }
+      } catch (e) {
+        console.warn('[createVentaItemObservacion] emit SSE falló:', e);
+      }
+      
+      return saved;
     } catch (error) {
       console.error('Error creating venta item observacion:', error);
       throw error;
@@ -1802,9 +1842,21 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemObservacion);
-      const entity = await repo.findOneBy({ id });
+      const entity = await repo.findOne({ where: { id }, relations: ['ventaItem', 'ventaItem.venta'] });
       if (!entity) throw new Error(`VentaItemObservacion ID ${id} not found`);
+      const ventaId = (entity as any).ventaItem?.venta?.id;
       await repo.remove(entity);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      if (ventaId) {
+        try {
+          const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+          await emitVentaCambio(dataSource, ventaId);
+        } catch (e) {
+          console.warn('[deleteVentaItemObservacion] emit SSE falló:', e);
+        }
+      }
+      
       return true;
     } catch (error) {
       console.error(`Error deleting venta item observacion ${id}:`, error);
@@ -1834,7 +1886,23 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemAdicional);
       const entity = repo.create(data);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+        const vItemId = (saved as any).ventaItem?.id ?? (saved as any).venta_item_id ?? (saved as any).ventaItemId;
+        if (vItemId) {
+          const vItem = await dataSource.getRepository(VentaItem).findOne({ where: { id: vItemId }, relations: ['venta'] });
+          if (vItem?.venta?.id) {
+            await emitVentaCambio(dataSource, (vItem.venta as any).id);
+          }
+        }
+      } catch (e) {
+        console.warn('[createVentaItemAdicional] emit SSE falló:', e);
+      }
+      
+      return saved;
     } catch (error) {
       console.error('Error creating venta item adicional:', error);
       throw error;
@@ -1845,9 +1913,21 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemAdicional);
-      const entity = await repo.findOneBy({ id });
+      const entity = await repo.findOne({ where: { id }, relations: ['ventaItem', 'ventaItem.venta'] });
       if (!entity) throw new Error(`VentaItemAdicional ID ${id} not found`);
+      const ventaId = (entity as any).ventaItem?.venta?.id;
       await repo.remove(entity);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      if (ventaId) {
+        try {
+          const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+          await emitVentaCambio(dataSource, ventaId);
+        } catch (e) {
+          console.warn('[deleteVentaItemAdicional] emit SSE falló:', e);
+        }
+      }
+      
       return true;
     } catch (error) {
       console.error(`Error deleting venta item adicional ${id}:`, error);
@@ -1874,7 +1954,23 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemIngredienteModificacion);
       const entity = repo.create(data);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+        const vItemId = (saved as any).ventaItem?.id ?? (saved as any).venta_item_id ?? (saved as any).ventaItemId;
+        if (vItemId) {
+          const vItem = await dataSource.getRepository(VentaItem).findOne({ where: { id: vItemId }, relations: ['venta'] });
+          if (vItem?.venta?.id) {
+            await emitVentaCambio(dataSource, (vItem.venta as any).id);
+          }
+        }
+      } catch (e) {
+        console.warn('[createVentaItemIngredienteModificacion] emit SSE falló:', e);
+      }
+      
+      return saved;
     } catch (error) {
       console.error('Error creating venta item ingrediente modificacion:', error);
       throw error;
@@ -1885,9 +1981,21 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemIngredienteModificacion);
-      const entity = await repo.findOneBy({ id });
+      const entity = await repo.findOne({ where: { id }, relations: ['ventaItem', 'ventaItem.venta'] });
       if (!entity) throw new Error(`VentaItemIngredienteModificacion ID ${id} not found`);
+      const ventaId = (entity as any).ventaItem?.venta?.id;
       await repo.remove(entity);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      if (ventaId) {
+        try {
+          const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+          await emitVentaCambio(dataSource, ventaId);
+        } catch (e) {
+          console.warn('[deleteVentaItemIngredienteModificacion] emit SSE falló:', e);
+        }
+      }
+      
       return true;
     } catch (error) {
       console.error(`Error deleting venta item ingrediente modificacion ${id}:`, error);
