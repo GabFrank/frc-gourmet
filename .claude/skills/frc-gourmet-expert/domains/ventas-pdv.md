@@ -1367,3 +1367,28 @@ Grid de tarjetas: Retiro de Caja, Gastos, Vale, Compra, Egresos de caja, Última
 ### Login por QR (desktop + PWA)
 
 Device Authorization Grant. `DeviceAuthCode` (`device_auth_codes`: `deviceCode` unique, `estado` PENDING/APPROVED/CONSUMED, `expiresAt` ~3min). Rutas Fastify `electron/server/device-auth-routes.ts`: `POST /api/auth/device/start` (público, genera QR), `/approve` (autenticado, aprueba con el JWT del que escanea), `/token` (poll, emite tokens + `LoginSession`, un solo uso). Desktop: `qr-login-dialog` (pollea `api.deviceToken` vía `httpFetch` → requiere nodo server accesible) → `AuthService.applyExternalSession`. PWA: páginas `vincular-dispositivo`/`aprobar-dispositivo`.
+
+### Invariante: Máximo 1 Venta ABIERTA por Mesa (2026-09-11)
+
+**Regla de oro:** una mesa puede tener **como máximo UNA venta en estado `ABIERTA`** con `comanda IS NULL` (cuenta propia de mesa, no comanda). Las cuentas de comanda vinculadas a la mesa NO cuentan — son **ubicación**, no ocupación.
+
+**Caminos protegidos (P0-1..P0-5):**
+
+1. **`createVenta`** (`electron/handlers/ventas.handler.ts`): Guard `assertNoVentaAbiertaEnMesa` **dentro** de `withMesaLock` + transacción. Rechaza con `MESA_YA_TIENE_VENTA_ABIERTA` si ya existe una venta ABIERTA de esa mesa.
+
+2. **`cerrarVentasAbiertasMesa`**: Rechaza con `MESA_TIENE_OTRAS_VENTAS_ABIERTAS` si hay >1 ABIERTA. Aplica tanto a CONCLUIR como a CANCELAR — no cierra hermanas sin pago.
+
+3. **`updateVenta`**: Guard **antes del merge** verifica que no haya hermanas ABIERTAS cuando la transición es `ABIERTA → CONCLUIDA`. Sin esto, el merge asigna el estado y aunque el guard rechace, la entidad ya está contaminada.
+
+4. **Normalización `mesa_id`**: `createVenta` rechaza `{ mesa_id: 5 }` sin `{ mesa: { id: 5 } }` con `VENTA_MESA_DEBE_SER_RELACION`. `/api/rpc` es default-allow; un cliente puede mandar la forma plana para evadir el guard si no se valida.
+
+5. **`materializarPedidoOnlineEnVenta`** (`electron/handlers/ventas.handler.ts`): Pedidos online de mesa (tipo `MESA` con `mesaId`) reusan el mismo guard. Si hay ABIERTA, rechaza igual — varios comensales pidiendo desde su celular caen en UNA cuenta.
+
+**UI — Errores surfaceados:**
+
+- `MESA_YA_TIENE_VENTA_ABIERTA` → Snackbar: *"Esta mesa ya tiene una cuenta abierta. Verifique las ventas activas antes de abrir una nueva."*
+- `MESA_TIENE_OTRAS_VENTAS_ABIERTAS` → Snackbar: *"Esta mesa tiene múltiples cuentas abiertas. Cierre o transfiera las otras cuentas primero."*
+
+**Tests:** `npm run test:mesa-una-venta-abierta` (`scripts/test-mesa-una-venta-abierta-e2e.ts`) — E2E completo para P0-1..P0-5. Los tests **deben fallar** si se revierten los guards (para verificar efectividad del fix).
+
+**Caso real que motivó el fix:** Alpha Don Franco 2026-09-10/11 noche, mesa 4 con ventas 3738/3739/3771 concurrentes → al cobrar 3739, la 3771 se cerró sin pago (pérdida 254k Gs). Ver `known-bugs.md` para detalles forenses completos.

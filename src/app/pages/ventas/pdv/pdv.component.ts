@@ -2035,7 +2035,7 @@ export class PdvComponent implements OnInit, OnDestroy {
             } else if (error?.message?.includes('VENTA_MESA_DEBE_SER_RELACION')) {
               this.snackBar.open('Error: formato de mesa inválido', 'Cerrar', { duration: 5000 });
             } else {
-              this.snackBar.open(mensajeDeError(error), 'Cerrar', { duration: 5000 });
+              this.snackBar.open(mensajeDeError(error, 'Error al crear venta'), 'Cerrar', { duration: 5000 });
             }
             throw error;
           })
@@ -2203,7 +2203,7 @@ export class PdvComponent implements OnInit, OnDestroy {
                 { duration: 8000 }
               );
             } else {
-              this.snackBar.open(mensajeDeError(error), 'Cerrar', { duration: 5000 });
+              this.snackBar.open(mensajeDeError(error, 'Error al cerrar ventas de mesa'), 'Cerrar', { duration: 5000 });
             }
             throw error;
           }
@@ -2390,8 +2390,22 @@ export class PdvComponent implements OnInit, OnDestroy {
         await this.cerrarComandaActual();
       }
       if (this.selectedMesa) {
-        // Cerrar cualquier venta huérfana abierta en esta mesa
-        await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CONCLUIDA, { validarDispositivoCaja: true }));
+        try {
+          // Cerrar cualquier venta huérfana abierta en esta mesa
+          await firstValueFrom(this.repositoryService.cerrarVentasAbiertasMesa(this.selectedMesa.id!, VentaEstado.CONCLUIDA, { validarDispositivoCaja: true }));
+        } catch (error: any) {
+          // P0-2: Error cuando hay múltiples ventas ABIERTAS en la mesa
+          if (error?.message?.includes('MESA_TIENE_OTRAS_VENTAS_ABIERTAS')) {
+            this.snackBar.open(
+              'Esta mesa tiene múltiples cuentas abiertas. Cierre o transfiera las otras cuentas primero.',
+              'Cerrar',
+              { duration: 8000 }
+            );
+          } else {
+            this.snackBar.open(mensajeDeError(error, 'Error al cerrar ventas de mesa'), 'Cerrar', { duration: 5000 });
+          }
+          throw error;
+        }
         await firstValueFrom(this.repositoryService.setPdvMesaEstado(this.selectedMesa.id!, PdvMesaEstado.DISPONIBLE));
         this.selectedMesa.venta = null as any;
         this.estamparMesa(this.selectedMesa as any);

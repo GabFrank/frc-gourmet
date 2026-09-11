@@ -296,6 +296,12 @@ export async function materializarPedidoOnlineEnVenta(
         where: { mesa: { id: mesa.id }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
       });
       if (!venta) {
+        // P0-5: Guard antes de crear venta de pedido online de mesa.
+        // Invariante: máximo 1 venta ABIERTA (comanda IS NULL) por mesaId.
+        // Reutiliza el mismo helper que `createVenta` — el guard está dentro de
+        // la transacción y del lock por mesa (withMesaLock envuelve todo esto).
+        await assertNoVentaAbiertaEnMesa(qr.manager, mesa.id, false);
+
         venta = ventaRepo.create({
           estado: VentaEstado.ABIERTA,
           caja: { id: cajaId } as any,
