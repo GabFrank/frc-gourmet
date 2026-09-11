@@ -51,8 +51,10 @@ async function main() {
   const { UsuarioRole } = E('personas/usuario-role.entity');
   const { PdvMesa } = E('ventas/pdv-mesa.entity');
   const { Caja } = E('financiero/caja.entity');
+  const { Conteo } = E('financiero/conteo.entity');
   const { Venta } = E('ventas/venta.entity');
-  const { PedidoOnline } = E('ventas/pedido-online.entity');
+  const { PedidoOnline } = E('pedidos-online/pedido-online.entity');
+  const { Dispositivo } = E('financiero/dispositivo.entity');
   const save = (ent: any, data: any) => ds.getRepository(ent).save(ds.getRepository(ent).create(data as any) as any);
 
   // Usuario con VENTAS_PDV (mozo/cajero estándar)
@@ -65,7 +67,15 @@ async function main() {
   registerVentasHandlers(ds, () => cajero);
   registerPedidosOnlineHandlers(ds, () => cajero);
 
-  const caja: any = await save(Caja, { estado: 'ABIERTO', montoApertura: 0 });
+  const dispositivo: any = await save(Dispositivo, { nombre: 'TEST-DEVICE', activo: true });
+  const conteoApertura: any = await save(Conteo, { totalEsperado: 0, totalReal: 0, diferencia: 0 });
+  const caja: any = await save(Caja, { 
+    estado: 'ABIERTO', 
+    montoApertura: 0, 
+    fechaApertura: new Date(),
+    dispositivo: { id: dispositivo.id },
+    conteoApertura: { id: conteoApertura.id }
+  });
   const nuevaMesa = async (numero: number) =>
     await save(PdvMesa, { numero, estado: 'DISPONIBLE', activo: true, reservado: false });
 
@@ -179,12 +189,12 @@ async function main() {
     ok(/VENTA_MESA_DEBE_SER_RELACION/.test(err), 'P0-4: rechaza mesa_id suelto', err);
   }
 
-  // ═══════ [P0-5] materializarPedidoOnlineEnVenta rechaza si mesa tiene ABIERTA ═══════
-  console.log('\n[P0-5] pedido online: rechaza crear venta si mesa tiene ABIERTA');
+  // ═══════ [P0-5] materializarPedidoOnlineEnVenta REUSA venta o guard si no hay ═══════
+  console.log('\n[P0-5] pedido online: REUSA venta existente de mesa');
   {
     const mesa: any = await nuevaMesa(5);
     // 1ª venta ABIERTA de mesa (sin pedido)
-    await save(Venta, {
+    const ventaExistente: any = await save(Venta, {
       estado: 'ABIERTA',
       caja: { id: caja.id },
       mesa: { id: mesa.id },
@@ -193,21 +203,26 @@ async function main() {
 
     // Pedido online de mesa (QR_MESA)
     const pedido: any = await save(PedidoOnline, {
-      tipo: 'MESA',
+      numero: 1,
+      tipoPedido: 'MESA',
       mesaId: mesa.id,
       estado: 'PENDIENTE',
       total: 10000
     });
 
-    let err = '';
-    try {
-      await invokeHandler('materializar-pedido-online-en-venta', pedido.id, { cajaId: caja.id });
-    } catch (e: any) { err = e.message; }
-    ok(/MESA_YA_TIENE_VENTA_ABIERTA/.test(err), 'P0-5: pedido online rechaza crear venta', err);
+    // Materializar DEBE REUSAR la venta existente (comportamiento intencional:
+    // múltiples comensales pidiendo desde su celular caen en UNA cuenta)
+    await invokeHandler('materializar-pedido-online-en-venta', pedido.id, { cajaId: caja.id });
 
-    // Verificar que pedido NO se materializó
+    // Verificar que pedido se materializó en la venta EXISTENTE
     const pedidoDespues: any = await ds.getRepository(PedidoOnline).findOneBy({ id: pedido.id } as any);
-    ok(!pedidoDespues!.ventaId, 'P0-5b: pedido NO se materializó', pedidoDespues!.ventaId);
+    ok(pedidoDespues!.ventaId === ventaExistente.id, 'P0-5a: pedido REUSA venta existente', { esperado: ventaExistente.id, real: pedidoDespues!.ventaId });
+
+    // Verificar que sigue habiendo solo 1 venta ABIERTA en la mesa
+    const ventasAbiertas = await ds.getRepository(Venta).count({
+      where: { mesa: { id: mesa.id }, estado: 'ABIERTA', comanda: null } as any
+    });
+    ok(ventasAbiertas === 1, 'P0-5b: sigue habiendo 1 sola venta ABIERTA', ventasAbiertas);
   }
 
   // ═══════ [REVERSIÓN] Tests deben FALLAR sin el fix ═══════
