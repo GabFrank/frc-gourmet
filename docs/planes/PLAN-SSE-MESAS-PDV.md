@@ -2,8 +2,31 @@
 
 **Fecha:** 2026-09-11  
 **Autor:** Cloud Agent (cursor/plan-sse-mesas-pdv-64d5)  
-**Estado:** Draft  
-**PR objetivo:** `develop`
+**Estado:** Draft → Enmendado (2026-09-11, auditorías A+B)  
+**PR objetivo:** `develop` (#302)
+
+---
+
+## Enmiendas (post-auditorías A+B)
+
+**Aplicadas 2026-09-11 antes de implementar:**
+
+### P0/P1 Auditoría A
+
+1. **✅ `delivery-convertir-modo` SÍ emite** — muta `venta.costoDelivery` (cambia total).
+2. **✅ `registrarCobroParcial` NO emite** — solo taguea `PagoDetalle`; el creador de la línea (`createPagoDetalle`) ya emitió. **Aclarado en inventario.**
+3. **✅ `anularCobroParcial` SÍ emite** — libera ítems (`montoCubierto` baja → estado PAGADO→PARCIAL/PENDIENTE).
+4. **✅ Test de auditoría continua** — falla si un handler que muta Venta/PdvMesa/Comanda no llama `broadcastMesaEvent`, con allowlist explícita de los que NO deben (ej: `registrarCobroParcial`, CRUD config).
+
+### P0/P1 Auditoría B
+
+1. **✅ Inventario completado** — pagos (`compras.handler.ts`), cobro parcial, CPC (`cuentas-por-cobrar.handler.ts`).
+2. **✅ Fase 5 mobile fuera** — mobile no lista mesas en vivo (carga al entrar + botón). Follow-up post-#302.
+3. **✅ Línea `refreshMesasSilent` corregida** — 775, no 797. PR #300 mergeado en `9bb4cded`.
+4. **✅ `seq` con índice** — migraciones SQLite+Postgres escriben `CREATE INDEX idx_seq_<tabla> ON <tabla>(seq)`. Emitir DENTRO de `withMesaLock` (orden garantizado).
+5. **✅ Tests no tautológicos** — al menos un test de transporte SSE real (conectar + emitir + recibir), no solo mock de `broadcastMesaEvent`.
+6. **✅ Cloudflare confirmado** — `X-Accel-Buffering: no` obligatorio; timeout idle ~60s → heartbeat 25s (como KDS).
+7. **✅ Migraciones reales escritas** — SQLite + Postgres, no solo nombradas.
 
 ---
 
@@ -148,18 +171,12 @@ export function registerMesaSseRoutes(fastify: FastifyInstance): void {
 
 ### Mesa seleccionada en edición: NO pisar
 
-**Regla existente en `refreshMesasSilent` (línea 797):**
+**Regla existente en `refreshMesasSilent` (línea 775, PR #300 mergeado en `9bb4cded`):**
 
 ```typescript
-if (this.selectedPdvMesa?.id === mesa.id) {
-  // NO pisar la venta de la mesa seleccionada: el cajero puede estar editando
-  // y un refresh concurrente borraría cambios no guardados.
-  // Saltea .venta pero actualiza número, sector, estado.
-  const ventaActual = this.selectedPdvMesa.venta;
-  Object.assign(this.selectedPdvMesa, mesaFresca);
-  this.selectedPdvMesa.venta = ventaActual;
-  this.estamparMesa(this.selectedPdvMesa);
-  continue;
+// Actualizar venta solo si no es la mesa seleccionada (para no pisar datos en edición)
+if (!this.selectedMesa || this.selectedMesa.id !== mesaLocal.id) {
+  mesaLocal.venta = mesaFresca.venta;
 }
 ```
 
@@ -225,6 +242,8 @@ private async flushPendingRefreshes() {
 | `cerrarVentasAbiertasMesa` | 882 | `MESA_CAMBIO` | Cierra venta + libera mesa |
 | `transferir-venta-pdv` | 2937 | `MESA_CAMBIO` × 2 (origen y destino) | Mueve venta/ítems entre contenedores |
 | `set-pdv-mesa-estado` | 2546 | `MESA_CAMBIO` | Ocupar/liberar manual |
+| `registrarCobroParcial` | 4271 | **NO emite** | Solo taguea PagoDetalle; el creador (`createPagoDetalle`) ya emitió |
+| `anularCobroParcial` | 4387 | `MESA_CAMBIO` o `COMANDA_CAMBIO` | Libera ítems (montoCubierto baja) |
 | `createPdvMesa` | 2503 | No emite (config) | — |
 | `updatePdvMesa` | 2970 | No emite (config) | Solo renombrar/sector |
 | `deletePdvMesa` | 2985 | No emite (config) | — |
@@ -239,12 +258,12 @@ private async flushPendingRefreshes() {
 
 | Handler | Emite | Razón |
 |---------|-------|-------|
-| `delivery-crear` | `MESA_CAMBIO` | Crea venta + vincula a mesa (si `modo=RETIRO` y hay mesa) |
-| `delivery-actualizar-datos` | No emite | Solo datos del cliente |
-| `delivery-cambiar-estado` | No emite | Estado interno del delivery |
+| `delivery-crear` | `MESA_CAMBIO` (si tiene mesa) | Crea venta + vincula a mesa (modo RETIRO con mesa) |
+| `delivery-actualizar-datos` | No emite | Solo datos del cliente (nombre/teléfono/dirección) |
+| `delivery-cambiar-estado` | No emite | Estado interno del delivery (timestamps) |
 | `delivery-asignar-repartidor` | No emite | — |
-| `delivery-cancelar` | `MESA_CAMBIO` (si tiene mesa) | Venta→CANCELADA |
-| `delivery-convertir-modo` | `MESA_CAMBIO` (si tiene mesa) | Costo de envío cambia → total |
+| `delivery-cancelar` | `MESA_CAMBIO` (si tiene mesa) | Venta→CANCELADA (libera mesa) |
+| `delivery-convertir-modo` | `MESA_CAMBIO` (si tiene mesa) | **Muta `venta.costoDelivery`** → total cambia |
 
 ### C. Handlers en `compras.handler.ts`
 
@@ -277,7 +296,12 @@ Llama `sincronizarEstadoMesaEnTx` al final → ya emite indirectamente si ese he
 - **`sincronizarEstadoMesaEnTx`** (`electron/utils/mesa-estado.utils.ts`): debe emitir `MESA_CAMBIO` al final de la transacción si el estado derivado cambió.
 - **`cerrarComandaEnTx`**: debe emitir `COMANDA_CAMBIO` + `MESA_CAMBIO` (si vinculada).
 
-**Total estimado:** ~25 puntos de emisión (algunos condicionales: solo si la venta tiene mesa/comanda).
+**Total estimado:** ~27 puntos de emisión (algunos condicionales: solo si la venta tiene mesa/comanda).
+
+**Allowlist de NO-emisión (verificada por test de auditoría continua):**
+- `registrarCobroParcial` — solo taguea; el creador de la línea ya emitió.
+- CRUD de config (createPdvMesa, updatePdvMesa, deletePdvMesa, createPdvConfig, updatePdvConfig) — no afectan estado operativo de mesas.
+- Getters (getPdvMesas, getVenta, etc.) — solo lectura.
 
 ---
 
@@ -287,11 +311,16 @@ Llama `sincronizarEstadoMesaEnTx` al final → ya emite indirectamente si ese he
 
 **Archivos:**
 - `electron/utils/mesa-events.utils.ts` — bus de eventos + `broadcastMesaEvent`.
-- `electron/server/mesa-sse-routes.ts` — ruta SSE.
+- `electron/server/mesa-sse-routes.ts` — ruta SSE (`/api/pdv/mesas/stream`, token contexto `'pdv'`).
 - `electron/utils/stream-token.utils.ts` — agregar contexto `'pdv'` (ya existe para `'kds'`).
-- `src/app/database/entities/ventas/venta.entity.ts` — agregar `seq: number` (nullable, default null). Migración: `AddSeqToVenta`.
-- `src/app/database/entities/ventas/pdv-mesa.entity.ts` — agregar `seq: number` (nullable, default null). Migración: `AddSeqToPdvMesa`.
-- `src/app/database/entities/ventas/comanda.entity.ts` — agregar `seq: number` (nullable, default null). Migración: `AddSeqToComanda`.
+- `src/app/database/entities/ventas/venta.entity.ts` — agregar `seq: number` (nullable, default null).
+- `src/app/database/entities/ventas/pdv-mesa.entity.ts` — agregar `seq: number` (nullable, default null).
+- `src/app/database/entities/ventas/comanda.entity.ts` — agregar `seq: number` (nullable, default null).
+- **Migraciones SQLite+Postgres:**
+  - `AddSeqToVenta` — columna + índice `idx_seq_venta`.
+  - `AddSeqToPdvMesa` — columna + índice `idx_seq_pdv_mesa`.
+  - `AddSeqToComanda` — columna + índice `idx_seq_comanda`.
+- Registrar ruta SSE en `main.ts` (después de `registerKdsSseRoutes`).
 
 **Test:**
 - Verificar que el stream se abre y envía heartbeats.
@@ -520,8 +549,9 @@ Si no, **anotar como follow-up** y completar desktop primero.
 **`electron/server/mesa-sse-routes.spec.ts`:**
 - Conectar sin token → 401.
 - Conectar con token válido → 200 + Content-Type text/event-stream.
-- Emitir evento → llega por el stream.
+- **Emitir evento → llega por el stream (transporte SSE real, NO solo mock).**
 - Heartbeat → llega cada ~25s.
+- `X-Accel-Buffering: no` presente en headers.
 
 ### Integration tests (handler-level)
 
@@ -538,6 +568,14 @@ Casos:
 - `transferir-venta-pdv` → 2 eventos (origen + destino).
 - `updateVenta` ABIERTA→CONCLUIDA → evento con el contenedor correcto.
 - `set-pdv-mesa-estado` DISPONIBLE→OCUPADO → evento.
+- `anularCobroParcial` → evento (libera ítems).
+- `delivery-convertir-modo` → evento (muta costoDelivery).
+- **`registrarCobroParcial` NO emite** (solo taguea).
+
+**Test de auditoría continua (`npm run test:auditoria-emitters`):**
+- Escanea todos los handlers que mutan `Venta`, `PdvMesa`, `Comanda`.
+- Verifica que llaman `broadcastMesaEvent` **O** están en la allowlist.
+- **Falla si un mutador nuevo no emite y no está en allowlist** (auditoría automática).
 
 **Cobertura esperada:** ≥85%.
 
@@ -731,9 +769,9 @@ Los cambios tocan:
 - [ ] Reconexión automática tras pérdida de red.
 - [ ] Mesa seleccionada NO se pisa (regla existente respetada).
 
-### Fase 5 (opcional, si mobile ya lista)
-- [ ] Mobile PWA conecta al mismo stream.
-- [ ] Eventos llegan y actualizan la lista mobile.
+### Fase 5 (mobile — FUERA de este PR)
+- Mobile no lista mesas en vivo (carga al entrar + botón, sin polling).
+- Follow-up post-#302.
 
 ### Regresión
 - [ ] Mesa con venta ABIERTA → color naranja.
