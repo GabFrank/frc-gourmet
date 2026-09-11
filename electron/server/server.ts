@@ -30,6 +30,7 @@ import { registerDeviceAuthRoutes } from './device-auth-routes';
 import { registerFileRoutes } from './file-routes';
 import { registerKdsSseRoutes } from './kds-sse-routes';
 import { registerMusicaSseRoutes } from './musica-sse-routes';
+import { registerMesaSseRoutes } from './mesa-sse-routes';
 import { registerPublicRoutes } from './public-routes';
 import { registerQrUploadRoutes } from './qr-upload-routes';
 import { registerAuthPlugin } from './auth-middleware';
