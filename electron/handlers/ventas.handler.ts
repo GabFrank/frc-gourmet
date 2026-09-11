@@ -977,6 +977,15 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         ? resolveRequestDeviceId(_event)
         : null;
 
+      // P0-4: Normalizar mesa_id suelto → rechazar si vino flat sin relación.
+      // `/api/rpc` es default-allow; un cliente puede mandar `{ mesa_id: 5 }`
+      // sin `{ mesa: { id: 5 } }` para evadir el guard. La forma plana no crea
+      // la relación y `data.mesa?.id` da undefined.
+      const mesaId = data?.mesa?.id ?? data?.mesaId ?? data?.mesa_id ?? null;
+      if ((data?.mesaId || data?.mesa_id) && !data?.mesa) {
+        throw new Error('VENTA_MESA_DEBE_SER_RELACION');
+      }
+
       // La mesa se ocupa ACA, en la misma transaccion que crea la venta.
       //
       // Antes el frontend hacia una segunda llamada a `updatePdvMesa`, que exige
@@ -987,15 +996,15 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // Solo aplica a la venta de mesa DIRECTA. Si la venta cuelga de una
       // comanda NO ocupa la mesa: el vinculo comanda->mesa es de ubicacion, no
       // de ocupacion (ver `mesaTieneCuentaPropia`).
-      // Sólo la forma `{ mesa: { id } }`: un `mesa_id` suelto no lo traduce
-      // `repo.create()` a la relación, así que la venta quedaría sin mesa y
-      // marcaríamos ocupada una mesa sin venta vinculada — justo el estado que
-      // este fix elimina.
-      const mesaId = data?.mesa?.id ?? null;
       const tieneComanda = !!data?.comanda?.id;
       const ocupaMesa = !!mesaId && !tieneComanda;
 
       const crear = async (): Promise<any> => dataSource.transaction(async (manager) => {
+        // P0-1: Guard DENTRO de la transacción, ANTES de crear la venta.
+        // Invariante: máximo 1 venta ABIERTA (comanda IS NULL) por mesaId.
+        // Fix para el bug de Alpha Don Franco 2026-09-10/11 (ventas 3738/3739/3771).
+        await assertNoVentaAbiertaEnMesa(manager, mesaId, tieneComanda);
+
         const repo = manager.getRepository(Venta);
         const entity: any = repo.create(data);
         await setEntityUserTracking(dataSource, entity, userId, false);
