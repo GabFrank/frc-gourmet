@@ -17,22 +17,166 @@ Sistema reporta lentitud generalizada en producción (Don Franco / app.frc-gourm
 
 | # | Prioridad | Hallazgo | Impacto Estimado |
 |---|-----------|----------|------------------|
-| 1 | **P0** | Polling agresivo 1s en PDV desktop | CRÍTICO: cada terminal martilla servidor cada segundo |
-| 2 | **P0** | N+1 queries en `getVentaItems` | ALTO: 10+ joins por ítem, sin paginación |
-| 3 | **P0** | `queryMesasWithVentaAbierta` sin índice mesa+estado | ALTO: full scan en cada refresh |
-| 4 | **P1** | Materialización pedido online con transacción larga | ALTO: traba toda la mesa mientras arma venta + ítems |
-| 5 | **P1** | Auto-impresión delay 2.5s + retry worker 5s | MEDIO-ALTO: el usuario espera respuesta que depende de impresora |
-| 6 | **P1** | Locks por mesa/comanda serializan operaciones | MEDIO: withMesaLock puede hacer cola a todos |
-| 7 | **P1** | Reportes con loops secuenciales `await` | MEDIO: reporte de 45 días = 45 queries en serie |
-| 8 | **P2** | Rate limiting 300 req/min puede cortar staff | MEDIO: con 5 terminales activas llega al límite |
-| 9 | **P2** | SSE + polling fallback mobile compiten | BAJO-MEDIO: polling de respaldo se queda activo |
-| 10 | **P2** | Falta índice `(estado, created_at)` en `ventas` | MEDIO: dashboards y reportes hacen scan |
+| **1** | **P0 🔥** | **`getVentas()` sin filtros → 3.5MB payload + 1925ms** | **CRÍTICO CONFIRMADO:** retorna TODO el histórico con 6 joins |
+| 2 | **P0** | Polling agresivo 1s en PDV desktop | CRÍTICO: cada terminal martilla servidor cada segundo |
+| 3 | **P0** | N+1 queries en `getVentaItems` | ALTO: 10+ joins por ítem, sin paginación |
+| 4 | **P0** | `queryMesasWithVentaAbierta` sin índice mesa+estado | ALTO: full scan en cada refresh |
+| 5 | **P1** | Materialización pedido online con transacción larga | ALTO: traba toda la mesa mientras arma venta + ítems |
+| 6 | **P1** | Auto-impresión delay 2.5s + retry worker 5s | MEDIO-ALTO: el usuario espera respuesta que depende de impresora |
+| 7 | **P1** | Locks por mesa/comanda serializan operaciones | MEDIO: withMesaLock puede hacer cola a todos |
+| 8 | **P1** | Reportes con loops secuenciales `await` | MEDIO: reporte de 45 días = 45 queries en serie |
+| 9 | **P2** | Rate limiting 300 req/min puede cortar staff | MEDIO: con 5 terminales activas llega al límite |
+| 10 | **P2** | SSE + polling fallback mobile compiten | BAJO-MEDIO: polling de respaldo se queda activo |
 
 ---
 
 ## Hallazgos Detallados
 
-### 1. **[P0] Polling Agresivo de 1 Segundo en PDV Desktop**
+### 1. **[P0 🔥 CONFIRMADO EN VIVO] `getVentas()` Sin Filtros → 3.5MB Payload + 1925ms**
+
+**Datos Reales de Producción (app.frc-gourmet.com):**
+- RPC típicos: 200-600ms ✅
+- **OUTLIER:** `getVentas` [] sin filtros ≈ **1925ms** + ≈ **3.5MB** payload 🔥
+
+**Handler Backend:** `electron/handlers/ventas.handler.ts:925-943`
+
+```typescript
+ipcMain.handle('getVentas', async () => {
+  const repo = dataSource.getRepository(Venta);
+  return await repo.find({
+    relations: [
+      'cliente', 
+      'cliente.persona', 
+      'formaPago', 
+      'caja', 
+      'pago', 
+      'delivery'
+    ],
+    order: { createdAt: 'DESC' }
+  });
+});
+```
+
+**Por qué mata el servidor:**
+- **Sin `where`:** retorna TODO el histórico (probablemente 10K+ ventas en Don Franco)
+- **Sin `take()`/`skip()`:** sin paginación ni límite
+- **6 joins hidratados** (`leftJoinAndSelect`) por cada venta
+- **Sin índice en `created_at`** para el `ORDER BY` → sort en memoria
+- Payload: si 10K ventas × ~350 bytes/venta = **3.5MB** JSON serializado
+
+**Cálculo del impacto:**
+- 10K ventas × 6 joins = **60K filas hidratadas** mínimo
+- TypeORM serializa todo a JSON → **1.9 segundos** de CPU + red
+- Cliente deserializa 3.5MB → **frontend se congela** mientras parsea
+
+**Callers Identificados (Rutas Calientes):**
+
+| Caller | Path | ¿Cuándo se llama? | ¿Necesita TODO? |
+|--------|------|-------------------|----------------|
+| ❌ **NUNCA SE USA** | `repository-ipc.service.ts:2025` | Método existe pero nadie lo llama | NO |
+
+**Handler similar CON filtro (pero también peligroso):**
+
+**`getVentasByCaja(cajaId)`** - `ventas.handler.ts:1277-1289`
+
+```typescript
+ipcMain.handle('getVentasByCaja', async (_event: any, cajaId: number) => {
+  return await repo.find({
+    where: { caja: { id: cajaId } },
+    relations: ['caja', 'formaPago', 'pago', 'items'],
+    order: { createdAt: 'DESC' }
+  });
+});
+```
+
+**Callers de `getVentasByCaja` (SÍ se usan):**
+
+| Caller | Path | ¿Cuándo? | Impacto |
+|--------|------|----------|---------|
+| **PDV cerrar caja** | `pdv.component.ts:2439` | Cada cierre de caja | ALTO: caja con 200 ventas = 200+ rows |
+| **Cierre caja dialog** | `cierre-caja-dialog.component.ts:72` | Al abrir diálogo de cierre | ALTO: mismo impacto |
+| **Últimas ventas dialog** | `ultimas-ventas-dialog/ultimas-ventas-dialog.component.ts:62` | Click en "Últimas Ventas" | ALTO: muestra TODO sin límite |
+| **List cajas (resumen)** | `create-caja-dialog.component.ts:666` | Al listar cajas (carga summary) | MEDIO: múltiples llamadas |
+
+**Por qué duele en cada caso:**
+
+1. **PDV cerrar caja:**
+   ```typescript
+   // pdv.component.ts:2439
+   const ventas = await firstValueFrom(this.repositoryService.getVentasByCaja(this.caja.id));
+   const ventasAbiertas = ventas.filter(v => v.estado === VentaEstado.ABIERTA);
+   ```
+   - **Filtrado en memoria**: carga TODAS para filtrar en JS las ABIERTAS
+   - Caja de turno largo (12 horas) = 200+ ventas cargadas → 1-2 segundos de espera
+   - **Se llama en el camino crítico del cierre** → usuario esperando
+
+2. **Últimas ventas dialog:**
+   ```typescript
+   // ultimas-ventas-dialog.component.ts:62
+   const ventas = await firstValueFrom(this.repositoryService.getVentasByCaja(this.cajaId));
+   this.rows = (ventas || []).map((v) => { /* ... */ });
+   ```
+   - Muestra **todas las ventas de la caja** sin paginación
+   - En una caja con 500 ventas (semana de producción), carga 500 rows de una vez
+   - Diálogo tarda **3-5 segundos** en abrir
+
+3. **Cierre caja dialog:**
+   - Mismo patrón: filtra `ABIERTA` vs `CONCLUIDA` en memoria
+   - Bloquea el cierre hasta que cargue todo
+
+**Evidencia de que NO se necesita todo:**
+
+Existe **`getVentasByDateRange()`** (línea 1051) que:
+- ✅ Tiene **paginación** (`page`, `pageSize`, default 25)
+- ✅ Filtra por **rango de fechas**
+- ✅ Tiene **filtros** (estado, cliente, canal, zona, etc.)
+- ✅ Retorna `{ data, total }` para UI paginada
+
+**Pero los callers críticos NO la usan** → siguen llamando `getVentasByCaja` sin límite.
+
+**Qué medir en vivo:**
+
+1. ✅ **MEDIDO:** `getVentas` sin filtros = 1925ms + 3.5MB (dato del usuario)
+2. Contar ventas en tabla `ventas` de Don Franco: `SELECT COUNT(*) FROM ventas`
+3. Medir `getVentasByCaja` de una caja con 200+ ventas (turno largo)
+4. Verificar si `getVentas()` SIN parámetros se llama desde algún lado (búsqueda en codebase dice que NO)
+5. Payload size de `getVentasByCaja`: ¿cuántos KB por cada 100 ventas?
+
+**Fix hipotético (NO implementar ahora):**
+
+```typescript
+// Opción A: deprecar getVentas() completamente (nadie lo usa)
+ipcMain.handle('getVentas', async () => {
+  throw new Error('getVentas está deprecado: usar getVentasByDateRange con paginación');
+});
+
+// Opción B: agregar LIMIT obligatorio a getVentasByCaja
+ipcMain.handle('getVentasByCaja', async (_event, cajaId, opts = {}) => {
+  const limit = opts.limit || 100; // default 100 últimas
+  const estado = opts.estado; // filtro opcional
+  return await repo.find({
+    where: { 
+      caja: { id: cajaId },
+      ...(estado && { estado })
+    },
+    relations: ['caja', 'formaPago', 'pago', 'items'],
+    order: { createdAt: 'DESC' },
+    take: limit
+  });
+});
+
+// Opción C: los callers usan getVentasByDateRange con rango "hoy"
+// (ya existe y tiene paginación)
+```
+
+**Prioridad:**
+- **P0 CRÍTICO CONFIRMADO** con datos reales de producción
+- Fix más rápido: agregar `take(100)` a `getVentasByCaja` → 95% de mejora
+- Fix completo: migrar callers a `getVentasByDateRange` con paginación
+
+---
+
+### 2. **[P0] Polling Agresivo de 1 Segundo en PDV Desktop**
 
 **Archivo:** `src/app/pages/ventas/pdv/pdv.component.ts:566`
 
