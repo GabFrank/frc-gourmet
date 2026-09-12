@@ -914,6 +914,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       }
       // Cerrar las cuentas de la mesa cambia su ocupacion: el cache la sigue.
       if (ventasAbiertas.length > 0) await sincronizarEstadoMesa(mesaId);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      if (ventasAbiertas.length > 0) {
+        try {
+          const { emitMesaCambio } = await import('../utils/mesa-emit.utils');
+          await emitMesaCambio(dataSource, mesaId);
+        } catch (e) {
+          console.warn('[cerrarVentasAbiertasMesa] emit SSE falló:', e);
+        }
+      }
+      
       return ventasAbiertas.length;
     } catch (error) {
       console.error(`Error cerrando ventas abiertas de mesa ${mesaId}:`, error);
@@ -1036,6 +1047,19 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             await mesaRepo.save(mesa);
           }
         }
+        
+        // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+        try {
+          const { emitMesaCambio, emitComandaCambio } = await import('../utils/mesa-emit.utils');
+          if (ocupaMesa) {
+            await emitMesaCambio(manager, Number(mesaId));
+          } else if (tieneComanda) {
+            await emitComandaCambio(manager, data.comanda.id);
+          }
+        } catch (e) {
+          console.warn('[createVenta] emit SSE falló:', e);
+        }
+        
         return saved;
       });
 
@@ -1442,6 +1466,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
 
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+        await emitVentaCambio(dataSource, id);
+      } catch (e) {
+        console.warn('[updateVenta] emit SSE falló:', e);
+      }
+
       // Cobrar o cancelar una venta de mesa CIERRA la cuenta propia de esa mesa,
       // asi que el cache `pdv_mesas.estado` tiene que seguirla. Es el evento mas
       // frecuente de todos y no lo estaba haciendo: la grilla se veia bien porque
@@ -1615,6 +1647,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       await validarVariacionDelItem(dataSource, data);
+      const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
       const repo = dataSource.getRepository(VentaItem);
       const entity = repo.create(data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
@@ -1642,6 +1675,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         await crearComandaItemsSiCorresponde(dataSource, (saved as any).id);
       } catch (e) {
         console.warn('[createVentaItem] hook KDS comanda-items falló:', e);
+      }
+
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const ventaId = (saved as any).venta?.id ?? (saved as any).venta_id ?? (saved as any).ventaId;
+        if (ventaId) {
+          await emitVentaCambio(dataSource, ventaId);
+        }
+      } catch (e) {
+        console.warn('[createVentaItem] emit SSE falló:', e);
       }
 
       return saved;
@@ -1685,6 +1728,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         }
       } catch (e) { console.warn('[updateVentaItem] KDS cancelar comanda-items falló:', e); }
 
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+        const ventaId = (entity as any).venta?.id ?? (entity as any).venta_id ?? (entity as any).ventaId;
+        if (ventaId) {
+          await emitVentaCambio(dataSource, ventaId);
+        }
+      } catch (e) {
+        console.warn('[updateVentaItem] emit SSE falló:', e);
+      }
+
       return saved;
     } catch (error) {
       console.error(`Error updating venta item ID ${id}:`, error);
@@ -1699,6 +1753,8 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(VentaItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
+      const ventaId = (entity as any).venta?.id ?? (entity as any).venta_id ?? (entity as any).ventaId;
+      
       // KDS: borrar ComandaItems del item antes para no dejar FK huérfana.
       try {
         await dataSource.getRepository(ComandaItem)
@@ -1708,6 +1764,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           .execute();
       } catch (e) { console.warn('[deleteVentaItem] KDS limpiar comanda-items falló:', e); }
       await repo.remove(entity);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      if (ventaId) {
+        try {
+          const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+          await emitVentaCambio(dataSource, ventaId);
+        } catch (e) {
+          console.warn('[deleteVentaItem] emit SSE falló:', e);
+        }
+      }
+      
       return true;
     } catch (error) {
       console.error(`Error deleting venta item ID ${id}:`, error);
@@ -1761,7 +1828,23 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       }
       payload.observacionLibre = nota ? nota.toUpperCase().slice(0, 500) : null;
       const entity = repo.create(payload);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+        const vItemId = (saved as any).ventaItem?.id ?? (saved as any).venta_item_id ?? (saved as any).ventaItemId;
+        if (vItemId) {
+          const vItem = await dataSource.getRepository(VentaItem).findOne({ where: { id: vItemId }, relations: ['venta'] });
+          if (vItem?.venta?.id) {
+            await emitVentaCambio(dataSource, (vItem.venta as any).id);
+          }
+        }
+      } catch (e) {
+        console.warn('[createVentaItemObservacion] emit SSE falló:', e);
+      }
+      
+      return saved;
     } catch (error) {
       console.error('Error creating venta item observacion:', error);
       throw error;
@@ -1772,9 +1855,21 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemObservacion);
-      const entity = await repo.findOneBy({ id });
+      const entity = await repo.findOne({ where: { id }, relations: ['ventaItem', 'ventaItem.venta'] });
       if (!entity) throw new Error(`VentaItemObservacion ID ${id} not found`);
+      const ventaId = (entity as any).ventaItem?.venta?.id;
       await repo.remove(entity);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      if (ventaId) {
+        try {
+          const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+          await emitVentaCambio(dataSource, ventaId);
+        } catch (e) {
+          console.warn('[deleteVentaItemObservacion] emit SSE falló:', e);
+        }
+      }
+      
       return true;
     } catch (error) {
       console.error(`Error deleting venta item observacion ${id}:`, error);
@@ -1804,7 +1899,23 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemAdicional);
       const entity = repo.create(data);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+        const vItemId = (saved as any).ventaItem?.id ?? (saved as any).venta_item_id ?? (saved as any).ventaItemId;
+        if (vItemId) {
+          const vItem = await dataSource.getRepository(VentaItem).findOne({ where: { id: vItemId }, relations: ['venta'] });
+          if (vItem?.venta?.id) {
+            await emitVentaCambio(dataSource, (vItem.venta as any).id);
+          }
+        }
+      } catch (e) {
+        console.warn('[createVentaItemAdicional] emit SSE falló:', e);
+      }
+      
+      return saved;
     } catch (error) {
       console.error('Error creating venta item adicional:', error);
       throw error;
@@ -1815,9 +1926,21 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemAdicional);
-      const entity = await repo.findOneBy({ id });
+      const entity = await repo.findOne({ where: { id }, relations: ['ventaItem', 'ventaItem.venta'] });
       if (!entity) throw new Error(`VentaItemAdicional ID ${id} not found`);
+      const ventaId = (entity as any).ventaItem?.venta?.id;
       await repo.remove(entity);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      if (ventaId) {
+        try {
+          const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+          await emitVentaCambio(dataSource, ventaId);
+        } catch (e) {
+          console.warn('[deleteVentaItemAdicional] emit SSE falló:', e);
+        }
+      }
+      
       return true;
     } catch (error) {
       console.error(`Error deleting venta item adicional ${id}:`, error);
@@ -1844,7 +1967,23 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemIngredienteModificacion);
       const entity = repo.create(data);
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+        const vItemId = (saved as any).ventaItem?.id ?? (saved as any).venta_item_id ?? (saved as any).ventaItemId;
+        if (vItemId) {
+          const vItem = await dataSource.getRepository(VentaItem).findOne({ where: { id: vItemId }, relations: ['venta'] });
+          if (vItem?.venta?.id) {
+            await emitVentaCambio(dataSource, (vItem.venta as any).id);
+          }
+        }
+      } catch (e) {
+        console.warn('[createVentaItemIngredienteModificacion] emit SSE falló:', e);
+      }
+      
+      return saved;
     } catch (error) {
       console.error('Error creating venta item ingrediente modificacion:', error);
       throw error;
@@ -1855,9 +1994,21 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       const repo = dataSource.getRepository(VentaItemIngredienteModificacion);
-      const entity = await repo.findOneBy({ id });
+      const entity = await repo.findOne({ where: { id }, relations: ['ventaItem', 'ventaItem.venta'] });
       if (!entity) throw new Error(`VentaItemIngredienteModificacion ID ${id} not found`);
+      const ventaId = (entity as any).ventaItem?.venta?.id;
       await repo.remove(entity);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      if (ventaId) {
+        try {
+          const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+          await emitVentaCambio(dataSource, ventaId);
+        } catch (e) {
+          console.warn('[deleteVentaItemIngredienteModificacion] emit SSE falló:', e);
+        }
+      }
+      
       return true;
     } catch (error) {
       console.error(`Error deleting venta item ingrediente modificacion ${id}:`, error);
@@ -2574,7 +2725,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
 
       mesa.estado = estado as PdvMesaEstado;
       await setEntityUserTracking(dataSource, mesa, getCurrentUser()?.id, true);
-      return await mesaRepo.save(mesa);
+      const saved = await mesaRepo.save(mesa);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const { emitMesaCambio } = await import('../utils/mesa-emit.utils');
+        await emitMesaCambio(dataSource, mesaId);
+      } catch (e) {
+        console.warn('[set-pdv-mesa-estado] emit SSE falló:', e);
+      }
+      
+      return saved;
     } catch (error) {
       console.error(`Error cambiando estado de la mesa ${mesaId}:`, error);
       throw error;
@@ -2923,6 +3084,23 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         await ocuparMesaEnTx(manager, destino.id);
       }
 
+      // ─── SSE: emitir eventos de cambio para origen Y destino ───────────────
+      try {
+        const { emitMesaCambio, emitComandaCambio } = await import('../utils/mesa-emit.utils');
+        if (origen.tipo === 'MESA') {
+          await emitMesaCambio(manager, origen.id);
+        } else {
+          await emitComandaCambio(manager, origen.id);
+        }
+        if (destino.tipo === 'MESA') {
+          await emitMesaCambio(manager, destino.id);
+        } else {
+          await emitComandaCambio(manager, destino.id);
+        }
+      } catch (e) {
+        console.warn('[transferir-venta-pdv] emit SSE falló:', e);
+      }
+
       return {
         ventaOrigenId: ventaOrigen.id,
         ventaDestinoId,
@@ -3072,7 +3250,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         const deviceId = resolveRequestDeviceId(_event);
         if (deviceId != null) entity.dispositivo = { id: deviceId };
       }
-      return await repo.save(entity);
+      const saved = await repo.save(entity);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const { emitComandaCambio } = await import('../utils/mesa-emit.utils');
+        await emitComandaCambio(dataSource, (saved as any).id);
+      } catch (e) {
+        console.warn('[createComanda] emit SSE falló:', e);
+      }
+      
+      return saved;
     } catch (error) {
       console.error('Error creating Comanda:', error);
       throw error;
@@ -3129,6 +3317,15 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             { mesa: mesaNueva ? ({ id: mesaNueva } as any) : null } as any,
           );
         }
+        
+        // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+        try {
+          const { emitComandaCambio } = await import('../utils/mesa-emit.utils');
+          await emitComandaCambio(manager, id);
+        } catch (e) {
+          console.warn('[updateComanda] emit SSE falló:', e);
+        }
+        
         return guardada;
       });
     } catch (error) {
@@ -3143,7 +3340,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(Comanda);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Comanda ID ${id} not found`);
-      return await repo.remove(entity);
+      await repo.remove(entity);
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const { emitComandaCambio } = await import('../utils/mesa-emit.utils');
+        await emitComandaCambio(dataSource, id);
+      } catch (e) {
+        console.warn('[deleteComanda] emit SSE falló:', e);
+      }
+      
+      return true;
     } catch (error) {
       console.error(`Error deleting Comanda ID ${id}:`, error);
       throw error;
@@ -3227,6 +3434,19 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // (donde esta sentada la cuenta, para saber a donde llevar la comida), no
       // de ocupacion. La mesa se pinta por su cuenta propia; las comandas las
       // muestra el badge.
+      
+      // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+      try {
+        const { emitComandaCambio, emitMesaCambio } = await import('../utils/mesa-emit.utils');
+        await emitComandaCambio(dataSource, comandaId);
+        // Si se vinculó a una mesa, emitir también MESA_CAMBIO (badge comandas)
+        if (data.mesaId) {
+          await emitMesaCambio(dataSource, data.mesaId);
+        }
+      } catch (e) {
+        console.warn('[abrirComanda] emit SSE falló:', e);
+      }
+      
       return saved;
     } catch (error) {
       console.error(`Error abriendo Comanda ID ${comandaId}:`, error);
@@ -3252,7 +3472,22 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       return await withComandaLock(comandaId, async () => dataSource.transaction(async (manager) => {
         const existe = await manager.findOneBy(Comanda, { id: comandaId });
         if (!existe) throw new Error(`Comanda ID ${comandaId} not found`);
+        const mesaId = (existe as any).pdv_mesa?.id ?? null;
+        
         await cerrarComandaEnTx(manager, comandaId, userId);
+        
+        // ─── SSE: emitir evento de cambio ─────────────────────────────────────
+        try {
+          const { emitComandaCambio, emitMesaCambio } = await import('../utils/mesa-emit.utils');
+          await emitComandaCambio(manager, comandaId);
+          // Si tenía mesa, emitir también MESA_CAMBIO (badge comandas baja)
+          if (mesaId) {
+            await emitMesaCambio(manager, mesaId);
+          }
+        } catch (e) {
+          console.warn('[cerrarComanda] emit SSE falló:', e);
+        }
+        
         return await manager.findOneBy(Comanda, { id: comandaId });
       }));
     } catch (error) {
@@ -4436,6 +4671,15 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       }
 
       await queryRunner.commitTransaction();
+      
+      // ─── SSE: emitir evento de cambio (fuera de la tx) ────────────────────
+      try {
+        const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+        await emitVentaCambio(dataSource, ventaId);
+      } catch (e) {
+        console.warn('[anularCobroParcial] emit SSE falló:', e);
+      }
+      
       return await getEstadoCobroVentaInternal(dataSource, ventaId);
     } catch (error) {
       await queryRunner.rollbackTransaction();
