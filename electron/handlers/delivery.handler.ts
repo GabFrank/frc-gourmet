@@ -885,6 +885,17 @@ export function registerDeliveryHandlers(
       await setEntityUserTracking(dataSource, delivery, usuarioId, true);
       const guardado = await manager.save(Delivery, delivery);
 
+      // ─── SSE: emitir evento si tiene mesa ─────────────────────────────────────
+      const ventaMesaId = (venta as any)?.mesa?.id ?? null;
+      if (ventaMesaId) {
+        try {
+          const { emitMesaCambio } = await import('../utils/mesa-emit.utils');
+          await emitMesaCambio(manager, ventaMesaId);
+        } catch (e) {
+          console.warn('[delivery-cancelar] emit SSE falló:', e);
+        }
+      }
+
       return { delivery: guardado, reversa };
     });
 

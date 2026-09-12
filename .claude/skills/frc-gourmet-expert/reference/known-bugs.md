@@ -1110,3 +1110,40 @@ que en realidad se canceló.
 Las dos salidas razonables: que `updateVenta` sincronice el delivery, o que el
 historial no ofrezca cancelar una venta con `delivery_id` y mande al diálogo de
 delivery, que ya hace la reversa completa.
+
+## ✅ RESUELTO — Múltiples ventas ABIERTAS concurrentes en la misma mesa (2026-09-11)
+
+**Síntoma reportado (Alpha Don Franco, 2026-09-10/11 noche):** Mesa 4 tenía **3 ventas de mesa concurrentes** en estado `ABIERTA`:
+- 3738 ABIERTA 19:51 PY → cobrada 22:11 (326k)
+- 3739 ABIERTA 19:52 PY → ticket 00:43 a 406k; cobrada 01:34 a 460k (pago 450k + desc 10k)
+- 3771 ABIERTA 22:21 PY **mientras 3739 seguía ABIERTA** → ítems 254k (Salto×8 + Mitaí + Guaraná)
+
+Al cobrar la 3739, `cerrarVentasAbiertasMesa` marcó la 3771 como `CONCLUIDA` **sin pago** (`fechaCierre` null, `montoCubierto` 0). El PdV mostraba la 3771 (254k); el ticket era de la 3739 → desfase percibido. No es error de suma: es **multi-cuenta en misma mesa** + cierre silencioso de cuentas hermanas, pérdida de 254k Gs.
+
+**Causa de raíz (tres fallas encadenadas):**
+
+1. **`createVenta` no rechazaba la 2ª venta ABIERTA.** `withMesaLock` serializa races concurrentes, pero **no valida que la mesa ya tenga cuenta**. El handler ocupa la mesa si `mesa.estado !== OCUPADO` pero igual persiste la nueva venta: si la mesa ya estaba `OCUPADO` (venta preexistente), crea una segunda cuenta en paralelo.
+2. **`cerrarVentasAbiertasMesa` cerraba TODAS las ABIERTAS.** Fetcha `where: { mesa_id, estado: ABIERTA, comanda: IS NULL }` y hace `repo.save({ estado: CONCLUIDA })` sobre **todas**. Es un tercer camino de finalización (sin cobro), y sin guard cerraba hermanas impagas en silencio — justo lo que pasó con la 3771.
+3. **`updateVenta` no guardaba contra hermanas.** Además, el merge de `updateData` contamina la entidad **antes** de validar: si `updateData.estado = CONCLUIDA` falla el guard, la entidad ya tiene el estado asignado.
+
+**Fix (PR #300, rama `cursor/fix-mesa-una-venta-abierta-4619`):**
+
+P0-1: **Guard dentro de `withMesaLock` + transacción atómica** (`assertNoVentaAbiertaEnMesa`) — verifica `count() == 0` **ANTES** de `repo.save` (línea de vida: `createVenta` → `materializarPedidoOnlineEnVenta`).
+
+P0-2: **Gatear CANCELACIÓN** (no solo CONCLUIDA) — `cerrarVentasAbiertasMesa` rechaza con `MESA_TIENE_OTRAS_VENTAS_ABIERTAS` si hay >1 ABIERTA. Cancelar una hermana sin avisar es tan malo como concluirla sin pago.
+
+P0-3: **Guard ANTES del merge en `updateVenta`** — valida que no haya hermanas ABIERTAS **antes** de `repo.merge(entity, ventaData)`.
+
+P0-4: **Normalizar `mesa_id` suelto** — rechaza `{ mesa_id: 5 }` sin `{ mesa: { id: 5 } }` (`VENTA_MESA_DEBE_SER_RELACION`). `/api/rpc` es default-allow; un cliente puede mandar la forma plana para evadir el guard.
+
+P0-5: **Cubrir `materializarPedidoOnlineEnVenta`** — pedidos online de mesa (tipo `MESA` con `mesaId`) crean venta dentro de su propia transacción. Si hay ABIERTA, debe rechazar igual. Reutiliza `assertNoVentaAbiertaEnMesa`.
+
+**UI (fases 4-5):** Manejo de errores con snackbar en PdV (`pdv.component.ts`):
+- `MESA_YA_TIENE_VENTA_ABIERTA` → "Esta mesa ya tiene una cuenta abierta. Verifique las ventas activas antes de abrir una nueva."
+- `MESA_TIENE_OTRAS_VENTAS_ABIERTAS` → "Esta mesa tiene múltiples cuentas abiertas. Cierre o transfiera las otras cuentas primero."
+
+**Tests (fase 6):** `scripts/test-mesa-una-venta-abierta-e2e.ts` — E2E completo para P0-1..P0-5. Uso: `npm run test:mesa-una-venta-abierta`. Los tests **deben fallar** si se revierten los guards (para verificar efectividad).
+
+**Plan completo:** `docs/planes/PLAN-MESA-UNA-VENTA-ABIERTA.md` con hallazgos de auditorías A (PASS-with-fixes) + B (FAIL) → enmendado 2026-09-11.
+
+**Invariante:** máximo 1 venta ABIERTA (`comanda IS NULL`) por `mesaId`.

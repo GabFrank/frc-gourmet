@@ -2,6 +2,77 @@
 
 El módulo más visible y operativamente más usado. Ventas, mesas, comandas, delivery, atajos, multi-sabor, descuento de stock automático.
 
+---
+
+## 🔥 Server-Sent Events (SSE) — Real-time Mesas/Comandas (2026-09-11)
+
+**Estado:** ✅ **Implementado en PR #302** (`cursor/plan-sse-mesas-pdv-64d5`)
+
+### ¿Qué es?
+Reemplazo del polling de 1 segundo (`setInterval`) por **Server-Sent Events (SSE)** para actualizaciones en tiempo real de mesas y comandas del PdV.
+
+### Arquitectura
+
+#### Backend (Electron)
+- **`electron/utils/mesa-events.utils.ts`**: bus de eventos (`mesaEvents`, `broadcastMesaEvent`)
+- **`electron/server/mesa-sse-routes.ts`**: endpoint `/api/pdv/mesas/stream` (SSE)
+- **`electron/utils/stream-token.utils.ts`**: tokens efímeros para autenticación (`StreamScope` extendido con `'pdv'`)
+- **`electron/utils/mesa-emit.utils.ts`**: helpers `emitMesaCambio`, `emitComandaCambio`, `emitVentaCambio` (con `seq` increment)
+
+#### Frontend (Angular)
+- **`src/app/pages/ventas/pdv/pdv.component.ts`**:
+  - `conectarSSEMesas()`: `EventSource` a `/api/pdv/mesas/stream`
+  - Snapshot inicial (`getPdvMesas`/`getComandas`) al abrir
+  - Coalescer de 300ms: agrupa ráfagas de eventos en 1 refresh
+  - **Merge selectivo**: NO pisa `.venta` de `selectedPdvMesa` (línea ~1293)
+  - Fallback a polling 15s si SSE falla
+  - Reconexión automática con snapshot
+
+#### Entidades (seq column)
+- **Migraciones**: `AddSeqToVenta`, `AddSeqToPdvMesa`, `AddSeqToComanda`
+- **Columnas**: `seq INTEGER NULL` + índices (`idx_seq_venta`, etc.)
+- **Emisión**: dentro de `withMesaLock` / `withComandaLock` para garantizar orden
+
+### Emitters (27 total)
+
+**VentaItem (8):**
+- `createVentaItem`, `updateVentaItem`, `deleteVentaItem`
+- `createVentaItemObservacion`, `deleteVentaItemObservacion`
+- `createVentaItemAdicional`, `deleteVentaItemAdicional`
+- `createVentaItemIngredienteModificacion`, `deleteVentaItemIngredienteModificacion`
+
+**Comanda (5):**
+- `createComanda`, `updateComanda`, `deleteComanda`, `abrirComanda`, `cerrarComanda`
+
+**Venta core (5):**
+- `createVenta`, `updateVenta`, `anularCobroParcial`, `cerrarVentasAbiertasMesa`, `set-pdv-mesa-estado`
+
+**Transferencia (1):**
+- `transferir-venta-pdv`
+
+**Delivery (2):**
+- `delivery-convertir-modo`, `delivery-cancelar`
+
+**Pagos (2):**
+- `createPago`, `createPagoDetalle`
+
+**CPC (1):**
+- `cobrar-venta-credito`
+
+**Allowlist (NO emiten):**
+- `registrarCobroParcial` (solo registra; `anularCobroParcial` emite)
+- `delivery-crear` (sin mesa)
+
+### Pruebas
+- **`test/sse-mesas-auditoria.spec.ts`**: auditoría continua (handlers mutadores SIN emisión = falla)
+- **`test/sse-mesas-cliente.spec.ts`**: merge selectivo + coalescer
+- **Regresión**: `npm run test:mesa-una-venta-abierta` (no reabre #300)
+
+### Cloudflare/Proxy
+- `X-Accel-Buffering: no` (nginx/Cloudflare no buferea SSE)
+- Heartbeat `: ping` cada 25s (evita timeout idle)
+
+---
 
 ## Qué venta va a cocina (cambió el 2026-08-24)
 
@@ -1367,3 +1438,28 @@ Grid de tarjetas: Retiro de Caja, Gastos, Vale, Compra, Egresos de caja, Última
 ### Login por QR (desktop + PWA)
 
 Device Authorization Grant. `DeviceAuthCode` (`device_auth_codes`: `deviceCode` unique, `estado` PENDING/APPROVED/CONSUMED, `expiresAt` ~3min). Rutas Fastify `electron/server/device-auth-routes.ts`: `POST /api/auth/device/start` (público, genera QR), `/approve` (autenticado, aprueba con el JWT del que escanea), `/token` (poll, emite tokens + `LoginSession`, un solo uso). Desktop: `qr-login-dialog` (pollea `api.deviceToken` vía `httpFetch` → requiere nodo server accesible) → `AuthService.applyExternalSession`. PWA: páginas `vincular-dispositivo`/`aprobar-dispositivo`.
+
+### Invariante: Máximo 1 Venta ABIERTA por Mesa (2026-09-11)
+
+**Regla de oro:** una mesa puede tener **como máximo UNA venta en estado `ABIERTA`** con `comanda IS NULL` (cuenta propia de mesa, no comanda). Las cuentas de comanda vinculadas a la mesa NO cuentan — son **ubicación**, no ocupación.
+
+**Caminos protegidos (P0-1..P0-5):**
+
+1. **`createVenta`** (`electron/handlers/ventas.handler.ts`): Guard `assertNoVentaAbiertaEnMesa` **dentro** de `withMesaLock` + transacción. Rechaza con `MESA_YA_TIENE_VENTA_ABIERTA` si ya existe una venta ABIERTA de esa mesa.
+
+2. **`cerrarVentasAbiertasMesa`**: Rechaza con `MESA_TIENE_OTRAS_VENTAS_ABIERTAS` si hay >1 ABIERTA. Aplica tanto a CONCLUIR como a CANCELAR — no cierra hermanas sin pago.
+
+3. **`updateVenta`**: Guard **antes del merge** verifica que no haya hermanas ABIERTAS cuando la transición es `ABIERTA → CONCLUIDA`. Sin esto, el merge asigna el estado y aunque el guard rechace, la entidad ya está contaminada.
+
+4. **Normalización `mesa_id`**: `createVenta` rechaza `{ mesa_id: 5 }` sin `{ mesa: { id: 5 } }` con `VENTA_MESA_DEBE_SER_RELACION`. `/api/rpc` es default-allow; un cliente puede mandar la forma plana para evadir el guard si no se valida.
+
+5. **`materializarPedidoOnlineEnVenta`** (`electron/handlers/ventas.handler.ts`): Pedidos online de mesa (tipo `MESA` con `mesaId`) reusan el mismo guard. Si hay ABIERTA, rechaza igual — varios comensales pidiendo desde su celular caen en UNA cuenta.
+
+**UI — Errores surfaceados:**
+
+- `MESA_YA_TIENE_VENTA_ABIERTA` → Snackbar: *"Esta mesa ya tiene una cuenta abierta. Verifique las ventas activas antes de abrir una nueva."*
+- `MESA_TIENE_OTRAS_VENTAS_ABIERTAS` → Snackbar: *"Esta mesa tiene múltiples cuentas abiertas. Cierre o transfiera las otras cuentas primero."*
+
+**Tests:** `npm run test:mesa-una-venta-abierta` (`scripts/test-mesa-una-venta-abierta-e2e.ts`) — E2E completo para P0-1..P0-5. Los tests **deben fallar** si se revierten los guards (para verificar efectividad del fix).
+
+**Caso real que motivó el fix:** Alpha Don Franco 2026-09-10/11 noche, mesa 4 con ventas 3738/3739/3771 concurrentes → al cobrar 3739, la 3771 se cerró sin pago (pérdida 254k Gs). Ver `known-bugs.md` para detalles forenses completos.
