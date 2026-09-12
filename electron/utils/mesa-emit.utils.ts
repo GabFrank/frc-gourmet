@@ -6,6 +6,9 @@
  */
 import { DataSource, EntityManager } from 'typeorm';
 import { broadcastMesaEvent, MesaEventTipo } from './mesa-events.utils';
+import { Venta } from '../../src/app/database/entities/ventas/venta.entity';
+import { PdvMesa } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
+import { Comanda } from '../../src/app/database/entities/ventas/comanda.entity';
 
 /**
  * Incrementa seq de una mesa y emite evento MESA_CAMBIO.
@@ -19,15 +22,25 @@ export async function emitMesaCambio(
 ): Promise<void> {
   const manager = ds instanceof DataSource ? ds.manager : ds;
 
-  // Incrementar seq
-  await manager.query(
-    `UPDATE pdv_mesas SET seq = COALESCE(seq, 0) + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    [mesaId],
-  );
+  // Incrementar seq con TypeORM QueryBuilder (funciona en SQLite y Postgres)
+  await manager
+    .createQueryBuilder()
+    .update('pdv_mesas')
+    .set({
+      seq: () => 'COALESCE(seq, 0) + 1',
+      updatedAt: () => 'CURRENT_TIMESTAMP',
+    })
+    .where('id = :mesaId', { mesaId })
+    .execute();
 
   // Leer el seq actualizado para el evento
-  const result = await manager.query(`SELECT seq FROM pdv_mesas WHERE id = ?`, [mesaId]);
-  const seq = result[0]?.seq ?? Date.now();
+  const result = await manager
+    .createQueryBuilder()
+    .select('seq')
+    .from('pdv_mesas', 'mesa')
+    .where('id = :mesaId', { mesaId })
+    .getRawOne();
+  const seq = result?.seq ?? Date.now();
 
   broadcastMesaEvent({
     tipo: 'MESA_CAMBIO',
@@ -49,15 +62,25 @@ export async function emitComandaCambio(
 ): Promise<void> {
   const manager = ds instanceof DataSource ? ds.manager : ds;
 
-  // Incrementar seq
-  await manager.query(
-    `UPDATE comandas SET seq = COALESCE(seq, 0) + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    [comandaId],
-  );
+  // Incrementar seq con TypeORM QueryBuilder (funciona en SQLite y Postgres)
+  await manager
+    .createQueryBuilder()
+    .update('comandas')
+    .set({
+      seq: () => 'COALESCE(seq, 0) + 1',
+      updatedAt: () => 'CURRENT_TIMESTAMP',
+    })
+    .where('id = :comandaId', { comandaId })
+    .execute();
 
   // Leer el seq actualizado
-  const result = await manager.query(`SELECT seq FROM comandas WHERE id = ?`, [comandaId]);
-  const seq = result[0]?.seq ?? Date.now();
+  const result = await manager
+    .createQueryBuilder()
+    .select('seq')
+    .from('comandas', 'comanda')
+    .where('id = :comandaId', { comandaId })
+    .getRawOne();
+  const seq = result?.seq ?? Date.now();
 
   broadcastMesaEvent({
     tipo: 'COMANDA_CAMBIO',
@@ -82,9 +105,7 @@ export async function emitVentaCambio(
 
   // Leer venta con mesa y comanda (sin cargar ítems completos)
   const venta = await manager
-    .createQueryBuilder()
-    .select('v')
-    .from('ventas', 'v')
+    .createQueryBuilder(Venta, 'v')
     .leftJoin('v.mesa', 'mesa')
     .leftJoin('v.comanda', 'comanda')
     .addSelect(['mesa.id', 'comanda.id'])
