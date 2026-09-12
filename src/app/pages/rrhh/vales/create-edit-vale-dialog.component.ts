@@ -131,12 +131,36 @@ import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/a
     </mat-dialog-actions>
   `,
   styles: [`
-    .dialog-content { min-width: 720px; }
+    .dialog-content { 
+      width: 100%; 
+      max-width: 720px; 
+      box-sizing: border-box; 
+    }
     .spinner { display: flex; justify-content: center; padding: 24px; }
-    .form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: center; }
-    .full { grid-column: 1 / -1; }
+    .form { 
+      display: grid; 
+      grid-template-columns: 1fr 1fr; 
+      gap: 12px; 
+      align-items: center; 
+      width: 100%; 
+      box-sizing: border-box; 
+    }
+    .full { 
+      grid-column: 1 / -1; 
+      max-width: 100%; 
+      box-sizing: border-box; 
+    }
+    .fuente-toggle { 
+      width: 100%; 
+      box-sizing: border-box; 
+    }
     .fuente-toggle .mat-button-toggle { flex: 1; }
     .convertido { color: #1565c0; font-size: 14px; align-self: center; }
+    mat-select {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   `],
 })
 export class CreateEditValeDialogComponent implements OnInit {
