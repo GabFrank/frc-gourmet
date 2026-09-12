@@ -5,6 +5,7 @@ import { getMonedaPrincipalId, getCotizacionMap } from './dashboard-ventas.handl
 import { resolverPeriodo, variacionPct, RangoFechas } from './reportes-periodo.util';
 import type { ReportePeriodoParams } from './reportes.handler';
 import { getInicioJornada } from './dashboard-ventas.handler';
+import { fechaParamSql } from '../utils/date.utils';
 
 const TIPOS_INGRESO: string[] = [
   TipoMovimiento.INGRESO_RETIRO_CAJA, TipoMovimiento.INGRESO_CIERRE_CAJA, TipoMovimiento.INGRESO_ENTRADA_VARIA,
@@ -80,7 +81,7 @@ async function gastosRango(ds: DataSource, ctx: Ctx, r: RangoFechas): Promise<nu
     FROM gastos g LEFT JOIN monedas m ON m.id = g.moneda_id
     WHERE g.estado NOT IN ('CANCELADO', 'PENDIENTE') AND g.fecha >= ? AND g.fecha <= ?
     GROUP BY g.moneda_id, m.principal
-  `, [r.desde.toISOString(), r.hasta.toISOString()]);
+  `, [fechaParamSql(ds, r.desde), fechaParamSql(ds, r.hasta)]);
   return rows.reduce((s, row) => s + convertir(row.total, row.moneda_id, row.principal, ctx), 0);
 }
 
@@ -118,7 +119,7 @@ async function flujoCaja(ds: DataSource, ctx: Ctx, r: RangoFechas) {
       FROM cajas_mayor_movimientos mv LEFT JOIN monedas m ON m.id = mv.moneda_id
       WHERE ${MOV_ACTIVO} AND mv.fecha >= ? AND mv.fecha <= ?
       GROUP BY mv.tipo_movimiento, mv.moneda_id, m.principal
-    `, [desde.toISOString(), hasta.toISOString()]);
+    `, [fechaParamSql(ds, desde), fechaParamSql(ds, hasta)]);
     let ing = 0, eg = 0;
     for (const row of rows) {
       const gs = convertir(row.total, row.moneda_id, row.principal, ctx);
@@ -136,7 +137,7 @@ async function composicion(ds: DataSource, ctx: Ctx, r: RangoFechas) {
     FROM cajas_mayor_movimientos mv LEFT JOIN monedas m ON m.id = mv.moneda_id
     WHERE ${MOV_ACTIVO} AND mv.fecha >= ? AND mv.fecha <= ?
     GROUP BY mv.tipo_movimiento, mv.moneda_id, m.principal
-  `, [r.desde.toISOString(), r.hasta.toISOString()]);
+  `, [fechaParamSql(ds, r.desde), fechaParamSql(ds, r.hasta)]);
   const ingMap: { [k: string]: number } = {}, egMap: { [k: string]: number } = {};
   for (const row of rows) {
     const tipo = String(row.tipo);
@@ -162,7 +163,7 @@ async function gastosPorCategoria(ds: DataSource, ctx: Ctx, r: RangoFechas) {
     LEFT JOIN monedas m ON m.id = g.moneda_id
     WHERE g.estado NOT IN ('CANCELADO', 'PENDIENTE') AND g.fecha >= ? AND g.fecha <= ?
     GROUP BY gc.nombre, g.moneda_id, m.principal
-  `, [r.desde.toISOString(), r.hasta.toISOString()]);
+  `, [fechaParamSql(ds, r.desde), fechaParamSql(ds, r.hasta)]);
   const map: { [k: string]: number } = {};
   for (const row of rows) {
     const label = String(row.nombre || 'SIN CATEGORÍA').toUpperCase();
@@ -219,7 +220,7 @@ async function comisionesPos(ds: DataSource, r: RangoFechas) {
     WHERE a.fecha_transaccion >= ? AND a.fecha_transaccion <= ?
     GROUP BY mp.nombre
     ORDER BY comision DESC
-  `, [r.desde.toISOString(), r.hasta.toISOString()]);
+  `, [fechaParamSql(ds, r.desde), fechaParamSql(ds, r.hasta)]);
   const total = rows.reduce((s, r2) => s + Number(r2.comision || 0), 0);
   const facturado = rows.reduce((s, r2) => s + Number(r2.original || 0), 0);
   return {

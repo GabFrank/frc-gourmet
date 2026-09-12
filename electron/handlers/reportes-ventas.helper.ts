@@ -10,6 +10,7 @@ import { resolverPeriodo, variacionPct, RangoFechas } from './reportes-periodo.u
 import { construirBloqueDelivery, CotizacionCtx } from './reportes-delivery.helper';
 import type { ReportePeriodoParams } from './reportes.handler';
 import { getInicioJornada } from './dashboard-ventas.handler';
+import { fechaParamSql } from '../utils/date.utils';
 
 const DIAS_LUN_PRIMERO = [1, 2, 3, 4, 5, 6, 0]; // strftime/EXTRACT DOW: 0=Dom..6=Sáb
 const DIAS_LABEL = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
@@ -35,7 +36,7 @@ function esPrincipal(v: any): boolean { return v === true || v === 1 || v === '1
 
 // ─────────────────────────── KPIs ───────────────────────────
 async function kpisVentas(ds: DataSource, ctx: CotCtx, r: RangoFechas) {
-  const filtro = filtroRango(r.desde.toISOString(), r.hasta.toISOString());
+  const filtro = filtroRango(ds, r.desde.toISOString(), r.hasta.toISOString());
   const { cnt, suma } = await sumaVentasRango(ds, ctx.monPrincipal, filtro, ctx.cotMap);
 
   const margenRows: any[] = await dbQuery(ds, `
@@ -44,7 +45,7 @@ async function kpisVentas(ds: DataSource, ctx: CotCtx, r: RangoFechas) {
     FROM venta_items vi
     JOIN ventas v ON v.id = vi.venta_id
     WHERE v.estado = ? AND vi.estado = ? AND v.created_at >= ? AND v.created_at <= ?
-  `, [VentaEstado.CONCLUIDA, EstadoVentaItem.ACTIVO, r.desde.toISOString(), r.hasta.toISOString()]);
+  `, [VentaEstado.CONCLUIDA, EstadoVentaItem.ACTIVO, fechaParamSql(ds, r.desde), fechaParamSql(ds, r.hasta)]);
   const ingreso = Number(margenRows?.[0]?.ingreso || 0);
   const costo = Number(margenRows?.[0]?.costo || 0);
   const margenPct = ingreso > 0 ? +(((ingreso - costo) / ingreso) * 100).toFixed(1) : 0;
@@ -52,7 +53,7 @@ async function kpisVentas(ds: DataSource, ctx: CotCtx, r: RangoFechas) {
   const mesasRows: any[] = await dbQuery(ds, `
     SELECT COUNT(DISTINCT v.mesa_id) as cnt FROM ventas v
     WHERE v.estado = ? AND v.mesa_id IS NOT NULL AND v.created_at >= ? AND v.created_at <= ?
-  `, [VentaEstado.CONCLUIDA, r.desde.toISOString(), r.hasta.toISOString()]);
+  `, [VentaEstado.CONCLUIDA, fechaParamSql(ds, r.desde), fechaParamSql(ds, r.hasta)]);
 
   return {
     facturacion: suma,
@@ -92,7 +93,7 @@ async function sumaTramoGs(
     : null;
   const { suma } = await sumaVentasRango(
     ds, ctx.monPrincipal,
-    filtroY(filtroRango(desde.toISOString(), hasta.toISOString()), canal),
+    filtroY(filtroRango(ds, desde.toISOString(), hasta.toISOString()), canal),
     ctx.cotMap,
   );
   return suma;
@@ -158,7 +159,7 @@ async function ventasPorDiaSemana(ds: DataSource, ctx: CotCtx, r: RangoFechas) {
     JOIN monedas m ON m.id = pd.moneda_id
     WHERE v.estado = ? AND v.created_at >= ? AND v.created_at <= ?
     GROUP BY ${dowExpr(ctx.isPg)}, pd.moneda_id, m.principal
-  `, [VentaEstado.CONCLUIDA, r.desde.toISOString(), r.hasta.toISOString()]);
+  `, [VentaEstado.CONCLUIDA, fechaParamSql(ds, r.desde), fechaParamSql(ds, r.hasta)]);
   const porDow: { [dow: number]: number } = {};
   for (const row of rows) {
     const cot = esPrincipal(row.principal) ? 1 : (ctx.cotMap[Number(row.moneda_id)] || 0);
@@ -179,7 +180,7 @@ async function horasPico(ds: DataSource, ctx: CotCtx, r: RangoFechas, soloDelive
     FROM ventas v
     WHERE v.estado = ? AND v.created_at >= ? AND v.created_at <= ?${filtroCanal}
     GROUP BY ${dowExpr(ctx.isPg)}, ${hourExpr(ctx.isPg)}
-  `, [VentaEstado.CONCLUIDA, r.desde.toISOString(), r.hasta.toISOString()]);
+  `, [VentaEstado.CONCLUIDA, fechaParamSql(ds, r.desde), fechaParamSql(ds, r.hasta)]);
   let minH = 23, maxH = 0; let hayDatos = false;
   const cell: { [k: string]: number } = {};
   for (const row of rows) {
@@ -210,7 +211,7 @@ async function productos(ds: DataSource, r: RangoFechas) {
     GROUP BY p.id, p.nombre
     ORDER BY unidades DESC
     LIMIT 20
-  `, [VentaEstado.CONCLUIDA, EstadoVentaItem.ACTIVO, r.desde.toISOString(), r.hasta.toISOString()]);
+  `, [VentaEstado.CONCLUIDA, EstadoVentaItem.ACTIVO, fechaParamSql(ds, r.desde), fechaParamSql(ds, r.hasta)]);
   const maxUnidades = rows.reduce((m, r2) => Math.max(m, Number(r2.unidades || 0)), 0);
   const items = rows.map((r2) => {
     const ingreso = Number(r2.ingreso || 0), costo = Number(r2.costo || 0), unidades = Number(r2.unidades || 0);
@@ -226,7 +227,7 @@ async function productos(ds: DataSource, r: RangoFechas) {
 
 // ─────────────────────── Mix de forma de pago ───────────────────────
 async function mixPago(ds: DataSource, ctx: CotCtx, r: RangoFechas) {
-  const filtro = filtroRango(r.desde.toISOString(), r.hasta.toISOString());
+  const filtro = filtroRango(ds, r.desde.toISOString(), r.hasta.toISOString());
   const { totalGs, porFormaPago } = await desgloseVentasRango(ds, ctx.monPrincipal, filtro);
   const agg: { [nombre: string]: number } = {};
   for (const fp of porFormaPago) agg[fp.formaPago] = (agg[fp.formaPago] || 0) + Number(fp.totalEnGs || 0);
@@ -248,7 +249,7 @@ async function combinaciones(ds: DataSource, r: RangoFechas) {
     GROUP BY pa.nombre, pb.nombre
     ORDER BY freq DESC
     LIMIT 8
-  `, [VentaEstado.CONCLUIDA, EstadoVentaItem.ACTIVO, EstadoVentaItem.ACTIVO, r.desde.toISOString(), r.hasta.toISOString()]);
+  `, [VentaEstado.CONCLUIDA, EstadoVentaItem.ACTIVO, EstadoVentaItem.ACTIVO, fechaParamSql(ds, r.desde), fechaParamSql(ds, r.hasta)]);
   return rows.map((r2) => ({
     par: `${String(r2.p1 || '').toUpperCase()} + ${String(r2.p2 || '').toUpperCase()}`,
     frecuencia: Number(r2.freq || 0),
@@ -263,7 +264,7 @@ async function meseros(ds: DataSource, ctx: CotCtx, r: RangoFechas) {
     FROM ventas v
     WHERE v.estado = ? AND v.created_by IS NOT NULL AND v.created_at >= ? AND v.created_at <= ?
     GROUP BY v.created_by
-  `, [VentaEstado.CONCLUIDA, r.desde.toISOString(), r.hasta.toISOString()]);
+  `, [VentaEstado.CONCLUIDA, fechaParamSql(ds, r.desde), fechaParamSql(ds, r.hasta)]);
   const cantidadPorUsuario: { [id: number]: number } = {};
   for (const row of cntRows) cantidadPorUsuario[Number(row.usuario_id)] = Number(row.cantidad || 0);
 
@@ -281,7 +282,7 @@ async function meseros(ds: DataSource, ctx: CotCtx, r: RangoFechas) {
     LEFT JOIN personas per ON per.id = u.persona_id
     WHERE v.estado = ? AND v.created_at >= ? AND v.created_at <= ?
     GROUP BY u.id, per.nombre, u.nickname, pd.moneda_id, m.principal
-  `, [VentaEstado.CONCLUIDA, r.desde.toISOString(), r.hasta.toISOString()]);
+  `, [VentaEstado.CONCLUIDA, fechaParamSql(ds, r.desde), fechaParamSql(ds, r.hasta)]);
 
   const acc: { [id: number]: { nombre: string; total: number } } = {};
   for (const row of rows) {
