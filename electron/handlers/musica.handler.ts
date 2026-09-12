@@ -1004,20 +1004,10 @@ export function registerMusicaHandlers(
    * Sirve tanto a musica como al KDS, que comparten el problema.
    */
   ipcMain.handle('stream-token', async (_event, scope: StreamScope) => {
-    // Tres scopes: kds, pdv, musica (cada uno con sus permisos)
-    let permisos: string[];
-    if (scope === 'kds') {
-      permisos = ['COMANDAS_KDS_VER', 'COMANDAS_KDS_OPERAR'];
-    } else if (scope === 'pdv') {
-      permisos = ['VENTAS_PDV'];
-    } else {
-      // musica
-      permisos = [PERM_VER, PERM_CONTROLAR];
-    }
-    
+    const permisos =
+      scope === 'kds' ? ['COMANDAS_KDS_VER', 'COMANDAS_KDS_OPERAR'] : [PERM_VER, PERM_CONTROLAR];
     const usuario = await ensurePermission(dataSource, getCurrentUser, permisos);
-    const scopeToken = scope === 'kds' ? 'kds' : scope === 'pdv' ? 'pdv' : 'musica';
-    return await emitirStreamToken(usuario.id, scopeToken);
+    return await emitirStreamToken(usuario.id, scope === 'kds' ? 'kds' : 'musica');
   });
 
   // ───────────────── Runtime automatico ─────────────────

@@ -44,12 +44,4 @@ export class Comanda extends BaseModel {
   @ManyToOne('Dispositivo', { nullable: true })
   @JoinColumn({ name: 'dispositivo_id' })
   dispositivo?: any;
-
-  /**
-   * SSE: número de secuencia para ordenar eventos del PdV. Se incrementa en cada
-   * mutación de la comanda (abrir, cerrar, cambiar observación, transferir cuenta, etc.).
-   * El cliente usa seq para descartar eventos viejos que lleguen fuera de orden.
-   */
-  @Column({ type: 'integer', nullable: true })
-  seq?: number;
 }

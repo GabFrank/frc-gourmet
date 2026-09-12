@@ -65,12 +65,4 @@ export class PdvMesa extends BaseModel {
 
   @OneToMany('Comanda', 'pdv_mesa')
   comandas?: any[];
-
-  /**
-   * SSE: número de secuencia para ordenar eventos del PdV. Se incrementa en cada
-   * mutación del estado de la mesa (ocupar, liberar, transferir cuenta, etc.).
-   * El cliente usa seq para descartar eventos viejos que lleguen fuera de orden.
-   */
-  @Column({ type: 'integer', nullable: true })
-  seq?: number;
 } 

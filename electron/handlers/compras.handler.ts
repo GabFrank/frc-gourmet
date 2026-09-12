@@ -1423,20 +1423,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     const repo = dataSource.getRepository(Pago);
     const entity = repo.create(pagoData);
     await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
-    const saved = await repo.save(entity);
-    
-    // ─── SSE: emitir evento si es pago de venta con mesa/comanda ────────────
-    try {
-      const ventaId = (saved as any).venta?.id ?? (pagoData?.venta as any)?.id;
-      if (ventaId) {
-        const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
-        await emitVentaCambio(dataSource, ventaId);
-      }
-    } catch (e) {
-      console.warn('[createPago] emit SSE falló:', e);
-    }
-    
-    return saved;
+    return await repo.save(entity);
   });
 
   ipcMain.handle('updatePago', async (_event: any, id: number, data: any) => {
@@ -1500,24 +1487,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       await assertTerminalPuedeOperar(dataSource, _event, (pago?.caja as any)?.id ?? null, 'PAGO');
     }
     const repo = dataSource.getRepository(PagoDetalle);
-    const saved = await repo.save(repo.create(detalleData));
-    
-    // ─── SSE: emitir evento si es pago de venta con mesa/comanda ────────────
-    try {
-      const pagoId = (saved as any).pago?.id ?? (detalleData?.pago as any)?.id;
-      if (pagoId) {
-        const pago = await dataSource.getRepository('Pago').findOne({ where: { id: pagoId }, relations: ['venta'] });
-        const ventaId = (pago as any)?.venta?.id;
-        if (ventaId) {
-          const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
-          await emitVentaCambio(dataSource, ventaId);
-        }
-      }
-    } catch (e) {
-      console.warn('[createPagoDetalle] emit SSE falló:', e);
-    }
-    
-    return saved;
+    return await repo.save(repo.create(detalleData));
   });
 
   ipcMain.handle('updatePagoDetalle', async (_event: any, id: number, data: any) => {

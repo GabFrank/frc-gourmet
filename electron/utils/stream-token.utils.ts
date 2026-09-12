@@ -23,7 +23,7 @@
 import * as crypto from 'crypto';
 import { getJwtSecret } from './jwt-secret.utils';
 
-export type StreamScope = 'kds' | 'musica' | 'pdv';
+export type StreamScope = 'kds' | 'musica';
 
 /** Ventana para abrir la conexión. Corta a propósito. */
 const TTL_MS = 60_000;

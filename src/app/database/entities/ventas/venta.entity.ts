@@ -123,12 +123,4 @@ export class Venta extends BaseModel {
    */
   @Column({ name: 'costo_delivery', type: 'decimal', precision: 18, scale: 2, nullable: true })
   costoDelivery?: number | null;
-
-  /**
-   * SSE: número de secuencia para ordenar eventos del PdV. Se incrementa en cada
-   * mutación (agregar/editar/borrar ítems, cobrar, cancelar, etc.). El cliente
-   * usa seq para descartar eventos viejos que lleguen fuera de orden.
-   */
-  @Column({ type: 'integer', nullable: true })
-  seq?: number;
 } 
