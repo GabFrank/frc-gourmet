@@ -35,8 +35,12 @@ Authorization: Bearer eyJhbGc...
 Content-Type: application/json
 
 {
-  "method": "get-ventas-by-date-range",
-  "params": ["2026-09-01T00:00:00.000Z", "2026-09-10T23:59:59.999Z", null]
+  "method": "getVentasByDateRange",
+  "params": [
+    "2026-09-01T00:00:00.000Z",
+    "2026-09-10T23:59:59.999Z",
+    { "estado": "CONCLUIDA", "page": 1, "pageSize": 50 }
+  ]
 }
 ```
 
@@ -45,33 +49,98 @@ Content-Type: application/json
 **Respuesta de error:**
 - `401 Unauthorized` — token inválido/expirado
 - `403 Forbidden` — usuario no tiene el permiso requerido (mensaje: `"DEBE TENER EL PERMISO XXXX"`)
+- `404 Not Found` — método RPC no existe (ej. usar nombres kebab-case inventados en lugar de los nombres reales)
 - `500` — error interno del handler (consultar logs del servidor)
 
 ---
 
-## 2. Casos de uso: Fase 1
+## 2. ⚠️ Gotchas verificados en v1.21.0-alpha.157
+
+**Fecha de verificación:** 2026-09-11 contra tag `v1.21.0-alpha.157` + `develop`  
+**Pruebas:** Smoke test en https://app.frc-gourmet.com
+
+### 2.1 Nombres de handler: NO usar kebab-case inventado
+
+❌ **INCORRECTO (devuelve 404):**
+- `get-ventas-by-date-range`
+- `get-productos-for-sale-mode`
+
+✅ **CORRECTO (nombres reales de `ipcMain.handle`):**
+- `getVentasByDateRange`
+- `get-productos-con-precio`
+
+**Por qué importa:** El RPC router mapea el string del `method` directamente a los nombres registrados en `ipcMain.handle()`. Los nombres inventados en kebab-case **no existen** y devuelven `404 Not Found`. Verificar siempre contra el código fuente en `electron/handlers/*.handler.ts`.
+
+### 2.2 Paginación default: 25 registros por página
+
+`getVentasByDateRange` pagina por default con `pageSize = 25`. Si necesitas más:
+```json
+{ "method": "getVentasByDateRange", "params": [desde, hasta, { page: 1, pageSize: 100 }] }
+```
+
+### 2.3 Estado de venta: DEBE ir en `filtros.estado`
+
+❌ **INCORRECTO (el estado se ignora silenciosamente):**
+```json
+{ "method": "getVentasByDateRange", "params": [desde, hasta, "CANCELADA"] }
+```
+
+✅ **CORRECTO:**
+```json
+{ "method": "getVentasByDateRange", "params": [desde, hasta, { "estado": "CANCELADA" }] }
+```
+
+**Por qué:** Si el 3er argumento es un string, TypeScript lo interpreta como `filtros` (tipo `any`), pero `filtros.estado` queda `undefined`. El handler **no rechaza** el request — simplemente devuelve todas las ventas del rango sin filtrar por estado.
+
+### 2.4 Montos NO vienen en `getVentas()` / `getVentasByEstado()`
+
+Los handlers que devuelven listas SIN fecha (`getVentas()`, `getVentasByEstado()`) **NO incluyen** `items` ni `pago.detalles`. Por tanto, NO se pueden calcular montos de esas respuestas.
+
+Para obtener KPIs de dinero, usar:
+- `getVentasByDateRange` (incluye `items` + `totales.costoDelivery`)
+- `get-dashboard-ventas-kpis` (agregados precalculados)
+- `getResumenCaja(cajaId)` (resumen financiero de una caja)
+- Reportes de cierre: handlers en `reportes-*.helper.ts`
+
+### 2.5 Precios: NO están embebidos en `get-productos`
+
+`get-productos` devuelve productos con `presentaciones`, pero **sin** `presentaciones.preciosVenta`.
+
+Para obtener precios:
+- **`get-productos-con-precio`**: productos activos + presentaciones con precios embebidos (el equivalente "sale mode")
+- **`get-precios-venta`**: lista completa de precios activos, join a `presentacion` / `moneda` / `tipoPrecio`
+- **`get-presentacion(id)`**: una presentación específica con sus precios
+
+---
+
+## 3. Casos de uso: Fase 1
 
 ### 2.1 Ventas del día
 
 **Objetivo:** Obtener todas las ventas de un rango de fechas (típicamente "hoy" según jornada comercial configurada).
 
-#### Método recomendado: `get-ventas-by-date-range`
+#### Método recomendado: `getVentasByDateRange`
 
 **Signature:**
 
 ```typescript
-ipcMain.handle('get-ventas-by-date-range', async (
+ipcMain.handle('getVentasByDateRange', async (
   _event,
   desde: string,    // ISO 8601 (ej. "2026-09-10T00:00:00.000Z")
   hasta: string,    // ISO 8601
-  estado?: VentaEstado | null,
   filtros?: {
-    cajaIds?: number[];
+    cajaId?: number;
+    estado?: VentaEstado;
+    mesaId?: number;
+    formasPagoIds?: number[];
+    monedaIds?: number[];
     canalOrigen?: 'PdV' | 'ONLINE' | 'TELEFONO' | 'WHATSAPP';
     zonaDeliveryId?: number;
     funcionarioId?: number;  // repartidor
+    page?: number;            // default 1
+    pageSize?: number;        // default 25
   }
-) => { ventas: Venta[]; totales: { ... } })
+) => { data: Venta[]; total: number; totales: { costoDelivery: number } })
 ```
 
 **Permisos requeridos:** `VENTAS_HISTORICO_VER` (el rol GERENTE lo tiene).
@@ -80,16 +149,15 @@ ipcMain.handle('get-ventas-by-date-range', async (
 
 ```json
 {
-  "ventas": [
+  "data": [
     {
       "id": 1234,
-      "created_at": "2026-09-10T14:23:00.000Z",
+      "createdAt": "2026-09-10T14:23:00.000Z",
       "estado": "CONCLUIDA",
       "cliente": { "id": 56, "persona": { "nombre": "JUAN PEREZ" } },
       "items": [
         {
           "id": 5678,
-          "producto": { "nombre": "PIZZA NAPOLITANA" },
           "cantidad": 1,
           "precioUnitario": 45000,
           "descuento": 0,
@@ -97,63 +165,81 @@ ipcMain.handle('get-ventas-by-date-range', async (
         }
       ],
       "pago": {
-        "id": 999,
-        "detalles": [
-          { "formaPago": { "nombre": "EFECTIVO" }, "monto": 45000, "moneda": { "simbolo": "Gs" } }
-        ]
+        "id": 999
       },
       "costoDelivery": 5000,
       "delivery": {
         "id": 111,
         "modo": "DELIVERY",
         "estado": "ENTREGADO",
-        "zona": { "nombre": "ZONA NORTE" },
-        "repartidor": { "persona": { "nombre": "CARLOS GOMEZ" } }
+        "precioDelivery": { "zona": { "nombre": "ZONA NORTE" } },
+        "entregadoPorFuncionario": { "id": 78, "persona": { "id": 90, "nombre": "CARLOS GOMEZ" } }
       }
     }
   ],
+  "total": 23,
   "totales": {
-    "totalVentas": 1234500,
-    "totalItems": 45,
-    "costoDelivery": 35000,
-    "cantidadVentas": 23
+    "costoDelivery": 35000
   }
 }
 ```
 
 **Qué hace:**
-- Devuelve ventas con `created_at` en el rango especificado
-- Incluye joins completos: `items`, `pago`, `delivery`, `cliente`, `mesa`, `comanda`
-- Filtra por estado (`null` = todas; `'CONCLUIDA'` = solo cobradas; `'CANCELADA'` = canceladas)
-- Opcionalmente filtra por caja, canal, zona o repartidor
-- Agrega `totales` del resultado filtrado (suma de pagos en moneda principal)
+- Devuelve una **página** de ventas con `createdAt` en el rango especificado
+- `data`: array de ventas de la página actual (default `pageSize` = **25**)
+- `total`: número total de registros que cumplen los filtros (para paginación)
+- `totales`: solo contiene `costoDelivery` (suma del costo de delivery del resultado filtrado)
+- Incluye joins: `items`, `pago`, `delivery`, `cliente`, `mesa`, `caja`, `formaPago`, `createdBy`
+- **NO incluye** `pago.detalles` ni datos de productos en `items` — usar handlers específicos para obtenerlos
+- Filtra por `filtros.estado` (ej. `'CONCLUIDA'`, `'CANCELADA'`). **IMPORTANTE:** debe ir en el objeto `filtros`, NO como 3er argumento posicional
+- Opcionalmente filtra por `cajaId`, `mesaId`, `formasPagoIds`, `monedaIds`, canal, zona o repartidor
 
-**Detectar auditoría:** Si `filtros.canalOrigen` o `zonaDeliveryId` o `funcionarioId` vienen poblados, es una consulta analítica. Si solo traen `desde`/`hasta`/`cajaIds`, es consulta operativa estándar.
+**Paginación:** Para obtener todas las ventas de un rango largo, iterar incrementando `page`:
+```javascript
+let page = 1;
+let allVentas = [];
+while (true) {
+  const resp = await callRpc('getVentasByDateRange', desde, hasta, { ...filtros, page, pageSize: 100 });
+  allVentas.push(...resp.data);
+  if (resp.data.length < 100) break;  // última página
+  page++;
+}
+```
+
+**Detectar auditoría:** Si `filtros.canalOrigen`, `zonaDeliveryId` o `funcionarioId` vienen poblados, es una consulta analítica. Si solo traen `desde`/`hasta`/`cajaId`, es consulta operativa estándar.
 
 **Alternativas:**
+
+- **`getVentas()`**: Lista **todas** las ventas sin filtro de fecha. Joins: `cliente`, `formaPago`, `caja`, `pago`, `delivery`. **NO incluye `items` ni `pago.detalles`**. Sin paginación (puede ser muy lenta en BD grandes). Requiere `VENTAS_HISTORICO_VER`.
+
+- **`getVentasByEstado(estado: VentaEstado)`**: Filtra por estado sin rango de fecha (toda la historia). Mismas relaciones que `getVentas()`. Requiere `VENTAS_HISTORICO_VER`.
+
+- **`getVenta(id: number)`**: Una venta específica. Joins: `cliente`, `formaPago`, `caja`, `pago` (shallow), `delivery`. Requiere `VENTAS_HISTORICO_VER`.
+
+- **`getVentasByCaja(cajaId: number)`**, **`getResumenCaja(cajaId: number)`**: Ventas y resumen financiero de una caja. Handler: `ventas.handler.ts`.
 
 - **`get-dashboard-ventas-kpis`** (dashboards): Devuelve KPIs agregados (no ventas individuales) con filtros por rango/caja. Útil para auditar totales rápidos sin detalle. Handler: `dashboard-ventas.handler.ts`.
   - Permisos: `VENTAS_DASHBOARD_VER` (GERENTE lo tiene).
   - Params: `{ rango?: 'today'|'week'|'month'|'custom', desde?, hasta?, cajaIds? }`
   - Response: `{ ventasTotales, itemsVendidos, ticketPromedio, delivery: { envios, retiros, ... }, ... }`
 
-- **`db-query`** directo (avanzado): El sistema tiene un helper `dbQuery(dataSource, sql, params)` que normaliza diferencias SQLite/Postgres. Los handlers lo usan internamente. **No expuesto en IPC**; el bot no puede llamarlo.
-
 ### 2.2 Cancelaciones
 
 **Objetivo:** Listar ventas canceladas y entender por qué (motivo, usuario, timestamp).
 
-#### Método recomendado: `get-ventas-by-date-range` con filtro `estado='CANCELADA'`
+#### Método recomendado: `getVentasByDateRange` con filtro `estado='CANCELADA'`
 
 **Params:**
 
 ```json
 {
-  "method": "get-ventas-by-date-range",
+  "method": "getVentasByDateRange",
   "params": [
     "2026-09-01T00:00:00.000Z",
     "2026-09-10T23:59:59.999Z",
-    "CANCELADA"
+    {
+      "estado": "CANCELADA"
+    }
   ]
 }
 ```
@@ -198,15 +284,18 @@ ipcMain.handle('get-ventas-by-date-range', async (
 3. `ELABORADO` sin receta vinculada
 4. `ELABORADO_CON_VARIACION` sin sabores/variaciones
 
-#### Método recomendado: `get-productos-for-sale-mode`
+#### Método recomendado: `get-productos-con-precio`
 
 **Signature:**
 
 ```typescript
-ipcMain.handle('get-productos-for-sale-mode', async (_event) => Producto[])
+ipcMain.handle('get-productos-con-precio', async (_event: any, search?: string) => Producto[])
 ```
 
 **Permisos requeridos:** `PRODUCTOS_VER` (GERENTE lo tiene).
+
+**Params:**
+- `search` (opcional): Filtro por nombre de producto (búsqueda parcial case-insensitive)
 
 **Response:**
 
@@ -282,15 +371,23 @@ productos.filter(p =>
 // y verificar que tenga RecetaPresentacion (variaciones)
 ```
 
+**Obtener precios por separado:**
+
+- **`get-precios-venta`**: Lista todos los `PrecioVenta` activos con joins a `presentacion`, `moneda`, `tipoPrecio`. Útil para cruzar con productos que no aparecen en `get-productos-con-precio`. Requiere `PRODUCTOS_VER`.
+
+- **`get-precios-venta-by-presentacion(presentacionId)`**, **`get-precios-venta-by-producto(productoId)`**, **`get-precios-venta-by-receta(recetaId)`**: Filtros específicos de precios.
+
+- **`get-presentacion(presentacionId)`**: Obtiene una presentación específica con sus precios, receta, códigos de barra y propiedades virtuales. Útil para inspeccionar un producto sospechoso en detalle.
+
 **Alternativas:**
 
-- **`get-productos`**: Lista todos los productos (no solo los de venta). Requiere `PRODUCTOS_VER`. Acepta filtro `tipo`, `familiaId`, `subfamiliaId`.
+- **`get-productos`**: Lista todos los productos activos con joins a `subfamilia.familia`, `receta`, `presentaciones`. **NO incluye `preciosVenta`**. Requiere `PRODUCTOS_VER`.
   
-- **`get-presentacion`**: Obtiene una presentación específica con sus precios/receta/códigos de barra. Útil para inspeccionar un producto sospechoso en detalle.
+- **`get-productos-with-filters(filters)`**: Filtra por `tipo`, `familiaId`, `subfamiliaId`, `activo`, `search`. Mismas relaciones que `get-productos`.
 
 ---
 
-## 3. Casos de uso: Fase 2/3 (sketch ligero)
+## 4. Casos de uso: Fase 2/3 (sketch ligero)
 
 ### 3.1 Clientes duplicados
 
@@ -364,7 +461,7 @@ productos.filter(p =>
 
 ---
 
-## 4. Lista DENY: Mutaciones que el bot NUNCA debe invocar
+## 5. Lista DENY: Mutaciones que el bot NUNCA debe invocar
 
 ### 4.1 Ventas y PdV
 
@@ -382,7 +479,7 @@ productos.filter(p =>
 | `set-pdv-mesa-estado`, `transferir-venta-pdv` | Ocupar/liberar mesas, mover cuentas | Operación de sala |
 | `procesarStockVenta`, `revertirStockVenta` | Descontar/revertir stock | Inventario |
 
-### 4.2 Productos y recetas
+### 5.2 Productos y recetas
 
 | Método | Qué hace | Por qué NO |
 |---|---|---|
@@ -393,7 +490,7 @@ productos.filter(p =>
 | `create-receta`, `update-receta`, `delete-receta` | CRUD recetas | Costeo |
 | `create-stock-movimiento` | Registrar movimiento de stock | Inventario |
 
-### 4.3 Financiero y caja
+### 5.3 Financiero y caja
 
 | Método | Qué hace | Por qué NO |
 |---|---|---|
@@ -404,7 +501,7 @@ productos.filter(p =>
 | `aplicar-pago-cpp`, `aplicar-pago-cpp-lote` | Pagar cuentas por pagar | Mueve dinero |
 | `cobrar-cpc-cuota`, `cobrar-cpc-lote` | Cobrar cuentas por cobrar | Mueve dinero |
 
-### 4.4 RRHH
+### 5.4 RRHH
 
 | Método | Qué hace | Por qué NO |
 |---|---|---|
@@ -414,7 +511,7 @@ productos.filter(p =>
 | `generar-liquidacion-sueldo`, `aprobar-liquidacion-sueldo`, `pagar-liquidacion-sueldo`, `anular-liquidacion-sueldo` | Liquidaciones | Nómina |
 | `generar-liquidacion-final` | Liquidación final (despido) | Nómina |
 
-### 4.5 Sistema y configuración
+### 5.5 Sistema y configuración
 
 | Método | Qué hace | Por qué NO |
 |---|---|---|
@@ -427,7 +524,7 @@ productos.filter(p =>
 
 ---
 
-## 5. Permisos del rol GERENTE (seedeados)
+## 6. Permisos del rol GERENTE (seedeados)
 
 El rol **GERENTE** tiene los siguientes permisos de **lectura** relevantes para auditorías:
 
@@ -478,9 +575,9 @@ El rol **GERENTE** tiene los siguientes permisos de **lectura** relevantes para 
 
 ---
 
-## 6. Detección del caso de auditoría en handlers
+## 7. Detección del caso de auditoría en handlers
 
-### 6.1 Indicadores de uso para auditoría
+### 7.1 Indicadores de uso para auditoría
 
 Un handler puede inferir que la llamada es de auditoría (vs operativa) si:
 
@@ -489,7 +586,7 @@ Un handler puede inferir que la llamada es de auditoría (vs operativa) si:
 3. **Hora:** Llamadas fuera del horario operativo (ej. 3 AM) sugieren procesos batch.
 4. **Read-only:** El bot nunca invoca métodos de mutación. Si un usuario con rol GERENTE llama solo `get-*` durante horas, es sospechoso de ser bot.
 
-### 6.2 Logging de auditoría
+### 7.2 Logging de auditoría
 
 Actualmente **no hay logging específico de auditoría**. Si se desea, agregar en `auth-middleware.ts` o `rpc-router.ts`:
 
@@ -501,13 +598,13 @@ if (method.startsWith('get-') || method.startsWith('search-')) {
 
 ---
 
-## 7. Notas finales
+## 8. Notas finales
 
-### 7.1 Host de producción
+### 8.1 Host de producción
 
 **⚠️ El servidor de producción NO es Comercial alpha ni el sitio web D1.** Es una PC física del restaurante en LAN (típicamente puerto 7070), configurada en modo `server` con Postgres local y expuesta vía túnel Cloudflare o VPN.
 
-### 7.2 Rate limiting
+### 8.2 Rate limiting
 
 El servidor tiene rate limiting diferenciado (F1–F4, 2026-09):
 
@@ -518,17 +615,17 @@ El bot debe:
 
 1. **Incluir `deviceInfo` en el login** con un `device_id` único (ej. `'audit-bot-don-franco'`) para tener su propio bucket.
 2. **Respetar backoff** ante HTTP 429: exponencial 15s → 30s → 60s → 120s.
-3. **Batch de requests:** Priorizar handlers que devuelven múltiples registros (`get-ventas-by-date-range`) en lugar de loops de `get-venta`.
+3. **Batch de requests:** Priorizar handlers que devuelven múltiples registros (`getVentasByDateRange`) en lugar de loops de `getVenta(id)` por cada venta.
 
-### 7.3 Handlers sin `ensurePermission`
+### 8.3 Handlers sin `ensurePermission`
 
 **⚠️ Bug conocido:** `ventas.handler.ts` (el más grande, ~3300 LOC) **no tiene `ensurePermission`** en sus métodos principales (`createVenta`, `updateVenta`, `getVentas`, etc.) y **no está en `BLOCKED_CHANNELS`** del RPC router. Ver `reference/known-bugs.md`.
 
 Implicación: `/api/rpc` es **default-allow**. Cualquier usuario autenticado puede invocar esos handlers, incluso sin el permiso adecuado. El frontend con `*appHasPermission` NO cuenta: la defensa real es el backend.
 
-**Para el bot:** Esto significa que métodos como `get-ventas-by-date-range` son invocables sin `VENTAS_HISTORICO_VER` en este handler específico, pero **depender de esto es arriesgado** (puede corregirse en un futuro parche).
+**Para el bot:** Esto significa que métodos como `getVentasByDateRange` son invocables sin `VENTAS_HISTORICO_VER` en este handler específico, pero **depender de esto es arriesgado** (puede corregirse en un futuro parche).
 
-### 7.4 Jornada comercial
+### 8.4 Jornada comercial
 
 La "ventana de hoy" NO es 00:00–23:59 UTC. Es `PdvConfig.inicioJornadaHora` (default **7 AM**) → 06:59 del día siguiente. Un cierre de caja del turno noche (cruza medianoche) pertenece al día "anterior".
 
@@ -548,7 +645,7 @@ hasta.setSeconds(hasta.getSeconds() - 1);
 
 ---
 
-## 8. Checklist de implementación del bot
+## 9. Checklist de implementación del bot
 
 - [ ] Login con usuario `GERENTE` (o dedicado) → obtener JWT
 - [ ] Implementar refresh de token cada ~6 días (o antes de expiración)
@@ -556,12 +653,13 @@ hasta.setSeconds(hasta.getSeconds() - 1);
 - [ ] Incluir `Authorization: Bearer <token>` en todas las llamadas a `/api/rpc`
 - [ ] Incluir `deviceInfo` con `device_id` único en el login
 - [ ] Respetar rate limit: máximo 600 req/min, backoff ante 429
-- [ ] Batch de requests: priorizar handlers agregados
+- [ ] Batch de requests: priorizar handlers agregados (ej. `get-dashboard-ventas-kpis` vs iterar `getVenta` por id)
 - [ ] Ajustar rangos de fecha por jornada comercial (default 7 AM)
 - [ ] Validar `usuario.mustChangePassword === false` tras login (bloquea si es `true`)
-- [ ] **NUNCA invocar métodos de mutación** de la lista DENY (sección 4)
+- [ ] **NUNCA invocar métodos de mutación** de la lista DENY (sección 5)
+- [ ] **Usar nombres de handler REALES** (camelCase o kebab según el handler), NO inventar kebab-case
 - [ ] Logs de auditoría: registrar qué consultas hace el bot y cuándo
-- [ ] Manejo de errores: 401 → relogin, 403 → permisos insuficientes, 500 → reportar
+- [ ] Manejo de errores: 401 → relogin, 403 → permisos insuficientes, 404 → método no existe (verificar nombre), 500 → reportar
 
 ---
 
