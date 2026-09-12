@@ -100,6 +100,7 @@
     "test:mesa-ocupacion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-mesa-ocupacion-e2e.ts",
     "test:mesa-una-venta-abierta": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-mesa-una-venta-abierta-e2e.ts",
     "test:mesa-sse": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-mesa-sse-e2e.ts",
+    "test:sse-emit-postgres": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-sse-emit-postgres.ts",
     "test:kpis-filtros": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-kpis-filtros-e2e.ts",
     "test:mesa-estado": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-mesa-estado-derivado.ts",
     "test:transferencia-pdv": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-transferencia-pdv-e2e.ts",
