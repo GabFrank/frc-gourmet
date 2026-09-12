@@ -70,6 +70,9 @@ export class BackupRestoreComponent implements OnInit {
   /** true cuando la BD activa es Postgres (activa la UI específica). */
   isPostgres = false;
 
+  /** true cuando la app corre en modo remoto (web /admin o mode=client) */
+  isRemote = false;
+
   backupsDataSource = new MatTableDataSource<BackupItem>([]);
   backupsDir = '';
   displayedColumns: string[] = ['fileName', 'createdAt', 'size', 'isAutomatic', 'hasImages', 'actions'];
@@ -107,6 +110,8 @@ export class BackupRestoreComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    // Detectar si corre en modo remoto (HTTP) para deshabilitar controles que no tienen sentido remotos
+    this.isRemote = window.location.protocol.startsWith('http');
     this.refreshAll();
   }
 
