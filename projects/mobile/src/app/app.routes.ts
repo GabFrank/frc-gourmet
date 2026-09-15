@@ -107,14 +107,9 @@ export const routes: Routes = [
   // Contrato externo: bot de WhatsApp envía https://app.frc-gourmet.com/#/o/{tipo}/{id}
   // El interceptor (APP_INITIALIZER + hashchange) traduce hash → path y navega acá.
   // P4: usar arrays de permisos para dual-check (legacy + nuevo permiso _VER)
-  {
-    path: 'o/compra/:id',
-    canActivate: [authGuard, permisoGuard],
-    data: { permiso: 'COMPRAS_VER' },
-    // Redirige a la ruta larga existente
-    redirectTo: '/compras/lista/:id',
-    pathMatch: 'full',
-  },
+  // 
+  // P0 FIX (2026-09-15): compra NO necesita ruta aquí (DeepLinkService mapea directo
+  // a /compras/lista/:id). Evita NG04014 (redirectTo + canActivate incompatibles).
   {
     path: 'o/gasto/:id',
     canActivate: [authGuard, permisoGuard],

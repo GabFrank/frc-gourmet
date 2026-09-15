@@ -68,7 +68,13 @@ export class DeepLinkService {
    * 
    * Mobile usa path routing (NO hash), pero el contrato externo usa hash.
    * Este método hace la traducción:
-   * - #/o/compra/123 → navega a /o/compra/123 (ruta Angular)
+   * - #/o/compra/123 → navega a /compras/lista/123 (ruta real ya con guards)
+   * - #/o/gasto/456 → navega a /o/gasto/456 (ruta con loadComponent)
+   * - #/o/vale/789 → navega a /o/vale/789 (ruta con loadComponent)
+   * - #/o/pago/111 → navega a /o/pago/111 (ruta con loadComponent)
+   * 
+   * P0 FIX (2026-09-15): compra mapea directo a /compras/lista/:id (ruta existente),
+   * NO a /o/compra/:id (redirectTo + canActivate = NG04014).
    * 
    * El Router maneja automáticamente:
    * - authGuard (redirige a login con returnUrl si sin sesión)
@@ -85,8 +91,11 @@ export class DeepLinkService {
       return false;
     }
 
-    // Traducir a ruta path interna
-    const rutaPath = `/o/${parsed.tipo}/${parsed.id}`;
+    // P0 FIX: compra → ruta real /compras/lista/:id (ya tiene guards)
+    // Otros tipos → rutas /o/{tipo}/:id (loadComponent + guards)
+    const rutaPath = parsed.tipo === 'compra'
+      ? `/compras/lista/${parsed.id}`
+      : `/o/${parsed.tipo}/${parsed.id}`;
 
     console.log('[DeepLink] Navegando a:', rutaPath);
 
