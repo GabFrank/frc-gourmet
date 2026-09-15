@@ -835,4 +835,133 @@ Este plan es **concreto, testeable y auditable**. Cada fase tiene un commit sepa
 5. Mergear a `develop` → alpha → beta → stable
 6. Actualizar bot de WhatsApp para usar los links
 
-**Fin del plan.**
+---
+
+## 12. Enmiendas post-auditoría (2026-09-15)
+
+**Estado:** APROBADO por Gabriel (vía Gerente Don Franco)
+
+### Hallazgos incorporados (auditorías A + B)
+
+#### P0: LoginComponent NO lee returnUrl hoy
+
+**Hallazgo verificado:** `src/app/auth/login/login.component.ts` líneas 203/216 — después del login exitoso, **siempre navega a `/`**. El query param `returnUrl` se pierde.
+
+**Cambio requerido en Fase 6:**
+
+```typescript
+// En LoginComponent.onSubmit(), después de login exitoso:
+const returnUrl = this.route.snapshot.queryParams['returnUrl'];
+if (returnUrl) {
+  // navigateByUrl decodifica %23 → # automáticamente
+  this.router.navigateByUrl(returnUrl);
+} else {
+  this.router.navigate(['/']);
+}
+```
+
+**Inyectar `ActivatedRoute`** en el constructor:
+
+```typescript
+constructor(
+  // ... existentes
+  private route: ActivatedRoute, // <-- AGREGAR
+) { ... }
+```
+
+**Crítico:** sin esto, el flujo returnUrl no funciona. La Fase 6 debe IMPLEMENTAR, no solo verificar.
+
+---
+
+#### P1: Permisos — agregar 3 nuevos al seed (mínimo correcto)
+
+Los permisos propuestos (`FINANCIERO_GASTO_VER`, `RRHH_VALE_VER`, `FINANCIERO_PAGO_CONSOLIDADO_VER`) **son necesarios** porque:
+
+1. Los componentes hoy NO tienen guard explícito de lectura (solo mutación)
+2. `/api/rpc` es default-allow — el handler IPC es la única frontera real
+3. Los handlers `get-gasto`, `get-vale`, `get-pago-consolidado-detalle` **no tienen `ensurePermission` hoy** (o usan permisos de mutación como proxy)
+
+**Acción:** en Fase 3/4/5, agregar los 3 permisos al seed (`SEED_PERMISOS` en `electron/handlers/permissions.handler.ts`) y agregar `ensurePermission` como primera línea en los handlers `get-*` correspondientes.
+
+**Alternativa:** si existen permisos `XXX_OPERAR` que ya abarcan lectura+mutación, mapear a esos. Pero preferir granularidad correcta (VER ≠ EDITAR).
+
+---
+
+#### P1: Gasto/Vale dialogs — readonly real + loadById
+
+**Hallazgo:** `CreateEditGastoDialogComponent` y `CreateEditValeDialogComponent` hoy:
+- Gasto: tiene `loadGasto(id)` pero NO modo readonly (línea 194-258)
+- Vale: NO tiene `loadVale(id)` ni modo readonly
+
+**Cambios requeridos (Fase 3/4):**
+
+1. **Ambos dialogs:** aceptar `data.readonly: boolean`
+2. **Si readonly:**
+   - `form.disable()` — deshabilitar todos los controles
+   - Ocultar botones de submit ("Guardar", "Registrar")
+   - Mostrar solo "Cerrar" + botones contextuales según permisos (ej. "Anular" si tiene permiso)
+   - Banner opcional: `<mat-chip color="accent">Solo lectura</mat-chip>`
+3. **Vale:** agregar `async loadVale(valeId: number)`:
+   - Llamar `await firstValueFrom(this.repo.getVale(valeId))`
+   - Popular formulario con `form.patchValue({ funcionarioId, monto, ... })`
+   - Mostrar estado (SOLICITADO/CONFIRMADO/etc) en chip
+4. **Handler IPC `get-vale`:** verificar que existe en `repository.service.ts`. Si no existe, agregarlo:
+   ```typescript
+   getVale(id: number): Observable<any> {
+     return from((window as any).api.callIpc('get-vale', id));
+   }
+   ```
+   Y registrar el handler en `electron/handlers/vales.handler.ts`.
+
+---
+
+#### P2: NO auto-cerrar dialogs/tabs después de 3s
+
+**Hallazgo:** la Fase 7 del plan original decía: *"mostrar snackbar + cerrar el tab/dialog automáticamente después de 3s"*.
+
+**Corrección:** **NUNCA cerrar automáticamente**. Razón:
+- El usuario puede estar leyendo el error o copiando el ID
+- Auto-cerrar es sorpresivo y frustrante
+- Mejor UX: error visible + botón "Cerrar" manual
+
+**Cambio en Fase 7:**
+- Si `load()` devuelve `null` o 404:
+  - Mostrar `MatSnackBar` con error: `"No se encontró el registro con ID {id}"`
+  - **NO cerrar** el tab/dialog
+  - El tab/dialog queda en estado vacío con mensaje de error visible (ej. `<div class="empty">No se encontró el registro.</div>`)
+  - Botón "Cerrar tab" / "Cerrar" disponible para el usuario
+- Si error de permisos:
+  - Abrir `ConfirmationDialogComponent` con mensaje claro
+  - Al aceptar, **el usuario cierra manualmente**
+  - NO cerrar automáticamente
+
+---
+
+#### Aceptación explícita: mismas superficies que hoy
+
+**Confirmado:** cada deep link abre **exactamente la misma UI** que el usuario vería si navegara manualmente:
+
+| Deep link | Superficie | Método equivalente hoy |
+|-----------|-----------|------------------------|
+| `#/o/compra/{id}` | `CompraDetalleComponent` (tab) | `ListComprasComponent.verDetalle()` |
+| `#/o/gasto/{id}` | `CreateEditGastoDialogComponent` (dialog readonly) | `ListGastosComponent.abrirGasto()` + readonly |
+| `#/o/vale/{id}` | `CreateEditValeDialogComponent` (dialog readonly) | NO existe hoy — creamos equivalente |
+| `#/o/pago/{id}` | `DetallePagoConsolidadoDialogComponent` (dialog) | `CajaMayorDetalleComponent.verDetallePagoConsolidado()` |
+
+**No se inventa navegación nueva** — solo se agrega un punto de entrada alternativo (URL) a las pantallas existentes.
+
+---
+
+### Actualización de fases
+
+Las 8 fases originales se mantienen, con ajustes:
+
+- **Fase 3 (gasto):** agregar readonly + check permiso `FINANCIERO_GASTO_VER` + handler `get-gasto` con `ensurePermission`
+- **Fase 4 (vale):** agregar readonly + `loadVale()` + handler `get-vale` con `ensurePermission` + permiso `RRHH_VALE_VER` al seed
+- **Fase 5 (pago):** agregar permiso `FINANCIERO_PAGO_CONSOLIDADO_VER` al seed + `ensurePermission` en handler `get-pago-consolidado-detalle`
+- **Fase 6 (returnUrl):** **IMPLEMENTAR** lectura de `returnUrl` en `LoginComponent.onSubmit()` (inyectar `ActivatedRoute`)
+- **Fase 7 (errores):** **NO auto-cerrar** — solo mostrar error visible + dejar que el usuario cierre manualmente
+
+---
+
+**Fin del plan enmendado.**
