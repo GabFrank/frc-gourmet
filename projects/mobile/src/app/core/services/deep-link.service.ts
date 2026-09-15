@@ -1,0 +1,96 @@
+import { inject, Injectable } from '@angular/core';
+import { Router } from '@angular/router';
+
+export interface DeepLinkParsed {
+  tipo: 'compra' | 'gasto' | 'vale' | 'pago';
+  id: number;
+}
+
+/**
+ * Servicio de deep links para mobile PWA.
+ * 
+ * Traduce URLs de WhatsApp con hash (#/o/{tipo}/{id}) a rutas path de Angular (/o/{tipo}/{id}).
+ * Mobile usa path routing (NO useHash), pero el contrato externo (bot de WhatsApp) usa hash
+ * para compatibilidad con desktop.
+ * 
+ * Flujo:
+ * 1. Usuario toca link https://app.frc-gourmet.com/#/o/compra/123
+ * 2. AppInitializer/hashchange listener detecta el hash
+ * 3. parseDeepLink() extrae tipo + id
+ * 4. translateAndNavigate() convierte a ruta path: /o/compra/123
+ * 5. Angular Router navega (authGuard + permisoGuard aplican automáticamente)
+ */
+@Injectable({
+  providedIn: 'root',
+})
+export class DeepLinkService {
+  private readonly router = inject(Router);
+
+  /**
+   * Parsea un deep link desde hash o URL completa.
+   * 
+   * Formatos válidos:
+   * - #/o/compra/123
+   * - /o/compra/123
+   * - https://app.frc-gourmet.com/#/o/compra/123
+   * 
+   * @param url Hash, path o URL completa
+   * @returns Objeto parseado o null si formato inválido
+   */
+  parseDeepLink(url: string): DeepLinkParsed | null {
+    if (!url) return null;
+
+    // Extraer el hash si es URL completa
+    let hashOrPath = url;
+    if (url.includes('#')) {
+      const hashIndex = url.indexOf('#');
+      hashOrPath = url.substring(hashIndex);
+    }
+
+    // Remover el # si está presente
+    const path = hashOrPath.startsWith('#') ? hashOrPath.substring(1) : hashOrPath;
+
+    // Patrón: /o/{tipo}/{id}
+    const match = path.match(/^\/o\/(compra|gasto|vale|pago)\/(\d+)$/);
+    if (!match) return null;
+
+    const tipo = match[1] as DeepLinkParsed['tipo'];
+    const id = parseInt(match[2], 10);
+
+    // Validar ID positivo
+    if (id <= 0) return null;
+
+    return { tipo, id };
+  }
+
+  /**
+   * Traduce hash de deep link a ruta path y navega.
+   * 
+   * Mobile usa path routing (NO hash), pero el contrato externo usa hash.
+   * Este método hace la traducción:
+   * - #/o/compra/123 → navega a /o/compra/123 (ruta Angular)
+   * 
+   * El Router maneja automáticamente:
+   * - authGuard (redirige a login con returnUrl si sin sesión)
+   * - permisoGuard (valida permiso de la ruta)
+   * - lazy loading de componentes
+   * 
+   * @param url Hash o URL completa con deep link
+   * @returns Promise de navegación (resolve true/false)
+   */
+  async translateAndNavigate(url: string): Promise<boolean> {
+    const parsed = this.parseDeepLink(url);
+    if (!parsed) {
+      console.warn('[DeepLink] Formato inválido, no se navega:', url);
+      return false;
+    }
+
+    // Traducir a ruta path interna
+    const rutaPath = `/o/${parsed.tipo}/${parsed.id}`;
+
+    console.log('[DeepLink] Navegando a:', rutaPath);
+
+    // Navegar (Router aplica guards automáticamente)
+    return this.router.navigateByUrl(rutaPath);
+  }
+}
