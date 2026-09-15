@@ -10,9 +10,8 @@ const routes: Routes = [
     path: 'login',
     loadComponent: () => import('./auth/login/login.component').then(m => m.LoginComponent)
   },
-  // Deep links: ruta dummy para o/{tipo}/{id} — no redirige, solo previene que catch-all limpie el hash
-  // El DeepLinkService intercepta desde window.location.hash en AppComponent
-  { path: 'o/:tipo/:id', redirectTo: '', pathMatch: 'full' },
+  // Deep links: NO hay ruta Angular para o/:tipo/:id — se manejan DIRECTAMENTE
+  // con hashchange listener en AppComponent (sin pasar por el router que limpia el hash)
   // Fallback route
   { path: '**', redirectTo: '' }
 ];

@@ -770,32 +770,39 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     const pendingDeepLink = sessionStorage.getItem('pendingDeepLink');
     if (pendingDeepLink && this.authService.isLoggedIn) {
       sessionStorage.removeItem('pendingDeepLink');
-      const parsed = this.deepLinkService.parseDeepLink(pendingDeepLink);
-      if (parsed) {
-        // Procesar después de un tick para que el DOM esté listo
-        setTimeout(() => {
-          this.deepLinkService.openDeepLink(parsed.tipo, parsed.id).catch((err) => {
-            console.error('Error procesando deep link inicial:', err);
-          });
-        }, 100);
-      }
+      this.processDeepLink(pendingDeepLink);
     }
 
-    // Deep links: interceptar NavigationEnd y parsear #/o/{tipo}/{id}
-    this.router.events
-      .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
-      .subscribe((event: NavigationEnd) => {
-        const hash = window.location.hash;
-        if (!hash) return;
+    // Deep links: escuchar cambios de hash DIRECTAMENTE (sin depender de NavigationEnd)
+    // Esto captura mid-session hash changes: window.location.hash = '#/o/compra/1'
+    window.addEventListener('hashchange', () => {
+      const hash = window.location.hash;
+      if (!hash || !hash.startsWith('#/o/')) return;
+      if (!this.authService.isLoggedIn) return; // Sin sesión → AuthGuard manejará con returnUrl
+      this.processDeepLink(hash);
+    });
 
-        const parsed = this.deepLinkService.parseDeepLink(hash);
-        if (!parsed) return;
+    // También procesar hash actual si ya existe (cold start con sesión activa)
+    const currentHash = window.location.hash;
+    if (currentHash && currentHash.startsWith('#/o/') && this.authService.isLoggedIn) {
+      this.processDeepLink(currentHash);
+    }
+  }
 
-        // Delegar al servicio para abrir el recurso
-        this.deepLinkService.openDeepLink(parsed.tipo, parsed.id).catch((err) => {
-          console.error('Error procesando deep link:', err);
-        });
+  /**
+   * Procesa un deep link #/o/{tipo}/{id} y abre el recurso correspondiente.
+   * Usado tanto en cold start como en mid-session hash changes.
+   */
+  private processDeepLink(hash: string): void {
+    const parsed = this.deepLinkService.parseDeepLink(hash);
+    if (!parsed) return;
+
+    // Procesar después de un tick para que el DOM esté listo (tabs, dialogs)
+    setTimeout(() => {
+      this.deepLinkService.openDeepLink(parsed.tipo, parsed.id).catch((err) => {
+        console.error('Error procesando deep link:', err);
       });
+    }, 100);
   }
 
   ngOnDestroy() {
