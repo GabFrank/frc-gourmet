@@ -13,7 +13,8 @@ import { Observable, Subscription, fromEvent } from 'rxjs';
 import { map, shareReplay, debounceTime, delay } from 'rxjs/operators';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import { CommonModule } from '@angular/common';
-import { RouterModule, Router } from '@angular/router';
+import { RouterModule, Router, NavigationEnd } from '@angular/router';
+import { filter } from 'rxjs/operators';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatSidenavModule, MatSidenav } from '@angular/material/sidenav';
 import { MatButtonModule } from '@angular/material/button';
@@ -116,6 +117,7 @@ import { SidenavMenuComponent } from './shared/components/sidenav-menu/sidenav-m
 import { MenuService } from './services/menu.service';
 import { PermissionService } from './services/permission.service';
 import { MenuNode } from './services/menu-tree';
+import { DeepLinkService } from './services/deep-link.service';
 
 @Component({
   selector: 'app-root',
@@ -284,6 +286,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     // E2.4: solo inyectar para arrancar el listener global de eventos de
     // impresora — el servicio se auto-suscribe en su constructor.
     private _printerEvents: PrinterEventsService,
+    private deepLinkService: DeepLinkService,
   ) {
     // Reconstruir el árbol del sidenav cuando cambian los permisos del usuario
     // (login/logout/refresh) o los overrides del ADMIN. Fuente única: menu-tree.ts.
@@ -755,6 +758,27 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     this.isMenuExpanded = false;
     this.expandedMenu = null;
     this.menuExpandedIds.clear();
+
+    // Deep links: interceptar NavigationEnd y parsear #/o/{tipo}/{id}
+    this.router.events
+      .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
+      .subscribe((event: NavigationEnd) => {
+        const hash = window.location.hash;
+        if (!hash) return;
+
+        const parsed = this.deepLinkService.parseDeepLink(hash);
+        if (!parsed) return;
+
+        // Delegar al servicio para abrir el recurso
+        this.deepLinkService.openDeepLink(parsed.tipo, parsed.id).catch((err) => {
+          console.error('Error procesando deep link:', err);
+        });
+
+        // Opcional: limpiar el hash después de procesarlo para no dejarlo visible
+        // window.location.hash = '';
+        // NOTA: no limpiamos para permitir que el usuario recargue la página
+        // y el deep link siga funcionando (útil durante desarrollo/testing)
+      });
   }
 
   ngOnDestroy() {
