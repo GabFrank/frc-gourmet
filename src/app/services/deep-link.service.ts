@@ -1,6 +1,7 @@
-import { Injectable } from '@angular/core';
+import { Injectable, Type } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { TabsService } from './tabs.service';
 
 export interface DeepLinkParsed {
   tipo: string;
@@ -26,6 +27,7 @@ export class DeepLinkService {
   constructor(
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
+    private tabsService: TabsService,
   ) {}
 
   /**
@@ -95,10 +97,21 @@ export class DeepLinkService {
 
   /**
    * Abre CompraDetalleComponent en una tab.
-   * Placeholder: implementado en Fase 2.
    */
   async openCompra(id: number): Promise<void> {
-    console.log(`[DeepLink] openCompra(${id}) - implementar en Fase 2`);
+    // Lazy-import para no cargar el componente hasta que sea necesario
+    const { CompraDetalleComponent } = await import(
+      '../pages/compras/compra-detalle/compra-detalle.component'
+    );
+
+    // Abrir tab (deduplica automáticamente por id si ya existe)
+    this.tabsService.openTab(
+      `Compra #${id}`,
+      CompraDetalleComponent,
+      { compraId: id },
+      `detalle-compra-${id}`,
+      true, // closable
+    );
   }
 
   /**
