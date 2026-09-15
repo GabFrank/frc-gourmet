@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -85,6 +85,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     private fb: FormBuilder,
     private authService: AuthService,
     private router: Router,
+    private route: ActivatedRoute,
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
     private themeService: ThemeService
@@ -200,7 +201,7 @@ export class LoginComponent implements OnInit, OnDestroy {
               duration: 3000,
               panelClass: 'success-snackbar',
             });
-            this.router.navigate(['/']);
+            this.navigateAfterLogin();
           } else {
             // El usuario eligio cerrar sesion antes de cambiar la pass.
             await this.authService.logout(false);
@@ -213,7 +214,7 @@ export class LoginComponent implements OnInit, OnDestroy {
             duration: 3000,
             panelClass: 'success-snackbar',
           });
-          this.router.navigate(['/']);
+          this.navigateAfterLogin();
         }
       } else {
         this.snackBar.open(result.message || 'Credenciales incorrectas', 'Cerrar', {
@@ -229,6 +230,20 @@ export class LoginComponent implements OnInit, OnDestroy {
       console.error('Login error:', error);
     } finally {
       this.isLoggingIn = false;
+    }
+  }
+
+  /**
+   * Navega después del login exitoso.
+   * Lee returnUrl del query param y navega a él, o a `/` si no existe.
+   * navigateByUrl decodifica automáticamente %23 → #.
+   */
+  private navigateAfterLogin(): void {
+    const returnUrl = this.route.snapshot.queryParams['returnUrl'];
+    if (returnUrl) {
+      this.router.navigateByUrl(returnUrl);
+    } else {
+      this.router.navigate(['/']);
     }
   }
 } 
