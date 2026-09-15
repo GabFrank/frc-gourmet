@@ -6,6 +6,9 @@ import { AuthService } from '@frc/shared-core';
 /**
  * APP_INITIALIZER para procesar deep links en cold start.
  * 
+ * P0 FIX (2026-09-15): inject() DEBE estar en el cuerpo de la factory,
+ * NO dentro del callback async (NG0203: inject must be called from injection context).
+ * 
  * P1 OBLIGATORIO (Gabriel): mitigar race Home flash.
  * 
  * Problema: si el usuario abre #/o/compra/1 sin sesión, authGuard redirige a
@@ -17,14 +20,16 @@ import { AuthService } from '@frc/shared-core';
  * - Si usuario ya logueado → navega inmediatamente (sin race).
  * - Si usuario NO logueado → no hace nada (authGuard se encargará con returnUrl).
  * 
- * Esto garantiza que deep links + sesión activa funcionen en cold start sin race.
+ * Sin dummy navigation a '/' — el router ya está inicializado por Angular,
+ * y translateAndNavigate navega directo al deep link (sin flash Home).
  */
 export function initializeDeepLinks(): () => Promise<void> {
-  return async () => {
-    const router = inject(Router);
-    const deepLinkService = inject(DeepLinkService);
-    const authService = inject(AuthService);
+  // P0 FIX: inject() aquí (en el cuerpo de la factory), NO dentro del async callback
+  const router = inject(Router);
+  const deepLinkService = inject(DeepLinkService);
+  const authService = inject(AuthService);
 
+  return async () => {
     // Leer hash inicial (si existe)
     const initialHash = window.location.hash;
 
@@ -40,10 +45,7 @@ export function initializeDeepLinks(): () => Promise<void> {
     if (authService.isLoggedIn) {
       console.log('[AppInitializer] Usuario logueado, navegando a deep link');
       
-      // Esperar que router esté listo (evita race con primera navegación)
-      await router.navigateByUrl('/'); // dummy navigation to initialize router
-      
-      // Ahora procesar deep link
+      // P0 FIX: sin dummy navigation — router ya ready, evita flash Home
       await deepLinkService.translateAndNavigate(initialHash);
     } else {
       console.log('[AppInitializer] Usuario NO logueado, authGuard manejará con returnUrl');
