@@ -32,6 +32,7 @@ import {
 import { CajaMayorConfiguracion } from '../../src/app/database/entities/financiero/caja-mayor-configuracion.entity';
 import { CajaMayor } from '../../src/app/database/entities/financiero/caja-mayor.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { Permission } from '../../src/app/database/entities/personas/permission.entity';
 
 import { ensurePermission } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
@@ -445,7 +446,22 @@ export function registerPagoConsolidadoHandlers(
         relations: ['monedaDeuda', 'responsable', 'responsable.persona'],
       });
       if (!pago) throw new Error(`Pago consolidado ${pagoId} no encontrado`);
-      await ensurePermission(dataSource, getCurrentUser, getAdapter(pago.concepto).permiso);
+      
+      // Permiso para ver: FINANCIERO_PAGO_CONSOLIDADO_VER (genérico) o el permiso del concepto específico
+      const user = getCurrentUser();
+      const permisoRepo = dataSource.getRepository(Permission);
+      const permisos = user?.id 
+        ? await permisoRepo.query(`
+            SELECT DISTINCT p.codigo FROM permissions p
+            JOIN role_permissions rp ON rp.permission_id = p.id
+            JOIN usuario_roles ur ON ur.role_id = rp.role_id
+            WHERE ur.usuario_id = ? AND p.codigo IN (?, ?)
+          `, [user.id, 'FINANCIERO_PAGO_CONSOLIDADO_VER', getAdapter(pago.concepto).permiso])
+        : [];
+      
+      if (!permisos || permisos.length === 0) {
+        throw new Error(`NO_PERMISSION: Se requiere FINANCIERO_PAGO_CONSOLIDADO_VER o ${getAdapter(pago.concepto).permiso}`);
+      }
 
       const detalles = await dataSource.getRepository(PagoConsolidadoDetalle).find({
         where: { pagoConsolidadoId: pagoId },

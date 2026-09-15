@@ -164,10 +164,27 @@ export class DeepLinkService {
 
   /**
    * Abre DetallePagoConsolidadoDialogComponent.
-   * Placeholder: implementado en Fase 5.
    */
   async openPago(id: number): Promise<void> {
-    console.log(`[DeepLink] openPago(${id}) - implementar en Fase 5`);
+    const dialogKey = `pago-${id}`;
+
+    // Evitar duplicados
+    if (this.isDialogOpen(dialogKey)) {
+      return;
+    }
+
+    // Lazy-import (mismo patrón que en CajaMayorDetalleComponent)
+    const { DetallePagoConsolidadoDialogComponent } = await import(
+      '../pages/financiero/caja-mayor/detalle-pago-consolidado-dialog/detalle-pago-consolidado-dialog.component'
+    );
+
+    const ref = this.dialog.open(DetallePagoConsolidadoDialogComponent, {
+      width: '760px',
+      maxWidth: '95vw',
+      data: { pagoId: id },
+    });
+
+    this.registerDialog(dialogKey, ref);
   }
 
   /**
