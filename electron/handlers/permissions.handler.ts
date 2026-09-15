@@ -17,6 +17,7 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'RRHH_ASISTENCIA_REGISTRAR', descripcion: 'Registrar asistencias', modulo: 'RRHH' },
   { codigo: 'RRHH_ASISTENCIA_JUSTIFICAR', descripcion: 'Justificar asistencias', modulo: 'RRHH' },
   // RRHH - Vales / Adelantos / Préstamos
+  { codigo: 'RRHH_VALE_VER', descripcion: 'Ver detalle de vales y adelantos', modulo: 'RRHH' },
   { codigo: 'RRHH_VALE_CREAR', descripcion: 'Crear vales/adelantos', modulo: 'RRHH' },
   { codigo: 'RRHH_VALE_CONFIRMAR', descripcion: 'Confirmar vales/adelantos', modulo: 'RRHH' },
   { codigo: 'RRHH_VALE_ANULAR', descripcion: 'Anular vales/adelantos', modulo: 'RRHH' },
@@ -127,6 +128,8 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'FINANCIERO_CAJA_GESTIONAR', descripcion: 'Borrar cajas/conteos y configurar las monedas habilitadas', modulo: 'FINANCIERO' },
   { codigo: 'FINANCIERO_CAJA_AJUSTAR', descripcion: 'Ajustar una caja ya cerrada (corregir conteo, agregar gasto/retiro)', modulo: 'FINANCIERO' },
   { codigo: 'CAJA_MAYOR_OPERAR', descripcion: 'Registrar movimientos/gastos/retiros en caja mayor', modulo: 'FINANCIERO' },
+  { codigo: 'FINANCIERO_GASTO_VER', descripcion: 'Ver detalle de gastos de Caja Mayor', modulo: 'FINANCIERO' },
+  { codigo: 'FINANCIERO_PAGO_CONSOLIDADO_VER', descripcion: 'Ver detalle de pagos consolidados de Caja Mayor', modulo: 'FINANCIERO' },
   { codigo: 'MONEDAS_GESTIONAR', descripcion: 'Gestionar monedas y cotizaciones', modulo: 'FINANCIERO' },
   { codigo: 'BANCOS_VER', descripcion: 'Ver cuentas bancarias, cheques y POS', modulo: 'FINANCIERO' },
   { codigo: 'BANCOS_GESTIONAR', descripcion: 'Gestionar cuentas bancarias, cheques y POS', modulo: 'FINANCIERO' },

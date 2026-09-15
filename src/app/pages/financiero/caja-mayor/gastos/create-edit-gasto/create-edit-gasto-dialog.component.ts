@@ -94,6 +94,8 @@ export class CreateEditGastoDialogComponent implements OnInit {
   gastoId: number | null = null;
   /** True una vez que se creo o edito al menos una vez en esta sesion del dialog. */
   private touched = false;
+  /** Modo read-only (deep link): deshabilita formulario, oculta botones de submit. */
+  readonly = false;
 
   /**
    * Alta diferida: el gasto nace PENDIENTE y no asienta nada. El pago se hace
@@ -119,6 +121,7 @@ export class CreateEditGastoDialogComponent implements OnInit {
   ngOnInit(): void {
     this.cajaMayorFijo = !!this.data?.cajaMayorId;
     this.diferido = !!this.data?.diferido;
+    this.readonly = !!this.data?.readonly;
     if (this.diferido) {
       this.detallesColumns = ['moneda', 'monto', 'actions'];
     }
@@ -195,6 +198,12 @@ export class CreateEditGastoDialogComponent implements OnInit {
         await this.loadGasto(this.gastoId);
       } else {
         this.aplicarPreselecciones();
+      }
+
+      // Si es readonly, deshabilitar el formulario
+      if (this.readonly) {
+        this.form.disable();
+        this.detalleForm.disable();
       }
     } catch (error) {
       console.error('Error loading lookups:', error);

@@ -1171,6 +1171,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('get-gasto', async (_event: any, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_GASTO_VER');
     try {
       const repo = dataSource.getRepository(Gasto);
       return await repo.findOne({

@@ -116,10 +116,26 @@ export class DeepLinkService {
 
   /**
    * Abre CreateEditGastoDialogComponent en modo readonly.
-   * Placeholder: implementado en Fase 3.
    */
   async openGasto(id: number): Promise<void> {
-    console.log(`[DeepLink] openGasto(${id}) - implementar en Fase 3`);
+    const dialogKey = `gasto-${id}`;
+
+    // Evitar duplicados
+    if (this.isDialogOpen(dialogKey)) {
+      return;
+    }
+
+    // Lazy-import
+    const { CreateEditGastoDialogComponent } = await import(
+      '../pages/financiero/caja-mayor/gastos/create-edit-gasto/create-edit-gasto-dialog.component'
+    );
+
+    const ref = this.dialog.open(CreateEditGastoDialogComponent, {
+      width: '700px',
+      data: { gastoId: id, readonly: true },
+    });
+
+    this.registerDialog(dialogKey, ref);
   }
 
   /**
