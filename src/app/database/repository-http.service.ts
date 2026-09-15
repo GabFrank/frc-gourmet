@@ -2194,6 +2194,9 @@ export class RepositoryHttpService extends RepositoryService {
   deleteMotivoVale(id: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.deleteMotivoVale() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getVale(id: number): Observable<any> {
+    return this.callRpc<any>('get-vale', id);
+  }
   getVales(filtros?: any): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getVales() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

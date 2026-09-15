@@ -25,6 +25,16 @@ export function registerValesHandlers(
   dataSource: DataSource,
   getCurrentUser: () => Usuario | null,
 ) {
+  // ============= VALE (GET) =============
+  ipcMain.handle('get-vale', async (_event: any, id: number) => {
+    await ensurePermission(dataSource, getCurrentUser, 'RRHH_VALE_VER');
+    const repo = dataSource.getRepository(Vale);
+    return await repo.findOne({
+      where: { id },
+      relations: ['funcionario', 'funcionario.persona', 'motivo', 'moneda', 'cajaMayor', 'formaPago', 'cuentaBancaria', 'cuentaBancaria.moneda', 'createdBy', 'createdBy.persona'],
+    });
+  });
+
   // ============= MOTIVOS =============
   ipcMain.handle('get-motivos-vale', async () => {
     return await dataSource.getRepository(MotivoVale).find({ order: { nombre: 'ASC' } });

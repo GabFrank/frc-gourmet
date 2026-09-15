@@ -140,10 +140,26 @@ export class DeepLinkService {
 
   /**
    * Abre CreateEditValeDialogComponent en modo readonly.
-   * Placeholder: implementado en Fase 4.
    */
   async openVale(id: number): Promise<void> {
-    console.log(`[DeepLink] openVale(${id}) - implementar en Fase 4`);
+    const dialogKey = `vale-${id}`;
+
+    // Evitar duplicados
+    if (this.isDialogOpen(dialogKey)) {
+      return;
+    }
+
+    // Lazy-import
+    const { CreateEditValeDialogComponent } = await import(
+      '../pages/rrhh/vales/create-edit-vale-dialog.component'
+    );
+
+    const ref = this.dialog.open(CreateEditValeDialogComponent, {
+      width: '720px',
+      data: { valeId: id, readonly: true },
+    });
+
+    this.registerDialog(dialogKey, ref);
   }
 
   /**
