@@ -12,6 +12,7 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatChipsModule } from '@angular/material/chips';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
@@ -34,6 +35,7 @@ import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/a
     MatSlideToggleModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    MatChipsModule,
   ],
   template: `
     <h2 mat-dialog-title>

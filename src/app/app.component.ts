@@ -391,6 +391,13 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngOnInit() {
+    // Deep links: capturar hash inicial ANTES de que el router lo limpie
+    const initialHash = window.location.hash;
+    if (initialHash && initialHash.startsWith('#/o/')) {
+      // Almacenar en sessionStorage para procesarlo después de la autenticación
+      sessionStorage.setItem('pendingDeepLink', initialHash);
+    }
+
     // Check for saved theme preference
     const savedTheme = localStorage.getItem('darkTheme');
     if (savedTheme) {
@@ -759,6 +766,21 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     this.expandedMenu = null;
     this.menuExpandedIds.clear();
 
+    // Deep links: procesar hash inicial guardado en ngOnInit si existe y hay sesión
+    const pendingDeepLink = sessionStorage.getItem('pendingDeepLink');
+    if (pendingDeepLink && this.authService.isLoggedIn) {
+      sessionStorage.removeItem('pendingDeepLink');
+      const parsed = this.deepLinkService.parseDeepLink(pendingDeepLink);
+      if (parsed) {
+        // Procesar después de un tick para que el DOM esté listo
+        setTimeout(() => {
+          this.deepLinkService.openDeepLink(parsed.tipo, parsed.id).catch((err) => {
+            console.error('Error procesando deep link inicial:', err);
+          });
+        }, 100);
+      }
+    }
+
     // Deep links: interceptar NavigationEnd y parsear #/o/{tipo}/{id}
     this.router.events
       .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
@@ -773,11 +795,6 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
         this.deepLinkService.openDeepLink(parsed.tipo, parsed.id).catch((err) => {
           console.error('Error procesando deep link:', err);
         });
-
-        // Opcional: limpiar el hash después de procesarlo para no dejarlo visible
-        // window.location.hash = '';
-        // NOTA: no limpiamos para permitir que el usuario recargue la página
-        // y el deep link siga funcionando (útil durante desarrollo/testing)
       });
   }
 

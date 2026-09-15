@@ -212,7 +212,7 @@
     </div>
   </form>
 
-  <div class="adjuntos-section">
+  <div *ngIf="!readonly" class="adjuntos-section">
     <app-adjuntos-list
       entidadTipo="GASTO"
       [entidadId]="gastoId"

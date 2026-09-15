@@ -19,6 +19,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatChipsModule } from '@angular/material/chips';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
@@ -58,6 +59,7 @@ interface DetalleRow {
     MatAutocompleteModule,
     MatTooltipModule,
     MatDividerModule,
+    MatChipsModule,
     CurrencyInputDirective,
     AdjuntosListComponent,
   ]
@@ -200,10 +202,12 @@ export class CreateEditGastoDialogComponent implements OnInit {
         this.aplicarPreselecciones();
       }
 
-      // Si es readonly, deshabilitar el formulario
+      // Si es readonly, deshabilitar el formulario + filtros
       if (this.readonly) {
         this.form.disable();
         this.detalleForm.disable();
+        this.categoriaFilter.disable();
+        this.proveedorFilter.disable();
       }
     } catch (error) {
       console.error('Error loading lookups:', error);
