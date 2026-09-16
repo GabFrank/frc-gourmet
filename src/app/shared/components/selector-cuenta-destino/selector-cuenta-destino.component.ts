@@ -148,7 +148,7 @@ export class SelectorCuentaDestinoComponent implements OnInit, OnChanges {
     
     if (cuenta.banco) parts.push(cuenta.banco);
     if (cuenta.numeroCuenta) parts.push(cuenta.numeroCuenta);
-    if (cuenta.moneda) parts.push(`(${cuenta.moneda.codigo})`);
+    if (cuenta.moneda) parts.push(`(${cuenta.moneda.denominacion})`);
     if (cuenta.alias) parts.push(`- ${cuenta.alias}`);
     
     return parts.join(' ');

@@ -133,7 +133,7 @@ export function registerPagoConsolidadoHandlers(
       // Nunca contra el saldo que mando el cliente: entre que se dibujo la
       // pantalla y se confirmo el pago la deuda pudo saldarse por otro camino.
       const items: ItemAPagar[] = [];
-      const meta: Array<{ descripcion: string; beneficiario: string | null }> = [];
+      const meta: Array<{ descripcion: string; beneficiario: string | null; beneficiarioId: number | null }> = [];
       // Se lockea SIEMPRE en orden de id: dos pagos concurrentes con obligaciones
       // solapadas, tomadas en el orden en que las tildó cada usuario, pueden
       // deadlockear en Postgres. Un orden total las serializa.
@@ -146,10 +146,10 @@ export function registerPagoConsolidadoHandlers(
           monto: redondear(Number(it.monto), 2),
           saldoPendiente: real.saldoPendiente,
           monedaId: real.monedaId,
-          beneficiarioId: null,
+          beneficiarioId: real.beneficiarioId,
           descripcion: real.descripcion,
         });
-        meta.push({ descripcion: real.descripcion, beneficiario: real.beneficiario });
+        meta.push({ descripcion: real.descripcion, beneficiario: real.beneficiario, beneficiarioId: real.beneficiarioId });
       }
 
       // Moneda de la deuda: comun a todas (lo valida `validarSeleccion`).
@@ -178,46 +178,38 @@ export function registerPagoConsolidadoHandlers(
         if (tieneBancarias && concepto === 'COMPRA') {
           // Fase 1: solo proveedores. Cliente/Funcionario en fases 2-3.
           // El beneficiario único ya está validado arriba.
-          const proveedorId = items[0].origenId; // origenId es el ID del gasto/cuota
-          // Necesitamos el proveedor desde el gasto. Esto requiere cargar el gasto.
-          // Por ahora, simplificamos: el adapter debe proveer el beneficiarioId.
-          // TODO: Extender adapter para devolver beneficiarioId en `leerYBloquear`.
-          // Por ahora, asumimos que meta[0].beneficiario es el nombre del proveedor.
-          // Necesitamos el ID del proveedor para cargar su cuenta default.
-          
-          // Solución temporal: buscar proveedor por nombre (subóptimo pero funcional para MVP)
-          const nombreProveedor = meta[0].beneficiario;
-          if (!nombreProveedor) {
+          const beneficiarioId = meta[0].beneficiarioId;
+          if (!beneficiarioId) {
             throw new Error('No se pudo identificar el proveedor para resolver la cuenta de cobro.');
           }
           const proveedor = await queryRunner.manager.findOne(Proveedor, {
-            where: { nombre: nombreProveedor, activo: true },
+            where: { id: beneficiarioId, activo: true },
             relations: ['cuentaBancariaDefault', 'cuentaBancariaDefault.persona', 'persona'],
           });
           if (!proveedor) {
-            throw new Error(`Proveedor "${nombreProveedor}" no encontrado.`);
+            throw new Error(`Proveedor #${beneficiarioId} no encontrado.`);
           }
           if (!proveedor.persona) {
             throw new Error(
-              `El proveedor "${nombreProveedor}" no tiene persona vinculada. ` +
+              `El proveedor "${proveedor.nombre}" no tiene persona vinculada. ` +
               `Vinculá una persona en su ficha para configurar cuenta de cobro.`
             );
           }
           if (!proveedor.cuentaBancariaDefaultId) {
             throw new Error(
-              `El proveedor "${nombreProveedor}" no tiene cuenta bancaria configurada. ` +
+              `El proveedor "${proveedor.nombre}" no tiene cuenta bancaria configurada. ` +
               `Agregá una en su ficha o pagá con otra forma de pago.`
             );
           }
           const cuenta = proveedor.cuentaBancariaDefault;
           if (!cuenta || !cuenta.activo) {
             throw new Error(
-              `La cuenta bancaria default del proveedor "${nombreProveedor}" está desactivada.`
+              `La cuenta bancaria default del proveedor "${proveedor.nombre}" está desactivada.`
             );
           }
           if (!cuenta.persona || !cuenta.persona.activo) {
             throw new Error(
-              `El titular de la cuenta bancaria del proveedor "${nombreProveedor}" está desactivado.`
+              `El titular de la cuenta bancaria del proveedor "${proveedor.nombre}" está desactivado.`
             );
           }
           cuentaDestinoResuelta = cuenta;

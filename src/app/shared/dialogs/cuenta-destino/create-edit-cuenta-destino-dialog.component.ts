@@ -95,7 +95,7 @@ const extraerMensajeError = (e: any): string => {
             <mat-label>Moneda</mat-label>
             <mat-select formControlName="monedaId">
               <mat-option *ngFor="let moneda of monedas" [value]="moneda.id">
-                {{ moneda.codigo }} - {{ moneda.descripcion }}
+                {{ moneda.denominacion }} ({{ moneda.simbolo }})
               </mat-option>
             </mat-select>
             <mat-error *ngIf="cuentaForm.get('monedaId')?.hasError('required')">
