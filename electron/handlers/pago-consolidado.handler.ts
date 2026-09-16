@@ -16,11 +16,13 @@ import { DataSource } from 'typeorm';
 
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
+import { CuentaBancariaDestino } from '../../src/app/database/entities/financiero/cuenta-bancaria-destino.entity';
 import { MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { PagoConsolidado } from '../../src/app/database/entities/financiero/pago-consolidado.entity';
 import { PagoConsolidadoDetalle } from '../../src/app/database/entities/financiero/pago-consolidado-detalle.entity';
+import { Proveedor } from '../../src/app/database/entities/compras/proveedor.entity';
 import {
   PagoConcepto,
   PagoConsolidadoEstado,
@@ -162,11 +164,64 @@ export function registerPagoConsolidadoHandlers(
         // con el que mandó el cliente.
         items[i].monto = redondear(Number(itemsOrdenados[i].monto), decDeuda);
       }
+
+      // ── Beneficiario único y cuenta destino (Fase 1: proveedores)
+      let cuentaDestinoResuelta: CuentaBancariaDestino | null = null;
       if (CONCEPTO_BENEFICIARIO_UNICO[concepto]) {
         // El beneficiario unico (proveedor en compras, cliente en cobros) se valida
         // contra lo releido, no contra lo que mando el cliente.
         const benes = new Set(meta.map((m) => m.beneficiario || ''));
         if (benes.size > 1) throw new Error(CONCEPTO_BENEFICIARIO_UNICO_ERROR[concepto]);
+
+        // Si hay líneas bancarias, resolver cuenta destino
+        const tieneBancarias = lineasPayload.some((l) => l.fuente === 'CUENTA_BANCARIA');
+        if (tieneBancarias && concepto === 'COMPRA') {
+          // Fase 1: solo proveedores. Cliente/Funcionario en fases 2-3.
+          // El beneficiario único ya está validado arriba.
+          const proveedorId = items[0].origenId; // origenId es el ID del gasto/cuota
+          // Necesitamos el proveedor desde el gasto. Esto requiere cargar el gasto.
+          // Por ahora, simplificamos: el adapter debe proveer el beneficiarioId.
+          // TODO: Extender adapter para devolver beneficiarioId en `leerYBloquear`.
+          // Por ahora, asumimos que meta[0].beneficiario es el nombre del proveedor.
+          // Necesitamos el ID del proveedor para cargar su cuenta default.
+          
+          // Solución temporal: buscar proveedor por nombre (subóptimo pero funcional para MVP)
+          const nombreProveedor = meta[0].beneficiario;
+          if (!nombreProveedor) {
+            throw new Error('No se pudo identificar el proveedor para resolver la cuenta de cobro.');
+          }
+          const proveedor = await queryRunner.manager.findOne(Proveedor, {
+            where: { nombre: nombreProveedor, activo: true },
+            relations: ['cuentaBancariaDefault', 'cuentaBancariaDefault.persona', 'persona'],
+          });
+          if (!proveedor) {
+            throw new Error(`Proveedor "${nombreProveedor}" no encontrado.`);
+          }
+          if (!proveedor.persona) {
+            throw new Error(
+              `El proveedor "${nombreProveedor}" no tiene persona vinculada. ` +
+              `Vinculá una persona en su ficha para configurar cuenta de cobro.`
+            );
+          }
+          if (!proveedor.cuentaBancariaDefaultId) {
+            throw new Error(
+              `El proveedor "${nombreProveedor}" no tiene cuenta bancaria configurada. ` +
+              `Agregá una en su ficha o pagá con otra forma de pago.`
+            );
+          }
+          const cuenta = proveedor.cuentaBancariaDefault;
+          if (!cuenta || !cuenta.activo) {
+            throw new Error(
+              `La cuenta bancaria default del proveedor "${nombreProveedor}" está desactivada.`
+            );
+          }
+          if (!cuenta.persona || !cuenta.persona.activo) {
+            throw new Error(
+              `El titular de la cuenta bancaria del proveedor "${nombreProveedor}" está desactivado.`
+            );
+          }
+          cuentaDestinoResuelta = cuenta;
+        }
       }
 
       const erroresSeleccion = validarSeleccion(concepto, items, decDeuda);
@@ -362,12 +417,23 @@ export function registerPagoConsolidadoHandlers(
           // Direccional: en un cobro la cuenta se acredita, no se debita.
           cb.saldo = redondear(Number(cb.saldo) + (esIngresoEvento ? g.monto : -g.monto), 2);
           await queryRunner.manager.save(CuentaBancaria, cb);
+
+          // Descripción enriquecida con datos de cuenta destino
+          let obsMovEnriquecida = obsMov;
+          if (cuentaDestinoResuelta) {
+            const titular = cuentaDestinoResuelta.titular || cuentaDestinoResuelta.persona?.nombre || 'SIN TITULAR';
+            const banco = cuentaDestinoResuelta.banco;
+            const nroCuenta = cuentaDestinoResuelta.numeroCuenta;
+            obsMovEnriquecida = `TRANSF. A ${titular} (${banco} ${nroCuenta}) - ${obsMov}`.slice(0, 255);
+          }
+
           const movBanco = await registrarMovimientoBancario(queryRunner.manager, dataSource, {
             cuentaBancariaId: Number(l.cuentaBancariaId),
             tipo: esIngresoEvento ? MovimientoBancarioTipo.ENTRADA_MANUAL : MovimientoBancarioTipo.SALIDA_MANUAL,
             monto: g.monto,
-            observacion: obsMov,
+            observacion: obsMovEnriquecida,
             responsable: userEntity,
+            cuentaBancariaDestinoId: cuentaDestinoResuelta?.id,
           });
           g.movimientoId = movBanco.id;
         }
@@ -402,6 +468,7 @@ export function registerPagoConsolidadoHandlers(
           formaPagoId: l.formaPagoId ?? null,
           cajaMayorId: l.cajaMayorId ?? null,
           cuentaBancariaId: l.cuentaBancariaId ?? null,
+          cuentaBancariaDestinoId: l.fuente === 'CUENTA_BANCARIA' && cuentaDestinoResuelta ? cuentaDestinoResuelta.id : null,
           montoOrigen: f.montoOrigen,
           cotizacion: l.cotizacion,
           montoImputado: f.montoImputado,
