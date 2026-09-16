@@ -24,6 +24,9 @@ export class AppComponent implements OnInit, OnDestroy {
   private readonly deepLinkService = inject(DeepLinkService);
   private sub?: Subscription;
   private hashChangeHandler?: () => void;
+  private popstateHandler?: () => void;
+  private hashPollInterval?: ReturnType<typeof setInterval>;
+  private lastProcessedHash = '';
 
   ngOnInit(): void {
     // Sesión expirada (401 irrecuperable) → cerrar sesión y volver al login.
@@ -35,6 +38,12 @@ export class AppComponent implements OnInit, OnDestroy {
 
     // P1 OBLIGATORIO: listener hashchange robusto con cleanup en destroy
     this.setupHashChangeListener();
+    
+    // P0 FIX: listener popstate para navegación con botones browser
+    this.setupPopstateListener();
+    
+    // P0 FIX: polling para detectar location.hash = '#/o/...' (no dispara hashchange)
+    this.setupHashPolling();
 
     // P0 FIX: procesar hash ya presente en ngOnInit (cubre mid-session y cold-start post-login)
     this.processExistingHash();
@@ -46,6 +55,14 @@ export class AppComponent implements OnInit, OnDestroy {
     // P1 OBLIGATORIO: cleanup del listener
     if (this.hashChangeHandler) {
       window.removeEventListener('hashchange', this.hashChangeHandler);
+    }
+    
+    if (this.popstateHandler) {
+      window.removeEventListener('popstate', this.popstateHandler);
+    }
+    
+    if (this.hashPollInterval) {
+      clearInterval(this.hashPollInterval);
     }
   }
 
@@ -61,7 +78,8 @@ export class AppComponent implements OnInit, OnDestroy {
 
     // Si ya logueado → navegar inmediatamente
     if (this.auth.isLoggedIn) {
-      console.log('[DeepLink] Hash presente en init (logueado):', hash);
+      console.log('[DeepLink] hash detectado vía init:', hash);
+      this.lastProcessedHash = hash;
       this.deepLinkService.translateAndNavigate(hash).catch((err) => {
         console.error('[DeepLink] Error navegando:', err);
       });
@@ -76,6 +94,7 @@ export class AppComponent implements OnInit, OnDestroy {
       setTimeout(() => {
         if (this.auth.isLoggedIn) {
           console.log('[DeepLink] Token hidratado, navegando:', hash);
+          this.lastProcessedHash = hash;
           this.deepLinkService.translateAndNavigate(hash).catch((err) => {
             console.error('[DeepLink] Error navegando:', err);
           });
@@ -110,10 +129,14 @@ export class AppComponent implements OnInit, OnDestroy {
       
       // Solo procesar deep links
       if (!hash || !hash.startsWith('#/o/')) return;
+      
+      // Evitar procesar el mismo hash múltiples veces
+      if (hash === this.lastProcessedHash) return;
 
       // Si logueado → navegar inmediatamente
       if (this.auth.isLoggedIn) {
-        console.log('[DeepLink] Hash cambió mid-session:', hash);
+        console.log('[DeepLink] hash detectado vía hashchange:', hash);
+        this.lastProcessedHash = hash;
         this.deepLinkService.translateAndNavigate(hash).catch((err) => {
           console.error('[DeepLink] Error navegando:', err);
         });
@@ -127,6 +150,7 @@ export class AppComponent implements OnInit, OnDestroy {
         setTimeout(() => {
           if (this.auth.isLoggedIn) {
             console.log('[DeepLink] Token hidratado, navegando:', hash);
+            this.lastProcessedHash = hash;
             this.deepLinkService.translateAndNavigate(hash).catch((err) => {
               console.error('[DeepLink] Error navegando:', err);
             });
@@ -140,5 +164,94 @@ export class AppComponent implements OnInit, OnDestroy {
     };
 
     window.addEventListener('hashchange', this.hashChangeHandler);
+  }
+
+  /**
+   * P0 FIX: listener popstate para navegación con botones browser.
+   * Complementa hashchange para cubrir más escenarios de navegación.
+   */
+  private setupPopstateListener(): void {
+    this.popstateHandler = () => {
+      const hash = window.location.hash;
+      
+      // Solo procesar deep links
+      if (!hash || !hash.startsWith('#/o/')) return;
+      
+      // Evitar procesar el mismo hash múltiples veces
+      if (hash === this.lastProcessedHash) return;
+
+      // Si logueado → navegar inmediatamente
+      if (this.auth.isLoggedIn) {
+        console.log('[DeepLink] hash detectado vía popstate:', hash);
+        this.lastProcessedHash = hash;
+        this.deepLinkService.translateAndNavigate(hash).catch((err) => {
+          console.error('[DeepLink] Error navegando:', err);
+        });
+        return;
+      }
+
+      // Si NO logueado pero hay token → hidratar y reintentar
+      const token = localStorage.getItem('frc_mobile_access_token');
+      if (token) {
+        console.log('[DeepLink] popstate sin isLoggedIn, verificando token storage...');
+        setTimeout(() => {
+          if (this.auth.isLoggedIn) {
+            console.log('[DeepLink] Token hidratado, navegando:', hash);
+            this.lastProcessedHash = hash;
+            this.deepLinkService.translateAndNavigate(hash).catch((err) => {
+              console.error('[DeepLink] Error navegando:', err);
+            });
+          } else {
+            console.log('[DeepLink] Token inválido, authGuard manejará');
+          }
+        }, 150);
+      }
+    };
+
+    window.addEventListener('popstate', this.popstateHandler);
+  }
+
+  /**
+   * P0 FIX: polling para detectar asignación directa location.hash = '#/o/...'
+   * 
+   * Problema: en Chrome automation / PathLocationStrategy, asignar window.location.hash
+   * no dispara hashchange event, pero el hash SÍ cambia en la URL.
+   * 
+   * Solución: poll corto (300ms) comparando window.location.hash con lastProcessedHash.
+   * Si detectamos un deep link nuevo y hay sesión → translateAndNavigate.
+   */
+  private setupHashPolling(): void {
+    this.hashPollInterval = setInterval(() => {
+      const hash = window.location.hash;
+      
+      // Solo procesar deep links nuevos
+      if (!hash || !hash.startsWith('#/o/')) return;
+      if (hash === this.lastProcessedHash) return;
+
+      // Si logueado → navegar inmediatamente
+      if (this.auth.isLoggedIn) {
+        console.log('[DeepLink] hash detectado vía poll:', hash);
+        this.lastProcessedHash = hash;
+        this.deepLinkService.translateAndNavigate(hash).catch((err) => {
+          console.error('[DeepLink] Error navegando:', err);
+        });
+        return;
+      }
+
+      // Si NO logueado pero hay token → hidratar y reintentar
+      const token = localStorage.getItem('frc_mobile_access_token');
+      if (token) {
+        console.log('[DeepLink] poll sin isLoggedIn, verificando token storage...');
+        setTimeout(() => {
+          if (this.auth.isLoggedIn && window.location.hash === hash) {
+            console.log('[DeepLink] Token hidratado, navegando:', hash);
+            this.lastProcessedHash = hash;
+            this.deepLinkService.translateAndNavigate(hash).catch((err) => {
+              console.error('[DeepLink] Error navegando:', err);
+            });
+          }
+        }, 150);
+      }
+    }, 300); // Poll cada 300ms - balance entre responsividad y rendimiento
   }
 }
