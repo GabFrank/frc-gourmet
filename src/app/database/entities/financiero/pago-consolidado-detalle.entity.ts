@@ -73,6 +73,15 @@ export class PagoConsolidadoDetalle extends BaseModel {
   @Column({ type: 'int', name: 'cuenta_bancaria_id', nullable: true })
   cuentaBancariaId?: number;
 
+  // Cuenta bancaria de DESTINO (terceros): a quién va el pago
+  // Nullable: solo se usa en líneas con fuente CUENTA_BANCARIA
+  @ManyToOne('CuentaBancariaDestino', { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'cuenta_bancaria_destino_id' })
+  cuentaBancariaDestino?: any;
+
+  @Column({ type: 'int', name: 'cuenta_bancaria_destino_id', nullable: true })
+  cuentaBancariaDestinoId?: number;
+
   /** Porcion de esta linea imputada a esta obligacion, en la moneda de la linea. */
   @Column({ type: 'decimal', precision: 18, scale: 2, name: 'monto_origen' })
   montoOrigen!: number;

@@ -36,6 +36,15 @@ export class Proveedor extends BaseModel {
   @JoinColumn({ name: 'persona_id' })
   persona?: Persona | null;
 
+  // Cuenta bancaria preferida para cobros a este proveedor
+  // Se deriva de persona: Persona tiene N cuentas, proveedor elige cuál es la default
+  @ManyToOne('CuentaBancariaDestino', { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'cuenta_bancaria_default_id' })
+  cuentaBancariaDefault?: any;
+
+  @Column({ type: 'int', name: 'cuenta_bancaria_default_id', nullable: true })
+  cuentaBancariaDefaultId?: number;
+
   // Relationships - Use string references to avoid circular dependencies
   @OneToMany('Compra', 'proveedor')
   compras!: Compra[];
