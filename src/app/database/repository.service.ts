@@ -943,6 +943,7 @@ export abstract class RepositoryService {
   abstract createMotivoVale(data: any): Observable<any>;
   abstract updateMotivoVale(id: number, data: any): Observable<any>;
   abstract deleteMotivoVale(id: number): Observable<any>;
+  abstract getVale(id: number): Observable<any>;
   abstract getVales(filtros?: any): Observable<any[]>;
   abstract getValesPendientesDescuento(funcionarioId: number): Observable<any[]>;
   abstract createVale(data: any): Observable<any>;

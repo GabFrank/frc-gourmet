@@ -13,6 +13,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { confirmarSaldosNegativos, SaldoNegativoCheck } from 'src/app/shared/utils/saldo-negativo-confirm';
+import { PermissionService } from 'src/app/services/permission.service';
 
 export interface DetallePagoConsolidadoData {
   pagoId: number;
@@ -60,12 +61,14 @@ export class DetallePagoConsolidadoDialogComponent implements OnInit {
   labelBeneficiario = 'Beneficiario';
   descuentoTexto = '';
   motivoDescuento = '';
+  puedeAnular = false; // Se calcula en cargar() según el concepto del pago
 
   constructor(
     private repo: RepositoryService,
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
     private dialogRef: MatDialogRef<DetallePagoConsolidadoDialogComponent>,
+    private permissionService: PermissionService,
     @Inject(MAT_DIALOG_DATA) public data: DetallePagoConsolidadoData,
   ) {}
 
@@ -108,6 +111,19 @@ export class DetallePagoConsolidadoDialogComponent implements OnInit {
       this.totalTexto = `${res?.monedaSimbolo || ''} ${this.fmt(res?.montoTotal, res?.decimales ?? 0)}`.trim();
       this.estaAnulado = res?.estado === 'ANULADO';
       this.tituloEstado = this.estaAnulado ? 'ANULADO' : '';
+
+      // Verificar permiso de anulación según el concepto del pago
+      // (mismo mapping que pago-consolidado-adapters.ts en el backend)
+      const concepto = res?.concepto;
+      let permisoAnular = '';
+      switch (concepto) {
+        case 'PAGAR_GASTO': permisoAnular = 'CAJA_MAYOR_OPERAR'; break;
+        case 'PAGAR_VALE': permisoAnular = 'RRHH_VALE_CONFIRMAR'; break;
+        case 'PAGAR_CPP': permisoAnular = 'COMPRAS_GESTIONAR'; break;
+        case 'PAGAR_COMPRA': permisoAnular = 'COMPRAS_GESTIONAR'; break;
+        case 'COBRO_CLIENTE': permisoAnular = 'CPC_ANULAR'; break;
+      }
+      this.puedeAnular = permisoAnular ? this.permissionService.has(permisoAnular) : false;
     } catch (e: any) {
       console.error('Error cargando detalle del pago', e);
       this.snackBar.open(e?.message || 'No se pudo cargar el detalle', 'Cerrar', { duration: 5000 });

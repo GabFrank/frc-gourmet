@@ -65,7 +65,7 @@
   <div class="detalle-footer" *ngIf="!loading">
     <button mat-button (click)="cerrar()">Cerrar</button>
     <span class="detalle-spacer"></span>
-    <button mat-flat-button color="warn" *ngIf="!estaAnulado" [disabled]="anulando" (click)="anular()">
+    <button mat-flat-button color="warn" *ngIf="!estaAnulado && puedeAnular" [disabled]="anulando" (click)="anular()">
       <mat-icon>undo</mat-icon> {{ labelAnular }}
     </button>
   </div>
