@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { CuentaBancariaDestino } from '../../src/app/database/entities/financiero/cuenta-bancaria-destino.entity';
 import { Persona } from '../../src/app/database/entities/personas/persona.entity';
+import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { ensurePermission } from '../utils/auth.utils';
 
@@ -16,7 +17,7 @@ import { ensurePermission } from '../utils/auth.utils';
  */
 export function registerCuentasBancariasDestinoHandlers(
   dataSource: DataSource,
-  getCurrentUser: () => { id: number; email: string } | undefined,
+  getCurrentUser: () => Usuario | null,
 ) {
   // ── CREATE ──
   ipcMain.handle(
@@ -59,7 +60,7 @@ export function registerCuentasBancariasDestinoHandlers(
         activo: true,
       });
 
-      setEntityUserTracking(cuenta, getCurrentUser(), 'create');
+      setEntityUserTracking(dataSource, cuenta, getCurrentUser()?.id, false);
       const saved = await repo.save(cuenta);
 
       // Hidratar relaciones
@@ -108,7 +109,7 @@ export function registerCuentasBancariasDestinoHandlers(
         titular, // Re-derivado
       });
 
-      setEntityUserTracking(cuenta, getCurrentUser(), 'update');
+      setEntityUserTracking(dataSource, cuenta, getCurrentUser()?.id, true);
       const saved = await repo.save(cuenta);
 
       return await repo.findOne({
@@ -145,7 +146,7 @@ export function registerCuentasBancariasDestinoHandlers(
 
     // Soft delete
     cuenta.activo = false;
-    setEntityUserTracking(cuenta, getCurrentUser(), 'update');
+    setEntityUserTracking(dataSource, cuenta, getCurrentUser()?.id, true);
     await repo.save(cuenta);
 
     return { id, activo: false };
