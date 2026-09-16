@@ -52,6 +52,10 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'CPC_ANULAR', descripcion: 'Anular cobros de cuotas de clientes', modulo: 'FINANCIERO' },
   { codigo: 'CPC_DESCUENTO', descripcion: 'Conceder descuentos al cobrar cuentas por cobrar', modulo: 'FINANCIERO' },
   { codigo: 'CPC_CANCELAR', descripcion: 'Cancelar cuentas por cobrar', modulo: 'FINANCIERO' },
+  // Cuentas Bancarias Destino (Fase 1 MVP - Proveedores)
+  { codigo: 'FINANCIERO_CTA_BANCARIA_DESTINO_CREAR', descripcion: 'Crear cuenta bancaria destino (terceros)', modulo: 'FINANCIERO' },
+  { codigo: 'FINANCIERO_CTA_BANCARIA_DESTINO_ACTUALIZAR', descripcion: 'Actualizar cuenta bancaria destino', modulo: 'FINANCIERO' },
+  { codigo: 'FINANCIERO_CTA_BANCARIA_DESTINO_ELIMINAR', descripcion: 'Eliminar cuenta bancaria destino', modulo: 'FINANCIERO' },
   // RRHH Fase 8 - Dashboard, Notificaciones y Reportes
   { codigo: 'RRHH_DASHBOARD_VER', descripcion: 'Ver dashboard de RRHH con KPIs', modulo: 'RRHH' },
   { codigo: 'RRHH_REPORTE_GENERAR', descripcion: 'Generar y exportar reportes RRHH (PDF/Excel)', modulo: 'RRHH' },
