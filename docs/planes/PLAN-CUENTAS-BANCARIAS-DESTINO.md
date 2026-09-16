@@ -4,8 +4,17 @@
 **Fecha:** 2026-09-16  
 **Ticket:** WA DonFranco#n7jr  
 **Rama:** `cursor/analisis-cuentas-bancarias-destino-539d`  
-**Estado:** ANÁLISIS (no implementado)  
-**Decisión final:** Modelo HÍBRIDO aprobado por Gabriel 2026-09-16
+**Estado:** ENMENDADO CON AUDITS A+B (listo para implementar)  
+**Decisión final:** Modelo HÍBRIDO aprobado por Gabriel 2026-09-16  
+**Auditorías:** A (Alcance/Convenciones) + B (Correctitud/Entidad) — 3 P0 incorporados
+
+**Cambios post-auditoría:**
+1. **Titular desnormalizado** en `CuentaBancariaDestino` (readonly UI, derivado Persona) — vs `CuentaBancaria.titular` libre
+2. **Timestamp migraciones:** NUNCA redondeado, generar epoch-ms real con `python3`
+3. **Proveedor.persona nullable:** Query diagnóstico obligatorio, badge UI si falta, vincular en Fase 1 si >10%
+4. **MovimientoBancario.cuenta_bancaria_destino_id:** FK además de descripción enriquecida (queryable)
+5. **Lectura pública sin permiso:** Diseño documentado en `domains/cuentas-bancarias.md` (path evolución `_VER`)
+6. **`domains/cuentas-bancarias.md`:** OBLIGATORIO ANTES DE MERGE (diferencia empresa vs destino)
 
 ---
 
@@ -177,9 +186,11 @@ export class CuentaBancariaDestino extends BaseModel {
   @Column({ type: 'varchar', length: 100, nullable: true })
   alias?: string;
 
-  // TITULAR derivado de Persona (no campo libre)
-  // Se calcula en runtime: `${persona.nombre} ${persona.apellido || ''}`
-  // O se desnormaliza al guardar (decision de implementacion)
+  // TITULAR derivado de Persona (no campo libre) — READONLY en UI
+  // IMPORTANTE: Distinto de CuentaBancaria.titular (empresa, string editable)
+  // Se desnormaliza al guardar para consistencia con empresa
+  @Column({ type: 'varchar', length: 200, name: 'titular' })
+  titular!: string;  // Poblado automáticamente desde Persona
 
   @ManyToOne(() => Moneda, { nullable: false, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'moneda_id' })
@@ -267,7 +278,13 @@ CREATE INDEX idx_funcionario_cta_default ON funcionarios(cuenta_bancaria_default
 
 ### 4.5. Migración
 
-**Nombre:** `1737063600000-CuentasBancariasDestinoHibrido.ts` (timestamp real epoch-ms)
+**IMPORTANTE:** Timestamp DEBE ser epoch-ms REAL (no redondeado). Generar con:
+```bash
+python3 -c "import time;print(int(time.time()*1000))"
+```
+**NUNCA usar números redondeados** (ej. `1737063600000`) — causan colisiones entre branches.
+
+**Nombre:** `<TIMESTAMP_REAL>-CuentasBancariasDestinoHibrido.ts` (timestamp generado al crear archivo)
 
 **up (driver-aware):**
 
@@ -335,6 +352,9 @@ CREATE INDEX idx_funcionario_cta_default ON funcionarios(cuenta_bancaria_default
 
 **`get-cuentas-bancarias-destino-by-persona`**
 - **Lectura pública** (sin permiso)
+- **DECISIÓN AUDIT A:** Consistente con mayoría de catálogos (ej. `get-producto`).
+  Documentar en `domains/cuentas-bancarias.md` que es lectura pública por diseño.
+  Path de evolución: agregar `FINANCIERO_CTA_BANCARIA_DESTINO_VER` en fase futura si se necesita restricción.
 - **Input:** `{ personaId, incluirInactivas? }`
 - **Output:** Array de cuentas de esa persona
 - Útil para cargar dropdown al vincular proveedor → cuenta
@@ -415,7 +435,26 @@ cuentaBancariaDestino?: CuentaBancariaDestino;
 cuentaBancariaDestinoId?: number;
 ```
 
-**Migración aparte:** `1737063700000-PagoConsolidadoDetalleCuentaDestino.ts` — agrega columna + índice.
+**Migración aparte:** `<TIMESTAMP_REAL>-PagoConsolidadoDetalleCuentaDestino.ts` — agrega columna + índice.
+
+**HALLAZGO AUDIT B #4:** Entidad `MovimientoBancario` también debe ganar columna FK:
+
+```typescript
+@ManyToOne(() => CuentaBancariaDestino, { nullable: true, createForeignKeyConstraints: false })
+@JoinColumn({ name: 'cuenta_bancaria_destino_id' })
+cuentaBancariaDestino?: CuentaBancariaDestino;
+
+@Column({ type: 'int', name: 'cuenta_bancaria_destino_id', nullable: true })
+cuentaBancariaDestinoId?: number;
+```
+
+**Justificación:**
+- Solo enriquecer `observacion` (string) no es queryable para match de comprobantes
+- FK permite búsquedas eficientes de movimientos por cuenta destino
+- Descripción enriquecida se mantiene para legibilidad humana
+- Índice: `idx_mov_bancario_destino ON movimientos_bancarios(cuenta_bancaria_destino_id)`
+
+**Migración aparte:** `<TIMESTAMP_REAL>-MovimientoBancarioCuentaDestino.ts` — agrega columna + índice.
 
 ### 5.3. Permisos nuevos
 
@@ -803,37 +842,44 @@ Si en el futuro se quiere ayudar a cargar datos legacy:
 ### Fase 1: Fundamentos (MVP) — Proveedores únicamente
 **Alcance:**
 
-- Entidad `CuentaBancariaDestino` (FK a `Persona`) + migración dual
+- Entidad `CuentaBancariaDestino` (FK a `Persona`, titular desnormalizado) + migración dual
 - Columna `cuenta_bancaria_default_id` en `Proveedor` + migración
 - Columna `cuenta_bancaria_destino_id` en `PagoConsolidadoDetalle` + migración
+- Columna `cuenta_bancaria_destino_id` en `MovimientoBancario` + migración (AUDIT B #4)
 - Handlers CRUD + permisos (3 nuevos, seed)
 - Modificar `update-proveedor` para aceptar `cuentaBancariaDefaultId`
 - Modificar `registrar-pago-consolidado` para resolver destino y validar
 - UI desktop:
   - Componente `selector-cuenta-destino`
-  - Diálogo `create-edit-cuenta-destino`
+  - Diálogo `create-edit-cuenta-destino` (titular readonly, derivado de Persona)
   - Diálogo `list-cuentas-persona`
-  - Integración en `create-edit-proveedor` (subsección cuenta de cobro)
+  - Integración en `create-edit-proveedor` (subsección cuenta de cobro + badge si falta persona)
   - Confirmación enriquecida en `pagar-obligaciones-dialog`
 - Mobile: Solo lectura (mostrar cuenta default en proveedor detalle)
-- Descripción enriquecida en `MovimientoBancario`
+- Descripción enriquecida en `MovimientoBancario` + FK `cuenta_bancaria_destino_id`
+- **Query diagnóstico documentado** para proveedores sin persona (ver Riesgo 1)
 
 **Entregables:**
-- Migraciones OK en ambos drivers (3 migraciones)
-- Tests: `npm run test:cuenta-destino-hibrido` (20 asserts):
-  - Crear cuenta para persona
+- Migraciones OK en ambos drivers (4 migraciones: entidad + 3 FKs con timestamp REAL)
+- Tests: `npm run test:cuenta-destino-hibrido` (mínimo 20 asserts):
+  - Crear cuenta para persona (titular se deriva)
   - Vincular cuenta a proveedor como default
   - Pago consolidado con validación de destino
   - Desactivar cuenta rechaza si es default de proveedor activo
-  - Titular se deriva de persona
+  - Titular se deriva de persona (readonly en UI)
   - UPPERCASE aplicado
+  - MovimientoBancario persiste FK cuenta_bancaria_destino_id
 - Manual: `docs/testing/TESTING-CHECKLIST-CUENTAS-DESTINO.md`
 - Actualizar docs:
   - `reference/entities-index.md` (agregar `CuentaBancariaDestino`)
-  - `reference/handlers-index.md` (agregar 4 handlers)
+  - `reference/handlers-index.md` (agregar 5 handlers)
   - `domains/financiero-caja-mayor.md` (sección pago consolidado + destinos)
   - `domains/compras-cpp.md` (mencionar cuentas destino)
-  - Nuevo: `domains/cuentas-bancarias.md` (diferencia empresa vs destino)
+  - **OBLIGATORIO ANTES DE MERGE:** Nuevo `domains/cuentas-bancarias.md` (AUDIT A #1):
+    - Diferencia CRÍTICA empresa vs destino (tabla comparativa)
+    - Titular: empresa=string libre editable, destino=derivado Persona readonly
+    - Lectura pública sin permiso: diseño documentado (AUDIT A #2)
+    - Comentarios en entidades: `// EMPRESA (activo con saldo)` vs `// DESTINO terceros (sin saldo)`
 
 ### Fase 2: Expansión a Funcionarios
 **Alcance:**
@@ -886,10 +932,16 @@ Si se necesita que un proveedor tenga cuentas default DISTINTAS por moneda (ej. 
 
 **Impacto:** No se puede derivar cuenta destino → error.
 
+**HALLAZGO AUDIT B:** `Proveedor.persona` es nullable en código real. Diagnóstico previo OBLIGATORIO.
+
 **Mitigación:**
+- **ANTES de Fase 1:** Ejecutar query diagnóstico documentado:
+  ```sql
+  SELECT COUNT(*) FROM proveedores WHERE activo = 1 AND persona_id IS NULL;
+  ```
 - Validar en `registrar-pago-consolidado`: si línea es bancaria pero `proveedor.persona` es null → error: *"El proveedor X no tiene persona vinculada. Agregá una en su ficha para configurar cuenta de cobro."*
 - UI de proveedor: mostrar prominentemente si falta persona (badge ROJO: "SIN PERSONA VINCULADA")
-- En el flujo de pago, permitir crear persona+cuenta en línea (quick-create, Fase 2)
+- Si diagnóstico revela >10% proveedores sin persona: agregar handler `vincular-persona-a-proveedor` (quick-create) en Fase 1
 
 ### Riesgo 2: Desactivar persona desactiva sus cuentas implícitamente
 **Descripción:** Usuario desactiva `Persona` → sus cuentas quedan "huérfanas" (activas pero con persona inactiva).
