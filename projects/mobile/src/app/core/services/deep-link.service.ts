@@ -1,5 +1,8 @@
 import { inject, Injectable } from '@angular/core';
 import { Router } from '@angular/router';
+import { PermissionService } from '@frc/shared-core';
+import { firstValueFrom, timeout, of } from 'rxjs';
+import { filter } from 'rxjs/operators';
 
 export interface DeepLinkParsed {
   tipo: 'compra' | 'gasto' | 'vale' | 'pago';
@@ -25,6 +28,7 @@ export interface DeepLinkParsed {
 })
 export class DeepLinkService {
   private readonly router = inject(Router);
+  private readonly permission = inject(PermissionService);
 
   /**
    * Parsea un deep link desde hash o URL completa.
@@ -81,6 +85,9 @@ export class DeepLinkService {
    * - permisoGuard (valida permiso de la ruta)
    * - lazy loading de componentes
    * 
+   * P0 FIX (2026-09-16): espera a que los permisos estén cargados antes de navegar,
+   * para evitar que permisoGuard rechace por permisos vacíos (especialmente en admin seed).
+   * 
    * @param url Hash o URL completa con deep link
    * @returns Promise de navegación (resolve true/false)
    */
@@ -89,6 +96,27 @@ export class DeepLinkService {
     if (!parsed) {
       console.warn('[DeepLink] Formato inválido, no se navega:', url);
       return false;
+    }
+
+    // P0 FIX: esperar a que los permisos estén cargados (max 3s)
+    // Evita rechazo prematuro cuando permisoGuard evalúa con codigos$ vacío
+    try {
+      const currentPerms = await firstValueFrom(this.permission.codigos$);
+      const permCount = currentPerms.size;
+      if (permCount === 0) {
+        console.log('[DeepLink] Esperando carga de permisos antes de navegar...');
+        const loadedPerms = await firstValueFrom(
+          this.permission.codigos$.pipe(
+            filter(set => set.size > 0),
+            timeout({ first: 3000, with: () => of(new Set<string>()) })
+          )
+        );
+        console.log('[DeepLink] Permisos cargados:', loadedPerms.size);
+      } else {
+        console.log('[DeepLink] Permisos ya disponibles:', permCount);
+      }
+    } catch (err) {
+      console.warn('[DeepLink] Timeout esperando permisos, navegando de todos modos:', err);
     }
 
     // P0 FIX: compra → ruta real /compras/lista/:id (ya tiene guards)
@@ -100,6 +128,10 @@ export class DeepLinkService {
     console.log('[DeepLink] Navegando a:', rutaPath);
 
     // Navegar (Router aplica guards automáticamente)
-    return this.router.navigateByUrl(rutaPath);
+    const result = await this.router.navigateByUrl(rutaPath);
+    
+    console.log('[DeepLink] Resultado de navegación:', result ? 'ÉXITO' : 'FALLO (guard/redirect)');
+    
+    return result;
   }
 }

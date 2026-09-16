@@ -1,4 +1,5 @@
-import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, NgZone, OnDestroy, OnInit, inject } from '@angular/core';
+import { Location } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { AuthService } from '@frc/shared-core';
@@ -22,6 +23,8 @@ import { DeepLinkService } from './core/services/deep-link.service';
 export class AppComponent implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly deepLinkService = inject(DeepLinkService);
+  private readonly ngZone = inject(NgZone);
+  private readonly location = inject(Location);
   private sub?: Subscription;
   private hashChangeHandler?: () => void;
   private popstateHandler?: () => void;
@@ -79,10 +82,7 @@ export class AppComponent implements OnInit, OnDestroy {
     // Si ya logueado → navegar inmediatamente
     if (this.auth.isLoggedIn) {
       console.log('[DeepLink] hash detectado vía init:', hash);
-      this.lastProcessedHash = hash;
-      this.deepLinkService.translateAndNavigate(hash).catch((err) => {
-        console.error('[DeepLink] Error navegando:', err);
-      });
+      void this.attemptNavigateDeepLink(hash);
       return;
     }
 
@@ -94,10 +94,7 @@ export class AppComponent implements OnInit, OnDestroy {
       setTimeout(() => {
         if (this.auth.isLoggedIn) {
           console.log('[DeepLink] Token hidratado, navegando:', hash);
-          this.lastProcessedHash = hash;
-          this.deepLinkService.translateAndNavigate(hash).catch((err) => {
-            console.error('[DeepLink] Error navegando:', err);
-          });
+          void this.attemptNavigateDeepLink(hash);
         } else {
           console.log('[DeepLink] Token inválido o expirado, authGuard manejará');
         }
@@ -108,12 +105,42 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * P0 FIX: intenta navegar a un deep link de forma segura dentro de NgZone.
+   * - Marca lastProcessedHash SOLO si navegación exitosa
+   * - Limpia el hash de la URL después de navegación exitosa
+   * - Loggea el resultado para debugging
+   */
+  private async attemptNavigateDeepLink(hash: string): Promise<void> {
+    // NgZone.run asegura que el change detection se dispare
+    await this.ngZone.run(async () => {
+      try {
+        const success = await this.deepLinkService.translateAndNavigate(hash);
+        
+        if (success) {
+          console.log('[DeepLink] Navegación EXITOSA a:', hash);
+          this.lastProcessedHash = hash;
+          
+          // Limpiar hash de la URL (evita confusión /o/gasto/1#/o/gasto/1)
+          // Usa replaceState para no agregar entrada al historial
+          this.location.replaceState(this.location.path());
+        } else {
+          console.warn('[DeepLink] Navegación RECHAZADA (probablemente por guard):', hash);
+          // NO marcar lastProcessedHash para permitir reintentos
+        }
+      } catch (err) {
+        console.error('[DeepLink] Error navegando:', hash, err);
+        // NO marcar lastProcessedHash para permitir reintentos
+      }
+    });
+  }
+
+  /**
    * Configura listener para deep links mid-session.
    * 
    * Flujo:
    * - Usuario ya logueado toca link de WhatsApp → window.location.hash cambia
    * - Evento hashchange se dispara
-   * - Si es deep link (#/o/...) → translateAndNavigate()
+   * - Si es deep link (#/o/...) → attemptNavigateDeepLink()
    * - Si NO logueado → verificar token storage y reintentar
    * 
    * P1 OBLIGATORIO: fallback si 'onhashchange' no está soportado (navegadores muy viejos)
@@ -136,10 +163,7 @@ export class AppComponent implements OnInit, OnDestroy {
       // Si logueado → navegar inmediatamente
       if (this.auth.isLoggedIn) {
         console.log('[DeepLink] hash detectado vía hashchange:', hash);
-        this.lastProcessedHash = hash;
-        this.deepLinkService.translateAndNavigate(hash).catch((err) => {
-          console.error('[DeepLink] Error navegando:', err);
-        });
+        void this.attemptNavigateDeepLink(hash);
         return;
       }
 
@@ -150,10 +174,7 @@ export class AppComponent implements OnInit, OnDestroy {
         setTimeout(() => {
           if (this.auth.isLoggedIn) {
             console.log('[DeepLink] Token hidratado, navegando:', hash);
-            this.lastProcessedHash = hash;
-            this.deepLinkService.translateAndNavigate(hash).catch((err) => {
-              console.error('[DeepLink] Error navegando:', err);
-            });
+            void this.attemptNavigateDeepLink(hash);
           } else {
             console.log('[DeepLink] Token inválido, authGuard manejará');
           }
@@ -183,10 +204,7 @@ export class AppComponent implements OnInit, OnDestroy {
       // Si logueado → navegar inmediatamente
       if (this.auth.isLoggedIn) {
         console.log('[DeepLink] hash detectado vía popstate:', hash);
-        this.lastProcessedHash = hash;
-        this.deepLinkService.translateAndNavigate(hash).catch((err) => {
-          console.error('[DeepLink] Error navegando:', err);
-        });
+        void this.attemptNavigateDeepLink(hash);
         return;
       }
 
@@ -197,10 +215,7 @@ export class AppComponent implements OnInit, OnDestroy {
         setTimeout(() => {
           if (this.auth.isLoggedIn) {
             console.log('[DeepLink] Token hidratado, navegando:', hash);
-            this.lastProcessedHash = hash;
-            this.deepLinkService.translateAndNavigate(hash).catch((err) => {
-              console.error('[DeepLink] Error navegando:', err);
-            });
+            void this.attemptNavigateDeepLink(hash);
           } else {
             console.log('[DeepLink] Token inválido, authGuard manejará');
           }
@@ -218,7 +233,7 @@ export class AppComponent implements OnInit, OnDestroy {
    * no dispara hashchange event, pero el hash SÍ cambia en la URL.
    * 
    * Solución: poll corto (300ms) comparando window.location.hash con lastProcessedHash.
-   * Si detectamos un deep link nuevo y hay sesión → translateAndNavigate.
+   * Si detectamos un deep link nuevo y hay sesión → attemptNavigateDeepLink.
    */
   private setupHashPolling(): void {
     this.hashPollInterval = setInterval(() => {
@@ -231,10 +246,7 @@ export class AppComponent implements OnInit, OnDestroy {
       // Si logueado → navegar inmediatamente
       if (this.auth.isLoggedIn) {
         console.log('[DeepLink] hash detectado vía poll:', hash);
-        this.lastProcessedHash = hash;
-        this.deepLinkService.translateAndNavigate(hash).catch((err) => {
-          console.error('[DeepLink] Error navegando:', err);
-        });
+        void this.attemptNavigateDeepLink(hash);
         return;
       }
 
@@ -245,10 +257,7 @@ export class AppComponent implements OnInit, OnDestroy {
         setTimeout(() => {
           if (this.auth.isLoggedIn && window.location.hash === hash) {
             console.log('[DeepLink] Token hidratado, navegando:', hash);
-            this.lastProcessedHash = hash;
-            this.deepLinkService.translateAndNavigate(hash).catch((err) => {
-              console.error('[DeepLink] Error navegando:', err);
-            });
+            void this.attemptNavigateDeepLink(hash);
           }
         }, 150);
       }
