@@ -40,15 +40,22 @@ export function initializeDeepLinks(): () => Promise<void> {
 
     console.log('[AppInitializer] Deep link detectado en cold start:', initialHash);
 
+    // P0 FIX: no confiar en isLoggedIn síncrono temprano — leer token mobile
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('frc_mobile_access_token') : null;
+    
     // Si usuario ya logueado → navegar inmediatamente
-    // Si NO logueado → dejar que authGuard maneje con returnUrl
+    // Si NO logueado pero hay token → dejar que AppComponent lo maneje tras hidratación
+    // Si NO logueado y sin token → authGuard manejará con returnUrl
     if (authService.isLoggedIn) {
       console.log('[AppInitializer] Usuario logueado, navegando a deep link');
       
       // P0 FIX: sin dummy navigation — router ya ready, evita flash Home
       await deepLinkService.translateAndNavigate(initialHash);
+    } else if (token) {
+      console.log('[AppInitializer] Token presente pero isLoggedIn=false, AppComponent manejará tras hidratación');
+      // NO navegar aquí — dejar que AppComponent.processExistingHash() lo maneje
     } else {
-      console.log('[AppInitializer] Usuario NO logueado, authGuard manejará con returnUrl');
+      console.log('[AppInitializer] Usuario NO logueado y sin token, authGuard manejará con returnUrl');
       // authGuard interceptará la navegación y añadirá returnUrl automáticamente
     }
   };
