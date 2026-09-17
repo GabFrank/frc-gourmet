@@ -12,6 +12,7 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatChipsModule } from '@angular/material/chips';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
@@ -34,9 +35,13 @@ import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/a
     MatSlideToggleModule,
     MatProgressSpinnerModule,
     MatSnackBarModule,
+    MatChipsModule,
   ],
   template: `
-    <h2 mat-dialog-title>{{ modoConfirmar ? 'Registrar egreso por vale' : 'Crear vale / adelanto' }}</h2>
+    <h2 mat-dialog-title>
+      {{ readonly ? 'Detalle Vale #' + valeId : (modoConfirmar ? 'Registrar egreso por vale' : 'Crear vale / adelanto') }}
+      <mat-chip *ngIf="readonly" color="accent" style="margin-left: 12px; vertical-align: middle;">Solo lectura</mat-chip>
+    </h2>
     <mat-dialog-content class="dialog-content">
       <div *ngIf="loading" class="spinner"><mat-progress-spinner mode="indeterminate" diameter="40"></mat-progress-spinner></div>
       <form [formGroup]="form" *ngIf="!loading" class="form">
@@ -124,8 +129,8 @@ import { convertirMonto, requiereCotizacion, cotizacionMercadoPara } from 'src/a
       </form>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button mat-button (click)="cancel()" [disabled]="saving">Cancelar</button>
-      <button mat-flat-button color="primary" (click)="submit()" [disabled]="form.invalid || saving">
+      <button mat-button (click)="cancel()" [disabled]="saving">{{ readonly ? 'Cerrar' : 'Cancelar' }}</button>
+      <button *ngIf="!readonly" mat-flat-button color="primary" (click)="submit()" [disabled]="form.invalid || saving">
         {{ modoConfirmar ? 'Registrar egreso (CONFIRMADO)' : 'Crear (estado SOLICITADO)' }}
       </button>
     </mat-dialog-actions>
@@ -163,6 +168,10 @@ export class CreateEditValeDialogComponent implements OnInit {
    * pago diferido. Borrar esta rama del desktop está anotado en el backlog.
    */
   modoConfirmar = false;
+  /** Modo read-only (deep link): deshabilita formulario, oculta botones de submit. */
+  readonly = false;
+  /** ID del vale a cargar (si está en modo readonly). */
+  valeId: number | null = null;
 
   requiereCotiz = false;
   montoConvertido = 0;
@@ -178,6 +187,8 @@ export class CreateEditValeDialogComponent implements OnInit {
     private dialog: MatDialog,
   ) {
     this.modoConfirmar = !!data?.modoConfirmar;
+    this.readonly = !!data?.readonly;
+    this.valeId = data?.valeId || null;
     this.form = this.fb.group({
       funcionarioId: [null, Validators.required],
       motivoId: [null],
@@ -291,10 +302,54 @@ export class CreateEditValeDialogComponent implements OnInit {
           error: () => { this.cotizMercado = null; },
         });
       }
+
+      // Si es readonly y hay valeId, cargar el vale
+      if (this.readonly && this.valeId) {
+        await this.loadVale(this.valeId);
+      }
+
+      // Si es readonly, deshabilitar el formulario
+      if (this.readonly) {
+        this.form.disable();
+      }
     } catch (e) {
       console.error(e);
     } finally {
       this.loading = false;
+    }
+  }
+
+  private async loadVale(valeId: number): Promise<void> {
+    try {
+      const vale = await firstValueFrom(this.repositoryService.getVale(valeId));
+      if (!vale) {
+        this.snackBar.open(`No se encontró el vale con ID ${valeId}`, 'Cerrar', {
+          duration: 5000,
+          panelClass: 'error-snackbar',
+        });
+        return;
+      }
+
+      this.form.patchValue({
+        funcionarioId: vale.funcionario?.id,
+        motivoId: vale.motivo?.id || null,
+        monto: Number(vale.monto),
+        fecha: vale.fecha ? new Date(vale.fecha) : new Date(),
+        monedaId: vale.moneda?.id,
+        fuente: vale.cuentaBancariaId ? 'CUENTA_BANCARIA' : 'CAJA_MAYOR',
+        cajaMayorId: vale.cajaMayor?.id || null,
+        formaPagoId: vale.formaPago?.id || null,
+        cuentaBancariaId: vale.cuentaBancariaId || null,
+        cotizacion: vale.cotizacion || null,
+        descripcion: vale.descripcion || '',
+        esAdelanto: vale.esAdelanto || false,
+      });
+    } catch (error: any) {
+      console.error('Error cargando vale:', error);
+      this.snackBar.open(`Error al cargar vale: ${error?.message || 'desconocido'}`, 'Cerrar', {
+        duration: 6000,
+        panelClass: 'error-snackbar',
+      });
     }
   }
 

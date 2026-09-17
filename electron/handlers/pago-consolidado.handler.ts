@@ -34,6 +34,7 @@ import {
 import { CajaMayorConfiguracion } from '../../src/app/database/entities/financiero/caja-mayor-configuracion.entity';
 import { CajaMayor } from '../../src/app/database/entities/financiero/caja-mayor.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { Permission } from '../../src/app/database/entities/personas/permission.entity';
 
 import { ensurePermission } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
@@ -504,7 +505,29 @@ export function registerPagoConsolidadoHandlers(
         relations: ['monedaDeuda', 'responsable', 'responsable.persona'],
       });
       if (!pago) throw new Error(`Pago consolidado ${pagoId} no encontrado`);
-      await ensurePermission(dataSource, getCurrentUser, getAdapter(pago.concepto).permiso);
+      
+      // Permiso para ver: FINANCIERO_PAGO_CONSOLIDADO_VER (genérico) o el permiso del concepto específico
+      // Usamos checkPermission para evitar raw SQL que falla en Postgres con `?`
+      const user = getCurrentUser();
+      if (!user?.id) throw new Error('NO_PERMISSION: Usuario no autenticado');
+      
+      const permisoGenerico = 'FINANCIERO_PAGO_CONSOLIDADO_VER';
+      const permisoConcepto = getAdapter(pago.concepto).permiso;
+      
+      // Verificar con QueryBuilder (compatible SQLite + Postgres)
+      const permisos = await dataSource.getRepository(Permission)
+        .createQueryBuilder('p')
+        .innerJoin('role_permissions', 'rp', 'rp.permission_id = p.id')
+        .innerJoin('usuario_roles', 'ur', 'ur.role_id = rp.role_id')
+        .where('ur.usuario_id = :uid', { uid: user.id })
+        .andWhere('p.codigo IN (:...codigos)', { codigos: [permisoGenerico, permisoConcepto] })
+        .select('p.codigo')
+        .distinct(true)
+        .getRawMany();
+      
+      if (!permisos || permisos.length === 0) {
+        throw new Error(`NO_PERMISSION: Se requiere ${permisoGenerico} o ${permisoConcepto}`);
+      }
 
       const detalles = await dataSource.getRepository(PagoConsolidadoDetalle).find({
         where: { pagoConsolidadoId: pagoId },

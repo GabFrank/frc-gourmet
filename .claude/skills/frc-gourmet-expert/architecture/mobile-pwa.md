@@ -313,6 +313,31 @@ pantalla:
   si dependiera del período, elegir una caja podría sacarla de la lista y dejar al
   usuario sin poder deseleccionarla.
 
+## Deep links mobile (2026-09-15)
+
+**Branch:** `cursor/plan-deep-links-ops-259f` (PR #305)  
+**Contrato URL:** `https://app.frc-gourmet.com/#/o/{tipo}/{id}` (hash para compatibilidad con WhatsApp/desktop)
+
+Mobile intercepta el hash y traduce a path routing:
+- **APP_INITIALIZER** (`app.initializer.ts`): procesa hash en cold start (sin race).
+- **hashchange listener** (`AppComponent`): procesa hash mid-session (usuario logueado toca link).
+- **DeepLinkService** (`core/services/deep-link.service.ts`): parsea hash → navega a ruta path `/o/{tipo}/{id}`.
+
+**Rutas deep-link:**
+- `/o/compra/:id` → redirect `/compras/lista/:id` (ya existía).
+- `/o/gasto/:id` → `GastoDetallePage` (readonly: categoría, detalles, sin adjuntos/editar).
+- `/o/vale/:id` → `ValeDetallePage` (readonly: funcionario, motivo, monto, sin confirmar/anular).
+- `/o/pago/:id` → `FeatureNotAvailablePage` (mensaje amigable: pago consolidado solo en desktop).
+
+**Permisos:** dual-check (arrays en `data.permiso`):
+- Gasto: `FINANCIERO_GASTO_VER` **O** `CAJA_MAYOR_OPERAR` (legacy).
+- Vale: `RRHH_VALE_VER` **O** `RRHH_VALE_CONFIRMAR` (legacy).
+
+**Auth/returnUrl:** ya funcionaba antes de deep links (móvil mejor que desktop).  
+**P5 cumplido:** 404 → snackbar + back (no rompe UI).
+
+---
+
 ## Reglas al construir pantallas
 
 1. **Verificar que exista el handler de escritura** (`create-X`/`update-X`/`delete-X`), no solo el método

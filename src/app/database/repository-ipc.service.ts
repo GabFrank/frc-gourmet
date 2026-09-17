@@ -3941,6 +3941,9 @@ export class RepositoryIpcService extends RepositoryService {
   deleteMotivoVale(id: number): Observable<any> {
     return from(this.api.deleteMotivoVale(id));
   }
+  getVale(id: number): Observable<any> {
+    return from(this.api.callIpc('get-vale', id));
+  }
   getVales(filtros?: any): Observable<any[]> {
     return from(this.api.getVales(filtros));
   }
