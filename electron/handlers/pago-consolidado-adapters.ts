@@ -90,7 +90,7 @@ export interface ConceptoAdapter {
    * el cliente: entre que se dibujo la pantalla y se confirmo el pago la deuda
    * pudo haberse saldado por otro camino.
    */
-  leerYBloquear(queryRunner: any, origenId: number): Promise<{ saldoPendiente: number; monedaId: number; descripcion: string; beneficiario: string | null }>;
+  leerYBloquear(queryRunner: any, origenId: number): Promise<{ saldoPendiente: number; monedaId: number; descripcion: string; beneficiario: string | null; beneficiarioId: number | null }>;
   /**
    * `montoDescuento` es la porcion de `monto` condonada al deudor (solo la usa el
    * cobro a cliente; los conceptos de egreso la ignoran).
@@ -227,6 +227,7 @@ const compraAdapter: ConceptoAdapter = {
       monedaId: Number(monedaId),
       descripcion: `CUOTA ${cuota.numero} — CPP #${cpp?.id}`,
       beneficiario: cpp?.proveedor?.nombre || null,
+      beneficiarioId: cpp?.proveedor?.id ?? null,
     };
   },
 
@@ -302,6 +303,7 @@ const gastoAdapter: ConceptoAdapter = {
       monedaId: Number(g.moneda.id),
       descripcion: `GASTO #${g.id}` + (g.gastoCategoria?.nombre ? ` (${g.gastoCategoria.nombre})` : ''),
       beneficiario: g.proveedor?.nombre || null,
+      beneficiarioId: g.proveedor?.id ?? null,
     };
   },
 
@@ -388,6 +390,7 @@ const valeAdapter: ConceptoAdapter = {
       monedaId: Number(v.moneda.id),
       descripcion: `VALE #${v.id}`,
       beneficiario: nombre,
+      beneficiarioId: v.funcionario?.id ?? null,
     };
   },
 
@@ -477,6 +480,7 @@ const liquidacionAdapter: ConceptoAdapter = {
       monedaId: Number(l.monedaPago.id),
       descripcion: `LIQUIDACION ${l.periodo} #${l.id}`,
       beneficiario: nombre,
+      beneficiarioId: l.funcionario?.id ?? null,
     };
   },
 
@@ -647,6 +651,7 @@ const cobroClienteAdapter: ConceptoAdapter = {
       monedaId: Number(cpc.moneda.id),
       descripcion: `CUOTA ${cuota.numero} — CPC #${cpc.id}`,
       beneficiario: nombreCliente(cpc.cliente),
+      beneficiarioId: cpc.cliente?.id ?? null,
     };
   },
 

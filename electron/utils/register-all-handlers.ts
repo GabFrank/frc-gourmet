@@ -47,6 +47,7 @@ import { registerBusquedaGlobalHandlers } from '../handlers/busqueda-global.hand
 import { registerMenuConfigHandlers } from '../handlers/menu-config.handler';
 import { registerPdvEgresosHandlers } from '../handlers/pdv-egresos.handler';
 import { registerBankingHandlers } from '../handlers/banking.handler';
+import { registerCuentasBancariasDestinoHandlers } from '../handlers/cuentas-bancarias-destino.handler';
 import { registerCuentasPorPagarHandlers } from '../handlers/cuentas-por-pagar.handler';
 import { registerPagoConsolidadoHandlers } from '../handlers/pago-consolidado.handler';
 import { registerDashboardShortcutsHandlers } from '../handlers/dashboard-shortcuts.handler';
@@ -134,6 +135,7 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerMenuConfigHandlers(dataSource, getCurrentUser); // Config del menu (overrides del ADMIN sobre menu-tree)
   registerPdvEgresosHandlers(dataSource, getCurrentUser); // Vales/compras pagados desde el cajon (PdV)
   registerBankingHandlers(dataSource, getCurrentUser); // CuentasBancarias + MaquinasPos + Acreditaciones
+  registerCuentasBancariasDestinoHandlers(dataSource, getCurrentUser); // Cuentas Bancarias Destino (terceros, pago consolidado)
   registerCuentasPorPagarHandlers(dataSource, getCurrentUser); // CompraCategoria + CompraCuota + CuentaPorPagar
   registerPagoConsolidadoHandlers(dataSource, getCurrentUser); // Pago consolidado de obligaciones desde Caja Mayor
   registerDashboardShortcutsHandlers(dataSource, getCurrentUser); // Dashboard Shortcuts personalizables
