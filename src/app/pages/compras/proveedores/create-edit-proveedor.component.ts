@@ -203,9 +203,9 @@ import { CreateEditCuentaDestinoDialogComponent } from '../../../shared/dialogs/
 
     .persona-section {
       padding: 16px;
-      border: 1px solid rgba(0, 0, 0, 0.12);
+      border: 1px solid var(--border-color);
       border-radius: 4px;
-      background-color: rgba(0, 0, 0, 0.02);
+      background-color: var(--surface-hover);
       justify-content: space-between;
     }
 
@@ -216,7 +216,7 @@ import { CreateEditCuentaDestinoDialogComponent } from '../../../shared/dialogs/
     .persona-label {
       font-weight: 500;
       margin-bottom: 8px;
-      color: rgba(0, 0, 0, 0.6);
+      color: var(--text-secondary);
     }
 
     .persona-info {
@@ -226,15 +226,16 @@ import { CreateEditCuentaDestinoDialogComponent } from '../../../shared/dialogs/
 
     .persona-name {
       font-weight: 500;
+      color: var(--text-primary);
     }
 
     .persona-doc {
       font-size: 0.9em;
-      color: rgba(0, 0, 0, 0.6);
+      color: var(--text-secondary);
     }
 
     .persona-empty {
-      color: rgba(0, 0, 0, 0.4);
+      color: var(--text-disabled);
       font-style: italic;
     }
 
@@ -246,9 +247,9 @@ import { CreateEditCuentaDestinoDialogComponent } from '../../../shared/dialogs/
     .cuenta-bancaria-section {
       margin-top: 24px;
       padding: 16px;
-      border: 1px solid rgba(0, 0, 0, 0.12);
+      border: 1px solid var(--border-color);
       border-radius: 4px;
-      background-color: rgba(0, 0, 0, 0.01);
+      background-color: var(--surface-hover);
     }
 
     .section-header {
@@ -258,7 +259,7 @@ import { CreateEditCuentaDestinoDialogComponent } from '../../../shared/dialogs/
       font-weight: 500;
       font-size: 16px;
       margin-bottom: 16px;
-      color: rgba(0, 0, 0, 0.87);
+      color: var(--text-primary);
     }
 
     .section-header mat-icon {
@@ -273,7 +274,7 @@ import { CreateEditCuentaDestinoDialogComponent } from '../../../shared/dialogs/
       background-color: rgba(255, 152, 0, 0.1);
       border-left: 4px solid rgba(255, 152, 0, 1);
       border-radius: 4px;
-      color: rgba(0, 0, 0, 0.7);
+      color: var(--text-primary);
       font-size: 14px;
     }
 
@@ -313,23 +314,10 @@ import { CreateEditCuentaDestinoDialogComponent } from '../../../shared/dialogs/
       border-color: rgba(255, 152, 0, 0.3);
     }
 
-    /* Dark theme adjustments */
+    /* Dark theme: solo los acentos indigo, el resto sale de las variables de tema */
     :host-context(.dark-theme) {
-      .persona-section {
-        border-color: rgba(255, 255, 255, 0.12);
-        background-color: rgba(255, 255, 255, 0.05);
-      }
-
-      .persona-label {
-        color: rgba(255, 255, 255, 0.6);
-      }
-
-      .persona-doc {
-        color: rgba(255, 255, 255, 0.6);
-      }
-
-      .persona-empty {
-        color: rgba(255, 255, 255, 0.4);
+      .section-header mat-icon {
+        color: rgba(121, 134, 203, 0.9);
       }
     }
   `]

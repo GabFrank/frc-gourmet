@@ -178,7 +178,7 @@ const extraerMensajeError = (e: any): string => {
       align-items: center;
       gap: 8px;
       font-weight: 500;
-      color: rgba(0, 0, 0, 0.6);
+      color: var(--text-secondary);
       margin-bottom: 12px;
     }
 
@@ -200,19 +200,15 @@ const extraerMensajeError = (e: any): string => {
 
     .titular-hint {
       font-size: 12px;
-      color: rgba(0, 0, 0, 0.5);
+      color: var(--text-secondary);
       font-style: italic;
     }
 
-    /* Dark theme */
+    /* Dark theme: solo los acentos indigo, el texto sale de las variables de tema */
     :host-context(.dark-theme) {
       .titular-section {
         border-color: rgba(121, 134, 203, 0.3);
         background-color: rgba(121, 134, 203, 0.1);
-      }
-
-      .titular-label {
-        color: rgba(255, 255, 255, 0.7);
       }
 
       .titular-label mat-icon {
@@ -221,10 +217,6 @@ const extraerMensajeError = (e: any): string => {
 
       .titular-chip {
         background-color: rgb(121, 134, 203);
-      }
-
-      .titular-hint {
-        color: rgba(255, 255, 255, 0.5);
       }
     }
   `]

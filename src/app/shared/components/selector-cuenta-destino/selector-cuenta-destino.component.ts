@@ -66,6 +66,23 @@ import { firstValueFrom } from 'rxjs';
     .full-width {
       width: 100%;
     }
+
+    /* El valor seleccionado y los hints deben seguir el tema (claro/oscuro),
+       no un color fijo, para mantener contraste legible en ambos temas. */
+    :host ::ng-deep .mat-mdc-select-value,
+    :host ::ng-deep .mat-mdc-select-value-text,
+    :host ::ng-deep .mat-mdc-select-min-line {
+      color: var(--text-primary) !important;
+    }
+
+    :host ::ng-deep .mat-mdc-select-placeholder,
+    :host ::ng-deep .mat-mdc-select-arrow {
+      color: var(--text-secondary);
+    }
+
+    :host ::ng-deep .mat-mdc-form-field-hint {
+      color: var(--text-secondary);
+    }
   `]
 })
 export class SelectorCuentaDestinoComponent implements OnInit, OnChanges {
