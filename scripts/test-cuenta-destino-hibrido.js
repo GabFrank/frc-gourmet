@@ -207,19 +207,16 @@ async function test5_ProveedorSinPersonaValida() {
 
   const guardado = await repoProveedor.save(proveedorSinPersona);
 
-  // Simular validación del pago consolidado
+  // Cuenta destino OPCIONAL: sin persona el pago CUENTA_BANCARIA sigue (sin adjuntar destino)
   assert.strictEqual(guardado.personaId, null, 'personaId debe ser null');
-  assert.throws(
-    () => {
-      if (!guardado.personaId) {
-        throw new Error('El proveedor no tiene persona vinculada');
-      }
-    },
-    /no tiene persona vinculada/,
-    'Debe lanzar error si no tiene persona'
-  );
+  let cuentaDestinoResuelta = null;
+  if (guardado.personaId && guardado.cuentaBancariaDefaultId) {
+    cuentaDestinoResuelta = { id: guardado.cuentaBancariaDefaultId };
+  }
+  assert.strictEqual(cuentaDestinoResuelta, null, 'sin persona no se resuelve cuenta destino');
+  // pago continúa — no throw
 
-  console.log('✅ Validación proveedor sin persona funciona');
+  console.log('✅ Proveedor sin persona: pago consolidado no bloquea (destino opcional)');
 }
 
 async function test6_ProveedorSinCuentaValida() {
@@ -238,19 +235,16 @@ async function test6_ProveedorSinCuentaValida() {
 
   const guardado = await repoProveedor.save(proveedorSinCuenta);
 
-  // Simular validación del pago consolidado
+  // Cuenta destino OPCIONAL: sin cuenta default el pago sigue
   assert.strictEqual(guardado.cuentaBancariaDefaultId, null, 'cuentaBancariaDefaultId debe ser null');
-  assert.throws(
-    () => {
-      if (!guardado.cuentaBancariaDefaultId) {
-        throw new Error('El proveedor no tiene cuenta bancaria configurada');
-      }
-    },
-    /no tiene cuenta bancaria configurada/,
-    'Debe lanzar error si no tiene cuenta'
-  );
+  let cuentaDestinoResuelta = null;
+  if (guardado.personaId && guardado.cuentaBancariaDefaultId) {
+    cuentaDestinoResuelta = { id: guardado.cuentaBancariaDefaultId };
+  }
+  assert.strictEqual(cuentaDestinoResuelta, null, 'sin cuenta default no se resuelve destino');
+  // pago continúa — no throw
 
-  console.log('✅ Validación proveedor sin cuenta funciona');
+  console.log('✅ Proveedor sin cuenta: pago consolidado no bloquea (destino opcional)');
 }
 
 async function test7_TitularDesnormalizadoReadonly() {

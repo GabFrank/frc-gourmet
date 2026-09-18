@@ -178,7 +178,8 @@ export function registerPagoConsolidadoHandlers(
         const tieneBancarias = lineasPayload.some((l) => l.fuente === 'CUENTA_BANCARIA');
         if (tieneBancarias && concepto === 'COMPRA') {
           // Fase 1: solo proveedores. Cliente/Funcionario en fases 2-3.
-          // El beneficiario único ya está validado arriba.
+          // Cuenta destino OPCIONAL (Gabriel 2026-09-18): si hay persona+cuenta
+          // válida se adjunta al movimiento; si no, el pago bancario sigue igual.
           const beneficiarioId = meta[0].beneficiarioId;
           if (!beneficiarioId) {
             throw new Error('No se pudo identificar el proveedor para resolver la cuenta de cobro.');
@@ -190,30 +191,22 @@ export function registerPagoConsolidadoHandlers(
           if (!proveedor) {
             throw new Error(`Proveedor #${beneficiarioId} no encontrado.`);
           }
-          if (!proveedor.persona) {
-            throw new Error(
-              `El proveedor "${proveedor.nombre}" no tiene persona vinculada. ` +
-              `Vinculá una persona en su ficha para configurar cuenta de cobro.`
-            );
-          }
-          if (!proveedor.cuentaBancariaDefaultId) {
-            throw new Error(
-              `El proveedor "${proveedor.nombre}" no tiene cuenta bancaria configurada. ` +
-              `Agregá una en su ficha o pagá con otra forma de pago.`
-            );
-          }
           const cuenta = proveedor.cuentaBancariaDefault;
-          if (!cuenta || !cuenta.activo) {
-            throw new Error(
-              `La cuenta bancaria default del proveedor "${proveedor.nombre}" está desactivada.`
+          if (
+            proveedor.persona &&
+            proveedor.cuentaBancariaDefaultId &&
+            cuenta &&
+            cuenta.activo &&
+            cuenta.persona &&
+            cuenta.persona.activo
+          ) {
+            cuentaDestinoResuelta = cuenta;
+          } else {
+            console.warn(
+              `[pago-consolidado] Proveedor "${proveedor.nombre}" sin cuenta destino usable; ` +
+              `pago CUENTA_BANCARIA continúa sin cuentaBancariaDestinoId.`
             );
           }
-          if (!cuenta.persona || !cuenta.persona.activo) {
-            throw new Error(
-              `El titular de la cuenta bancaria del proveedor "${proveedor.nombre}" está desactivado.`
-            );
-          }
-          cuentaDestinoResuelta = cuenta;
         }
       }
 

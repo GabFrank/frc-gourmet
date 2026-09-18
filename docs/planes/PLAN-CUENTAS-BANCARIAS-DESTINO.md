@@ -939,7 +939,7 @@ Si se necesita que un proveedor tenga cuentas default DISTINTAS por moneda (ej. 
   ```sql
   SELECT COUNT(*) FROM proveedores WHERE activo = 1 AND persona_id IS NULL;
   ```
-- Validar en `registrar-pago-consolidado`: si línea es bancaria pero `proveedor.persona` es null → error: *"El proveedor X no tiene persona vinculada. Agregá una en su ficha para configurar cuenta de cobro."*
+- En `registrar-pago-consolidado`: cuenta destino es **opcional**. Si línea es bancaria y hay persona+cuenta default válida → adjuntar `cuentaBancariaDestinoId`. Si falta persona/cuenta → warn y el pago continúa (Gabriel 2026-09-18).
 - UI de proveedor: mostrar prominentemente si falta persona (badge ROJO: "SIN PERSONA VINCULADA")
 - Si diagnóstico revela >10% proveedores sin persona: agregar handler `vincular-persona-a-proveedor` (quick-create) en Fase 1
 
