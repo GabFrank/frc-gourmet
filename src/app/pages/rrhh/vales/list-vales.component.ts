@@ -189,7 +189,7 @@ export class ListValesComponent implements OnInit {
   }
 
   abrirCrear(): void {
-    const ref = this.dialog.open(CreateEditValeDialogComponent, { width: '780px' });
+    const ref = this.dialog.open(CreateEditValeDialogComponent, { width: '760px' });
     ref.afterClosed().subscribe((res) => { if (res?.saved) this.load(); });
   }
 
