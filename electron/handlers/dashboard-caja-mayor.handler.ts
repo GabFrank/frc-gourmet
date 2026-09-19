@@ -8,6 +8,7 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { dbQuery } from '../utils/db-query';
 import { Rango, bucketsForRango } from '../utils/dashboard-rangos.util';
 import { getInicioJornada } from './dashboard-ventas.handler';
+import { fechaParamSql } from '../utils/date.utils';
 
 const TIPOS_INGRESO: TipoMovimiento[] = [
   TipoMovimiento.INGRESO_RETIRO_CAJA,
@@ -168,8 +169,8 @@ async function buildMovimientosPorRango(
   // no "en la jornada X".
   for (const bucket of bucketsForRango(rango, new Date(), inicioJornada)) {
     labels.push(bucket.label);
-    const desde = bucket.desde.toISOString();
-    const hasta = bucket.hasta.toISOString();
+    const desde = fechaParamSql(dataSource, bucket.desde);
+    const hasta = fechaParamSql(dataSource, bucket.hasta);
 
     const ingRows: any[] = await dbQuery(dataSource, `
       SELECT COALESCE(SUM(monto), 0) as suma

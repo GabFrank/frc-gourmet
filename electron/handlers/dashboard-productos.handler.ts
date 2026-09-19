@@ -8,6 +8,7 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { dbQuery } from '../utils/db-query';
 import { getInicioJornada } from './dashboard-ventas.handler';
 import { Rango, rangoToFechas } from '../utils/dashboard-rangos.util';
+import { fechaParamSql } from '../utils/date.utils';
 
 export function registerDashboardProductosHandlers(
   dataSource: DataSource,
@@ -133,7 +134,7 @@ export function registerDashboardProductosHandlers(
         GROUP BY p.id, p.nombre
         ORDER BY total DESC
         LIMIT 8
-      `, [VentaEstado.CONCLUIDA, EstadoVentaItem.ACTIVO, desde.toISOString(), hasta.toISOString()]);
+      `, [VentaEstado.CONCLUIDA, EstadoVentaItem.ACTIVO, fechaParamSql(dataSource, desde), fechaParamSql(dataSource, hasta)]);
       const maxTopTotal = topRows.reduce((m, r) => Math.max(m, Number(r.total || 0)), 0);
       const topVendidos = topRows.map(r => ({
         id: Number(r.id),

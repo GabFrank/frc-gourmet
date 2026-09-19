@@ -205,11 +205,12 @@ O sea que el bug sólo se ve en standalone, que es el despliegue default.
 `fechaParamSql(dataSource, fecha)` (`electron/utils/date.utils.ts`), que formatea
 según el driver. No usar `.toISOString()` suelto.
 
-> Los reportes y dashboards de Ventas todavía tienen este bug (`filtroRango` en
-> `dashboard-ventas.handler.ts` y las queries de `reportes-ventas.helper.ts`):
-> issue [#249](https://github.com/GabFrank/frc-gourmet/issues/249). Ojo al
-> arreglarlo: los totales publicados **cambian** (aparece el día 1, desaparece el
-> arrastre del mes siguiente).
+**Fix aplicado** (PR #296, 2026-09): todos los handlers de reportes/dashboards
+(Ventas, Finanzas, Delivery, Productos, Caja Mayor, Compras) ya usan
+`fechaParamSql`. Los totales en SQLite cambiaron: ahora incluyen el día 1 del
+período y ya no incluyen el arrastre del día 1 del mes siguiente. Esto NO es un
+bug de datos — los datos están correctos, era el filtro. Test E2E:
+`npm run test:reporte-filtro-dia-uno` (contraejemplo con T + fix con espacio).
 
 ## TypeORM `find` con relations no carga columnas raw
 

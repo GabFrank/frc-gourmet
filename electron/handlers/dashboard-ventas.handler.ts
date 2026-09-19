@@ -7,6 +7,7 @@ import { PdvMesa } from '../../src/app/database/entities/ventas/pdv-mesa.entity'
 import { ComandaItem, ComandaItemEstado } from '../../src/app/database/entities/ventas/comanda-item.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { dbQuery } from '../utils/db-query';
+import { fechaParamSql } from '../utils/date.utils';
 import {
   Rango,
   RangoBucket,
@@ -63,8 +64,10 @@ export async function getMonedaPrincipalId(dataSource: DataSource): Promise<numb
 // sigue la caja abierta, así una caja que cruza medianoche NO reinicia el total).
 export type VentaFiltro = { sql: string; params: any[] };
 
-export function filtroRango(desdeISO: string, hastaISO: string): VentaFiltro {
-  return { sql: 'v.created_at >= ? AND v.created_at <= ?', params: [desdeISO, hastaISO] };
+export function filtroRango(dataSource: DataSource, desdeISO: string, hastaISO: string): VentaFiltro {
+  const desde = fechaParamSql(dataSource, new Date(desdeISO));
+  const hasta = fechaParamSql(dataSource, new Date(hastaISO));
+  return { sql: 'v.created_at >= ? AND v.created_at <= ?', params: [desde, hasta] };
 }
 
 /**
@@ -316,7 +319,7 @@ export function registerDashboardVentasHandlers(
       const filtroPeriodo = soloCajas
         ? (filtroCajasSel as VentaFiltro)
         : filtroY(
-            filtroRango(ventana.desde.toISOString(), ventana.hasta.toISOString()),
+            filtroRango(dataSource, ventana.desde.toISOString(), ventana.hasta.toISOString()),
             filtroCajasSel,
           );
 
@@ -344,7 +347,7 @@ export function registerDashboardVentasHandlers(
         ? filtroPeriodo
         : totalBasadoEnCajas
         ? filtroCajas(cajaIdsAbiertas)
-        : filtroRango(hoyInicio.toISOString(), hoyFin.toISOString());
+        : filtroRango(dataSource, hoyInicio.toISOString(), hoyFin.toISOString());
 
       const { cnt: ventasHoy } = await sumaVentasRango(dataSource, monedaPrincipalId, filtroHoy);
       const desgloseHoy = await desgloseVentasRango(dataSource, monedaPrincipalId, filtroHoy);
@@ -581,7 +584,7 @@ async function buildVentasPorPeriodo(
     const r = await sumaVentasRango(
       dataSource,
       monedaPrincipalId,
-      filtroY(filtroRango(bucket.desde.toISOString(), bucket.hasta.toISOString()), filtroExtra),
+      filtroY(filtroRango(dataSource, bucket.desde.toISOString(), bucket.hasta.toISOString()), filtroExtra),
       cotizacionMap,
     );
     labels.push(bucket.label);
