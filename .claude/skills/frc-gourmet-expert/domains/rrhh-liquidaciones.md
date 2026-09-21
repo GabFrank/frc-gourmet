@@ -214,7 +214,7 @@ LiquidacionFinalItem {
 
 **Pagar (2026-07):** el egreso de Caja Mayor es por `totalNeto` (solo si > 0). Salda cada deuda neteada: VALE → DESCONTADO; CPP_CUOTA → montoPagado += neto (PAGADA/PARCIAL); CPC_CUOTA → cobra cuota + baja `saldoActual` + `MovimientoCliente` PAGO. Todo neteado dentro del EGRESO_SALARIO. **No hay handler `anular-liquidacion-final`** (gap pre-existente).
 
-> ⚠️ **Multimoneda pendiente:** el neteo compara/resta montos de distinta moneda como iguales (`LiquidacionItem`/`LiquidacionFinalItem` no guardan moneda). Ver [reference/known-bugs.md](reference/known-bugs.md).
+> ⚠️ **Multimoneda pendiente:** el neteo compara/resta montos de distinta moneda como iguales (`LiquidacionItem`/`LiquidacionFinalItem` no guardan moneda). Ver [reference/known-bugs.md](../reference/known-bugs.md).
 > ⚠️ **Sin UI:** ningún componente invoca `generar/aprobar/pagar-liquidacion-final` — el neteo vive solo a nivel handler. Ver [workflows/todos-pendientes.md](../workflows/todos-pendientes.md).
 ```
 

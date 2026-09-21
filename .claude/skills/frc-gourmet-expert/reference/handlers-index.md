@@ -59,14 +59,14 @@
 | **reportes-delivery.helper.ts** | ~720 | *(helper, no registra canales)* Motor único de métricas de delivery/retiro: KPIs, mix por canal, zonas, repartidores, tiempos+SLA, cancelaciones, y `resumenDeliveryCaja` para el cierre. Lo consumen `reportes-ventas.helper.ts`, `dashboard-ventas.handler.ts` y `resumen-caja.utils.ts`. → [domains/reportes.md](../domains/reportes.md) §8 |
 | **reportes-rrhh.handler.ts** | 472 | Exports PDF/Excel (pdfmake + exceljs) |
 | **rrhh-funcionarios.handler.ts** | ~530 | Cargo, Funcionario, HistoricoCargo/Salario + alta transaccional. 2026-07: `get-funcionario-resumen-financiero` (deudas convertidas a PYG), `get-funcionario-de-cliente` (vínculo cruzado) |
-| **sabores.handler.ts** | 437 | Sabor + auto-generación de variaciones al crear sabor |
+| **sabores.handler.ts** | 437 | Sabor + auto-generación de variaciones al crear sabor (NO se registra como handler propio — unificado en `recetas.handler.ts`) |
 | **sectores-impresoras.handler.ts** | 135 | M2M Sector↔Printer con rol (COMANDA / TICKET_VENTA / PRECUENTA) |
 | **system.handler.ts** | 68 | OS info / MAC address. No necesita DB |
 | **vacaciones.handler.ts** | 380 | Vacacion, VacacionPeriodo + auto-Asistencia VACACION al marcar GOZADA |
 | **vales.handler.ts** | 417 | Vale, MotivoVale + `confirmar-vale` (EGRESO_VALE), `anular-vale` (contra-mov) |
 | **ventas.handler.ts** | ~3300 | Venta*, Comanda*, PdvMesa, Sector, Reserva, Delivery, PdvAtajo*, PdvConfig. Incluye `procesarStockVenta`/`revertirStockVenta`, `set-pdv-mesa-estado` (ocupar/liberar, permiso operativo) y `transferir-venta-pdv` (mover una cuenta entre mesas y comandas, transaccional). El más grande. `getVentasByDateRange` filtra además por canal / zona / repartidor / origen y devuelve `totales.costoDelivery` del resultado filtrado. ⚠️ **No tiene `ensurePermission`** y no está en `BLOCKED_CHANNELS` — ver `known-bugs.md`. |
 
-> **Nota:** `receta-presentacion.handler.ts` y `caja-mayor-utils.ts` NO se registran como handlers en `main.ts` — exportan helpers usados por otros handlers.
+> **Nota:** `receta-presentacion.handler.ts`, `sabores.handler.ts` y `caja-mayor-utils.ts` NO se registran como handlers en `main.ts` — exportan helpers usados por otros handlers (sabores y variaciones quedaron unificados en `recetas.handler.ts`, ver comentario en `main.ts`).
 
 ## Patrón estándar de handler
 

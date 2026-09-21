@@ -213,7 +213,7 @@ Los movimientos de Caja Mayor son **inmutables**: anular crea un contra-movimien
 - Estadísticas en tiempo real (websocket).
 - Reportes financieros consolidados (flujo de caja, balance).
 
-→ [workflows/todos-pendientes.md](../../workflows/todos-pendientes.md).
+→ [workflows/todos-pendientes.md](../workflows/todos-pendientes.md).
 
 ---
 

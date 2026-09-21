@@ -1144,6 +1144,4 @@ P0-5: **Cubrir `materializarPedidoOnlineEnVenta`** — pedidos online de mesa (t
 
 **Tests (fase 6):** `scripts/test-mesa-una-venta-abierta-e2e.ts` — E2E completo para P0-1..P0-5. Uso: `npm run test:mesa-una-venta-abierta`. Los tests **deben fallar** si se revierten los guards (para verificar efectividad).
 
-**Plan completo:** `docs/planes/PLAN-MESA-UNA-VENTA-ABIERTA.md` con hallazgos de auditorías A (PASS-with-fixes) + B (FAIL) → enmendado 2026-09-11.
-
 **Invariante:** máximo 1 venta ABIERTA (`comanda IS NULL`) por `mesaId`.
