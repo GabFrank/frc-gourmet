@@ -709,7 +709,7 @@ export class PagarObligacionesDialogComponent implements OnInit, OnDestroy {
       });
     } else if (this.concepto === PagoConcepto.VALE) {
       const { CreateEditValeDialogComponent } = await import('src/app/pages/rrhh/vales/create-edit-vale-dialog.component');
-      ref = this.dialog.open(CreateEditValeDialogComponent, { width: '700px', maxHeight: '90vh', data: {} });
+      ref = this.dialog.open(CreateEditValeDialogComponent, { width: '760px', maxHeight: '90vh', data: {} });
     } else if (this.concepto === PagoConcepto.COMPRA) {
       const { CrearCompraSimplificadaDialogComponent } = await import('src/app/pages/compras/crear-compra-simplificada-dialog/crear-compra-simplificada-dialog.component');
       ref = this.dialog.open(CrearCompraSimplificadaDialogComponent, { width: '700px', maxHeight: '90vh', data: {} });
