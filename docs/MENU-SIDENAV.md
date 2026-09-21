@@ -114,7 +114,7 @@ Editá **solo** `src/app/services/menu-tree.ts`:
 3. Para un subgrupo nuevo, agregá una rama con `children`.
 
 No hace falta tocar `app.component` ni el buscador: ambos leen el árbol.
-Esta es la regla dura #22 de la skill (toda pantalla navegable debe estar en el
+Esta es la regla dura #23 de la skill (toda pantalla navegable debe estar en el
 árbol). Ver también [BUSCADOR-GLOBAL.md](BUSCADOR-GLOBAL.md).
 
 ## Pendiente (próximos PRs de esta serie)

@@ -520,6 +520,56 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
     ],
   },
   {
+    descripcion: 'GERENTE_READONLY',
+    permisos: [
+      // Dashboards - solo lectura para auditoría Fase 1+
+      'HOME_DASHBOARD_VER',
+      'VENTAS_DASHBOARD_VER',
+      'COMPRAS_DASHBOARD_VER',
+      'PRODUCTOS_DASHBOARD_VER',
+      'FINANCIERO_DASHBOARD_VER',
+      'CAJA_MAYOR_DASHBOARD_VER',
+      'RRHH_DASHBOARD_VER',
+      // Reportes - acceso a reportes de cierre de mes
+      'VENTAS_REPORTES_VER',
+      'FINANCIERO_REPORTES_VER',
+      // RRHH - solo ver funcionarios y notificaciones
+      'RRHH_FUNCIONARIO_VER',
+      'RRHH_NOTIFICACIONES_VER',
+      // Comisiones - solo ver reglas
+      'COMISION_REGLA_VER',
+      // Productos / Recetas / Stock - solo lectura
+      'PRODUCTOS_VER',
+      'RECETAS_VER',
+      'INGREDIENTES_VER',
+      'ADICIONALES_VER',
+      'SABORES_VER',
+      'STOCK_MOVIMIENTO_VER',
+      // Ventas - histórico y pedidos online, sin operar
+      'VENTAS_HISTORICO_VER',
+      'PEDIDOS_ONLINE_VER',
+      // Facturación - solo ver
+      'FACTURACION_VER',
+      // Compras + Proveedores - solo ver
+      'COMPRAS_VER',
+      'PROVEEDORES_VER',
+      // Personas / Clientes - solo ver
+      'PERSONAS_VER',
+      'CLIENTES_VER',
+      // Financiero - solo ver cajas y bancos, sin operar
+      'FINANCIERO_CAJA_VER',
+      'BANCOS_VER',
+      // Música - solo ver estado
+      'MUSICA_VER',
+      // KDS - solo ver comandas
+      'COMANDAS_KDS_VER',
+      // NOTA: Este rol es para auditoría/consulta. NO tiene permisos de
+      // escritura, creación, edición, aprobación, pago, configuración ni
+      // operación de ningún módulo. Ideal para bots de auditoría externa
+      // o consultores que necesitan analizar datos sin capacidad de modificarlos.
+    ],
+  },
+  {
     descripcion: 'CAJERO',
     permisos: [
       'HOME_DASHBOARD_VER', 'VENTAS_DASHBOARD_VER', 'CAJA_MAYOR_DASHBOARD_VER',

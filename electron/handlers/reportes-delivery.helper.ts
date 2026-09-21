@@ -39,6 +39,7 @@ import { DataSource } from 'typeorm';
 import { dbQuery } from '../utils/db-query';
 import { VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
 import { RangoFechas } from './reportes-periodo.util';
+import { fechaParamSql } from '../utils/date.utils';
 import {
   CanalVenta, CANAL_VENTA_ORDEN, CANAL_VENTA_LABEL,
   canalVentaExpr, joinDeliveryCanal,
@@ -76,10 +77,10 @@ export interface FiltroVentas {
 }
 
 /** Filtro de un rango de fechas, en el formato que espera `dbQuery`. */
-export function filtroDeRango(r: RangoFechas): FiltroVentas {
+export function filtroDeRango(ds: DataSource, r: RangoFechas): FiltroVentas {
   return {
     sql: 'v.created_at >= ? AND v.created_at <= ?',
-    params: [r.desde.toISOString(), r.hasta.toISOString()],
+    params: [fechaParamSql(ds, r.desde), fechaParamSql(ds, r.hasta)],
   };
 }
 
@@ -757,8 +758,8 @@ export async function construirBloqueDelivery(
   const umbralAmarillo = num(cfg?.[0]?.amarillo) || 30;
   const umbralRojo = num(cfg?.[0]?.rojo) || 60;
 
-  const fActual = filtroDeRango(actual);
-  const fAnterior = anterior ? filtroDeRango(anterior) : null;
+  const fActual = filtroDeRango(ds, actual);
+  const fAnterior = anterior ? filtroDeRango(ds, anterior) : null;
 
   const [kpis, kpisAnterior, mixCanal, zonas, repartidores, tiempos, cancelaciones, cobro, origen] =
     await Promise.all([

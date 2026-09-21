@@ -13,7 +13,8 @@ import { Observable, Subscription, fromEvent } from 'rxjs';
 import { map, shareReplay, debounceTime, delay } from 'rxjs/operators';
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import { CommonModule } from '@angular/common';
-import { RouterModule, Router } from '@angular/router';
+import { RouterModule, Router, NavigationEnd } from '@angular/router';
+import { filter } from 'rxjs/operators';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatSidenavModule, MatSidenav } from '@angular/material/sidenav';
 import { MatButtonModule } from '@angular/material/button';
@@ -116,6 +117,7 @@ import { SidenavMenuComponent } from './shared/components/sidenav-menu/sidenav-m
 import { MenuService } from './services/menu.service';
 import { PermissionService } from './services/permission.service';
 import { MenuNode } from './services/menu-tree';
+import { DeepLinkService } from './services/deep-link.service';
 
 @Component({
   selector: 'app-root',
@@ -284,6 +286,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     // E2.4: solo inyectar para arrancar el listener global de eventos de
     // impresora — el servicio se auto-suscribe en su constructor.
     private _printerEvents: PrinterEventsService,
+    private deepLinkService: DeepLinkService,
   ) {
     // Reconstruir el árbol del sidenav cuando cambian los permisos del usuario
     // (login/logout/refresh) o los overrides del ADMIN. Fuente única: menu-tree.ts.
@@ -388,6 +391,13 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngOnInit() {
+    // Deep links: capturar hash inicial ANTES de que el router lo limpie
+    const initialHash = window.location.hash;
+    if (initialHash && initialHash.startsWith('#/o/')) {
+      // Almacenar en sessionStorage para procesarlo después de la autenticación
+      sessionStorage.setItem('pendingDeepLink', initialHash);
+    }
+
     // Check for saved theme preference
     const savedTheme = localStorage.getItem('darkTheme');
     if (savedTheme) {
@@ -755,6 +765,44 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     this.isMenuExpanded = false;
     this.expandedMenu = null;
     this.menuExpandedIds.clear();
+
+    // Deep links: procesar hash inicial guardado en ngOnInit si existe y hay sesión
+    const pendingDeepLink = sessionStorage.getItem('pendingDeepLink');
+    if (pendingDeepLink && this.authService.isLoggedIn) {
+      sessionStorage.removeItem('pendingDeepLink');
+      this.processDeepLink(pendingDeepLink);
+    }
+
+    // Deep links: escuchar cambios de hash DIRECTAMENTE (sin depender de NavigationEnd)
+    // Esto captura mid-session hash changes: window.location.hash = '#/o/compra/1'
+    window.addEventListener('hashchange', () => {
+      const hash = window.location.hash;
+      if (!hash || !hash.startsWith('#/o/')) return;
+      if (!this.authService.isLoggedIn) return; // Sin sesión → AuthGuard manejará con returnUrl
+      this.processDeepLink(hash);
+    });
+
+    // También procesar hash actual si ya existe (cold start con sesión activa)
+    const currentHash = window.location.hash;
+    if (currentHash && currentHash.startsWith('#/o/') && this.authService.isLoggedIn) {
+      this.processDeepLink(currentHash);
+    }
+  }
+
+  /**
+   * Procesa un deep link #/o/{tipo}/{id} y abre el recurso correspondiente.
+   * Usado tanto en cold start como en mid-session hash changes.
+   */
+  private processDeepLink(hash: string): void {
+    const parsed = this.deepLinkService.parseDeepLink(hash);
+    if (!parsed) return;
+
+    // Procesar después de un tick para que el DOM esté listo (tabs, dialogs)
+    setTimeout(() => {
+      this.deepLinkService.openDeepLink(parsed.tipo, parsed.id).catch((err) => {
+        console.error('Error procesando deep link:', err);
+      });
+    }, 100);
   }
 
   ngOnDestroy() {

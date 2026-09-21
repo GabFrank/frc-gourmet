@@ -176,8 +176,7 @@ ticket + imagen de WhatsApp) e historial (columna Canal, 4 filtros nuevos y
 totales del resultado filtrado)— y todos leen el **mismo motor**,
 `electron/handlers/reportes-delivery.helper.ts`. Detalles →
 [domains/reportes.md](domains/reportes.md) §8,
-[domains/dashboards.md](domains/dashboards.md) §7.8,
-`docs/planes/PLAN-INFORMES-DELIVERY.md`.
+[domains/dashboards.md](domains/dashboards.md) §7.8.
 
 Cuatro cosas que conviene no volver a aprender por las malas:
 

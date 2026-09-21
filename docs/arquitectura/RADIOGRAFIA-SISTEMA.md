@@ -101,7 +101,7 @@ Servicios involucrados: `SaboresVariacionesService` (estado), `SaboresService` (
 
 ## 3. Handlers IPC (54 archivos)
 
-Hay **54 handlers** en `electron/handlers/*.handler.ts` que registran ~776 canales `ipcMain.handle()` en total. La registración ocurre en `main.ts` (raíz) tras la inicialización de la DB; cada handler recibe el `DataSource` y, opcionalmente, `getCurrentUser`. Cada canal se registra además en un `handlerRegistry` global que el servidor Fastify expone vía `/api/rpc`.
+Hay **72 handlers** en `electron/handlers/*.handler.ts` que registran ~776 canales `ipcMain.handle()` en total. La registración ocurre en `main.ts` (raíz) tras la inicialización de la DB; cada handler recibe el `DataSource` y, opcionalmente, `getCurrentUser`. Cada canal se registra además en un `handlerRegistry` global que el servidor Fastify expone vía `/api/rpc`.
 
 Handlers por área (lista no exhaustiva de canales):
 

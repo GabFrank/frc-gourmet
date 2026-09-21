@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { CompraCategoria } from '../../src/app/database/entities/compras/compra-categoria.entity';
 import { CompraCuota } from '../../src/app/database/entities/compras/compra-cuota.entity';
 import { CuentaPorPagar } from '../../src/app/database/entities/financiero/cuenta-por-pagar.entity';
+import { Proveedor } from '../../src/app/database/entities/compras/proveedor.entity';
 import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/cuenta-por-pagar-cuota.entity';
 import {
   CuotaEstado,
@@ -778,6 +779,14 @@ export function registerCuentasPorPagarHandlers(
       if (data.descripcion) existing.descripcion = data.descripcion.toUpperCase();
       if (data.observacion !== undefined) existing.observacion = data.observacion?.toUpperCase() || undefined;
       if (data.estado) existing.estado = data.estado;
+
+      // Reasignar proveedor (ops: alinear CPP con compra cuando quedó beneficiario viejo)
+      if (data.proveedorId !== undefined && data.proveedorId !== null) {
+        const proveedorRepo = dataSource.getRepository(Proveedor);
+        const proveedor = await proveedorRepo.findOne({ where: { id: Number(data.proveedorId), activo: true } });
+        if (!proveedor) throw new Error(`Proveedor ${data.proveedorId} no encontrado o inactivo`);
+        existing.proveedor = proveedor;
+      }
 
       await setEntityUserTracking(dataSource, existing, getCurrentUser()?.id, true);
       return await repo.save(existing);

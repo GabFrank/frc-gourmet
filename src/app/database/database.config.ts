@@ -138,6 +138,7 @@ import { GastoDetalle } from './entities/financiero/gasto-detalle.entity';
 
 // Banking entities (Fase 2)
 import { CuentaBancaria } from './entities/financiero/cuenta-bancaria.entity';
+import { CuentaBancariaDestino } from './entities/financiero/cuenta-bancaria-destino.entity';
 import { MaquinaPos } from './entities/financiero/maquina-pos.entity';
 import { AcreditacionPos } from './entities/financiero/acreditacion-pos.entity';
 import { MovimientoBancario } from './entities/financiero/movimiento-bancario.entity';
@@ -291,6 +292,13 @@ import { MusicaPreferenciaEstilo1786804287491 } from './migrations/1786804287491
 import { ProductoConfigVariacion1787063450518 } from './migrations/1787063450518-ProductoConfigVariacion';
 import { IndicesRucYReconciliarMesas1787255528889 } from './migrations/1787255528889-IndicesRucYReconciliarMesas';
 import { InicioJornadaHora1787563118200 } from './migrations/1787563118200-InicioJornadaHora';
+import { AddSeqToVenta1789151316209 } from './migrations/1789151316209-AddSeqToVenta';
+import { AddSeqToPdvMesa1789151316210 } from './migrations/1789151316210-AddSeqToPdvMesa';
+import { AddSeqToComanda1789151316211 } from './migrations/1789151316211-AddSeqToComanda';
+import { CuentasBancariasDestinoHibrido1789586966573 } from './migrations/1789586966573-CuentasBancariasDestinoHibrido';
+import { ProveedorCuentaBancariaDefault1789587015222 } from './migrations/1789587015222-ProveedorCuentaBancariaDefault';
+import { PagoConsolidadoDetalleCuentaDestino1789587032713 } from './migrations/1789587032713-PagoConsolidadoDetalleCuentaDestino';
+import { MovimientoBancarioCuentaDestino1789587049751 } from './migrations/1789587049751-MovimientoBancarioCuentaDestino';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -491,6 +499,7 @@ function getEntitiesList(): any[] {
       EgresoCaja,
       // Banking (Fase 2)
       CuentaBancaria,
+      CuentaBancariaDestino,
       MaquinaPos,
       AcreditacionPos,
       MovimientoBancario,
@@ -716,6 +725,14 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     PagoDetalleDestinoAcreditacion1787842699124,
     CobroConsolidadoCpc1787848148246,
     BackfillZonaDeliveryPedidosOnline1787877249492,
+    // SSE mesas PDV: seq para ordenar eventos sin polling
+    AddSeqToVenta1789151316209,
+    AddSeqToPdvMesa1789151316210,
+    AddSeqToComanda1789151316211,
+    CuentasBancariasDestinoHibrido1789586966573,
+    ProveedorCuentaBancariaDefault1789587015222,
+    PagoConsolidadoDetalleCuentaDestino1789587032713,
+    MovimientoBancarioCuentaDestino1789587049751,
   ];
 }
 
