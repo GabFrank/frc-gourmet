@@ -19,6 +19,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatChipsModule } from '@angular/material/chips';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
@@ -58,6 +59,7 @@ interface DetalleRow {
     MatAutocompleteModule,
     MatTooltipModule,
     MatDividerModule,
+    MatChipsModule,
     CurrencyInputDirective,
     AdjuntosListComponent,
   ]
@@ -94,6 +96,8 @@ export class CreateEditGastoDialogComponent implements OnInit {
   gastoId: number | null = null;
   /** True una vez que se creo o edito al menos una vez en esta sesion del dialog. */
   private touched = false;
+  /** Modo read-only (deep link): deshabilita formulario, oculta botones de submit. */
+  readonly = false;
 
   /**
    * Alta diferida: el gasto nace PENDIENTE y no asienta nada. El pago se hace
@@ -119,6 +123,7 @@ export class CreateEditGastoDialogComponent implements OnInit {
   ngOnInit(): void {
     this.cajaMayorFijo = !!this.data?.cajaMayorId;
     this.diferido = !!this.data?.diferido;
+    this.readonly = !!this.data?.readonly;
     if (this.diferido) {
       this.detallesColumns = ['moneda', 'monto', 'actions'];
     }
@@ -195,6 +200,14 @@ export class CreateEditGastoDialogComponent implements OnInit {
         await this.loadGasto(this.gastoId);
       } else {
         this.aplicarPreselecciones();
+      }
+
+      // Si es readonly, deshabilitar el formulario + filtros
+      if (this.readonly) {
+        this.form.disable();
+        this.detalleForm.disable();
+        this.categoriaFilter.disable();
+        this.proveedorFilter.disable();
       }
     } catch (error) {
       console.error('Error loading lookups:', error);

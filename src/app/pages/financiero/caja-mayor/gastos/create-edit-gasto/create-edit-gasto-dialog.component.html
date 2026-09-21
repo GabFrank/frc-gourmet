@@ -1,4 +1,7 @@
-<h2 mat-dialog-title>{{isEditing ? (gastoId ? 'Editar Gasto #' + gastoId : 'Editar Gasto') : 'Nuevo Gasto'}}</h2>
+<h2 mat-dialog-title>
+  {{readonly ? 'Detalle Gasto #' + gastoId : (isEditing ? (gastoId ? 'Editar Gasto #' + gastoId : 'Editar Gasto') : 'Nuevo Gasto')}}
+  <mat-chip *ngIf="readonly" color="accent" style="margin-left: 12px; vertical-align: middle;">Solo lectura</mat-chip>
+</h2>
 
 <mat-dialog-content>
   <form [formGroup]="form" class="form-container">
@@ -137,7 +140,7 @@
         <input matInput type="text" inputmode="decimal" formControlName="monto" appCurrencyInput [decimals]="decimalesMoneda">
       </mat-form-field>
 
-      <button mat-mini-fab color="primary"
+      <button *ngIf="!readonly" mat-mini-fab color="primary"
               (click)="agregarDetalle()"
               [disabled]="detalleForm.invalid"
               matTooltip="Agregar">
@@ -165,7 +168,7 @@
       <ng-container matColumnDef="actions">
         <th mat-header-cell *matHeaderCellDef></th>
         <td mat-cell *matCellDef="let row; let i = index">
-          <button mat-icon-button color="warn" (click)="eliminarDetalle(i)" matTooltip="Eliminar">
+          <button *ngIf="!readonly" mat-icon-button color="warn" (click)="eliminarDetalle(i)" matTooltip="Eliminar">
             <mat-icon>delete</mat-icon>
           </button>
         </td>
@@ -209,7 +212,7 @@
     </div>
   </form>
 
-  <div class="adjuntos-section">
+  <div *ngIf="!readonly" class="adjuntos-section">
     <app-adjuntos-list
       entidadTipo="GASTO"
       [entidadId]="gastoId"
@@ -221,8 +224,8 @@
 </mat-dialog-content>
 
 <mat-dialog-actions align="end">
-  <button mat-button (click)="onCancel()" [disabled]="saving">{{ isEditing ? 'Cerrar' : 'Cancelar' }}</button>
-  <button mat-raised-button color="primary" (click)="onSubmit()"
+  <button mat-button (click)="onCancel()" [disabled]="saving">{{ readonly ? 'Cerrar' : (isEditing ? 'Cerrar' : 'Cancelar') }}</button>
+  <button *ngIf="!readonly" mat-raised-button color="primary" (click)="onSubmit()"
           [disabled]="form.invalid || detalles.length === 0 || saving || (isEditing && form.pristine)">
     <mat-spinner *ngIf="saving" diameter="20" class="inline-spinner"></mat-spinner>
     <span *ngIf="!saving">{{isEditing ? 'Guardar cambios' : 'Registrar'}}</span>

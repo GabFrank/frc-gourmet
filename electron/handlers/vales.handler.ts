@@ -14,6 +14,7 @@ import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity
 import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { Permission } from '../../src/app/database/entities/personas/permission.entity';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
@@ -25,6 +26,33 @@ export function registerValesHandlers(
   dataSource: DataSource,
   getCurrentUser: () => Usuario | null,
 ) {
+  // ============= VALE (GET) =============
+  ipcMain.handle('get-vale', async (_event: any, id: number) => {
+    // Permiso dual: RRHH_VALE_CONFIRMAR (legacy, puede crear/confirmar vales) o RRHH_VALE_VER (nuevo, solo lectura)
+    const user = getCurrentUser();
+    if (!user?.id) throw new Error('NO_PERMISSION: Usuario no autenticado');
+    
+    const permisos = await dataSource.getRepository(Permission)
+      .createQueryBuilder('p')
+      .innerJoin('role_permissions', 'rp', 'rp.permission_id = p.id')
+      .innerJoin('usuario_roles', 'ur', 'ur.role_id = rp.role_id')
+      .where('ur.usuario_id = :uid', { uid: user.id })
+      .andWhere('p.codigo IN (:...codigos)', { codigos: ['RRHH_VALE_CONFIRMAR', 'RRHH_VALE_VER'] })
+      .select('p.codigo')
+      .distinct(true)
+      .getRawMany();
+    
+    if (!permisos || permisos.length === 0) {
+      throw new Error('NO_PERMISSION: Se requiere RRHH_VALE_CONFIRMAR o RRHH_VALE_VER');
+    }
+
+    const repo = dataSource.getRepository(Vale);
+    return await repo.findOne({
+      where: { id },
+      relations: ['funcionario', 'funcionario.persona', 'motivo', 'moneda', 'cajaMayor', 'formaPago', 'cuentaBancaria', 'cuentaBancaria.moneda', 'createdBy', 'createdBy.persona'],
+    });
+  });
+
   // ============= MOTIVOS =============
   ipcMain.handle('get-motivos-vale', async () => {
     return await dataSource.getRepository(MotivoVale).find({ order: { nombre: 'ASC' } });

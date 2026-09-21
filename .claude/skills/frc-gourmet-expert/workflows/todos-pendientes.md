@@ -22,6 +22,8 @@ Confirmado contra código en la reauditoría integral. Estos ya NO son pendiente
 - [x] **Refactor sabores: cada variación su propia receta** — `create-sabor`/`generarVariacionesParaProducto` crean una `Receta` por variación (ya no compartida). Módulo Gestión de Sabores + `reparar-recetas-compartidas`.
 - [x] **Batch de seguridad/correctness 2026-07-15** — ~20 bugs C/M/A cerrados (ver [reference/known-bugs.md](../reference/known-bugs.md)). Incluye permisos en handlers de precio/stock (C-03) y 23 handlers RRHH (M-05).
 - [x] **Transferencia bancaria (banco→banco) + UI config Caja Mayor 2026-07-27** — nuevo tipo `TipoOperacionFinanciera.TRANSFERENCIA_BANCARIA` (transferencia interna entre dos cuentas bancarias, posible multi-moneda con cotización; no toca Caja Mayor). Migración `DropCheckTipoOperacionFinanciera` (suelta el CHECK de SQLite). **UI Caja Mayor:** el diálogo de configuración quitó la sección "Formas de pago" (inútil, solo hay EFECTIVO) y agregó **drag & drop** para ordenar las cuentas bancarias (persistido en `CajaMayorConfiguracion.cuentasBancariasOrden`, reflejado en el sidebar desktop + mobile). Tests: `test:transferencia-bancaria`, `test:config-caja-mayor`, `test:operacion-financiera`. → [domains/financiero-caja-mayor.md](../domains/financiero-caja-mayor.md).
+- [x] **Permisos de Facturación** — `FACTURACION_VER`/`_EMITIR`/`_ANULAR`/`_TIMBRADO_GESTIONAR`/`_PLANTILLA_GESTIONAR`/`_CONFIGURAR` seedeados en `permissions.handler.ts:109-114` y gateados en `menu-tree.ts` (hojas `facturas`, `timbrados`, `plantillas-factura`, `facturacion-config`).
+- [x] **Permisos OCR** — `COMPRAS_IMPORTAR_FACTURA` y `SISTEMA_CONFIGURAR_IA` gateados en `menu-tree.ts:203,520` (hojas `factura-imports`, `ia-config`).
 
 ### Pendientes CONFIRMADOS (siguen abiertos tras la reauditoría)
 
@@ -31,7 +33,6 @@ Confirmado contra código en la reauditoría integral. Estos ya NO son pendiente
 - [ ] **Producción UI genérica** — solo existe `produccion-buffet-dialog` (BUFFET_POR_PESO); falta la pantalla de producción de elaborados.
 - [ ] **Ensamblado Pizza UI** (`EnsambladoPizza`/`SaborPizza`/`TamanhoPizza`) — legacy sin UI; evaluar deprecar a favor de `RecetaPresentacion`.
 - [ ] **Cancelar Caja** — botón "CANCELAR CAJA" sigue `disabled` ("Próximamente"); `CajaEstado.CANCELADO` existe sin flujo.
-- [ ] **Permisos de Facturación** — el subsistema no tiene códigos de permiso ni gating en el menú.
 
 ## ✅ Feature implementado (rama `claude/pedidos-mesa-qr`, sin mergear): Pedidos en Mesa por QR (MESA_QR autoservicio)
 
@@ -103,13 +104,12 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
   - `timeout / connection refused` → "No se puede conectar al puerto 515. Verificá firewall y que el servicio LPD esté corriendo (paso 1+4)".
   - `ACK 0x00` → "Cola accesible, podés guardar".
 - [ ] **Adjuntos polimórficos release 2 — solo falta UI** (auditado 2026-06-08). El **backend ya está**: handler genérico `adjuntos.handler.ts` (`get-adjuntos`/`create-adjunto`/`delete-adjunto`) + permisos para ~18 tipos (`documentos-permissions.config.ts`: GASTO, CPP, CPP_CUOTA, CPC, CPC_CUOTA, CHEQUE, RETIRO_CAJA, ENTRADA_VARIA, OPERACION_FINANCIERA, MOVIMIENTO_BANCARIO, ACREDITACION_POS, COMPRA, VENTA, VALE, PRESTAMO_FUNCIONARIO, LIQUIDACION_SUELDO, LIQUIDACION_FINAL, ASISTENCIA). El componente `<app-adjuntos-list>` está cableado **solo a GASTO**. **Falta:** sumar `<app-adjuntos-list entidadTipo="...">` al resto de los dialogs/detalles.
-- [ ] **Imagen en Presentación + Sabor** — columnas `imageUrl` ya existen en BD. Falta UI: thumbnail clickeable en cada presentacion del producto (dialog con `<app-file-upload>`), idem en `create-edit-sabor-dialog`. Dejar fallback al `producto.imageUrl` si la presentacion no tiene la suya.
+- [ ] **Imagen en `create-edit-sabor-dialog` (Gestión de Sabores)** — `sabor-dialog` (dentro de `gestionar-producto`) ya tiene `<app-file-upload>`/`imageUrl`, pero `create-edit-sabor-dialog` (`pages/gestion-sabores/dialogs/`) es un diálogo distinto y **no** tiene subida de imagen.
 - [ ] **Migrar `create-edit-persona` a `<app-file-upload>`** — actualmente usa `<input type=file>` artesanal con `save-profile-image` legacy. Reemplazar por shared `<app-file-upload carpeta="profile-images">` mantiene los mismos URLs `app://profile-images/<file>` sin migración de datos. Beneficia: thumbnails automáticos, preview consistente.
 - [ ] **Migrar `PdvCategoriaItem.imagen` (base64 → app://)** — hoy guarda base64 directo en BD (anti-patrón). Crear job de migración que: lee cada `imagen` que empieza con `data:image/...`, llama `save-file` con carpeta='producto-images' o nueva 'pdv-images', actualiza la columna con la URL devuelta, y opcionalmente elimina el data URL viejo (o deja la columna apuntando al archivo). Patrón: tab de "Mantenimiento BD" con botón "Migrar imágenes legacy".
 - [ ] **Backup/restore extender a carpetas userData** — el backup actual cubre solo la BD. Sumar `userData/{profile-images,producto-images,funcionario-documentos,factura-imports,adjuntos}` al ZIP de backup. Restore correspondiente.
 - [ ] Limpiar `.js` y `.js.map` del repo (deberían estar en `.gitignore`).
 - [x] Eliminar entidad `RecetaAdicional` legacy (verificado 2026-06-28: ya no existe el `.entity.ts` ni referencias; solo queda `RecetaAdicionalVinculacion`).
-- [ ] **Permisos OCR**: `COMPRAS_IMPORTAR_FACTURA` y `SISTEMA_CONFIGURAR_IA` están seedeados pero no se chequean en sidenav. Agregar `*ngIf="hasPermission(...)"` a las entradas correspondientes.
 - [ ] **Inferidor de presentación** (regex en `producto-inference.util.ts`) no detecta unidad cuando la descripción no incluye número/unidad explícita (ej "MANDIOCA" sin tamaño). Mejora futura: que el OCR sugiera unidad y cantidad por separado en el JSON.
 
 ## Refactor técnico
@@ -181,10 +181,7 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
 
 ## Producto / Recetas
 
-- [ ] **UI de Observaciones**: CRUD para `Observacion` y `ProductoObservacion` (entities existen, no hay UI).
 - [ ] **Imágenes de producto**: reactivar handler comentado en `images.handler.ts:31-121`. `ProductoImage` entity fue eliminada — usar columna `imageUrl` en `Producto`.
-- [ ] **Stock UI**: gestión completa de `StockMovimiento` (componentes eliminados). Necesita UI de movimientos manuales (AJUSTE_POSITIVO, AJUSTE_NEGATIVO, DESCARTE, TRANSFERENCIA).
-- [ ] **Combos UI**: entities `Combo` + `ComboProducto` y `ProductoTipo.COMBO` existen, **no hay UI dedicada**. Falta crear.
 - [ ] **Promociones UI**: entities `Promocion` + `PromocionPresentacion` existen. 4 tipos (DESCUENTO_PORCENTAJE, DESCUENTO_MONTO, PRODUCTO_GRATIS, COMBO_ESPECIAL). Sin UI ni motor de aplicación en PdV.
 - [ ] **Producción UI**: entities `Produccion` + `ProduccionIngrediente` existen, sin UI. Necesita: registrar producción de elaborado → genera `StockMovimiento.PRODUCCION_SALIDA` (ingredientes) + `PRODUCCION_ENTRADA` (producto terminado).
 - [ ] **Ensamblado Pizza UI**: `EnsambladoPizza` + `EnsambladoPizzaSabor` + `TamanhoPizza` + `SaborPizza` existen pero sin UI (es legacy del modelo viejo, evaluar deprecar a favor del refactor con `RecetaPresentacion`).
@@ -192,18 +189,11 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
 ## Ventas / PdV
 
 - [ ] **Reservas UI completa**: entity `Reserva` existe, falta UI para crear/gestionar reservas, calendario, notificaciones de reservas próximas.
-- [ ] **Comandas estado avanzado**: estados `EN_PREPARACION`, `LISTO`, `ENTREGADO`, `CANCELADO` existen en `ComandaItem` pero la UI sólo maneja DISPONIBLE/OCUPADO de la Comanda principal. Falta Kitchen Display Screen (KDS).
-- [ ] **Impresión real de tickets/comandas**: `printTicketVenta`, `printComanda` se llaman pero la implementación de impresión está en `printers.handler.ts` con `printPosReceipt()`. Falta:
-  - Templates ESC/POS por tipo de impresora
-  - Auto-impresión al cobrar
-  - Relación `Producto → Printer` para enrutar comandas a estaciones específicas
 - [ ] **Categorías click → agregar al carrito**: items de categoría se muestran pero no agregan productos al carrito.
 - [ ] **Retirar el árbol viejo de categorías del PdV**: `PdvGrupoCategoria` → `PdvCategoria` → `PdvCategoriaItem` → `PdvItemProducto` quedó reemplazado por los **atajos** (`PdvAtajoGrupo`/`PdvAtajoItem`/`PdvAtajoItemProducto`). Sigue con entidades, handlers y una FK en `PdvConfig`. Baja con estrategia de 2 versiones (no hay `DROP` directo).
 - [ ] **UI Precios de Delivery**: ABM visual (actualmente se gestionan desde crear-delivery dialog).
 - [ ] **UI Configuración PdV**: dialogo para editar umbrales y parámetros de `PdvConfig` (parcialmente hecho via `pdv-config-dialog`, falta refinamiento).
 - [ ] **Cancelar Caja**: cancela caja con ventas, cobros y movimientos de stock. UI parcial.
-- [ ] **Retiros de Efectivo desde PdV**: registrar retiros durante turno (entity `RetiroCaja` existe en módulo financiero, falta integración).
-- [ ] **Gastos desde PdV**: registrar gastos operativos sin salir del PdV.
 - [ ] **Bug findPrecioCosto()**: retorna 0 hardcodeado en vez de buscar el precio de costo real.
 - [ ] **`DividirCuentaDialog` quedó de facto reemplazado por el cobro parcial por ítems** (que sí persiste quién pagó qué; el diálogo viejo es informativo). Decidir si se quita o se reusa como atajo de selección de ítems.
 - [ ] **`anularCobroParcial` no tiene llamador en el frontend** — el handler existe y es transaccional, pero desde la UI no hay forma de anular una ronda. Ver `domains/ventas-pdv.md`.
@@ -491,7 +481,7 @@ El módulo se cerró para poder usarse en producción
 - ~~El delivery no aparecía en ningún informe.~~ Hecho: reporte de cierre de mes
   (4 KPIs + 5 tarjetas), dashboard de Ventas, resumen de la PWA, cierre de caja
   (diálogo + ticket + WhatsApp) e historial de ventas (columna Canal + 4 filtros
-  + totales del filtro). Plan: `docs/planes/PLAN-INFORMES-DELIVERY.md`.
+  + totales del filtro).
 - ~~El reparto que venía de la tienda online nacía sin zona.~~ Hecho: el alta la
   sella y una migración backfillea los viejos.
 

@@ -439,7 +439,7 @@ Estos módulos dependen de permisos y de la configuración del local; pueden no 
 
 ### "Mesa quedó OCUPADA sin venta"
 
-→ [workflows/verificacion-bd-sqlite.md](../../workflows/verificacion-bd-sqlite.md): query manual para liberarla.
+→ [workflows/verificacion-bd-sqlite.md](../workflows/verificacion-bd-sqlite.md): query manual para liberarla.
 
 ### "El cobro está rechazando una moneda"
 

@@ -1,6 +1,6 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
-import { of } from 'rxjs';
+import { of, firstValueFrom } from 'rxjs';
 import { filter, map, take, timeout, catchError } from 'rxjs/operators';
 import { PermissionService } from '@frc/shared-core';
 
@@ -23,14 +23,23 @@ export const permisoGuard: CanActivateFn = (route, state) => {
 
   const decide = () => {
     const ok = codes.some((c) => permission.has(c));
+    if (!ok) {
+      console.warn('[PermisoGuard] RECHAZADO:', state.url, 'requiere uno de:', codes);
+    } else {
+      console.log('[PermisoGuard] PERMITIDO:', state.url);
+    }
     return ok ? true : router.createUrlTree(['/home'], { queryParams: { sinPermiso: state.url } });
   };
 
   // Si ya está permitido, resolver sincrónico.
-  if (codes.some((c) => permission.has(c))) return true;
+  if (codes.some((c) => permission.has(c))) {
+    console.log('[PermisoGuard] PERMITIDO (sincrónico):', state.url);
+    return true;
+  }
 
   // Si no, esperar a que carguen los permisos del usuario (primera emisión con
   // datos) y reevaluar. Timeout de respaldo por si el set queda vacío.
+  console.log('[PermisoGuard] Esperando carga de permisos para:', state.url);
   return permission.codigos$.pipe(
     filter((set) => set.size > 0),
     take(1),

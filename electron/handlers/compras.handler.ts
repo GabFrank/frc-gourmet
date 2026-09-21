@@ -1423,7 +1423,23 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     const repo = dataSource.getRepository(Pago);
     const entity = repo.create(pagoData);
     await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
-    return await repo.save(entity);
+    const saved = await repo.save(entity);
+    
+    // ─── SSE: emitir evento si es pago de venta con mesa/comanda ────────────
+    try {
+      const pagoId = (saved as any).id;
+      if (pagoId) {
+        const venta = await dataSource.getRepository(Venta).findOne({ where: { pago: { id: pagoId } } as any });
+        if (venta?.id) {
+          const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+          await emitVentaCambio(dataSource, venta.id);
+        }
+      }
+    } catch (e) {
+      console.warn('[createPago] emit SSE falló:', e);
+    }
+    
+    return saved;
   });
 
   ipcMain.handle('updatePago', async (_event: any, id: number, data: any) => {
@@ -1487,7 +1503,23 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       await assertTerminalPuedeOperar(dataSource, _event, (pago?.caja as any)?.id ?? null, 'PAGO');
     }
     const repo = dataSource.getRepository(PagoDetalle);
-    return await repo.save(repo.create(detalleData));
+    const saved = await repo.save(repo.create(detalleData));
+    
+    // ─── SSE: emitir evento si es pago de venta con mesa/comanda ────────────
+    try {
+      const pagoId = (saved as any).pago?.id ?? (detalleData?.pago as any)?.id;
+      if (pagoId) {
+        const venta = await dataSource.getRepository(Venta).findOne({ where: { pago: { id: pagoId } } as any });
+        if (venta?.id) {
+          const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+          await emitVentaCambio(dataSource, venta.id);
+        }
+      }
+    } catch (e) {
+      console.warn('[createPagoDetalle] emit SSE falló:', e);
+    }
+    
+    return saved;
   });
 
   ipcMain.handle('updatePagoDetalle', async (_event: any, id: number, data: any) => {

@@ -791,6 +791,11 @@ export abstract class RepositoryService {
   abstract createCuentaBancaria(data: any): Observable<any>;
   abstract updateCuentaBancaria(id: number, data: any): Observable<any>;
   abstract deleteCuentaBancaria(id: number): Observable<any>;
+  abstract getCuentasBancariasDestinoByPersona(personaId: number, incluirInactivas: boolean): Observable<any[]>;
+  abstract getCuentaBancariaDestino(id: number): Observable<any>;
+  abstract createCuentaBancariaDestino(data: any): Observable<any>;
+  abstract updateCuentaBancariaDestino(id: number, data: any): Observable<any>;
+  abstract deleteCuentaBancariaDestino(id: number): Observable<any>;
   abstract getMaquinasPos(): Observable<any[]>;
   abstract getMaquinaPos(id: number): Observable<any>;
   abstract createMaquinaPos(data: any): Observable<any>;
@@ -943,6 +948,7 @@ export abstract class RepositoryService {
   abstract createMotivoVale(data: any): Observable<any>;
   abstract updateMotivoVale(id: number, data: any): Observable<any>;
   abstract deleteMotivoVale(id: number): Observable<any>;
+  abstract getVale(id: number): Observable<any>;
   abstract getVales(filtros?: any): Observable<any[]>;
   abstract getValesPendientesDescuento(funcionarioId: number): Observable<any[]>;
   abstract createVale(data: any): Observable<any>;
