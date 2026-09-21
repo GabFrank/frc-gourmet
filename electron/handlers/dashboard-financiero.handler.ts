@@ -6,6 +6,7 @@ import { MonedaCambio } from '../../src/app/database/entities/financiero/moneda-
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { CajaMayorEstado } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { dbQuery } from '../utils/db-query';
+import { fechaParamSql } from '../utils/date.utils';
 
 export function registerDashboardFinancieroHandlers(
   dataSource: DataSource,
@@ -158,7 +159,7 @@ async function buildHistoricoCotizaciones(
         WHERE moneda_origen_id = ? AND moneda_destino_id = ?
           AND created_at <= ?
         ORDER BY created_at DESC LIMIT 1
-      `, [usdMoneda.id, principal.id, d.toISOString()]);
+      `, [usdMoneda.id, principal.id, fechaParamSql(dataSource, d)]);
       usd.push(Number(rows?.[0]?.compraLocal || 0));
     } else {
       usd.push(0);
@@ -170,7 +171,7 @@ async function buildHistoricoCotizaciones(
         WHERE moneda_origen_id = ? AND moneda_destino_id = ?
           AND created_at <= ?
         ORDER BY created_at DESC LIMIT 1
-      `, [brlMoneda.id, principal.id, d.toISOString()]);
+      `, [brlMoneda.id, principal.id, fechaParamSql(dataSource, d)]);
       brl.push(Number(rows?.[0]?.compraLocal || 0));
     } else {
       brl.push(0);
