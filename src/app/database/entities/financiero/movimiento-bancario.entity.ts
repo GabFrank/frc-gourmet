@@ -19,6 +19,15 @@ export class MovimientoBancario extends BaseModel {
   @JoinColumn({ name: 'cuenta_bancaria_id' })
   cuentaBancaria!: any;
 
+  // Cuenta bancaria de DESTINO (terceros): a quién va la transferencia
+  // Nullable: solo se usa en movimientos que son transferencias a terceros (pago consolidado)
+  @ManyToOne('CuentaBancariaDestino', { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'cuenta_bancaria_destino_id' })
+  cuentaBancariaDestino?: any;
+
+  @Column({ type: 'int', name: 'cuenta_bancaria_destino_id', nullable: true })
+  cuentaBancariaDestinoId?: number;
+
   @Column({
     type: 'varchar',
     enum: MovimientoBancarioTipo,

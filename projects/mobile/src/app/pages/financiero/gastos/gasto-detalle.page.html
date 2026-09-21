@@ -1,0 +1,94 @@
+<mat-toolbar color="primary">
+  <button mat-icon-button (click)="goBack()">
+    <mat-icon>arrow_back</mat-icon>
+  </button>
+  <span class="toolbar-title">Gasto #{{ id }}</span>
+</mat-toolbar>
+
+<mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+
+<div class="page-content">
+  <!-- Error state -->
+  <mat-card *ngIf="error && !loading" class="error-card" appearance="outlined">
+    <mat-card-content>
+      <div class="error-icon">
+        <mat-icon color="warn">error_outline</mat-icon>
+      </div>
+      <p class="error-message">{{ error }}</p>
+      <button mat-raised-button color="primary" (click)="goBack()">
+        Volver
+      </button>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Content -->
+  <ng-container *ngIf="!error && !loading">
+    <!-- Cabecera -->
+    <mat-card class="detail-card" appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>
+          {{ categoria }}
+          <mat-chip [class]="estadoClase">{{ estado }}</mat-chip>
+        </mat-card-title>
+        <mat-card-subtitle>{{ fecha }}</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="detail-row" *ngIf="descripcion">
+          <span class="detail-label">Descripción:</span>
+          <span class="detail-value">{{ descripcion }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Caja Mayor:</span>
+          <span class="detail-value">{{ cajaMayor }}</span>
+        </div>
+        <div class="detail-row" *ngIf="proveedor !== 'N/A'">
+          <span class="detail-label">Proveedor:</span>
+          <span class="detail-value">{{ proveedor }}</span>
+        </div>
+        <div class="detail-row" *ngIf="numeroComprobante">
+          <span class="detail-label">Nº Comprobante:</span>
+          <span class="detail-value">{{ numeroComprobante }}</span>
+        </div>
+        <div class="detail-row total-row">
+          <span class="detail-label">Total:</span>
+          <span class="detail-value total">
+            {{ simbolo }} {{ total | number:'1.0-' + decimales }}
+          </span>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Detalles -->
+    <mat-card *ngIf="detalles.length > 0" class="detail-card" appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>Detalles ({{ detalles.length }})</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div *ngFor="let d of detalles; let i = index" class="detalle-item">
+          <div class="detalle-header">
+            <span class="detalle-numero">#{{ i + 1 }}</span>
+            <span class="detalle-monto">
+              {{ d.simbolo }} {{ d.monto | number:'1.0-2' }}
+            </span>
+          </div>
+          <div class="detalle-body">
+            <div class="detalle-row">
+              <span class="detalle-label">Moneda:</span>
+              <span>{{ d.moneda }}</span>
+            </div>
+            <div class="detalle-row">
+              <span class="detalle-label">Forma de pago:</span>
+              <span>{{ d.formaPago }}</span>
+            </div>
+            <div class="detalle-row" *ngIf="d.observacion">
+              <span class="detalle-label">Observación:</span>
+              <span>{{ d.observacion }}</span>
+            </div>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Nota: NO se muestran adjuntos (mobile no tiene <app-file-upload>) -->
+  </ng-container>
+</div>

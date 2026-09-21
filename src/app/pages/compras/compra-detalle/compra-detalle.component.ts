@@ -57,7 +57,10 @@ export class CompraDetalleComponent implements OnInit {
   }
 
   setData(d: any): void {
-    if (d?.compraId) this.compraId = d.compraId;
+    if (d?.compraId) {
+      this.compraId = d.compraId;
+      this.load(); // Cargar datos inmediatamente para deep links
+    }
   }
 
   async load(): Promise<void> {

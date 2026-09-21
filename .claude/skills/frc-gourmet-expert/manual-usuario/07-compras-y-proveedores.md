@@ -219,7 +219,7 @@ Toda compra finalizada genera CPP + cuotas — no toques `CompraCuota`.
 - Exports PDF / Excel.
 - Alertas de stock mínimo al finalizar compra.
 
-→ Pendientes en [workflows/todos-pendientes.md](../../workflows/todos-pendientes.md).
+→ Pendientes en [workflows/todos-pendientes.md](../workflows/todos-pendientes.md).
 
 ---
 

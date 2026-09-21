@@ -2,7 +2,7 @@
 
 ## main.ts
 
-`main.ts` es el bootstrap de Electron: inicializa la BD, registra los 54 handlers, dispara seeds y schedulers, y crea las ventanas (splash + principal).
+`main.ts` es el bootstrap de Electron: inicializa la BD, registra los 72 handlers (vía `registerAllAppHandlers()`, ver [reference/handlers-index.md](../reference/handlers-index.md)), dispara seeds y schedulers, y crea las ventanas (splash + principal).
 
 ### Variables globales
 

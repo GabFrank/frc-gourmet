@@ -49,6 +49,8 @@ Los canales `crear-vale-confirmado` y `confirmar-vale` **siguen vivos**: los usa
 PWA mobile, que no tiene pantalla de pago diferido. El `modoConfirmar` del diálogo
 de desktop quedó sin entrada (borrarlo está en el backlog).
 
+**⚠️ Layout del diálogo:** El diálogo de crear vale (`create-edit-vale-dialog.component.ts`) no puede tener `min-width` en `.dialog-content` mayor que el `width` del `MatDialogConfig` menos el padding del `mat-dialog-content` (~32px), o causará overflow horizontal.
+
 Detalle del subsistema → [financiero-caja-mayor.md](financiero-caja-mayor.md)
 § Pago consolidado.
 
