@@ -17,6 +17,7 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'RRHH_ASISTENCIA_REGISTRAR', descripcion: 'Registrar asistencias', modulo: 'RRHH' },
   { codigo: 'RRHH_ASISTENCIA_JUSTIFICAR', descripcion: 'Justificar asistencias', modulo: 'RRHH' },
   // RRHH - Vales / Adelantos / Préstamos
+  { codigo: 'RRHH_VALE_VER', descripcion: 'Ver detalle de vales y adelantos', modulo: 'RRHH' },
   { codigo: 'RRHH_VALE_CREAR', descripcion: 'Crear vales/adelantos', modulo: 'RRHH' },
   { codigo: 'RRHH_VALE_CONFIRMAR', descripcion: 'Confirmar vales/adelantos', modulo: 'RRHH' },
   { codigo: 'RRHH_VALE_ANULAR', descripcion: 'Anular vales/adelantos', modulo: 'RRHH' },
@@ -52,6 +53,10 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'CPC_ANULAR', descripcion: 'Anular cobros de cuotas de clientes', modulo: 'FINANCIERO' },
   { codigo: 'CPC_DESCUENTO', descripcion: 'Conceder descuentos al cobrar cuentas por cobrar', modulo: 'FINANCIERO' },
   { codigo: 'CPC_CANCELAR', descripcion: 'Cancelar cuentas por cobrar', modulo: 'FINANCIERO' },
+  // Cuentas Bancarias Destino (Fase 1 MVP - Proveedores)
+  { codigo: 'FINANCIERO_CTA_BANCARIA_DESTINO_CREAR', descripcion: 'Crear cuenta bancaria destino (terceros)', modulo: 'FINANCIERO' },
+  { codigo: 'FINANCIERO_CTA_BANCARIA_DESTINO_ACTUALIZAR', descripcion: 'Actualizar cuenta bancaria destino', modulo: 'FINANCIERO' },
+  { codigo: 'FINANCIERO_CTA_BANCARIA_DESTINO_ELIMINAR', descripcion: 'Eliminar cuenta bancaria destino', modulo: 'FINANCIERO' },
   // RRHH Fase 8 - Dashboard, Notificaciones y Reportes
   { codigo: 'RRHH_DASHBOARD_VER', descripcion: 'Ver dashboard de RRHH con KPIs', modulo: 'RRHH' },
   { codigo: 'RRHH_REPORTE_GENERAR', descripcion: 'Generar y exportar reportes RRHH (PDF/Excel)', modulo: 'RRHH' },
@@ -127,6 +132,8 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'FINANCIERO_CAJA_GESTIONAR', descripcion: 'Borrar cajas/conteos y configurar las monedas habilitadas', modulo: 'FINANCIERO' },
   { codigo: 'FINANCIERO_CAJA_AJUSTAR', descripcion: 'Ajustar una caja ya cerrada (corregir conteo, agregar gasto/retiro)', modulo: 'FINANCIERO' },
   { codigo: 'CAJA_MAYOR_OPERAR', descripcion: 'Registrar movimientos/gastos/retiros en caja mayor', modulo: 'FINANCIERO' },
+  { codigo: 'FINANCIERO_GASTO_VER', descripcion: 'Ver detalle de gastos de Caja Mayor', modulo: 'FINANCIERO' },
+  { codigo: 'FINANCIERO_PAGO_CONSOLIDADO_VER', descripcion: 'Ver detalle de pagos consolidados de Caja Mayor', modulo: 'FINANCIERO' },
   { codigo: 'MONEDAS_GESTIONAR', descripcion: 'Gestionar monedas y cotizaciones', modulo: 'FINANCIERO' },
   { codigo: 'BANCOS_VER', descripcion: 'Ver cuentas bancarias, cheques y POS', modulo: 'FINANCIERO' },
   { codigo: 'BANCOS_GESTIONAR', descripcion: 'Gestionar cuentas bancarias, cheques y POS', modulo: 'FINANCIERO' },

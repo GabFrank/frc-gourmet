@@ -1,0 +1,54 @@
+<mat-toolbar color="primary">
+  <button mat-icon-button (click)="goBack()">
+    <mat-icon>arrow_back</mat-icon>
+  </button>
+  <span class="toolbar-title">Vale #{{ id }}</span>
+</mat-toolbar>
+
+<mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+
+<div class="page-content">
+  <!-- Error state -->
+  <mat-card *ngIf="error && !loading" class="error-card" appearance="outlined">
+    <mat-card-content>
+      <div class="error-icon">
+        <mat-icon color="warn">error_outline</mat-icon>
+      </div>
+      <p class="error-message">{{ error }}</p>
+      <button mat-raised-button color="primary" (click)="goBack()">
+        Volver
+      </button>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Content -->
+  <ng-container *ngIf="!error && !loading">
+    <!-- Cabecera -->
+    <mat-card class="detail-card" appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>
+          {{ funcionario }}
+          <mat-chip [class]="estadoClase">{{ estadoLabel }}</mat-chip>
+          <mat-chip *ngIf="esAdelanto" class="chip-adelanto">Adelanto</mat-chip>
+        </mat-card-title>
+        <mat-card-subtitle>{{ fecha }}</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="detail-row">
+          <span class="detail-label">Motivo:</span>
+          <span class="detail-value">{{ motivo }}</span>
+        </div>
+        <div class="detail-row" *ngIf="descripcion">
+          <span class="detail-label">Descripción:</span>
+          <span class="detail-value">{{ descripcion }}</span>
+        </div>
+        <div class="detail-row total-row">
+          <span class="detail-label">Monto:</span>
+          <span class="detail-value total">
+            {{ simbolo }} {{ monto | number:'1.0-' + decimales }}
+          </span>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </ng-container>
+</div>

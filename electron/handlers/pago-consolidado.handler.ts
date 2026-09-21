@@ -16,11 +16,13 @@ import { DataSource } from 'typeorm';
 
 import { CajaMayorMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-movimiento.entity';
 import { CuentaBancaria } from '../../src/app/database/entities/financiero/cuenta-bancaria.entity';
+import { CuentaBancariaDestino } from '../../src/app/database/entities/financiero/cuenta-bancaria-destino.entity';
 import { MovimientoBancarioTipo } from '../../src/app/database/entities/financiero/movimiento-bancario.entity';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { PagoConsolidado } from '../../src/app/database/entities/financiero/pago-consolidado.entity';
 import { PagoConsolidadoDetalle } from '../../src/app/database/entities/financiero/pago-consolidado-detalle.entity';
+import { Proveedor } from '../../src/app/database/entities/compras/proveedor.entity';
 import {
   PagoConcepto,
   PagoConsolidadoEstado,
@@ -32,6 +34,7 @@ import {
 import { CajaMayorConfiguracion } from '../../src/app/database/entities/financiero/caja-mayor-configuracion.entity';
 import { CajaMayor } from '../../src/app/database/entities/financiero/caja-mayor.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { Permission } from '../../src/app/database/entities/personas/permission.entity';
 
 import { ensurePermission } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
@@ -131,7 +134,7 @@ export function registerPagoConsolidadoHandlers(
       // Nunca contra el saldo que mando el cliente: entre que se dibujo la
       // pantalla y se confirmo el pago la deuda pudo saldarse por otro camino.
       const items: ItemAPagar[] = [];
-      const meta: Array<{ descripcion: string; beneficiario: string | null }> = [];
+      const meta: Array<{ descripcion: string; beneficiario: string | null; beneficiarioId: number | null }> = [];
       // Se lockea SIEMPRE en orden de id: dos pagos concurrentes con obligaciones
       // solapadas, tomadas en el orden en que las tildó cada usuario, pueden
       // deadlockear en Postgres. Un orden total las serializa.
@@ -144,10 +147,10 @@ export function registerPagoConsolidadoHandlers(
           monto: redondear(Number(it.monto), 2),
           saldoPendiente: real.saldoPendiente,
           monedaId: real.monedaId,
-          beneficiarioId: null,
+          beneficiarioId: real.beneficiarioId,
           descripcion: real.descripcion,
         });
-        meta.push({ descripcion: real.descripcion, beneficiario: real.beneficiario });
+        meta.push({ descripcion: real.descripcion, beneficiario: real.beneficiario, beneficiarioId: real.beneficiarioId });
       }
 
       // Moneda de la deuda: comun a todas (lo valida `validarSeleccion`).
@@ -162,11 +165,49 @@ export function registerPagoConsolidadoHandlers(
         // con el que mandó el cliente.
         items[i].monto = redondear(Number(itemsOrdenados[i].monto), decDeuda);
       }
+
+      // ── Beneficiario único y cuenta destino (Fase 1: proveedores)
+      let cuentaDestinoResuelta: CuentaBancariaDestino | null = null;
       if (CONCEPTO_BENEFICIARIO_UNICO[concepto]) {
         // El beneficiario unico (proveedor en compras, cliente en cobros) se valida
         // contra lo releido, no contra lo que mando el cliente.
         const benes = new Set(meta.map((m) => m.beneficiario || ''));
         if (benes.size > 1) throw new Error(CONCEPTO_BENEFICIARIO_UNICO_ERROR[concepto]);
+
+        // Si hay líneas bancarias, resolver cuenta destino
+        const tieneBancarias = lineasPayload.some((l) => l.fuente === 'CUENTA_BANCARIA');
+        if (tieneBancarias && concepto === 'COMPRA') {
+          // Fase 1: solo proveedores. Cliente/Funcionario en fases 2-3.
+          // Cuenta destino OPCIONAL (Gabriel 2026-09-18): si hay persona+cuenta
+          // válida se adjunta al movimiento; si no, el pago bancario sigue igual.
+          const beneficiarioId = meta[0].beneficiarioId;
+          if (!beneficiarioId) {
+            throw new Error('No se pudo identificar el proveedor para resolver la cuenta de cobro.');
+          }
+          const proveedor = await queryRunner.manager.findOne(Proveedor, {
+            where: { id: beneficiarioId, activo: true },
+            relations: ['cuentaBancariaDefault', 'cuentaBancariaDefault.persona', 'persona'],
+          });
+          if (!proveedor) {
+            throw new Error(`Proveedor #${beneficiarioId} no encontrado.`);
+          }
+          const cuenta = proveedor.cuentaBancariaDefault;
+          if (
+            proveedor.persona &&
+            proveedor.cuentaBancariaDefaultId &&
+            cuenta &&
+            cuenta.activo &&
+            cuenta.persona &&
+            cuenta.persona.activo
+          ) {
+            cuentaDestinoResuelta = cuenta;
+          } else {
+            console.warn(
+              `[pago-consolidado] Proveedor "${proveedor.nombre}" sin cuenta destino usable; ` +
+              `pago CUENTA_BANCARIA continúa sin cuentaBancariaDestinoId.`
+            );
+          }
+        }
       }
 
       const erroresSeleccion = validarSeleccion(concepto, items, decDeuda);
@@ -362,12 +403,23 @@ export function registerPagoConsolidadoHandlers(
           // Direccional: en un cobro la cuenta se acredita, no se debita.
           cb.saldo = redondear(Number(cb.saldo) + (esIngresoEvento ? g.monto : -g.monto), 2);
           await queryRunner.manager.save(CuentaBancaria, cb);
+
+          // Descripción enriquecida con datos de cuenta destino
+          let obsMovEnriquecida = obsMov;
+          if (cuentaDestinoResuelta) {
+            const titular = cuentaDestinoResuelta.titular || cuentaDestinoResuelta.persona?.nombre || 'SIN TITULAR';
+            const banco = cuentaDestinoResuelta.banco;
+            const nroCuenta = cuentaDestinoResuelta.numeroCuenta;
+            obsMovEnriquecida = `TRANSF. A ${titular} (${banco} ${nroCuenta}) - ${obsMov}`.slice(0, 255);
+          }
+
           const movBanco = await registrarMovimientoBancario(queryRunner.manager, dataSource, {
             cuentaBancariaId: Number(l.cuentaBancariaId),
             tipo: esIngresoEvento ? MovimientoBancarioTipo.ENTRADA_MANUAL : MovimientoBancarioTipo.SALIDA_MANUAL,
             monto: g.monto,
-            observacion: obsMov,
+            observacion: obsMovEnriquecida,
             responsable: userEntity,
+            cuentaBancariaDestinoId: cuentaDestinoResuelta?.id,
           });
           g.movimientoId = movBanco.id;
         }
@@ -402,6 +454,7 @@ export function registerPagoConsolidadoHandlers(
           formaPagoId: l.formaPagoId ?? null,
           cajaMayorId: l.cajaMayorId ?? null,
           cuentaBancariaId: l.cuentaBancariaId ?? null,
+          cuentaBancariaDestinoId: l.fuente === 'CUENTA_BANCARIA' && cuentaDestinoResuelta ? cuentaDestinoResuelta.id : null,
           montoOrigen: f.montoOrigen,
           cotizacion: l.cotizacion,
           montoImputado: f.montoImputado,
@@ -445,7 +498,29 @@ export function registerPagoConsolidadoHandlers(
         relations: ['monedaDeuda', 'responsable', 'responsable.persona'],
       });
       if (!pago) throw new Error(`Pago consolidado ${pagoId} no encontrado`);
-      await ensurePermission(dataSource, getCurrentUser, getAdapter(pago.concepto).permiso);
+      
+      // Permiso para ver: FINANCIERO_PAGO_CONSOLIDADO_VER (genérico) o el permiso del concepto específico
+      // Usamos checkPermission para evitar raw SQL que falla en Postgres con `?`
+      const user = getCurrentUser();
+      if (!user?.id) throw new Error('NO_PERMISSION: Usuario no autenticado');
+      
+      const permisoGenerico = 'FINANCIERO_PAGO_CONSOLIDADO_VER';
+      const permisoConcepto = getAdapter(pago.concepto).permiso;
+      
+      // Verificar con QueryBuilder (compatible SQLite + Postgres)
+      const permisos = await dataSource.getRepository(Permission)
+        .createQueryBuilder('p')
+        .innerJoin('role_permissions', 'rp', 'rp.permission_id = p.id')
+        .innerJoin('usuario_roles', 'ur', 'ur.role_id = rp.role_id')
+        .where('ur.usuario_id = :uid', { uid: user.id })
+        .andWhere('p.codigo IN (:...codigos)', { codigos: [permisoGenerico, permisoConcepto] })
+        .select('p.codigo')
+        .distinct(true)
+        .getRawMany();
+      
+      if (!permisos || permisos.length === 0) {
+        throw new Error(`NO_PERMISSION: Se requiere ${permisoGenerico} o ${permisoConcepto}`);
+      }
 
       const detalles = await dataSource.getRepository(PagoConsolidadoDetalle).find({
         where: { pagoConsolidadoId: pagoId },

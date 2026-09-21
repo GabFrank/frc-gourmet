@@ -103,6 +103,34 @@ const REPORTES_ITEMS: SectionItem[] = [
  * Las olas administrativas van habilitando sub-módulos.
  */
 export const routes: Routes = [
+  // --- DEEP LINKS (/o/{tipo}/{id}) ---
+  // Contrato externo: bot de WhatsApp envía https://app.frc-gourmet.com/#/o/{tipo}/{id}
+  // El interceptor (APP_INITIALIZER + hashchange) traduce hash → path y navega acá.
+  // P4: usar arrays de permisos para dual-check (legacy + nuevo permiso _VER)
+  // 
+  // P0 FIX (2026-09-15): compra NO necesita ruta aquí (DeepLinkService mapea directo
+  // a /compras/lista/:id). Evita NG04014 (redirectTo + canActivate incompatibles).
+  {
+    path: 'o/gasto/:id',
+    canActivate: [authGuard, permisoGuard],
+    // Dual-check: legacy CAJA_MAYOR_OPERAR O nuevo FINANCIERO_GASTO_VER
+    data: { permiso: ['FINANCIERO_GASTO_VER', 'CAJA_MAYOR_OPERAR'] },
+    loadComponent: () => import('./pages/financiero/gastos/gasto-detalle.page').then((m) => m.GastoDetallePage),
+  },
+  {
+    path: 'o/vale/:id',
+    canActivate: [authGuard, permisoGuard],
+    // Dual-check: legacy RRHH_VALE_CONFIRMAR O nuevo RRHH_VALE_VER
+    data: { permiso: ['RRHH_VALE_VER', 'RRHH_VALE_CONFIRMAR'] },
+    loadComponent: () => import('./pages/rrhh/vales/vale-detalle.page').then((m) => m.ValeDetallePage),
+  },
+  {
+    path: 'o/pago/:id',
+    canActivate: [authGuard],
+    // Pago consolidado NO existe en mobile → mensaje amigable (sin permisoGuard, público para cualquier logueado)
+    loadComponent: () => import('./pages/error/feature-not-available.page').then((m) => m.FeatureNotAvailablePage),
+  },
+
   {
     path: 'login',
     loadComponent: () => import('./pages/login/login.page').then((m) => m.LoginPage),

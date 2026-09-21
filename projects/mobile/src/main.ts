@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { APP_INITIALIZER } from '@angular/core';
 import { bootstrapApplication } from '@angular/platform-browser';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { provideHttpClient } from '@angular/common/http';
@@ -13,6 +14,7 @@ import { AppComponent } from './app/app.component';
 import { routes } from './app/app.routes';
 import { installApiHttp } from './app/core/data/api-http';
 import { MobileAppModeService } from './app/core/services/mobile-app-mode.service';
+import { initializeDeepLinks } from './app/app.initializer';
 
 // Locale es-PY: PYG sin decimales, separador de miles ".". Mismo criterio que el desktop.
 registerLocaleData(localeEsPY, 'es-PY');
@@ -46,5 +48,11 @@ bootstrapApplication(AppComponent, {
     { provide: RepositoryService, useClass: RepositoryIpcService },
     // Modo siempre 'client' en mobile (stub sin Electron).
     { provide: AppModeService, useClass: MobileAppModeService },
+    // P1 OBLIGATORIO: APP_INITIALIZER para procesar deep links en cold start sin race
+    {
+      provide: APP_INITIALIZER,
+      useFactory: initializeDeepLinks,
+      multi: true,
+    },
   ],
 }).catch((err) => console.error(err));

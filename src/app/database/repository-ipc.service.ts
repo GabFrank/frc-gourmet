@@ -3435,6 +3435,22 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.deleteCuentaBancaria(id));
   }
 
+  getCuentasBancariasDestinoByPersona(personaId: number, incluirInactivas: boolean): Observable<any[]> {
+    return from(this.api.callIpc('get-cuentas-bancarias-destino-by-persona', { personaId, incluirInactivas }));
+  }
+  getCuentaBancariaDestino(id: number): Observable<any> {
+    return from(this.api.callIpc('get-cuenta-bancaria-destino', id));
+  }
+  createCuentaBancariaDestino(data: any): Observable<any> {
+    return from(this.api.callIpc('create-cuenta-bancaria-destino', data));
+  }
+  updateCuentaBancariaDestino(id: number, data: any): Observable<any> {
+    return from(this.api.callIpc('update-cuenta-bancaria-destino', id, data));
+  }
+  deleteCuentaBancariaDestino(id: number): Observable<any> {
+    return from(this.api.callIpc('delete-cuenta-bancaria-destino', id));
+  }
+
   getMaquinasPos(): Observable<any[]> {
     return from(this.api.getMaquinasPos());
   }
@@ -3924,6 +3940,9 @@ export class RepositoryIpcService extends RepositoryService {
   }
   deleteMotivoVale(id: number): Observable<any> {
     return from(this.api.deleteMotivoVale(id));
+  }
+  getVale(id: number): Observable<any> {
+    return from(this.api.callIpc('get-vale', id));
   }
   getVales(filtros?: any): Observable<any[]> {
     return from(this.api.getVales(filtros));

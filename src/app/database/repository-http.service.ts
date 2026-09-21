@@ -1750,6 +1750,22 @@ export class RepositoryHttpService extends RepositoryService {
   deleteCuentaBancaria(id: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.deleteCuentaBancaria() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+
+  getCuentasBancariasDestinoByPersona(personaId: number, incluirInactivas: boolean): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getCuentasBancariasDestinoByPersona() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getCuentaBancariaDestino(id: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getCuentaBancariaDestino() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  createCuentaBancariaDestino(data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.createCuentaBancariaDestino() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  updateCuentaBancariaDestino(id: number, data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.updateCuentaBancariaDestino() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  deleteCuentaBancariaDestino(id: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deleteCuentaBancariaDestino() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   getMaquinasPos(): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getMaquinasPos() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
@@ -2193,6 +2209,9 @@ export class RepositoryHttpService extends RepositoryService {
   }
   deleteMotivoVale(id: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.deleteMotivoVale() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getVale(id: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getVale() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getVales(filtros?: any): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getVales() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;

@@ -35,6 +35,7 @@ export async function registrarMovimientoBancario(
     numeroComprobante?: string;
     responsable?: any; // Usuario | null | undefined
     fecha?: Date;
+    cuentaBancariaDestinoId?: number | null;
   },
 ): Promise<MovimientoBancario> {
   const mov = manager.create(MovimientoBancario, {
@@ -47,6 +48,7 @@ export async function registrarMovimientoBancario(
       ? params.numeroComprobante.toUpperCase()
       : undefined,
     responsable: params.responsable || undefined,
+    cuentaBancariaDestinoId: params.cuentaBancariaDestinoId || null,
   });
   await setEntityUserTracking(dataSource, mov, params.responsable?.id, false);
   return await manager.save(MovimientoBancario, mov);

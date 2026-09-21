@@ -1,0 +1,36 @@
+<mat-toolbar color="primary">
+  <button mat-icon-button (click)="goBack()">
+    <mat-icon>arrow_back</mat-icon>
+  </button>
+  <span class="toolbar-title">Función no disponible</span>
+</mat-toolbar>
+
+<div class="page-content">
+  <mat-card class="error-card" appearance="outlined">
+    <mat-card-content>
+      <div class="error-icon">
+        <mat-icon color="warn">info_outline</mat-icon>
+      </div>
+      
+      <h2 class="error-title">Pago consolidado</h2>
+      
+      <p class="error-message">
+        Esta operación solo puede verse en la <strong>aplicación de escritorio</strong>.
+      </p>
+      
+      <p class="error-submessage">
+        Los pagos consolidados requieren una interfaz financiera avanzada que actualmente no está disponible en la versión móvil.
+      </p>
+      
+      <div class="actions">
+        <button mat-raised-button color="primary" (click)="goHome()">
+          <mat-icon>home</mat-icon>
+          Ir a inicio
+        </button>
+        <button mat-button (click)="goBack()">
+          Volver
+        </button>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>

@@ -30,6 +30,7 @@ import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.e
 import { TipoOperacionFinanciera, DiferenciaDestinoTipo } from '../../src/app/database/entities/financiero/operaciones-financieras-enums';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { Permission } from '../../src/app/database/entities/personas/permission.entity';
 import { esIngreso, actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { ensurePermission, getEffectiveUser } from '../utils/auth.utils';
 import { bloquearSiPagoConsolidado } from './pago-consolidado-guard';
@@ -1171,6 +1172,24 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
   });
 
   ipcMain.handle('get-gasto', async (_event: any, id: number) => {
+    // Permiso dual: CAJA_MAYOR_OPERAR (legacy, puede crear/editar gastos) o FINANCIERO_GASTO_VER (nuevo, solo lectura)
+    const user = getCurrentUser();
+    if (!user?.id) throw new Error('NO_PERMISSION: Usuario no autenticado');
+    
+    const permisos = await dataSource.getRepository(Permission)
+      .createQueryBuilder('p')
+      .innerJoin('role_permissions', 'rp', 'rp.permission_id = p.id')
+      .innerJoin('usuario_roles', 'ur', 'ur.role_id = rp.role_id')
+      .where('ur.usuario_id = :uid', { uid: user.id })
+      .andWhere('p.codigo IN (:...codigos)', { codigos: ['CAJA_MAYOR_OPERAR', 'FINANCIERO_GASTO_VER'] })
+      .select('p.codigo')
+      .distinct(true)
+      .getRawMany();
+    
+    if (!permisos || permisos.length === 0) {
+      throw new Error('NO_PERMISSION: Se requiere CAJA_MAYOR_OPERAR o FINANCIERO_GASTO_VER');
+    }
+
     try {
       const repo = dataSource.getRepository(Gasto);
       return await repo.findOne({

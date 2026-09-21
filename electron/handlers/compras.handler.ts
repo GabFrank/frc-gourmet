@@ -1427,10 +1427,13 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     
     // ─── SSE: emitir evento si es pago de venta con mesa/comanda ────────────
     try {
-      const ventaId = (saved as any).venta?.id ?? (pagoData?.venta as any)?.id;
-      if (ventaId) {
-        const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
-        await emitVentaCambio(dataSource, ventaId);
+      const pagoId = (saved as any).id;
+      if (pagoId) {
+        const venta = await dataSource.getRepository(Venta).findOne({ where: { pago: { id: pagoId } } as any });
+        if (venta?.id) {
+          const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
+          await emitVentaCambio(dataSource, venta.id);
+        }
       }
     } catch (e) {
       console.warn('[createPago] emit SSE falló:', e);
@@ -1506,11 +1509,10 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     try {
       const pagoId = (saved as any).pago?.id ?? (detalleData?.pago as any)?.id;
       if (pagoId) {
-        const pago = await dataSource.getRepository('Pago').findOne({ where: { id: pagoId }, relations: ['venta'] });
-        const ventaId = (pago as any)?.venta?.id;
-        if (ventaId) {
+        const venta = await dataSource.getRepository(Venta).findOne({ where: { pago: { id: pagoId } } as any });
+        if (venta?.id) {
           const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
-          await emitVentaCambio(dataSource, ventaId);
+          await emitVentaCambio(dataSource, venta.id);
         }
       }
     } catch (e) {
