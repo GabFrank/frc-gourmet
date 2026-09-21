@@ -35,16 +35,16 @@ const BLOCKED_CHANNELS = new Set<string>([
   'reset-database',
   'restart-app',
 
-  // Backups y restauración (destructivos / filesystem del servidor)
+  // Backups: permitidos los no destructivos (con guard SISTEMA_BACKUP en handler).
+  // Permitidos por HTTP: backup-create, backup-trigger-auto-now, backup-send-whatsapp.
+  // Destructivos o riesgosos siguen bloqueados:
   'backup-db-reset',
   'backup-clear-images',
   'backup-restore',
   'backup-delete',
-  'backup-create',
-  'backup-create-and-export',
-  'backup-trigger-auto-now',
-  'backup-config-set',
-  'backup-send-whatsapp',
+  // Configuración sensible y diálogos del servidor (sin sentido remoto):
+  'backup-create-and-export',  // showSaveDialog en el servidor = DoS
+  'backup-config-set',  // configuración sensible, solo local
   'backup-pick-folder',
   'backup-pick-restore-file',
 
