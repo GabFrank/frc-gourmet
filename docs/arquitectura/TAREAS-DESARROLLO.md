@@ -11,7 +11,7 @@
 ## Estado general
 
 El sistema creció muy por encima del alcance del tracker original. Hoy hay **157 archivos `.entity.ts`**,
-**54 handlers IPC**, driver dual SQLite/PostgreSQL con migraciones (sin `synchronize`), modos
+**72 handlers IPC**, driver dual SQLite/PostgreSQL con migraciones (sin `synchronize`), modos
 standalone/server/client y una PWA mobile. Las "acciones inmediatas" y la mayoría de las fases del
 tracker viejo **ya están resueltas**.
 
