@@ -23,7 +23,10 @@ export function registerAuthHandlers(
       const sessionRepository = dataSource.getRepository(LoginSession);
 
       // Find user case-insensitively
+      // `Usuario.password` es `select: false`: sin este addSelect el hash llega
+      // undefined y el login rechaza siempre.
       const usuario = await userRepository.createQueryBuilder('usuario')
+        .addSelect('usuario.password')
         .leftJoinAndSelect('usuario.persona', 'persona')
         .where('LOWER(usuario.nickname) = LOWER(:nickname)', { nickname: nickname })
         .getOne();
@@ -56,8 +59,16 @@ export function registerAuthHandlers(
       session.os = deviceInfo?.os || process.platform;
       const savedSession = await sessionRepository.save(session);
 
-      // Set the current user globally in the main process
-      setCurrentUser(usuario);
+      // Set the current user globally in the main process.
+      //
+      // Va SIN el hash: este singleton es lo que devuelve `getCurrentUser()`, y
+      // hay ~28 handlers que lo asignan a una entidad (`x.verificadoPor =
+      // currentUser`) y devuelven esa entidad — por ahí el hash volvía a salir.
+      // Nadie aguas abajo lee `currentUser.password` (los 7 lectores del hash lo
+      // piden con `addSelect`); el `verifyPassword` de arriba y el
+      // `session.usuario` de la `LoginSession` ya ocurrieron.
+      const { password: _hash, ...usuarioSinHash } = usuario as any;
+      setCurrentUser(usuarioSinHash as Usuario);
 
       // F5 paso 3: tambien actualizar currentDevice si el login trajo deviceId
       // (modo standalone donde el usuario eligio dispositivo en la wizard, o
@@ -90,7 +101,9 @@ export function registerAuthHandlers(
   ipcMain.handle('validate-credentials', async (_event: any, data: { nickname: string, password: string }) => {
     try {
       const userRepository = dataSource.getRepository(Usuario);
+      // Ídem login: el hash se pide explícito (`select: false` en la entidad).
       const usuario = await userRepository.createQueryBuilder('usuario')
+        .addSelect('usuario.password')
         .leftJoinAndSelect('usuario.persona', 'persona')
         .where('LOWER(usuario.nickname) = LOWER(:nickname)', { nickname: data.nickname })
         .getOne();

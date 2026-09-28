@@ -51,8 +51,10 @@ export function registerAuthRoutes(fastify: FastifyInstance, dataSource: DataSou
     const userRepo = dataSource.getRepository(Usuario);
     const sessionRepo = dataSource.getRepository(LoginSession);
 
+    // `Usuario.password` es `select: false`: el hash se pide explícito.
     const usuario = await userRepo
       .createQueryBuilder('usuario')
+      .addSelect('usuario.password')
       .leftJoinAndSelect('usuario.persona', 'persona')
       .where('LOWER(usuario.nickname) = LOWER(:nickname)', { nickname })
       .getOne();

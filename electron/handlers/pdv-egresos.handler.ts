@@ -19,6 +19,7 @@ import { ensurePermission } from '../utils/auth.utils';
 import { aplicarEstadoPagoCuota, revertirEstadoPagoCuota } from './cuentas-por-pagar.handler';
 import { getCotizacionCompraLocal } from '../utils/moneda.utils';
 import { crearCompraSimplificadaTx } from './compras.handler';
+import { selectUsuarioPublico } from '../utils/select-usuario-publico.util';
 
 /**
  * Egresos de efectivo de la caja de venta (PdV) por vales y compras pagados
@@ -391,13 +392,16 @@ export function registerPdvEgresosHandlers(
   // ─── Lecturas ────────────────────────────────────────────────────────────────
   ipcMain.handle('get-egresos-caja', async (_event, cajaId: number, incluirAnulados?: boolean) => {
     await ensurePermission(dataSource, getCurrentUser, ['VENTAS_PDV', 'FINANCIERO_CAJA_VER']);
-    const where: any = { caja: { id: cajaId } };
-    if (!incluirAnulados) where.estado = 'ACTIVO';
-    return await dataSource.getRepository(EgresoCaja).find({
-      where,
-      relations: ['moneda', 'formaPago', 'createdBy', 'createdBy.persona'],
-      order: { fecha: 'DESC', id: 'DESC' } as any,
-    });
+    const qb = dataSource.getRepository(EgresoCaja).createQueryBuilder('egreso')
+      .leftJoinAndSelect('egreso.moneda', 'moneda')
+      .leftJoinAndSelect('egreso.formaPago', 'formaPago')
+      .where('egreso.caja_id = :cajaId', { cajaId })
+      .orderBy('egreso.fecha', 'DESC')
+      .addOrderBy('egreso.id', 'DESC');
+    if (!incluirAnulados) qb.andWhere('egreso.estado = :estado', { estado: 'ACTIVO' });
+    // `createdBy` recortado: con `relations` viajaba la `Persona` del cajero.
+    selectUsuarioPublico(qb, 'egreso.createdBy', 'createdBy');
+    return await qb.getMany();
   });
 
   ipcMain.handle('get-vales-pendientes-funcionario', async (_event, funcionarioId: number) => {

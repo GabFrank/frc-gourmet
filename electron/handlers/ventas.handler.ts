@@ -22,6 +22,7 @@ import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
 import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
+import { selectUsuarioPublico } from '../utils/select-usuario-publico.util';
 import { Not, IsNull, In, EntityManager } from 'typeorm';
 import { DeepPartial } from 'typeorm';
 import { SelectQueryBuilder } from 'typeorm';
@@ -1078,15 +1079,15 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const qb = repo.createQueryBuilder('venta')
         .leftJoinAndSelect('venta.caja', 'caja')
         .leftJoinAndSelect('caja.dispositivo', 'dispositivo')
-        .leftJoinAndSelect('caja.createdBy', 'cajaCreatedBy')
-        .leftJoinAndSelect('cajaCreatedBy.persona', 'cajaCreatedByPersona')
         .leftJoinAndSelect('venta.formaPago', 'formaPago')
         .leftJoinAndSelect('venta.pago', 'pago')
         .leftJoinAndSelect('venta.mesa', 'mesa')
         .leftJoinAndSelect('venta.cliente', 'cliente')
-        .leftJoinAndSelect('cliente.persona', 'persona')
-        .leftJoinAndSelect('venta.createdBy', 'createdBy')
-        .leftJoinAndSelect('createdBy.persona', 'createdByPersona')
+        // El cliente se recorta a lo que puede aparecer en pantalla o en un
+        // comprobante: hidratar la `Persona` entera publicaba su dirección,
+        // teléfono, email y fecha de nacimiento en una lista de ventas.
+        .leftJoin('cliente.persona', 'persona')
+        .addSelect(['persona.id', 'persona.nombre', 'persona.apellido', 'persona.documento'])
         .leftJoinAndSelect('venta.items', 'items')
         // El delivery entra en la lista para poder mostrar el canal, la zona y
         // el repartidor. Va LEFT: la mayoría de las ventas no tiene reparto.
@@ -1106,6 +1107,12 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         .leftJoin('delivery.entregadoPorFuncionario', 'repartidor')
         .leftJoin('repartidor.persona', 'repartidorPersona')
         .addSelect(['repartidor.id', 'repartidorPersona.id', 'repartidorPersona.nombre']);
+
+      // Los dos `Usuario` de la fila (el cajero que abrió la caja y el que creó
+      // la venta) van recortados: la lista muestra el nombre y nada más. Ver
+      // `select-usuario-publico.util.ts`.
+      selectUsuarioPublico(qb, 'caja.createdBy', 'cajaCreatedBy', 'cajaCreatedByPersona');
+      selectUsuarioPublico(qb, 'venta.createdBy', 'createdBy', 'createdByPersona');
 
       // Date range filter (skip if cajaId is provided — caja has its own date range)
       //

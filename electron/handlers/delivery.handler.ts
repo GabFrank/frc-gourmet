@@ -42,6 +42,17 @@ import { printDeliveryTicketInternal } from './documentos-tickets.handler';
 import { getEstadoCobroVentaInternal } from './ventas.handler';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+/**
+ * Columnas de la `Persona` del **`Funcionario`** repartidor que este canal publica.
+ *
+ * Deliberadamente NO es `COLUMNAS_PERSONA_PUBLICA` de
+ * `select-usuario-publico.util.ts`: esa lista describe la `Persona` de un
+ * `Usuario` y el día que necesite un campo más (el plan ya discute conservar
+ * `documento` para facturación), este canal empezaría a publicar ese campo **del
+ * repartidor** sin que nadie toque este archivo — y el documento del repartidor
+ * es justo uno de los que este canal dejó de exponer.
+ */
+const COLUMNAS_PERSONA_REPARTIDOR = ['id', 'nombre', 'apellido'] as const;
 
 /**
  * Transiciones legales del delivery.
@@ -187,9 +198,24 @@ export function registerDeliveryHandlers(
       .innerJoinAndSelect('venta.delivery', 'delivery')
       .leftJoinAndSelect('delivery.precioDelivery', 'precioDelivery')
       .leftJoinAndSelect('delivery.cliente', 'cliente')
-      .leftJoinAndSelect('cliente.persona', 'persona')
-      .leftJoinAndSelect('delivery.entregadoPorFuncionario', 'repartidor')
-      .leftJoinAndSelect('repartidor.persona', 'repartidorPersona')
+      // ⚠️ Ni el cliente ni el repartidor van con `leftJoinAndSelect`.
+      //
+      // `Funcionario` arrastra `salarioBase`, `valorJornal`, `numeroIps` y
+      // `cuentaBancariaPropia`: hidratarlo publicaba el **sueldo y la cuenta
+      // bancaria** de cada repartidor cada vez que el PdV abre el diálogo de
+      // delivery, sobre un canal que `/api/rpc` sirve default-allow. Es la
+      // misma lección que `getVentasByDateRange` ya había aprendido
+      // (`ventas.handler.ts`, sesión 2026-08-28).
+      //
+      // De la `Persona` del cliente se conservan nombre, apellido, documento y
+      // **dirección**: la dirección la usa `convertir-modo-delivery-dialog`
+      // como fallback cuando el reparto no trae la suya. Teléfono, email y
+      // fecha de nacimiento no los usa nadie.
+      .leftJoin('cliente.persona', 'persona')
+      .addSelect(['persona.id', 'persona.nombre', 'persona.apellido', 'persona.documento', 'persona.direccion'])
+      .leftJoin('delivery.entregadoPorFuncionario', 'repartidor')
+      .leftJoin('repartidor.persona', 'repartidorPersona')
+      .addSelect(['repartidor.id', ...COLUMNAS_PERSONA_REPARTIDOR.map((c) => `repartidorPersona.${c}`)])
       .leftJoinAndSelect('venta.items', 'items')
       .leftJoinAndSelect('venta.pago', 'pago')
       // Sólo el id: alcanza para marcar los deliveries de otro turno y evita

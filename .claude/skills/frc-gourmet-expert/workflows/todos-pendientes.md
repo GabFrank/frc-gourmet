@@ -258,6 +258,11 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
 
   ⚠️ **Diseñar la migración de roles, no improvisarla**: `seedRolesPlantilla` sólo **agrega** permisos, nunca quita. Partir `VENTAS_PDV` en varios deja a los roles existentes — y sobre todo a los **roles custom** creados a mano — con el permiso viejo hasta que alguien los revise a mano.
 
+- [ ] 🟠 **Recortar la `Persona` en las ~20 lecturas que todavía hidratan `createdBy`.** Resto del PR `fix/usuario-password-select` (2026-09-28), que cerró la fuga del **hash** en todo el sistema (`Usuario.password` es `select: false`) y recortó los datos personales en los **11 canales del dominio caja**. Lo que queda no publica contraseñas, pero sí **documento, teléfono, email y dirección** de quien cargó cada registro, sobre canales que `/api/rpc` sirve default-allow.
+
+  Los seis archivos con `createdBy.persona`, verificados el 2026-09-28: `caja-mayor.handler.ts:1149, 1198, 2061, 2090, 2336, 2373`; `banking.handler.ts:744, 773`; `dashboard-financiero.handler.ts:71`; `dashboard-ventas.handler.ts:332`; `vales.handler.ts:52`; `ventas.handler.ts:1619, 1644` (`getVenta`/`getVentaItems`). Más otras ~15 que hidratan el `Usuario` sin su persona (`financiero.handler.ts:352` y `:362`, etc.).
+
+  Se reproduce con `rg -n "createdBy\.persona" electron/` y `rg -n "'createdBy'" electron/handlers electron/utils`. La herramienta ya existe: `selectUsuarioPublico` en `electron/utils/select-usuario-publico.util.ts`. Antes de recortar cada canal hay que grepear qué consume el frontend de esa respuesta — en el PR de caja hubo que **conservar `cliente.persona.direccion`** en `delivery-listar-pdv` porque `convertir-modo-delivery-dialog` la usa de fallback. Al terminar, extender `scripts/test-sin-fuga-datos-e2e.ts` con los canales nuevos. → [reference/known-bugs.md](../reference/known-bugs.md).
 - [ ] **Idle timeout server-side**: hoy solo `last_activity_time` se actualiza, sin auto-logout.
 - [ ] **Refresh tokens** + invalidación.
 - [ ] **Recuperación de contraseña**.

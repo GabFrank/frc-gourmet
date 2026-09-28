@@ -92,7 +92,13 @@ async function syncAdminPermissions(dataSource: DataSource): Promise<void> {
 async function markDefaultAdminMustChangePassword(dataSource: DataSource): Promise<void> {
   try {
     const usuarioRepo = dataSource.getRepository(Usuario);
-    const admin = await usuarioRepo.findOne({ where: { nickname: 'admin' } });
+    // `Usuario.password` es `select: false`: el hash se pide explícito, si no
+    // `verifyPassword` recibe undefined y el admin default nunca se detecta.
+    const admin = await usuarioRepo
+      .createQueryBuilder('usuario')
+      .addSelect('usuario.password')
+      .where('usuario.nickname = :nickname', { nickname: 'admin' })
+      .getOne();
     if (!admin || admin.mustChangePassword || !admin.activo) return;
     const stillDefault = await verifyPassword('admin', admin.password);
     if (!stillDefault) return;

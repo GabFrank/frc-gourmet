@@ -17,6 +17,7 @@ import { EgresoCaja } from '../../src/app/database/entities/financiero/egreso-ca
 import { RetiroCaja } from '../../src/app/database/entities/financiero/retiro-caja.entity';
 import { RetiroCajaOrigen } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { dbQuery } from './db-query';
+import { selectUsuarioPublico } from './select-usuario-publico.util';
 import { resumenDeliveryCaja, ResumenDeliveryCaja } from '../handlers/reportes-delivery.helper';
 
 export interface ResumenCajaConteoMoneda {
@@ -55,10 +56,17 @@ export interface ResumenCaja {
  */
 export async function computeResumenCaja(dataSource: DataSource, cajaId: number): Promise<ResumenCaja> {
   const cajaRepo = dataSource.getRepository(Caja);
-  const caja = await cajaRepo.findOne({
-    where: { id: cajaId },
-    relations: ['dispositivo', 'conteoApertura', 'conteoCierre', 'createdBy', 'createdBy.persona'],
-  });
+  // La `caja` se devuelve entera al frontend (`resumen.caja` en el diálogo de
+  // resumen y en el ticket de cierre), así que su `createdBy` va recortado: con
+  // `relations` arrastraba la `Persona` completa del cajero. Ver
+  // `select-usuario-publico.util.ts`.
+  const cajaQb = cajaRepo.createQueryBuilder('caja')
+    .leftJoinAndSelect('caja.dispositivo', 'dispositivo')
+    .leftJoinAndSelect('caja.conteoApertura', 'conteoApertura')
+    .leftJoinAndSelect('caja.conteoCierre', 'conteoCierre')
+    .where('caja.id = :cajaId', { cajaId });
+  selectUsuarioPublico(cajaQb, 'caja.createdBy', 'createdBy');
+  const caja = await cajaQb.getOne();
   if (!caja) throw new Error(`Caja ${cajaId} not found`);
 
   // Conteo apertura por moneda
@@ -219,11 +227,17 @@ export async function computeResumenCaja(dataSource: DataSource, cajaId: number)
   // Retiros MANUALES de esta caja. El retiro de CIERRE se genera del propio
   // conteo (mueve el efectivo contado a caja mayor) y NO debe descontarse del
   // esperado; solo los manuales, que salieron del cajón durante el turno.
-  const retirosCaja = await dataSource.getRepository(RetiroCaja).find({
-    where: { caja: { id: cajaId } as any, origen: RetiroCajaOrigen.MANUAL as any },
-    relations: ['detalles', 'detalles.moneda', 'detalles.formaPago', 'responsableRetiro', 'responsableRetiro.persona'],
-    order: { fechaRetiro: 'DESC' } as any,
-  });
+  // El responsable va recortado (sólo se muestra su nombre, ver el `map` de
+  // abajo). Con `relations` se hidrataba su `Persona` entera.
+  const retirosQb = dataSource.getRepository(RetiroCaja).createQueryBuilder('retiro')
+    .leftJoinAndSelect('retiro.detalles', 'detalles')
+    .leftJoinAndSelect('detalles.moneda', 'moneda')
+    .leftJoinAndSelect('detalles.formaPago', 'formaPago')
+    .where('retiro.caja_id = :cajaId', { cajaId })
+    .andWhere('retiro.origen = :origen', { origen: RetiroCajaOrigen.MANUAL })
+    .orderBy('retiro.fechaRetiro', 'DESC');
+  selectUsuarioPublico(retirosQb, 'retiro.responsableRetiro', 'responsableRetiro');
+  const retirosCaja = await retirosQb.getMany();
   const retirosEfectivoPorMoneda: { [monedaId: number]: number } = {};
   const retiros = retirosCaja.map(r => {
     const detalles = (r.detalles || []).map((d: any) => {

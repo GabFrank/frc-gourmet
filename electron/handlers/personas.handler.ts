@@ -261,6 +261,14 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
       }
 
       // Update other fields
+      //
+      // ⚠️ La entidad se cargó SIN la columna `password` (`select: false`), así
+      // que acá `usuario.password` vale `undefined` salvo que el payload traiga
+      // una nueva. TypeORM ignora las propiedades `undefined` al calcular el
+      // diff del UPDATE, así que el hash existente NO se pisa ni se borra —
+      // está cubierto por el assert 5b de `npm run test:sin-fuga-datos`. Si
+      // algún día hace falta forzarlo, el camino es `repo.update(id, {...})`
+      // sin la columna, nunca setear `usuario.password = ''`.
       if (usuarioData.password !== undefined && usuarioData.password !== '') {
         usuario.password = await hashPassword(usuarioData.password);
       }
@@ -274,7 +282,12 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
       await setEntityUserTracking(dataSource, usuario, currentUser?.id, true);
       const updatedUsuario = await usuarioRepository.save(usuario);
 
-      return { success: true, usuario: updatedUsuario };
+      // `save()` devuelve LA MISMA instancia, así que si el payload trajo una
+      // contraseña nueva la respuesta llevaría el hash recién generado — justo el
+      // camino del reset administrativo, y el hash es de OTRO usuario. En modo
+      // `client` eso cruza la LAN por `/api/rpc`. El resto del contrato no cambia.
+      const { password: _hash, ...sinHash } = updatedUsuario as any;
+      return { success: true, usuario: sinHash };
     } catch (error) {
       console.error('Error updating usuario:', error);
       return {
@@ -319,7 +332,13 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
       }
 
       const usuarioRepository = dataSource.getRepository(Usuario);
-      const usuario = await usuarioRepository.findOne({ where: { id: payload.usuarioId } });
+      // `Usuario.password` es `select: false`: hay que pedir el hash explícito
+      // para poder verificar la contraseña actual.
+      const usuario = await usuarioRepository
+        .createQueryBuilder('usuario')
+        .addSelect('usuario.password')
+        .where('usuario.id = :id', { id: payload.usuarioId })
+        .getOne();
       if (!usuario || !usuario.activo) {
         return { success: false, message: 'USUARIO NO ENCONTRADO O INACTIVO' };
       }
