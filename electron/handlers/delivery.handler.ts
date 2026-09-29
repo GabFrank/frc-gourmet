@@ -27,7 +27,9 @@ import { DataSource, EntityManager } from 'typeorm';
 import { Delivery, DeliveryEstado, DeliveryModo } from '../../src/app/database/entities/ventas/delivery.entity';
 import { PrecioDelivery } from '../../src/app/database/entities/ventas/precio-delivery.entity';
 import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
+import { CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
+import { assertCajaAbierta } from '../utils/caja-abierta.utils';
 import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.entity';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
@@ -218,10 +220,11 @@ export function registerDeliveryHandlers(
       .addSelect(['repartidor.id', ...COLUMNAS_PERSONA_REPARTIDOR.map((c) => `repartidorPersona.${c}`)])
       .leftJoinAndSelect('venta.items', 'items')
       .leftJoinAndSelect('venta.pago', 'pago')
-      // Sólo el id: alcanza para marcar los deliveries de otro turno y evita
-      // arrastrar la caja entera por cada fila.
+      // Sólo el id y el estado: alcanza para marcar los deliveries de otro
+      // turno y los de una caja ya cerrada (que sólo se pueden cancelar, Q1),
+      // y evita arrastrar la caja entera —con su `createdBy`— por cada fila.
       .leftJoin('venta.caja', 'caja')
-      .addSelect('caja.id');
+      .addSelect(['caja.id', 'caja.estado']);
 
     if (incluirOtrasCajas) {
       qb.where('(venta.caja_id = :cajaId OR delivery.estado IN (:...pendientes))', {
@@ -249,6 +252,13 @@ export function registerDeliveryHandlers(
       ...(venta.delivery as any),
       // Marca para la UI: este delivery viene de un turno anterior.
       otraCaja: Number((venta.caja as any)?.id ?? cajaId) !== Number(cajaId),
+      // Q1: la caja de esta venta ya se cerró, así que el backend rechaza
+      // cobrarla (`CAJA_CERRADA`). La fila se sigue viendo —y se puede
+      // cancelar—, pero el diálogo esconde el cobro en vez de dejar que el
+      // cajero lo descubra recién al confirmar el pago.
+      // M8: cualquier estado distinto de ABIERTO (CERRADO o CANCELADO) es no
+      // operable: el guard del backend compara `!== ABIERTO`.
+      cajaCerrada: !!(venta.caja as any)?.estado && String((venta.caja as any).estado) !== CajaEstado.ABIERTO,
       venta: {
         id: venta.id,
         estado: venta.estado,
@@ -322,6 +332,11 @@ export function registerDeliveryHandlers(
     const costoDelivery = esRetiro ? 0 : await resolverCostoDelivery(dataSource, precioDeliveryId);
 
     const resultado = await dataSource.transaction(async (manager) => {
+      // Invariante de caja: el delivery abre una venta, y una venta nueva no
+      // entra a una caja cerrada. Dentro de la transacción para que no se cuele
+      // uno que empezó milisegundos antes del cierre.
+      await assertCajaAbierta(manager, payload.cajaId, { lock: 'read', contexto: 'delivery-crear' });
+
       const deliveryGuardado = await crearDeliveryEnTx(manager, dataSource, {
         precioDeliveryId,
         clienteId: payload?.clienteId,

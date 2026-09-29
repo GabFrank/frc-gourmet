@@ -40,6 +40,13 @@ declare global {
        */
       onPrinterEvent(handler: (payload: any) => void): () => void;
 
+      /**
+       * Eventos de mesas/comandas/cajas del PdV (canal `mesa-updates`).
+       * Devuelve unsubscribe. **Opcional a propósito:** en la web (`/admin`) y
+       * en la PWA no hay IPC y vale `undefined` — hay que llamarlo con `?.`.
+       */
+      onMesaEvent?(handler: (payload: any) => void): () => void;
+
       on(channel: string, callback: (data: any) => void): void;
     };
   }

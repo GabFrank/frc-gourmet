@@ -5,6 +5,7 @@
  * 1. Auditoría RUNTIME: handlers reales emiten eventos
  * 2. Contrato payload: seq, mesaId, tipo
  * 3. Merge helper: no pisa venta seleccionada
+ * 4. Contrato payload de CAJA_CAMBIO (cajaId, cajaEstado, dispositivoId, seq)
  */
 
 import 'reflect-metadata';
@@ -20,11 +21,15 @@ let dataSource: DataSource;
 let mesaEvents: EventEmitter;
 let emitVentaCambio: (ds: DataSource, ventaId: number) => Promise<void>;
 let emitMesaCambio: (ds: DataSource, mesaId: number) => Promise<void>;
+let emitCajaCambio: (ds: DataSource, cajaId: number, estado: string, dispositivoId?: number | null) => Promise<void>;
 
 interface MesaEventPayload {
-  tipo: 'MESA_CAMBIO' | 'COMANDA_CAMBIO';
+  tipo: 'MESA_CAMBIO' | 'COMANDA_CAMBIO' | 'CAJA_CAMBIO';
   mesaId?: number;
   comandaId?: number;
+  cajaId?: number;
+  cajaEstado?: string;
+  dispositivoId?: number | null;
   seq: number;
   updatedAt: string;
 }
@@ -118,6 +123,7 @@ async function setup() {
   const mesaEmitModule = await import('../electron/utils/mesa-emit.utils');
   emitVentaCambio = mesaEmitModule.emitVentaCambio;
   emitMesaCambio = mesaEmitModule.emitMesaCambio;
+  emitCajaCambio = mesaEmitModule.emitCajaCambio;
   
   console.log('✅ Módulos SSE importados');
 }
@@ -333,17 +339,81 @@ async function testMergeHelper() {
 }
 
 /**
+ * Test 4: Contrato del payload de CAJA_CAMBIO
+ *
+ * El PdV usa este evento para soltar una caja que se cerró desde otra
+ * terminal. Si el payload cambia de forma, el aviso se pierde en silencio: el
+ * cliente filtra por `tipo` y por `cajaId`.
+ */
+async function testContratoCajaCambio() {
+  console.log('\n📋 TEST 4: Contrato payload CAJA_CAMBIO');
+
+  const capturados: MesaEventPayload[] = [];
+  const listener = (payload: MesaEventPayload) => capturados.push(payload);
+  mesaEvents.on('change', listener);
+
+  try {
+    const { Caja } = await import('../src/app/database/entities/financiero/caja.entity');
+    const caja = await dataSource.getRepository(Caja).findOne({
+      where: { activo: true } as any,
+      relations: ['dispositivo'],
+    });
+    if (!caja) throw new Error('❌ No hay caja seeded');
+
+    await emitCajaCambio(dataSource, caja.id, 'CERRADO');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const evento = capturados.find((e) => e.tipo === 'CAJA_CAMBIO' && e.cajaId === caja.id);
+    if (!evento) throw new Error(`❌ No se emitió CAJA_CAMBIO (${capturados.length} eventos)`);
+    console.log(`  → Payload: ${JSON.stringify(evento)}`);
+
+    if (evento.cajaEstado !== 'CERRADO') {
+      throw new Error(`❌ cajaEstado incorrecto: ${evento.cajaEstado}`);
+    }
+    console.log('  ✅ cajaEstado: CERRADO (UPPERCASE, como en la base)');
+
+    // El dispositivo se resuelve solo cuando el llamador no lo pasa: el PdV lo
+    // usa para no reaccionar a cajas de otras terminales.
+    if (Number(evento.dispositivoId) !== Number((caja as any).dispositivo?.id)) {
+      throw new Error(`❌ dispositivoId incorrecto: ${evento.dispositivoId}`);
+    }
+    console.log(`  ✅ dispositivoId resuelto solo: ${evento.dispositivoId}`);
+
+    // `cajas` NO tiene columna `seq`: es un Date.now(). El cliente NO lo
+    // compara contra los seq de mesa/comanda — son secuencias distintas.
+    if (typeof evento.seq !== 'number' || evento.seq < 1_700_000_000_000) {
+      throw new Error(`❌ seq no parece un Date.now(): ${evento.seq}`);
+    }
+    console.log(`  ✅ seq: ${evento.seq} (Date.now(), no la columna seq)`);
+
+    if (evento.mesaId !== undefined || evento.comandaId !== undefined) {
+      throw new Error('❌ CAJA_CAMBIO no debe traer mesaId/comandaId');
+    }
+    console.log('  ✅ sin mesaId/comandaId: no dispara refresh de mesas');
+
+    // Nunca lanza: una caja inexistente no puede romper un cierre.
+    await emitCajaCambio(dataSource, 999999, 'CERRADO');
+    console.log('  ✅ con una caja inexistente no lanza (best-effort)');
+
+    console.log('  ✅ TEST 4 PASS');
+  } finally {
+    mesaEvents.off('change', listener);
+  }
+}
+
+/**
  * Main
  */
 async function main() {
   console.log('🚀 Test E2E SSE Mesas/PDV\n');
-  
+
   try {
     await setup();
-    
+
     await testAuditoriaRuntime();
     await testContratoPayload();
     await testMergeHelper();
+    await testContratoCajaCambio();
     
     console.log('\n✅ TODOS LOS TESTS PASARON\n');
     process.exit(0);

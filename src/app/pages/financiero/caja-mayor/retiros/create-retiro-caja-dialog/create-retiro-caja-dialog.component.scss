@@ -4,6 +4,16 @@
   padding: 40px;
 }
 
+/* Ajuste de una caja cerrada: amarillo de "atención", por variable de tema. */
+.aviso-ajuste {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--warning-color);
+  color: var(--warning-color);
+  font-size: 0.8rem;
+}
+
 .form-container {
   display: flex;
   flex-direction: column;

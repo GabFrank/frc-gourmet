@@ -25,6 +25,8 @@ import { catchError, finalize } from 'rxjs/operators';
 import { AuthService } from 'src/app/services/auth.service';
 import { VentaEstado } from 'src/app/database/entities/ventas/venta.entity';
 import { TipoDetalle } from 'src/app/database/entities/compras/pago-detalle.entity';
+import { mensajeDeError } from 'src/app/shared/utils/error-message.util';
+import { esCajaAbiertaDuplicada, esCajaCerrada } from 'src/app/shared/utils/caja-error.util';
 
 interface MonedaConfig {
   moneda: Moneda;
@@ -97,6 +99,19 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   // Mode of operation
   dialogMode: 'create' | 'conteo' = 'create';
   dialogTitle = 'Abrir nueva caja';
+
+  /**
+   * La caja ya estaba CERRADA cuando el diálogo la releyó del backend, y no
+   * estamos en modo ajuste. Bloquea el guardado: este flujo crea el `Conteo` y
+   * todos sus `ConteoDetalle` ANTES de llamar `updateCaja`, así que sin este
+   * corte cada intento de cerrar una caja ya cerrada dejaría un conteo
+   * huérfano — y no son inertes: `computeResumenCaja` y `generarRetiroDelCierre`
+   * los buscan por FK. Ver D7/B9 del plan.
+   */
+  cajaYaCerrada = false;
+  /** Mensaje en español del bloqueo/rechazo de caja. */
+  errorCaja: string | null = null;
+
   existingCaja: Caja | null = null;
   existingConteo: Conteo | null = null;
   existingConteoCierre: Conteo | null = null;
@@ -636,7 +651,28 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   }
 
   onCancel(): void {
+    // UX-1b: con el cierre ya registrado, salir por cualquier botón es cerrar
+    // con éxito. Antes SALIR devolvía `undefined` y el llamador (el PdV) lo
+    // leía como «no se cerró» aunque la caja ya estuviera CERRADO.
+    if (this.cierreCompleted) {
+      this.closeFinalDialog();
+      return;
+    }
     this.dialogRef.close();
+  }
+
+  /**
+   * UX-1b: el stepper vive bajo `*ngIf="!loading"`, así que el guardado del
+   * cierre lo destruye y al volver renace en el paso 0 (CONTEO APERTURA, con
+   * SALIR/SIGUIENTE) en vez de mostrar «CAJA CERRADA EXITOSAMENTE». Se lo lleva
+   * al último paso (RESUMEN) cuando reaparece.
+   */
+  private irAlResumenFinal(): void {
+    this.isLinear = false;
+    setTimeout(() => {
+      if (!this.stepper) return;
+      this.stepper.selectedIndex = this.stepper.steps.length - 1;
+    }, 0);
   }
 
   closeFinalDialog(): void {
@@ -783,6 +819,10 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
   }
 
   onSubmit(): void {
+    // La caja ya estaba cerrada al releerla del backend: no se crea NADA (ni el
+    // `Conteo` ni sus detalles). Ver `cajaYaCerrada`.
+    if (this.cajaYaCerrada) return;
+
     // Sync all form values to stores before submission
     this.syncFormValuesToStores();
 
@@ -806,6 +846,34 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
     this.loading = true;
 
     const dispositivoId = this.cajaInfoForm.get('dispositivoId')?.value;
+    // M6: la revalidación contra el backend va ANTES de crear el `Conteo`, así
+    // que el resto del alta pasó a un método async.
+    void this.crearCajaConConteoApertura(dispositivoId);
+  }
+
+  /**
+   * Alta de caja: revalidación + `Conteo` de APERTURA + detalles + `Caja`.
+   *
+   * **La revalidación va primero (M6).** Antes se creaba el `Conteo` y sus
+   * `ConteoDetalle` y recién al final `create-caja` rechazaba con
+   * `CAJA_ABIERTA_DUPLICADA` — doble click, otra terminal, la PWA —, y el
+   * conteo quedaba huérfano en base, sin caja que lo referencie y sumando
+   * ruido a los arqueos. Es el mismo patrón que D7/B9 le puso al **cierre**
+   * (`loadExistingCajaData`), que se había quedado sólo con el cierre.
+   */
+  private async crearCajaConConteoApertura(dispositivoId: number): Promise<void> {
+    const cajaAbierta = await this.cajaAbiertaDelDispositivo(dispositivoId);
+    if (cajaAbierta) {
+      this.loading = false;
+      // El nombre de la terminal va en el mensaje porque el alta deja ELEGIR el
+      // dispositivo: "esta terminal" podría no ser la que el usuario está usando.
+      const terminal = String((cajaAbierta.dispositivo as any)?.nombre || '').trim();
+      const msg = `LA TERMINAL ${terminal || `#${(cajaAbierta.dispositivo as any)?.id ?? ''}`} `
+        + `YA TIENE UNA CAJA ABIERTA (CAJA #${cajaAbierta.id}). CERRÁ ESA CAJA ANTES DE ABRIR OTRA.`;
+      this.snackBar.open(msg, 'CERRAR', { duration: 8000, panelClass: ['error-snackbar'] });
+      this.dialogRef.close({ success: false, error: msg });
+      return;
+    }
 
     // Step 1: Create conteo inicial first
     const conteoData: Partial<Conteo> = {
@@ -847,10 +915,11 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
               error => {
                 console.error('Error creating caja:', error);
                 this.loading = false;
-                this.dialogRef.close({
-                  success: false,
-                  error: 'ERROR AL CREAR CAJA'
-                });
+                // `CAJA_ABIERTA_DUPLICADA`: el índice único parcial (o el guard)
+                // rechazó una segunda caja abierta en la misma terminal.
+                const msg = this.mensajeErrorCaja(error, 'ERROR AL CREAR CAJA');
+                this.snackBar.open(msg, 'CERRAR', { duration: 8000, panelClass: ['error-snackbar'] });
+                this.dialogRef.close({ success: false, error: msg });
               }
             );
           }, error => {
@@ -1314,11 +1383,21 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
 
       // If this is a new conteo cierre, update the caja with the conteo cierre ID
       if (!this.existingConteoCierre && this.existingCaja && this.existingCaja.id) {
-        const cajaUpdateData: Partial<Caja> = {
-          conteoCierre: { id: conteoCierreId } as Conteo,
-          fechaCierre: new Date(),
-          estado: CajaEstado.CERRADO
-        };
+        // ⚠️ En modo AJUSTE el `estado` se OMITE del payload a propósito (D7):
+        // la caja ya está CERRADO y mandarlo otra vez caería en la regla 1 de
+        // `update-caja` («la caja #N ya fue cerrada el …»). Sin `estado`, el
+        // update cae en la regla 2, que exige FINANCIERO_CAJA_AJUSTAR — el
+        // permiso que el ajustador ya tiene por definición.
+        const cajaUpdateData: Partial<Caja> = this.data?.ajuste
+          ? {
+              conteoCierre: { id: conteoCierreId } as Conteo,
+              fechaCierre: new Date(),
+            }
+          : {
+              conteoCierre: { id: conteoCierreId } as Conteo,
+              fechaCierre: new Date(),
+              estado: CajaEstado.CERRADO
+            };
         updateObservables.push(
           this.repositoryService.updateCaja(this.existingCaja.id, cajaUpdateData)
         );
@@ -1330,21 +1409,26 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
                 () => {
                   this.loading = false;
                   this.cierreCompleted = true;
+                  this.irAlResumenFinal();
                   this.imprimirTicketCierre();
                 },
           (error: any) => {
             console.error('Error updating conteo detalles:', error);
                   this.loading = false;
-                  this.dialogRef.close({
-                    success: false,
-              error: 'ERROR AL ACTUALIZAR DETALLES DEL CONTEO'
-                  });
+                  // Carrera: entre la revalidación de `loadExistingCajaData` y
+                  // este guardado, otra terminal pudo cerrar la caja. El
+                  // backend responde `CAJA_CERRADA`; acá se traduce, no se
+                  // muestra el string crudo (en modo cliente sería un JSON).
+                  const msg = this.mensajeErrorCaja(error, 'ERROR AL ACTUALIZAR DETALLES DEL CONTEO');
+                  this.snackBar.open(msg, 'CERRAR', { duration: 8000, panelClass: ['error-snackbar'] });
+                  this.dialogRef.close({ success: false, error: msg });
                 }
               );
             } else {
         // No changes needed
               this.loading = false;
               this.cierreCompleted = true;
+              this.irAlResumenFinal();
               this.imprimirTicketCierre();
             }
     }, error => {
@@ -1380,6 +1464,56 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
       });
   }
 
+  /** ` EL 24/09/2026 14:35`, o vacío si la caja no trae fecha de cierre. */
+  private textoFechaCierre(caja: Caja): string {
+    const f = caja?.fechaCierre ? new Date(caja.fechaCierre as any) : null;
+    if (!f || isNaN(f.getTime())) return '';
+    const p = (n: number) => String(n).padStart(2, '0');
+    return ` EL ${p(f.getDate())}/${p(f.getMonth() + 1)}/${f.getFullYear()} ${p(f.getHours())}:${p(f.getMinutes())}`;
+  }
+
+  /**
+   * Traduce los códigos de error del backend de caja a un mensaje en español.
+   *
+   * El código viaja en el `message` porque es lo único que sobrevive a los tres
+   * transportes (IPC, `/api/rpc`, modo cliente). En modo cliente el texto crudo
+   * llega envuelto en `HTTP 500: {"error":"…"}`, así que NO se muestra tal cual.
+   */
+  private mensajeErrorCaja(error: any, fallback: string): string {
+    // La detección vive en `caja-error.util` (fuente única desktop + PWA); acá
+    // se especializan los textos: en este diálogo lo importante es que el
+    // cierre NO se registró, y el resto de la pantalla habla en MAYÚSCULAS.
+    if (esCajaCerrada(error)) {
+      return 'ESTA CAJA YA FUE CERRADA POR OTRO USUARIO O TERMINAL. NO SE REGISTRÓ EL CIERRE.';
+    }
+    if (esCajaAbiertaDuplicada(error)) {
+      return 'YA HAY UNA CAJA ABIERTA EN ESTA TERMINAL. CERRÁ ESA CAJA ANTES DE ABRIR OTRA.';
+    }
+    return mensajeDeError(error, fallback);
+  }
+
+  /**
+   * ¿Este dispositivo ya tiene una caja `ABIERTO`? (M6)
+   *
+   * Se lee del backend, no del snapshot de la lista: la caja pudo abrirse en
+   * otra terminal o en la PWA hace dos segundos. **Fail-open a propósito**: si
+   * la consulta falla (en modo cliente `getCajasAbiertas` todavía no tiene
+   * impl HTTP) se sigue con el alta y decide el índice único parcial, que es el
+   * control primario del invariante. Lo que este chequeo evita es el `Conteo`
+   * huérfano en el caso frecuente, no la carrera.
+   */
+  private async cajaAbiertaDelDispositivo(dispositivoId: number | null | undefined): Promise<Caja | null> {
+    const id = Number(dispositivoId) || 0;
+    if (!id) return null;
+    try {
+      const abiertas = (await firstValueFrom(this.repositoryService.getCajasAbiertas())) || [];
+      return abiertas.find((c: any) => Number(c?.dispositivo?.id) === id) || null;
+    } catch (e) {
+      console.warn('[create-caja] no se pudo revalidar si la terminal ya tiene caja abierta:', e);
+      return null;
+    }
+  }
+
   private loadExistingCajaData(cajaId: number): void {
     this.loading = true;
     console.log(`Loading caja data for cajaId: ${cajaId}`);
@@ -1389,6 +1523,22 @@ export class CreateCajaDialogComponent implements OnInit, AfterViewInit {
       (caja: Caja) => {
         console.log('Caja loaded:', caja);
         this.existingCaja = caja;
+
+        // Revalidación contra el BACKEND (D7/B9). El objeto que llegó por
+        // MAT_DIALOG_DATA / por la lista es un snapshot: otra terminal o la PWA
+        // pueden haber cerrado la caja mientras tanto. Si ya está cerrada y no
+        // venimos a ajustarla, se corta ACÁ — antes de crear ningún `Conteo`.
+        // M8: el criterio es `!== ABIERTO`, no `=== CERRADO`. Una caja
+        // `CANCELADO` tampoco se cierra, y el backend la rechaza igual; el
+        // texto sí se diferencia, porque «YA FUE CERRADA» para una caja
+        // cancelada manda a buscar un cierre que nunca existió.
+        if (caja && caja.estado !== CajaEstado.ABIERTO && !this.data?.ajuste) {
+          this.cajaYaCerrada = true;
+          this.errorCaja = caja.estado === CajaEstado.CERRADO
+            ? `LA CAJA #${caja.id} YA FUE CERRADA${this.textoFechaCierre(caja)}. `
+              + 'NO SE PUEDE VOLVER A CERRAR. SI NECESITÁS CORREGIR EL CONTEO, USÁ AJUSTAR CONTEO.'
+            : `LA CAJA #${caja.id} NO ESTÁ ABIERTA (${caja.estado}). NO SE PUEDE REGISTRAR SU CIERRE.`;
+        }
 
         // Load dispositivos first to ensure the dispositivo can be selected
         this.repositoryService.getDispositivos().subscribe(

@@ -24,6 +24,7 @@ import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation
 import { CobrarVentaDialogComponent, CobrarVentaDialogData } from '../cobrar-venta-dialog/cobrar-venta-dialog.component';
 import { MonedaCambio } from '../../../database/entities/financiero/moneda-cambio.entity';
 import { SeleccionarRepartidorDialogComponent } from '../seleccionar-repartidor-dialog/seleccionar-repartidor-dialog.component';
+import { esCajaCerrada } from '../../utils/caja-error.util';
 import {
   ConvertirModoDeliveryDialogComponent,
   ConvertirModoDeliveryDialogResult,
@@ -67,6 +68,13 @@ interface DeliveryRow {
   observacion: string;
   tiempoColor: string;
   otraCaja: boolean;
+  /**
+   * La caja de la venta de este pedido ya está CERRADA (Q1): el backend
+   * rechaza cobrarlo (`CAJA_CERRADA`) y no hay reapertura de cajas, así que la
+   * única salida es cancelarlo y volver a cargarlo en la caja de hoy. Se avisa
+   * en la fila para que el cajero no lo descubra recién al confirmar el pago.
+   */
+  cajaCerrada: boolean;
 }
 
 @Component({
@@ -205,9 +213,10 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     const puedePagos = this.data.puedeAgregarPagos !== false;
     const puedeFin = this.data.puedeFinalizar !== false;
     this.cobroBloqueadoPorTerminal = !puedePagos && !puedeFin;
-    this.tooltipPago = this.cobroBloqueadoPorTerminal
+    this.tooltipPagoTerminal = this.cobroBloqueadoPorTerminal
       ? `El cobro se realiza en ${this.data.terminalDeLaCaja || 'la terminal donde se abrió la caja'}`
       : '';
+    this.tooltipPago = this.tooltipPagoTerminal;
     try {
       const config = await firstValueFrom(this.repositoryService.getPdvConfig());
       if (config) {
@@ -488,6 +497,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       observacion: d.observacion || '',
       tiempoColor: this.colorDe(d, mins),
       otraCaja: !!d.otraCaja,
+      cajaCerrada: !!d.cajaCerrada,
     };
   }
 
@@ -618,6 +628,10 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   /** Ningún permiso de cobro en esta terminal: el botón PAGO no hace nada. */
   cobroBloqueadoPorTerminal = false;
   tooltipPago = '';
+  /** El pedido seleccionado pertenece a una caja cerrada: sólo se cancela (Q1). */
+  cajaCerradaSeleccionada = false;
+  /** Motivo del bloqueo por terminal ajena, para no perderlo al recomputar. */
+  private tooltipPagoTerminal = '';
   puedeCambiarEstado = false;
   puedeAsignarRepartidor = false;
   esRetiroSeleccionado = false;
@@ -653,8 +667,15 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     // `recalcularTotalesDetalle`, y el orden entre los dos no está garantizado
     // en todos los caminos que refrescan la selección.
     const yaCobrada = this.selectedDelivery?.venta?.estado === 'CONCLUIDA';
+    // Q1: la caja de esta venta ya se cerró. El backend rechaza el cobro con
+    // `CAJA_CERRADA`, así que ofrecerlo sería mandar al cajero a un rechazo.
+    // Cancelar sigue habilitado: es una reversa y resta del arqueo.
+    this.cajaCerradaSeleccionada = !!this.selectedDelivery?.cajaCerrada;
     this.puedeEditarPago = !!this.selectedDelivery && !this.isTerminal
-      && !this.cobroBloqueadoPorTerminal && !yaCobrada;
+      && !this.cobroBloqueadoPorTerminal && !yaCobrada && !this.cajaCerradaSeleccionada;
+    this.tooltipPago = this.cajaCerradaSeleccionada
+      ? 'Caja cerrada: este pedido sólo se puede cancelar y volver a cargar en la caja de hoy'
+      : this.tooltipPagoTerminal;
     this.puedeCambiarEstado = !!this.selectedDelivery && this.estadosDisponibles.length > 0;
 
     // El repartidor es quien LLEVA el pedido. En un retiro nadie lo lleva:
@@ -866,8 +887,8 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     if (!this.selectedDelivery?.venta) return;
     // También cubre el camino `finalizar()` → `editarPago()` (botón ENTREGADO
     // sobre un delivery sin cobrar), que no pasa por el botón PAGO.
-    if (this.cobroBloqueadoPorTerminal) {
-      this.snackBar.open(this.tooltipPago, 'CERRAR', { duration: 5000 });
+    if (this.cobroBloqueadoPorTerminal || this.cajaCerradaSeleccionada) {
+      this.snackBar.open(this.tooltipPago, 'CERRAR', { duration: 6000 });
       return;
     }
 
@@ -1173,8 +1194,12 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
 
   private mostrarError(error: unknown, fallback: string): void {
     console.error(fallback, error);
-    const mensaje = (error as any)?.message?.replace(/^Error invoking remote method '[^']+':\s*Error:\s*/, '')
-      || fallback;
-    this.snackBar.open(mensaje, 'CERRAR', { duration: 6000, panelClass: ['error-snackbar'] });
+    // El backend manda el código dentro del mensaje (es lo único que sobrevive
+    // a los tres transportes). Acá se traduce a algo que diga qué hacer, en vez
+    // de mostrar «CAJA_CERRADA: …» o el JSON del 500 del modo cliente.
+    const mensaje = esCajaCerrada(error)
+      ? 'La caja de esta venta ya fue cerrada: el pedido sólo se puede cancelar y volver a cargar en la caja de hoy.'
+      : ((error as any)?.message?.replace(/^Error invoking remote method '[^']+':\s*Error:\s*/, '') || fallback);
+    this.snackBar.open(mensaje, 'CERRAR', { duration: 7000, panelClass: ['error-snackbar'] });
   }
 }

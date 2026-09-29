@@ -197,10 +197,14 @@ async function main() {
   // ── 6. El dispositivo dueño de la caja no se reasigna ─────────────────────
   console.log('\n[6] update-caja no puede apropiarse de la caja');
   {
-    const caja = await nuevaCaja(term1.id);
+    // Terminal propia: `caja1` sigue ABIERTA y desde la Fase 2 el índice único
+    // parcial prohíbe dos cajas ABIERTO en el mismo dispositivo. El bloque sólo
+    // necesita "una caja de alguien", así que se lleva su propia terminal.
+    const term3: any = await save(Dispositivo, { nombre: 'TERMINAL 3', activo: true });
+    const caja = await nuevaCaja(term3.id);
     await invokeHandler('update-caja', caja.id, { dispositivo: { id: term2.id } });
     const tras: any = await ds.getRepository(Caja).findOne({ where: { id: caja.id }, relations: ['dispositivo'] });
-    ok((tras?.dispositivo as any)?.id === term1.id, 'la caja sigue siendo de su terminal', (tras?.dispositivo as any)?.id);
+    ok((tras?.dispositivo as any)?.id === term3.id, 'la caja sigue siendo de su terminal', (tras?.dispositivo as any)?.id);
   }
 
   // ── 7. Editar/borrar líneas pasa por el gate, sin flag ────────────────────

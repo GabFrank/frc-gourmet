@@ -2,6 +2,9 @@
 
 <mat-dialog-content>
   <p class="gc-sub" *ngIf="cajaNombre">Caja: {{ cajaNombre }}</p>
+  <!-- D6: el gasto entra sobre una caja ya cerrada, con motivo y permiso de
+       ajuste. Se dice en pantalla para que no parezca una operación del turno. -->
+  <p class="gc-aviso-ajuste" *ngIf="avisoAjuste">{{ avisoAjuste }}</p>
 
   <form [formGroup]="form" class="gc-form" (ngSubmit)="guardar()">
     <mat-form-field appearance="outline" class="gc-full">

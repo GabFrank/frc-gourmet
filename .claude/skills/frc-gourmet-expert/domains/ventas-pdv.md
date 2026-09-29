@@ -1463,3 +1463,402 @@ Device Authorization Grant. `DeviceAuthCode` (`device_auth_codes`: `deviceCode` 
 **Tests:** `npm run test:mesa-una-venta-abierta` (`scripts/test-mesa-una-venta-abierta-e2e.ts`) — E2E completo para P0-1..P0-5. Los tests **deben fallar** si se revierten los guards (para verificar efectividad del fix).
 
 **Caso real que motivó el fix:** Alpha Don Franco 2026-09-10/11 noche, mesa 4 con ventas 3738/3739/3771 concurrentes → al cobrar 3739, la 3771 se cerró sin pago (pérdida 254k Gs). Ver `known-bugs.md` para detalles forenses completos.
+
+## Guard de caja cerrada (2026-09-28) — leer antes de tocar cualquier escritura con `caja`
+
+**Regla de oro:** **ninguna escritura de plata entra a una caja que no está
+`ABIERTO`.** El helper central es `electron/utils/caja-abierta.utils.ts`
+(`assertCajaAbierta`, `assertCajaAbiertaSiVino`, `leerEstadoCaja`,
+`cajaDeVenta`, `cajaDePago`).
+
+### El incidente que lo motivó (cajas #122 / #123, 24/09)
+
+La caja **#122** se cerró a las 14:35 y la **#123** se abrió a las 14:39 desde
+*Caja Mayor → abrir caja desde conteo*. La pestaña del PdV de la terminal
+principal siguió con `this.caja = #122` **hasta la 01:54**, y el backend aceptó
+todo: 10 ventas nuevas, 52 cobros de ventas de la #123 con `pago.caja = 122`,
+11 gastos y un retiro — todo imputado a una caja cerrada. Resultado: #122
+sobrante +₲2.123.453 / +R$1.468, #123 faltante −₲2.092.850 / −R$1.451,75. Las
+dos juntas suman +₲30.603: **no faltaba plata, estaba mal imputada.**
+
+**Nunca hubo dos cajas `ABIERTO` a la vez** — el solape fue de hecho, no de
+estado. Cuatro causas encadenadas: (A) el PdV resolvía la caja una vez y nunca
+la revalidaba; (B) ningún handler que escribe con `caja` miraba `caja.estado`
+(salvo los egresos del cajón); (C) `createPago` no exigía
+`pago.caja === venta.caja`; (D) cerrar una caja ya cerrada no fallaba ni dejaba
+rastro. Y, latente, (E) la apertura era check-then-save sin transacción ni
+índice.
+
+### El código viaja en el `message`, NO en `err.code`
+
+`errorCajaCerrada()` lanza un `Error` cuyo mensaje **empieza con
+`CAJA_CERRADA: `** y además setea `err.code`. El prefijo del mensaje no es
+redundancia: es lo único que sobrevive a los tres transportes.
+
+| Transporte | Qué llega al cliente |
+|---|---|
+| IPC local | `Error invoking remote method 'createVenta': Error: CAJA_CERRADA: …` |
+| `/api/rpc` (server) | `500 { error: "CAJA_CERRADA: …" }` — **pierde `code`** salvo `FORBIDDEN`/`UNAUTHORIZED` |
+| modo cliente | `new Error('HTTP 500: {"error":"CAJA_CERRADA: …"}')` |
+
+Por eso la detección en el frontend es `includes()` sobre el texto, con fuente
+única en **`src/app/shared/utils/caja-error.util.ts`** (`esCajaCerrada`,
+`esCajaAbiertaDuplicada`, `mensajeDeErrorCaja`, `esEstadoCajaNoOperable`,
+`esEstadoCajaCancelada`), reexportada por `shared-core/public-api.ts` para que la
+PWA use la misma. ⚠️ **El texto crudo nunca se muestra**: en modo cliente el
+usuario vería el JSON del 500.
+
+⚠️ **El camino principal de cobro tiene que estar entre los consumidores**
+(hallazgo M2): `cobrar-venta-dialog.mostrarErrorCobro()` ramifica con
+`esCajaCerrada(error)`, avisa y **cierra el diálogo** con
+`{ success: false, cajaCerrada: true }`; el PdV lee ese flag y dispara
+`revalidarCaja()` + `evaluarCuentaDeCajaCerrada(venta.id)`. Sin la rama, el
+rechazo caía en el fallback genérico («No se pudo finalizar el cobro») y el PdV
+**nunca se enteraba**: no revalidaba, no reelegía caja, no marcaba la cuenta.
+Pasan por el mismo helper los seis caminos de error del diálogo, incluido el
+**cobro parcial** (que tenía su propio snackbar) y el sub-diálogo de crédito, que
+traduce y propaga.
+
+### El guard vive FUERA del gate de terminal, a propósito
+
+No está en `terminal-caja.utils.ts` y no hay que mudarlo ahí. El gate de
+terminal es **opt-in** (sólo corre cuando el llamador manda
+`validarDispositivoCaja`) y su propio encabezado aclara que es un candado
+operativo, no una frontera. Este invariante tiene que correr **siempre**:
+colgarlo del gate le haría heredar la semántica opt-in y bastaría con omitir el
+flag para saltearlo. Son dos reglas distintas y conviene que se vean distintas.
+
+### Canales gateados
+
+| Canal | Archivo | Qué caja se verifica | Ejecutor que recibe el guard |
+|---|---|---|---|
+| `createVenta` | `ventas.handler.ts` | `data.caja`, si vino | `manager` de la tx + `FOR SHARE` |
+| `updateVenta` `ABIERTA → CONCLUIDA` | `ventas.handler.ts` | la caja **de la venta**, leída server-side | `dataSource` |
+| `updateVenta` que adopta `data.pago` | `ventas.handler.ts` | ídem (D4 capa 2) | `dataSource` |
+| `cerrarVentasAbiertasMesa` (`CONCLUIDA`) | `ventas.handler.ts` | la caja de **cada** venta abierta, antes del bucle de saves | `manager` de `enTransaccionSiPostgres` + `FOR SHARE` |
+| `registrarCobroParcial` | `ventas.handler.ts` | `cajaDeVenta(ventaId)` | `queryRunner.manager` + `FOR SHARE` |
+| `materializarPedidoOnlineEnVenta` | `ventas.handler.ts` | la caja ya resuelta | `qr.manager` + `FOR SHARE` |
+| `transferir-venta-pdv` | `ventas.handler.ts` | caja de origen, caja de la **venta destino** si ya existía, y `cajaActivaId` cuando alguna de las dos está cerrada (Q2) | `manager` de la tx + `FOR SHARE` |
+| `createPago` | `compras.handler.ts` | con `ventaId`, la de la venta; sin él, la del payload | `manager` de `enTransaccionSiPostgres` + `FOR SHARE` |
+| `createPagoDetalle` | `compras.handler.ts` | `cajaDePago(pagoId)` — **siempre** server-side | `manager` de `enTransaccionSiPostgres` + `FOR SHARE` |
+| `cobrar-venta-credito` | `cuentas-por-cobrar.handler.ts` | `venta.caja` | `queryRunner.manager` |
+| `delivery-crear` | `delivery.handler.ts` | `payload.cajaId` | `manager` de la tx + `FOR SHARE` |
+| `create-gasto-caja`, `edit-gasto-caja`, `anular-gasto-caja` | `gastos-caja.handler.ts` | `gasto.caja` | `manager` de `enTransaccionSiPostgres` + `FOR SHARE`, vía `assertCajaOperableConAjuste` |
+| `create-retiro-caja` | `caja-mayor.handler.ts` | `retiro.caja` | ídem |
+| `crear-vale-caja`, `pagar-vale-caja`, `crear-compra-simplificada-caja`, `pagar-compra-cuota-caja`, `anular-egreso-caja` | `pdv-egresos.handler.ts` | `validarCaja` — ya exigía `ABIERTO`; **sólo se unificó el mensaje** al código `CAJA_CERRADA` | — |
+
+Cuatro cosas que no se pueden aflojar al tocar esta tabla:
+
+1. **⚠️ Pasarle el `DataSource` a un canal que escribe dentro de una
+   transacción convierte el guard en un no-op transaccional silencioso**: lee
+   fuera de la transacción de la escritura y el TOCTOU con el cierre concurrente
+   queda abierto. Por eso la columna del ejecutor está enumerada canal por
+   canal. ⚠️ Y **abrir una transacción nueva no siempre es la respuesta**: en
+   SQLite hay una sola conexión y dos `dataSource.transaction()` intercalados
+   comparten la transacción física, así que el `ROLLBACK` de uno se lleva los
+   `INSERT` del otro. Los canales que se envolvieron después de la Fase 1 usan
+   **`enTransaccionSiPostgres(ds, fn)`** (`electron/utils/tx.utils.ts`): abre
+   transacción **sólo en Postgres**, que es donde el `FOR SHARE` sirve para algo;
+   en SQLite corre el mismo cuerpo con el manager del `DataSource`, sin
+   transacción, y el guard corre igual (sin un lock que el driver ignoraba de
+   todos modos).
+2. **El lock va SIN `relations`.** `findOne({ where, relations, lock })` genera
+   `LEFT JOIN` y Postgres rechaza `FOR UPDATE`/`FOR SHARE` sobre el lado nulable
+   de un outer join — el bug del issue #258. `leerEstadoCaja` selecciona `id`,
+   `estado` y `fechaCierre`, y nada más. En SQLite el driver ignora los locks y
+   hay un solo escritor: la rama se omite entera (`puedeBloquear()` exige
+   Postgres **y** transacción activa, porque fuera de una transacción TypeORM
+   lanza `PessimisticLockTransactionRequiredError`).
+3. **`anular-gasto-caja` y `edit-gasto-caja` cargan la relación `caja`**
+   (`findOne({ where, relations: ['caja'] })`, antes `findOneBy`). Sin eso el
+   guard sería un no-op silencioso: el mismo modo de falla que ya documentaba
+   `createPagoDetalle`.
+4. **`assertCajaAbiertaSiVino` no hace nada cuando no hay caja.** `Venta.caja` y
+   `Pago.caja` son FK nullable y hay flujos legítimos sin caja (pagos de compra
+   que no salen del cajón). Una venta sin caja no descuadra ningún arqueo — no
+   está en ninguno. Exigirla sería una regla nueva, fuera de alcance.
+
+### Canales que siguen funcionando sobre caja cerrada (§5.2 del plan)
+
+El criterio es único: **una reversa que RESTA acerca el arqueo a la realidad;
+bloquearla deja mesas y pedidos colgados para siempre, y no hay reapertura de
+cajas.**
+
+- **Cancelar / anular:** `updateVenta → CANCELADA` (y rehabilitar desde el
+  historial), `delivery-cancelar`, `anularCobroParcial`. Las transiciones que no
+  imputan plata nueva siguen permitidas.
+- **`anular-egreso-caja` disparado desde `anular-vale`** (reversa en cascada):
+  bloquearla dejaría el vale anulado y el egreso vivo, que es peor que el
+  descuadre. El canal **directo** de `anular-egreso-caja` sí exige caja abierta
+  (ya lo hacía vía `validarCaja`).
+- **`deleteVenta`:** sólo borra ventas **sin ítems** — sin plata, sin arqueo que
+  mover. Es limpieza de inventario/mesas.
+- **El cierre y su plomería:** `generarRetiroDelCierre` (corre *dentro* de
+  `update-caja`, justo después de que la caja pasó a `CERRADO`; gatearlo se
+  autobloquearía), `generar-retiro-cierre-caja` manual, `ingresar-retiro-caja`,
+  `puede-ajustar-caja`, `finalizar-ajuste-caja`, `create-conteo`/`update-conteo`
+  y sus detalles, y las impresiones/WhatsApp del cierre.
+- **Todo Caja Mayor:** no tiene FK a `cajas` (sólo `caja_mayor_id`).
+- **Gastos y retiros con `ajuste: { motivo }`** — ver
+  [financiero-caja-mayor.md](financiero-caja-mayor.md).
+
+### D4 — la caja del `Pago` se deriva de la VENTA, en dos capas
+
+Esta es la causa C, y el fix tiene que funcionar **también con un cliente
+viejo**, porque en modo cliente/servidor las versiones no se actualizan
+sincronizadas.
+
+- **Capa 1 (`createPago`, `compras.handler.ts`).** El payload lleva `ventaId`
+  (lo agregaron `cobrar-venta-dialog.component.ts` y el cobro rápido F2 del
+  PdV). Si viene, `pagoData.caja` se **sobrescribe** con `cajaDeVenta(ventaId)`
+  y se loguea que se ignoró la del payload. `ventaId` se desestructura fuera de
+  `pagoData`: no es columna de `Pago`.
+- **Capa 2 (`updateVenta`, rama que adopta `data.pago`).** El `Pago` nace
+  primero y la venta lo adopta después con `updateVenta(id, { pago })`. Ésta es
+  la última oportunidad de corregir la imputación, y la única que funciona con
+  un cliente que manda `caja: this.data.caja` (la caja del PdV, no la de la
+  venta) — así se escribieron los 52 cobros cruzados. Si
+  `pago.caja !== venta.caja`, **se reimputa** con un `console.warn`.
+
+⚠️ **Se DERIVA en vez de rechazar** cuando la caja de la venta está abierta: el
+servidor tiene el dato correcto a mano y rechazar dejaría al cajero trabado sin
+poder cobrar. Si la caja de la venta está **cerrada**, ahí sí se rechaza (Q1).
+
+**Criterio de aceptación que cierra la causa C:** un cobro hecho por el flujo
+real —`createPago` **sin** `ventaId` + `updateVenta({ pago })`— tiene que dejar
+`pago.caja === venta.caja`. El test con `ventaId` sintético no alcanza.
+
+⚠️ **Consecuencia operativa que hay que saber explicar** (riesgo R-C de la
+auditoría de diff): derivar la caja de la venta también cambia el caso legítimo
+de **dos cajas ABIERTAS**. Si desde el PdV de la caja B se cobra un delivery o
+una mesa pendiente de la caja A —que sigue abierta—, la plata entra físicamente
+al cajón de B pero el arqueo la acredita a **A**, porque es la caja de la venta.
+Es la decisión de Gabriel (§5.2 del plan) y es lo correcto para el arqueo de la
+venta, pero deja **dos** arqueos con diferencia física si nadie lo sabe. Está en
+el manual (`manual-usuario/06-pdv-uso-diario.md`): lo que se cobra de una cuenta
+de otra caja abierta se arquea en esa otra caja.
+
+### Q1 — un delivery vivo de una caja cerrada sólo se cancela
+
+Decisión de Gabriel: **rechazar el cobro**. Imputar la plata a la caja actual
+movería el arqueo entre cajas, que es justamente el descuadre que originó el PR.
+Consecuencia asumida: como no hay reapertura de cajas, ese pedido **sólo se
+puede cancelar y volver a cargar en la caja de hoy**.
+
+Para que el cajero no lo descubra recién al confirmar el pago:
+`delivery-listar-pdv` agrega `caja.estado` al `leftJoin` (sólo `id` + `estado`,
+sin arrastrar la caja entera con su `createdBy`) y marca la fila con
+`cajaCerrada`. `delivery-dialog` deshabilita el cobro de esa fila
+(`cajaCerradaSeleccionada`) con tooltip *«Caja cerrada: este pedido sólo se
+puede cancelar y volver a cargar en la caja de hoy»*, cubre también el camino
+`finalizar()` → `editarPago()` (el botón ENTREGADO sobre un pedido sin cobrar) y
+traduce el rechazo del backend en `mostrarError`. **Cancelar sigue habilitado.**
+
+### Q2 — transferir una cuenta cuando la caja de origen ya se cerró
+
+Antes la cuenta destino heredaba `ventaOrigen.caja` sin mirarla: transferir una
+mesa de una caja cerrada creaba una venta **nueva** en una caja cerrada.
+
+- Origen **`ABIERTO`** → comportamiento de siempre (hereda la caja de origen).
+- Origen **cerrado** → la cuenta destino nace en la **caja activa** del PdV que
+  transfiere (`payload.cajaActivaId`, que el PdV manda ya revalidada), con
+  `assertCajaAbierta` sobre ella: la plata del turno de hoy entra al cajón de
+  hoy.
+- Los `Pago` / `CobroParcial` **ya registrados NO se mueven**: quedan en la caja
+  donde entró la plata.
+- Cliente viejo sin `cajaActivaId` y origen cerrado → `CAJA_CERRADA`. El cajero
+  actualiza o cancela.
+
+⚠️ **El destino también cuenta** (hallazgo M1). Hay un tercer caso que el plan no
+describía: el destino **ya tiene** una cuenta abierta, así que los ítems se mudan
+a *esa* venta y no nace ninguna. Si la caja de esa cuenta no está `ABIERTO`, los
+ítems terminaban en una venta imputada a una caja cerrada y la cuenta quedaba
+**incobrable** — el cajero se enteraba recién al cobrar. Ahora esa venta destino
+se **reimputa** a la `cajaActivaId` validada, con el mismo criterio que el resto
+de Q2. Los `Pago` / `CobroParcial` ya registrados siguen sin moverse.
+
+⚠️ **`cajaActivaId` viene del payload, así que pasa el gate de terminal del
+cobro** (hallazgo P1): `assertTerminalPuedeOperar(…, 'PAGO')`, **opt-in con el
+mismo flag `validarDispositivoCaja` que `createPago`**. Reimputar una cuenta a
+una caja es meterle la plata que se va a cobrar ahí, así que la acción es la
+misma que registrar un pago; sin el gate, un cliente con `VENTAS_PDV` podía
+mandar cualquier caja abierta —incluida la de otra terminal— y desviar el arqueo
+del turno. Es opt-in y no obligatorio a propósito: el gate de terminal no es una
+frontera de seguridad y una política obligatoria acá habría bloqueado la
+transferencia en instalaciones donde el cobro entre terminales **sí** está
+permitido. El PdV desktop manda el flag junto con `cajaActivaId`
+(`pdv.component.ts`, `ejecutarTransferencia`).
+
+⚠️ **La PWA no manda `cajaActivaId`** (`projects/mobile/.../mesa-detalle.page.ts`,
+los dos `transferirVentaPdv`). Consecuencia asumida: transferir desde el celular
+una cuenta cuya caja ya se cerró se **rechaza con `CAJA_CERRADA`** y la salida es
+cancelar y volver a cargarla. Es la misma salida que el resto de Q1/Q2, sólo sin
+el atajo; si alguna vez se cablea, hay que mandar **también** el flag del gate.
+
+### El PdV revalida la caja (D12)
+
+`this.caja` es un **snapshot**; la fuente de verdad es el backend.
+
+- **`asegurarCajaAbierta(accion)`** corre antes de toda operación que imputa
+  plata. Si no hay caja llama a `inicializarCaja()` y —deliberadamente— **NO
+  reintenta la acción original**: reintentar sería cobrar contra una caja que el
+  cajero acaba de elegir en un diálogo que le apareció por sorpresa.
+- **Es fail-open ante error de red** (`revalidarCajaInterno` devuelve `true` si
+  `getCaja` falla): bloquear el cobro porque no se pudo confirmar un estado deja
+  al local sin facturar, y el guard server-side tiene la última palabra igual.
+  ⚠️ Si alguna vez se degradara ese guard, este fail-open deja de ser gratis.
+- **Seis disparadores**, todos coalescidos en una sola revalidación en vuelo
+  (`revalidacionEnCurso`): `window:focus`, `document:visibilitychange`,
+  activación de la tab (`activeTab$` filtrado a `'pdv'` **o** `'pdv-tab'` con
+  `skip(1)`), IPC `CAJA_CAMBIO`, SSE `CAJA_CAMBIO` y el polling de respaldo de
+  15 s. Sin coalescer, cerrar la caja desde otra pestaña encadenaba tres avisos
+  del mismo hecho y tres `inicializarCaja()` compitiendo.
+- **Un solo diálogo por hecho** (`avisoCajaCerradaAbierto`): *«ESTA CAJA YA FUE
+  CERRADA»* → `inicializarCaja()`.
+- `inicializarCaja()` tiene su propio guard de reentrancia
+  (`inicializacionEnCurso`), y `ofrecerCerrarCaja` llama a `resolverCajaActiva`
+  **directo** —sin pasar por el wrapper— porque corre dentro de una resolución
+  en curso y pasar por ahí sería un deadlock.
+
+### La cuenta de una caja cerrada queda marcada (M3)
+
+Reelegir caja arregla el PdV, **no las cuentas viejas**. Después de que el cajero
+pasa a la caja B, las ventas `ABIERTA` de la caja A siguen existiendo: el gate
+mira `this.caja` (que ahora está abierta) y `getVenta()` devuelve la venta de la
+caja cerrada igual. Se le podían agregar ítems y cobrarla, y el rechazo llegaba
+recién al confirmar el pago.
+
+`evaluarCuentaDeCajaCerrada(ventaId)` lee la caja **de la venta** —`getVenta`
+trae `relations: ['caja']`— y, si su estado no es `ABIERTO`, prende
+`cuentaDeCajaCerrada`:
+
+- Aviso con ícono arriba de los botones del panel de venta
+  (`pdv.component.html`, clase `.cuenta-caja-cerrada-aviso`).
+- **COBRAR y COBRO RÁPIDO deshabilitados**, con el motivo en el tooltip (pisa el
+  del gate de terminal: es el bloqueo que manda).
+- Chequeo **también en runtime** dentro de `cobroRapido()`: F2 llega por atajo de
+  teclado y el `[disabled]` del botón no lo cubre.
+- El texto se adapta a la salida que **existe de verdad**: «transferila (pasa a
+  la caja activa) o cancelala» sólo si `resolverOrigenTransferencia()` devuelve
+  algo (mesa o comanda); en venta rápida y delivery el botón TRANSFERIR no
+  existe, así que dice «cancelala y volvé a cargarla en la caja activa».
+- Para `CANCELADO` el texto dice «cancelada», no «cerrada»
+  (`esEstadoCajaCancelada`).
+- **Agregar ítems sigue habilitado a propósito** — es decisión de producto
+  pendiente, no un olvido.
+
+⚠️ **Lo que NO está marcado es la grilla de mesas/comandas**: `getPdvMesas` no
+joinea `venta.caja`, así que la fila sigue mostrando su total sin ninguna señal.
+Marcar la grilla necesita un campo nuevo en ese handler — deuda anotada en
+[../workflows/todos-pendientes.md](../workflows/todos-pendientes.md), junto con
+la decisión de producto sobre qué hacer con las mesas abiertas al cerrar la caja.
+
+### `CAJA_CAMBIO`: el mapa real de transportes
+
+`emitCajaCambio(ds, cajaId, estado, dispositivoId?)`
+(`electron/utils/mesa-emit.utils.ts`) reusa `broadcastMesaEvent`. Lo emiten
+`create-caja`, `update-caja`, `abrir-caja-desde-conteo`,
+`finalizar-ajuste-caja` y —vía `emitirCambioDeCajaAjustada()`— los cuatro
+canales de **ajuste** (`create`/`edit`/`anular-gasto-caja`,
+`create-retiro-caja`), que cambian el arqueo y `revisado` de una caja que el PdV
+y los resúmenes están mirando (hallazgo P8). Ese helper **relee el estado de la
+base** en vez de asumir `CERRADO`, porque el payload declara `cajaEstado` y una
+caja `CANCELADO` haría mentir al consumidor gratis. Los canales de ajuste emiten
+**sólo cuando hay ajuste**: un gasto del turno normal no mueve el estado de la
+caja y no vale spamear el bus en cada hielo.
+
+⚠️ El payload lleva **sólo ids y estado** (`cajaId`, `cajaEstado`,
+`dispositivoId`, `seq`): ni usuario, ni persona, ni montos. Por eso no hace falta
+segmentar el broadcast por dispositivo, y el stream es autenticado como el resto
+de `/api`.
+
+⚠️ **Siempre DESPUÉS del commit.** Emitir dentro de la transacción avisaría de
+un cambio que todavía puede hacer rollback, y el cliente revalidaría con
+`get-caja` leyendo el estado viejo: quedaría convencido de que la caja sigue
+abierta justo cuando dejó de estarlo. Es best-effort de punta a punta (nunca
+lanza): el invariante lo sostiene el guard, el evento sólo adelanta el aviso.
+
+⚠️ **El `seq` de `CAJA_CAMBIO` es un `Date.now()`**, no la columna `seq`:
+`cajas` no la tiene y no se le agrega. Son secuencias distintas de las de
+mesa/comanda y **el cliente no las compara** — mezclarlas descartaría eventos
+válidos.
+
+| Superficie | IPC `mesa-updates` | SSE `/api/pdv/mesas/stream` | Respaldo |
+|---|---|---|---|
+| Ventana Electron, `standalone` | ✅ (`api.onMesaEvent`) | ❌ — URL relativa contra `file://` / `:4201` | foco + visibilidad + tab + poll 15 s |
+| Ventana Electron, `server` | ✅ | ❌ (ídem) | ídem |
+| Ventana Electron, `mode=client` | ❌ — el método existe pero **nunca dispara**: los handlers corren en la otra máquina | ❌ | ídem; el rechazo del backend es la última palabra (riesgo declarado, RB-4) |
+| `/admin` web y PWA (mismo origen que Fastify) | ❌ — `api-http.ts` declara `onMesaEvent: undefined` | ✅ | ídem |
+
+⚠️ En `api-http.ts` la clave **tiene que estar presente aunque valga
+`undefined`**: el `Proxy` fabrica una función RPC para toda propiedad ausente,
+así que `api.onMesaEvent(cb)` terminaría invocando un canal inexistente en vez
+de dejar que el PdV caiga al SSE. El consumo es siempre
+`window.api?.onMesaEvent?.(…)`.
+
+### Aviso de jornada anterior (D13)
+
+Unirse en silencio a la única caja abierta es lo que hizo que el almuerzo del
+viernes cayera dentro de la caja del jueves. Ahora, si la **única** caja abierta
+se abrió antes del comienzo de la jornada en curso, `resolverCajaActiva` abre el
+`SeleccionarCajaDialogComponent` con el aviso y dos salidas: **Usar igual**
+(`{ caja }`) o **Ir a cerrarla** (`{ cerrar: caja }`, que lleva al diálogo de
+conteo).
+
+- El corte sale de **`PdvConfig.inicioJornadaHora`** (Q3), reusando
+  `anclaJornada` / `inicioDelDia` — la **misma** fuente que los reportes y los
+  dashboards. La lección de 2026-08-28 fue que dos cálculos de jornada distintos
+  ponen el mismo hecho en días distintos según la pantalla.
+- `?? 7` y **no** `|| 7`: `inicioJornadaHora = 0` es válido y significa "el día
+  calendario".
+- ⚠️ `getPdvConfig()` puede devolver un **array** (el handler lista una tabla de
+  una fila). `asegurarPdvConfig()` lo normaliza; sin eso el corte caía al
+  default 7 por casualidad y dejaba de respetar lo configurado. Se lee en
+  `resolverCajaActiva` porque `inicializarCaja` corre en `ngOnInit` **antes** de
+  `loadInitialData`.
+
+### Qué NO hace este PR (no-objetivos explícitos)
+
+- **NO corrige retroactivamente los datos de producción.** Las cajas 122/123
+  quedan como están; no hay script de corrección ni migración que mueva filas de
+  negocio. La decisión es de Gabriel.
+- **NO reabre cajas.** La única forma de tocar una caja cerrada sigue siendo el
+  flujo de ajuste (`FINANCIERO_CAJA_AJUSTAR`).
+- **NO cierra cajas automáticamente**, ni en runtime ni en una migración.
+- **NO cambia el modelo de caja compartida**, ni toca
+  `permitirPagosTerminalAjena` / `permitirFinalizarTerminalAjena`.
+- **NO agrega "una caja abierta por usuario"** — sólo por dispositivo (D8).
+- **NO exige caja en las escrituras sin caja**: `assertCajaAbiertaSiVino` es un
+  no-op cuando `caja` es `null`.
+- **NO implementa el cierre asistido** de cajas abiertas varios días (Q6) ni el
+  aviso de cajas duplicadas en *Sistema* (Q4). Ver
+  [../workflows/todos-pendientes.md](../workflows/todos-pendientes.md).
+
+### Tests
+
+- `npm run test:caja-cerrada` (**129 asserts**) — el guard canal por canal, las
+  exenciones de §5.2, Q1, Q2 (incluido el destino con cuenta en caja cerrada y el
+  gate de terminal sobre `cajaActivaId`), `pago.caja === venta.caja` por el flujo
+  real y con el `Pago` sembrado ya imputado a una caja cerrada, y el lock omitido
+  en SQLite.
+- `npm run test:caja-apertura` (**105 asserts**) — apertura única por
+  dispositivo, el candado, la violación del índice traducida, el cierre de una
+  caja ya cerrada, `CAJA_CAMBIO`, los campos no editables de `update-caja`, el
+  rechazo de la reapertura y de `create-caja` en otro estado.
+- `npm run test:locks-pg` — casos `[F1]`–`[F7]` de serialización en Postgres,
+  incluido `CAJA_CAMBIO` leído desde una **segunda conexión** (post-commit), el
+  alcance de la transacción del cierre por el handler real, y un ajuste de gasto
+  concurrente con un cierre en vuelo. ⚠️ **Se saltea con exit 0 sin Postgres**, y
+  CI no tiene el servicio: hay que correrlo a mano
+  (`FRC_PG_USERNAME`/`FRC_PG_PASSWORD`) antes de mergear algo que toque locks.
+- `npm run test:mesa-sse` — `CAJA_CAMBIO` por el bus in-process / SSE.
+- `npm run test:sse-emit-postgres` — contrato del emisor; su modo Postgres
+  estaba roto desde antes de este PR (pisaba `type` por spread y corría el
+  baseline de SQLite) y quedó arreglado.
+
+**Deuda que dejó la ronda de fixes post-auditoría** (§17 del plan): marcar la
+grilla de mesas, `puede-ajustar-caja`/`finalizar-ajuste-caja` con `CANCELADO`,
+`update-caja` sobre `CERRADO` sin motivo, Postgres en CI, y el `getCurrentUser()`
+del guard «sólo quien abrió la caja la cierra» (en modo servidor/PWA compara
+contra el usuario del desktop). Todas en
+[../workflows/todos-pendientes.md](../workflows/todos-pendientes.md).

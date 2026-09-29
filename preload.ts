@@ -3180,8 +3180,11 @@ contextBridge.exposeInMainWorld('api', {
   editGastoCaja: async (gastoId: number, data: any): Promise<any> => {
     return await ipcRenderer.invoke('edit-gasto-caja', gastoId, data);
   },
-  anularGastoCaja: async (gastoId: number, motivo?: string): Promise<any> => {
-    return await ipcRenderer.invoke('anular-gasto-caja', gastoId, motivo);
+  // `opts.ajuste` es la llave para anular un gasto de una caja YA CERRADA
+  // (D6): sin ella el handler rechaza con CAJA_CERRADA. Es opcional y va al
+  // final, así que los llamadores de dos argumentos no cambian (M13).
+  anularGastoCaja: async (gastoId: number, motivo?: string, opts?: { ajuste?: { motivo?: string } }): Promise<any> => {
+    return await ipcRenderer.invoke('anular-gasto-caja', gastoId, motivo, opts);
   },
   // Egresos de caja PdV (vales/compras pagados desde el cajón)
   crearValeCaja: async (data: any): Promise<any> => {
@@ -4399,6 +4402,25 @@ contextBridge.exposeInMainWorld('api', {
     const listener = (_event: any, data: any) => handler(data);
     ipcRenderer.on('comanda-item-updates', listener);
     return () => ipcRenderer.removeListener('comanda-item-updates', listener);
+  },
+
+  /**
+   * PdV: suscribe al canal `mesa-updates` (emitido por `broadcastMesaEvent`
+   * en `electron/utils/mesa-events.utils.ts`). Devuelve la función para
+   * desuscribir. Payload: `{tipo: 'MESA_CAMBIO' | 'COMANDA_CAMBIO' |
+   * 'CAJA_CAMBIO', mesaId?, comandaId?, cajaId?, cajaEstado?, seq, updatedAt}`.
+   *
+   * Lo consume el PdV para enterarse al instante de que su caja se cerró. Ojo
+   * con el alcance: `broadcastMesaEvent` recorre las ventanas del proceso que
+   * ejecuta el handler, así que este canal llega en **standalone y server** y
+   * NO en `mode=client` (allá los handlers corren en el servidor, en otra
+   * máquina). En modo cliente el aviso llega por revalidación al recuperar el
+   * foco o al operar, y el rechazo del backend es la última palabra.
+   */
+  onMesaEvent: (handler: (payload: any) => void): (() => void) => {
+    const listener = (_event: any, data: any) => handler(data);
+    ipcRenderer.on('mesa-updates', listener);
+    return () => ipcRenderer.removeListener('mesa-updates', listener);
   },
 
   /**

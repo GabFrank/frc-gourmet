@@ -505,3 +505,100 @@ El módulo se cerró para poder usarse en producción
   polígono también a las zonas del PdV.
 - **Rentabilidad por envío.** Requiere modelar lo que se le paga al repartidor;
   hoy no hay entidad para eso.
+
+## Caja cerrada — deuda que dejó el PR del guard (2026-09-28)
+
+Las tres primeras salen de decisiones explícitas de Gabriel al aprobar el plan
+(§0 de `docs/planes/PLAN-caja-cerrada-guard.md`): se dejaron **fuera de alcance a
+propósito**, no se olvidaron.
+
+- **Q4 — Aviso visible de cajas duplicadas / índice no creado.** Si una base
+  tiene dos cajas `ABIERTO` en el mismo dispositivo, la migración **no crea** el
+  índice único `UQ_cajas_abierta_por_dispositivo` y `asegurarIndicesOpcionales()`
+  lo reintenta en cada arranque; mientras tanto, lo único que hay es un
+  `console.error` con la lista de dispositivos. ⚠️ **Nadie lo ve**: la instalación
+  queda sin el control primario del invariante y sin señal en la UI. Falta una
+  tarjeta o banner en *Sistema* que muestre el resultado de
+  `asegurarIndicesOpcionales` (ya devuelve
+  `{ cajaUnicaAbierta: 'ok' | 'duplicados' | 'error' }` justamente para esto) con
+  el link a Financiero › Cajas para cerrar las sobrantes. **No** debe cerrar
+  cajas solo — eso lo decide una persona.
+- **Q6 — Cierre asistido de cajas abiertas varios días.** Hoy lo único que hay es
+  la **advertencia de jornada anterior** (D13): si la única caja abierta se abrió
+  antes del corte de `PdvConfig.inicioJornadaHora`, el PdV pregunta *«¿la usás
+  igual o la cerrás antes de vender?»*. Falta el flujo asistido para el caso
+  crudo: una caja abierta hace tres días, con ventas de varias jornadas adentro,
+  que hoy hay que cerrar a mano sabiendo que el arqueo va a mezclar días. Está
+  fuera de alcance porque requiere decidir política contable (¿se parte la caja?
+  ¿se imputa todo al día de apertura?), no sólo UI.
+- **Fuga de datos de los RPC de lectura de caja.** El PR sanea el fix de raíz
+  (`select: false` en `Usuario.password`) y los 11 canales del dominio caja;
+  quedan **~30 canales que hidratan `createdBy.persona`** con su lista. Ver
+  `reference/known-bugs.md`.
+
+Y una que encontró la implementación:
+
+- ✅ **`removeTabById('pdv')` no cerraba la pestaña del PdV abierta desde el
+  menú** — **resuelto** en la ronda de fixes post-auditoría (helper
+  `cerrarPestanaPdv()` con los dos ids). Ver `reference/known-bugs.md`.
+- **`npm run test:mesa-una-venta-abierta` no termina el proceso** (falta
+  `process.exit(0)`; el `setInterval` del retry de comandas sostiene el event
+  loop). Arreglo de una línea, también en `reference/known-bugs.md`. ⚠️ Mientras
+  siga así, la suite **no se corre** en las rondas de verificación.
+
+### Deuda que dejó la ronda de fixes post-auditoría (§17 del plan)
+
+Las 39 observaciones de las dos auditorías de diff quedaron en **31 aplicadas, 4
+descartadas y 4 deudas**. Éstas son las cuatro, más una que apareció
+implementando:
+
+- **Marcar la grilla de mesas/comandas cuando la cuenta es de una caja no
+  abierta** (M3). Hoy sólo está marcada la **cuenta seleccionada** (aviso + COBRAR
+  y COBRO RÁPIDO deshabilitados), porque `getPdvMesas` **no joinea `venta.caja`**:
+  la fila de la grilla sigue mostrando su total sin señal. Arreglo: agregar
+  `caja.id` + `caja.estado` al `leftJoinAndSelect` de `getPdvMesas` (dos columnas
+  escalares, como se hizo en `delivery-listar-pdv`) y reusar el mismo chip.
+  ⚠️ **Antes hay que cerrar la decisión de producto con Gabriel:** qué pasa con las
+  mesas abiertas cuando se cierra la caja. Hoy el backend no deja cerrar una caja
+  con ventas `ABIERTA`, pero las cuentas que sobreviven a un cierre hecho desde
+  otra terminal se **transfieren** (pasan a la caja activa, Q2) o se **cancelan**.
+  Alternativas: (1) dejarlo así y sólo marcar la grilla; (2) avisar en el cierre y
+  ofrecer transferir/cancelar desde ahí; (3) reimputar automáticamente a la caja
+  que quede activa — lo más cómodo y lo más riesgoso, porque mueve cuentas entre
+  arqueos sin que nadie lo decida. La (3) necesita política contable, no UI.
+- **`puede-ajustar-caja` y `finalizar-ajuste-caja` exigen `CERRADO`** en vez de
+  `!== ABIERTO` (M8). Con una caja `CANCELADO`, el ajuste muere en el pre-chequeo
+  con «La caja no está cerrada.» aunque `assertCajaOperableConAjuste` sí lo acepte
+  y el front ya use el criterio correcto. **No urge:** ningún código escribe ese
+  estado hoy (verificado con grep en `src`, `electron` y `projects`). Si alguna vez
+  se agrega un camino que cancele cajas, esto se vuelve un bloqueo real.
+- **`update-caja` sobre una caja `CERRADO` no exige motivo** (P4). Exige
+  `FINANCIERO_CAJA_AJUSTAR`, pero no pasa por `assertCajaOperableConAjuste` ni
+  estampa `motivoAjuste`/`revisado`/`revisadoPor`. Se aceptó porque la traza del
+  ajuste de conteo la deja `finalizar-ajuste-caja` (que sí pide motivo) y
+  `updatedBy` registra al autor. Cerrarlo es reusar el helper también acá.
+- **Postgres en CI** (D2). `test:locks-pg` es el **único gate real** del invariante
+  «una caja `ABIERTO` por dispositivo» (índice + `23505` + `FOR SHARE`/`FOR UPDATE`
+  + `CAJA_CAMBIO` post-commit leído desde una segunda conexión). Se corrió a mano
+  contra un Postgres 17 real (**33/0**), pero el workflow de PR **no tiene servicio
+  Postgres** y la suite se saltea con exit 0. Falta un job dedicado (o un service
+  container) que la haga bloqueante; si no, borrar `withAperturaCajaLock` o el
+  índice deja todo en verde.
+- **El guard «sólo quien abrió la caja puede cerrarla» usa `getCurrentUser()`** y
+  no `getEffectiveUser`, así que en modo servidor/PWA compara contra el usuario del
+  desktop. Hay que moverlo **junto** con el `createdBy` de `create-caja`, que se
+  estampa con la misma función. Detalle en `reference/known-bugs.md`.
+
+Y dos riesgos de la auditoría que quedaron **abiertos a propósito**, por si alguien
+los vuelve a encontrar:
+
+- **`withAperturaCajaLock` no tiene timeout** (R-B). Si el `fn` se queda esperando
+  un lock de base (en Postgres `lock_timeout` es 0: espera para siempre), las
+  aperturas siguientes de ese dispositivo se encolan en memoria y, en modo
+  servidor, cada request de Fastify se cuelga sin error ni log. Un `lock_timeout`
+  explícito en las transacciones de apertura/cierre, o un `Promise.race`, lo cierra.
+- **El fail-open del front es estructural** (R-D). `revalidarCajaInterno` devuelve
+  `true` ante error de red y la PWA hace lo mismo, así que el guard de backend es
+  el **único** control. Está bien argumentado (bloquear el cobro porque no se pudo
+  confirmar un estado deja el local sin facturar), pero cualquier canal nuevo sin
+  `assertCajaAbierta` queda sin red de contención.

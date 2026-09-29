@@ -56,8 +56,15 @@
             <th mat-header-cell *matHeaderCellDef>NOMBRE</th>
             <td mat-cell *matCellDef="let row">
               {{ row.nombre }}
-              <mat-icon *ngIf="row.otraCaja" class="otra-caja-icon"
+              <mat-icon *ngIf="row.otraCaja && !row.cajaCerrada" class="otra-caja-icon"
                 matTooltip="Delivery de otro turno (otra caja)">history</mat-icon>
+              <!-- Q1: la caja de esta venta ya se cerró. El cobro está
+                   rechazado por el backend, así que se dice acá en vez de
+                   dejar que el cajero lo descubra al confirmar el pago. -->
+              <span *ngIf="row.cajaCerrada" class="caja-cerrada-chip"
+                matTooltip="No hay reapertura de cajas: cancelá el pedido y volvé a cargarlo en la caja de hoy">
+                CAJA CERRADA: SOLO CANCELAR
+              </span>
             </td>
           </ng-container>
 

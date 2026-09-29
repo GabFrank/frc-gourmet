@@ -27,6 +27,8 @@ import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { aplicarPagoCpoCuota } from './cuentas-por-pagar.handler';
 import { ensurePermission } from '../utils/auth.utils';
 import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
+import { assertCajaAbiertaSiVino, cajaDePago, cajaDeVenta } from '../utils/caja-abierta.utils';
+import { enTransaccionSiPostgres } from '../utils/tx.utils';
 import { Venta } from '../../src/app/database/entities/ventas/venta.entity';
 
 // ===== Helpers internos =====
@@ -1415,15 +1417,53 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     // habilite. El flag `validarDispositivoCaja` lo envía únicamente el flujo de
     // cobro de venta (cobrar-venta-dialog / cobro rápido). Los pagos de compra
     // no lo mandan, así que no se ven afectados. Se descarta antes de persistir.
-    const { validarDispositivoCaja, ...pagoData } = data ?? {};
+    const { validarDispositivoCaja, ventaId, ...pagoData } = data ?? {};
+
+    // ─── D4 capa 1: si el cliente dice a qué venta pertenece el cobro, la caja
+    // sale de la VENTA, no del payload. `this.data.caja` del diálogo de cobro es
+    // la caja del PdV, que puede no ser la de la venta (delivery pendiente de
+    // otro turno, venta de mesa de la caja vieja): así se escribieron los 52
+    // cobros cruzados del 24/09. La capa 2 vive en `updateVenta` y cubre a los
+    // clientes viejos, que no mandan `ventaId`.
+    const cajaDeLaVenta = ventaId ? await cajaDeVenta(dataSource, Number(ventaId)) : null;
+    if (cajaDeLaVenta != null) {
+      const cajaDelPayload = pagoData?.caja?.id ?? pagoData?.caja ?? null;
+      if (Number(cajaDelPayload) !== cajaDeLaVenta) {
+        console.warn(
+          `[createPago] caja del payload (${cajaDelPayload ?? 'null'}) ignorada; `
+          + `se usa la de la venta (${cajaDeLaVenta}).`,
+        );
+      }
+      pagoData.caja = { id: cajaDeLaVenta } as any;
+    }
+
     if (validarDispositivoCaja) {
       const cajaId = pagoData?.caja?.id ?? pagoData?.caja ?? null;
       await assertTerminalPuedeOperar(dataSource, _event, cajaId, 'PAGO');
     }
+
     const repo = dataSource.getRepository(Pago);
     const entity = repo.create(pagoData);
     await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
-    const saved = await repo.save(entity);
+
+    // Invariante de caja: con `ventaId` se verifica la caja de la VENTA; sin él
+    // (pago de compra) la del payload. Q1: un delivery vivo de una caja cerrada
+    // no se puede cobrar — sólo cancelar y revender en la caja de hoy.
+    //
+    // Guard + `save` en la MISMA transacción, sólo en Postgres (hallazgo P6):
+    // pasarle el `DataSource` al guard lo dejaba sin `FOR SHARE` y el TOCTOU con
+    // un cierre concurrente quedaba abierto (el propio helper lo documenta). En
+    // SQLite `enTransaccionSiPostgres` corre sin transacción a propósito: dos
+    // `dataSource.transaction()` intercalados comparten la transacción física y
+    // el rollback de uno se lleva los INSERT del otro (M5).
+    const cajaDelPago = pagoData?.caja?.id ?? pagoData?.caja ?? null;
+    const saved = await enTransaccionSiPostgres(dataSource, async (manager) => {
+      await assertCajaAbiertaSiVino(manager, cajaDelPago, {
+        contexto: 'createPago',
+        lock: 'read',
+      });
+      return await manager.getRepository(Pago).save(entity);
+    });
     
     // ─── SSE: emitir evento si es pago de venta con mesa/comanda ────────────
     try {
@@ -1491,19 +1531,26 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     // La caja se resuelve SIEMPRE server-side desde el id del pago: el payload
     // del renderer trae el `pago` tal como lo devolvió `getVenta`, que no carga
     // `pago.caja`, así que confiar en `data.pago.caja` dejaría el gate en no-op.
+    //
+    // La resolución de la caja dejó de ser condicional al flag: el invariante de
+    // caja cerrada corre SIEMPRE, no sólo cuando el cobro del PdV pide el gate
+    // de terminal.
     const { validarDispositivoCaja, ...detalleData } = data ?? {};
+    const pagoIdDetalle = detalleData?.pago?.id ?? detalleData?.pago ?? null;
+    const cajaDelPago = await cajaDePago(dataSource, pagoIdDetalle);
     if (validarDispositivoCaja) {
-      const pagoId = detalleData?.pago?.id ?? detalleData?.pago ?? null;
-      const pago = pagoId
-        ? await dataSource.getRepository(Pago).findOne({
-            where: { id: Number(pagoId) },
-            relations: ['caja'],
-          })
-        : null;
-      await assertTerminalPuedeOperar(dataSource, _event, (pago?.caja as any)?.id ?? null, 'PAGO');
+      await assertTerminalPuedeOperar(dataSource, _event, cajaDelPago, 'PAGO');
     }
+    // Guard + `save` en la misma transacción en Postgres (P6): ídem `createPago`.
     const repo = dataSource.getRepository(PagoDetalle);
-    const saved = await repo.save(repo.create(detalleData));
+    const entityDetalle = repo.create(detalleData);
+    const saved = await enTransaccionSiPostgres(dataSource, async (manager) => {
+      await assertCajaAbiertaSiVino(manager, cajaDelPago, {
+        contexto: 'createPagoDetalle',
+        lock: 'read',
+      });
+      return await manager.getRepository(PagoDetalle).save(entityDetalle as any);
+    });
     
     // ─── SSE: emitir evento si es pago de venta con mesa/comanda ────────────
     try {

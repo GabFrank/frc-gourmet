@@ -48,6 +48,16 @@ export class CreateGastoCajaDialogComponent implements OnInit {
   cajaNombre = '';
   gastoId: number | null = null;
   isEditing = false;
+  /**
+   * Llave de ajuste sobre una caja ya CERRADA (D6). La decide el LLAMADOR del
+   * diálogo —Financiero › Cajas y el resumen de caja, que saben el estado de la
+   * caja y piden el motivo—, no este componente: desde el PdV el mismo diálogo
+   * se abre sin ella y el backend rechaza con `CAJA_CERRADA`, que es lo que
+   * tiene que pasar cuando el cajero opera contra una caja que ya se cerró.
+   */
+  private ajuste: { motivo: string } | null = null;
+  /** Aviso visible de que esto es un ajuste, no una operación del turno. */
+  avisoAjuste = '';
 
   gastoCategorias: any[] = [];
   monedas: any[] = [];
@@ -67,6 +77,11 @@ export class CreateGastoCajaDialogComponent implements OnInit {
     this.cajaNombre = this.data?.cajaNombre || '';
     this.gastoId = this.data?.gastoId || null;
     this.isEditing = !!this.gastoId;
+    const motivoAjuste = String(this.data?.ajuste?.motivo ?? '').trim();
+    if (motivoAjuste) {
+      this.ajuste = { motivo: motivoAjuste };
+      this.avisoAjuste = `Ajuste de una caja ya cerrada. Motivo: ${motivoAjuste}`;
+    }
 
     this.form = this.fb.group({
       gastoCategoriaId: [null],
@@ -161,6 +176,9 @@ export class CreateGastoCajaDialogComponent implements OnInit {
           descripcion: v.descripcion,
           monto: Number(v.monto),
           gastoCategoriaId: v.gastoCategoriaId || null,
+          // Sobre una caja ABIERTA el backend ignora este campo, así que el
+          // llamador lo manda siempre que corresponda sin ramificar.
+          ...(this.ajuste ? { ajuste: this.ajuste } : {}),
         }));
         this.snackBar.open('Gasto actualizado', 'Cerrar', { duration: 2500 });
       } else {
@@ -173,6 +191,7 @@ export class CreateGastoCajaDialogComponent implements OnInit {
           monedaId: v.monedaId,
           formaPagoId: v.formaPagoId,
           fecha: v.fecha,
+          ...(this.ajuste ? { ajuste: this.ajuste } : {}),
         }));
         this.snackBar.open('Gasto registrado', 'Cerrar', { duration: 2500 });
       }

@@ -13,7 +13,13 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { firstValueFrom, forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
-import { AuthService, RepositoryService, mensajeDeError } from '@frc/shared-core';
+import {
+  AuthService,
+  RepositoryService,
+  mensajeDeError,
+  esCajaCerrada,
+  mensajeDeErrorCaja,
+} from '@frc/shared-core';
 import { AgregarItemDialogComponent, AgregarItemResult } from './agregar-item-dialog.component';
 import {
   SeleccionarVariacionDialogComponent,
@@ -496,6 +502,28 @@ export class TomarPedidoPage implements OnInit {
       this.snack.open('No hay una caja abierta para registrar la venta', 'CERRAR', { duration: 4000 });
       return null;
     }
+
+    // El mozo puede tener la pantalla abierta desde antes del cierre de caja.
+    // La caja se resuelve una sola vez (`resolverCaja`), así que se revalida
+    // contra el backend antes de crear la venta: sin esto la PWA insistía
+    // contra una caja cerrada y sólo se enteraba por el rechazo.
+    try {
+      const fresca: any = await firstValueFrom(this.repo.getCaja(this.cajaId));
+      if (String(fresca?.estado || '') !== 'ABIERTO') {
+        this.cajaId = null;
+        this.snack.open(
+          'La caja ya fue cerrada. Elegí una caja abierta y volvé a intentar.',
+          'CERRAR',
+          { duration: 6000 },
+        );
+        this.resolverCaja();
+        return null;
+      }
+    } catch {
+      // Fail-open: sin red no se bloquea el pedido. El backend rechaza igual si
+      // la caja está cerrada, y ese rechazo se maneja abajo.
+    }
+
     try {
       // Comanda: la venta se vincula a la comanda (y a su mesa si tiene). Mesa:
       // se vincula a la mesa. La venta se crea a demanda (al primer item).
@@ -514,8 +542,20 @@ export class TomarPedidoPage implements OnInit {
       // daba por perdida confiando en una reconciliación que no existía.
       // La comanda ya quedó OCUPADA al abrirla, no se toca acá.
       return this.ventaId;
-    } catch {
-      this.snack.open('No se pudo abrir la cuenta', 'CERRAR', { duration: 4000 });
+    } catch (e) {
+      if (esCajaCerrada(e)) {
+        // El guard del backend ganó la carrera: la caja se cerró entre la
+        // revalidación y el INSERT. Se suelta la caja y se vuelve a elegir.
+        this.cajaId = null;
+        this.snack.open(
+          mensajeDeErrorCaja(e, 'No se pudo abrir la cuenta'),
+          'CERRAR',
+          { duration: 7000 },
+        );
+        this.resolverCaja();
+        return null;
+      }
+      this.snack.open(mensajeDeError(e, 'No se pudo abrir la cuenta'), 'CERRAR', { duration: 5000 });
       return null;
     }
   }

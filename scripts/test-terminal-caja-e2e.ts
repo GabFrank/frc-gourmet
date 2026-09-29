@@ -118,7 +118,18 @@ async function main() {
 
   let seqMesa = 0;
   // `Caja.conteoApertura` es NOT NULL: toda caja nace con su conteo de apertura.
+  // ⚠️ Cada bloque abre "la caja de su terminal", y desde que existe el índice
+  // único parcial `UQ_cajas_abierta_por_dispositivo` no pueden convivir dos
+  // ABIERTO en el mismo dispositivo. Se cierra la anterior antes de abrir la
+  // nueva — que es lo que pasa en la vida real, y lo que el fixture asumía sin
+  // hacerlo.
   const nuevaCaja = async (dispositivoId: number | null): Promise<any> => {
+    if (dispositivoId) {
+      await ds.getRepository(Caja).update(
+        { dispositivo: { id: dispositivoId }, estado: 'ABIERTO' } as any,
+        { estado: 'CERRADO', fechaCierre: new Date() } as any,
+      );
+    }
     const conteo: any = await save(Conteo, { activo: true, tipo: 'APERTURA', fecha: new Date() });
     return await save(Caja, {
       estado: 'ABIERTO', activo: true, fechaApertura: new Date(),

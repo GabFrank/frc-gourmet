@@ -620,6 +620,18 @@
       <span class="cr-item cr-saldo"><mat-icon>account_balance_wallet</mat-icon> Saldo <strong>{{ cobroSaldo | number:'1.0-2' }}</strong></span>
     </div>
 
+    <!-- M3: la cuenta seleccionada quedó en una caja que ya no está ABIERTO (el
+         PdV reeligió caja y esta cuenta es del turno anterior). El cobro lo
+         rechaza el backend, así que se dice ACÁ en vez de dejar que el cajero lo
+         descubra al confirmar el pago. Agregar ítems sigue habilitado a
+         propósito: es decisión de producto pendiente. Mismo patrón que el chip
+         Q1 de la grilla de deliveries. -->
+    <div class="cuenta-caja-cerrada-aviso" *ngIf="cuentaDeCajaCerrada && !moverItemsMode"
+      [matTooltip]="tooltipCuentaCajaCerrada" data-testid="pdv-aviso-cuenta-caja-cerrada">
+      <mat-icon>lock_clock</mat-icon>
+      <span>{{ avisoCuentaCajaCerrada }}</span>
+    </div>
+
     <!-- Bottom buttons: modo normal -->
     <div class="action-buttons" *ngIf="!moverItemsMode">
       <button
@@ -627,7 +639,7 @@
         mat-raised-button
         color="primary"
         class="action-button"
-        [disabled]="!hasActiveVenta || !hasActiveItems || (!puedeCobrar && !puedeFinalizarVenta)"
+        [disabled]="!hasActiveVenta || !hasActiveItems || cuentaDeCajaCerrada || (!puedeCobrar && !puedeFinalizarVenta)"
         (click)="cobrarVenta()"
         data-testid="pdv-btn-cobrar"
         [matTooltip]="tooltipCobrar"
@@ -640,7 +652,7 @@
         mat-raised-button
         color="primary"
         class="action-button"
-        [disabled]="!hasActiveVenta || !hasActiveItems || !puedeCobrar || !puedeFinalizarVenta"
+        [disabled]="!hasActiveVenta || !hasActiveItems || cuentaDeCajaCerrada || !puedeCobrar || !puedeFinalizarVenta"
         (click)="cobroRapido()"
         data-testid="pdv-btn-cobro-rapido"
         [matTooltip]="tooltipCobroRapido"

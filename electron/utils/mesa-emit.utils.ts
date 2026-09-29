@@ -91,6 +91,59 @@ export async function emitComandaCambio(
 }
 
 /**
+ * Avisa a las terminales que una caja cambió de estado (se abrió, se cerró o
+ * se ajustó). Es lo que hace que el PdV deje de operar contra una caja que ya
+ * se cerró sin que el cajero toque nada.
+ *
+ * ⚠️ **Se llama SIEMPRE DESPUÉS DEL COMMIT.** Emitir adentro de la transacción
+ * avisaría de un cambio que todavía puede hacer rollback, y el cliente
+ * revalidaría contra `get-caja` leyendo el estado viejo: quedaría convencido de
+ * que la caja sigue abierta justo cuando dejó de estarlo.
+ *
+ * ⚠️ **`seq` es `Date.now()`**, no la columna `seq` de la entidad: `cajas` no
+ * tiene esa columna (ver `MesaEventPayload.seq`). El cliente no compara este
+ * `seq` contra los de mesa/comanda.
+ *
+ * Best-effort de punta a punta: nunca lanza. El invariante de caja lo sostiene
+ * el guard del backend (`caja-abierta.utils.ts`); este evento sólo adelanta el
+ * aviso, así que un fallo del bus no puede romper la apertura ni el cierre.
+ */
+export async function emitCajaCambio(
+  ds: DataSource | EntityManager,
+  cajaId: number,
+  estado: string,
+  dispositivoId?: number | null,
+): Promise<void> {
+  try {
+    const id = Number(cajaId) || 0;
+    if (!id) return;
+
+    let disp = dispositivoId ?? null;
+    if (disp == null) {
+      const manager = ds instanceof DataSource ? ds.manager : ds;
+      const fila = await manager
+        .createQueryBuilder()
+        .select('c.dispositivo_id', 'dispositivoId')
+        .from('cajas', 'c')
+        .where('c.id = :id', { id })
+        .getRawOne();
+      disp = fila?.dispositivoId != null ? Number(fila.dispositivoId) : null;
+    }
+
+    broadcastMesaEvent({
+      tipo: 'CAJA_CAMBIO',
+      cajaId: id,
+      cajaEstado: String(estado || '').toUpperCase(),
+      dispositivoId: disp,
+      seq: Date.now(),
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.warn(`[mesa-emit] no se pudo emitir CAJA_CAMBIO de la caja ${cajaId}:`, e);
+  }
+}
+
+/**
  * Emite evento para una venta según su contenedor (mesa o comanda).
  * Lee la venta con sus relaciones y emite el evento correspondiente.
  *

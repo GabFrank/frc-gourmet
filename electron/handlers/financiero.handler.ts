@@ -25,6 +25,16 @@ import { getEvolutionApiKey } from '../utils/notificaciones-secrets.util';
 import { sendWhatsappMedia, sendWhatsappText, normalizeWhatsappNumber } from '../services/whatsapp.service';
 import { dbQuery } from '../utils/db-query';
 import { selectUsuarioPublico } from '../utils/select-usuario-publico.util';
+import {
+  cajaAbiertaDeDispositivo,
+  errorCajaAbiertaDuplicada,
+  errorCajaCerrada,
+  guardarAperturaTraduciendoDuplicado,
+  leerEstadoCaja,
+  withAperturaCajaLock,
+} from '../utils/caja-abierta.utils';
+import { emitCajaCambio } from '../utils/mesa-emit.utils';
+import { enTransaccionSiPostgres } from '../utils/tx.utils';
 
 interface EnvioCierreResult {
   ok: boolean;
@@ -680,24 +690,66 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   });
 
   ipcMain.handle('create-caja', async (_event: IpcMainInvokeEvent, data: any) => {
-    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_OPERAR');
     try {
-      const repo = dataSource.getRepository(Caja);
-      // Guard: una sola caja ABIERTA por dispositivo (terminal). Antes solo lo
-      // aseguraba el frontend del desktop; la PWA también abre cajas, así que el
-      // chequeo va en backend para ser inmune a la carrera multi-dispositivo.
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_OPERAR');
+
+      // El permiso NO se unifica con `abrir-caja-desde-conteo`, que exige
+      // FINANCIERO_CAJA_GESTIONAR (decisión B16 del plan): abrir la caja del
+      // turno es rutina del cajero; abrirla desde un conteo de Caja Mayor es
+      // una operación de gestión sobre el efectivo consolidado. Lo que sí se
+      // unifica entre los dos canales es la CONDUCTA: guard sobre el estado
+      // final, transacción y traducción de la violación del índice único.
       const dispositivoId = data?.dispositivo?.id ?? data?.dispositivo_id ?? null;
-      if (data?.estado === CajaEstado.ABIERTO && dispositivoId != null) {
-        const yaAbierta = await repo.count({
-          where: { dispositivo: { id: dispositivoId }, estado: CajaEstado.ABIERTO },
-        });
-        if (yaAbierta > 0) {
-          throw new Error('Ya hay una caja abierta en esta terminal. Cerrá esa caja antes de abrir otra.');
-        }
+      // ⚠️ `Caja.estado` tiene `default: ABIERTO` en la entidad: un payload sin
+      // `estado` abre una caja igual. El guard viejo miraba `data.estado ===
+      // ABIERTO` y por eso se salteaba entero con sólo omitir el campo.
+      const estadoFinal = data?.estado ?? CajaEstado.ABIERTO;
+      // ⚠️ P9: este canal abre cajas, y nada más. Con `estado: 'CERRADO'` se
+      // salteaba el guard de duplicado (sólo corre para ABIERTO) y se creaba una
+      // caja CERRADO, con `dispositivo` elegido por el cliente, que el índice
+      // parcial tampoco cubre: una caja que nunca estuvo abierta, con arqueo
+      // propio y sin apertura real. Verificado que ningún llamador lo hace: el
+      // desktop manda `CajaEstado.ABIERTO` (`create-caja-dialog:851`), la PWA
+      // `'ABIERTO'` (`caja-abrir.page:101`) y el resto omite el campo (la
+      // entidad tiene `default: ABIERTO`).
+      if (estadoFinal !== CajaEstado.ABIERTO) {
+        throw new Error(
+          'Este canal solo abre cajas: una caja nueva nace ABIERTO. '
+          + `No se puede crear una caja en estado ${String(estadoFinal)}.`,
+        );
       }
-      const entity = repo.create(data);
-      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
-      return await repo.save(entity);
+
+      // El candado serializa las aperturas de ESTA terminal dentro del proceso.
+      // Sin él, en SQLite dos `dataSource.transaction` intercalados comparten
+      // la misma transacción física y el rollback de la perdedora borra el
+      // INSERT de la ganadora — ver `withAperturaCajaLock`.
+      const abierta: any = await withAperturaCajaLock(dispositivoId, () => dataSource.transaction(async (manager) => {
+        const repo = manager.getRepository(Caja);
+        // Guard: una sola caja ABIERTA por dispositivo (terminal). Cubre la
+        // carrera lenta (dos clicks). La carrera real la cierra el índice
+        // único parcial `UQ_cajas_abierta_por_dispositivo` — ver el `catch`.
+        if (estadoFinal === CajaEstado.ABIERTO && dispositivoId != null) {
+          const yaAbierta = await cajaAbiertaDeDispositivo(manager, dispositivoId, {
+            lock: 'write', contexto: 'create-caja',
+          });
+          if (yaAbierta != null) throw errorCajaAbiertaDuplicada(yaAbierta);
+        }
+        const entity = repo.create(data);
+        await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
+        return await guardarAperturaTraduciendoDuplicado(
+          () => repo.save(entity),
+          dispositivoId,
+        );
+      }));
+
+      // Aviso a las terminales, DESPUÉS del commit (ver `emitCajaCambio`): el
+      // PdV de otro equipo se enteró de que hay una caja nueva sin esperar a
+      // que alguien recargue. Never-throws.
+      const creada = Array.isArray(abierta) ? abierta[0] : abierta;
+      if (creada?.id) {
+        await emitCajaCambio(dataSource, creada.id, creada.estado ?? estadoFinal, dispositivoId);
+      }
+      return creada;
     } catch (error) {
       console.error('Error creating caja:', error);
       throw error;
@@ -707,49 +759,150 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('update-caja', async (_event: IpcMainInvokeEvent, id: number, data: any) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_OPERAR');
-      const repo = dataSource.getRepository(Caja);
-      const entity = await repo.findOne({ where: { id }, relations: ['createdBy'] });
-      if (!entity) throw new Error(`Caja ID ${id} not found`);
 
-      // Guard: solo el usuario que ABRIÓ la caja puede cerrarla. Antes solo lo
-      // aseguraba el frontend del desktop (mostraba la acción solo al creador);
-      // la PWA también cierra cajas, así que va en backend.
-      if (data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO) {
-        const abridorId = (entity.createdBy as any)?.id ?? null;
-        const actualId = getCurrentUser()?.id ?? null;
-        if (abridorId != null && actualId !== abridorId) {
-          throw new Error('Solo el usuario que abrió la caja puede cerrarla.');
+      // ── Alcance de la transacción (D3/B3 del plan, y no se negocia) ──────
+      // Adentro: lock de la fila + guards + merge/save. Es todo lo que persiste
+      // la Caja. AFUERA, después del commit: `generarRetiroDelCierre` y el
+      // WhatsApp. Motivo duro: `generarRetiroDelCierre` recibe el DataSource,
+      // no un EntityManager, así que en Postgres leería desde OTRA conexión el
+      // estado pre-commit — vería la caja todavía ABIERTO y sin `conteoCierre`,
+      // devolvería null sin lanzar y el retiro automático del cierre dejaría de
+      // generarse EN SILENCIO (RB-1). Motivo secundario: el WhatsApp y el
+      // retiro tardan, y sostener el FOR UPDATE mientras tanto hace esperar a
+      // cada venta nueva.
+      //
+      // ⚠️ La transacción es **sólo en Postgres** (`enTransaccionSiPostgres`,
+      // hallazgo M5). En SQLite hay una sola conexión y dos
+      // `dataSource.transaction()` intercalados comparten la transacción
+      // física: el cierre podía cruzarse con `createVenta`, `delivery-crear`,
+      // `transferir-venta-pdv` o `registrarCobroParcial` —que sí abren la
+      // suya— y el ROLLBACK de uno se llevaba los INSERT del otro. Es el mismo
+      // motivo por el que la apertura necesitó `withAperturaCajaLock`. En
+      // SQLite, entonces, este canal vuelve al comportamiento sin transacción
+      // (que es el que tenía antes del PR) y los guards corren igual: el lock
+      // nunca llegaba al driver de todos modos.
+      const { seEstaCerrando, saved } = await enTransaccionSiPostgres(dataSource, async (manager) => {
+        const repoTx = manager.getRepository(Caja);
+        // Lock de la fila SIN relations (#258: Postgres rechaza FOR UPDATE
+        // sobre el lado nulable de un outer join). El estado se lee acá, ya
+        // serializado contra las escrituras en vuelo que toman FOR SHARE.
+        await leerEstadoCaja(manager, id, { lock: 'write', contexto: 'update-caja' });
+        const entity = await repoTx.findOne({ where: { id }, relations: ['createdBy'] });
+        if (!entity) throw new Error(`Caja ID ${id} not found`);
+
+        // ── Regla 1 (D7): cerrar una caja ya cerrada falla con un mensaje que
+        // se entiende. VA ANTES que la regla 2 a propósito: si el permiso de
+        // ajuste corriera primero, un cajero que cierra dos veces recibiría
+        // «PERMISO REQUERIDO: FINANCIERO_CAJA_AJUSTAR» y saldría a pedir un
+        // permiso que no necesita. Hasta hoy este caso no fallaba ni dejaba
+        // rastro: es la causa D del incidente del 24/09.
+        if (data?.estado === CajaEstado.CERRADO && entity.estado === CajaEstado.CERRADO) {
+          throw errorCajaCerrada(id, {
+            id,
+            estado: entity.estado,
+            fechaCierre: (entity.fechaCierre as any) ?? null,
+          });
         }
-      }
 
-      // Guard: no permitir CERRAR una caja que todavía tiene ventas ABIERTAS
-      // (mesas/comandas/ventas rápidas sin cobrar). Si se cierra igual, esas
-      // ventas quedan huérfanas (la mesa queda OCUPADA para siempre, visible
-      // para cualquier caja nueva). El chequeo del diálogo de cierre es solo de
-      // frontend y un snapshot: en el modelo multi-dispositivo otro equipo puede
-      // abrir una venta en esta caja después de que el diálogo cargó. Este guard
-      // en backend es inmune a esa carrera.
-      if (data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO) {
-        const ventasAbiertas = await dataSource.getRepository(Venta).count({
-          where: { caja: { id }, estado: VentaEstado.ABIERTA },
-        });
-        if (ventasAbiertas > 0) {
+        // ── Regla 1b (P2/P3): NO hay reapertura de cajas ────────────────────
+        // El plan lo dice como no-objetivo explícito («NO se reabren cajas») y
+        // no hay ningún flujo legítimo que lo pida: el único `estado: ABIERTO`
+        // que sale del frontend es el del `createCaja` de apertura (desktop
+        // `create-caja-dialog:851`, PWA `caja-abrir.page:101`). Sin este
+        // rechazo, cualquiera con FINANCIERO_CAJA_AJUSTAR podía revivir una
+        // caja cerrada por la regla 2 —que exige el permiso pero no limita QUÉ
+        // se escribe—, y el índice único parcial sólo lo frenaba si el
+        // dispositivo ya tenía otra abierta. Va ANTES del permiso de ajuste por
+        // el mismo motivo que la regla 1: el mensaje tiene que explicar qué
+        // pasó, no mandar a pedir un permiso que no arregla nada.
+        if (data?.estado === CajaEstado.ABIERTO && entity.estado === CajaEstado.CERRADO) {
           throw new Error(
-            `No se puede cerrar la caja: tiene ${ventasAbiertas} venta(s) abierta(s) (mesas/comandas sin cobrar). Cobrá o cancelá esas cuentas antes de cerrar.`
+            `La caja #${id} ya fue cerrada y no se puede reabrir. `
+            + 'Para corregir un dato usá el ajuste de caja cerrada; para seguir vendiendo, abrí una caja nueva.',
           );
         }
-      }
 
-      const seEstaCerrando = data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO;
-      // `dispositivo` fuera del merge: es el dueño de la caja y lo único que
-      // sostiene el gate de cobro por terminal. Aceptarlo dejaba que cualquier
-      // terminal se apropiara de una caja ajena con un update, desarmando el
-      // gate para siempre y rompiendo el invariante "una caja abierta por
-      // dispositivo", que sólo se verifica al crear. Ningún llamador lo manda.
-      const { dispositivo: _dispositivoIgnorado, ...cajaData } = data ?? {};
-      repo.merge(entity, cajaData);
-      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      const saved = await repo.save(entity);
+        // ── Regla 2 (D7): cualquier update sobre una caja CERRADO es un ajuste
+        // y exige FINANCIERO_CAJA_AJUSTAR, además del permiso operativo. El
+        // diálogo en modo ajuste omite `estado` del payload, con lo que esquiva
+        // la regla 1 y cae acá, que el ajustador cumple por definición.
+        if (entity.estado === CajaEstado.CERRADO) {
+          await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_AJUSTAR');
+        }
+
+        // Guard: solo el usuario que ABRIÓ la caja puede cerrarla. Antes solo lo
+        // aseguraba el frontend del desktop (mostraba la acción solo al creador);
+        // la PWA también cierra cajas, así que va en backend.
+        if (data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO) {
+          const abridorId = (entity.createdBy as any)?.id ?? null;
+          const actualId = getCurrentUser()?.id ?? null;
+          if (abridorId != null && actualId !== abridorId) {
+            throw new Error('Solo el usuario que abrió la caja puede cerrarla.');
+          }
+        }
+
+        // Guard: no permitir CERRAR una caja que todavía tiene ventas ABIERTAS
+        // (mesas/comandas/ventas rápidas sin cobrar). Si se cierra igual, esas
+        // ventas quedan huérfanas (la mesa queda OCUPADA para siempre, visible
+        // para cualquier caja nueva). El chequeo del diálogo de cierre es solo de
+        // frontend y un snapshot: en el modelo multi-dispositivo otro equipo puede
+        // abrir una venta en esta caja después de que el diálogo cargó. Este guard
+        // en backend es inmune a esa carrera.
+        if (data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO) {
+          const ventasAbiertas = await manager.getRepository(Venta).count({
+            where: { caja: { id }, estado: VentaEstado.ABIERTA },
+          });
+          if (ventasAbiertas > 0) {
+            throw new Error(
+              `No se puede cerrar la caja: tiene ${ventasAbiertas} venta(s) abierta(s) (mesas/comandas sin cobrar). Cobrá o cancelá esas cuentas antes de cerrar.`
+            );
+          }
+        }
+
+        const cerrando = data?.estado === CajaEstado.CERRADO && entity.estado !== CajaEstado.CERRADO;
+        // ── Campos NO editables por este canal (P2) ─────────────────────────
+        //
+        // `dispositivo`: es el dueño de la caja y lo único que sostiene el gate
+        // de cobro por terminal. Aceptarlo dejaba que cualquier terminal se
+        // apropiara de una caja ajena con un update, desarmando el gate para
+        // siempre y rompiendo el invariante "una caja abierta por dispositivo",
+        // que sólo se verifica al crear.
+        //
+        // `createdBy`: es el abridor, y el guard de más arriba («solo el usuario
+        // que abrió la caja puede cerrarla») se evalúa contra él. Un usuario con
+        // sólo FINANCIERO_CAJA_OPERAR podía hacer `update-caja(id, {createdBy:
+        // él})` sobre una caja ABIERTO y después cerrarla: el guard comparaba
+        // contra el `createdBy` que él mismo acababa de escribir.
+        //
+        // `id`: un merge del `id` sobre la entidad cargada convierte el `save`
+        // en un INSERT/UPDATE de OTRA fila.
+        // `createdAt`, `conteoApertura`, `fechaApertura`: son la identidad de la
+        // apertura; mover el conteo de apertura de una caja ya cerrada falsea el
+        // arqueo de las dos cajas involucradas.
+        //
+        // Ningún llamador legítimo los manda: el desktop cierra/ajusta con
+        // `{conteoCierre, fechaCierre, estado?}` (`create-caja-dialog:1341-1352`)
+        // y la PWA con `{estado, fechaCierre, conteoCierre}`
+        // (`caja-cerrar.page:108-112`).
+        const {
+          id: _idIgnorado,
+          dispositivo: _dispositivoIgnorado,
+          createdBy: _createdByIgnorado,
+          createdAt: _createdAtIgnorado,
+          conteoApertura: _conteoAperturaIgnorado,
+          fechaApertura: _fechaAperturaIgnorada,
+          ...cajaData
+        } = data ?? {};
+        repoTx.merge(entity, cajaData);
+        await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
+        return { seEstaCerrando: cerrando, saved: await repoTx.save(entity) };
+      });
+
+      // Aviso a las terminales: fuera de la transacción (si hubiera fallado,
+      // este punto no se alcanza) y ANTES del retiro y del WhatsApp, que
+      // tardan. El PdV que tenía esta caja en memoria la revalida y deja de
+      // operar contra ella.
+      await emitCajaCambio(dataSource, id, (saved as any)?.estado ?? '');
 
       // Al cerrar, auto-generar el RetiroCaja FLOTANTE con el efectivo del cierre,
       // para que quede disponible para ingresar a una caja mayor. Best-effort: si
@@ -837,6 +990,12 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
     (caja as any).motivoAjuste = (motivo || '').trim().toUpperCase() || null;
     await setEntityUserTracking(dataSource, caja, getCurrentUser()?.id, true);
     await cajaRepo.save(caja);
+
+    // A13: este handler hace `save` directo (no pasa por `update-caja`) y
+    // cambia `revisado`/`motivoAjuste` de una caja que el PdV o un resumen
+    // abierto pueden estar mirando. Avisar cuesta una línea y evita una vista
+    // rancia con el arqueo viejo.
+    await emitCajaCambio(dataSource, cajaId, caja.estado);
     return { success: true };
   });
 
@@ -888,7 +1047,15 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('get-caja-abierta-by-usuario', async (_event: IpcMainInvokeEvent, usuarioId: number) => {
     try {
       const repo = dataSource.getRepository(Caja);
-      return await repo.findOne({ where: { createdBy: { id: usuarioId }, estado: CajaEstado.ABIERTO } });
+      // `order` explícito (D8): el PdV usa esto para recargar la caja que ACABA
+      // de abrir. Un `findOne` sin orden devuelve una cualquiera si el usuario
+      // tiene más de una abierta (el modelo lo permite: la unicidad es por
+      // dispositivo, no por usuario) — y quedarse pegado a la caja equivocada
+      // es exactamente el bug que este PR ataca.
+      return await repo.findOne({
+        where: { createdBy: { id: usuarioId }, estado: CajaEstado.ABIERTO },
+        order: { fechaApertura: 'DESC', id: 'DESC' },
+      });
     } catch (error) {
       console.error('Error getting caja abierta por usuario:', error);
       throw error;

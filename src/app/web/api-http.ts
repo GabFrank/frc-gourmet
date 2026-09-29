@@ -285,9 +285,14 @@ function buildExplicit(): Record<string, unknown> {
     onWindowDevToolsRequested: undefined,
     // Auto-update (electron-updater): no aplica a la app web.
     autoUpdateGetConfig: undefined,
-    // Push IPC de impresora / comandas: en web se usa el fallback SSE/poll.
+    // Push IPC de impresora / comandas / mesas: en web se usa el fallback
+    // SSE/poll. La clave TIENE que estar presente aunque valga `undefined`:
+    // el Proxy de abajo fabrica una función RPC para toda propiedad ausente,
+    // así que `api.onMesaEvent(cb)` terminaría invocando un canal inexistente
+    // en vez de dejar que el guard del PdV caiga al SSE.
     onPrinterEvent: undefined,
     onComandaEvent: undefined,
+    onMesaEvent: undefined,
     // Diálogos nativos de archivo (backup/restore): sin equivalente en browser.
     backupPickRestoreFile: async (): Promise<null> => null,
     backupPickFolder: async (): Promise<null> => null,

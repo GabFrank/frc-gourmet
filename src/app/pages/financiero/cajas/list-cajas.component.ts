@@ -363,12 +363,68 @@ export class ListCajasComponent implements OnInit {
     });
   }
 
+  /**
+   * Llave de ajuste para operar sobre una caja ya CERRADA (D6).
+   *
+   * El backend exige `ajuste: { motivo }` + `FINANCIERO_CAJA_AJUSTAR` + que el
+   * retiro del cierre no esté todavía INGRESADO en Caja Mayor. El motivo se
+   * pide **acá**, en el llamador, y no dentro del diálogo de gasto/retiro: esos
+   * mismos diálogos los abre el PdV para el cajón del turno, y desde ahí NUNCA
+   * se manda `ajuste`. Devuelve `null` si el usuario canceló o si la caja no se
+   * puede ajustar (ahí ya se mostró el motivo del bloqueo).
+   *
+   * El criterio es **cualquier estado distinto de `ABIERTO`** (M8), el mismo que
+   * usa `assertCajaOperableConAjuste` en el backend. Comparar contra `CERRADO`
+   * dejaba `CANCELADO` sin llave: se cortaba antes de pedir el motivo, no se
+   * mandaba `ajuste` y el gasto que faltó no había forma de registrarlo.
+   *
+   * ⚠️ Para `CANCELADO` el corte hoy lo pone `puede-ajustar-caja`, que sigue
+   * respondiendo «La caja no está cerrada.» (`financiero.handler.ts:927`). Ese
+   * canal es backend y queda fuera de este cambio; lo que se gana acá es el
+   * mensaje temprano en vez de hacer llenar el formulario para que el guard lo
+   * rechace al confirmar.
+   */
+  private async pedirMotivoAjuste(caja: Caja, que: string): Promise<{ motivo: string } | null> {
+    if (caja.estado === CajaEstado.ABIERTO) return null;
+
+    // Mismo chequeo previo que `ajustarConteo`: si el retiro del cierre ya se
+    // ingresó a Caja Mayor, el backend va a rechazar igual — mejor decirlo
+    // antes de hacerle contar el gasto.
+    const permiso = await firstValueFrom(this.repositoryService.puedeAjustarCaja(caja.id!));
+    if (!permiso?.editable) {
+      this.snackBar.open(permiso?.motivoBloqueo || 'No se puede ajustar esta caja.', 'CERRAR', { duration: 6000 });
+      return null;
+    }
+
+    const motivo = await firstValueFrom(
+      this.dialog.open(PromptDialogComponent, {
+        width: '460px',
+        data: {
+          title: 'Ajustar caja cerrada',
+          message: `La caja #${caja.id} ya no está abierta (${caja.estado}). ${que} queda `
+            + 'registrado como ajuste: indicá el motivo (se guarda en la caja junto a tu usuario).',
+          label: 'Motivo del ajuste',
+          required: true,
+          confirmText: 'Continuar',
+        },
+      }).afterClosed(),
+    );
+    const limpio = String(motivo || '').trim();
+    return limpio ? { motivo: limpio } : null;
+  }
+
   /** Agrega un gasto que faltó registrar a una caja (incl. ya cerrada). */
-  agregarGasto(caja: Caja): void {
+  async agregarGasto(caja: Caja): Promise<void> {
+    // No sólo `CERRADO`: toda caja que no esté `ABIERTO` necesita la llave de
+    // ajuste, porque el guard del backend rechaza por `!== ABIERTO` (M8).
+    const cerrada = caja.estado !== CajaEstado.ABIERTO;
+    const ajuste = cerrada ? await this.pedirMotivoAjuste(caja, 'El gasto') : null;
+    if (cerrada && !ajuste) return;
+
     const ref = this.dialog.open(CreateGastoCajaDialogComponent, {
       width: '560px',
       disableClose: true,
-      data: { cajaId: caja.id },
+      data: { cajaId: caja.id, ...(ajuste ? { ajuste } : {}) },
     });
     ref.afterClosed().subscribe(result => {
       if (result?.success || result?.saved || result === true) {
@@ -379,11 +435,16 @@ export class ListCajasComponent implements OnInit {
   }
 
   /** Agrega un retiro que faltó registrar a una caja (incl. ya cerrada). */
-  agregarRetiro(caja: Caja): void {
+  async agregarRetiro(caja: Caja): Promise<void> {
+    // Mismo criterio que `agregarGasto` (M8): `!== ABIERTO`, no `=== CERRADO`.
+    const cerrada = caja.estado !== CajaEstado.ABIERTO;
+    const ajuste = cerrada ? await this.pedirMotivoAjuste(caja, 'El retiro') : null;
+    if (cerrada && !ajuste) return;
+
     const ref = this.dialog.open(CreateRetiroCajaDialogComponent, {
       width: '620px',
       disableClose: true,
-      data: { cajaId: caja.id },
+      data: { cajaId: caja.id, ...(ajuste ? { ajuste } : {}) },
     });
     ref.afterClosed().subscribe(result => {
       if (result?.success || result?.saved || result === true) {

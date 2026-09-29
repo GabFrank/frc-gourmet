@@ -14,6 +14,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 
 import { RepositoryService } from 'src/app/database/repository.service';
+import { esCajaCerrada, mensajeDeErrorCaja } from 'src/app/shared/utils/caja-error.util';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { ImprimirPagareDialogComponent } from './imprimir-pagare-dialog.component';
 
@@ -190,6 +191,15 @@ export class CobrarCreditoDialogComponent implements OnInit {
     } catch (e: any) {
       console.error('Error cobrarVentaCredito:', e);
       const raw = String(e?.message || '');
+      // `cobrar-venta-credito` pasa por el guard de caja: el rechazo se traduce
+      // con el util (el código viaja dentro del `message`, y en modo cliente el
+      // texto crudo sería el JSON del 500) y se cierra el diálogo avisando al
+      // padre, que lo propaga al PdV para que revalide su caja.
+      if (esCajaCerrada(e)) {
+        this.snackBar.open(mensajeDeErrorCaja(e, 'Error al registrar la venta a crédito'), 'CERRAR', { duration: 9000 });
+        this.dialogRef.close({ success: false, cajaCerrada: true });
+        return;
+      }
       const msg = raw.includes('FINALIZACION_NO_PERMITIDA_EN_ESTE_DISPOSITIVO')
         ? 'La venta solo se finaliza en la terminal donde se abrió la caja'
         : raw.includes('Error invoking remote method')

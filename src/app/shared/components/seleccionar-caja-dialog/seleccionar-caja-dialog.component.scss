@@ -4,6 +4,30 @@
   opacity: 0.7;
 }
 
+/* Aviso de jornada anterior. Amarillo = "revisá esto", uno de los cuatro
+   colores de estado permitidos, y por variable de tema para dark/light.
+   Sin fallback hardcodeado: `--warning-color` está definida en
+   `src/styles/theme-variables.scss` para los dos temas, y el fondo se deriva de
+   la misma variable con `color-mix` (M12) para que acompañe dark/light en vez
+   de ser un `rgba` fijo. */
+.aviso-jornada {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--warning-color);
+  background-color: color-mix(in srgb, var(--warning-color) 12%, transparent);
+  font-size: 13px;
+  line-height: 1.35;
+
+  mat-icon {
+    flex: 0 0 auto;
+    color: var(--warning-color);
+  }
+}
+
 .cajas-list {
   padding: 0;
 }

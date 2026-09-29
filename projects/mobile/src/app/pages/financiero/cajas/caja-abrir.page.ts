@@ -9,7 +9,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
-import { RepositoryService } from '@frc/shared-core';
+import { RepositoryService, mensajeDeErrorCaja } from '@frc/shared-core';
 import { ConteoFormComponent, ConteoGrupo } from './conteo-form.component';
 import { buildGruposConteo, detallesDeGrupos, detallesResumidoDeGrupos } from './caja-conteo.util';
 
@@ -87,6 +87,24 @@ export class CajaAbrirPage implements OnInit {
     }
     this.saving = true;
     try {
+      // M6: revalidar ANTES de crear el `Conteo`. La lista de terminales libres
+      // se armó en `ngOnInit` y es un snapshot: entre que se pintó y que el
+      // encargado toca ABRIR pueden haber pasado minutos y otra terminal (o el
+      // desktop) ya abrió la caja de esta. Sin esto el rechazo llegaba recién en
+      // `createCaja` y el `Conteo` + sus detalles quedaban huérfanos en base.
+      const ocupadaPor = await this.cajaAbiertaDeTerminal(this.terminalId);
+      if (ocupadaPor) {
+        // El nombre de la terminal va en el mensaje porque la apertura deja
+        // ELEGIRLA: puede no ser la que el encargado tiene en la mano.
+        const terminal = this.terminales.find((t) => t.id === this.terminalId)?.nombre || 'Esta terminal';
+        this.snack.open(
+          `${terminal} ya tiene una caja abierta (caja #${ocupadaPor}). Cerrá esa caja antes de abrir otra.`,
+          'CERRAR', { duration: 7000 },
+        );
+        this.saving = false;
+        return;
+      }
+
       const conteo: any = await firstValueFrom(this.repo.createConteo({
         activo: true,
         tipo: 'APERTURA',
@@ -107,9 +125,31 @@ export class CajaAbrirPage implements OnInit {
       this.snack.open('Caja abierta', 'OK', { duration: 2500 });
       await this.router.navigateByUrl('/financiero/cajas');
     } catch (e: any) {
-      const msg = (e?.message || 'No se pudo abrir la caja').replace(/^Error:\s*/, '');
-      this.snack.open(msg, 'CERRAR', { duration: 5000 });
+      // `CAJA_ABIERTA_DUPLICADA` es el rechazo esperable acá (esta terminal ya
+      // tiene su caja del turno abierta) y quedó sin traducir en la Fase 2: sin
+      // esto la PWA mostraba el código crudo, o directamente el JSON del 500
+      // que devuelve `/api/rpc`.
+      this.snack.open(mensajeDeErrorCaja(e, 'No se pudo abrir la caja'), 'CERRAR', { duration: 6000 });
       this.saving = false;
+    }
+  }
+
+  /**
+   * Id de la caja `ABIERTO` de esta terminal, o `null` (M6).
+   *
+   * **Fail-open**: si la consulta falla se sigue con la apertura y decide el
+   * índice único parcial del backend, que es el control primario. Lo que este
+   * chequeo evita es el `Conteo` huérfano en el caso frecuente.
+   */
+  private async cajaAbiertaDeTerminal(terminalId: number | null): Promise<number | null> {
+    const id = Number(terminalId) || 0;
+    if (!id) return null;
+    try {
+      const abiertas = (await firstValueFrom(this.repo.getCajasAbiertas())) || [];
+      const caja = (abiertas as any[]).find((c: any) => Number(c?.dispositivo?.id) === id);
+      return caja?.id != null ? Number(caja.id) : null;
+    } catch {
+      return null;
     }
   }
 

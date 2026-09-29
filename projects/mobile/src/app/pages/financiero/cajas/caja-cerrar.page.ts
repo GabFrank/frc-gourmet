@@ -9,7 +9,9 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { FormsModule } from '@angular/forms';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
-import { RepositoryService } from '@frc/shared-core';
+import {
+  RepositoryService, esCajaCerrada, esEstadoCajaCancelada, esEstadoCajaNoOperable, mensajeDeErrorCaja,
+} from '@frc/shared-core';
 import { ConteoFormComponent, ConteoGrupo } from './conteo-form.component';
 import { buildGruposConteo, detallesDeGrupos, detallesResumidoDeGrupos } from './caja-conteo.util';
 
@@ -56,11 +58,29 @@ export class CajaCerrarPage implements OnInit {
     this.cajaId = Number(this.route.snapshot.paramMap.get('id'));
     this.loading = true;
     try {
-      const [resumen, cajasMonedas, billetes] = await Promise.all([
+      const [caja, resumen, cajasMonedas, billetes] = await Promise.all([
+        firstValueFrom(this.repo.getCaja(this.cajaId)),
         firstValueFrom(this.repo.getResumenCaja(this.cajaId)),
         firstValueFrom(this.repo.getCajasMonedas()),
         firstValueFrom(this.repo.getMonedasBilletes()),
       ]);
+
+      // Revalidación contra el BACKEND antes de dejar contar nada: esta página
+      // crea el `Conteo` y todos sus `ConteoDetalle` ANTES de llamar
+      // `updateCaja`. Si la caja ya se cerró desde otra terminal, seguir
+      // dejaría un conteo huérfano que `computeResumenCaja` y
+      // `generarRetiroDelCierre` después buscan por FK. Ver D7/B9 del plan.
+      // M8: el criterio es `!== ABIERTO`, no `=== CERRADO` — una caja
+      // `CANCELADO` tampoco se cierra y el backend la rechaza igual. El texto
+      // se diferencia para no mandar a buscar un cierre que nunca existió.
+      const estadoCaja = (caja as any)?.estado;
+      if (esEstadoCajaNoOperable(estadoCaja)) {
+        this.error = esEstadoCajaCancelada(estadoCaja)
+          ? `La caja #${this.cajaId} fue cancelada. No se puede registrar su cierre.`
+          : `La caja #${this.cajaId} ya fue cerrada. No se puede volver a cerrar.`;
+        return;
+      }
+
       this.grupos = buildGruposConteo(cajasMonedas || [], billetes || []);
 
       // Efectivo esperado por moneda (apertura + ventas en efectivo), como guía.
@@ -80,7 +100,7 @@ export class CajaCerrarPage implements OnInit {
   }
 
   async cerrar(): Promise<void> {
-    if (this.saving) return;
+    if (this.saving || this.error) return;
     this.saving = true;
     try {
       const conteo: any = await firstValueFrom(this.repo.createConteo({
@@ -103,10 +123,23 @@ export class CajaCerrarPage implements OnInit {
       this.imprimirTicketCierre();
       await this.router.navigateByUrl('/financiero/cajas');
     } catch (e: any) {
-      const msg = (e?.message || 'No se pudo cerrar la caja').replace(/^Error:\s*/, '');
-      this.snack.open(msg, 'CERRAR', { duration: 6000 });
+      this.snack.open(this.mensajeErrorCaja(e), 'CERRAR', { duration: 8000 });
       this.saving = false;
     }
+  }
+
+  /**
+   * Traduce los códigos del backend a un mensaje en español.
+   *
+   * La detección y los textos genéricos viven en `caja-error.util` (fuente
+   * única desktop + PWA); acá sólo se especializa el caso del cierre, donde lo
+   * importante es que el cierre NO se registró.
+   */
+  private mensajeErrorCaja(e: any): string {
+    if (esCajaCerrada(e)) {
+      return 'Esta caja ya fue cerrada desde otra terminal. No se registró el cierre.';
+    }
+    return mensajeDeErrorCaja(e, 'No se pudo cerrar la caja');
   }
 
   /**

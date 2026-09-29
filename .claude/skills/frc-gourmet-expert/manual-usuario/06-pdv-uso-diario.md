@@ -41,6 +41,46 @@ Step 2: **Resumen**
 
 Si rechazás abrir caja, la pestaña del PdV se cierra automáticamente.
 
+### Una sola caja abierta por terminal
+
+Cada terminal puede tener **una sola caja abierta a la vez**. Si intentás abrir
+una segunda, el sistema te avisa:
+
+> **Ya hay una caja abierta en esta terminal (caja #123). Cerrá esa caja antes de abrir otra.**
+
+Pasa sobre todo con el **doble click** en «ABRIR CAJA» (el segundo click es el
+que recibe el aviso: la caja del primero quedó abierta y en uso) y cuando alguien
+abrió la caja del turno desde la PWA o desde *Caja Mayor → Abrir caja desde
+conteo* y en esta PC no se actualizó la pantalla.
+
+Que haya una sola caja por terminal **no cambia el modelo de caja compartida**:
+otra terminal se puede seguir uniendo a tu caja para lanzar ítems, igual que
+antes.
+
+**El conteo que cargaste no queda a medias.** Si el sistema rechaza la apertura,
+el conteo de billetes que acabás de contar **no se guarda**: no vas a encontrar
+conteos de apertura fantasma en *Financiero → Conteos*, ni al día siguiente ni
+nunca. El sistema revisa si la terminal ya tiene caja **antes** de guardar nada.
+Vale también para la PWA: la lista de terminales libres que ves al entrar es una
+foto de ese momento, así que si alguien abrió esa caja mientras vos cargabas, el
+aviso aparece al tocar **ABRIR** — y tampoco deja conteo suelto.
+
+### Si la caja abierta viene de una jornada anterior
+
+Al entrar al PdV, si la **única** caja abierta se abrió antes del comienzo de la
+jornada de hoy (el horario de inicio lo configura el local; por defecto las
+07:00), el sistema ya **no se une sola**. Te pregunta:
+
+> **La caja #123 está abierta desde 24/09/2026 14:39, o sea de una jornada anterior. ¿La usás igual o la cerrás antes de vender?**
+
+Con dos botones: **Usar igual** (seguís vendiendo en esa caja) o **Ir a
+cerrarla** (te lleva al conteo de cierre y después abrís una nueva).
+
+**Por qué importa:** si te unís sin darte cuenta a la caja de ayer, las ventas de
+hoy caen en el arqueo de ayer. Eso ya pasó una vez: el almuerzo de un viernes
+quedó dentro de la caja del jueves. Como **las cajas no se reabren**, después no
+hay forma de separarlas.
+
 ## 2. Pantalla del PdV
 
 ```
@@ -349,6 +389,30 @@ Dos avisos que vale la pena leer:
   debajo, avisa en rojo cuánto sobra. **No devuelve nada solo**: eso lo decide
   el mostrador.
 
+### Pedidos que quedaron en una caja ya cerrada
+
+En la lista de delivery también aparecen los pedidos **pendientes de turnos
+anteriores**, para que no se pierdan. Si la caja de alguno de esos pedidos **ya
+se cerró**, la fila queda marcada y el botón **PAGO** se deshabilita, con este
+tooltip:
+
+> **Caja cerrada: este pedido sólo se puede cancelar y volver a cargar en la caja de hoy.**
+
+**Qué hacer:**
+
+1. **Cancelar** el pedido (con motivo). Cancelar siempre está permitido.
+2. **Volver a cargarlo** como pedido nuevo, en la caja de hoy.
+3. Cobrarlo normalmente.
+
+**Por qué no se puede cobrar directo:** el dinero tiene que entrar al arqueo de
+la caja donde realmente se cobró. Si el sistema lo dejara entrar a una caja ya
+cerrada e impresa, ese cierre pasaría a estar mal; y si lo imputara solo a la
+caja de hoy, movería plata entre dos arqueos sin que nadie lo decida. Como **las
+cajas no se reabren**, la única salida limpia es cancelar y revender.
+
+⚠️ Si intentás cobrarlo por otro camino (por ejemplo el botón **ENTREGADO** sobre
+un pedido sin cobrar), el sistema muestra el mismo aviso y no registra nada.
+
 ### Timer de espera
 
 Junto a cada delivery, un timer cuenta el tiempo desde apertura:
@@ -374,6 +438,103 @@ Al confirmar:
   - Amarillo: 5-15%.
   - Rojo: >15%.
 - Tab del PdV se cierra.
+
+### «Esta caja ya fue cerrada»
+
+Si la caja con la que estabas trabajando se cerró **desde otra pantalla** (otra
+terminal, otra pestaña, la PWA, o Caja Mayor), el PdV te avisa con un cartel:
+
+> **ESTA CAJA YA FUE CERRADA**
+> La caja #122 ya fue cerrada, así que no se pueden registrar más operaciones en
+> ella. Elegí una caja abierta o abrí una nueva para seguir vendiendo.
+
+El aviso aparece **solo, sin que toques nada**, en cuanto volvés a la pestaña del
+PdV o cuando alguien cierra la caja. Y si igual llegás a intentar una operación,
+el sistema la **rechaza**: no se guarda ni la venta, ni el cobro, ni el gasto, ni
+el retiro.
+
+**Si te agarró con el cobro abierto**, no vas a quedar mirando un error raro: la
+ventana de cobro te muestra el mismo mensaje, **se cierra sola** y detrás aparece
+el cartel de arriba para que elijas caja. Pasa igual si entraste por *Cobrar a
+crédito* o si estabas haciendo un **cobro parcial**.
+
+⚠️ **En las PC configuradas como «cliente»** (las que no tienen base propia y
+trabajan contra el servidor del local) el aviso **no llega solo al instante**: hay
+que cambiar de pestaña, volver a darle foco a la ventana, o esperar el chequeo
+automático que corre cada 15 segundos. Lo que **no** cambia es el rechazo: el
+servidor no acepta la operación de ninguna manera.
+
+**Qué hacer:** tocar **ENTENDIDO** y elegir una caja abierta (o abrir una nueva).
+Después **volvé a hacer la operación**. El sistema no la repite solo a propósito:
+cobrar contra una caja que acabás de elegir de apuro es justamente cómo se
+imputan cobros a la caja equivocada.
+
+⚠️ **No perdiste nada.** Las ventas y los cobros que sí se registraron antes del
+cierre están en la caja correcta. Lo que el sistema impide es agregar plata a una
+caja ya cerrada y arqueada.
+
+### Si una mesa quedó con la cuenta de una caja cerrada
+
+Puede pasar: cerraron la caja A, vos elegiste la caja B, pero la mesa 4 seguía con
+su cuenta abierta **de la caja A**. Esa cuenta no desaparece y no se pierde — pero
+**no se puede cobrar tal cual está**.
+
+Al seleccionarla, arriba de los botones aparece:
+
+> 🔒 **Cuenta de una caja cerrada #A: transferila (pasa a la caja activa) o cancelala**
+
+Y **COBRAR** y **COBRO RÁPIDO** quedan grises, con el motivo en el globito de
+ayuda. Si igual apretás **F1** o **F2**, sale el mismo aviso y no se abre nada.
+
+**Qué podés hacer:**
+
+| Si la cuenta es de… | Salida |
+|---|---|
+| Una **mesa** o una **comanda** | **TRANSFERIR** la cuenta a otra mesa: pasa a tu caja de hoy y la cobrás normal. O **cancelarla**. |
+| Una **venta rápida** o un **delivery** | **Cancelarla** y volver a cargarla en la caja de hoy (ahí no hay botón TRANSFERIR). |
+
+**Agregar ítems sigue funcionando** — si la mesa está comiendo, seguís lanzando a
+cocina; lo que no se puede es meter la plata en una caja que ya se arqueó.
+
+Si seleccionás otra cuenta, de tu caja de hoy, el aviso desaparece solo.
+
+⚠️ **La lista de mesas todavía no muestra esta marca**: la mesa se ve normal, con
+su total, y el aviso aparece recién cuando la seleccionás. Está pendiente.
+
+### Cerrar una caja que ya estaba cerrada
+
+Si abrís el cierre de una caja que **otro ya cerró**, el diálogo te lo dice y no
+te deja contar nada:
+
+> **LA CAJA #122 YA FUE CERRADA EL 24/09/2026 14:35. NO SE PUEDE VOLVER A CERRAR. SI NECESITÁS CORREGIR EL CONTEO, USÁ AJUSTAR CONTEO.**
+
+Antes esto **no avisaba nada**: el diálogo mostraba el cierre viejo y parecía que
+completabas el cierre, pero no se guardaba nada. Si lo que necesitás es corregir
+el conteo o agregar un gasto que faltó, es **Ajustar** desde *Financiero →
+Cajas* → ver [capítulo 8](08-caja-mayor-financiero.md).
+
+### Transferir una cuenta cuando la caja de origen ya se cerró
+
+Si transferís una mesa o comanda cuya caja **ya se cerró**, la cuenta que se crea
+en el destino va a **tu caja de hoy** (la caja abierta con la que estás
+trabajando). El sistema lo hace solo: la plata del turno de hoy entra al cajón de
+hoy.
+
+Lo mismo vale **al revés**: si transferís a una mesa que **ya tenía** una cuenta
+abierta y esa cuenta es de una caja cerrada, los ítems se suman ahí y la cuenta
+entera pasa a tu caja de hoy. Antes los ítems se mudaban a una cuenta que después
+no se podía cobrar, y te enterabas al final del almuerzo.
+
+Dos cosas que **no** cambian:
+
+- Los **cobros ya registrados** de esa cuenta **no se mueven**: quedan en la caja
+  donde entró la plata.
+- Si no tenés una caja abierta, la transferencia se rechaza con *«esta caja ya fue
+  cerrada»*. Abrí o elegí una caja y volvé a intentar; o cancelá la cuenta.
+
+⚠️ **Desde el celular (la PWA) esto todavía no funciona.** Si la caja de la cuenta
+ya se cerró, la app avisa *«esta caja ya fue cerrada»* y no transfiere. Hacelo
+desde una PC del PdV, o **cancelá** la cuenta y volvé a cargarla en la caja de hoy.
 
 ## 13. Atajos de teclado
 
@@ -426,6 +587,49 @@ Estos módulos dependen de permisos y de la configuración del local; pueden no 
 
 - Verificá que no tengas una caja abierta de un día anterior. Cerrala primero.
 - El dispositivo debe tener `isCaja=true`.
+- Si el aviso dice **"Ya hay una caja abierta en esta terminal"**, es literal:
+  esta PC ya tiene su caja del turno. Cerrala antes de abrir otra. Si no la ves
+  en pantalla, salí y volvé a entrar al PdV — puede haberla abierto otro usuario
+  o la PWA.
+
+### "Me dice que la caja ya fue cerrada y yo la veo abierta"
+
+Lo que ves en pantalla es una foto del momento en que entraste; la caja pudo
+cerrarse después desde otra terminal, otra pestaña o la PWA. El sistema le
+pregunta al servidor antes de cada operación de plata, y el servidor manda.
+
+Tocá **ENTENDIDO**, elegí una caja abierta (o abrí una nueva) y **repetí la
+operación**. Nada de lo que hiciste antes del cierre se perdió.
+
+### "Quiero cobrar un delivery viejo y no me deja"
+
+Su caja ya se cerró. Cancelalo y volvé a cargarlo en la caja de hoy — ver
+[Pedidos que quedaron en una caja ya cerrada](#pedidos-que-quedaron-en-una-caja-ya-cerrada).
+
+### "COBRAR está gris y la mesa tiene ítems"
+
+Mirá arriba de los botones: si dice *«Cuenta de una caja cerrada #N»*, esa cuenta
+quedó en una caja que ya se arqueó. Transferila a otra mesa (pasa a tu caja de hoy)
+o cancelala y volvé a cargarla — ver
+[Si una mesa quedó con la cuenta de una caja cerrada](#si-una-mesa-quedó-con-la-cuenta-de-una-caja-cerrada).
+
+### "Cobré una mesa y el dinero no aparece en mi arqueo"
+
+Si esa mesa venía de **otra caja que también está abierta** (por ejemplo, la caja
+de otro turno o de otra terminal que no se cerró), el cobro se arquea en **esa**
+caja, no en la tuya — el sistema siempre imputa el pago a la caja de la venta. La
+plata está en tu cajón, pero el arqueo la espera en la otra caja.
+
+**Cómo evitarlo:** que no queden cajas de turnos anteriores abiertas. Si te pasó,
+avisá al encargado antes de cerrar: los dos arqueos van a mostrar diferencia (uno
+de más, el otro de menos) y se compensan entre sí.
+
+### "Cancelé la apertura de caja y quedó una pestaña del PdV vacía"
+
+Ya no pasa. Antes, si abrías el PdV desde el menú lateral y cancelabas el diálogo
+de apertura, la pestaña quedaba abierta y te volvía a preguntar en cada click.
+Ahora la pestaña se cierra sola, la hayas abierto desde el menú o desde el botón
+del inicio.
 
 ### "El producto no aparece en el buscador"
 

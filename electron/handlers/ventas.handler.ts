@@ -23,6 +23,15 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
 import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
 import { selectUsuarioPublico } from '../utils/select-usuario-publico.util';
+import {
+  assertCajaAbierta,
+  assertCajaAbiertaSiVino,
+  cajaDePago,
+  cajaDeVenta,
+  errorCajaCerrada,
+  leerEstadoCaja,
+} from '../utils/caja-abierta.utils';
+import { enTransaccionSiPostgres } from '../utils/tx.utils';
 import { Not, IsNull, In, EntityManager } from 'typeorm';
 import { DeepPartial } from 'typeorm';
 import { SelectQueryBuilder } from 'typeorm';
@@ -69,6 +78,7 @@ import { EstadoPedidoOnline, TipoPedidoOnline } from '../../src/app/database/ent
 import { CobroParcial } from '../../src/app/database/entities/ventas/cobro-parcial.entity';
 import { CobroParcialItem } from '../../src/app/database/entities/ventas/cobro-parcial-item.entity';
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
+import { Pago } from '../../src/app/database/entities/compras/pago.entity';
 import { invalidarCacheJornada } from './dashboard-ventas.handler';
 
 /**
@@ -249,6 +259,38 @@ export async function materializarPedidoOnlineEnVenta(
 
     // Caja: la del parámetro o la única caja abierta.
     let cajaId: number | undefined = opts?.cajaId ? Number(opts.cajaId) : undefined;
+
+    // El único camino que manda un `cajaId` explícito es `aceptar-pedido-online`,
+    // donde lo elige el operador y puede estar rancio. Si esa caja ya se cerró
+    // NO se rechaza a secas: `aceptar-pedido-online` es best-effort a propósito
+    // (el cliente ya fue notificado de la aceptación), así que un rechazo dejaría
+    // el pedido ACEPTADO sin `Venta` — invisible para el PdV, incobrable e
+    // inimprimible. Se reintenta con la única caja abierta, que es el mismo
+    // camino seguro de más abajo.
+    if (cajaId) {
+      const estado = await leerEstadoCaja(dataSource, cajaId);
+      if (!estado || estado.estado !== CajaEstado.ABIERTO) {
+        const abiertas = await dataSource.getRepository(Caja).find({ where: { estado: CajaEstado.ABIERTO } });
+        if (abiertas.length === 1) {
+          console.warn(
+            `[materializarPedidoOnlineEnVenta] la caja ${cajaId} ya fue cerrada; `
+            + `se materializa contra la única caja abierta (${abiertas[0].id}).`,
+          );
+          cajaId = abiertas[0].id;
+        } else if (abiertas.length === 0) {
+          throw new Error(
+            `No se pudo crear la venta: la caja #${cajaId} ya fue cerrada y no hay ninguna caja abierta. `
+            + 'Abrí una caja y volvé a materializar el pedido.',
+          );
+        } else {
+          throw new Error(
+            `No se pudo crear la venta: la caja #${cajaId} ya fue cerrada y hay más de una caja abierta. `
+            + 'Materializá el pedido desde el PdV de la caja que corresponda.',
+          );
+        }
+      }
+    }
+
     if (!cajaId) {
       const abiertas = await dataSource.getRepository(Caja).find({ where: { estado: CajaEstado.ABIERTO } });
       if (abiertas.length === 0) throw new Error('no_hay_caja_abierta');
@@ -265,6 +307,10 @@ export async function materializarPedidoOnlineEnVenta(
     await qr.connect();
     await qr.startTransaction();
     try {
+    // Guard DENTRO de la transacción: entre la resolución de arriba y este
+    // punto la caja pudo cerrarse.
+    await assertCajaAbierta(qr.manager, cajaId, { lock: 'read', contexto: 'materializarPedidoOnlineEnVenta' });
+
     const mesaRepo = qr.manager.getRepository(PdvMesa);
     const ventaRepo = qr.manager.getRepository(Venta);
     const itemRepo = qr.manager.getRepository(VentaItem);
@@ -909,10 +955,31 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           await assertTerminalPuedeOperar(dataSource, _event, (v.caja as any)?.id ?? null, 'FINALIZAR');
         }
       }
-      for (const v of ventasAbiertas) {
-        v.estado = estado as VentaEstado;
-        await repo.save(v);
-      }
+      // Concluir es imputar plata a la caja de cada venta: si alguna de esas
+      // cajas está cerrada no se concluye NINGUNA (el guard corre antes del
+      // bucle de saves). A diferencia del gate de terminal, este no es opt-in:
+      // corre siempre. Cancelar sigue permitido — resta, no agrega.
+      //
+      // Guard + saves en la MISMA transacción, sólo en Postgres (hallazgo P6):
+      // con el `DataSource` el guard no podía tomar el `FOR SHARE` y el TOCTOU
+      // con un cierre concurrente quedaba abierto. El alcance es acotado (los
+      // guards y los saves de las ventas de UNA mesa); `sincronizarEstadoMesa`
+      // y el emit SSE quedan afuera, post-commit. En SQLite el helper corre sin
+      // transacción a propósito — ver el encabezado de `tx.utils.ts`.
+      await enTransaccionSiPostgres(dataSource, async (manager) => {
+        if (estado === VentaEstado.CONCLUIDA) {
+          for (const v of ventasAbiertas) {
+            await assertCajaAbiertaSiVino(manager, (v.caja as any)?.id ?? null, {
+              contexto: 'cerrarVentasAbiertasMesa',
+              lock: 'read',
+            });
+          }
+        }
+        for (const v of ventasAbiertas) {
+          v.estado = estado as VentaEstado;
+          await manager.getRepository(Venta).save(v);
+        }
+      });
       // Cerrar las cuentas de la mesa cambia su ocupacion: el cache la sigue.
       if (ventasAbiertas.length > 0) await sincronizarEstadoMesa(mesaId);
       
@@ -1032,6 +1099,15 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         // Invariante: máximo 1 venta ABIERTA (comanda IS NULL) por mesaId.
         // Fix para el bug de Alpha Don Franco 2026-09-10/11 (ventas 3738/3739/3771).
         await assertNoVentaAbiertaEnMesa(manager, mesaId, tieneComanda);
+
+        // Invariante de caja: una venta nueva nunca entra a una caja cerrada.
+        // Va DENTRO de la misma transacción (y con FOR SHARE en Postgres) para
+        // que una venta que empezó milisegundos antes del cierre no se persista
+        // igual.
+        await assertCajaAbiertaSiVino(manager, data?.caja?.id ?? data?.caja ?? null, {
+          lock: 'read',
+          contexto: 'createVenta',
+        });
 
         const repo = manager.getRepository(Venta);
         const entity: any = repo.create(data);
@@ -1401,6 +1477,49 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         && estadoAnterior === VentaEstado.ABIERTA
       ) {
         await assertTerminalPuedeOperar(dataSource, _event, filaVenta?.c ?? null, 'FINALIZAR');
+      }
+
+      const cajaDeLaVenta: number | null = filaVenta?.c != null ? Number(filaVenta.c) : null;
+
+      // Invariante de caja — a diferencia del gate de terminal, NO es opt-in:
+      // concluir una venta es imputar su cobro a la caja de la venta.
+      // Las demás transiciones (CANCELADA, rehabilitar desde el historial) no
+      // imputan plata nueva y siguen permitidas sobre una caja cerrada: una
+      // cancelación RESTA del arqueo, y bloquearla dejaría mesas colgadas.
+      if (
+        data?.estado === VentaEstado.CONCLUIDA
+        && estadoAnterior === VentaEstado.ABIERTA
+      ) {
+        await assertCajaAbiertaSiVino(dataSource, cajaDeLaVenta, { contexto: 'updateVenta(CONCLUIDA)' });
+      }
+
+      // ─── D4 capa 2: la caja del Pago se deriva de la VENTA, server-side ────
+      //
+      // El `Pago` nace primero (`createPago`) y la venta lo adopta después con
+      // `updateVenta(id, { pago })`. Los tres caminos del cobro hacen las dos
+      // llamadas seguidas, así que ésta es la última oportunidad de corregir la
+      // imputación — y la única que funciona con un cliente viejo, que manda
+      // `caja: this.data.caja` (la caja del PdV, no la de la venta). Así se
+      // originaron los 52 cobros con `pago.caja = 122` sobre ventas de la #123.
+      //
+      // Se DERIVA en vez de rechazar: el servidor tiene el dato correcto a mano
+      // y rechazar dejaría al cajero trabado sin poder cobrar. Si la caja de la
+      // venta está cerrada, ahí sí se rechaza (Q1).
+      const pagoAdoptadoId = Number((data?.pago as any)?.id ?? data?.pago) || null;
+      if (pagoAdoptadoId) {
+        await assertCajaAbiertaSiVino(dataSource, cajaDeLaVenta, { contexto: 'updateVenta(pago)' });
+        if (cajaDeLaVenta != null) {
+          const cajaDelPago = await cajaDePago(dataSource, pagoAdoptadoId);
+          if (cajaDelPago !== cajaDeLaVenta) {
+            console.warn(
+              `[updateVenta] caja del pago ${pagoAdoptadoId} (${cajaDelPago ?? 'null'}) `
+              + `reimputada a la caja de la venta ${id} (${cajaDeLaVenta}).`,
+            );
+            await dataSource.getRepository(Pago).update(pagoAdoptadoId, {
+              caja: { id: cajaDeLaVenta } as any,
+            } as any);
+          }
+        }
       }
 
       // A-01: al cancelar una venta a crédito hay que revertir la Cuenta Por
@@ -2779,6 +2898,20 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     destino: TransferenciaContenedor;
     alcance: 'COMPLETA' | 'ITEMS';
     itemIds?: number[];
+    /**
+     * Caja abierta del PdV que ejecuta la transferencia (Q2). Sólo se usa
+     * cuando la caja de la venta de origen ya está CERRADA: en ese caso la
+     * cuenta destino nace —o se reimputa— en esta caja, en vez de heredar una
+     * caja cerrada. Opcional: un cliente viejo no lo manda y entonces la
+     * transferencia desde una caja cerrada se rechaza.
+     */
+    cajaActivaId?: number;
+    /**
+     * Opt-in del gate de terminal sobre `cajaActivaId`, con el MISMO flag y la
+     * misma semántica que el cobro (`createPago` / `createPagoDetalle`): sólo
+     * corre si el llamador lo manda. Ver el comentario de `resolverCajaActiva`.
+     */
+    validarDispositivoCaja?: boolean;
   }
 
   const buscarVentaAbiertaDe = async (
@@ -2890,7 +3023,11 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     // ocupacion (ver `mesaTieneCuentaPropia`).
   };
 
-  const transferirVentaPdvInternal = async (payload: TransferenciaPayload, userId?: number): Promise<any> => {
+  const transferirVentaPdvInternal = async (
+    payload: TransferenciaPayload,
+    userId?: number,
+    event?: any,
+  ): Promise<any> => {
     const origen = payload?.origen;
     const destino = payload?.destino;
     const alcance = payload?.alcance;
@@ -2934,11 +3071,92 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         if (!comandaDestino || !comandaDestino.activo) throw new Error(`Comanda de destino ${destino.id} no disponible.`);
       }
 
+      // ─── Invariante de caja (Q2) ──────────────────────────────────────────
+      //
+      // La cuenta destino heredaba `ventaOrigen.caja` sin mirarla: transferir
+      // una mesa cuya caja ya se había cerrado creaba una venta NUEVA en una
+      // caja cerrada — exactamente el bug.
+      //
+      // Decisión de Gabriel: con el origen cerrado, la cuenta destino va a la
+      // **caja activa** del PdV que transfiere (la plata del turno de hoy entra
+      // al cajón de hoy). Los `Pago`/`CobroParcial` ya registrados NO se mueven:
+      // quedan en la caja donde entró la plata. Sin `cajaActivaId` (cliente
+      // viejo) se rechaza: el cajero actualiza o cancela.
+      const cajaOrigenId: number | null = (ventaOrigen.caja as any)?.id ?? null;
+      const estadoCajaOrigen = await leerEstadoCaja(manager, cajaOrigenId, { lock: 'read' });
+      const origenAbierto = cajaOrigenId == null || estadoCajaOrigen?.estado === CajaEstado.ABIERTO;
+
       let ventaDestino = await buscarVentaAbiertaDe(manager, destino);
       if (ventaDestino && ventaDestino.id === ventaOrigen.id) {
         throw new Error('El origen y el destino son la misma cuenta.');
       }
       const destinoYaTeniaVenta = !!ventaDestino;
+
+      /**
+       * Valida `payload.cajaActivaId` UNA sola vez y la devuelve. Se llama
+       * perezosamente: con las dos cajas abiertas no hace falta y el gate de
+       * terminal no tiene por qué correr.
+       *
+       * `cajaCerradaId`/`estadoCerrado` son sólo para el mensaje de error: lo
+       * que el cajero tiene que leer es qué caja está cerrada, no cuál mandó.
+       */
+      let cajaActivaValidada: number | null | undefined;
+      const resolverCajaActiva = async (
+        cajaCerradaId: number | null,
+        estadoCerrado: any,
+      ): Promise<number> => {
+        if (cajaActivaValidada === undefined) {
+          const id = Number(payload?.cajaActivaId) || null;
+          if (id) {
+            // ⚠️ P1: la caja activa viene del PAYLOAD, así que pasa el MISMO
+            // gate de terminal que el cobro (`assertTerminalPuedeOperar` con
+            // 'PAGO'): sin esto un cliente con `VENTAS_PDV` podía reimputar una
+            // cuenta a cualquier caja abierta —incluida la de otro dispositivo—
+            // y desviar el arqueo del turno. Reimputar la cuenta a una caja es
+            // meterle la plata que se va a cobrar ahí, así que la acción es la
+            // misma que registrar un pago.
+            //
+            // Es **opt-in con el mismo flag que el cobro** a propósito: el gate
+            // de terminal no es una frontera de seguridad (lo dice su propio
+            // encabezado) y se dispara sólo cuando el llamador lo pide. Inventar
+            // acá una política distinta —obligatoria— habría bloqueado la
+            // transferencia en instalaciones donde el cobro sí está permitido
+            // entre terminales.
+            if (payload?.validarDispositivoCaja) {
+              await assertTerminalPuedeOperar(dataSource, event, id, 'PAGO');
+            }
+            await assertCajaAbierta(manager, id, { lock: 'read', contexto: 'transferir-venta-pdv' });
+          }
+          cajaActivaValidada = id;
+        }
+        if (!cajaActivaValidada) throw errorCajaCerrada(cajaCerradaId, estadoCerrado);
+        return cajaActivaValidada;
+      };
+
+      let cajaDeLaCuentaDestino: any = ventaOrigen.caja;
+      if (!origenAbierto) {
+        cajaDeLaCuentaDestino = { id: await resolverCajaActiva(cajaOrigenId, estadoCajaOrigen) } as any;
+      }
+
+      // ─── M1: la caja de la VENTA DESTINO también cuenta ───────────────────
+      // Cuando el destino ya tiene una cuenta abierta, los ítems se mudan a ESA
+      // venta y `cajaDeLaCuentaDestino` no la toca: se podían mover ítems a una
+      // venta imputada a una caja CERRADA y la cuenta quedaba incobrable (el
+      // cajero se enteraba al cobrar). Mismo criterio que Q2: la venta que
+      // recibe los ítems queda en la caja activa validada; los `Pago` /
+      // `CobroParcial` ya registrados NO se mueven.
+      if (ventaDestino) {
+        const cajaDestinoId: number | null = (ventaDestino.caja as any)?.id ?? null;
+        if (cajaDestinoId != null) {
+          const estadoCajaDestino = await leerEstadoCaja(manager, cajaDestinoId, { lock: 'read' });
+          if (estadoCajaDestino?.estado !== CajaEstado.ABIERTO) {
+            const activa = await resolverCajaActiva(cajaDestinoId, estadoCajaDestino);
+            (ventaDestino as any).caja = { id: activa } as any;
+            await setEntityUserTracking(dataSource, ventaDestino as any, userId, true);
+            await manager.save(Venta, ventaDestino as any);
+          }
+        }
+      }
 
       // Items a mover.
       //
@@ -3021,6 +3239,11 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           (ventaOrigen as any).comanda = comandaDestino;
           (ventaOrigen as any).mesa = comandaDestino!.pdv_mesa ?? null;
         }
+        // Q2: la venta entera se muda de contenedor. Si venía de una caja
+        // cerrada, se reimputa a la caja activa (arriba ya se verificó que está
+        // abierta). Con el origen abierto, `cajaDeLaCuentaDestino` es la misma
+        // caja de siempre y esta línea no cambia nada.
+        (ventaOrigen as any).caja = cajaDeLaCuentaDestino;
         await setEntityUserTracking(dataSource, ventaOrigen as any, userId, true);
         await manager.save(Venta, ventaOrigen);
         ventaDestinoId = ventaOrigen.id;
@@ -3029,7 +3252,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         if (!ventaDestino) {
           const nueva: any = manager.create(Venta, {
             estado: VentaEstado.ABIERTA,
-            caja: ventaOrigen.caja,
+            caja: cajaDeLaCuentaDestino,
             ...(destino.tipo === 'MESA'
               ? { mesa: mesaDestino }
               : { comanda: comandaDestino, mesa: comandaDestino!.pdv_mesa ?? null }),
@@ -3137,7 +3360,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         payload?.destino?.tipo === tipo ? Number(payload.destino.id) : null,
       ].filter((n): n is number => typeof n === 'number' && !Number.isNaN(n)))).sort((a, b) => b - a);
 
-      const ejecutar = () => transferirVentaPdvInternal(payload, userId);
+      const ejecutar = () => transferirVentaPdvInternal(payload, userId, _event);
       const conComandas = idsDe('COMANDA').reduce<() => Promise<any>>(
         (fn, comandaId) => () => withComandaLock(comandaId, fn),
         ejecutar,
@@ -4531,6 +4754,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       });
       if (!venta) throw new Error(`Venta ${ventaId} no encontrada`);
       if (venta.estado !== VentaEstado.ABIERTA) throw new Error('VENTA_NO_ABIERTA');
+      // Una ronda de cobro parcial es plata que entra: va a la caja de la venta
+      // y esa caja tiene que estar abierta. `anularCobroParcial` (la reversa)
+      // sigue permitido sobre caja cerrada: resta, no agrega.
+      await assertCajaAbiertaSiVino(
+        queryRunner.manager,
+        await cajaDeVenta(queryRunner.manager, ventaId),
+        { lock: 'read', contexto: 'registrarCobroParcial' },
+      );
 
       // Validar topes por ítem contra la cobertura ya persistida (anti doble-cobro).
       const itemsAfectados: Array<{ item: VentaItem; brutoCubierto: number; cantidad?: number }> = [];

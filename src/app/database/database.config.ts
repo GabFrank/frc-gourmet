@@ -299,6 +299,7 @@ import { CuentasBancariasDestinoHibrido1789586966573 } from './migrations/178958
 import { ProveedorCuentaBancariaDefault1789587015222 } from './migrations/1789587015222-ProveedorCuentaBancariaDefault';
 import { PagoConsolidadoDetalleCuentaDestino1789587032713 } from './migrations/1789587032713-PagoConsolidadoDetalleCuentaDestino';
 import { MovimientoBancarioCuentaDestino1789587049751 } from './migrations/1789587049751-MovimientoBancarioCuentaDestino';
+import { CajaUnicaAbiertaPorDispositivo1790617935368 } from './migrations/1790617935368-CajaUnicaAbiertaPorDispositivo';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -733,6 +734,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     ProveedorCuentaBancariaDefault1789587015222,
     PagoConsolidadoDetalleCuentaDestino1789587032713,
     MovimientoBancarioCuentaDestino1789587049751,
+    CajaUnicaAbiertaPorDispositivo1790617935368,
   ];
 }
 

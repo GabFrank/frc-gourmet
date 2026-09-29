@@ -16,6 +16,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
+import { mensajeDeError } from 'src/app/shared/utils/error-message.util';
 
 interface DetalleRow {
   monedaId: number;
@@ -57,6 +58,15 @@ export class CreateRetiroCajaDialogComponent implements OnInit {
 
   cajaId: number = 0;
   cajaNombre: string = '';
+  /**
+   * Llave de ajuste sobre una caja ya CERRADA (D6). La decide el LLAMADOR
+   * (Financiero › Cajas, que conoce el estado de la caja y pide el motivo); el
+   * PdV abre este mismo diálogo sin ella y el backend rechaza con
+   * `CAJA_CERRADA`, que es lo correcto para el cajón del turno.
+   */
+  private ajuste: { motivo: string } | null = null;
+  /** Aviso visible de que esto es un ajuste, no un retiro del turno. */
+  avisoAjuste = '';
 
   monedas: any[] = [];
   formasPagoEfectivo: any[] = [];
@@ -77,6 +87,11 @@ export class CreateRetiroCajaDialogComponent implements OnInit {
   ngOnInit(): void {
     this.cajaId = this.data?.cajaId || 0;
     this.cajaNombre = this.data?.cajaNombre || '';
+    const motivoAjuste = String(this.data?.ajuste?.motivo ?? '').trim();
+    if (motivoAjuste) {
+      this.ajuste = { motivo: motivoAjuste };
+      this.avisoAjuste = `Ajuste de una caja ya cerrada. Motivo: ${motivoAjuste}`;
+    }
 
     this.form = this.fb.group({
       cajaMayorId: [null],
@@ -200,6 +215,11 @@ export class CreateRetiroCajaDialogComponent implements OnInit {
       if (f.cajaMayorId) {
         data.cajaMayor = { id: f.cajaMayorId };
       }
+      // Sobre una caja ABIERTA el backend ignora `ajuste`; sobre una cerrada es
+      // lo que habilita el retiro (con `FINANCIERO_CAJA_AJUSTAR` y motivo).
+      if (this.ajuste) {
+        data.ajuste = this.ajuste;
+      }
 
       await firstValueFrom(this.repositoryService.createRetiroCaja(data));
       const msg = f.cajaMayorId
@@ -207,9 +227,15 @@ export class CreateRetiroCajaDialogComponent implements OnInit {
         : 'Retiro registrado como FLOTANTE';
       this.snackBar.open(msg, 'Cerrar', { duration: 3000 });
       this.dialogRef?.close(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creando retiro:', error);
-      this.snackBar.open('Error al registrar retiro', 'Cerrar', { duration: 3000 });
+      // El motivo real importa: «la caja ya fue cerrada» o «falta el permiso de
+      // ajuste» son accionables, «Error al registrar retiro» no.
+      this.snackBar.open(
+        mensajeDeError(error, 'Error al registrar retiro'),
+        'Cerrar',
+        { duration: 6000 },
+      );
     } finally {
       this.saving = false;
     }
