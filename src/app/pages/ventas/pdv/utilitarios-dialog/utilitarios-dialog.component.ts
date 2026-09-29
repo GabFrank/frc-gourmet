@@ -116,6 +116,14 @@ export class UtilitariosDialogComponent implements OnInit {
     });
   }
 
+  /**
+   * ⚠️ **Desde acá NUNCA se manda `ajuste`** (D6). Estos son los utilitarios
+   * del cajón de la caja del turno: si la caja ya se cerró, el backend rechaza
+   * con `CAJA_CERRADA` y eso es lo correcto — corregir una caja cerrada es un
+   * acto de gestión, va por Financiero › Cajas, con motivo y
+   * `FINANCIERO_CAJA_AJUSTAR`. El flag lo decide el llamador del diálogo, no el
+   * diálogo, así que agregarlo acá desarmaría el guard para el PdV entero.
+   */
   seleccionar(opt: UtilitarioOption): void {
     if (opt.disabled) return;
 

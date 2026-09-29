@@ -31,6 +31,7 @@ import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.ent
 import { PagoOrigenTipo } from '../../src/app/database/entities/financiero/pago-consolidado-enums';
 import { bloquearSiPagoConsolidado } from './pago-consolidado-guard';
 import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
+import { assertCajaAbiertaSiVino } from '../utils/caja-abierta.utils';
 
 function calcularEstadoCuota(monto: number, montoCobrado: number): CuentaPorCobrarCuotaEstado {
   if (montoCobrado >= monto) return CuentaPorCobrarCuotaEstado.COBRADO;
@@ -854,6 +855,13 @@ export function registerCuentasPorCobrarHandlers(
       if (!venta) throw new Error(`Venta ${data.ventaId} no encontrada`);
       if (venta.estado === VentaEstado.CONCLUIDA) throw new Error('La venta ya está concluida');
       if (venta.estado === VentaEstado.CANCELADA) throw new Error('La venta está cancelada');
+      // Invariante de caja: cerrar a crédito crea el `Pago` con `caja: venta.caja`
+      // (más abajo), así que esa caja tiene que estar abierta. Corre dentro de la
+      // transacción del cobro, no opt-in como el gate de terminal.
+      await assertCajaAbiertaSiVino(queryRunner.manager, (venta.caja as any)?.id ?? null, {
+        lock: 'read',
+        contexto: 'cobrar-venta-credito',
+      });
 
       const cliente = await clienteRepo.findOne({ where: { id: data.clienteId } });
       if (!cliente) throw new Error(`Cliente ${data.clienteId} no encontrado`);

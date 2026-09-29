@@ -72,6 +72,21 @@ export interface TransferirVentaPdvPayload {
   destino: { tipo: 'MESA' | 'COMANDA'; id: number };
   alcance: 'COMPLETA' | 'ITEMS';
   itemIds?: number[];
+  /**
+   * Caja abierta del PdV que transfiere. El backend la usa SÓLO cuando la caja
+   * de la venta de origen ya está cerrada: ahí la cuenta destino nace en esta
+   * caja en vez de heredar la cerrada. Sin este dato, esa transferencia se
+   * rechaza con `CAJA_CERRADA`.
+   */
+  cajaActivaId?: number;
+  /**
+   * Opt-in del gate de terminal sobre `cajaActivaId`, con el MISMO flag y la
+   * misma semántica que el cobro (`createPago`/`createPagoDetalle`): reimputar
+   * la cuenta a una caja es meterle la plata que se va a cobrar ahí, así que el
+   * backend le exige el mismo permiso de terminal que a un pago. Sólo corre si
+   * el llamador lo manda.
+   */
+  validarDispositivoCaja?: boolean;
 }
 
 export interface TransferirVentaPdvResult {
@@ -762,7 +777,12 @@ export abstract class RepositoryService {
   abstract getGastosCaja(cajaId: number, incluirAnulados?: boolean): Observable<any[]>;
   abstract getGastoCaja(gastoId: number): Observable<any>;
   abstract editGastoCaja(gastoId: number, data: any): Observable<any>;
-  abstract anularGastoCaja(gastoId: number, motivo?: string): Observable<any>;
+  /**
+   * `opts.ajuste.motivo` habilita anular un gasto de una caja ya CERRADA
+   * (exige `FINANCIERO_CAJA_AJUSTAR`). Opcional: sin él el handler rechaza con
+   * `CAJA_CERRADA`, que es lo correcto para el PdV.
+   */
+  abstract anularGastoCaja(gastoId: number, motivo?: string, opts?: { ajuste?: { motivo?: string } }): Observable<any>;
   // Egresos de caja PdV (vales/compras pagados desde el cajón)
   abstract crearValeCaja(data: any): Observable<any>;
   abstract pagarValeCaja(data: any): Observable<any>;

@@ -15,9 +15,11 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { mensajeDeError } from 'src/app/shared/utils/error-message.util';
+import { esCajaCerrada, esEstadoCajaCancelada, esEstadoCajaNoOperable }
+  from 'src/app/shared/utils/caja-error.util';
 import { FormControl, FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
-import { Observable, of, firstValueFrom, async } from 'rxjs';
-import { debounceTime, distinctUntilChanged, map, startWith, switchMap, catchError } from 'rxjs/operators';
+import { Observable, of, firstValueFrom, async, Subscription } from 'rxjs';
+import { debounceTime, distinctUntilChanged, filter, map, skip, startWith, switchMap, catchError } from 'rxjs/operators';
 import { animate, state, style, transition, trigger } from '@angular/animations';
 
 import { RepositoryService } from '../../../database/repository.service';
@@ -34,9 +36,11 @@ import { Venta, VentaEstado } from 'src/app/database/entities/ventas/venta.entit
 import { PagoEstado } from 'src/app/database/entities/compras/estado.enum';
 import { TipoDetalle } from 'src/app/database/entities/compras/pago-detalle.entity';
 import { AuthService } from 'src/app/services/auth.service';
-import { Caja } from 'src/app/database/entities/financiero/caja.entity';
+import { PermissionService } from 'src/app/services/permission.service';
+import { Caja, CajaEstado } from 'src/app/database/entities/financiero/caja.entity';
+import { anclaJornada, inicioDelDia } from 'src/app/shared/utils/dashboard-rangos.util';
 import { CreateCajaDialogComponent } from '../../financiero/cajas/create-caja-dialog/create-caja-dialog.component';
-import { SeleccionarCajaDialogComponent, SeleccionarCajaDialogData } from '../../../shared/components/seleccionar-caja-dialog/seleccionar-caja-dialog.component';
+import { SeleccionarCajaDialogComponent, SeleccionarCajaDialogData, SeleccionarCajaDialogResult } from '../../../shared/components/seleccionar-caja-dialog/seleccionar-caja-dialog.component';
 import { TabsService } from 'src/app/services/tabs.service';
 import { MesaSelectionDialogComponent } from '../../../shared/components/mesa-selection-dialog/mesa-selection-dialog.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
@@ -134,6 +138,16 @@ export class PdvComponent implements OnInit, OnDestroy {
   private sseReconnectTimer: any;
   private fallbackPollTimer: any;
   private sseConnected = false;
+  /**
+   * Generación de la conexión SSE (M11). `conectarSSEMesas` tiene tres `await`
+   * antes de asignar `this.mesasEventSource`, y desde que corre en cada
+   * `aplicarCajaSeleccionada` puede solaparse consigo mismo: la segunda
+   * invocación llamaba `desconectarSSEMesas()` cuando la primera todavía no
+   * había asignado nada, así que el `EventSource` de la primera quedaba vivo
+   * sin referencia y cada cambio de mesa refrescaba dos veces. Cada intento se
+   * queda con su número y se descarta solo si otro arrancó mientras esperaba.
+   */
+  private sseGen = 0;
   
   private refreshingMesas = false;
 
@@ -241,10 +255,62 @@ export class PdvComponent implements OnInit, OnDestroy {
   puedeFinalizarVenta = false;
   /** Texto del chip informativo en la barra de caja. Vacío = no se muestra. */
   avisoTerminal = '';
+  /**
+   * M3: la cuenta seleccionada (mesa, comanda, venta rápida o delivery en
+   * edición) pertenece a una caja que **ya no está ABIERTO**.
+   *
+   * Pasa cada vez que el PdV reelige caja: la cuenta vieja sigue en memoria y
+   * en la grilla, el gate de caja pasa (la caja NUEVA está abierta) y el cajero
+   * se enteraba recién al cobrar. Agregar ítems sigue permitido a propósito
+   * (decisión de producto pendiente): lo que se bloquea es el cobro, que el
+   * backend rechaza con `CAJA_CERRADA`.
+   */
+  cuentaDeCajaCerrada = false;
+  /** Texto del aviso de la cuenta en caja cerrada. Vacío = no se muestra. */
+  avisoCuentaCajaCerrada = '';
+  /** Detalle del aviso (tooltip del chip y de los botones de cobro). */
+  tooltipCuentaCajaCerrada = '';
   tooltipCobrar = 'Cobrar (F1)';
   tooltipCobroRapido = 'Cobro rápido (F2)';
   // Nombre del dispositivo dueno de la caja (para el mensaje al usuario).
   dispositivoCajaNombre = '';
+
+  // ─── Revalidación de la caja (D12) ──────────────────────────────────────
+  /**
+   * Una revalidación a la vez. Se dispara desde seis lugares (foco,
+   * visibilidad, activación de la tab, IPC `CAJA_CAMBIO`, SSE y el polling de
+   * respaldo): sin esto, cerrar la caja desde otra pestaña encadenaba tres
+   * avisos sobre el mismo hecho y tres `inicializarCaja()` compitiendo — el
+   * tercero podía pisar la caja que resolvió el primero.
+   *
+   * Los disparos concurrentes NO se descartan: se cuelgan de la revalidación
+   * en vuelo (`revalidacionEnCurso`). Descartarlos haría que un click del
+   * cajero se perdiera en silencio si justo había una revalidación de fondo.
+   */
+  private revalidandoCaja = false;
+  private revalidacionEnCurso: Promise<boolean> | null = null;
+  /** Una sola resolución de caja en vuelo (ver `inicializarCaja`). */
+  private inicializacionEnCurso: Promise<void> | null = null;
+  /** Un solo diálogo «esta caja ya fue cerrada» por hecho. */
+  private avisoCajaCerradaAbierto = false;
+  /**
+   * Caja que ESTE PdV está cerrando (diálogo de conteo abierto desde
+   * `cerrarCaja()`). El `update-caja` del cierre emite `CAJA_CAMBIO` mientras el
+   * diálogo sigue abierto en su paso final, y sin esta marca el PdV tomaba su
+   * propio cierre por uno ajeno: «ESTA CAJA YA FUE CERRADA» + re-resolución de
+   * caja encima del diálogo, justo antes de cerrar la pestaña.
+   */
+  private cierrePropioCajaId: number | null = null;
+  /** Desuscripción del IPC `mesa-updates` (null en web/PWA: no hay IPC). */
+  private offMesaEvent: (() => void) | null = null;
+  private activeTabSub: Subscription | null = null;
+
+  /**
+   * Sentinela interno: la acción se abortó porque no hay caja utilizable. El
+   * aviso ya lo mostró `asegurarCajaAbierta`, así que los llamadores lo
+   * descartan en silencio en vez de loguear un error que no agrega nada.
+   */
+  private static readonly SIN_CAJA = 'PDV_SIN_CAJA';
 
   // Atajos (accesos rápidos)
   atajoGrupos: any[] = [];
@@ -272,6 +338,7 @@ export class PdvComponent implements OnInit, OnDestroy {
     private dialog: MatDialog,
     private fb: FormBuilder,
     private authService: AuthService,
+    private permissionService: PermissionService,
     private tabsService: TabsService,
     private snackBar: MatSnackBar,
     private elementRef: ElementRef
@@ -304,6 +371,10 @@ export class PdvComponent implements OnInit, OnDestroy {
     if (this.authService.currentUser) {
       await this.inicializarCaja();
     }
+
+    // Avisos de cambio de caja (IPC + activación de la tab). Se suscribe
+    // DESPUÉS de resolver la caja: antes no hay nada que revalidar.
+    this.escucharCambiosDeCaja();
     //set timeout and focus on searchTerm input
     setTimeout(() => {
       const searchTermInput = document.querySelector('input[formControlName="searchTerm"]');
@@ -321,10 +392,52 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Cierra la pestaña del PdV, con los DOS ids posibles (M4).
+   *
+   * La hoja del menú la abre como `pdv-tab` (`menu-tree.ts`) y los atajos del
+   * home y del dashboard de ventas como `pdv`. `removeTabById` busca por id
+   * exacto, así que `removeTabById('pdv')` era un **no-op** cuando el cajero
+   * había entrado por el menú: cancelar la selección de caja dejaba el PdV
+   * abierto con `caja === null` y cada acción reabría el diálogo. Sólo puede
+   * existir una (`addTab` deduplica por título), así que borrar los dos ids es
+   * inocuo para home y para ventas-dashboard.
+   */
+  private cerrarPestanaPdv(): void {
+    ['pdv', 'pdv-tab'].forEach((id) => this.tabsService.removeTabById(id));
+  }
+
+  /**
    * Resuelve a qué caja abierta se une este PdV: 1 → automática; varias →
    * diálogo de selección; ninguna → ofrecer abrir una nueva.
+   *
+   * Es **esperable en los tres caminos** (B10): `asegurarCajaAbierta` la
+   * `await`ea y decide si la operación del cajero puede seguir. Cuando el
+   * camino "ninguna caja" se resolvía con un `subscribe()` que retornaba al
+   * instante —el caso más probable justo después de un cierre— la acción se
+   * descartaba en silencio aunque un segundo después hubiera caja nueva.
    */
-  private async inicializarCaja(): Promise<void> {
+  private inicializarCaja(): Promise<void> {
+    // Una sola resolución en vuelo. Dos acciones del cajero sin caja (o el
+    // aviso de caja cerrada cruzado con un click) abrían dos diálogos de
+    // selección apilados, y el segundo podía pisar la caja del primero.
+    if (this.inicializacionEnCurso) return this.inicializacionEnCurso;
+    this.inicializacionEnCurso = this.resolverCajaActiva()
+      .finally(() => { this.inicializacionEnCurso = null; });
+    return this.inicializacionEnCurso;
+  }
+
+  /**
+   * El cuerpo de `inicializarCaja`. Se llama directo (sin pasar por el guard
+   * de reentrancia) desde `ofrecerCerrarCaja`, que corre DENTRO de una
+   * resolución en curso: pasar por el wrapper ahí devolvería la promesa que
+   * está esperando a esta misma cadena, o sea un deadlock.
+   */
+  private async resolverCajaActiva(): Promise<void> {
+    // La config del PdV se lee ACÁ: `inicializarCaja` corre en `ngOnInit`
+    // ANTES de `loadInitialData`, y el corte de jornada de abajo la necesita.
+    // Es una fila, y `refrescarGateTerminal` ya hace lo mismo.
+    await this.asegurarPdvConfig();
+
     let cajasAbiertas: Caja[] = [];
     try {
       cajasAbiertas = (await firstValueFrom(this.repositoryService.getCajasAbiertas())) || [];
@@ -333,75 +446,175 @@ export class PdvComponent implements OnInit, OnDestroy {
       cajasAbiertas = [];
     }
 
-    if (cajasAbiertas.length === 1) {
+    // D13: la única caja abierta viene de una jornada anterior. Unirse en
+    // silencio es lo que hizo que el almuerzo del viernes cayera dentro de la
+    // caja del jueves: se avisa y decide una persona.
+    const deJornadaAnterior = cajasAbiertas.length === 1 && this.esDeJornadaAnterior(cajasAbiertas[0]);
+
+    if (cajasAbiertas.length === 1 && !deJornadaAnterior) {
       this.aplicarCajaSeleccionada(cajasAbiertas[0]);
-    } else if (cajasAbiertas.length > 1) {
+    } else if (cajasAbiertas.length > 1 || deJornadaAnterior) {
       const dialogRef = this.dialog.open(SeleccionarCajaDialogComponent, {
         width: '520px',
         disableClose: true,
-        data: { cajas: cajasAbiertas, currentDeviceId: this.currentDeviceId } as SeleccionarCajaDialogData,
+        data: {
+          cajas: cajasAbiertas,
+          currentDeviceId: this.currentDeviceId,
+          ...(deJornadaAnterior
+            ? {
+                avisoJornadaAnterior: this.textoJornadaAnterior(cajasAbiertas[0]),
+                cajaParaCerrar: cajasAbiertas[0],
+              }
+            : {}),
+        } as SeleccionarCajaDialogData,
       });
-      const result = await firstValueFrom(dialogRef.afterClosed());
+      const result: SeleccionarCajaDialogResult | null = await firstValueFrom(dialogRef.afterClosed());
       if (result?.caja) {
         this.aplicarCajaSeleccionada(result.caja);
       } else if (result?.abrirNueva) {
-        this.ofrecerAbrirCaja(false);
+        await this.ofrecerAbrirCaja(false);
+      } else if (result?.cerrar) {
+        await this.ofrecerCerrarCaja(result.cerrar);
       } else {
-        this.tabsService.removeTabById('pdv');
+        this.cerrarPestanaPdv();
       }
     } else {
-      this.ofrecerAbrirCaja(true);
+      await this.ofrecerAbrirCaja(true);
     }
   }
 
   /**
-   * Ofrece abrir una nueva caja. Si `preguntar` es true, primero confirma.
+   * Relee la configuración del PdV.
+   *
+   * ⚠️ `getPdvConfig()` puede devolver un **array** (el handler lista la tabla
+   * de una fila). Sin normalizar, `config?.inicioJornadaHora` es `undefined`,
+   * el corte de jornada caía al default 7 por casualidad y dejaba de respetar
+   * lo que configuró el local.
    */
-  private ofrecerAbrirCaja(preguntar: boolean): void {
-    const abrir = () => {
-      const cajaDialogRef = this.dialog.open(CreateCajaDialogComponent, {
-        width: '60vw',
-        height: '60vh',
-        maxWidth: '100vw',
-        maxHeight: '100vh',
-        disableClose: true,
-      });
-      cajaDialogRef.afterClosed().subscribe(async (cajaResult) => {
-        if (cajaResult?.success) {
-          // Recargar la caja recién abierta de este usuario.
-          const caja = await firstValueFrom(
-            this.repositoryService.getCajaAbiertaByUsuario(this.authService.currentUser!.id)
-          );
-          if (caja) {
-            this.aplicarCajaSeleccionada(caja);
-          } else {
-            this.tabsService.removeTabById('pdv');
-          }
-        } else {
-          this.tabsService.removeTabById('pdv');
-        }
-      });
-    };
+  private async asegurarPdvConfig(): Promise<void> {
+    try {
+      const cfg = await firstValueFrom(this.repositoryService.getPdvConfig());
+      const config = Array.isArray(cfg) ? cfg[0] : cfg;
+      if (config) this.pdvConfig = config;
+    } catch {
+      /* se sigue con lo que haya: el corte cae al default de 7 */
+    }
+  }
 
-    if (!preguntar) {
-      abrir();
+  /**
+   * ¿Esta caja se abrió antes del comienzo de la jornada comercial en curso?
+   *
+   * Se reusan `anclaJornada` / `inicioDelDia` — la MISMA fuente que usan los
+   * reportes y los dashboards. La lección de 2026-08-28 fue justamente que dos
+   * cálculos de jornada distintos ponen el mismo hecho en días distintos según
+   * la pantalla. `?? 7` y no `|| 7`: `inicioJornadaHora = 0` es válido y
+   * significa "el día calendario".
+   */
+  private esDeJornadaAnterior(caja: Caja | null | undefined): boolean {
+    const apertura = caja?.fechaApertura ? new Date(caja.fechaApertura) : null;
+    if (!apertura || Number.isNaN(apertura.getTime())) return false;
+    const crudo = Number(this.pdvConfig?.inicioJornadaHora ?? 7);
+    const hora = Number.isFinite(crudo) ? crudo : 7;
+    const corte = inicioDelDia(anclaJornada(new Date(), hora), hora);
+    return apertura.getTime() < corte.getTime();
+  }
+
+  private textoJornadaAnterior(caja: Caja): string {
+    const apertura = caja?.fechaApertura ? new Date(caja.fechaApertura) : null;
+    const cuando = apertura && !Number.isNaN(apertura.getTime())
+      ? apertura.toLocaleString()
+      : 'una jornada anterior';
+    return `La caja #${caja.id} está abierta desde ${cuando}, o sea de una jornada anterior. `
+      + '¿La usás igual o la cerrás antes de vender?';
+  }
+
+  /**
+   * Ofrece abrir una nueva caja. Si `preguntar` es true, primero confirma.
+   * Devuelve la caja resuelta (o `null`) para que `inicializarCaja` pueda
+   * esperarla — ver el comentario de arriba (B10).
+   */
+  private async ofrecerAbrirCaja(preguntar: boolean): Promise<Caja | null> {
+    if (preguntar) {
+      const quiere = await firstValueFrom(this.dialog.open(ConfirmationDialogComponent, {
+        disableClose: true,
+        data: {
+          title: 'Caja abierta no encontrada',
+          message: 'No hay una caja abierta, ¿desea abrir una nueva?',
+        },
+      }).afterClosed());
+      if (!quiere) {
+        this.cerrarPestanaPdv();
+        return null;
+      }
+    }
+
+    const cajaResult = await firstValueFrom(this.dialog.open(CreateCajaDialogComponent, {
+      width: '60vw',
+      height: '60vh',
+      maxWidth: '100vw',
+      maxHeight: '100vh',
+      disableClose: true,
+    }).afterClosed());
+    if (!cajaResult?.success) {
+      this.cerrarPestanaPdv();
+      return null;
+    }
+
+    // Recargar la caja recién abierta de este usuario.
+    let caja: Caja | null = null;
+    try {
+      caja = await firstValueFrom(
+        this.repositoryService.getCajaAbiertaByUsuario(this.authService.currentUser!.id)
+      );
+    } catch (e) {
+      console.error('Error recargando la caja recién abierta:', e);
+    }
+    if (!caja) {
+      this.cerrarPestanaPdv();
+      return null;
+    }
+    this.aplicarCajaSeleccionada(caja);
+    return caja;
+  }
+
+  /**
+   * Rama `{ cerrar: caja }` del diálogo de selección (A10): la caja quedó
+   * abierta de ayer y el cajero eligió cerrarla antes de vender. Se abre el
+   * MISMO diálogo de conteo que usa Financiero › Cajas — que ya revalida
+   * contra el backend (D7) — y después se vuelve a resolver la caja.
+   */
+  private async ofrecerCerrarCaja(caja: Caja): Promise<void> {
+    if (!this.permissionService.has('FINANCIERO_CAJA_OPERAR')) {
+      await firstValueFrom(this.dialog.open(ConfirmationDialogComponent, {
+        width: '440px',
+        data: {
+          title: 'NO PODÉS CERRAR ESTA CAJA',
+          message: `Pedile a un encargado que cierre la caja #${caja.id} antes de seguir vendiendo.`,
+          confirmText: 'ENTENDIDO',
+          showCancel: false,
+        },
+      }).afterClosed());
+      this.cerrarPestanaPdv();
       return;
     }
 
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+    const result = await firstValueFrom(this.dialog.open(CreateCajaDialogComponent, {
+      width: '60vw',
+      height: '60vh',
+      maxWidth: '100vw',
+      maxHeight: '100vh',
       disableClose: true,
-      data: {
-        title: 'Caja abierta no encontrada',
-        message: 'No hay una caja abierta, ¿desea abrir una nueva?',
-      },
-    });
-    dialogRef.afterClosed().subscribe(result => {
-      if (result) {
-        abrir();
-      } else {
-        this.tabsService.removeTabById('pdv');
-      }
-    });
+      data: { mode: 'conteo', cajaId: caja.id },
+    }).afterClosed());
+
+    if (result?.success) {
+      // Cerrada: se resuelve de nuevo (va a ofrecer abrir una nueva).
+      await this.resolverCajaActiva();
+    } else {
+      // Se arrepintió a mitad del conteo: el PdV no se queda pegado a una caja
+      // que el propio cajero marcó como problemática.
+      this.cerrarPestanaPdv();
+    }
   }
 
   /**
@@ -423,6 +636,10 @@ export class PdvComponent implements OnInit, OnDestroy {
     this.puedeCobrar = this.esTerminalDeLaCaja;
     this.puedeFinalizarVenta = this.esTerminalDeLaCaja;
     this.actualizarTextosTerminal(caja.id);
+    // M3: si el PdV REELIGIÓ caja (la anterior se cerró), la cuenta que quedó
+    // seleccionada es de la caja vieja. Se reevalúa acá porque este es el único
+    // punto por donde pasan los tres caminos de resolución de caja.
+    void this.evaluarCuentaDeCajaCerrada(this.ventaSeleccionadaId());
     this.loadInitialData();
   }
 
@@ -451,6 +668,7 @@ export class PdvComponent implements OnInit, OnDestroy {
       this.avisoTerminal = '';
       this.tooltipCobrar = 'Cobrar (F1)';
       this.tooltipCobroRapido = 'Cobro rápido (F2)';
+      this.aplicarMotivoCuentaEnTooltips();
       return;
     }
     const ref = cajaId ? `Caja #${cajaId}` : 'Caja';
@@ -471,6 +689,87 @@ export class PdvComponent implements OnInit, OnDestroy {
     this.tooltipCobroRapido = this.puedeCobrar && this.puedeFinalizarVenta
       ? 'Cobro rápido (F2)'
       : `El cobro rápido registra y finaliza: solo se hace en ${terminal}`;
+    this.aplicarMotivoCuentaEnTooltips();
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // M3 — La cuenta seleccionada quedó en una caja que ya no está ABIERTO
+  //
+  // Ni `getPdvMesas` ni `getComandas` traen `venta.caja` (el join de mesas mapea
+  // la venta sin la relación), así que el estado se lee con `getVenta`, que sí
+  // carga `caja`. Es una fila más por selección de cuenta, en el mismo lugar
+  // donde ya se cargan ítems, personalizaciones y estado de cobro.
+  // ────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * ¿La caja de esta venta sigue operable? Marca (o limpia) el aviso y los
+   * tooltips de cobro.
+   *
+   * Criterio: **cualquier estado distinto de `ABIERTO`** (M8), el mismo que usa
+   * el guard del backend. Si el estado no viene, no se bloquea nada: el guard
+   * server-side tiene la última palabra y el fail-open es el mismo que el de
+   * `revalidarCajaInterno`.
+   */
+  private async evaluarCuentaDeCajaCerrada(ventaId: number | null | undefined): Promise<void> {
+    const id = Number(ventaId) || 0;
+    if (!id) { this.limpiarAvisoCuentaCajaCerrada(); return; }
+    let venta: any = null;
+    try {
+      venta = await firstValueFrom(this.repositoryService.getVenta(id));
+    } catch (e) {
+      console.warn('[pdv] no se pudo leer la caja de la cuenta; se sigue (fail-open):', e);
+      this.limpiarAvisoCuentaCajaCerrada();
+      return;
+    }
+    const cajaDeLaVenta = venta?.caja;
+    if (!esEstadoCajaNoOperable(cajaDeLaVenta?.estado)) {
+      this.limpiarAvisoCuentaCajaCerrada();
+      return;
+    }
+    const ref = cajaDeLaVenta?.id ? ` #${cajaDeLaVenta.id}` : '';
+    const cancelada = esEstadoCajaCancelada(cajaDeLaVenta?.estado);
+    const cual = cancelada ? `Cuenta de una caja cancelada${ref}` : `Cuenta de una caja cerrada${ref}`;
+    // TRANSFERIR sólo existe para mesa y comanda (`resolverOrigenTransferencia`
+    // devuelve null en venta rápida y delivery), así que no se ofrece una salida
+    // que el botón no tiene.
+    const puedeTransferir = !!this.resolverOrigenTransferencia();
+    this.cuentaDeCajaCerrada = true;
+    this.avisoCuentaCajaCerrada = puedeTransferir
+      ? `${cual}: transferila (pasa a la caja activa) o cancelala`
+      : `${cual}: cancelala y volvé a cargarla en la caja activa`;
+    this.tooltipCuentaCajaCerrada = puedeTransferir
+      ? 'No hay reapertura de cajas y el cobro lo rechaza el backend. Usá TRANSFERIR para pasar la '
+        + 'cuenta a la caja activa (la plata del turno entra al cajón de hoy), o cancelala.'
+      : 'No hay reapertura de cajas y el cobro lo rechaza el backend. Cancelá esta cuenta y volvé a '
+        + 'cargarla en la caja activa.';
+    this.actualizarTextosTerminal(this.caja?.id);
+  }
+
+  private limpiarAvisoCuentaCajaCerrada(): void {
+    if (!this.cuentaDeCajaCerrada && !this.avisoCuentaCajaCerrada) return;
+    this.cuentaDeCajaCerrada = false;
+    this.avisoCuentaCajaCerrada = '';
+    this.tooltipCuentaCajaCerrada = '';
+    this.actualizarTextosTerminal(this.caja?.id);
+  }
+
+  /** Id de la venta de la cuenta seleccionada, sea mesa, comanda o rápida. */
+  private ventaSeleccionadaId(): number | null {
+    return this.ventaRapidaActual?.id
+      || this.selectedComanda?.venta?.id
+      || this.selectedMesa?.venta?.id
+      || null;
+  }
+
+  /**
+   * El motivo "caja cerrada" pisa el del gate de terminal en los dos tooltips
+   * de cobro: es el bloqueo que manda, y el que explica por qué el botón está
+   * deshabilitado.
+   */
+  private aplicarMotivoCuentaEnTooltips(): void {
+    if (!this.cuentaDeCajaCerrada) return;
+    this.tooltipCobrar = this.tooltipCuentaCajaCerrada;
+    this.tooltipCobroRapido = this.tooltipCuentaCajaCerrada;
   }
 
   /**
@@ -488,6 +787,201 @@ export class PdvComponent implements OnInit, OnDestroy {
       if (config) this.pdvConfig = config;
     } catch { /* se mantiene lo que ya estaba */ }
     this.recomputarGateTerminal();
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Revalidación de la caja (D12)
+  //
+  // El 24/09 esta pestaña se quedó con la caja #122 en memoria después de que
+  // se cerrara y siguió operando cinco horas contra ella. `this.caja` es un
+  // snapshot: la fuente de verdad es el backend, y se le pregunta antes de
+  // cada operación de plata, al recuperar el foco y cuando llega un aviso.
+  // ────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Gate previo a toda operación que imputa plata a la caja.
+   *
+   * Devuelve `false` cuando la operación NO debe seguir; en ese caso el aviso
+   * al usuario ya se mostró. Es **fail-open ante error de red**: bloquear el
+   * cobro porque no se pudo confirmar un estado deja al local sin facturar, y
+   * el guard server-side de la Fase 1 tiene la última palabra igual.
+   *
+   * ⚠️ Si alguna vez se degradara ese guard del backend, este fail-open deja
+   * de ser gratis y hay que revisarlo junto con la degradación.
+   */
+  private async asegurarCajaAbierta(accion: string): Promise<boolean> {
+    if (!this.caja) {
+      await this.inicializarCaja();
+      // `inicializarCaja` la setea por efecto lateral, así que se relee: el
+      // narrowing de TypeScript todavía la cree `null` acá.
+      const resuelta = this.caja as Caja | null;
+      if (!resuelta) {
+        this.snackBar.open(`No hay una caja abierta para ${accion}.`, 'CERRAR', { duration: 5000 });
+        return false;
+      }
+      // Deliberado: NO se reintenta la acción original (B10). Reintentar sería
+      // cobrar contra una caja que el cajero acaba de elegir en un diálogo que
+      // le apareció por sorpresa, sin confirmar que es la correcta — y un cobro
+      // imputado a la caja equivocada es justo el bug que este PR arregla.
+      this.snackBar.open(
+        `Seleccionaste la caja #${resuelta.id}, volvé a intentar ${accion}.`,
+        'CERRAR',
+        { duration: 6000 },
+      );
+      return false;
+    }
+    return await this.revalidarCaja();
+  }
+
+  /**
+   * Una sola revalidación en vuelo. Los disparos concurrentes (foco +
+   * `activeTab$` + IPC juntos) se cuelgan de la misma promesa, así que hay un
+   * solo aviso y una sola reinicialización (B11).
+   */
+  private revalidarCaja(): Promise<boolean> {
+    if (this.revalidacionEnCurso) return this.revalidacionEnCurso;
+    this.revalidandoCaja = true;
+    this.revalidacionEnCurso = this.revalidarCajaInterno().finally(() => {
+      this.revalidandoCaja = false;
+      this.revalidacionEnCurso = null;
+    });
+    return this.revalidacionEnCurso;
+  }
+
+  private async revalidarCajaInterno(): Promise<boolean> {
+    const cajaId = this.caja?.id;
+    if (!cajaId) return false;
+
+    let fresca: Caja | null = null;
+    try {
+      fresca = await firstValueFrom(this.repositoryService.getCaja(cajaId));
+    } catch (e) {
+      console.warn('[pdv] no se pudo revalidar la caja; se sigue (fail-open):', e);
+      return true;
+    }
+
+    if (fresca && (fresca as any).estado === CajaEstado.ABIERTO) {
+      this.caja = fresca;
+      return true;
+    }
+
+    await this.avisarCajaCerrada(cajaId);
+    return false;
+  }
+
+  /**
+   * Revalidación de fondo (foco, visibilidad, activación de la tab, evento,
+   * polling). Sale sin hacer nada si el PdV todavía no tiene caja o si ya hay
+   * una revalidación corriendo: los disparos de fondo no necesitan colgarse de
+   * la promesa en vuelo, a diferencia de un click del cajero.
+   */
+  private revalidarCajaEnFondo(): void {
+    if (!this.caja || this.revalidandoCaja) return;
+    // Cierre propio en curso: el cambio de estado lo provocó este PdV y el
+    // diálogo de conteo ya informa el resultado (éxito o CAJA_CERRADA ajena).
+    if (this.cierrePropioCajaId != null && Number(this.caja.id) === this.cierrePropioCajaId) return;
+    void this.revalidarCaja();
+  }
+
+  /**
+   * Un `CAJA_CAMBIO` puede ser de cualquier caja del local (otra terminal abrió
+   * la suya). Sólo interesa el de la caja propia; para las demás no hay nada
+   * que revalidar.
+   *
+   * ⚠️ El `seq` de `CAJA_CAMBIO` es un `Date.now()` y **no se compara** contra
+   * los `seq` de mesa/comanda: son secuencias distintas y mezclarlas
+   * descartaría eventos válidos (B14).
+   */
+  private manejarEventoCajaCambio(payload: any): void {
+    if (payload?.tipo !== 'CAJA_CAMBIO') return;
+    const cajaId = Number(payload?.cajaId) || 0;
+    if (!cajaId || !this.caja || Number(this.caja.id) !== cajaId) return;
+    this.revalidarCajaEnFondo();
+  }
+
+  /** Aviso único + vuelta a elegir/abrir caja. */
+  private async avisarCajaCerrada(cajaId: number): Promise<void> {
+    this.caja = null;
+    if (!this.avisoCajaCerradaAbierto) {
+      this.avisoCajaCerradaAbierto = true;
+      try {
+        await firstValueFrom(this.dialog.open(ConfirmationDialogComponent, {
+          width: '460px',
+          disableClose: true,
+          data: {
+            title: 'ESTA CAJA YA FUE CERRADA',
+            message: cajaId
+              ? `La caja #${cajaId} ya fue cerrada, así que no se pueden registrar más operaciones en ella.\n\n`
+                + 'Elegí una caja abierta o abrí una nueva para seguir vendiendo.'
+              : 'La caja ya fue cerrada. Elegí una caja abierta o abrí una nueva para seguir vendiendo.',
+            confirmText: 'ENTENDIDO',
+            showCancel: false,
+          },
+        }).afterClosed());
+      } finally {
+        this.avisoCajaCerradaAbierto = false;
+      }
+    }
+    await this.inicializarCaja();
+  }
+
+  /**
+   * Traduce el rechazo `CAJA_CERRADA` del backend.
+   *
+   * El código viaja en el `message` porque es lo único que sobrevive a los tres
+   * transportes (IPC lo prefija, `/api/rpc` responde `500 {error}` y el modo
+   * cliente lo envuelve en `HTTP 500: {...}`). Devuelve `true` si lo manejó,
+   * para que el llamador no muestre además su mensaje genérico.
+   */
+  private manejarErrorCajaCerrada(error: any): boolean {
+    if (!esCajaCerrada(error)) return false;
+    void this.avisarCajaCerrada(this.caja?.id ?? 0);
+    return true;
+  }
+
+  /** Suscripciones que avisan de un cambio de caja sin que el usuario toque nada. */
+  private escucharCambiosDeCaja(): void {
+    // IPC: llega en standalone y en server (el handler corre en esta máquina).
+    // En `mode=client` el método no existe / no dispara nunca: allá el aviso
+    // llega por foco, por acción o por el polling de respaldo (RB-4).
+    try {
+      this.offMesaEvent = window.api?.onMesaEvent?.(
+        (payload: any) => this.manejarEventoCajaCambio(payload),
+      ) ?? null;
+    } catch (e) {
+      console.warn('[pdv] no se pudo suscribir a mesa-updates:', e);
+    }
+
+    // `activeTab$` es un BehaviorSubject: emite al suscribirse. El `skip(1)` va
+    // ANTES del `filter` (M10): detrás descartaba la primera emisión que
+    // MATCHEA, no el valor inicial, así que si el PdV no era la pestaña activa
+    // al suscribirse —`escucharCambiosDeCaja()` corre después de
+    // `inicializarCaja()`, que puede quedarse minutos en diálogos— la primera
+    // activación real se comía el skip y no revalidaba: justo el disparador que
+    // pide D12.
+    // Los dos ids conviven: la hoja del menú abre la tab como `pdv-tab` y los
+    // atajos del home/dashboard como `pdv`.
+    this.activeTabSub = this.tabsService.activeTab$
+      .pipe(
+        skip(1),
+        distinctUntilChanged(),
+        filter((id) => id === 'pdv' || id === 'pdv-tab'),
+      )
+      .subscribe(() => this.revalidarCajaEnFondo());
+  }
+
+  /**
+   * La pestaña colgada de fondo es EXACTAMENTE el caso del bug: el cajero
+   * cerró la caja desde otra tab (o desde la PWA) y volvió al PdV.
+   */
+  @HostListener('window:focus')
+  onWindowFocus(): void {
+    this.revalidarCajaEnFondo();
+  }
+
+  @HostListener('document:visibilitychange')
+  onVisibilityChange(): void {
+    if (document.visibilityState === 'visible') this.revalidarCajaEnFondo();
   }
 
   /**
@@ -636,7 +1130,11 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    // SSE: cerrar conexión y limpiar timers
+    // SSE: cerrar conexión y limpiar timers. El `sseGen++` invalida cualquier
+    // `conectarSSEMesas` que haya quedado a mitad de camino: sin eso su
+    // `new EventSource(...)` se abría después de destruir el componente y ya no
+    // había quién lo cierre.
+    this.sseGen++;
     this.desconectarSSEMesas();
     if (this.coalesceTimer) clearTimeout(this.coalesceTimer);
     if (this.sseReconnectTimer) clearTimeout(this.sseReconnectTimer);
@@ -647,6 +1145,18 @@ export class PdvComponent implements OnInit, OnDestroy {
     }
     if (this.focusBuscadorTimeout) {
       clearTimeout(this.focusBuscadorTimeout);
+    }
+    // Revalidación de caja: el listener IPC vive en el proceso principal y el
+    // `activeTab$` en un BehaviorSubject de toda la app — los dos sobreviven a
+    // la pestaña si no se los suelta, y seguirían revalidando (y abriendo
+    // diálogos) sobre un componente destruido.
+    if (this.offMesaEvent) {
+      try { this.offMesaEvent(); } catch { /* ya desuscripto */ }
+      this.offMesaEvent = null;
+    }
+    if (this.activeTabSub) {
+      this.activeTabSub.unsubscribe();
+      this.activeTabSub = null;
     }
   }
 
@@ -978,6 +1488,7 @@ export class PdvComponent implements OnInit, OnDestroy {
     } else {
       this.ventaItemsDataSource.data = [];
       this.calculateTotals();
+      this.limpiarAvisoCuentaCajaCerrada();
     }
 
     // Devolver el foco al buscador de productos tras un pequeño delay.
@@ -993,6 +1504,8 @@ export class PdvComponent implements OnInit, OnDestroy {
       this.ventaItemsDataSource.data = items;
       this.calculateTotals();
       await this.loadEstadoCobroActual(ventaId);
+      // M3: ¿esta cuenta quedó en una caja que ya se cerró?
+      await this.evaluarCuentaDeCajaCerrada(ventaId);
     } catch (error) {
       console.error('Error loading venta items:', error);
       this.ventaItemsDataSource.data = [];
@@ -1577,7 +2090,8 @@ export class PdvComponent implements OnInit, OnDestroy {
       }
 
       // Get the venta first
-      const venta = await this.getVenta();
+      const venta = await this.getVentaONada();
+      if (!venta) return;
 
       const precioVentaToUse = precioVenta;
       if (!precioVentaToUse) {
@@ -1672,7 +2186,8 @@ export class PdvComponent implements OnInit, OnDestroy {
       if (!this.selectedMesa && !this.selectedComanda) return;
     }
 
-    const venta = await this.getVenta();
+    const venta = await this.getVentaONada();
+    if (!venta) return;
 
     const newVentaItem = new VentaItem();
     newVentaItem.presentacion = presentacion;
@@ -1743,7 +2258,8 @@ export class PdvComponent implements OnInit, OnDestroy {
       if (!this.selectedMesa && !this.selectedComanda) return;
     }
 
-    const venta = await this.getVenta();
+    const venta = await this.getVentaONada();
+    if (!venta) return;
 
     // Calcular precio de adicionales total (personalización por sabor)
     let totalAdicionales = 0;
@@ -1824,6 +2340,9 @@ export class PdvComponent implements OnInit, OnDestroy {
    * contraseña temporal) se veía como si no hubiera pasado nada.
    */
   private mostrarErrorItem(error: any, fallback: string): void {
+    // `CAJA_CERRADA` tiene su propio tratamiento: además del mensaje hay que
+    // soltar la caja en memoria y volver a elegir una.
+    if (this.manejarErrorCajaCerrada(error)) return;
     this.snackBar.open(mensajeDeError(error, fallback), 'CERRAR', {
       duration: 6000,
       panelClass: 'error-snackbar',
@@ -1979,8 +2498,30 @@ export class PdvComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * `getVenta()` tolerante: devuelve `null` en vez de propagar el sentinela de
+   * "no hay caja utilizable". El aviso ya se mostró; el llamador sólo tiene
+   * que abortar.
+   */
+  private async getVentaONada(): Promise<Venta | null> {
+    try {
+      return await this.getVenta();
+    } catch (e: any) {
+      if (String(e?.message || e).includes(PdvComponent.SIN_CAJA)) return null;
+      throw e;
+    }
+  }
+
   // return a promise, if mesa is not null, get venta from mesa, if null create a new venta
-  getVenta(): Promise<Venta> {
+  async getVenta(): Promise<Venta> {
+    // Este es el único lugar por donde el PdV crea ventas (mesa, comanda y
+    // venta rápida pasan por acá), así que el guard de caja va acá y no
+    // repetido en cada acción. Cambió de firma a `async`: los cuatro
+    // llamadores ya lo `await`eaban (B13).
+    if (!(await this.asegurarCajaAbierta('cargar la cuenta'))) {
+      throw new Error(PdvComponent.SIN_CAJA);
+    }
+
     // Venta rápida (sin mesa)
     if (this.ventaRapidaActual) {
       return Promise.resolve(this.ventaRapidaActual);
@@ -2151,6 +2692,10 @@ export class PdvComponent implements OnInit, OnDestroy {
   async cobrarVenta(): Promise<void> {
     if (!this.hasActiveVenta || !this.hasActiveItems) return;
 
+    // La caja puede haberse cerrado desde otra terminal mientras esta pestaña
+    // estaba de fondo: es el caso del incidente del 24/09.
+    if (!(await this.asegurarCajaAbierta('cobrar'))) return;
+
     // La config puede haber cambiado desde que se abrió la pestaña: el diálogo
     // de configuración del PdV no se abre desde acá.
     await this.refrescarGateTerminal();
@@ -2168,6 +2713,16 @@ export class PdvComponent implements OnInit, OnDestroy {
 
     const venta = this.ventaRapidaActual || this.selectedComanda?.venta || this.selectedMesa?.venta;
     if (!venta) return;
+
+    // M3: la cuenta puede ser de una caja ya cerrada aunque la caja activa esté
+    // abierta (el PdV reeligió caja y esta cuenta quedó del turno anterior). Se
+    // relee acá y no se confía en el flag: entre la selección y el click pudo
+    // cerrarse. F1 llega por atajo, así que el botón deshabilitado no alcanza.
+    await this.evaluarCuentaDeCajaCerrada(venta.id);
+    if (this.cuentaDeCajaCerrada) {
+      this.snackBar.open(this.avisoCuentaCajaCerrada, 'CERRAR', { duration: 8000 });
+      return;
+    }
 
     const dialogData: CobrarVentaDialogData = {
       venta,
@@ -2192,6 +2747,16 @@ export class PdvComponent implements OnInit, OnDestroy {
     });
 
     dialogRef.afterClosed().subscribe(async result => {
+      if (result?.cajaCerrada) {
+        // El diálogo ya mostró «Esta caja ya fue cerrada…» y se cerró solo (M2).
+        // Acá se revalida la caja propia —puede ser justo la que se cerró, y
+        // entonces `revalidarCaja` dispara el aviso y la reelección— y se marca
+        // la cuenta, para que el botón de cobro quede deshabilitado con motivo
+        // en vez de invitar a otro intento que el backend va a rechazar igual.
+        await this.revalidarCaja();
+        await this.evaluarCuentaDeCajaCerrada(venta.id);
+        return;
+      }
       if (result?.success) {
         // Cerrar comanda si estaba vinculada
         if (this.selectedComanda) {
@@ -2210,7 +2775,7 @@ export class PdvComponent implements OnInit, OnDestroy {
                 'Cerrar',
                 { duration: 8000 }
               );
-            } else {
+            } else if (!this.manejarErrorCajaCerrada(error)) {
               this.snackBar.open(mensajeDeError(error, 'Error al cerrar ventas de mesa'), 'Cerrar', { duration: 5000 });
             }
             throw error;
@@ -2232,6 +2797,7 @@ export class PdvComponent implements OnInit, OnDestroy {
         this.ventaItemsDataSource.data = [];
         this.calculateTotals();
         this.resetEstadoCobro();
+        this.limpiarAvisoCuentaCajaCerrada();
       } else if (result?.partial) {
         // Cobro parcial: la venta sigue abierta. Recargar ítems + estado de cobro.
         const ventaId = this.ventaRapidaActual?.id || this.selectedComanda?.venta?.id || this.selectedMesa?.venta?.id;
@@ -2304,6 +2870,7 @@ export class PdvComponent implements OnInit, OnDestroy {
 
   async ventaRapida(): Promise<void> {
     if (this.ventaRapidaActual) return;
+    if (!(await this.asegurarCajaAbierta('abrir una venta rápida'))) return;
 
     try {
       const venta = new Venta();
@@ -2313,6 +2880,8 @@ export class PdvComponent implements OnInit, OnDestroy {
 
       const createdVenta = await firstValueFrom(this.repositoryService.createVenta(venta));
       this.ventaRapidaActual = createdVenta;
+      // Nace en la caja activa (ya revalidada): no hay nada que avisar.
+      this.limpiarAvisoCuentaCajaCerrada();
 
       // Deseleccionar mesa si había una
       this.selectedMesa = null;
@@ -2320,11 +2889,15 @@ export class PdvComponent implements OnInit, OnDestroy {
       this.calculateTotals();
     } catch (error) {
       console.error('Error al crear venta rápida:', error);
+      if (!this.manejarErrorCajaCerrada(error)) {
+        this.snackBar.open(mensajeDeError(error, 'No se pudo abrir la venta rápida'), 'CERRAR', { duration: 5000 });
+      }
     }
   }
 
   async cobroRapido(): Promise<void> {
     if (!this.hasActiveVenta || !this.hasActiveItems) return;
+    if (!(await this.asegurarCajaAbierta('cobrar'))) return;
 
     // El cobro rápido registra el pago Y cierra la venta de un saque, así que
     // necesita los dos permisos. Este camino no tenía ningún gate: en una
@@ -2338,6 +2911,15 @@ export class PdvComponent implements OnInit, OnDestroy {
 
     const venta = this.ventaRapidaActual || this.selectedComanda?.venta || this.selectedMesa?.venta;
     if (!venta) return;
+
+    // M3: igual que en `cobrarVenta`. F2 llega por atajo, así que el botón
+    // deshabilitado no alcanza, y el estado se relee por si la caja de la cuenta
+    // se cerró entre la selección y el atajo.
+    await this.evaluarCuentaDeCajaCerrada(venta.id);
+    if (this.cuentaDeCajaCerrada) {
+      this.snackBar.open(this.avisoCuentaCajaCerrada, 'CERRAR', { duration: 8000 });
+      return;
+    }
 
     const items = this.ventaItemsDataSource.data.filter(i => i.estado === EstadoVentaItem.ACTIVO);
     // `Number()` en los cuatro términos: son columnas `decimal` y en Postgres
@@ -2365,6 +2947,9 @@ export class PdvComponent implements OnInit, OnDestroy {
         estado: PagoEstado.PAGADO,
         caja: this.caja!,
         activo: true,
+        // `this.caja` es la caja del PdV; la del cobro la decide la venta.
+        // Sin esto el cobro rápido puede imputar la plata a otro arqueo.
+        ventaId: venta.id,
         validarDispositivoCaja: true,
       } as any));
 
@@ -2429,6 +3014,7 @@ export class PdvComponent implements OnInit, OnDestroy {
       await this.loadMesas();
     } catch (error) {
       console.error('Error al realizar cobro rápido:', error);
+      if (this.manejarErrorCajaCerrada(error)) return;
       const msg = String((error as any)?.message || '');
       this.snackBar.open(
         msg.includes('_NO_PERMITID') || msg.includes('NO_PERMITIDA')
@@ -2442,6 +3028,9 @@ export class PdvComponent implements OnInit, OnDestroy {
 
   async cerrarCaja(): Promise<void> {
     if (!this.caja) return;
+    // Si ya se cerró por afuera, el aviso y la reinicialización salen de acá:
+    // sin esto el diálogo de conteo abría igual y creaba un `Conteo` huérfano.
+    if (!(await this.asegurarCajaAbierta('cerrar la caja'))) return;
 
     // Verificar ventas abiertas
     const ventas = await firstValueFrom(this.repositoryService.getVentasByCaja(this.caja.id));
@@ -2462,6 +3051,7 @@ export class PdvComponent implements OnInit, OnDestroy {
     }
 
     // Abrir diálogo de cierre con conteo de billetes (mismo componente que apertura)
+    this.cierrePropioCajaId = Number(this.caja.id) || null;
     const dialogRef = this.dialog.open(CreateCajaDialogComponent, {
       width: '60vw',
       height: '60vh',
@@ -2471,16 +3061,42 @@ export class PdvComponent implements OnInit, OnDestroy {
       data: { mode: 'conteo', cajaId: this.caja.id },
     });
 
-    dialogRef.afterClosed().subscribe(result => {
-      if (result?.success) {
+    const cajaCierreId = this.cierrePropioCajaId;
+    dialogRef.afterClosed().subscribe(async (result) => {
+      // UX-1b: el resultado del diálogo no alcanza para saber si la caja se
+      // cerró (un SALIR después de confirmar devolvía `undefined`). Sin error
+      // del diálogo, se pregunta al backend; la marca sigue puesta mientras
+      // tanto para que el `CAJA_CAMBIO` propio no dispare el aviso.
+      const cerradaPorEstePdv = !!result?.success
+        || (!result?.error && await this.cajaDejoDeEstarAbierta(cajaCierreId));
+      this.cierrePropioCajaId = null;
+      if (cerradaPorEstePdv) {
         this.caja = null;
-        this.tabsService.removeTabById('pdv');
+        this.cerrarPestanaPdv();
+        return;
       }
+      // Salió sin cerrar, o el diálogo falló (p. ej. la cerraron desde otra
+      // terminal mientras contaba): los eventos ignorados durante el diálogo
+      // se recuperan con una revalidación.
+      this.revalidarCajaEnFondo();
     });
+  }
+
+  /** ¿La caja ya no está ABIERTO? Ante un error de lectura, `false` (fail-open). */
+  private async cajaDejoDeEstarAbierta(cajaId: number | null): Promise<boolean> {
+    if (!cajaId) return false;
+    try {
+      const fresca: any = await firstValueFrom(this.repositoryService.getCaja(cajaId));
+      return !!fresca && fresca.estado !== CajaEstado.ABIERTO;
+    } catch {
+      return false;
+    }
   }
 
   async openDelivery(): Promise<void> {
     if (!this.caja) return;
+    // El diálogo crea deliveries y cobra: la caja tiene que seguir abierta.
+    if (!(await this.asegurarCajaAbierta('operar delivery'))) return;
 
     // El cobro de un delivery sale por el mismo diálogo, así que necesita el
     // gate al día.
@@ -2520,6 +3136,8 @@ export class PdvComponent implements OnInit, OnDestroy {
           }
           this.ventaItemsDataSource.data = items;
           this.calculateTotals();
+          // M3: el delivery puede venir de un turno anterior con la caja cerrada.
+          await this.evaluarCuentaDeCajaCerrada(result.venta.id);
         } catch (e) {
           this.ventaItemsDataSource.data = [];
         }
@@ -2532,9 +3150,18 @@ export class PdvComponent implements OnInit, OnDestroy {
     this.ventaRapidaActual = null;
     this.ventaItemsDataSource.data = [];
     this.calculateTotals();
+    this.limpiarAvisoCuentaCajaCerrada();
   }
 
-  openUtilitarios(): void {
+  /**
+   * Utilitarios del cajón (gasto, retiro, vale, compra). Todos escriben contra
+   * la caja, así que pasó a `async` para poder revalidarla antes (B13).
+   *
+   * ⚠️ Desde acá NUNCA se manda `ajuste`: el PdV opera la caja del turno, no
+   * corrige cajas cerradas. El flag de ajuste lo decide el llamador del
+   * diálogo, y ese camino es Financiero › Cajas (D6).
+   */
+  async openUtilitarios(): Promise<void> {
     if (!this.caja) {
       this.dialog.open(ConfirmationDialogComponent, {
         width: '400px',
@@ -2542,6 +3169,7 @@ export class PdvComponent implements OnInit, OnDestroy {
       });
       return;
     }
+    if (!(await this.asegurarCajaAbierta('usar los utilitarios'))) return;
     this.dialog.open(UtilitariosDialogComponent, {
       width: '600px',
       data: { cajaId: this.caja.id, cajaNombre: `Caja #${this.caja.id}` },
@@ -2630,12 +3258,22 @@ export class PdvComponent implements OnInit, OnDestroy {
     alcance: 'COMPLETA' | 'ITEMS',
     itemIds?: number[],
   ): Promise<void> {
+    // La cuenta destino puede nacer en ESTA caja (Q2: `cajaActivaId`), así que
+    // revalidarla antes no es cosmético: el backend la exige abierta.
+    if (!(await this.asegurarCajaAbierta('transferir la cuenta'))) return;
     try {
       const resultado = await firstValueFrom(this.repositoryService.transferirVentaPdv({
         origen: { tipo: origen.tipo, id: origen.id },
         destino: { tipo: destino.tipo, id: destino.id },
         alcance,
         ...(itemIds ? { itemIds } : {}),
+        // Si la caja de la cuenta de origen ya se cerró, la cuenta destino nace
+        // en ESTA caja en vez de heredar una caja cerrada. El backend la valida
+        // y, sin este dato, rechaza la transferencia.
+        ...(this.caja?.id ? { cajaActivaId: this.caja.id } : {}),
+        // P1: si la cuenta se reimputa a esta caja, el backend le aplica el
+        // mismo gate de terminal que al cobro (mismo opt-in que createPago).
+        validarDispositivoCaja: true,
       }));
 
       this.cancelarMoverItems();
@@ -2660,8 +3298,9 @@ export class PdvComponent implements OnInit, OnDestroy {
       );
     } catch (error: any) {
       console.error('Error al transferir la cuenta:', error);
+      if (this.manejarErrorCajaCerrada(error)) return;
       this.snackBar.open(
-        error?.message || 'No se pudo transferir la cuenta',
+        mensajeDeError(error, 'No se pudo transferir la cuenta'),
         'CERRAR',
         { duration: 6000, panelClass: ['error-snackbar'] },
       );
@@ -3051,6 +3690,8 @@ export class PdvComponent implements OnInit, OnDestroy {
         // Calculate totals based on loaded items
         this.calculateTotals();
         await this.loadEstadoCobroActual(mesa.venta.id);
+        // M3: ¿esta cuenta quedó en una caja que ya se cerró?
+        await this.evaluarCuentaDeCajaCerrada(mesa.venta.id);
       } catch (error) {
         console.error('Error loading venta items:', error);
         // Reset items and totals on error
@@ -3063,6 +3704,7 @@ export class PdvComponent implements OnInit, OnDestroy {
       this.ventaItemsDataSource.data = [];
       this.calculateTotals();
       this.resetEstadoCobro();
+      this.limpiarAvisoCuentaCajaCerrada();
     }
   }
 
@@ -3104,7 +3746,8 @@ export class PdvComponent implements OnInit, OnDestroy {
 
       if (!venta) {
         // Create a new venta if none exists
-        venta = await this.getVenta();
+        venta = await this.getVentaONada();
+        if (!venta) return;
       }
 
       // Update the nombreCliente
@@ -3183,10 +3826,30 @@ export class PdvComponent implements OnInit, OnDestroy {
    * Fallback a polling 15s si el stream falla o se cierra.
    */
   private async conectarSSEMesas(): Promise<void> {
+    // Cerrar la conexión anterior antes de abrir otra. Desde que el PdV
+    // revalida y puede REELEGIR caja, `aplicarCajaSeleccionada` →
+    // `loadInitialData` → acá puede correr más de una vez por pestaña: sin
+    // esto quedaban dos EventSource vivos y cada evento disparaba dos
+    // refrescos. Es idempotente, así que la reconexión por error sigue igual.
+    //
+    // `gen` (M11) cubre el solapamiento: entre el `desconectarSSEMesas()` de
+    // arriba y la asignación de `this.mesasEventSource` hay tres `await`, así
+    // que una segunda invocación podía "desconectar" cuando la primera todavía
+    // no había asignado nada y dejar su EventSource vivo y huérfano. El intento
+    // viejo se descarta —y cierra lo que haya abierto— en cuanto ve que otro
+    // arrancó después.
+    const gen = ++this.sseGen;
+    this.desconectarSSEMesas();
+    if (this.sseReconnectTimer) {
+      clearTimeout(this.sseReconnectTimer);
+      this.sseReconnectTimer = null;
+    }
     try {
       // 1. Snapshot inicial (reemplaza el primer refreshMesas)
       await this.refreshMesasSilent();
       await this.refreshComandasSilent();
+
+      if (gen !== this.sseGen) return;
 
       // 2. Solicitar stream-token con contexto 'pdv' (patrón KDS)
       const api = (window as any).api;
@@ -3195,6 +3858,7 @@ export class PdvComponent implements OnInit, OnDestroy {
         const res = await api.callIpc('stream-token', 'pdv');
         token = res?.token || null;
       }
+      if (gen !== this.sseGen) return;
       if (!token) {
         console.warn('[SSE] No se pudo obtener stream-token, fallback a polling');
         this.activarFallbackPolling();
@@ -3203,9 +3867,15 @@ export class PdvComponent implements OnInit, OnDestroy {
 
       // 3. EventSource a /api/pdv/mesas/stream?token=...
       const url = `/api/pdv/mesas/stream?token=${encodeURIComponent(token)}`;
-      this.mesasEventSource = new EventSource(url);
+      const es = new EventSource(url);
+      // Última chance de quedar obsoleto: si otro intento arrancó mientras se
+      // pedía el token, este stream se cierra acá mismo en vez de quedar vivo
+      // sin referencia.
+      if (gen !== this.sseGen) { es.close(); return; }
+      this.mesasEventSource = es;
 
-      this.mesasEventSource.onopen = () => {
+      es.onopen = () => {
+        if (gen !== this.sseGen) return;
         console.log('[SSE Mesas] Conectado');
         this.sseConnected = true;
         // Detener fallback si estaba corriendo
@@ -3215,7 +3885,8 @@ export class PdvComponent implements OnInit, OnDestroy {
         }
       };
 
-      this.mesasEventSource.onmessage = (event) => {
+      es.onmessage = (event) => {
+        if (gen !== this.sseGen) return;
         try {
           const payload = JSON.parse(event.data);
           if (payload.tipo === 'MESA_CAMBIO' && payload.mesaId) {
@@ -3224,13 +3895,22 @@ export class PdvComponent implements OnInit, OnDestroy {
           } else if (payload.tipo === 'COMANDA_CAMBIO' && payload.comandaId) {
             this.pendingComandaRefreshes.add(payload.comandaId);
             this.coalescerRefrescos();
+          } else if (payload.tipo === 'CAJA_CAMBIO') {
+            // Éste es el camino que llega a `/admin` y a la PWA (mismo origen
+            // que Fastify). En la ventana de Electron el SSE no conecta —URL
+            // relativa contra `file://` / `:4201`—, y ahí el aviso entra por el
+            // IPC `mesa-updates`.
+            this.manejarEventoCajaCambio(payload);
           }
         } catch (e) {
           console.warn('[SSE Mesas] Error parseando evento:', e);
         }
       };
 
-      this.mesasEventSource.onerror = () => {
+      es.onerror = () => {
+        // Un error del stream viejo no tiene que desconectar ni reconectar al
+        // que lo reemplazó.
+        if (gen !== this.sseGen) { es.close(); return; }
         console.warn('[SSE Mesas] Error/cierre, reconectando en 5s...');
         this.sseConnected = false;
         this.desconectarSSEMesas();
@@ -3329,6 +4009,9 @@ export class PdvComponent implements OnInit, OnDestroy {
       if (!this.sseConnected) {
         this.refreshMesasSilent();
         this.refreshComandasSilent();
+        // Sin SSE ni IPC (el caso de `mode=client`), este poll es el único
+        // aviso automático de que la caja se cerró.
+        this.revalidarCajaEnFondo();
       }
     }, 15000);
   }

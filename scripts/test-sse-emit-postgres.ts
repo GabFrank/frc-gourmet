@@ -54,18 +54,26 @@ async function setupPostgres() {
   console.log(`✅ Database ${pgDatabase} created`);
   await adminDs.destroy();
   
-  // Conectar a la BD de test
+  // Conectar a la BD de test.
+  //
+  // ⚠️ El override va POR `getDataSourceOptions`, no por spread: es quien elige
+  // el juego de migraciones según el driver. Pisando sólo `type` en el objeto
+  // resultante, `getMigrations()` ya había devuelto el baseline de SQLite y la
+  // corrida moría con «syntax error at or near "AUTOINCREMENT"» — el mismo
+  // tropiezo que `test-locks-postgres-e2e.ts` documenta en su encabezado. El
+  // modo Postgres de este test estaba roto desde antes de este PR.
   const tmpDir = path.resolve(__dirname, '../.tmp');
-  const base = getDataSourceOptions(tmpDir);
-  
-  dataSource = new DataSource({
-    ...(base as any),
+  const base = getDataSourceOptions(tmpDir, {
     type: 'postgres',
     host: pgHost,
     port: pgPort,
     username: pgUser,
     password: pgPassword,
     database: pgDatabase,
+  });
+  
+  dataSource = new DataSource({
+    ...(base as any),
     synchronize: false,
     migrationsRun: false,
   });

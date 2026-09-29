@@ -520,6 +520,279 @@ RetiroCajaDetalle {
    - Para cada detalle: crear `CajaMayorMovimiento` INGRESO_RETIRO_CAJA + `actualizarSaldo`.
    - Estado → INGRESADO.
 
+## Cajas del PdV: apertura única, cierre y ajuste post-cierre (2026-09-28)
+
+Esta sección es sobre la **`Caja` del PdV**, no sobre `CajaMayor`. Está acá
+porque los dos canales que la abren y los que la ajustan viven en
+`caja-mayor.handler.ts` y en `financiero.handler.ts`. El invariante de escritura
+("ninguna plata entra a una caja que no está `ABIERTO`") está en
+[ventas-pdv.md](ventas-pdv.md).
+
+### Una sola caja `ABIERTO` por dispositivo: el índice es el control primario
+
+Migración `1790617935368-CajaUnicaAbiertaPorDispositivo` → índice único parcial
+**`UQ_cajas_abierta_por_dispositivo`** sobre `cajas (dispositivo_id) WHERE
+estado = 'ABIERTO'`.
+
+⚠️ **El índice no es un cinturón, es el control.** El guard transaccional con
+`SELECT … FOR UPDATE` **NO** cierra la carrera de doble apertura: en el caso que
+importa —el dispositivo todavía no tiene caja abierta— el lock matchea **cero
+filas**, y Postgres en `READ COMMITTED` no toma gap locks, así que dos
+transacciones concurrentes leen cero las dos y pasan las dos. En SQLite el
+argumento "un solo escritor" vale dentro de un proceso, pero no entre dos
+instancias de Electron sobre el mismo archivo.
+
+- **El SQL no ramifica por driver, a propósito:** los índices parciales existen
+  en SQLite ≥ 3.8.0 y Postgres ≥ 9.0, el quoting con comillas dobles vale en los
+  dos, y `Caja.estado` es `@Column({ type: 'varchar', enum: CajaEstado })` —
+  **no** un enum nativo de Postgres —, así que `WHERE "estado" = 'ABIERTO'` es un
+  literal de texto inmutable en ambos.
+- **Si ya hay duplicados NO se crea el índice y NO se aborta:** una migración que
+  falla deja la instalación sin arrancar. Se loguea la lista de dispositivos
+  (`id → cantidad`) y **no se cierra ninguna caja sola** — eso lo decide una
+  persona.
+- ⚠️ **El `return` temprano no alcanzaba como mitigación:** TypeORM marca la
+  migración como ejecutada igual, así que limpiar los duplicados después nunca
+  volvería a intentarla. Por eso el mismo `CREATE UNIQUE INDEX IF NOT EXISTS` se
+  reintenta en **cada arranque** desde `asegurarIndicesOpcionales(ds)`
+  (`src/app/database/indices-opcionales.ts`), llamada justo después de
+  `runMigrations`. Detalle del patrón →
+  [../architecture/database.md](../architecture/database.md).
+
+**Detectar la violación del índice es específico por driver, y los dos mensajes
+son distintos:**
+
+| Driver | Qué llega | Cómo se matchea |
+|---|---|---|
+| Postgres (`pg`) | `code '23505'` + `duplicate key value violates unique constraint "UQ_cajas_abierta_por_dispositivo"` (el nombre conserva el casing porque se creó entre comillas dobles) | el mensaje **nombra el índice** |
+| SQLite | `code 'SQLITE_CONSTRAINT'` + `UNIQUE constraint failed: cajas.dispositivo_id` — nombra la **columna**, no el índice | el mensaje nombra `cajas.dispositivo_id` |
+
+⚠️ **No alcanza con `code === '23505'` ni con "cualquier UNIQUE de SQLite":**
+`cajas` tiene otro índice único (`conteo_apertura_id`, por el `@OneToOne`), y
+reusar un conteo de apertura daría «Ya hay una caja abierta en esta terminal»,
+que sería falso. `esViolacionCajaUnicaAbierta()` exige que el error nombre **este**
+índice o **esta** columna. La traducción al mensaje humano
+(`CAJA_ABIERTA_DUPLICADA`) la hace `guardarAperturaTraduciendoDuplicado()`, así
+el cajero ve el mismo texto lo produzca el guard o el índice.
+
+### El candado de apertura: por qué existe, y por qué en SQLite
+
+`create-caja` y `abrir-caja-desde-conteo` corren dentro de
+`withAperturaCajaLock(dispositivoId, …)` — una cola de promesas por clave, igual
+patrón que `withMesaLock` en `ventas.handler.ts`.
+
+⚠️ **No es cosmético, y se descubrió midiendo.** En SQLite (driver `sqlite3`, el
+del modo standalone) TypeORM tiene **una sola conexión**, así que dos
+`dataSource.transaction()` que se intercalan terminan compartiendo la **misma
+transacción física**. Si la segunda revienta contra el índice único, su
+`ROLLBACK` **descarta también el INSERT de la primera**: un doble click en
+«ABRIR CAJA» dejaba **cero** cajas abiertas y el mensaje «Ya hay una caja
+abierta en esta terminal», que además era mentira. Antes de este PR no pasaba
+porque `create-caja` no abría transacción.
+
+Con el candado, la segunda apertura empieza cuando la primera ya commiteó: la
+rechaza el guard, limpio, y la ganadora sobrevive. **No reemplaza al índice:**
+entre dos procesos —dos instancias de Electron sobre el mismo archivo, o dos
+nodos contra el mismo Postgres— el único control es el índice.
+
+Otros dos detalles de la apertura:
+
+- ⚠️ **`Caja.estado` tiene `default: ABIERTO` en la entidad.** El guard viejo
+  miraba `data.estado === ABIERTO` y por eso se salteaba entero con sólo omitir
+  el campo. Ahora se evalúa `estadoFinal = data?.estado ?? CajaEstado.ABIERTO`.
+- ⚠️ **`create-caja` abre cajas, y nada más** (hallazgo P9): cualquier
+  `estadoFinal !== ABIERTO` se rechaza. Con `estado: 'CERRADO'` se salteaba el
+  guard de duplicado —que sólo corre para `ABIERTO`— y nacía una caja `CERRADO`
+  con el `dispositivo` elegido por el cliente, que el índice parcial tampoco
+  cubre: una caja que nunca estuvo abierta, con arqueo propio y sin apertura
+  real.
+- **Los permisos NO se unifican** entre los dos canales (decisión B16):
+  `create-caja` pide `FINANCIERO_CAJA_OPERAR` (abrir la caja del turno es rutina
+  del cajero) y `abrir-caja-desde-conteo` pide `FINANCIERO_CAJA_GESTIONAR`
+  (abrirla desde un conteo de Caja Mayor es una operación sobre el efectivo
+  consolidado). Lo que sí se unificó es la **conducta**: transacción + guard
+  sobre el estado final + traducción de la violación del índice + `CAJA_CAMBIO`
+  después del commit.
+
+### `update-caja`: cerrar una caja ya cerrada, y el orden de las reglas (D7)
+
+Hasta este PR, cerrar una caja ya cerrada **no fallaba ni dejaba rastro**: es la
+causa D del incidente del 24/09. El diálogo mostraba el cierre viejo y
+"completaba" sin escribir nada.
+
+Ahora `update-caja` corre dentro de una transacción que empieza con
+`leerEstadoCaja(manager, id, { lock: 'write' })` — `FOR UPDATE` **sin
+`relations`**, por el issue #258 — y aplica las reglas **en este orden, que no es
+arbitrario**:
+
+1. **`CERRADO → CERRADO` se rechaza** con `CAJA_CERRADA` y la fecha del cierre.
+2. **`CERRADO → ABIERTO` se rechaza**: **no hay reapertura de cajas** (hallazgo
+   P3). Va también **antes** del permiso de ajuste, por el mismo motivo que la
+   regla 1. Sin este rechazo, cualquiera con `FINANCIERO_CAJA_AJUSTAR` podía
+   revivir una caja cerrada por la regla 3 —que exige el permiso pero no limita
+   **qué** se escribe— y el índice único parcial sólo lo frenaba si ese
+   dispositivo ya tenía otra caja abierta. El único `estado: ABIERTO` que sale
+   del frontend es el del `createCaja` de apertura.
+3. **Cualquier otro update sobre una caja `CERRADO` es un ajuste** y exige
+   `FINANCIERO_CAJA_AJUSTAR`, además del `FINANCIERO_CAJA_OPERAR` de entrada.
+4. Sólo quien **abrió** la caja puede cerrarla (guard de backend: la PWA también
+   cierra cajas). ⚠️ **Deuda conocida:** compara contra `getCurrentUser()` y no
+   contra `getEffectiveUser`, así que en **modo servidor / PWA** compara contra el
+   usuario del desktop — justo el caso para el que se escribió. No se arregló
+   solo porque `createdBy` se estampa con el **mismo** `getCurrentUser()` en
+   `create-caja`: hay que mover los dos juntos.
+5. No se cierra una caja con **ventas `ABIERTA`** (inmune a la carrera
+   multi-dispositivo, a diferencia del chequeo del diálogo).
+
+**Campos que este canal NO deja escribir** (hallazgo P2) — se descartan del
+`merge` antes de tocar la entidad: `id`, `dispositivo`, `createdBy`, `createdAt`,
+`conteoApertura`, `fechaApertura`.
+
+- `createdBy` es el que sostiene la regla 4. Un usuario con **sólo**
+  `FINANCIERO_CAJA_OPERAR` podía hacer `update-caja(id, { createdBy: él })` sobre
+  una caja `ABIERTO` y cerrarla después: el guard comparaba contra el valor que él
+  mismo acababa de escribir.
+- `dispositivo` es el dueño de la caja y lo único que sostiene el gate de cobro
+  por terminal; aceptarlo dejaba que cualquier terminal se apropiara de una caja
+  ajena con un update, y el invariante "una caja abierta por dispositivo" sólo se
+  verifica al **crear**.
+- `id` convertiría el `save` en un UPDATE de otra fila; `conteoApertura` /
+  `fechaApertura` / `createdAt` son la identidad de la apertura, y mover el conteo
+  de apertura de una caja cerrada falsea el arqueo de las **dos** cajas.
+
+Ningún llamador legítimo los manda: el desktop cierra/ajusta con
+`{ conteoCierre, fechaCierre, estado? }` y la PWA con
+`{ estado, fechaCierre, conteoCierre }`.
+
+⚠️ **Las reglas 1 y 2 van ANTES que el permiso de ajuste, a propósito.** Si el
+permiso corriera primero, un cajero que cierra dos veces recibiría «PERMISO
+REQUERIDO: FINANCIERO_CAJA_AJUSTAR» y saldría a pedir un permiso que no
+necesita, en vez de leer «la caja #N ya fue cerrada el …». Mismo argumento para
+la reapertura: el mensaje tiene que explicar qué pasó, no mandar a pedir un
+permiso que no arregla nada.
+
+⚠️ **El diálogo en modo ajuste OMITE `estado` del payload** a propósito
+(`create-caja-dialog.component.ts`): con `estado: CERRADO` caería en la regla 1;
+sin él cae en la regla 3, que el ajustador cumple por definición.
+
+**La transacción es SÓLO en Postgres** (`enTransaccionSiPostgres`, hallazgo M5).
+`update-caja` no abría ninguna antes de este PR, y sumar una en **SQLite**
+reabría un modo de falla medido: hay una sola conexión y dos
+`dataSource.transaction()` intercalados comparten la transacción física, así que
+el cierre podía cruzarse con `createVenta`, `delivery-crear`,
+`transferir-venta-pdv` o `registrarCobroParcial` —que sí abren la suya— y el
+`ROLLBACK` de uno se llevaba los `INSERT` del otro. Es el mismo motivo por el que
+la apertura necesitó `withAperturaCajaLock`. En SQLite, entonces, el canal vuelve
+al comportamiento sin transacción (el de antes del PR) y los guards corren igual:
+el lock nunca llegaba al driver. Detalle del helper →
+[../architecture/database.md](../architecture/database.md).
+
+**Alcance de la transacción (D3/B3, y no se negocia):** adentro van el lock, los
+guards y el merge/save. **Afuera, después del commit**, van `emitCajaCambio`,
+`generarRetiroDelCierre` y el WhatsApp. El motivo duro es que
+`generarRetiroDelCierre` recibe el `DataSource`, no un `EntityManager`: en
+Postgres leería desde **otra conexión** el estado pre-commit, vería la caja
+todavía `ABIERTO` y sin `conteoCierre`, devolvería `null` sin lanzar, y el retiro
+automático del cierre dejaría de generarse **en silencio** (RB-1). El motivo
+secundario es que el WhatsApp y el retiro tardan, y sostener el `FOR UPDATE`
+mientras tanto hace esperar a cada venta nueva.
+
+**Las dos superficies que crean el `Conteo` revalidan antes de contar nada**
+(D7/B9): `create-caja-dialog.component.ts` (desktop) y `caja-cerrar.page.ts` (PWA)
+releen la caja del backend y cortan si ya está `CERRADO` y no venimos a
+ajustarla. No es cosmético: los dos flujos crean el `Conteo` y **todos** sus
+`ConteoDetalle` *antes* de llamar a `updateCaja`, así que sin el corte cada
+intento de cerrar una caja ya cerrada dejaría un conteo huérfano — y no son
+inertes, `computeResumenCaja` y `generarRetiroDelCierre` los buscan por FK.
+
+⚠️ **El mismo orden estaba en la APERTURA, y este PR hizo los rechazos mucho más
+frecuentes** (hallazgo M6): conteo → detalles → `createCaja`, así que cada
+apertura rechazada —doble click, otra terminal, el índice único— dejaba un
+`Conteo` `APERTURA` huérfano. Ahora las dos superficies revalidan **antes** de
+crear el conteo: `crearCajaConConteoApertura()` +
+`cajaAbiertaDelDispositivo()` en el desktop, y `cajaAbiertaDeTerminal()` en
+`caja-abrir.page.ts` (la PWA ya filtraba las terminales ocupadas en `ngOnInit`,
+pero eso es un **snapshot de minutos antes**; esto revalida al tocar ABRIR). Los
+dos mensajes nombran la terminal, porque la apertura deja elegir el dispositivo.
+**Fail-open explícito si la consulta falla** —en modo cliente `getCajasAbiertas`
+todavía lanza «no implementado»—: decide el índice único parcial, que es el
+control primario.
+
+### Ajuste sobre una caja ya cerrada: `ajuste: { motivo }` (D6)
+
+Los canales que Financiero › Cajas puede ejecutar sobre una caja **ya cerrada**
+("agregar el gasto/retiro que faltó") usan
+`assertCajaOperableConAjuste()` en vez del guard a secas:
+`create-gasto-caja`, `edit-gasto-caja`, `anular-gasto-caja` y
+`create-retiro-caja`.
+
+| Estado de la caja | `ajuste` en el payload | Resultado |
+|---|---|---|
+| `ABIERTO` | con o sin | el flag se **ignora** (no hay nada que ajustar), así el frontend puede mandarlo siempre sin ramificar |
+| cerrada | sin `ajuste` | `CAJA_CERRADA` |
+| cerrada | con `ajuste` | exige `FINANCIERO_CAJA_AJUSTAR` + **motivo no vacío** + la **misma condición que `puede-ajustar-caja`**: el retiro del cierre no puede estar ya `INGRESADO` en Caja Mayor |
+
+- **La traza queda en la `Caja`:** `estamparTrazaAjuste()` setea `revisado = true`,
+  `revisadoPor` y `motivoAjuste` (UPPERCASE, igual que `finalizar-ajuste-caja`).
+  ⚠️ Corre **en la misma transacción** que el `save` del gasto/retiro (hallazgo
+  P7): estampar después del commit dejaba la caja ajustada **sin traza** si esto
+  fallaba, y el llamador recibía un error por una operación que sí había
+  ocurrido. Los cuatro canales usan `enTransaccionSiPostgres`, así que en SQLite
+  no hay transacción a propósito y ahí sigue siendo "primero la escritura,
+  después la traza".
+- **El ajuste avisa a las terminales** (hallazgo P8): post-commit,
+  `emitirCambioDeCajaAjustada()` emite `CAJA_CAMBIO` releyendo el estado de la
+  base. Un ajuste mueve el arqueo y `revisado` de una caja que el PdV y los
+  resúmenes abiertos están mirando. Sólo se emite **cuando hay ajuste**: un gasto
+  del turno normal no cambia el estado de la caja.
+- ⚠️ **El `ensurePermission` operativo del handler va ANTES que este helper.** Si
+  el de ajuste corriera primero, un cajero que agrega un gasto a la caja
+  equivocada recibiría «PERMISO REQUERIDO: FINANCIERO_CAJA_AJUSTAR» en vez del
+  mensaje que explica qué pasó.
+- ⚠️ **El motivo lo pide el LLAMADOR, no el diálogo de gasto/retiro.** Esos
+  mismos diálogos los abre el PdV para el cajón del turno, y desde ahí **nunca**
+  se manda `ajuste` — `utilitarios-dialog` lo documenta explícitamente. Ponerlo
+  dentro del diálogo desarmaría el guard para el PdV entero. Los tres llamadores
+  que sí lo piden (con `PromptDialogComponent`, motivo obligatorio) son
+  `list-cajas.component.ts` (*Agregar gasto* / *Agregar retiro*) y
+  `resumen-caja-dialog.component.ts` (*Editar gasto*).
+- **El botón se gatea con los dos permisos** (B19): `resumen-caja-dialog`
+  pre-computa `puedeEditarGastos = FINANCIERO_CAJA_GESTIONAR && (!cajaCerrada ||
+  FINANCIERO_CAJA_AJUSTAR)`. Sin eso, un rol con GESTIONAR y sin AJUSTAR veía el
+  botón y se comía el rechazo después de completar el formulario.
+- **`list-cajas` pre-chequea con `puede-ajustar-caja`** antes de pedir el motivo:
+  si el retiro del cierre ya se ingresó a Caja Mayor el backend va a rechazar
+  igual, y es mejor decirlo antes de hacerle contar el gasto.
+
+El flujo de ajuste que ya existía (`puede-ajustar-caja` +
+`finalizar-ajuste-caja`, que regenera el retiro del cierre desde el conteo
+corregido y exige `FINANCIERO_CAJA_AJUSTAR`) **no cambió** y sigue siendo la única
+forma de tocar una caja cerrada: **no hay reapertura de cajas.**
+
+Dos límites de esta pieza, conocidos y anotados como deuda (§17 del plan):
+
+- ⚠️ **`update-caja` sobre una caja `CERRADO` exige el permiso pero NO el
+  motivo** (hallazgo P4): corrige el `conteoCierre` sin pasar por
+  `assertCajaOperableConAjuste` ni estampar traza. Se deja así porque la traza del
+  ajuste de conteo la deja **`finalizar-ajuste-caja`** (que sí pide motivo) y
+  `updatedBy` registra al autor del update. Los canales que **agregan plata** a
+  una caja cerrada —gastos y retiros— sí exigen motivo.
+- ⚠️ **`puede-ajustar-caja` y `finalizar-ajuste-caja` exigen `CERRADO`**, no
+  `!== ABIERTO`. Con una caja `CANCELADO` el flujo de ajuste muere en el
+  pre-chequeo con «La caja no está cerrada.» aunque
+  `assertCajaOperableConAjuste` sí acepte el caso y el front ya use el criterio
+  correcto (hallazgo M8). No urge: **ningún código escribe ese estado hoy**.
+
+**Tests:** `npm run test:caja-apertura` (**105 asserts**: apertura única, candado,
+violación del índice traducida, cierre de caja cerrada, `CAJA_CAMBIO`, campos no
+editables de `update-caja`, rechazo de la reapertura, `create-caja` en otro
+estado, y el pre-chequeo de duplicados ignorando las cajas sin dispositivo) y
+`npm run test:caja-cerrada` (**129 asserts**: el guard y las exenciones, el ajuste
+con y sin permiso —también con un **cajero** sin `AJUSTAR`, para verificar que el
+rechazo es *de permiso* y no `CAJA_CERRADA`— y con el retiro de cierre ya
+`INGRESADO`). En Postgres, `npm run test:locks-pg` agrega el ajuste de gasto
+concurrente con un cierre en vuelo (`[F7]`).
+
 ## Entradas Varias
 
 `EntradaVaria` + `EntradaVariaCategoria`:

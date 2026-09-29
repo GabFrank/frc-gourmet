@@ -32,6 +32,11 @@
   </div>
 
   <mat-dialog-content class="dialog-content" style="height: 100%">
+    <!-- La caja ya estaba cerrada al releerla del backend: no se guarda nada. -->
+    <div *ngIf="cajaYaCerrada" class="caja-cerrada-aviso">
+      <mat-icon color="warn">lock</mat-icon>
+      <span>{{ errorCaja }}</span>
+    </div>
     <div *ngIf="loading" class="loading-overlay">
       <mat-spinner diameter="40"></mat-spinner>
       <p>Cargando datos...</p>
@@ -237,7 +242,7 @@
           </div>
 
           <div class="step-actions">
-              <button mat-button mat-dialog-close>SALIR</button>
+              <button mat-button (click)="onCancel()">SALIR</button>
               <button
                 mat-button
                 matStepperNext
@@ -445,7 +450,7 @@
         </div>
 
         <div class="step-actions">
-              <button mat-button mat-dialog-close>SALIR</button>
+              <button mat-button (click)="onCancel()">SALIR</button>
               <button mat-button matStepperPrevious>ATRÁS</button>
               <button
                 mat-button
@@ -544,9 +549,10 @@
             </div>
 
             <div class="step-actions">
-              <button mat-button mat-dialog-close>SALIR</button>
+              <button mat-button (click)="onCancel()">SALIR</button>
               <button mat-button matStepperPrevious>ATRÁS</button>
               <button
+                *ngIf="!cajaYaCerrada"
                 mat-raised-button
                 color="primary"
                 (click)="onSubmit()"

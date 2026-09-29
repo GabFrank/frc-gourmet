@@ -114,6 +114,8 @@
     "test:zonas-poligono": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-zonas-poligono-e2e.ts",
     "test:terminal-caja": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-terminal-caja-e2e.ts",
     "test:sin-fuga-datos": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-sin-fuga-datos-e2e.ts",
+    "test:caja-cerrada": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-caja-cerrada-e2e.ts",
+    "test:caja-apertura": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-caja-apertura-e2e.ts",
     "test:ticket-delivery-pagos": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-ticket-delivery-pagos-e2e.ts",
     "test:integridad-cobro": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-integridad-cobro-e2e.ts",
     "test:resumen-caja-numeros": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-resumen-caja-numeros.ts",

@@ -16,6 +16,7 @@ import { setEntityUserTracking } from '../utils/entity.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { ensurePermission } from '../utils/auth.utils';
+import { errorCajaCerrada } from '../utils/caja-abierta.utils';
 import { aplicarEstadoPagoCuota, revertirEstadoPagoCuota } from './cuentas-por-pagar.handler';
 import { getCotizacionCompraLocal } from '../utils/moneda.utils';
 import { crearCompraSimplificadaTx } from './compras.handler';
@@ -41,8 +42,15 @@ export function registerPdvEgresosHandlers(
       relations: ['dispositivo'],
     });
     if (!caja) throw new Error(`Caja ${cajaId} no encontrada.`);
+    // Estos handlers ya exigían caja abierta desde siempre; lo único que
+    // faltaba era que el mensaje llevara el código `CAJA_CERRADA` para que el
+    // PdV los pueda tratar igual que a los demás canales.
     if (caja.estado !== CajaEstado.ABIERTO) {
-      throw new Error('La caja no está abierta. No se pueden registrar egresos.');
+      throw errorCajaCerrada(caja.id, {
+        id: caja.id,
+        estado: caja.estado,
+        fechaCierre: (caja.fechaCierre as any) ?? null,
+      });
     }
     // Gate por dispositivo: bloquea solo cuando ambos ids son resolubles y difieren.
     const dispositivoCajaId = (caja.dispositivo as any)?.id ?? null;

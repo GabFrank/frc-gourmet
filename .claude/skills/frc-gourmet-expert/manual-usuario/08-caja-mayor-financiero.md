@@ -272,7 +272,61 @@ Raro. Solo cuando se cierra una sucursal:
 - Estado → CERRADA.
 - No se pueden agregar más movimientos.
 
-## 11. Errores comunes
+## 11. Ajustar una caja del PdV ya cerrada
+
+**Las cajas del PdV no se reabren.** Nunca. Si una caja se cerró y después
+aparece un gasto que faltó, un retiro mal cargado o un conteo con un error, lo que
+hay es el **ajuste**: una corrección puntual sobre la caja cerrada, con motivo y
+con firma.
+
+**Dónde:** *Financiero → Cajas* → buscar la caja cerrada → según el caso,
+**AGREGAR GASTO**, **AGREGAR RETIRO** o **AJUSTAR CONTEO**. Editar un gasto ya
+cargado se hace desde el **Resumen** de la caja.
+
+**Qué te pide el sistema:**
+
+1. **El permiso `FINANCIERO_CAJA_AJUSTAR`.** Un cajero con el permiso normal de
+   caja **no** puede ajustar: le aparece *«PERMISO REQUERIDO»*. Es del encargado o
+   del gerente.
+2. **Un motivo, obligatorio.** Una ventana te lo pide antes de dejarte cargar
+   nada, y no acepta el campo vacío. Ejemplo: *«FALTÓ CARGAR LA COMPRA DE HIELO
+   DEL TURNO NOCHE»*.
+3. Y que el **retiro del cierre de esa caja no haya entrado todavía a Caja
+   Mayor**. Si ya entró, el sistema corta con:
+
+   > **El retiro del cierre ya fue ingresado a Caja Mayor. Revertí ese ingreso desde Caja Mayor antes de ajustar la caja.**
+
+   Es el límite natural: una vez que esa plata se consolidó, cambiar el arqueo de
+   origen desacomoda los saldos.
+
+**Qué queda registrado.** El ajuste no es silencioso: la caja queda marcada como
+**revisada**, con **tu usuario** y con **el motivo que escribiste** (se guarda en
+mayúsculas). Eso es lo que le permite a quien mire el arqueo mañana entender por
+qué los números no son los del cierre original.
+
+**Con AJUSTAR CONTEO no hay un paso extra:** cuando confirmás el conteo corregido,
+el sistema cierra el ajuste solo — vuelve a generar el **retiro del cierre** a
+partir del conteo nuevo, para que lo que entre a Caja Mayor sea el monto real, y
+avisa con *«CAJA AJUSTADA»*.
+
+⚠️ **AGREGAR GASTO y AGREGAR RETIRO no regeneran el retiro del cierre**, y está
+bien que sea así: ese retiro sale del **efectivo que se contó** al cerrar, y un
+gasto que se carga después no cambia lo que había en el cajón. Lo que sí cambia es
+el **esperado** del arqueo, y eso se ve en el resumen de la caja.
+
+Dos detalles prácticos:
+
+- El resumen de la caja y las pantallas del PdV que estuvieran abiertas se
+  **actualizan solas** después de un ajuste: no hace falta recargar para ver el
+  monto nuevo.
+- Si el botón de editar gasto **no aparece** en el resumen de una caja cerrada, es
+  que tenés permiso para gestionar cajas pero no para ajustarlas. Es a propósito:
+  mejor que no esté, que dejarte llenar el formulario para rechazarlo al final.
+- ⚠️ **Los gastos y retiros del turno normal —caja abierta— no piden nada de
+  esto.** El motivo se pide **sólo** sobre una caja que ya no está abierta, y desde
+  los Utilitarios del PdV nunca se puede ajustar una caja cerrada.
+
+## 12. Errores comunes
 
 ### "Saldo negativo al pagar gasto"
 
@@ -291,6 +345,21 @@ Si dice "Anular desde X módulo", ir al módulo origen y anular desde ahí (revi
 ### "Anular gasto recurrente — ¿cancela los próximos?"
 
 No. Anular solo cancela ESTE registro de gasto. La recurrencia sigue activa. Si querés cancelar todos los próximos: editar el Gasto y poner `esRecurrente=false`.
+
+### "Quiero agregar un gasto a una caja del PdV y me dice que ya fue cerrada"
+
+Es el guard de caja: a una caja cerrada no entra plata nueva sin dejar rastro. Si
+el gasto es real y falta, usá el **ajuste** — ver
+[Ajustar una caja del PdV ya cerrada](#11-ajustar-una-caja-del-pdv-ya-cerrada).
+Necesitás el permiso `FINANCIERO_CAJA_AJUSTAR` y un motivo escrito.
+
+### "Ajusté la caja y ahora el retiro del cierre no cuadra"
+
+Si lo que corregiste fue el **conteo** (AJUSTAR CONTEO), el retiro del cierre se
+regenera solo al confirmar. Si lo que hiciste fue **agregar un gasto o un retiro**,
+el retiro del cierre **no** se toca a propósito: refleja el efectivo que se contó,
+no lo que se cargó después. Y si el retiro ya entró a Caja Mayor, no se puede
+ajustar nada hasta revertir ese ingreso desde Caja Mayor.
 
 ---
 

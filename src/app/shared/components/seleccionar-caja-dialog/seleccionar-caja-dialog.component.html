@@ -1,7 +1,14 @@
 <h2 mat-dialog-title>Seleccionar caja abierta</h2>
 
 <mat-dialog-content>
-  <p class="hint">Hay varias cajas abiertas. Elegí a cuál querés unirte.</p>
+  <!-- Aviso de jornada anterior (D13): la caja quedó abierta de ayer. Unirse
+       en silencio metía las ventas de hoy en el arqueo de ayer. -->
+  <div class="aviso-jornada" *ngIf="hayAviso">
+    <mat-icon>schedule</mat-icon>
+    <span>{{ avisoJornadaAnterior }}</span>
+  </div>
+
+  <p class="hint">{{ textoIntro }}</p>
 
   <mat-list class="cajas-list">
     <button
@@ -27,6 +34,16 @@
 </mat-dialog-content>
 
 <mat-dialog-actions align="end">
+  <!-- Las tres salidas del aviso de jornada anterior. Sin aviso, "usar igual"
+       e "ir a cerrarla" no tienen a qué caja referirse. -->
+  <button mat-stroked-button *ngIf="hayAviso" (click)="usarIgual()">
+    <mat-icon>play_arrow</mat-icon>
+    Usar igual
+  </button>
+  <button mat-stroked-button *ngIf="hayAviso" (click)="irACerrarla()">
+    <mat-icon>lock</mat-icon>
+    Ir a cerrarla
+  </button>
   <button mat-stroked-button (click)="abrirNueva()">
     <mat-icon>add</mat-icon>
     Abrir nueva caja

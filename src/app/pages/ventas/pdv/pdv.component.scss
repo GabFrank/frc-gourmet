@@ -1253,6 +1253,33 @@ tr.example-element-row:not(.example-expanded-row):active {
 }
 
 
+/* M3: la cuenta seleccionada quedó en una caja que ya no está ABIERTO. Naranja
+   de advertencia (mismo criterio que el chip Q1 de deliveries): hay algo que
+   resolver, pero no se perdió nada. Todo por variables del tema. */
+.cuenta-caja-cerrada-aviso {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  margin-bottom: 6px;
+  border-radius: 6px;
+  border: 1px solid var(--warning-color);
+  background-color: color-mix(in srgb, var(--warning-color) 12%, transparent);
+  color: var(--warning-color);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  line-height: 1.3;
+
+  mat-icon {
+    flex: 0 0 auto;
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+}
+
+
 /* Badges del botón DELIVERY, contra la esquina superior derecha del botón.
    `.bottom-button` tiene `overflow: hidden`, así que van por dentro del borde
    en vez de montados encima como haría matBadge. */

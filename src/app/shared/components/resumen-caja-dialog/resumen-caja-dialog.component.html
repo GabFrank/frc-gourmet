@@ -168,12 +168,16 @@
               <span class="tile-label">{{ g.descripcion }}{{ g.categoria ? ' · ' + g.categoria : '' }}</span>
               <span class="tile-value">{{ g.monedaSimbolo }} {{ g.monto | number:'1.0-2' }}</span>
             </div>
+            <!-- B19: `puedeEditarGastos` ya combina GESTIONAR con AJUSTAR
+                 cuando la caja está cerrada, que es lo que exige el backend.
+                 Mostrar el botón sin AJUSTAR mandaba al usuario a completar el
+                 formulario para comerse un rechazo al guardar. -->
             <button
-              *appHasPermission="'FINANCIERO_CAJA_GESTIONAR'"
+              *ngIf="puedeEditarGastos"
               mat-icon-button
               class="tile-action-button"
               [disabled]="g.estado !== 'ACTIVO'"
-              [matTooltip]="g.estado === 'ACTIVO' ? 'Editar gasto' : 'No se puede editar (gasto anulado)'"
+              [matTooltip]="g.estado === 'ACTIVO' ? tooltipEditarGasto : 'No se puede editar (gasto anulado)'"
               (click)="editarGasto(g)">
               <mat-icon>edit</mat-icon>
             </button>

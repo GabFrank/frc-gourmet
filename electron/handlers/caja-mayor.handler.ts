@@ -33,6 +33,17 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { Permission } from '../../src/app/database/entities/personas/permission.entity';
 import { esIngreso, actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { ensurePermission, getEffectiveUser } from '../utils/auth.utils';
+import {
+  assertCajaOperableConAjuste,
+  cajaAbiertaDeDispositivo,
+  emitirCambioDeCajaAjustada,
+  errorCajaAbiertaDuplicada,
+  estamparTrazaAjuste,
+  guardarAperturaTraduciendoDuplicado,
+  withAperturaCajaLock,
+} from '../utils/caja-abierta.utils';
+import { enTransaccionSiPostgres } from '../utils/tx.utils';
+import { emitCajaCambio } from '../utils/mesa-emit.utils';
 import { bloquearSiPagoConsolidado } from './pago-consolidado-guard';
 import { PagoOrigenTipo } from '../../src/app/database/entities/financiero/pago-consolidado-enums';
 import { Vale } from '../../src/app/database/entities/rrhh/vale.entity';
@@ -1725,7 +1736,11 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     try {
       await ensurePermission(dataSource, getCurrentUser, 'CAJA_MAYOR_OPERAR');
       const repo = dataSource.getRepository(RetiroCaja);
-      const { detalles, ...retiroData } = data;
+      // `ajuste` se extrae antes del create: no es columna de la entidad, es la
+      // llave explícita para operar sobre una caja ya cerrada (D6).
+      const { detalles, ajuste: ajustePayload, ...retiroData } = data;
+
+      const cajaId = retiroData?.caja?.id ?? retiroData?.caja ?? null;
 
       const entity = repo.create({
         ...retiroData,
@@ -1739,10 +1754,35 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           return detalle;
         }),
       });
-
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
-      const result = await repo.save(entity);
-      const savedRetiro = Array.isArray(result) ? result[0] : result;
+
+      // Invariante de caja. El retiro automático del cierre NO pasa por acá
+      // (`retiro-cierre.util.ts` usa el repositorio directo), así que gatear este
+      // canal no autobloquea el cierre.
+      //
+      // Guard + `save` + traza en UNA transacción (M7/P7), sólo en Postgres: ahí
+      // el guard toma el `FOR SHARE` que cierra el TOCTOU con un cierre
+      // concurrente, y la traza del ajuste no puede quedarse atrás de un retiro
+      // ya commiteado. En SQLite `enTransaccionSiPostgres` corre sin transacción
+      // a propósito — ver su encabezado.
+      const { savedRetiro, ajuste } = await enTransaccionSiPostgres(dataSource, async (manager) => {
+        const esAjuste = await assertCajaOperableConAjuste(manager, cajaId, ajustePayload, {
+          dataSource,
+          getCurrentUser,
+          contexto: 'create-retiro-caja',
+          lock: 'read',
+        });
+        const result = await manager.getRepository(RetiroCaja).save(entity as any);
+        const fila = Array.isArray(result) ? result[0] : result;
+        if (esAjuste.esAjuste && cajaId) {
+          await estamparTrazaAjuste(manager, Number(cajaId), esAjuste.motivo!, getCurrentUser);
+        }
+        return { savedRetiro: fila, ajuste: esAjuste };
+      });
+
+      // Aviso post-commit a las terminales (P8): el ajuste movió el arqueo y
+      // `revisado` de una caja que el PdV y los resúmenes están mirando.
+      if (ajuste.esAjuste && cajaId) await emitirCambioDeCajaAjustada(dataSource, cajaId);
 
       return savedRetiro;
     } catch (error) {
@@ -1941,37 +1981,59 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
    * sido usado ya para abrir otra caja y que el dispositivo no tenga una caja abierta.
    */
   ipcMain.handle('abrir-caja-desde-conteo', async (_event: any, conteoId: number, dispositivoId: number) => {
-    await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
     try {
+      await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
+      // El permiso NO se unifica con `create-caja`, que exige
+      // FINANCIERO_CAJA_OPERAR (decisión B16 del plan): abrir la caja del turno
+      // es rutina del cajero, abrirla desde un conteo de Caja Mayor es una
+      // operación de gestión sobre el efectivo consolidado. Lo que sí queda
+      // igual que en `create-caja` es la conducta: guard + save en una sola
+      // transacción y traducción de la violación del índice único.
       if (!conteoId) throw new Error('conteoId requerido');
       if (!dispositivoId) throw new Error('Debe seleccionar un dispositivo');
 
-      const conteoRepo = dataSource.getRepository(Conteo);
-      const conteo = await conteoRepo.findOne({ where: { id: conteoId } });
-      if (!conteo) throw new Error(`Conteo ${conteoId} no encontrado`);
+      // Mismo candado que `create-caja`: serializa las aperturas de esta
+      // terminal dentro del proceso (en SQLite dos transacciones intercaladas
+      // comparten la física y un rollback se lleva puesto el otro INSERT).
+      const abierta: any = await withAperturaCajaLock(dispositivoId, () => dataSource.transaction(async (manager) => {
+        const conteoRepo = manager.getRepository(Conteo);
+        const conteo = await conteoRepo.findOne({ where: { id: conteoId } });
+        if (!conteo) throw new Error(`Conteo ${conteoId} no encontrado`);
 
-      const cajaRepo = dataSource.getRepository(Caja);
-      // El conteo no debe estar ya usado como apertura de otra caja.
-      const yaUsado = await cajaRepo.findOne({ where: { conteoApertura: { id: conteoId } } as any });
-      if (yaUsado) throw new Error(`Este conteo ya fue usado para abrir la caja #${yaUsado.id}`);
+        const cajaRepo = manager.getRepository(Caja);
+        // El conteo no debe estar ya usado como apertura de otra caja.
+        const yaUsado = await cajaRepo.findOne({ where: { conteoApertura: { id: conteoId } } as any });
+        if (yaUsado) throw new Error(`Este conteo ya fue usado para abrir la caja #${yaUsado.id}`);
 
-      // El dispositivo no debe tener una caja abierta.
-      const abierta = await cajaRepo.findOne({
-        where: { dispositivo: { id: dispositivoId }, estado: CajaEstado.ABIERTO } as any,
-      });
-      if (abierta) throw new Error('El dispositivo ya tiene una caja abierta');
+        // El dispositivo no debe tener una caja abierta. Cubre la carrera lenta;
+        // la real la cierra el índice único parcial (ver el helper).
+        const abierta = await cajaAbiertaDeDispositivo(manager, dispositivoId, {
+          lock: 'write', contexto: 'abrir-caja-desde-conteo',
+        });
+        if (abierta != null) throw errorCajaAbiertaDuplicada(abierta);
 
-      const currentUser = getEffectiveUser(getCurrentUser);
-      const caja = cajaRepo.create({
-        dispositivo: { id: dispositivoId } as any,
-        estado: CajaEstado.ABIERTO,
-        fechaApertura: new Date(),
-        conteoApertura: { id: conteoId } as any,
-        activo: true,
-      });
-      await setEntityUserTracking(dataSource, caja, currentUser?.id, false);
-      const saved = await cajaRepo.save(caja);
-      return Array.isArray(saved) ? saved[0] : saved;
+        const currentUser = getEffectiveUser(getCurrentUser);
+        const caja = cajaRepo.create({
+          dispositivo: { id: dispositivoId } as any,
+          estado: CajaEstado.ABIERTO,
+          fechaApertura: new Date(),
+          conteoApertura: { id: conteoId } as any,
+          activo: true,
+        });
+        await setEntityUserTracking(dataSource, caja, currentUser?.id, false);
+        const saved = await guardarAperturaTraduciendoDuplicado(
+          () => cajaRepo.save(caja),
+          dispositivoId,
+        );
+        return Array.isArray(saved) ? saved[0] : saved;
+      }));
+
+      // Aviso DESPUÉS del commit: el PdV de esa terminal se entera de la caja
+      // nueva sin recargar. Best-effort — nunca rompe la apertura.
+      if (abierta?.id) {
+        await emitCajaCambio(dataSource, abierta.id, abierta.estado ?? CajaEstado.ABIERTO, dispositivoId);
+      }
+      return abierta;
     } catch (error) {
       console.error(`Error abriendo caja desde conteo ${conteoId}:`, error);
       throw error;

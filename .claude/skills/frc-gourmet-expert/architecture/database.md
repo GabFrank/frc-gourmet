@@ -135,6 +135,59 @@ try {
 
 **Helper crítico:** `actualizarSaldoCajaMayor(qr, cajaMayorId, monedaId, formaPagoId, monto, tipoMovimiento)` en `electron/handlers/caja-mayor-utils.ts`. Único punto de actualización de `CajaMayorSaldo`. Llamarlo siempre dentro de la misma transacción que crea el `CajaMayorMovimiento`.
 
+### ⚠️ En SQLite, dos `dataSource.transaction()` intercalados son UNA transacción
+
+Esto no es un detalle de performance, es una trampa de correctitud que se
+descubrió **midiendo** (Fase 2 del guard de caja cerrada, 2026-09-28).
+
+Con el driver `sqlite3` —el del modo standalone, o sea el default— TypeORM
+mantiene **una sola conexión**. Dos `dataSource.transaction()` que se intercalan
+terminan compartiendo la **misma transacción física**: el `ROLLBACK` de una
+descarta también los `INSERT` de la otra. El caso real fue el doble click en
+«ABRIR CAJA»: la segunda apertura reventaba contra el índice único, su rollback
+se llevaba el INSERT de la ganadora, y quedaban **cero** cajas abiertas con el
+mensaje «ya hay una caja abierta» — que además era falso.
+
+Consecuencias prácticas, las dos:
+
+1. **Serializar en memoria** lo que no puede intercalarse dentro del proceso:
+   `withAperturaCajaLock(dispositivoId, fn)` (cola de promesas por clave, mismo
+   patrón que `withMesaLock`). No reemplaza al control de base: entre dos procesos
+   —dos Electron sobre el mismo archivo, dos nodos contra el mismo Postgres— el
+   único control es el índice único.
+2. **No agregar transacciones nuevas en SQLite sólo para tomar un lock que el
+   driver ignora.** Para eso está **`enTransaccionSiPostgres(ds, fn)`**
+   (`electron/utils/tx.utils.ts`):
+
+```typescript
+const guardado = await enTransaccionSiPostgres(dataSource, async (manager) => {
+  await assertCajaAbierta(manager, cajaId, { lock: 'read' });
+  return await manager.getRepository(GastoCaja).save(entity);
+});
+// el emit y los best-effort van ACÁ, después del commit
+```
+
+- **En Postgres abre transacción**, porque ahí cada una toma su propia conexión
+  del pool y es lo **único** que hace efectivos los `FOR SHARE` / `FOR UPDATE`:
+  `puedeBloquear()` exige una transacción activa, y fuera de una TypeORM lanza
+  `PessimisticLockTransactionRequiredError`. Es lo que cierra el TOCTOU.
+- **En SQLite corre el mismo cuerpo con el `manager` del `DataSource`**, sin
+  transacción. No se pierde nada: el guard corre igual (sin un lock que el driver
+  descartaba de todos modos) y el único escritor del proceso serializa de hecho.
+- **Regla de uso:** el `fn` recibe el `manager` y **todo** lo que tenga que ser
+  atómico va adentro; los emits SSE, los best-effort y lo que tarde (WhatsApp,
+  impresión) van **afuera, después**. Pasarle el `DataSource` a un guard que
+  corre dentro de una transacción lo convierte en un **no-op transaccional
+  silencioso**.
+- Hay también `enTransaccionActiva(manager)` para no anidar.
+
+Lo usan hoy `update-caja`, los tres canales de gasto de caja,
+`create-retiro-caja`, `createPago`, `createPagoDetalle` y
+`cerrarVentasAbiertasMesa`. Los que ya abrían transacción propia antes de este
+patrón (`createVenta`, `delivery-crear`, `transferir-venta-pdv`,
+`registrarCobroParcial`) **no** se migraron: son los que definen el modo de falla
+con el que hay que no intercalarse.
+
 ## Mapa de dominios y cantidades
 
 Conteo por carpeta de `src/app/database/entities/` (157 archivos `*.entity.ts` en total, incluye `base.entity.ts` abstracto):
@@ -177,6 +230,61 @@ Hay índices puntuales (no exhaustivo):
 - `NotificacionRrhh.claveDedupe` UNIQUE (para deduplicar notifs auto-generadas).
 
 `CajaMayorSaldo` documenta unicidad lógica `(cajaMayor, moneda, formaPago)` pero **no tiene constraint formal** — la unicidad se valida en handler.
+
+### Índices opcionales: el patrón del reintento en cada arranque
+
+`src/app/database/indices-opcionales.ts` — `asegurarIndicesOpcionales(ds)`, que
+`DatabaseService.initialize` llama **inmediatamente después de
+`runPendingMigrations`**, en las dos ramas (sqlite y postgres).
+
+Existe por un modo de falla que no es obvio. Un índice único que depende de que
+los datos estén limpios no se puede garantizar desde una migración:
+
+1. Si la migración **aborta** cuando encuentra duplicados, la instalación no
+   arranca — las migraciones corren al inicio de la app. El repo ya tomó esta
+   decisión antes; ver el comentario de
+   `1787255528889-IndicesRucYReconciliarMesas` ("un UNIQUE fallaría y dejaría la
+   app sin arrancar").
+2. Si en cambio **loguea y hace `return`** —lo que hace
+   `1790617935368-CajaUnicaAbiertaPorDispositivo`—, ⚠️ **TypeORM la marca como
+   ejecutada igual**, porque el `up()` no lanzó. Y `runMigrations()` sólo corre
+   las pendientes: aunque el operador después limpie los duplicados, **el índice
+   no se crearía nunca más** y la instalación quedaría sin el control primario
+   de su invariante, en silencio.
+
+El reintento de arranque es lo que hace que "cerrá los duplicados" vuelva a ser
+una instrucción que funciona: el mismo `CREATE UNIQUE INDEX IF NOT EXISTS`
+corre en cada arranque, con el mismo pre-chequeo.
+
+Reglas de la casa para todo lo que se agregue a ese archivo:
+
+- **Nunca lanza.** Un `try/catch` que loguea. Arrancar la app no puede depender
+  de un índice opcional.
+- **Idempotente.** `IF NOT EXISTS` + pre-chequeo antes de cada intento.
+- **Nunca toca filas de negocio.** Si los datos impiden el índice, se avisa con
+  la lista concreta y la decisión queda en una persona.
+- **SQL portable** entre SQLite y Postgres, o ramificado explícitamente.
+- **Devuelve un resumen** (`{ cajaUnicaAbierta: 'ok' | 'duplicados' | 'error' }`)
+  para que los tests puedan afirmar qué pasó; el arranque lo ignora.
+
+⚠️ **Los índices parciales tratan los NULL como distintos** en los dos drivers,
+así que el pre-chequeo tiene que filtrar la columna nulable o se vuelve en
+contra: dos filas con `dispositivo_id IS NULL` **no** violan
+`UQ_cajas_abierta_por_dispositivo`, pero un `GROUP BY` sin filtro las junta en un
+grupo `null (2)` y bloquearía para siempre la creación del índice, con un log
+que además le pide al operador cerrar cajas que no son el problema. De ahí el
+`AND dispositivo_id IS NOT NULL` en `dispositivosConCajasDuplicadas()` y en la
+migración.
+
+⚠️ Una migración de este tipo **exporta su `name`** (p. ej.
+`NOMBRE_MIGRACION_CAJA_UNICA_ABIERTA`) para que el test que borra su fila de
+`typeorm_migrations` y la vuelve a correr con duplicados sembrados no dependa de
+un string duplicado: con el nombre hardcodeado en el test, cambiar el timestamp
+dejaba el `DELETE` sin matchear y el bloque quedaba tautológico.
+
+**Índices que hoy viven ahí:** `UQ_cajas_abierta_por_dispositivo` — una sola
+caja `ABIERTO` por dispositivo. Detalle del invariante en
+[../domains/financiero-caja-mayor.md](../domains/financiero-caja-mayor.md).
 
 ## Recalcular saldos de Caja Mayor
 

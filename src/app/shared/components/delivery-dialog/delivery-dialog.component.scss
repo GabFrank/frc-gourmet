@@ -345,6 +345,21 @@ tr.mat-mdc-row {
   color: var(--success-color);
 }
 
+/* Q1: la venta de este pedido quedó en una caja cerrada. Naranja = "hay algo
+   que resolver, pero no se perdió nada", no rojo de error. */
+.caja-cerrada-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  vertical-align: middle;
+  border: 1px solid var(--warning-color);
+  color: var(--warning-color);
+}
+
 
 
 /* ── Detalle de un ítem, igual que el ticket del cliente ───────────────── */

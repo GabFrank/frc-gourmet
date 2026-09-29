@@ -1185,3 +1185,149 @@ P0-5: **Cubrir `materializarPedidoOnlineEnVenta`** — pedidos online de mesa (t
 **Tests (fase 6):** `scripts/test-mesa-una-venta-abierta-e2e.ts` — E2E completo para P0-1..P0-5. Uso: `npm run test:mesa-una-venta-abierta`. Los tests **deben fallar** si se revierten los guards (para verificar efectividad).
 
 **Invariante:** máximo 1 venta ABIERTA (`comanda IS NULL`) por `mesaId`.
+
+## ✅ RESUELTO preventivamente — Cinco horas de ventas y cobros contra una caja ya cerrada (cajas 122/123, 2026-09-24)
+
+**Síntoma (Don Franco, jueves 24/09):** la caja **#122** se cerró a las 14:35 y
+la **#123** se abrió a las 14:39 desde *Caja Mayor → abrir caja desde conteo*.
+La pestaña del PdV de la terminal principal siguió con `this.caja = #122` **hasta
+la 01:54 del viernes**, y el backend aceptó todo: **10 ventas** nuevas, **52
+cobros** de ventas de la #123 con `pago.caja = 122`, **11 gastos** por ₲1.111.000
+y el **retiro #155** — todo imputado a una caja cerrada. Después la #123 no se
+cerró a la noche, y el viernes el PdV se unió a ella en silencio (era la única
+abierta): el almuerzo del viernes cayó dentro de la caja del jueves.
+
+Arqueo: **#122 sobrante +₲2.123.453 / +R$1.468**, **#123 faltante −₲2.092.850 /
+−R$1.451,75**. Juntas suman +₲30.603 / +R$16,25 — **no faltaba plata, estaba mal
+imputada.**
+
+⚠️ **Nunca hubo dos cajas en estado `ABIERTO` a la vez.** El solape fue **de
+hecho**, no de estado: por eso ninguna pantalla lo mostraba.
+
+**Cuatro causas encadenadas (+ una latente):**
+
+| # | Causa |
+|---|---|
+| A | El PdV resolvía la caja **una sola vez** (`inicializarCaja`) y nunca la revalidaba. El único SSE que escuchaba era el de mesas/comandas. |
+| B | **Ningún handler que escribe con `caja` validaba `caja.estado === ABIERTO`**, salvo los egresos del cajón. `evaluarTerminalCaja` ya cargaba la `Caja` y sólo miraba `dispositivo`. |
+| C | `createPago` no exigía `pago.caja === venta.caja`: leía `pagoData.caja` tal como vino del renderer. De ahí los 52 pagos con `caja=122` sobre ventas `caja=123`. |
+| D | **Cerrar una caja ya cerrada no fallaba ni dejaba rastro.** El diálogo reutilizaba el `conteoCierre` existente y sólo llamaba `updateCaja` si no había uno; `update-caja` tampoco rechazaba `CERRADO → CERRADO`. |
+| E (latente) | La apertura era `count()` + `save()` **fuera de transacción**, y el guard sólo corría si `data.estado === 'ABIERTO'` — se salteaba omitiendo el campo, porque la entidad tiene `default: ABIERTO`. |
+
+**Resuelto** en `fix/caja-cerrada-guard` (tres fases + una ronda de fixes
+post-auditoría): guard central `electron/utils/caja-abierta.utils.ts` en las 14
+escrituras con `caja`, derivación server-side de `pago.caja` desde la venta en dos
+capas, índice único parcial `UQ_cajas_abierta_por_dispositivo` + candado de
+apertura, rechazo de `CERRADO → CERRADO` **y de `CERRADO → ABIERTO`** (no hay
+reapertura), campos no editables en `update-caja`, revalidación de la caja en el
+PdV con la cuenta de caja cerrada marcada, y evento `CAJA_CAMBIO` también en los
+canales de ajuste. Detalle en
+[../domains/ventas-pdv.md](../domains/ventas-pdv.md) y
+[../domains/financiero-caja-mayor.md](../domains/financiero-caja-mayor.md).
+Tests: `npm run test:caja-cerrada`, `npm run test:caja-apertura`.
+
+⚠️ **Lo que sigue abierto: las cajas 122/123 NO se corrigieron.** Es una decisión
+explícita de Gabriel, no un olvido: el PR **no trae ningún script de corrección
+de datos ni migración que mueva filas de negocio**, y la reimputación que
+proponía el informe de la investigación **no se ejecutó**. Los arqueos de esas
+dos cajas quedan descuadrados en producción para siempre. Si alguien vuelve a
+mirar esos números, el descuadre es dato histórico, no un bug vivo. El fix es
+**preventivo**: impide que vuelva a pasar, no arregla lo que pasó.
+
+## ✅ RESUELTO — `removeTabById('pdv')` era un no-op cuando el PdV se abrió desde el menú (2026-09-28)
+
+**Bug preexistente**, no lo introdujo el PR del guard de caja — pero ese PR
+agregó **seis caminos nuevos** que dependen de ese cierre (cancelar el diálogo de
+selección de caja, no querer abrir una, cerrar la caja desde el PdV…), así que
+multiplicó su alcance y se arregló acá (hallazgo M4 de la auditoría de diff).
+
+`pdv.component.ts` cerraba su propia pestaña con
+`this.tabsService.removeTabById('pdv')`. Pero el id de la tab depende de **quién
+la abrió**:
+
+| Origen | `tabId` |
+|---|---|
+| Hoja del menú lateral (`services/menu-tree.ts`) | `'pdv-tab'` |
+| Atajo del home (`home.component.ts`) y del dashboard de Ventas | `'pdv'` |
+
+`TabsService.removeTabById` hace `findIndex(tab => tab.id === tabId)` y **si no
+matchea no hace nada**. O sea: abierto desde el menú —el camino normal—, el PdV
+que se queda sin caja **no se cierra**; queda una pestaña vacía que el cajero
+tiene que cerrar a mano.
+
+La revalidación de caja **sí** contemplaba los dos ids
+(`filter(id => id === 'pdv' || id === 'pdv-tab')`) — la asimetría estaba
+reconocida en el mismo archivo—, así que el bug era sólo el cierre: abierto desde
+el menú (el camino normal), el PdV que se quedaba sin caja **no se cerraba** y
+quedaba una pestaña con `caja === null` que reabría el diálogo en cada click.
+
+**Fix:** helper privado `cerrarPestanaPdv()` que borra **los dos** ids, usado en
+los siete call sites. Es inocuo por construcción: `removeTabById` no hace nada si
+el id no existe (`tabs.service.ts`), y `addTab` deduplica por título, así que
+`pdv` y `pdv-tab` no pueden coexistir. Verificación de UI: paso 25 del guion de
+§12 del plan (abrir el PdV desde el menú **y** desde el home, y cancelar el
+diálogo de apertura en los dos).
+
+## `npm run test:mesa-una-venta-abierta` no termina el proceso — ABIERTO (menor, tooling)
+
+**Preexistente**, no lo introdujo el PR del guard de caja: ese PR no toca el
+script ni el worker. ⚠️ Como efecto práctico, la suite **no se corre** en las
+rondas de verificación (queda fuera de la lista y hay que matarla a mano), así
+que una regresión del invariante mesa↔venta no se detectaría ahí. Arreglarlo es
+una línea (abajo).
+
+El test **pasa** (imprime su resumen `✓ N ✗ 0`) pero **el proceso nunca sale**:
+hay que matarlo con Ctrl-C, y en CI o en un script encadenado se cuelga hasta el
+timeout.
+
+**Causa:** `registerVentasHandlers()` arranca `startRetryComandaWorker(ds)`, que
+crea un `setInterval` de 5 s (`RETRY_INTERVAL_MS`) que **nadie limpia**
+—`stopRetryComandaWorker()` existe pero no tiene ningún llamador—, así que el
+event loop de Node queda vivo indefinidamente. `scripts/test-mesa-una-venta-abierta-e2e.ts`
+termina con `if (failed > 0) process.exit(1);` y **no llama `process.exit(0)` en
+el camino feliz**; `await ds.destroy()` no alcanza, porque el que sostiene el
+loop es el timer, no la conexión.
+
+Los demás tests que registran handlers de ventas (`test:caja-cerrada`,
+`test:terminal-caja`, `test:cobro-parcial`, …) cierran con
+`process.exit(failed > 0 ? 1 : 0)` y por eso salen bien. **Arreglo de una línea:**
+cambiar el cierre del script a esa forma. Mismo patrón pendiente en
+`test-dashboard-rangos.ts`, `test-kpis-filtros-e2e.ts`,
+`test-receta-vinculo-e2e.ts` y `test-reportes-periodo.ts` (esos no registran el
+worker, así que hoy salen igual — pero son la misma bomba de tiempo si alguien
+les agrega handlers de ventas).
+
+## El guard «sólo quien abrió la caja puede cerrarla» compara contra el usuario del desktop — ABIERTO (medio)
+
+`update-caja` (`electron/handlers/financiero.handler.ts`) rechaza el cierre si
+`entity.createdBy.id !== getCurrentUser()?.id`. El problema es **`getCurrentUser()`
+a secas**: es el usuario logueado en el proceso Electron, no el de la request. En
+**modo servidor / PWA** —justo el caso para el que se escribió el guard, porque la
+PWA también cierra cajas— la comparación se hace contra el usuario del desktop,
+así que puede rechazar a quien sí abrió la caja y dejar pasar a quien no. Lo
+correcto es `getEffectiveUser`, que es lo que usan los demás guards del camino
+`/api/rpc`.
+
+⚠️ **No se arregla de un solo lado.** `createdBy` se estampa con el **mismo**
+`getCurrentUser()` en `create-caja`, así que cambiar sólo el comparador rompe el
+caso que hoy funciona (apertura y cierre desde el desktop). Hay que mover los dos
+juntos, con un assert por `withRequestUser` en `test:caja-apertura`. Descubierto
+durante la ronda de fixes post-auditoría del PR del guard de caja y anotado en el
+bloque `[15]` de esa suite; deuda registrada en §17 del plan y en
+[../workflows/todos-pendientes.md](../workflows/todos-pendientes.md).
+
+## ✅ RESUELTO — el modo Postgres de `test:sse-emit-postgres` corría el baseline de SQLite (2026-09-28)
+
+`scripts/test-sse-emit-postgres.ts` construía el `DataSource` pisando `type:
+'postgres'` **por spread** sobre el resultado de `getDataSourceOptions(tmpDir)`.
+Para cuando el spread aplicaba, `getMigrations()` ya había elegido el juego de
+migraciones **del driver original** (SQLite), así que la corrida moría con
+`syntax error at or near "AUTOINCREMENT"`. Estaba roto desde **antes** del PR del
+guard de caja; se detectó al querer usar el test para verificar el emisor de
+`CAJA_CAMBIO` sobre Postgres.
+
+**Fix:** pasar el override **como parámetro** de `getDataSourceOptions(tmpDir,
+{ type: 'postgres', host, port, … })`, que es quien decide las migraciones. Ahora
+el test pasa en Postgres y en SQLite. Mismo tropiezo que
+`test-locks-postgres-e2e.ts` documenta en su encabezado: **el `type` nunca se
+pisa después**.

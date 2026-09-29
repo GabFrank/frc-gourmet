@@ -14,6 +14,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 
 import { RepositoryService } from '../../../database/repository.service';
+import { esCajaCerrada, mensajeDeErrorCaja } from '../../utils/caja-error.util';
 import { Venta, VentaEstado } from '../../../database/entities/ventas/venta.entity';
 import { VentaItem, EstadoVentaItem } from '../../../database/entities/ventas/venta-item.entity';
 import { Moneda } from '../../../database/entities/financiero/moneda.entity';
@@ -909,6 +910,12 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
           estado: PagoEstado.ABIERTO,
           caja: this.data.caja,
           activo: true,
+          // `this.data.caja` es la caja del PdV, que NO siempre es la de la
+          // venta (un delivery pendiente de otro turno, una cuenta de mesa de la
+          // caja anterior). Con `ventaId` el backend resuelve la caja desde la
+          // venta y descarta la del payload: es lo que impide que un cobro
+          // termine imputado al arqueo equivocado.
+          ventaId: this.data.venta.id,
           // El backend valida que este dispositivo sea el dueño de la caja.
           // Si no lo es, rechaza el cobro (COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO).
           validarDispositivoCaja: true,
@@ -1089,6 +1096,8 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
             estado: PagoEstado.ABIERTO,
             caja: this.data.caja,
             activo: true,
+            // Ídem `agregarLinea`: la caja del Pago la decide la venta.
+            ventaId: this.data.venta.id,
             validarDispositivoCaja: true,
           } as any));
           await firstValueFrom(this.repositoryService.updateVenta(this.data.venta.id, {
@@ -1241,12 +1250,25 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
   }
 
   /**
-   * Mensaje legible para los rechazos del gate por terminal. El backend
-   * devuelve códigos; hasta 2026-08 el `catch` solo hacía `console.error` y el
-   * cajero veía que "no pasaba nada".
+   * Mensaje legible para los rechazos del gate por terminal y del guard de
+   * caja. El backend devuelve códigos; hasta 2026-08 el `catch` solo hacía
+   * `console.error` y el cajero veía que "no pasaba nada".
+   *
+   * `CAJA_CERRADA` es distinto de los otros dos: no hay nada que reintentar en
+   * esta pantalla (la caja de la venta no se reabre), así que se avisa, se
+   * CIERRA el diálogo y se le dice al llamador —el PdV o el panel de
+   * deliveries— con `cajaCerrada: true`, para que revalide su caja en vez de
+   * quedarse con un diálogo que va a rechazar todo. Sin esto el rechazo caía
+   * en el `fallback` genérico ("No se pudo finalizar el cobro") y el PdV nunca
+   * se enteraba.
    */
   private mostrarErrorCobro(error: any, fallback: string): void {
     const msg = String(error?.message || error || '');
+    if (esCajaCerrada(error)) {
+      this.snackBar.open(mensajeDeErrorCaja(error, fallback), 'CERRAR', { duration: 9000 });
+      this.dialogRef.close({ success: false, cajaCerrada: true });
+      return;
+    }
     let texto = fallback;
     if (msg.includes('COBRO_NO_PERMITIDO_EN_ESTE_DISPOSITIVO')) {
       texto = `No se pueden registrar pagos desde esta terminal: la caja se abrió en ${this.data.terminalDeLaCaja || 'otra terminal'}.`;
@@ -1521,6 +1543,11 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
           error: (e) => console.error('Error procesando stock (no-blocking):', e),
         });
         this.dialogRef.close({ success: true, credito: true, ventaId: result.ventaId, cpcId: result.cpcId });
+      } else if (result?.cajaCerrada) {
+        // `cobrar-venta-credito` también rechaza con `CAJA_CERRADA`. El aviso
+        // lo mostró el sub-diálogo; acá sólo se propaga para que el PdV
+        // revalide su caja.
+        this.dialogRef.close({ success: false, cajaCerrada: true });
       }
     });
   }
@@ -1576,7 +1603,9 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       this.dialogRef.close({ success: false, partial: true, pago: this.pago });
     } catch (e) {
       console.error('Error en cobro parcial:', e);
-      this.snackBar.open('No se pudo registrar el cobro parcial', 'Cerrar', { duration: 3500 });
+      // `registrarCobroParcial` también pasa por el guard de caja (§5.1), así
+      // que el rechazo se traduce en el mismo lugar que los demás.
+      this.mostrarErrorCobro(e, 'No se pudo registrar el cobro parcial');
       this.setProcessing(false);
     }
   }

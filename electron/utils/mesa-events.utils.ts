@@ -17,12 +17,26 @@
 import { BrowserWindow } from 'electron';
 import { EventEmitter } from 'events';
 
-export type MesaEventTipo = 'MESA_CAMBIO' | 'COMANDA_CAMBIO';
+export type MesaEventTipo = 'MESA_CAMBIO' | 'COMANDA_CAMBIO' | 'CAJA_CAMBIO';
 
 export interface MesaEventPayload {
   tipo: MesaEventTipo;
   mesaId?: number;
   comandaId?: number;
+  /** Sólo en `CAJA_CAMBIO`: la caja que se abrió, se cerró o se ajustó. */
+  cajaId?: number;
+  /** Sólo en `CAJA_CAMBIO`: `ABIERTO` | `CERRADO` con el que quedó. */
+  cajaEstado?: string;
+  /** Sólo en `CAJA_CAMBIO`: terminal dueña de esa caja, para filtrar en el cliente. */
+  dispositivoId?: number | null;
+  /**
+   * Número de orden del cambio.
+   *
+   * ⚠️ En `MESA_CAMBIO`/`COMANDA_CAMBIO` sale de la columna `seq` de la
+   * entidad. En **`CAJA_CAMBIO` es un `Date.now()`**: `cajas` no tiene columna
+   * `seq` y no se le agrega. Son secuencias distintas y **el cliente no las
+   * compara entre sí** — mezclarlas descartaría eventos válidos.
+   */
   seq: number;
   updatedAt: string; // ISO timestamp
 }

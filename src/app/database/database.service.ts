@@ -2,6 +2,7 @@ import { DataSource } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { createDataSource, getDataSourceOptions, DbConnectionOverride } from './database.config';
+import { asegurarIndicesOpcionales } from './indices-opcionales';
 
 /**
  * Service to manage database operations with TypeORM.
@@ -42,6 +43,9 @@ export class DatabaseService {
       console.log(`[DB] Backend: postgres @ ${override?.host}:${override?.port}/${override?.database}`);
       this.dataSource = await createDataSource(userDataPath, override);
       if (hasMigrations) await this.runPendingMigrations(this.dataSource);
+      // Índices que una migración no puede garantizar porque dependen de que los
+      // datos estén limpios. Nunca lanza; ver `indices-opcionales.ts`.
+      await asegurarIndicesOpcionales(this.dataSource);
       return this.dataSource;
     }
 
@@ -61,6 +65,7 @@ export class DatabaseService {
     try {
       this.dataSource = await createDataSource(userDataPath, override);
       if (hasMigrations) await this.runPendingMigrations(this.dataSource);
+      await asegurarIndicesOpcionales(this.dataSource);
       return this.dataSource;
     } catch (err) {
       console.error('[DB] Error al inicializar. Backup pre-migrate:', this.lastPreMigrationBackup, err);

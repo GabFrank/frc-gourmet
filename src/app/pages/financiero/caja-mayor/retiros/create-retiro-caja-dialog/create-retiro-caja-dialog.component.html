@@ -5,6 +5,9 @@
     <mat-spinner diameter="40"></mat-spinner>
   </div>
 
+  <!-- D6: retiro sobre una caja ya cerrada, con motivo y permiso de ajuste. -->
+  <p class="aviso-ajuste" *ngIf="avisoAjuste">{{ avisoAjuste }}</p>
+
   <form *ngIf="!loading" [formGroup]="form" class="form-container">
     <div class="form-row">
       <mat-form-field appearance="outline" class="flex-field">

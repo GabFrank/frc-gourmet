@@ -94,11 +94,18 @@ async function main() {
   // Datos base.
   await save(PdvConfig, { cantidad_mesas: 0 });
   const dispositivo: any = await save(Dispositivo, { nombre: 'CAJA-TEST', activo: true });
-  const nuevaCaja = async () => await save(Caja, {
+  // ⚠️ Una terminal por caja: desde la Fase 2 del guard de caja cerrada hay un
+  // índice único parcial que prohíbe dos cajas ABIERTO en el mismo dispositivo,
+  // y este fixture necesita DOS abiertas a la vez (probar que el delivery no se
+  // cruza de caja). Dos cajas abiertas en terminales distintas es el modelo
+  // real; dos en la misma nunca lo fue.
+  let seqTerminal = 0;
+  const nuevaCaja = async (disp?: any) => await save(Caja, {
     estado: 'ABIERTO', fechaApertura: new Date(), activo: true,
-    dispositivo, conteoApertura: await save(Conteo, {}),
+    dispositivo: disp ?? await save(Dispositivo, { nombre: `CAJA-TEST-${++seqTerminal}`, activo: true }),
+    conteoApertura: await save(Conteo, {}),
   });
-  const caja1: any = await nuevaCaja();
+  const caja1: any = await nuevaCaja(dispositivo);
   const caja2: any = await nuevaCaja();
   const zonaCerca: any = await save(PrecioDelivery, { descripcion: 'CENTRO', valor: 5000, activo: true });
   const zonaLejos: any = await save(PrecioDelivery, { descripcion: 'PERIFERIA', valor: 15000, activo: true });

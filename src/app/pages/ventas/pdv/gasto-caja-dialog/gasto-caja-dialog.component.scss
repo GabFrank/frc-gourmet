@@ -4,6 +4,16 @@
   opacity: 0.7;
 }
 
+/* Ajuste de una caja cerrada: amarillo de "atención", por variable de tema. */
+.gc-aviso-ajuste {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--warning-color);
+  color: var(--warning-color);
+  font-size: 0.8rem;
+}
+
 .gc-form {
   display: flex;
   flex-direction: column;

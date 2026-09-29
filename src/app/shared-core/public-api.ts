@@ -79,6 +79,17 @@ export type { Persona } from '../database/entities/personas/persona.entity';
 // --- Utilidades de dominio (datos puros, sin Angular/Electron) ---
 // Mensaje legible de un error del backend (desenvuelve el prefijo de IPC).
 export { mensajeDeError } from '../shared/utils/error-message.util';
+// Códigos de error del invariante de caja y su texto en español (fuente única
+// desktop + PWA: el código viaja dentro del `message`, ver el util).
+export {
+  CODIGO_CAJA_CERRADA,
+  CODIGO_CAJA_ABIERTA_DUPLICADA,
+  esCajaCerrada,
+  esCajaAbiertaDuplicada,
+  esEstadoCajaNoOperable,
+  esEstadoCajaCancelada,
+  mensajeDeErrorCaja,
+} from '../shared/utils/caja-error.util';
 // Forma de pago EFECTIVO (fuente única desktop + mobile).
 export { formaPagoEfectivo, formasPagoDeCaja, formasPagoEfectivoDeCaja } from '../shared/utils/forma-pago-efectivo.util';
 // Reglas de validación de Operación Financiera (fuente única desktop + mobile).
