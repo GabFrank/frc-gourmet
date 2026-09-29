@@ -50,9 +50,15 @@ export const ONBOARDING_TASKS: OnboardingTaskDef[] = [
     // count=1 cuando el operador cambio la contrasenia. Si el usuario admin
     // no existe (fue renombrado/eliminado), consideramos la tarea completa.
     detect: async (ds) => {
+      // `Usuario.password` es `select: false`: sin el addSelect el hash llega
+      // undefined, `verifyPassword` da false y la tarea se marcaría completa
+      // aunque el admin siguiera con la contraseña default.
       const admin = await ds
         .getRepository(Usuario)
-        .findOne({ where: { nickname: 'admin' } });
+        .createQueryBuilder('usuario')
+        .addSelect('usuario.password')
+        .where('usuario.nickname = :nickname', { nickname: 'admin' })
+        .getOne();
       if (!admin) return { count: 1 };
       const stillDefault = await verifyPassword('admin', admin.password);
       return { count: stillDefault ? 0 : 1 };

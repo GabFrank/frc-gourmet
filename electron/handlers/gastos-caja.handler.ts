@@ -4,6 +4,7 @@ import { GastoCaja } from '../../src/app/database/entities/financiero/gasto-caja
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
+import { selectUsuarioPublico } from '../utils/select-usuario-publico.util';
 
 /**
  * Handlers de gastos pagados con el efectivo de la caja de venta (PdV).
@@ -43,13 +44,17 @@ export function registerGastosCajaHandlers(
   ipcMain.handle('get-gastos-caja', async (_event, cajaId: number, incluirAnulados?: boolean) => {
     await ensurePermission(dataSource, getCurrentUser, ['VENTAS_PDV', 'FINANCIERO_CAJA_VER']);
     const repo = dataSource.getRepository(GastoCaja);
-    const where: any = { caja: { id: cajaId } };
-    if (!incluirAnulados) where.estado = 'ACTIVO';
-    return await repo.find({
-      where,
-      relations: ['gastoCategoria', 'moneda', 'formaPago', 'createdBy', 'createdBy.persona'],
-      order: { fecha: 'DESC', id: 'DESC' },
-    });
+    const qb = repo.createQueryBuilder('gasto')
+      .leftJoinAndSelect('gasto.gastoCategoria', 'gastoCategoria')
+      .leftJoinAndSelect('gasto.moneda', 'moneda')
+      .leftJoinAndSelect('gasto.formaPago', 'formaPago')
+      .where('gasto.caja_id = :cajaId', { cajaId })
+      .orderBy('gasto.fecha', 'DESC')
+      .addOrderBy('gasto.id', 'DESC');
+    if (!incluirAnulados) qb.andWhere('gasto.estado = :estado', { estado: 'ACTIVO' });
+    // `createdBy` recortado: con `relations` viajaba la `Persona` del cajero.
+    selectUsuarioPublico(qb, 'gasto.createdBy', 'createdBy');
+    return await qb.getMany();
   });
 
   // Anular un gasto (no se borra; queda registro)

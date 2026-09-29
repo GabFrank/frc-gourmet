@@ -24,6 +24,7 @@ import { buildEvolutionConfig } from '../services/notificacion.service';
 import { getEvolutionApiKey } from '../utils/notificaciones-secrets.util';
 import { sendWhatsappMedia, sendWhatsappText, normalizeWhatsappNumber } from '../services/whatsapp.service';
 import { dbQuery } from '../utils/db-query';
+import { selectUsuarioPublico } from '../utils/select-usuario-publico.util';
 
 interface EnvioCierreResult {
   ok: boolean;
@@ -559,13 +560,25 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   });
 
   // --- Caja Handlers ---
+  /**
+   * ⚠️ Los dos `Usuario` de la caja (quien la abrió y quien la revisó) van por
+   * `selectUsuarioPublico`, NO por `relations`. Con `relations` TypeORM hidrata
+   * la entidad entera, y con ella la `Persona` del cajero (documento, teléfono,
+   * dirección, email). `/api/rpc` es default-allow: la lista de cajas la puede
+   * pedir cualquier usuario con un JWT válido. Mismo criterio en `get-caja`,
+   * `get-caja-by-dispositivo`, `get-cajas-abiertas` y `computeResumenCaja`.
+   */
   ipcMain.handle('get-cajas', async () => {
     try {
       const repo = dataSource.getRepository(Caja);
-      return await repo.find({
-        relations: ['dispositivo', 'conteoApertura', 'conteoCierre', 'revisadoPor', 'revisadoPor.persona', 'createdBy', 'createdBy.persona'],
-        order: { fechaApertura: 'DESC' }
-      });
+      const qb = repo.createQueryBuilder('caja')
+        .leftJoinAndSelect('caja.dispositivo', 'dispositivo')
+        .leftJoinAndSelect('caja.conteoApertura', 'conteoApertura')
+        .leftJoinAndSelect('caja.conteoCierre', 'conteoCierre')
+        .orderBy('caja.fechaApertura', 'DESC');
+      selectUsuarioPublico(qb, 'caja.revisadoPor', 'revisadoPor');
+      selectUsuarioPublico(qb, 'caja.createdBy', 'createdBy');
+      return await qb.getMany();
     } catch (error) {
       console.error('Error getting cajas:', error);
       throw error;
@@ -634,10 +647,14 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('get-caja', async (_event: IpcMainInvokeEvent, id: number) => {
     try {
       const repo = dataSource.getRepository(Caja);
-      return await repo.findOne({
-        where: { id },
-        relations: ['dispositivo', 'conteoApertura', 'conteoCierre', 'revisadoPor', 'revisadoPor.persona', 'createdBy', 'createdBy.persona']
-      });
+      const qb = repo.createQueryBuilder('caja')
+        .leftJoinAndSelect('caja.dispositivo', 'dispositivo')
+        .leftJoinAndSelect('caja.conteoApertura', 'conteoApertura')
+        .leftJoinAndSelect('caja.conteoCierre', 'conteoCierre')
+        .where('caja.id = :id', { id });
+      selectUsuarioPublico(qb, 'caja.revisadoPor', 'revisadoPor');
+      selectUsuarioPublico(qb, 'caja.createdBy', 'createdBy');
+      return await qb.getOne();
     } catch (error) {
       console.error(`Error getting caja ${id}:`, error);
       throw error;
@@ -647,11 +664,15 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('get-caja-by-dispositivo', async (_event: IpcMainInvokeEvent, dispositivoId: number) => {
     try {
       const repo = dataSource.getRepository(Caja);
-      return await repo.find({
-        where: { dispositivo: { id: dispositivoId } },
-        relations: ['dispositivo', 'conteoApertura', 'conteoCierre', 'revisadoPor', 'revisadoPor.persona', 'createdBy', 'createdBy.persona'],
-        order: { fechaApertura: 'DESC' }
-      });
+      const qb = repo.createQueryBuilder('caja')
+        .leftJoinAndSelect('caja.dispositivo', 'dispositivo')
+        .leftJoinAndSelect('caja.conteoApertura', 'conteoApertura')
+        .leftJoinAndSelect('caja.conteoCierre', 'conteoCierre')
+        .where('dispositivo.id = :dispositivoId', { dispositivoId })
+        .orderBy('caja.fechaApertura', 'DESC');
+      selectUsuarioPublico(qb, 'caja.revisadoPor', 'revisadoPor');
+      selectUsuarioPublico(qb, 'caja.createdBy', 'createdBy');
+      return await qb.getMany();
     } catch (error) {
       console.error(`Error getting cajas for dispositivo ${dispositivoId}:`, error);
       throw error;
@@ -880,11 +901,13 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
   ipcMain.handle('get-cajas-abiertas', async () => {
     try {
       const repo = dataSource.getRepository(Caja);
-      return await repo.find({
-        where: { estado: CajaEstado.ABIERTO },
-        relations: ['dispositivo', 'conteoApertura', 'createdBy', 'createdBy.persona'],
-        order: { fechaApertura: 'DESC' }
-      });
+      const qb = repo.createQueryBuilder('caja')
+        .leftJoinAndSelect('caja.dispositivo', 'dispositivo')
+        .leftJoinAndSelect('caja.conteoApertura', 'conteoApertura')
+        .where('caja.estado = :estado', { estado: CajaEstado.ABIERTO })
+        .orderBy('caja.fechaApertura', 'DESC');
+      selectUsuarioPublico(qb, 'caja.createdBy', 'createdBy');
+      return await qb.getMany();
     } catch (error) {
       console.error('Error getting cajas abiertas:', error);
       throw error;

@@ -13,7 +13,20 @@ export class Usuario extends BaseModel {
   @Column({ unique: true })
   nickname!: string;
 
-  @Column()
+  /**
+   * Hash bcrypt. `select: false` es una bandera de query (NO genera DDL, no
+   * necesita migración): con ella la columna deja de venir en cualquier
+   * `find`/`leftJoinAndSelect` que hidrate un `Usuario`, y con eso el hash
+   * desaparece de las ~30 respuestas que arrastran `createdBy`.
+   *
+   * Los caminos que SÍ necesitan el hash lo piden explícito con
+   * `.addSelect('<alias>.password')` (login IPC y HTTP, validate-credentials,
+   * change-password, onboarding, seed del admin y migrate-passwords). Si
+   * agregás un lector nuevo y te olvidás del `addSelect`, el valor llega
+   * `undefined` — no falla ruidosamente, así que está cubierto por
+   * `npm run test:sin-fuga-datos`.
+   */
+  @Column({ select: false })
   password!: string;
 
   @Column({ default: true })

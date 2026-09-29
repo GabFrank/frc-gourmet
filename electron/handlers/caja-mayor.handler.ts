@@ -40,6 +40,7 @@ import { ValeEstado } from '../../src/app/database/entities/rrhh/vale-estado.enu
 import { generarRetiroDelCierre } from './retiro-cierre.util';
 import { getMovimientosBancariosUnificados } from '../utils/movimientos-bancarios';
 import { dispatchEvento } from '../services/notificacion.service';
+import { selectUsuarioPublico } from '../utils/select-usuario-publico.util';
 
 // Alias local para mantener firma legacy de actualizarSaldo
 const actualizarSaldo = actualizarSaldoCajaMayor;
@@ -1673,14 +1674,15 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         .leftJoinAndSelect('retiro.caja', 'caja')
         .leftJoinAndSelect('caja.dispositivo', 'dispositivo')
         .leftJoinAndSelect('retiro.cajaMayor', 'cajaMayor')
-        .leftJoinAndSelect('retiro.responsableRetiro', 'responsableRetiro')
-        .leftJoinAndSelect('responsableRetiro.persona', 'retiroPersona')
-        .leftJoinAndSelect('retiro.responsableIngreso', 'responsableIngreso')
-        .leftJoinAndSelect('responsableIngreso.persona', 'ingresoPersona')
         .leftJoinAndSelect('retiro.detalles', 'detalles')
         .leftJoinAndSelect('detalles.moneda', 'moneda')
         .leftJoinAndSelect('detalles.formaPago', 'formaPago')
         .orderBy('retiro.fechaRetiro', 'DESC');
+
+      // Los dos responsables van recortados: la UI muestra nickname o nombre y
+      // apellido, y con `leftJoinAndSelect` viajaba la `Persona` entera.
+      selectUsuarioPublico(qb, 'retiro.responsableRetiro', 'responsableRetiro', 'retiroPersona');
+      selectUsuarioPublico(qb, 'retiro.responsableIngreso', 'responsableIngreso', 'ingresoPersona');
 
       if (filtros?.estado) {
         qb.andWhere('retiro.estado = :estado', { estado: filtros.estado });
@@ -1699,15 +1701,18 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
   ipcMain.handle('get-retiro-caja', async (_event: any, id: number) => {
     try {
       const repo = dataSource.getRepository(RetiroCaja);
-      return await repo.findOne({
-        where: { id },
-        relations: [
-          'caja', 'caja.dispositivo', 'cajaMayor',
-          'responsableRetiro', 'responsableRetiro.persona',
-          'responsableIngreso', 'responsableIngreso.persona',
-          'detalles', 'detalles.moneda', 'detalles.formaPago',
-        ],
-      });
+      const qb = repo.createQueryBuilder('retiro')
+        .leftJoinAndSelect('retiro.caja', 'caja')
+        .leftJoinAndSelect('caja.dispositivo', 'dispositivo')
+        .leftJoinAndSelect('retiro.cajaMayor', 'cajaMayor')
+        .leftJoinAndSelect('retiro.detalles', 'detalles')
+        .leftJoinAndSelect('detalles.moneda', 'moneda')
+        .leftJoinAndSelect('detalles.formaPago', 'formaPago')
+        .where('retiro.id = :id', { id });
+      // Ídem `get-retiros-caja`: responsables recortados.
+      selectUsuarioPublico(qb, 'retiro.responsableRetiro', 'responsableRetiro', 'retiroPersona');
+      selectUsuarioPublico(qb, 'retiro.responsableIngreso', 'responsableIngreso', 'ingresoPersona');
+      return await qb.getOne();
     } catch (error) {
       console.error(`Error getting retiro caja ID ${id}:`, error);
       throw error;

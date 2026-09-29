@@ -1073,27 +1073,67 @@ mayoría de los mayores están cerrados. **Lo que quedó abierto:**
 ## Encontrados por la auditoría de los informes de delivery (2026-09-01)
 
 Dos hallazgos **preexistentes** que la auditoría destapó y que se dejaron sin
-arreglar a propósito, porque exceden el alcance del PR que los encontró.
+arreglar a propósito, porque excedían el alcance del PR que los encontró.
+**Al 2026-09-28: uno resuelto, uno abierto** — el hash de la contraseña en los
+canales de lectura se cerró en el PR `fix/usuario-password-select` (queda la
+deuda residual de datos personales, anotada dentro de ese ítem); la cancelación
+de una venta con delivery desde el Historial sigue abierta.
 
-### `getVentasByDateRange` hidrata entidades completas sobre un canal sin permiso
+### ✅ RESUELTO (2026-09-28) — El hash de la contraseña viajaba en los canales de lectura
 
-`electron/handlers/ventas.handler.ts` — el handler **no tiene `ensurePermission`**
-y **no está en `BLOCKED_CHANNELS`** del router RPC, que es default-allow. Cualquier
-usuario con un JWT válido puede invocarlo.
+Lo que decía este ítem: `getVentasByDateRange` y los demás RPC de lectura de caja
+hidrataban `createdBy` entero, o sea el **hash bcrypt** de la contraseña del
+cajero y el documento/teléfono/dirección de su `Persona`, sobre canales sin
+`ensurePermission` y fuera de `BLOCKED_CHANNELS` (`/api/rpc` es default-allow).
+Lo reconfirmó la investigación de las cajas 122/123 (2026-09-25).
 
-El PR de informes de delivery corrigió su propia parte (el repartidor ahora va con
-`leftJoin` + `addSelect` de `id` y `nombre`, en vez de arrastrar `salarioBase`,
-`numeroIps` y `cuentaBancariaPropia` del `Funcionario` y el documento de su
-`Persona`). Pero queda lo de antes:
+Se cerró en dos capas (PR `fix/usuario-password-select`, Fase 4 / D14 del plan
+`docs/planes/PLAN-caja-cerrada-guard.md`; alcance y verificación en
+`docs/planes/PLAN-usuario-password-select.md`):
 
-- `.leftJoinAndSelect('venta.createdBy', 'createdBy')` hidrata `Usuario`, y
-  **`Usuario.password` es un `@Column()` común, sin `select: false`** — o sea que
-  el hash de la contraseña del cajero viaja en cada fila de la lista de ventas.
-- Lo mismo con `cliente.persona`: documento, dirección y teléfono del cliente.
+1. **Fix de raíz:** `@Column({ select: false })` en `Usuario.password`. Es una
+   bandera de query, **no** DDL: no lleva migración. Con eso el hash deja de
+   venir en **todas** las lecturas del sistema de una sola vez. Los 7 caminos
+   que sí lo necesitan lo piden con `.addSelect('<alias>.password')`: login IPC
+   (`auth.handler`) y HTTP (`server/auth-routes`), `validate-credentials`,
+   `change-password`, `onboarding-tasks.config`, `seed-system`
+   (`markDefaultAdminMustChangePassword`) y `utils/migrate-passwords` — sin el
+   `addSelect` este último se volvía un **no-op silencioso**
+   (`if (!u.password) continue` salteaba a todos, sin lanzar ni loguear).
+2. **Recorte de la `Persona`** en los 11 canales del dominio caja, con el helper
+   nuevo `electron/utils/select-usuario-publico.util.ts` (`leftJoin` +
+   `addSelect` de `id`, `nickname`, `persona.{id,nombre,apellido}`):
+   `get-cajas`, `get-caja`, `get-caja-by-dispositivo`, `get-cajas-abiertas`,
+   `getResumenCaja`/`computeResumenCaja`, `getVentasByDateRange` (sus **tres**
+   usuarios: `venta.createdBy`, `caja.createdBy` y el `cliente.persona`),
+   `get-retiros-caja`, `get-retiro-caja`, `get-gastos-caja`, `get-egresos-caja`
+   y `delivery-listar-pdv` — que además publicaba `salarioBase`, `valorJornal`,
+   `numeroIps` y `cuentaBancariaPropia` del **repartidor**.
 
-Arreglarlo es acotar los `select` de esos joins y/o poner un `ensurePermission`.
-Lo segundo cambia quién puede usar el Historial de Ventas, así que necesita
-decidir el permiso primero.
+Regla que queda: **para leer el hash hay que pedirlo (`addSelect`); para exponer
+usuarios hay que usar `selectUsuarioPublico`.** No-regresión:
+`npm run test:sin-fuga-datos`.
+
+⚠️ **Deuda que NO entró en ese PR.** Quedan ~20 lecturas más que hidratan
+`createdBy`/`updatedBy` fuera del dominio caja. Con `select: false` ya **no
+publican el hash**, pero las que además traen `createdBy.persona` siguen
+publicando datos personales (documento, teléfono, email, dirección) de quien
+cargó el registro. Verificado el 2026-09-28 — los seis archivos con
+`createdBy.persona` son:
+
+- `caja-mayor.handler.ts:1149, 1198, 2061, 2090, 2336, 2373`
+- `banking.handler.ts:744, 773`
+- `dashboard-financiero.handler.ts:71`, `dashboard-ventas.handler.ts:332`
+- `vales.handler.ts:52`
+- `ventas.handler.ts:1619, 1644` (`getVenta` / `getVentaItems`)
+
+Y otras ~15 que hidratan el `Usuario` sin su persona (`financiero.handler.ts:352`
+y `:362` — `get-conteos` / `get-conteo` —, etc.). Se reproduce con:
+
+    rg -n "createdBy\.persona" electron/                    # las que publican datos personales
+    rg -n "'createdBy'" electron/handlers electron/utils    # todas las que hidratan el Usuario
+
+Está anotado también en `workflows/todos-pendientes.md`, que es el backlog real.
 
 ### Cancelar una venta con delivery desde el Historial deja el `Delivery` vivo
 

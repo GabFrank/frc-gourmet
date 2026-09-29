@@ -160,6 +160,32 @@ Los handlers sensibles **SÍ** validan permisos del usuario efectivo vía `ensur
 
 > Riesgo residual: el IPC `setCurrentUser` sigue existiendo y un usuario autenticado podría intentar spoofear a otro. Mitigado porque cada handler revalida permisos contra el usuario efectivo. Ver [reference/known-bugs.md](../reference/known-bugs.md).
 
+### `Usuario.password` es `select: false` (2026-09-28)
+
+`src/app/database/entities/personas/usuario.entity.ts` declara la columna con
+`@Column({ select: false })`. Es una **bandera de query, no un cambio de schema**: no genera DDL y
+no lleva migración. Existe porque hidratar un `Usuario` por una relación (`createdBy`,
+`revisadoPor`, `responsableRetiro`, …) publicaba el **hash bcrypt** en la respuesta de ~30 canales
+de lectura, y `/api/rpc` es default-allow.
+
+Dos reglas que se siguen sin excepción:
+
+1. **Para leer el hash hay que pedirlo.** `.addSelect('<alias>.password')` en el QueryBuilder. Sin
+   eso el valor llega `undefined` y el fallo es **silencioso**: `verifyPassword(x, undefined)`
+   devuelve `false` (el login rechaza siempre) y un `if (!u.password) continue` saltea todo. Los
+   siete lectores legítimos son login IPC y HTTP, `validate-credentials`, `change-password`,
+   `onboarding-tasks.config`, `seed-system` y `utils/migrate-passwords`.
+2. **Para exponer usuarios se usa `selectUsuarioPublico`**
+   (`electron/utils/select-usuario-publico.util.ts`): `leftJoin` + `addSelect` de `id`, `nickname` y
+   `persona.{id,nombre,apellido}` — lo que la UI muestra del cajero y nada más. Nunca
+   `leftJoinAndSelect` de `createdBy` + `createdBy.persona`, que arrastra documento, teléfono,
+   dirección, email y fecha de nacimiento.
+
+Escribir el hash sobre una entidad cargada sin la columna **no la borra**: TypeORM ignora las
+propiedades `undefined` al calcular el diff del UPDATE. Está verificado en
+`npm run test:sin-fuga-datos` (asserts 5, 5b y 5c), que es también la garantía de no-regresión de
+todo lo anterior.
+
 ## Auth Guard
 
 `src/app/guards/auth.guard.ts`:

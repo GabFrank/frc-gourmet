@@ -9,7 +9,14 @@ import { hashPassword, isHashed } from './password.utils';
  */
 export async function migratePlaintextPasswords(dataSource: DataSource): Promise<void> {
   const repo = dataSource.getRepository(Usuario);
-  const todos = await repo.find();
+  // `Usuario.password` es `select: false`: con un `find()` pelado el hash llega
+  // undefined, el `if (!u.password) continue` de abajo saltea a todos y la
+  // migración se vuelve un no-op SILENCIOSO (no lanza, no loguea). Cubierto por
+  // el assert 7 de `npm run test:sin-fuga-datos`.
+  const todos = await repo
+    .createQueryBuilder('usuario')
+    .addSelect('usuario.password')
+    .getMany();
   let migrados = 0;
   for (const u of todos) {
     if (!u.password) continue;
