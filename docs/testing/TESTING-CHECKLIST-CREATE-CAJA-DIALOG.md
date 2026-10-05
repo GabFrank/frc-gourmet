@@ -3,7 +3,7 @@
 **Fecha**: 2026-09-04  
 **Bugfix**: Resolver WSOD al abrir diálogo de crear/conteo de caja  
 **PR**: #287 (cursor/fix-create-caja-dialog-wsod-bd0a)  
-**Plan**: `docs/planes/PLAN-CREATE-CAJA-DIALOG-WSOD.md`  
+**Plan**: (plan efímero, ya borrado)  
 **Responsable QA**: Asistente general (Grok Bot, snapshot `frc_gourmet_dev`)
 
 ---

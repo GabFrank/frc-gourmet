@@ -509,7 +509,7 @@ El módulo se cerró para poder usarse en producción
 ## Caja cerrada — deuda que dejó el PR del guard (2026-09-28)
 
 Las tres primeras salen de decisiones explícitas de Gabriel al aprobar el plan
-(§0 de `docs/planes/PLAN-caja-cerrada-guard.md`): se dejaron **fuera de alcance a
+(§0 de `PLAN-caja-cerrada-guard`, ya borrado): se dejaron **fuera de alcance a
 propósito**, no se olvidaron.
 
 - **Q4 — Aviso visible de cajas duplicadas / índice no creado.** Si una base

@@ -1088,8 +1088,8 @@ cajero y el documento/teléfono/dirección de su `Persona`, sobre canales sin
 Lo reconfirmó la investigación de las cajas 122/123 (2026-09-25).
 
 Se cerró en dos capas (PR `fix/usuario-password-select`, Fase 4 / D14 del plan
-`docs/planes/PLAN-caja-cerrada-guard.md`; alcance y verificación en
-`docs/planes/PLAN-usuario-password-select.md`):
+`PLAN-caja-cerrada-guard`, ya borrado; alcance y verificación en
+`PLAN-usuario-password-select`, ya borrado; ver git log):
 
 1. **Fix de raíz:** `@Column({ select: false })` en `Usuario.password`. Es una
    bandera de query, **no** DDL: no lleva migración. Con eso el hash deja de

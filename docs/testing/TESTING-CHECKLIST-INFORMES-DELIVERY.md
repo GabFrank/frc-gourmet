@@ -1,7 +1,7 @@
 # Checklist de pruebas — Delivery y retiro en los informes de venta
 
 > Branch `claude/sales-reports-delivery-ihwnbi`. Cubre lo agregado en las fases
-> 0–5 del plan `docs/planes/PLAN-INFORMES-DELIVERY.md`.
+> 0–5 del plan `PLAN-INFORMES-DELIVERY` (efímero, ya borrado).
 >
 > **Requiere reiniciar la app**: hay cambios en `electron/handlers/`,
 > `electron/utils/` y una migración nueva.
