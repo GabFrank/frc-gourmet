@@ -13,7 +13,10 @@
  */
 import { ipcMain } from 'electron';
 import { randomUUID } from 'crypto';
-import { DataSource, EntityManager, In } from 'typeorm';
+import { DataSource, EntityManager, In, Like } from 'typeorm';
+import { ConfiguracionRrhh } from '../../src/app/database/entities/rrhh/configuracion-rrhh.entity';
+import { DrLiquidacionPendiente } from '../../src/app/database/entities/rrhh/disciplina/dr-liquidacion-pendiente.entity';
+import { DrLiquidacionPendienteEstado } from '../../src/app/database/entities/rrhh/disciplina/dr-liquidacion-pendiente-estado.enum';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.entity';
 import { Penalizacion } from '../../src/app/database/entities/rrhh/penalizacion.entity';
@@ -29,6 +32,8 @@ import {
   calcularMulta,
   mesDestino,
   validarMoneda,
+  aplicarTope,
+  mesSiguiente,
   DisciplinaError,
   EstadosLiquidacionPorMes,
   FaltaPrevia,
@@ -80,6 +85,35 @@ async function funcionarioDeSesion(ds: DataSource, user: Usuario): Promise<Funci
   });
   if (!f) fail('SIN_FUNCIONARIO', 'TU USUARIO NO ESTÁ VINCULADO A UN FUNCIONARIO');
   return f;
+}
+
+/** Tope mensual DR (DR_TOPE_DESCUENTO_MENSUAL); 0 o vacío = sin tope. */
+async function topeMensual(m: EntityManager): Promise<number | null> {
+  const c = await m.getRepository(ConfiguracionRrhh).findOne({ where: { clave: 'DR_TOPE_DESCUENTO_MENSUAL' } as any });
+  const v = Number(c?.valor);
+  return v > 0 ? v : null;
+}
+
+/** Suma de Penalizacion [DR] vigentes del funcionario en el mes (YYYY-MM). */
+async function drDescontadoEnMes(m: EntityManager, funcionarioId: number, mes: string): Promise<number> {
+  const pens = await m.getRepository(Penalizacion).find({
+    where: { funcionario: { id: funcionarioId }, anulada: false, descripcion: Like(`${PREFIJO_DR}%`) } as any,
+  });
+  return pens.filter((p: any) => fechaIso(p.fecha).slice(0, 7) === mes).reduce((s, p: any) => s + (Number(p.monto) || 0), 0);
+}
+
+/** Si hay un borrador de liquidación de ese funcionario y mes, queda desactualizado hasta regenerarlo. */
+async function marcarBorradorDesactualizado(m: EntityManager, funcionarioId: number, mes: string | null, motivo: string): Promise<void> {
+  if (!mes) return;
+  const liq = await m.getRepository(LiquidacionSueldo).findOne({ where: { funcionario: { id: funcionarioId }, periodo: mes } as any });
+  if (!liq || (liq.estado as string) !== 'BORRADOR') return;
+  const ya = await m.getRepository(DrLiquidacionPendiente).count({
+    where: { funcionario: { id: funcionarioId }, mes, estado: DrLiquidacionPendienteEstado.PENDIENTE } as any,
+  });
+  if (ya) return;
+  await m.getRepository(DrLiquidacionPendiente).save(m.getRepository(DrLiquidacionPendiente).create({
+    funcionario: { id: funcionarioId }, mes, liquidacion: { id: liq.id }, motivo: up(motivo), estado: DrLiquidacionPendienteEstado.PENDIENTE,
+  } as any));
 }
 
 /** Calcula n.º de ocurrencia, resultado y monto de una falta nueva con el motor. */
@@ -260,6 +294,7 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
 
       let penalizacion: Penalizacion | null = null;
       let mes: string | null = null;
+      let cuotasInfo: { mes: string; monto: number }[] = [];
       const monto = Number(falta.montoCalculado) || 0;
       if (falta.resultado === DrFaltaResultado.MULTA && monto > 0) {
         try {
@@ -268,19 +303,37 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
         } catch (e) {
           aError(e);
         }
-        const fechaPen = mes === fechaIso(falta.fecha).slice(0, 7) ? fechaIso(falta.fecha) : `${mes}-01`;
-        const nueva = m.getRepository(Penalizacion).create({
-          funcionario: { id: falta.funcionario.id } as any,
-          tipo: PenalizacionTipo.OTRO,
-          descripcion: `${PREFIJO_DR} ${falta.tipoFalta.nombre} #${falta.nOcurrencia} (FALTA ${falta.id})`.toUpperCase(),
-          monto,
-          fecha: fechaPen as any,
-          registradoPor: { id: user.id } as any,
-          anulada: false,
-          autoGenerada: true,
-        });
-        await setEntityUserTracking(dataSource, nueva, user.id, false);
-        penalizacion = await m.getRepository(Penalizacion).save(nueva);
+        // Tope mensual: lo que excede pasa en cuotas a los meses siguientes (máx. 24).
+        const tope = await topeMensual(m);
+        const cuotas: { mes: string; monto: number }[] = [];
+        let resto = monto;
+        let mesCuota = mes!;
+        for (let k = 0; resto > 0 && k < 24; k++) {
+          const t = aplicarTope(resto, await drDescontadoEnMes(m, falta.funcionario.id, mesCuota), tope);
+          if (t.montoEsteMes > 0) cuotas.push({ mes: mesCuota, monto: t.montoEsteMes });
+          resto = t.excedente;
+          mesCuota = mesSiguiente(mesCuota);
+        }
+        if (resto > 0) fail('TOPE_EXCEDIDO', 'LA MULTA SUPERA 24 MESES DE TOPE: REVISÁ EL TOPE MENSUAL');
+        const base = `${PREFIJO_DR} ${falta.tipoFalta.nombre} #${falta.nOcurrencia} (FALTA ${falta.id})`.toUpperCase();
+        for (let k = 0; k < cuotas.length; k++) {
+          const c = cuotas[k];
+          const nueva = m.getRepository(Penalizacion).create({
+            funcionario: { id: falta.funcionario.id } as any,
+            tipo: PenalizacionTipo.OTRO,
+            descripcion: cuotas.length > 1 ? `${base} CUOTA ${k + 1}/${cuotas.length}` : base,
+            monto: c.monto,
+            fecha: (c.mes === fechaIso(falta.fecha).slice(0, 7) ? fechaIso(falta.fecha) : `${c.mes}-01`) as any,
+            registradoPor: { id: user.id } as any,
+            anulada: false,
+            autoGenerada: true,
+          });
+          await setEntityUserTracking(dataSource, nueva, user.id, false);
+          const g = await m.getRepository(Penalizacion).save(nueva);
+          if (k === 0) penalizacion = g;
+          await marcarBorradorDesactualizado(m, falta.funcionario.id, c.mes, `FALTA ${falta.id} APROBADA`);
+        }
+        cuotasInfo = cuotas;
       }
       const res = await repo.update(
         { id: faltaId, estado: falta.estado } as any,
@@ -294,7 +347,7 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
         } as any,
       );
       if (!res.affected) fail('ESTADO_INVALIDO', 'LA FALTA CAMBIÓ MIENTRAS SE APROBABA'); // revierte la transacción
-      return { ok: true, penalizacionId: penalizacion?.id ?? null, mesDestino: mes };
+      return { ok: true, penalizacionId: penalizacion?.id ?? null, mesDestino: mes, cuotas: cuotasInfo };
     });
   });
 
@@ -312,13 +365,23 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
           : [DrFaltaEstado.REGISTRADA, DrFaltaEstado.APELADA, DrFaltaEstado.APROBADA];
         if (!permitidos.includes(falta.estado)) fail('ESTADO_INVALIDO', 'NO SE PUEDE CAMBIAR EL ESTADO DE ESTA FALTA');
         if (falta.penalizacion) {
-          const liq = await m.getRepository(LiquidacionSueldo).findOne({
-            where: { funcionario: { id: falta.funcionario.id }, periodo: falta.mesDestino ?? '' } as any,
+          // Todas las cuotas de esta falta (misma marca «(FALTA id)»).
+          const pens: any[] = await m.getRepository(Penalizacion).find({
+            where: { funcionario: { id: falta.funcionario.id }, anulada: false, descripcion: Like(`${PREFIJO_DR}%(FALTA ${falta.id})%`) } as any,
           });
-          if (liq && ['APROBADA', 'PAGADA'].includes(liq.estado as string)) {
-            fail('LIQUIDACION_CERRADA', 'LA MULTA YA ESTÁ EN UNA LIQUIDACIÓN APROBADA O PAGADA');
+          for (const p of pens) {
+            const mesP = fechaIso(p.fecha).slice(0, 7);
+            const liq = await m.getRepository(LiquidacionSueldo).findOne({
+              where: { funcionario: { id: falta.funcionario.id }, periodo: mesP } as any,
+            });
+            if (liq && ['APROBADA', 'PAGADA'].includes(liq.estado as string)) {
+              fail('LIQUIDACION_CERRADA', 'LA MULTA YA ESTÁ EN UNA LIQUIDACIÓN APROBADA O PAGADA');
+            }
           }
-          await m.getRepository(Penalizacion).update({ id: falta.penalizacion.id } as any, { anulada: true } as any);
+          for (const p of pens) {
+            await m.getRepository(Penalizacion).update({ id: p.id } as any, { anulada: true } as any);
+            await marcarBorradorDesactualizado(m, falta.funcionario.id, fechaIso(p.fecha).slice(0, 7), `FALTA ${falta.id} ${estadoFinal}`);
+          }
         }
         const res = await repo.update(
           { id: faltaId, estado: falta.estado } as any,

@@ -22,6 +22,7 @@ import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/
 import { CuotaEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
 import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
 import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
+import { DrLiquidacionPendiente } from '../../src/app/database/entities/rrhh/disciplina/dr-liquidacion-pendiente.entity';
 import { MovimientoCliente } from '../../src/app/database/entities/financiero/movimiento-cliente.entity';
 import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
 import {
@@ -829,6 +830,11 @@ export function registerLiquidacionSueldoHandlers(
       liq.totalNeto = tot.neto;
       await setEntityUserTracking(dataSource, liq, userId, true);
       await liqRepo.save(liq);
+      // DR: el borrador regenerado ya refleja las multas/premios aprobados o anulados.
+      await queryRunner.manager.getRepository(DrLiquidacionPendiente).update(
+        { funcionario: { id: funcionarioId }, mes: periodo, estado: 'PENDIENTE' } as any,
+        { estado: 'RESUELTO', resueltoEn: new Date() } as any,
+      );
 
       await queryRunner.commitTransaction();
       return liq;
@@ -923,6 +929,11 @@ export function registerLiquidacionSueldoHandlers(
     const liq = await repo.findOne({ where: { id } });
     if (!liq) throw new Error(`Liquidacion ${id} no encontrada`);
     if (liq.estado !== LiquidacionSueldoEstado.BORRADOR) throw new Error('Solo BORRADOR puede ser aprobado');
+    const liqFull: any = await repo.findOne({ where: { id }, relations: ['funcionario'] });
+    const drPend = await dataSource.getRepository(DrLiquidacionPendiente).count({
+      where: { funcionario: { id: liqFull?.funcionario?.id }, mes: liq.periodo, estado: 'PENDIENTE' } as any,
+    });
+    if (drPend) throw new Error('LIQUIDACIÓN DESACTUALIZADA POR CAMBIOS DE DISCIPLINA: REGENERÁ EL BORRADOR ANTES DE APROBAR');
     const userId = getCurrentUser()?.id;
     const userEntity = userId
       ? await dataSource.getRepository(Usuario).findOne({ where: { id: userId } })

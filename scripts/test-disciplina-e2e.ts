@@ -335,6 +335,31 @@ async function main() {
   const misP = await como(colab, () => call('dr-mis-premios'));
   ok(misP.length === 1 && misP[0].periodo.id === perC.id, 'mis premios: ANA ve solo el suyo', misP.length);
 
+  // ===== O) Tope mensual y borrador desactualizado =====
+  console.log('\n[O] Tope mensual y borrador desactualizado');
+  const { ConfiguracionRrhh } = E('rrhh/configuracion-rrhh.entity');
+  const { DrLiquidacionPendiente } = E('rrhh/disciplina/dr-liquidacion-pendiente.entity');
+  const cfgRepo = ds.getRepository(ConfiguracionRrhh);
+  const cfgTope: any = await cfgRepo.findOne({ where: { clave: 'DR_TOPE_DESCUENTO_MENSUAL' } });
+  if (cfgTope) await cfgRepo.update({ id: cfgTope.id }, { valor: '30000' });
+  else await save(ConfiguracionRrhh, { clave: 'DR_TOPE_DESCUENTO_MENSUAL', valor: '30000', tipo: 'NUMBER', descripcion: 'TEST' });
+  await call('dr-registrar-falta', { tipoFaltaId: tipo.id, fecha: '2027-02-03', funcionarioIds: [fB.id] });
+  const rT = await call('dr-registrar-falta', { tipoFaltaId: tipo.id, fecha: '2027-02-10', funcionarioIds: [fB.id] });
+  const liqB = await call('generar-liquidacion-borrador', { funcionarioId: fB.id, periodo: '2027-02', monedaPagoId: pyg.id });
+  const apT = await call('dr-aprobar-falta', rT.creadas[0].id);
+  ok(apT.cuotas.length === 2 && apT.cuotas[0].mes === '2027-02' && approx(apT.cuotas[0].monto, 30000) && apT.cuotas[1].mes === '2027-03' && approx(apT.cuotas[1].monto, 20000),
+    'multa 50.000 con tope 30.000 → 30.000 feb + 20.000 mar', apT.cuotas);
+  const pendO = await ds.getRepository(DrLiquidacionPendiente).count({ where: { mes: '2027-02', estado: 'PENDIENTE' } });
+  ok(pendO === 1, 'el borrador de febrero queda desactualizado', pendO);
+  await rechaza(call('aprobar-liquidacion-sueldo', liqB.id), /DESACTUALIZADA/, 'no se aprueba un borrador desactualizado');
+  const liqB2 = await call('generar-liquidacion-borrador', { funcionarioId: fB.id, periodo: '2027-02', monedaPagoId: pyg.id });
+  const detB = await call('get-liquidacion-sueldo', liqB2.id);
+  ok(approx(detB.totalDescuentos, 30000), 'borrador regenerado descuenta solo la cuota de 30.000', detB.totalDescuentos);
+  ok(await ds.getRepository(DrLiquidacionPendiente).count({ where: { estado: 'PENDIENTE' } }) === 0, 'regenerar resuelve el pendiente');
+  await call('aprobar-liquidacion-sueldo', liqB2.id);
+  await rechaza(call('dr-anular-falta', rT.creadas[0].id, 'error'), 'LIQUIDACION_CERRADA', 'no se anula si una cuota está en liquidación aprobada');
+  await cfgRepo.update({ clave: 'DR_TOPE_DESCUENTO_MENSUAL' }, { valor: '0' });
+
   await ds.destroy();
   console.log(`\n[disciplina-e2e] ${passed} OK, ${failed} fallas`);
   process.exit(failed ? 1 : 0);
