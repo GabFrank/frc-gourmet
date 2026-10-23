@@ -49,6 +49,26 @@ import { FuncionarioTurno } from './entities/rrhh/funcionario-turno.entity';
 import { Asistencia } from './entities/rrhh/asistencia.entity';
 import { FuncionarioRostro } from './entities/rrhh/funcionario-rostro.entity';
 import { Penalizacion } from './entities/rrhh/penalizacion.entity';
+// RRHH - Disciplina y Reconocimiento (tablas dr_*)
+import { DrGrupo } from './entities/rrhh/disciplina/dr-grupo.entity';
+import { DrGrupoMiembro } from './entities/rrhh/disciplina/dr-grupo-miembro.entity';
+import { DrTipoFalta } from './entities/rrhh/disciplina/dr-tipo-falta.entity';
+import { DrChecklistItem } from './entities/rrhh/disciplina/dr-checklist-item.entity';
+import { DrGravedad } from './entities/rrhh/disciplina/dr-gravedad.entity';
+import { DrTipoError } from './entities/rrhh/disciplina/dr-tipo-error.entity';
+import { DrPremio } from './entities/rrhh/disciplina/dr-premio.entity';
+import { DrCriterio } from './entities/rrhh/disciplina/dr-criterio.entity';
+import { DrEncuesta } from './entities/rrhh/disciplina/dr-encuesta.entity';
+import { DrEncuestaPregunta } from './entities/rrhh/disciplina/dr-encuesta-pregunta.entity';
+import { DrFalta } from './entities/rrhh/disciplina/dr-falta.entity';
+import { DrError } from './entities/rrhh/disciplina/dr-error.entity';
+import { DrPuntajeCriterio } from './entities/rrhh/disciplina/dr-puntaje-criterio.entity';
+import { DrPeriodo } from './entities/rrhh/disciplina/dr-periodo.entity';
+import { DrResultadoPremio } from './entities/rrhh/disciplina/dr-resultado-premio.entity';
+import { DrParticipacion } from './entities/rrhh/disciplina/dr-participacion.entity';
+import { DrVotoAgregado } from './entities/rrhh/disciplina/dr-voto-agregado.entity';
+import { DrRespuestaTexto } from './entities/rrhh/disciplina/dr-respuesta-texto.entity';
+import { DrLiquidacionPendiente } from './entities/rrhh/disciplina/dr-liquidacion-pendiente.entity';
 import { Feriado } from './entities/rrhh/feriado.entity';
 import { HoraExtra } from './entities/rrhh/hora-extra.entity';
 import { Vale } from './entities/rrhh/vale.entity';
@@ -300,6 +320,7 @@ import { ProveedorCuentaBancariaDefault1789587015222 } from './migrations/178958
 import { PagoConsolidadoDetalleCuentaDestino1789587032713 } from './migrations/1789587032713-PagoConsolidadoDetalleCuentaDestino';
 import { MovimientoBancarioCuentaDestino1789587049751 } from './migrations/1789587049751-MovimientoBancarioCuentaDestino';
 import { CajaUnicaAbiertaPorDispositivo1790617935368 } from './migrations/1790617935368-CajaUnicaAbiertaPorDispositivo';
+import { DisciplinaReconocimiento1792785488053 } from './migrations/1792785488053-DisciplinaReconocimiento';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -450,6 +471,26 @@ function getEntitiesList(): any[] {
       Asistencia,
       FuncionarioRostro,
       Penalizacion,
+      // Disciplina y Reconocimiento
+      DrGrupo,
+      DrGrupoMiembro,
+      DrTipoFalta,
+      DrChecklistItem,
+      DrGravedad,
+      DrTipoError,
+      DrPremio,
+      DrCriterio,
+      DrEncuesta,
+      DrEncuestaPregunta,
+      DrFalta,
+      DrError,
+      DrPuntajeCriterio,
+      DrPeriodo,
+      DrResultadoPremio,
+      DrParticipacion,
+      DrVotoAgregado,
+      DrRespuestaTexto,
+      DrLiquidacionPendiente,
       Feriado,
       HoraExtra,
       Vale,
@@ -735,6 +776,8 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     PagoConsolidadoDetalleCuentaDestino1789587032713,
     MovimientoBancarioCuentaDestino1789587049751,
     CajaUnicaAbiertaPorDispositivo1790617935368,
+    // Disciplina y Reconocimiento (multas, premios, encuestas anónimas) — tablas dr_*
+    DisciplinaReconocimiento1792785488053,
   ];
 }
 

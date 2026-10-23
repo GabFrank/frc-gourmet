@@ -1,0 +1,12 @@
+export enum DrFaltaEstado {
+  REGISTRADA = 'REGISTRADA',
+  APELADA = 'APELADA',
+  APROBADA = 'APROBADA',
+  JUSTIFICADA = 'JUSTIFICADA',
+  ANULADA = 'ANULADA',
+}
+
+export enum DrFaltaResultado {
+  ADVERTENCIA = 'ADVERTENCIA',
+  MULTA = 'MULTA',
+}

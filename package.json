@@ -47,6 +47,7 @@
     "test:ingrediente-multi-variacion": "ts-node --transpile-only --project tsconfig.typeorm.json scripts/test-ingrediente-multi-variacion-e2e.ts",
     "test:cobro-parcial": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-cobro-parcial-e2e.ts",
     "test:funcionario-vales": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-funcionario-vales-e2e.ts",
+    "test:disciplina-motor": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-disciplina-motor.ts",
     "test:resumen-multimoneda": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-resumen-multimoneda-e2e.ts",
     "test:operacion-financiera": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-operacion-financiera-validacion-e2e.ts",
     "test:fichaje-facial": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-fichaje-facial.ts",

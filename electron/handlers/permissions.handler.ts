@@ -61,6 +61,14 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'RRHH_DASHBOARD_VER', descripcion: 'Ver dashboard de RRHH con KPIs', modulo: 'RRHH' },
   { codigo: 'RRHH_REPORTE_GENERAR', descripcion: 'Generar y exportar reportes RRHH (PDF/Excel)', modulo: 'RRHH' },
   { codigo: 'RRHH_NOTIFICACIONES_VER', descripcion: 'Ver notificaciones del modulo RRHH', modulo: 'RRHH' },
+  // RRHH - Disciplina y Reconocimiento (multas, premios, encuestas anonimas)
+  { codigo: 'RRHH_DR_CONFIGURAR', descripcion: 'Configurar disciplina y reconocimiento (grupos, faltas, errores, premios, encuestas)', modulo: 'RRHH' },
+  { codigo: 'RRHH_DR_REGISTRAR', descripcion: 'Registrar faltas y errores de disciplina', modulo: 'RRHH' },
+  { codigo: 'RRHH_DR_PUNTUAR', descripcion: 'Cargar puntaje diario por criterios de premios', modulo: 'RRHH' },
+  { codigo: 'RRHH_DR_APROBAR', descripcion: 'Aprobar/justificar faltas, resolver apelaciones y cerrar periodos de premios', modulo: 'RRHH' },
+  { codigo: 'RRHH_DR_RESULTADOS_VER', descripcion: 'Ver resultados de premios y encuestas (periodo cerrado)', modulo: 'RRHH' },
+  { codigo: 'RRHH_DR_VOTAR', descripcion: 'Votar en encuestas anonimas de companeros', modulo: 'RRHH' },
+  { codigo: 'RRHH_DR_MIS_DATOS', descripcion: 'Ver mis faltas, puntos y premios, y apelar', modulo: 'RRHH' },
   // Compras - Importacion OCR/IA
   { codigo: 'COMPRAS_IMPORTAR_FACTURA', descripcion: 'Importar facturas de compra con OCR + IA', modulo: 'COMPRAS' },
   { codigo: 'SISTEMA_CONFIGURAR_IA', descripcion: 'Configurar credenciales y parametros de IA (OCR de facturas)', modulo: 'SISTEMA' },

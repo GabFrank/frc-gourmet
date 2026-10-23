@@ -1,3 +1,4 @@
+import { bloquearSiEsDr, PERMISOS_LECTURA_BONOS } from '../utils/disciplina-proteccion';
 import { ipcMain } from 'electron';
 import { Between, DataSource, Not } from 'typeorm';
 import { LiquidacionSueldo } from '../../src/app/database/entities/rrhh/liquidacion-sueldo.entity';
@@ -1120,6 +1121,7 @@ export function registerLiquidacionSueldoHandlers(
 
   // ============= BONOS =============
   ipcMain.handle('get-bonos', async (_e, filtros: any) => {
+    await ensurePermission(dataSource, getCurrentUser, PERMISOS_LECTURA_BONOS);
     const repo = dataSource.getRepository(Bono);
     const qb = repo.createQueryBuilder('b')
       .leftJoinAndSelect('b.funcionario', 'f')
@@ -1138,6 +1140,7 @@ export function registerLiquidacionSueldoHandlers(
     const repo = dataSource.getRepository(Bono);
     const funcionario = await dataSource.getRepository(Funcionario).findOne({ where: { id: data.funcionarioId } });
     if (!funcionario) throw new Error(`Funcionario ${data.funcionarioId} no encontrado`);
+    bloquearSiEsDr(data.motivo, 'BONO');
     const entity = repo.create({
       funcionario,
       tipo: data.tipo,
@@ -1157,6 +1160,7 @@ export function registerLiquidacionSueldoHandlers(
     const repo = dataSource.getRepository(Bono);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Bono ${id} no encontrado`);
+    bloquearSiEsDr(existing.motivo, 'BONO');
     existing.anulado = true;
     await setEntityUserTracking(dataSource, existing, getCurrentUser()?.id, true);
     return await repo.save(existing);
