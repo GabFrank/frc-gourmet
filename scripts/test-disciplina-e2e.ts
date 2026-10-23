@@ -24,6 +24,7 @@ import { invokeHandlerWithContext } from '../electron/utils/handler-registry';
 import { getDataSourceOptions } from '../src/app/database/database.config';
 import { registerDisciplinaHandlers } from '../electron/handlers/disciplina.handler';
 import { registerDisciplinaVotacionHandlers } from '../electron/handlers/disciplina-votacion.handler';
+import { registerDisciplinaPremiosHandlers } from '../electron/handlers/disciplina-premios.handler';
 import { withRequestUser } from '../electron/utils/auth.utils';
 import { registerAsistenciasHandlers } from '../electron/handlers/asistencias.handler';
 import { registerLiquidacionSueldoHandlers, seedLiquidacionConceptos } from '../electron/handlers/liquidacion-sueldo.handler';
@@ -91,6 +92,7 @@ async function main() {
   await seedLiquidacionConceptos(ds);
   registerDisciplinaHandlers(ds, () => actual);
   registerDisciplinaVotacionHandlers(ds, () => actual);
+  registerDisciplinaPremiosHandlers(ds, () => actual);
   registerAsistenciasHandlers(ds, () => actual);
   registerLiquidacionSueldoHandlers(ds, () => actual);
 
@@ -240,6 +242,24 @@ async function main() {
   const filasCerradas: any[] = await ds.getRepository(DrVotoAgregado).find();
   ok(filasCerradas.every((f) => f.datosCifrados == null), 'al cerrar se borra el cifrado');
   await como(colab, () => rechaza(call('dr-get-resultados-encuesta', per.id), 'FORBIDDEN', 'colaborador no ve resultados'));
+
+
+  // ===== K) Premio por votación → Bono [DR] =====
+  console.log('\n[K] Premio por votación');
+  const { DrPremio } = E('rrhh/disciplina/dr-premio.entity');
+  const { DrPeriodo } = E('rrhh/disciplina/dr-periodo.entity');
+  const { Bono } = E('rrhh/bono.entity');
+  const premio: any = await save(DrPremio, { nombre: 'COMPAÑERO DEL MES', monto: 100000, moneda: pyg, periodo: 'MENSUAL', metodo: 'VOTACION', reglaEmpate: 'DIVIDIR', encuesta: enc, grupo, orden: 1, activo: true });
+  await ds.getRepository(DrPeriodo).update({ id: per.id }, { premio: { id: premio.id } });
+  const calc = await call('dr-calcular-premio', per.id);
+  const gan = calc.ranking.filter((x: any) => x.ganador);
+  ok(calc.estado === 'GANADOR' && gan.length === 1 && gan[0].funcionarioId === fabi.id && approx(gan[0].montoPropuesto, 100000), 'gana FABI 100.000', calc);
+  const apP = await call('dr-aprobar-premio', per.id);
+  const bono: any = await ds.getRepository(Bono).findOne({ where: { id: apP.bonos[0] }, relations: ['funcionario'] });
+  ok(bono && bono.motivo.startsWith('[DR]') && approx(bono.monto, 100000) && bono.funcionario.id === fabi.id, 'Bono [DR] 100.000 a FABI', bono?.motivo);
+  await rechaza(call('dr-aprobar-premio', per.id), 'ESTADO_INVALIDO', 'no se aprueba dos veces');
+  await rechaza(call('dr-calcular-premio', per.id), 'ESTADO_INVALIDO', 'no se recalcula un premio aprobado');
+  ok(await ds.getRepository(Bono).count() === 1, '1 solo bono');
 
   await ds.destroy();
   console.log(`\n[disciplina-e2e] ${passed} OK, ${failed} fallas`);
