@@ -26,6 +26,7 @@ import { registerDisciplinaHandlers } from '../electron/handlers/disciplina.hand
 import { registerDisciplinaVotacionHandlers } from '../electron/handlers/disciplina-votacion.handler';
 import { registerDisciplinaPremiosHandlers } from '../electron/handlers/disciplina-premios.handler';
 import { registerDisciplinaCatalogosHandlers } from '../electron/handlers/disciplina-catalogos.handler';
+import { registerDisciplinaPuntosHandlers } from '../electron/handlers/disciplina-puntos.handler';
 import { withRequestUser } from '../electron/utils/auth.utils';
 import { registerAsistenciasHandlers } from '../electron/handlers/asistencias.handler';
 import { registerLiquidacionSueldoHandlers, seedLiquidacionConceptos } from '../electron/handlers/liquidacion-sueldo.handler';
@@ -82,7 +83,7 @@ async function main() {
 
   const admin: any = await save(Usuario, { nickname: 'ADMIN', password: 'x', activo: true });
   await permisos(admin, 'ADMIN_DR', [
-    'RRHH_DR_CONFIGURAR', 'RRHH_DR_REGISTRAR', 'RRHH_DR_APROBAR', 'RRHH_DR_RESULTADOS_VER', 'RRHH_PENALIZACION_REGISTRAR',
+    'RRHH_DR_CONFIGURAR', 'RRHH_DR_REGISTRAR', 'RRHH_DR_PUNTUAR', 'RRHH_DR_APROBAR', 'RRHH_DR_RESULTADOS_VER', 'RRHH_PENALIZACION_REGISTRAR',
     'RRHH_LIQUIDACION_GENERAR', 'RRHH_LIQUIDACION_APROBAR',
   ]);
   const colab: any = await save(Usuario, { nickname: 'COLAB', password: 'x', activo: true });
@@ -95,6 +96,7 @@ async function main() {
   registerDisciplinaVotacionHandlers(ds, () => actual);
   registerDisciplinaPremiosHandlers(ds, () => actual);
   registerDisciplinaCatalogosHandlers(ds, () => actual);
+  registerDisciplinaPuntosHandlers(ds, () => actual);
   registerAsistenciasHandlers(ds, () => actual);
   registerLiquidacionSueldoHandlers(ds, () => actual);
 
@@ -276,6 +278,62 @@ async function main() {
   await como(colab, () => rechaza(call('dr-save-grupos', { nombre: 'Y' }), 'FORBIDDEN', 'colaborador no configura'));
   const e2 = await call('dr-save-encuestas', { id: enc.id, titulo: 'compañerismo y orden' });
   ok(e2.titulo === 'COMPAÑERISMO Y ORDEN', 'edita encuesta', e2.titulo);
+
+  // ===== M) Errores y SALDO_PUNTOS =====
+  console.log('\n[M] Errores y saldo de puntos');
+  const { DrGravedad } = E('rrhh/disciplina/dr-gravedad.entity');
+  const { DrTipoError } = E('rrhh/disciplina/dr-tipo-error.entity');
+  const { DrCriterio } = E('rrhh/disciplina/dr-criterio.entity');
+  const { DrError } = E('rrhh/disciplina/dr-error.entity');
+  const gM: any = await save(DrGrupo, { nombre: 'COCINA PUNTOS', activo: true });
+  for (const f of [fA, fB, fC]) await save(DrGrupoMiembro, { grupo: gM, funcionario: f, rol: 'MIEMBRO', pesoVoto: 1, activo: true });
+  const grave: any = await save(DrGravedad, { nombre: 'GRAVE', puntos: 3, orden: 1, activo: true });
+  const leve: any = await save(DrGravedad, { nombre: 'LEVE', puntos: 1, orden: 2, activo: true });
+  const teGrave: any = await save(DrTipoError, { nombre: 'PLATO FRÍO', gravedad: grave, grupo: gM, orden: 1, activo: true });
+  const teLeve: any = await save(DrTipoError, { nombre: 'MESADA SUCIA', gravedad: leve, orden: 2, activo: true });
+  const rE1 = await call('dr-registrar-error', { fecha: '2026-07-06', tipoErrorId: teGrave.id, funcionarioIds: [fA.id, fB.id], detalle: 'mesa 4' });
+  ok(rE1.length === 2 && rE1.every((x: any) => x.puntos === 3), 'registra error a 2 personas con 3 puntos', rE1);
+  await call('dr-registrar-error', { fecha: '2026-07-07', tipoErrorId: teLeve.id, funcionarioIds: [fA.id] });
+  const rC = await call('dr-registrar-error', { fecha: '2026-07-07', tipoErrorId: teLeve.id, funcionarioIds: [fC.id] });
+  await ds.getRepository(DrGravedad).update({ id: grave.id }, { puntos: 9 });
+  const e0: any = await ds.getRepository(DrError).findOne({ where: { id: rE1[0].id } });
+  ok(Number(e0.puntos) === 3, 'cambiar la gravedad no altera errores ya registrados');
+  await como(colab, () => rechaza(call('dr-registrar-error', { fecha: '2026-07-07', tipoErrorId: teLeve.id, funcionarioIds: [fB.id] }), 'FORBIDDEN', 'colaborador no registra errores'));
+  await rechaza(call('dr-anular-error', rC[0].id, ''), 'VALIDACION', 'anular error exige motivo');
+  await call('dr-anular-error', rC[0].id, 'carga equivocada');
+  await rechaza(call('dr-anular-error', rC[0].id, 'otra vez'), 'ESTADO_INVALIDO', 'no se anula dos veces');
+  await call('dr-registrar-error', { fecha: '2026-08-02', tipoErrorId: teGrave.id, funcionarioIds: [fC.id] }); // fuera del período
+  const pSaldo: any = await save(DrPremio, { nombre: 'SALDO COCINA', monto: 100000, moneda: pyg, periodo: 'MENSUAL', metodo: 'SALDO_PUNTOS', reglaEmpate: 'DIVIDIR', puntosIniciales: 10, grupo: gM, orden: 2, activo: true });
+  const perS: any = await save(DrPeriodo, { premio: pSaldo, desde: '2026-07-01', hasta: '2026-07-31', estado: 'CERRADO' });
+  const cS = await call('dr-calcular-premio', perS.id);
+  const ptsS = Object.fromEntries(cS.ranking.map((x: any) => [x.funcionarioId, x.puntaje]));
+  ok(ptsS[fA.id] === 6 && ptsS[fB.id] === 7 && ptsS[fC.id] === 10, 'saldo = 10 − errores vigentes del período (ANA 6, BETO 7, CARLA 10)', ptsS);
+  ok(cS.estado === 'GANADOR' && cS.ranking.find((x: any) => x.ganador).funcionarioId === fC.id, 'gana CARLA (error anulado y fuera de período no cuentan)', cS.estado);
+  const mis = await como(colab, () => call('dr-mis-puntos', { desde: '2026-07-01', hasta: '2026-07-31' }));
+  ok(mis.errores.length === 2 && mis.saldos.some((s: any) => s.premioId === pSaldo.id && s.saldo === 6), 'mis puntos: solo los de ANA, saldo 6', mis.saldos);
+  await como(colab, () => rechaza(call('dr-get-errores', {}), 'FORBIDDEN', 'colaborador no ve errores de otros'));
+
+  // ===== N) Puntaje por CRITERIOS =====
+  console.log('\n[N] Criterios');
+  const pCrit: any = await save(DrPremio, { nombre: 'COCINERO DE LA SEMANA', monto: 100000, moneda: pyg, periodo: 'SEMANAL', metodo: 'CRITERIOS', reglaEmpate: 'DIVIDIR', grupo: gM, orden: 3, activo: true });
+  const c1: any = await save(DrCriterio, { premio: pCrit, texto: 'LIMPIEZA', escalaMin: 0, escalaMax: 2, orden: 1, activo: true });
+  const c2: any = await save(DrCriterio, { premio: pCrit, texto: 'PUNTUALIDAD', escalaMin: 0, escalaMax: 2, orden: 2, activo: true });
+  await call('dr-puntuar', { fecha: '2026-07-06', puntajes: [
+    { funcionarioId: fA.id, criterioId: c1.id, valor: 2 }, { funcionarioId: fA.id, criterioId: c2.id, valor: 1 },
+    { funcionarioId: fB.id, criterioId: c1.id, valor: 2 }, { funcionarioId: fB.id, criterioId: c2.id, valor: 0 },
+  ] });
+  await call('dr-puntuar', { fecha: '2026-07-06', puntajes: [{ funcionarioId: fB.id, criterioId: c2.id, valor: 1 }] }); // reemplaza, no duplica
+  await call('dr-puntuar', { fecha: '2026-07-07', puntajes: [{ funcionarioId: fC.id, criterioId: c1.id, valor: 2 }] });
+  await rechaza(call('dr-puntuar', { fecha: '2026-07-07', puntajes: [{ funcionarioId: fC.id, criterioId: c1.id, valor: 3 }] }), 'VALIDACION', 'valor fuera de escala rechazado');
+  await como(colab, () => rechaza(call('dr-puntuar', { fecha: '2026-07-07', puntajes: [{ funcionarioId: fA.id, criterioId: c1.id, valor: 2 }] }), 'FORBIDDEN', 'colaborador no puntúa'));
+  const perC: any = await save(DrPeriodo, { premio: pCrit, desde: '2026-07-06', hasta: '2026-07-12', estado: 'CERRADO' });
+  const cC = await call('dr-calcular-premio', perC.id);
+  const gan2 = cC.ranking.filter((x: any) => x.ganador);
+  ok(cC.estado === 'EMPATE' && gan2.length === 2 && gan2.every((g: any) => g.puntaje === 3 && approx(g.montoPropuesto, 50000)), 'ANA y BETO empatan con 3 y dividen 50.000 c/u', cC.ranking);
+  const apC = await call('dr-aprobar-premio', perC.id);
+  ok(apC.bonos.length === 2, 'aprobar empate crea 2 bonos [DR]', apC);
+  const misP = await como(colab, () => call('dr-mis-premios'));
+  ok(misP.length === 1 && misP[0].periodo.id === perC.id, 'mis premios: ANA ve solo el suyo', misP.length);
 
   await ds.destroy();
   console.log(`\n[disciplina-e2e] ${passed} OK, ${failed} fallas`);

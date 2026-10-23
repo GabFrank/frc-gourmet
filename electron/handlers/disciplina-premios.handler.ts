@@ -2,10 +2,11 @@
  * Disciplina y Reconocimiento (DR) — cálculo y aprobación de premios.
  * Calcular deja dr_resultado_premio en PROPUESTO (o DESIERTO); aprobar crea un Bono «[DR] …»
  * por ganador (vínculo único dr_resultado_premio.bono_id, UPDATE condicional sobre el estado).
- * Métodos: VOTACION (agregados del período cerrado). CRITERIOS y SALDO_PUNTOS: siguiente bloque.
+ * Métodos: VOTACION (agregados del período cerrado), CRITERIOS (Σ puntajes del período) y
+ * SALDO_PUNTOS (puntos iniciales − Σ errores VIGENTES del período, tipos del grupo del premio o globales).
  */
 import { ipcMain } from 'electron';
-import { DataSource } from 'typeorm';
+import { Between, DataSource } from 'typeorm';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { Bono } from '../../src/app/database/entities/rrhh/bono.entity';
 import { BonoTipo } from '../../src/app/database/entities/rrhh/bono-tipo.enum';
@@ -17,12 +18,16 @@ import { DrGrupoMiembro } from '../../src/app/database/entities/rrhh/disciplina/
 import { DrParticipacion } from '../../src/app/database/entities/rrhh/disciplina/dr-participacion.entity';
 import { DrVotoAgregado } from '../../src/app/database/entities/rrhh/disciplina/dr-voto-agregado.entity';
 import { DrResultadoPremio } from '../../src/app/database/entities/rrhh/disciplina/dr-resultado-premio.entity';
+import { DrPuntajeCriterio } from '../../src/app/database/entities/rrhh/disciplina/dr-puntaje-criterio.entity';
+import { DrError } from '../../src/app/database/entities/rrhh/disciplina/dr-error.entity';
 import { DrResultadoEstado } from '../../src/app/database/entities/rrhh/disciplina/dr-resultado-estado.enum';
 import { ensurePermission } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { PREFIJO_DR } from '../utils/disciplina-proteccion';
 import {
   calcularVotacion,
+  calcularCriterios,
+  calcularSaldoPuntos,
   resolverPremio,
   mesDestino,
   validarMoneda,
@@ -59,7 +64,6 @@ export function registerDisciplinaPremiosHandlers(dataSource: DataSource, getCur
       const premio = periodo.premio;
       const ya = await m.getRepository(DrResultadoPremio).count({ where: { periodo: { id: periodoId }, estado: DrResultadoEstado.APROBADO } as any });
       if (ya) fail('ESTADO_INVALIDO', 'EL PREMIO YA FUE APROBADO');
-      if (premio.metodo !== 'VOTACION') fail('NO_IMPLEMENTADO', `MÉTODO ${premio.metodo} TODAVÍA NO DISPONIBLE`);
 
       const grupoId = premio.grupo?.id ?? premio.encuesta?.grupo?.id;
       if (!grupoId) fail('CONFIGURACION', 'EL PREMIO NO TIENE GRUPO');
@@ -68,18 +72,39 @@ export function registerDisciplinaPremiosHandlers(dataSource: DataSource, getCur
         relations: ['funcionario', 'funcionario.persona'],
       });
       const funcionarios = miembros.map((x) => ({ id: x.funcionario.id, nombre: nombreDe(x.funcionario) }));
-      const agregados = await m.getRepository(DrVotoAgregado).find({ where: { periodo: { id: periodoId } } as any, relations: ['evaluado', 'pregunta'] });
-      const puntajes = calcularVotacion(funcionarios, agregados.map((a: any) => ({
-        evaluadoId: a.evaluado.id, tipoPregunta: a.pregunta.tipo,
-        sumaPonderada: Number(a.sumaPonderada) || 0, sumaPesos: Number(a.sumaPesos) || 0,
-        cantidad: Number(a.cantidad) || 0, conteoSi: Number(a.conteoSi) || 0, conteoNo: Number(a.conteoNo) || 0,
-      })));
-      const cantidadVotantes = await m.getRepository(DrParticipacion).count({ where: { periodo: { id: periodoId } } as any });
-      const cfg = await m.getRepository(ConfiguracionRrhh).findOne({ where: { clave: 'DR_VOTACION_MIN_VOTANTES' } as any });
-      const minVotantes = Number(cfg?.valor) > 0 ? Number(cfg!.valor) : MIN_VOTANTES_DEFAULT;
+      const desde = String(periodo.desde).slice(0, 10);
+      const hastaP = String(periodo.hasta).slice(0, 10);
+      let puntajes;
+      let cantidadVotantes: number | null = null;
+      let minVotantes: number | null = null;
+      if (premio.metodo === 'VOTACION') {
+        const agregados = await m.getRepository(DrVotoAgregado).find({ where: { periodo: { id: periodoId } } as any, relations: ['evaluado', 'pregunta'] });
+        puntajes = calcularVotacion(funcionarios, agregados.map((a: any) => ({
+          evaluadoId: a.evaluado.id, tipoPregunta: a.pregunta.tipo,
+          sumaPonderada: Number(a.sumaPonderada) || 0, sumaPesos: Number(a.sumaPesos) || 0,
+          cantidad: Number(a.cantidad) || 0, conteoSi: Number(a.conteoSi) || 0, conteoNo: Number(a.conteoNo) || 0,
+        })));
+        cantidadVotantes = await m.getRepository(DrParticipacion).count({ where: { periodo: { id: periodoId } } as any });
+        const cfg = await m.getRepository(ConfiguracionRrhh).findOne({ where: { clave: 'DR_VOTACION_MIN_VOTANTES' } as any });
+        minVotantes = Number(cfg?.valor) > 0 ? Number(cfg!.valor) : MIN_VOTANTES_DEFAULT;
+      } else if (premio.metodo === 'CRITERIOS') {
+        const filas: any[] = await m.getRepository(DrPuntajeCriterio).find({
+          where: { criterio: { premio: { id: premio.id } }, fecha: Between(desde, hastaP) } as any, relations: ['funcionario'],
+        });
+        puntajes = calcularCriterios(funcionarios, filas.map((f) => ({ funcionarioId: f.funcionario.id, valor: Number(f.valor) || 0 })));
+      } else if (premio.metodo === 'SALDO_PUNTOS') {
+        const errores: any[] = await m.getRepository(DrError).find({
+          where: { fecha: Between(desde, hastaP) } as any, relations: ['funcionario', 'tipoError', 'tipoError.grupo'],
+        });
+        const delGrupo = errores.filter((e) => !e.tipoError?.grupo || e.tipoError.grupo.id === grupoId);
+        puntajes = calcularSaldoPuntos(funcionarios, Number(premio.puntosIniciales) || 0,
+          delGrupo.map((e) => ({ funcionarioId: e.funcionario.id, puntos: Number(e.puntos) || 0, estado: e.estado })));
+      } else {
+        fail('CONFIGURACION', `MÉTODO ${premio.metodo} DESCONOCIDO`);
+      }
       let r;
       try {
-        r = resolverPremio({ metodo: 'VOTACION', monto: Number(premio.monto) || 0, reglaEmpate: reglaMotor(premio.reglaEmpate), puntajes, cantidadVotantes, minVotantes });
+        r = resolverPremio({ metodo: premio.metodo, monto: Number(premio.monto) || 0, reglaEmpate: reglaMotor(premio.reglaEmpate), puntajes, cantidadVotantes: cantidadVotantes ?? undefined, minVotantes: minVotantes ?? undefined });
       } catch (e) {
         if (e instanceof DisciplinaError) fail((e as any).codigo, e.message);
         throw e;
