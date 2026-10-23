@@ -23,6 +23,8 @@ import { DataSource } from 'typeorm';
 import { invokeHandlerWithContext } from '../electron/utils/handler-registry';
 import { getDataSourceOptions } from '../src/app/database/database.config';
 import { registerDisciplinaHandlers } from '../electron/handlers/disciplina.handler';
+import { registerDisciplinaVotacionHandlers } from '../electron/handlers/disciplina-votacion.handler';
+import { withRequestUser } from '../electron/utils/auth.utils';
 import { registerAsistenciasHandlers } from '../electron/handlers/asistencias.handler';
 import { registerLiquidacionSueldoHandlers, seedLiquidacionConceptos } from '../electron/handlers/liquidacion-sueldo.handler';
 
@@ -78,7 +80,7 @@ async function main() {
 
   const admin: any = await save(Usuario, { nickname: 'ADMIN', password: 'x', activo: true });
   await permisos(admin, 'ADMIN_DR', [
-    'RRHH_DR_CONFIGURAR', 'RRHH_DR_REGISTRAR', 'RRHH_DR_APROBAR', 'RRHH_PENALIZACION_REGISTRAR',
+    'RRHH_DR_CONFIGURAR', 'RRHH_DR_REGISTRAR', 'RRHH_DR_APROBAR', 'RRHH_DR_RESULTADOS_VER', 'RRHH_PENALIZACION_REGISTRAR',
     'RRHH_LIQUIDACION_GENERAR', 'RRHH_LIQUIDACION_APROBAR',
   ]);
   const colab: any = await save(Usuario, { nickname: 'COLAB', password: 'x', activo: true });
@@ -88,6 +90,7 @@ async function main() {
   const como = async <T>(u: any, fn: () => Promise<T>) => { const prev = actual; actual = u; try { return await fn(); } finally { actual = prev; } };
   await seedLiquidacionConceptos(ds);
   registerDisciplinaHandlers(ds, () => actual);
+  registerDisciplinaVotacionHandlers(ds, () => actual);
   registerAsistenciasHandlers(ds, () => actual);
   registerLiquidacionSueldoHandlers(ds, () => actual);
 
@@ -182,6 +185,61 @@ async function main() {
   await rechaza(call('anular-penalizacion', ap.penalizacionId), /DISCIPLINA/, 'anular-penalizacion bloqueado para [DR]');
   const penIntacta: any = await ds.getRepository(Penalizacion).findOne({ where: { id: ap.penalizacionId } });
   ok(approx(penIntacta.monto, 50000) && penIntacta.anulada === false, 'penalización [DR] intacta', penIntacta);
+
+
+  // ===== J) Votación anónima =====
+  console.log('\n[J] Votación anónima');
+  const { DrGrupo } = E('rrhh/disciplina/dr-grupo.entity');
+  const { DrGrupoMiembro } = E('rrhh/disciplina/dr-grupo-miembro.entity');
+  const { DrEncuesta } = E('rrhh/disciplina/dr-encuesta.entity');
+  const { DrEncuestaPregunta } = E('rrhh/disciplina/dr-encuesta-pregunta.entity');
+  const { DrVotoAgregado } = E('rrhh/disciplina/dr-voto-agregado.entity');
+  const { DrParticipacion } = E('rrhh/disciplina/dr-participacion.entity');
+  const grupo: any = await save(DrGrupo, { nombre: 'COCINA', activo: true });
+  const votantes: any[] = [{ u: colab, f: fA }];
+  for (const n of ['DANI', 'EVA', 'FABI']) {
+    const u: any = await save(Usuario, { nickname: n, password: 'x', activo: true });
+    await permisos(u, `COLAB_${n}`, ['RRHH_DR_VOTAR']);
+    votantes.push({ u, f: await mkFunc(n, u) });
+  }
+  for (const v of votantes) await save(DrGrupoMiembro, { grupo, funcionario: v.f, rol: 'MIEMBRO', pesoVoto: 1, activo: true });
+  const enc: any = await save(DrEncuesta, { titulo: 'COMPAÑERISMO', grupo, horasAbierta: 48, activo: true });
+  const qEsc: any = await save(DrEncuestaPregunta, { encuesta: enc, texto: 'AYUDA A LOS DEMÁS', tipo: 'ESCALA', escalaMin: 1, escalaMax: 5, obligatoria: true, orden: 1, activo: true });
+  const qTxt: any = await save(DrEncuestaPregunta, { encuesta: enc, texto: 'COMENTARIO', tipo: 'TEXTO', escalaMin: 1, obligatoria: false, orden: 2, activo: true });
+  const per = await call('dr-abrir-periodo', { encuestaId: enc.id, desde: '2026-11-01', hasta: '2026-11-30' });
+  ok(per.estado === 'ABIERTO', 'período abierto', per.estado);
+
+  const pend = await como(colab, () => call('dr-mis-encuestas-pendientes'));
+  ok(pend.length === 1 && pend[0].evaluados.length === 3 && !pend[0].evaluados.some((x: any) => x.id === fA.id), 'pendiente con 3 compañeros (sin autovoto)', pend);
+  // Cada votante pone a FABI = 5 y al resto = 3
+  const fabi = votantes[3].f;
+  const envio = (v: any) => votantes.filter((o) => o.f.id !== v.f.id).flatMap((o) => [
+    { evaluadoId: o.f.id, preguntaId: qEsc.id, valor: o.f.id === fabi.id ? 5 : 3 },
+    { evaluadoId: o.f.id, preguntaId: qTxt.id, valor: o.f.id === fabi.id ? `bien ${v.f.id}` : '' },
+  ]);
+  for (const v of votantes) await como(v.u, () => withRequestUser(v.u, () => call('dr-votar', per.id, envio(v))) as Promise<any>);
+  await como(colab, () => rechaza(call('dr-votar', per.id, envio(votantes[0])), 'YA_VOTO', 'no vota dos veces'));
+  await como(colab, () => rechaza(call('dr-votar', per.id, [{ evaluadoId: fA.id, preguntaId: qEsc.id, valor: 5 }]), /.+/, 'rechaza autovoto / envío incompleto'));
+  const filasAbiertas: any[] = await ds.getRepository(DrVotoAgregado).find();
+  ok(filasAbiertas.length > 0 && filasAbiertas.every((f) => f.datosCifrados && f.sumaPonderada == null), 'con período abierto los agregados están cifrados', filasAbiertas[0]);
+  const colsVoto = (await ds.query(`PRAGMA table_info('dr_voto_agregado')`)).map((c: any) => c.name);
+  const colsTxt = (await ds.query(`PRAGMA table_info('dr_respuesta_texto')`)).map((c: any) => c.name);
+  const sinVotante = (cols: string[]) => !cols.some((c) => /votante|usuario|funcionario|created|fecha/.test(c));
+  ok(sinVotante(colsVoto) && sinVotante(colsTxt), 'tablas de votos sin votante ni fecha', { colsVoto, colsTxt });
+  ok(await ds.getRepository(DrParticipacion).count() === 4, '4 participaciones');
+  await rechaza(call('dr-get-resultados-encuesta', per.id), 'PERIODO_ABIERTO', 'sin resultados con período abierto');
+
+  const cierre = await call('dr-cerrar-periodo', per.id);
+  ok(cierre.votantes === 4, 'cierre con 4 votantes', cierre);
+  const resu = await call('dr-get-resultados-encuesta', per.id);
+  const filaFabi = resu.filas.find((f: any) => f.evaluadoId === fabi.id && f.preguntaId === qEsc.id);
+  const filaAna = resu.filas.find((f: any) => f.evaluadoId === fA.id && f.preguntaId === qEsc.id);
+  ok(resu.suficiente && filaFabi && approx(filaFabi.promedio, 5) && filaFabi.cantidad === 3, 'FABI promedio 5 con 3 votos', filaFabi);
+  ok(filaAna && approx(filaAna.promedio, 3), 'ANA promedio 3', filaAna);
+  ok(resu.textos.length === 3 && resu.textos.every((t: any) => !('id' in t) && t.evaluadoId === fabi.id), '3 comentarios para FABI, sin id', resu.textos);
+  const filasCerradas: any[] = await ds.getRepository(DrVotoAgregado).find();
+  ok(filasCerradas.every((f) => f.datosCifrados == null), 'al cerrar se borra el cifrado');
+  await como(colab, () => rechaza(call('dr-get-resultados-encuesta', per.id), 'FORBIDDEN', 'colaborador no ve resultados'));
 
   await ds.destroy();
   console.log(`\n[disciplina-e2e] ${passed} OK, ${failed} fallas`);
