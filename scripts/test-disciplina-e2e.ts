@@ -25,6 +25,7 @@ import { getDataSourceOptions } from '../src/app/database/database.config';
 import { registerDisciplinaHandlers } from '../electron/handlers/disciplina.handler';
 import { registerDisciplinaVotacionHandlers } from '../electron/handlers/disciplina-votacion.handler';
 import { registerDisciplinaPremiosHandlers } from '../electron/handlers/disciplina-premios.handler';
+import { registerDisciplinaCatalogosHandlers } from '../electron/handlers/disciplina-catalogos.handler';
 import { withRequestUser } from '../electron/utils/auth.utils';
 import { registerAsistenciasHandlers } from '../electron/handlers/asistencias.handler';
 import { registerLiquidacionSueldoHandlers, seedLiquidacionConceptos } from '../electron/handlers/liquidacion-sueldo.handler';
@@ -93,6 +94,7 @@ async function main() {
   registerDisciplinaHandlers(ds, () => actual);
   registerDisciplinaVotacionHandlers(ds, () => actual);
   registerDisciplinaPremiosHandlers(ds, () => actual);
+  registerDisciplinaCatalogosHandlers(ds, () => actual);
   registerAsistenciasHandlers(ds, () => actual);
   registerLiquidacionSueldoHandlers(ds, () => actual);
 
@@ -260,6 +262,20 @@ async function main() {
   await rechaza(call('dr-aprobar-premio', per.id), 'ESTADO_INVALIDO', 'no se aprueba dos veces');
   await rechaza(call('dr-calcular-premio', per.id), 'ESTADO_INVALIDO', 'no se recalcula un premio aprobado');
   ok(await ds.getRepository(Bono).count() === 1, '1 solo bono');
+
+
+  // ===== L) Catálogos configurables =====
+  console.log('\n[L] Catálogos');
+  const g2 = await call('dr-save-grupos', { nombre: 'salón', activo: true });
+  ok(g2.id > 0 && g2.nombre === 'SALÓN', 'crea grupo en MAYÚSCULAS', g2);
+  const mm = await call('dr-save-grupo-miembros', { grupo: g2.id, funcionario: { id: fB.id }, rol: 'MIEMBRO', pesoVoto: 2, activo: true });
+  ok(mm.id > 0, 'agrega miembro', mm);
+  const lista = await call('dr-get-grupo-miembros', { grupoId: g2.id });
+  ok(lista.length === 1 && lista[0].funcionario.id === fB.id && Number(lista[0].pesoVoto) === 2, 'filtra miembros por grupo', lista.length);
+  await rechaza(call('dr-save-premios', { nombre: 'X', metodo: 'VOTACION', monto: -5 }), 'VALIDACION', 'premio con monto negativo rechazado');
+  await como(colab, () => rechaza(call('dr-save-grupos', { nombre: 'Y' }), 'FORBIDDEN', 'colaborador no configura'));
+  const e2 = await call('dr-save-encuestas', { id: enc.id, titulo: 'compañerismo y orden' });
+  ok(e2.titulo === 'COMPAÑERISMO Y ORDEN', 'edita encuesta', e2.titulo);
 
   await ds.destroy();
   console.log(`\n[disciplina-e2e] ${passed} OK, ${failed} fallas`);
