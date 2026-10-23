@@ -51,7 +51,11 @@ async function main() {
   if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
   const dbFile = path.join(tmpDir, 'test-disciplina-e2e.db');
   if (fs.existsSync(dbFile)) fs.unlinkSync(dbFile);
-  const ds = new DataSource({ ...(getDataSourceOptions(tmpDir) as any), database: dbFile, synchronize: false, migrationsRun: false });
+  // DR_E2E_PG=<base> corre la misma suite contra un Postgres local (la base se recrea vacía).
+  const pgDb = process.env['DR_E2E_PG'];
+  const ds = pgDb
+    ? new DataSource({ ...(getDataSourceOptions(tmpDir, { type: 'postgres', database: pgDb, username: process.env['PGUSER'] || 'postgres' } as any) as any), synchronize: false, migrationsRun: false })
+    : new DataSource({ ...(getDataSourceOptions(tmpDir) as any), database: dbFile, synchronize: false, migrationsRun: false });
   await ds.initialize();
   await ds.runMigrations({ transaction: 'each' });
   console.log('[disciplina-e2e] Migraciones OK.');
@@ -228,8 +232,11 @@ async function main() {
   await como(colab, () => rechaza(call('dr-votar', per.id, [{ evaluadoId: fA.id, preguntaId: qEsc.id, valor: 5 }]), /.+/, 'rechaza autovoto / envío incompleto'));
   const filasAbiertas: any[] = await ds.getRepository(DrVotoAgregado).find();
   ok(filasAbiertas.length > 0 && filasAbiertas.every((f) => f.datosCifrados && f.sumaPonderada == null), 'con período abierto los agregados están cifrados', filasAbiertas[0]);
-  const colsVoto = (await ds.query(`PRAGMA table_info('dr_voto_agregado')`)).map((c: any) => c.name);
-  const colsTxt = (await ds.query(`PRAGMA table_info('dr_respuesta_texto')`)).map((c: any) => c.name);
+  const columnas = async (t: string): Promise<string[]> => pgDb
+    ? (await ds.query(`SELECT column_name AS name FROM information_schema.columns WHERE table_name = $1`, [t])).map((c: any) => c.name)
+    : (await ds.query(`PRAGMA table_info('${t}')`)).map((c: any) => c.name);
+  const colsVoto = await columnas('dr_voto_agregado');
+  const colsTxt = await columnas('dr_respuesta_texto');
   const sinVotante = (cols: string[]) => !cols.some((c) => /votante|usuario|funcionario|created|fecha/.test(c));
   ok(sinVotante(colsVoto) && sinVotante(colsTxt), 'tablas de votos sin votante ni fecha', { colsVoto, colsTxt });
   ok(await ds.getRepository(DrParticipacion).count() === 4, '4 participaciones');
