@@ -133,6 +133,27 @@
 | LiquidacionComision / LiquidacionComisionItem | Liquidación de comisión |
 | NotificacionRrhh | claveDedupe UNIQUE |
 
+## RRHH — Disciplina y Reconocimiento (`rrhh/disciplina/`) — 19
+
+Tablas con prefijo `dr_`, migración `1792785488053-DisciplinaReconocimiento` (PR #313). Las 3 de votación **no** extienden `BaseModel` (sin `created_*`/`updated_*`, PK UUID varchar(36) generado en código): es lo que preserva el anonimato. → [domains/rrhh-disciplina.md](../domains/rrhh-disciplina.md).
+
+| Entidad | Tabla | Notas |
+|---|---|---|
+| DrGrupo / DrGrupoMiembro | `dr_grupo` / `dr_grupo_miembro` | Grupo de trabajo; miembro con `rol` y `pesoVoto`. UNIQUE (grupo, funcionario) |
+| DrTipoFalta / DrChecklistItem | `dr_tipo_falta` / `dr_checklist_item` | Configuración de faltas (advertencias, monto, escala JSON, reinicio, tolerancia, plazo de apelación) |
+| DrGravedad / DrTipoError | `dr_gravedad` / `dr_tipo_error` | Gravedad = puntos que descuenta; catálogo de errores |
+| DrPremio / DrCriterio | `dr_premio` / `dr_criterio` | Premio (método, regla de empate, puntos iniciales); criterios con escala |
+| DrEncuesta / DrEncuestaPregunta | `dr_encuesta` / `dr_encuesta_pregunta` | Encuesta por grupo; preguntas ESCALA / SI_NO / TEXTO |
+| DrFalta | `dr_falta` | Falta registrada. UNIQUE `penalizacion_id` (aprobación idempotente); `mes_destino`, `lote_id` |
+| DrError | `dr_error` | Error con puntos copiados de la gravedad |
+| DrPuntajeCriterio | `dr_puntaje_criterio` | UNIQUE (fecha, funcionario, criterio) |
+| DrPeriodo | `dr_periodo` | Período de premio y/o encuesta (ABIERTO / CERRADO / APROBADO) |
+| DrResultadoPremio | `dr_resultado_premio` | UNIQUE (periodo, funcionario) y UNIQUE `bono_id` |
+| DrLiquidacionPendiente | `dr_liquidacion_pendiente` | Borrador de liquidación desactualizado por DR; bloquea aprobarlo |
+| DrParticipacion | `dr_participacion` | **Sin BaseModel.** Solo (periodo, funcionario) UNIQUE: «ya votó» |
+| DrVotoAgregado | `dr_voto_agregado` | **Sin BaseModel.** Suma por (periodo, evaluado, pregunta) UNIQUE; `datos_cifrados` mientras está abierto |
+| DrRespuestaTexto | `dr_respuesta_texto` | **Sin BaseModel.** Texto libre sin autor ni hora |
+
 ## IA (`ia/`) — 2
 
 | Entidad | Notas |

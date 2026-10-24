@@ -8,7 +8,7 @@
 |---|---:|---|
 | **adjuntos.handler.ts** | 139 | Adjuntos polimórficos (CRUD genérico vinculable a cualquier entidad) |
 | **app-mode.handler.ts** | 108 | Modo de operación standalone / server / client; test de conexión a server |
-| **asistencias.handler.ts** | 378 | Turno, FuncionarioTurno, Asistencia, Penalizacion + auto-penalización por tardanza |
+| **asistencias.handler.ts** | 389 | Turno, FuncionarioTurno, Asistencia, Penalizacion + auto-penalización por tardanza. Desde PR #313: `get-penalizaciones` exige permiso y los registros `[DR]` no se crean/editan/anulan desde acá |
 | **auth.handler.ts** | 212 | Login/logout, LoginSession, JWT (`getJwtSecret`), `verifyPassword` (bcrypt) |
 | **backup.handler.ts** | 548 | Backup/restore de BD + `startAutoBackupScheduler` |
 | **banking.handler.ts** | 916 | CuentaBancaria, MovimientoBancario, MaquinaPos, AcreditacionPos, Chequera, Cheque + `startAcreditacionesScheduler` |
@@ -30,6 +30,11 @@
 | **dashboard-ventas.handler.ts** | ~590 | KPIs Ventas. Devuelve además el bloque `delivery` (envíos, retiros, ingreso por envíos y `enCamino`, este último SIN filtro de período: es estado operativo) |
 | **delivery.handler.ts** | ~930 | Máquina de estados del delivery/retiro (`delivery-crear`, `-cambiar-estado`, `-actualizar-datos`, `-asignar-repartidor`, `-cancelar` transaccional, `-listar-pdv`, `-imprimir-ticket`) + **`delivery-convertir-modo`** (DELIVERY ⇄ RETIRO: mueve `venta.costoDelivery`, desasigna repartidor y sincroniza el `PedidoOnline`). El CRUD genérico de `ventas.handler.ts` rechaza estado, zona y `modo` |
 | **db-config.handler.ts** | 273 | Configuración de BD (sqlite path / postgres); `db-config-init-postgres` crea rol+DB |
+| **disciplina.handler.ts** | 439 | Disciplina y Reconocimiento (DR): DrTipoFalta + DrFalta. Registro (motor de multas, lote, tardanza sin doble descuento), apelación/renuncia por identidad de sesión, aprobación idempotente → Penalizacion `[DR]` (mes abierto, tope en cuotas, `dr_liquidacion_pendiente`), justificar/anular. → [domains/rrhh-disciplina.md](../domains/rrhh-disciplina.md) |
+| **disciplina-catalogos.handler.ts** | 97 | DR: `dr-get-*` / `dr-save-*` genérico para grupos, miembros, encuestas, preguntas, premios, tipos de error, gravedades, criterios y checklist (textos en MAYÚSCULAS) |
+| **disciplina-premios.handler.ts** | 175 | DR: cálculo de premios (VOTACION / CRITERIOS / SALDO_PUNTOS, reglas de empate) y aprobación → Bono `[DR]` |
+| **disciplina-puntos.handler.ts** | 171 | DR: errores con puntos (DrError), puntaje diario por criterios (DrPuntajeCriterio), mis puntos / mis premios |
+| **disciplina-votacion.handler.ts** | 294 | DR: períodos y votación anónima (participación + agregados cifrados AES-GCM en una transacción; clave `userData/dr-votos.key`), cierre con reescritura mezclada, resultados con mínimo de votantes |
 | **documentos-tickets.handler.ts** | 962 | Tickets térmicos (comanda multi-sector, venta, recibos, vales) |
 | **empresa.handler.ts** | 96 | Empresa singleton (datos + branding + fiscal) |
 | **equipos-comision.handler.ts** | 338 | EquipoComision* |
@@ -42,7 +47,7 @@
 | **images.handler.ts** | 31 | Solo imágenes de perfil (legacy compat). Lo nuevo usa files.handler |
 | **kds.handler.ts** | 216 | KDS: comandas en pantalla de cocina (estado por sector); ver kds-sse-routes en server/ |
 | **liquidacion-final.handler.ts** | 263 | LiquidacionFinal* + antigüedad / indemnización / vacaciones no gozadas |
-| **liquidacion-sueldo.handler.ts** | 954 | LiquidacionSueldo*, Bono, Aguinaldo + `seedLiquidacionConceptos`, `anular-liquidacion-sueldo` |
+| **liquidacion-sueldo.handler.ts** | 1242 | LiquidacionSueldo*, Bono, Aguinaldo + `seedLiquidacionConceptos`, `anular-liquidacion-sueldo`. Desde PR #313: `aprobar-liquidacion-sueldo` rechaza si hay `dr_liquidacion_pendiente` PENDIENTE (regenerar el borrador lo resuelve), `get-bonos` exige permiso, Bonos `[DR]` protegidos |
 | **movimientos-cliente.handler.ts** | 217 | MovimientoCliente (tracking saldo cliente) |
 | **notificaciones-rrhh.handler.ts** | 354 | NotificacionRrhh + `generarNotificacionesRrhh` (startup + cada 24h) |
 | **onboarding.handler.ts** | 161 | Tareas guiadas de onboarding en Home |
@@ -144,3 +149,29 @@ Los handlers sensibles llaman `ensurePermission(dataSource, getCurrentUser, 'COD
 - Rutas Fastify: `electron/server/public-routes.ts` (`/pub/*`), `kds-sse-routes.ts` (`/api/kds/stream`), static `/admin/` + `/tienda/`.
 - Impresoras: `list-system-printers`, `scan-network-printers`, `test-printer-connection`, `print-cierre-caja`.
 - WhatsApp: `enviar-resumen-cierre-whatsapp` (+ `whatsapp.service.ts` / `whatsapp-sender.ts`).
+
+## Handlers nuevos 2026-10 — Disciplina y Reconocimiento (PR #313)
+
+Registrados en `register-all-handlers.ts` justo después de `registerAsistenciasHandlers`. Todos validan permiso adentro (`ensurePermission`); los de «lo mío» y votar toman el funcionario de la sesión/token. → [domains/rrhh-disciplina.md](../domains/rrhh-disciplina.md).
+
+| Archivo | Canal | Permiso |
+|---|---|---|
+| `disciplina.handler.ts` | `dr-get-tipos-falta` | CONFIGURAR \| REGISTRAR \| APROBAR |
+| | `dr-save-tipo-falta`, `dr-set-tipo-falta-activo` | CONFIGURAR |
+| | `dr-registrar-falta`, `dr-get-faltas` (este también con APROBAR) | REGISTRAR |
+| | `dr-mis-faltas`, `dr-apelar-falta`, `dr-renunciar-apelacion` | MIS_DATOS |
+| | `dr-aprobar-falta`, `dr-justificar-falta`, `dr-anular-falta` | APROBAR |
+| `disciplina-votacion.handler.ts` | `dr-abrir-periodo`, `dr-cerrar-periodo` | APROBAR |
+| | `dr-mis-encuestas-pendientes`, `dr-votar` | VOTAR |
+| | `dr-get-resultados-encuesta` | RESULTADOS_VER |
+| `disciplina-premios.handler.ts` | `dr-calcular-premio`, `dr-aprobar-premio` | APROBAR |
+| `disciplina-puntos.handler.ts` | `dr-registrar-error` | REGISTRAR |
+| | `dr-anular-error` | APROBAR |
+| | `dr-get-errores` | REGISTRAR \| APROBAR \| RESULTADOS_VER |
+| | `dr-puntuar` | PUNTUAR |
+| | `dr-get-puntajes` | PUNTUAR \| APROBAR \| RESULTADOS_VER |
+| | `dr-mis-puntos`, `dr-mis-premios` | MIS_DATOS |
+| `disciplina-catalogos.handler.ts` | `dr-get-{grupos, grupo-miembros, encuestas, encuesta-preguntas, premios, tipos-error, gravedades, criterios, checklist-items}` | CONFIGURAR \| REGISTRAR \| PUNTUAR \| APROBAR \| RESULTADOS_VER |
+| | `dr-save-{…mismos 9}` | CONFIGURAR |
+
+Permisos abreviados: `RRHH_DR_<X>`. Helpers: motor puro `electron/services/disciplina/` y `electron/utils/disciplina-proteccion.ts` (`bloquearSiEsDr`, `PERMISOS_LECTURA_PENALIZACIONES`, `PERMISOS_LECTURA_BONOS`).
