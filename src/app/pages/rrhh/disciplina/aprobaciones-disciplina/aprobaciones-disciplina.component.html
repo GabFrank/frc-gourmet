@@ -136,7 +136,7 @@
                       <mat-icon>more_vert</mat-icon>
                     </button>
                     <mat-menu #ma="matMenu">
-                      <button mat-menu-item (click)="aprobar(f, true)">
+                      <button mat-menu-item (click)="aprobar(f, true)" [disabled]="!f.puedeAprobar" [matTooltip]="f.motivoNoAprobar">
                         <mat-icon>check_circle</mat-icon><span>Aprobar (rechazar apelación)</span>
                       </button>
                       <button mat-menu-item (click)="justificar(f)">

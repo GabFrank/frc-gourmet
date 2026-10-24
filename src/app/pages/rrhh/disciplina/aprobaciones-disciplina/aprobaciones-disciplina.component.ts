@@ -12,6 +12,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
+import { AuthService } from 'src/app/services/auth.service';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTableModule } from '@angular/material/table';
 import { MatButtonModule } from '@angular/material/button';
@@ -110,6 +111,7 @@ export class AprobacionesDisciplinaComponent implements OnInit {
     private api: DisciplinaApiService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
+    private auth: AuthService,
   ) {}
 
   async ngOnInit(): Promise<void> {
@@ -124,7 +126,8 @@ export class AprobacionesDisciplinaComponent implements OnInit {
     const vence = f.apelacionVence ? new Date(f.apelacionVence) : null;
     const renuncio = !!f.renunciaApelacion;
     const plazoAbierto = f.estado === DrFaltaEstado.REGISTRADA && !!vence && vence.getTime() > Date.now();
-    const puedeAprobar = !(plazoAbierto && !renuncio);
+    const registroPropio = !!f.detectadoPor?.id && f.detectadoPor.id === this.auth.currentUser?.id;
+    const puedeAprobar = !(plazoAbierto && !renuncio) && !registroPropio;
     return {
       id: f.id,
       clave: `f-${f.id}`,
@@ -141,7 +144,9 @@ export class AprobacionesDisciplinaComponent implements OnInit {
       renuncio,
       plazoAbierto,
       puedeAprobar,
-      motivoNoAprobar: puedeAprobar ? '' : 'Todavía corre el plazo de apelación y la persona no renunció a apelar',
+      motivoNoAprobar: registroPropio
+        ? 'La registraste vos: la aprueba otro aprobador'
+        : puedeAprobar ? '' : 'Todavía corre el plazo de apelación y la persona no renunció a apelar',
       apelacionTexto: f.apelacionTexto || '',
       apelacionFecha: f.apelacionFecha ? new Date(f.apelacionFecha) : null,
       observacion: f.observacion || '',

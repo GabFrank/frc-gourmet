@@ -339,7 +339,7 @@ export class ConfigDisciplinaComponent implements OnInit {
     try {
       const monedas: any[] = (await firstValueFrom(this.repositoryService.getMonedas())) ?? [];
       this.fuentes.monedas = monedas.filter((m) => m.activo !== false).map((m) => ({ valor: m.id, label: `${m.denominacion} (${m.simbolo})` }));
-      const pyg = monedas.find((m) => /GUARAN/i.test(m.denominacion ?? '') || ['PYG', 'GS', '₲'].includes(String(m.simbolo ?? '').toUpperCase()));
+      const pyg = monedas.find((m) => m.principal === true && m.activo !== false);
       this.monedaPygId = pyg?.id ?? null;
     } catch (e) {
       console.error(e);

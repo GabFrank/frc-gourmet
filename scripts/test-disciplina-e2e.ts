@@ -344,8 +344,9 @@ async function main() {
   ok(Number(e0.puntos) === 3, 'cambiar la gravedad no altera errores ya registrados');
   await como(colab, () => rechaza(call('dr-registrar-error', { fecha: '2026-07-07', tipoErrorId: teLeve.id, funcionarioIds: [fB.id] }), 'FORBIDDEN', 'colaborador no registra errores'));
   await rechaza(call('dr-anular-error', rC[0].id, ''), 'VALIDACION', 'anular error exige motivo');
-  await call('dr-anular-error', rC[0].id, 'carga equivocada');
-  await rechaza(call('dr-anular-error', rC[0].id, 'otra vez'), 'ESTADO_INVALIDO', 'no se anula dos veces');
+  await rechaza(call('dr-anular-error', rC[0].id, 'mío'), 'AUTO_RESOLUCION', 'quien registró el error no lo anula');
+  await resolver('dr-anular-error', rC[0].id, 'carga equivocada');
+  await rechaza(resolver('dr-anular-error', rC[0].id, 'otra vez'), 'ESTADO_INVALIDO', 'no se anula dos veces');
   await call('dr-registrar-error', { fecha: '2026-08-02', tipoErrorId: teGrave.id, funcionarioIds: [fC.id] }); // fuera del período
   const pSaldo: any = await save(DrPremio, { nombre: 'SALDO COCINA', monto: 100000, moneda: pyg, periodo: 'MENSUAL', metodo: 'SALDO_PUNTOS', reglaEmpate: 'DIVIDIR', puntosIniciales: 10, grupo: gM, orden: 2, activo: true });
   const perS: any = await save(DrPeriodo, { premio: pSaldo, desde: '2026-07-01', hasta: '2026-07-31', estado: 'CERRADO' });

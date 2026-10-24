@@ -6,7 +6,7 @@
  * SALDO_PUNTOS (puntos iniciales − Σ errores VIGENTES del período, tipos del grupo del premio o globales).
  */
 import { ipcMain } from 'electron';
-import { marcarBorradorDesactualizado } from './disciplina.handler';
+import { marcarBorradorDesactualizado, funcionarioIdDeUsuario } from './disciplina.handler';
 import { Between, DataSource } from 'typeorm';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { Bono } from '../../src/app/database/entities/rrhh/bono.entity';
@@ -134,6 +134,10 @@ export function registerDisciplinaPremiosHandlers(dataSource: DataSource, getCur
         relations: ['funcionario', 'funcionario.monedaSalario', 'moneda'],
       });
       if (!ganadores.length) fail('ESTADO_INVALIDO', 'NO HAY GANADORES PROPUESTOS PARA APROBAR');
+      const propio = await funcionarioIdDeUsuario(m, user.id);
+      if (propio && ganadores.some((g) => g.funcionario?.id === propio)) {
+        fail('AUTO_RESOLUCION', 'ESTÁS ENTRE LOS GANADORES: EL PREMIO LO APRUEBA OTRO APROBADOR');
+      }
       const bonos: number[] = [];
       for (const g of ganadores) {
         const liqs = await m.getRepository(LiquidacionSueldo).find({ where: { funcionario: { id: g.funcionario.id } } as any });

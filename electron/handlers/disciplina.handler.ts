@@ -103,10 +103,26 @@ async function drDescontadoEnMes(m: EntityManager, funcionarioId: number, mes: s
   return pens.filter((p: any) => fechaIso(p.fecha).slice(0, 7) === mes).reduce((s, p: any) => s + (Number(p.monto) || 0), 0);
 }
 
-/** Separación de funciones: quien registró la falta no la aprueba, justifica ni anula. */
-function noAutoResolver(falta: any, user: { id: number }): void {
-  if (falta?.detectadoPor?.id && falta.detectadoPor.id === user.id) {
-    fail('AUTO_RESOLUCION', 'NO PODÉS RESOLVER UNA FALTA QUE REGISTRASTE VOS: LA RESUELVE OTRO APROBADOR');
+/** Funcionario vinculado al usuario de la sesión (null si no tiene). */
+export async function funcionarioIdDeUsuario(m: EntityManager, userId: number): Promise<number | null> {
+  const f = await m.getRepository(Funcionario).findOne({ where: { usuario: { id: userId } } as any });
+  return f?.id ?? null;
+}
+
+/**
+ * Separación de funciones: quien registró el hecho no lo resuelve, y nadie resuelve un hecho
+ * propio (la falta o el error cargado a su funcionario).
+ */
+export async function noAutoResolver(
+  m: EntityManager, hecho: any, user: { id: number }, registrador: 'detectadoPor' | 'registradoPor' = 'detectadoPor',
+): Promise<void> {
+  const reg = hecho?.[registrador];
+  if (reg?.id && reg.id === user.id) {
+    fail('AUTO_RESOLUCION', 'NO PODÉS RESOLVER ALGO QUE REGISTRASTE VOS: LO RESUELVE OTRO APROBADOR');
+  }
+  const propio = await funcionarioIdDeUsuario(m, user.id);
+  if (propio && hecho?.funcionario?.id === propio) {
+    fail('AUTO_RESOLUCION', 'NO PODÉS RESOLVER UN HECHO TUYO: LO RESUELVE OTRO APROBADOR');
   }
 }
 
@@ -331,7 +347,7 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
         relations: ['funcionario', 'funcionario.monedaSalario', 'tipoFalta', 'moneda', 'detectadoPor'],
       });
       if (!falta) fail('NO_ENCONTRADO', 'FALTA NO ENCONTRADA');
-      noAutoResolver(falta, user);
+      await noAutoResolver(m, falta, user);
       if (![DrFaltaEstado.REGISTRADA, DrFaltaEstado.APELADA].includes(falta.estado)) fail('ESTADO_INVALIDO', 'LA FALTA YA FUE RESUELTA');
       // §12: con el plazo de apelación vigente solo se aprueba si la persona renunció a apelar.
       // (Si apeló, la falta está APELADA y se resuelve con la apelación a la vista.)
@@ -408,7 +424,7 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
         const repo = m.getRepository(DrFalta);
         const falta: any = await repo.findOne({ where: { id: faltaId } as any, relations: ['penalizacion', 'funcionario', 'detectadoPor'] });
         if (!falta) fail('NO_ENCONTRADO', 'FALTA NO ENCONTRADA');
-        noAutoResolver(falta, user);
+        await noAutoResolver(m, falta, user);
         const permitidos = estadoFinal === DrFaltaEstado.JUSTIFICADA
           ? [DrFaltaEstado.REGISTRADA, DrFaltaEstado.APELADA]
           : [DrFaltaEstado.REGISTRADA, DrFaltaEstado.APELADA, DrFaltaEstado.APROBADA];
