@@ -5,9 +5,9 @@
 > métodos de cálculo. Lo aprobado se materializa como **`Penalizacion` / `Bono` normales**
 > marcados con el prefijo `[DR]`, así la liquidación de sueldo los toma sin cambios.
 >
-> **Fase 1 (PR #313): solo backend.** Entidades `dr_*`, migración, permisos, motor puro,
-> handlers RPC y tres suites de test. **No hay pantallas todavía** (fase 2 desktop,
-> fase 3 PWA). Todo se ejercita por IPC / `POST /api/rpc`.
+> **Fase 1 (PR #313):** backend (entidades `dr_*`, migración, permisos, motor puro,
+> handlers RPC y tres suites de test). **Fase 2:** pantallas desktop. **Fase 3:** pantallas
+> PWA mobile (ver «Pantallas mobile»).
 
 ## Principios de diseño (el porqué)
 
@@ -116,6 +116,10 @@ REGISTRADA ──(funcionario apela, dentro del plazo)──▶ APELADA
    - Tardanza con `minutos ≤ toleranciaMinutos` → resultado NINGUNO: **no se crea la falta**.
    - `apelacionVence = ahora + plazoApelacionHoras`.
    - Devuelve `{ creadas, loteId, ignoradas }`.
+   - **Vista previa** (`dr-preview-falta`, `RRHH_DR_REGISTRAR`, solo lectura): mismos datos
+     de entrada, mismo cálculo (`calcularFalta` + chequeo de tardanza), no guarda nada.
+     Devuelve `{ items: [{ funcionarioId, resultado: ADVERTENCIA|MULTA|NINGUNO|IGNORADA,
+     monto, nOcurrencia, motivo? }], simbolo }`. La usa la PWA para no duplicar el motor.
 2. **Apelación** (`dr-apelar-falta`, `RRHH_DR_MIS_DATOS`, solo el dueño de la falta): exige
    texto, plazo vigente (`PLAZO_VENCIDO`) y que no haya renunciado (`RENUNCIO_APELACION`).
    UPDATE condicional `estado=REGISTRADA AND renunciaApelacion=false` → APELADA.
@@ -319,6 +323,26 @@ Electron: `scripts/ui-sandbox.ts` (app web contra una base temporal).
 Separación de funciones (backend): nadie resuelve un hecho que registró ni uno cargado a su
 propio funcionario (`noAutoResolver`), y quien está entre los ganadores no aprueba el premio.
 
+## Pantallas mobile (fase 3)
+
+En `projects/mobile/src/app/pages/rrhh/disciplina/` (helpers en `dr-mobile.utils.ts`),
+entradas en `RRHH_ITEMS` de `projects/mobile/src/app/app.routes.ts`. La configuración y los
+reportes quedan en desktop.
+
+| Ruta | Página | Permiso | Canales |
+|---|---|---|---|
+| `/rrhh/disciplina/falta` | `registrar-falta` | `RRHH_DR_REGISTRAR` | `dr-get-tipos-falta`, `dr-preview-falta`, `dr-registrar-falta` |
+| `/rrhh/disciplina/error` | `registrar-error` | `RRHH_DR_REGISTRAR` | `dr-get-tipos-error`, `dr-registrar-error` |
+| `/rrhh/disciplina/puntaje` | `puntaje-dia` | `RRHH_DR_PUNTUAR` | `dr-get-premios`, `dr-get-criterios`, `dr-get-grupo-miembros`, `dr-get-puntajes`, `dr-puntuar` |
+| `/rrhh/disciplina/votar` | `votacion` | `RRHH_DR_VOTAR` | `dr-mis-encuestas-pendientes`, `dr-votar` |
+| `/rrhh/disciplina/mi-resumen` | `mi-resumen` | `RRHH_DR_MIS_DATOS` | `dr-mis-faltas`, `dr-mis-puntos`, `dr-mis-premios`, `dr-apelar-falta`, `dr-renunciar-apelacion` |
+| `/rrhh/disciplina/aprobaciones` | `aprobaciones` (M6) | `RRHH_DR_APROBAR` | `dr-get-faltas`, `dr-aprobar-falta`, `dr-justificar-falta`, `dr-anular-falta` |
+
+Límites de la PWA: M6 resuelve **solo faltas** (los premios se aprueban únicamente en
+desktop); el bloqueo de «hecho propio» no se anticipa en la UI mobile, depende del error del
+backend (`noAutoResolver`); puntaje del día y votación usan `confirm()` del navegador para
+descartar cambios sin guardar.
+
 ## Handlers
 
 `disciplina.handler.ts` (faltas), `disciplina-votacion.handler.ts` (períodos y votación),
@@ -349,8 +373,9 @@ Manual: `docs/testing/TESTING-CHECKLIST-DISCIPLINA-RECONOCIMIENTO.md`.
    Ver [../reference/known-bugs.md](../reference/known-bugs.md).
 2. **Doble descuento si la falta DR se carga antes que la asistencia.** El chequeo de
    tardanza solo mira las Penalizaciones automáticas que ya existen.
-3. **Sin UI mobile.** La fase 2 trajo las pantallas desktop; falta la fase 3 (PWA:
-   registro rápido, puntaje, votación, Mi resumen y apelación del funcionario).
+3. **PWA parcial (fase 3).** Sin aprobación de premios en mobile (solo desktop); «hecho
+   propio» en mobile solo se ve al fallar el backend; descarte de puntajes/votos con
+   `confirm()` nativo. Ver «Pantallas mobile».
 4. ~~Aprobar un premio no marcaba el borrador como desactualizado~~: corregido en fase 2.
 6. Aprobar un premio toma la última propuesta guardada: si otro recalcula entre «Calcular»
    y «Aprobar», se aprueba lo recalculado.

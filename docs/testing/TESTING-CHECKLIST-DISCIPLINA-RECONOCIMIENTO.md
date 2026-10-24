@@ -1,4 +1,4 @@
-# Checklist de pruebas — Disciplina y Reconocimiento (fases 1 y 2)
+# Checklist de pruebas — Disciplina y Reconocimiento (fases 1, 2 y 3)
 
 Feature: módulo RRHH **Disciplina y Reconocimiento (DR)** (PR #313): faltas con advertencia,
 multa y apelación; errores con puntos; puntaje diario por criterios; votación anónima entre
@@ -244,8 +244,64 @@ temporal (ver cabecera del script).
 - [ ] Premios: calcular, revisar y aprobar; aprobar marca el borrador de liquidación como
       desactualizado.
 
-### Fase 3 (PWA) — pendiente
-- [ ] Registro rápido, error en 3 toques, puntaje del día, votación paso a paso con envío
-      único y «Ya votaste», Mi resumen con «Apelar» y plazo. Capturas mobile (390 px).
+## Fase 3 (PWA mobile)
+
+Pantallas en `projects/mobile/src/app/pages/rrhh/disciplina/`, desde el menú RRHH de la PWA.
+**Requiere reiniciar la app** (el canal nuevo `dr-preview-falta` está en `electron/handlers/`).
+Cada pantalla se prueba en **modo claro y oscuro** y a **390 px** de ancho (DevTools, modo
+dispositivo): sin scroll horizontal, botones de al menos 44 px, textos sin cortar.
+Dos usuarios: **admin** (todos los `RRHH_DR_*`) y **colaborador** (solo `COLABORADOR_DR`).
+
+### 15. Menú y permisos
+- [ ] Admin ve las 6 entradas: Registrar falta, Registrar error, Puntaje del día,
+      Votación anónima, Mi resumen, Aprobaciones DR.
+- [ ] Colaborador ve solo Votación anónima y Mi resumen (`COLABORADOR_DR` = VOTAR + MIS_DATOS).
+- [ ] Entrar por URL a una ruta sin permiso (`/rrhh/disciplina/aprobaciones` con el
+      colaborador) no muestra la pantalla.
+
+### 16. Registrar falta (`/rrhh/disciplina/falta`, `RRHH_DR_REGISTRAR`)
+- [ ] Pasos tipo → cuándo → funcionario(s) → confirmar; el tipo muestra su regla y
+      «Todos los presentes» cuando corresponde.
+- [ ] Antes de confirmar, la vista previa (`dr-preview-falta`) muestra por persona
+      ADVERTENCIA / MULTA con monto y n.ª vez / dentro de tolerancia / ignorada; coincide
+      con lo que crea el registro real.
+- [ ] Tardanza: minutos dentro de la tolerancia no crean falta; con penalización automática
+      de asistencia ese día queda «Ignorada» con motivo.
+- [ ] Varios funcionarios: comparten lote; el resultado lista creadas e ignoradas.
+
+### 17. Registrar error (`/rrhh/disciplina/error`, `RRHH_DR_REGISTRAR`)
+- [ ] Tres toques: tipo (con gravedad y puntos) → quién → confirmar; muestra los puntos
+      descontados por persona.
+
+### 18. Puntaje del día (`/rrhh/disciplina/puntaje`, `RRHH_DR_PUNTUAR`)
+- [ ] Elegir premio por criterios y fecha: carga criterios, miembros del grupo y los
+      puntajes ya guardados de ese día.
+- [ ] Guardar y volver a entrar: los valores persisten (no duplica).
+- [ ] Con cambios sin guardar, cambiar de premio o fecha pide confirmar el descarte
+      (diálogo `confirm()` del navegador).
+
+### 19. Votación anónima (`/rrhh/disciplina/votar`, `RRHH_DR_VOTAR`)
+- [ ] Lista solo encuestas abiertas donde el usuario no votó; aviso de anonimato visible.
+- [ ] Paso a paso por compañero y pregunta; el envío es único; después aparece «Ya votaste».
+- [ ] Votar desde otro dispositivo / encuesta cerrada entre medio: error claro y la lista
+      se refresca.
+- [ ] Salir con respuestas cargadas pide confirmar (`confirm()`).
+
+### 20. Mi resumen (`/rrhh/disciplina/mi-resumen`, `RRHH_DR_MIS_DATOS`)
+- [ ] El colaborador ve sus faltas, puntos del período y premios; nunca los de otro.
+- [ ] Falta dentro del plazo: «Apelar» (exige texto) y «No voy a apelar» (renuncia); vencido el
+      plazo o ya renunciada, los botones no aparecen.
+- [ ] La falta apelada aparece en Aprobaciones (mobile y desktop) con su descargo.
+
+### 21. Aprobaciones DR (`/rrhh/disciplina/aprobaciones`, `RRHH_DR_APROBAR`)
+- [ ] Pendientes y apeladas; aprobar deshabilitado con motivo mientras corre el plazo y no
+      hubo renuncia.
+- [ ] Aprobar (genera la Penalización `[DR]`), justificar y anular piden motivo y quitan la
+      falta de la lista.
+- [ ] Hecho propio (falta cargada a uno mismo o registrada por uno): el backend la rechaza y
+      se muestra el error (mobile no la deshabilita de antemano).
+- [ ] Los premios **no** se aprueban acá: solo desde desktop (pestaña Premios).
+
+### Pendiente
 - [ ] Cierre de período con ranking y empates, y el aviso de anonimato del constructor de
       encuestas en grupos chicos.

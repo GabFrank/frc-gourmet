@@ -14,6 +14,7 @@
  *  E') Plazo de apelación: no se aprueba antes de que venza salvo renuncia del funcionario.
  *  J') Voto atómico: si fallan los agregados no queda la participación.
  *  P) Tardanza: sin doble descuento si asistencias ya generó una multa automática ese día.
+ *  Q) Vista previa (dr-preview-falta): mismo resultado que el registro, sin crear filas; tardanza IGNORADA; permiso.
  *
  * Uso: npm run test:disciplina-e2e
  */
@@ -432,6 +433,39 @@ async function main() {
   const penC: any[] = await ds.getRepository(Penalizacion).find({ where: { funcionario: { id: fC.id }, anulada: false } });
   const porDia = (d: string) => penC.filter((p) => String(p.fecha).slice(0, 10) === d).length;
   ok(porDia('2027-05-04') === 1 && porDia('2027-05-05') === 1, 'CARLA: una sola penalización por día', penC.map((p) => [p.fecha, p.descripcion]));
+
+  // ===== Q) Vista previa de la falta (sin guardar) =====
+  console.log('\n[Q] Vista previa: mismo cálculo que el registro, sin crear filas');
+  const tQ = await call('dr-save-tipo-falta', {
+    nombre: 'uniforme incompleto', advertenciasPrevias: 1, montoMulta: 30000, moneda: { id: pyg.id },
+    reinicio: 'MENSUAL', plazoApelacionHoras: 48, activo: true,
+  });
+  const fD: any = await mkFunc('DANI');
+  const nFaltasQ0 = await ds.getRepository(DrFalta).count();
+  const pv1 = await call('dr-preview-falta', { tipoFaltaId: tQ.id, fecha: '2027-06-02', funcionarioIds: [fD.id] });
+  ok(pv1.items.length === 1 && pv1.items[0].funcionarioId === fD.id && pv1.items[0].resultado === 'ADVERTENCIA' && pv1.items[0].nOcurrencia === 1 && approx(pv1.items[0].monto, 0),
+    'preview 1.ª ocurrencia = ADVERTENCIA', pv1);
+  ok(pv1.simbolo === 'Gs', 'preview trae el símbolo de la moneda', pv1.simbolo);
+  ok(await ds.getRepository(DrFalta).count() === nFaltasQ0, 'preview no crea faltas');
+  const rQ1 = await call('dr-registrar-falta', { tipoFaltaId: tQ.id, fecha: '2027-06-02', funcionarioIds: [fD.id] });
+  ok(rQ1.creadas[0].resultado === pv1.items[0].resultado && rQ1.creadas[0].nOcurrencia === pv1.items[0].nOcurrencia && approx(rQ1.creadas[0].montoCalculado ?? 0, pv1.items[0].monto),
+    'registro ADVERTENCIA = lo que mostró la preview', { pv: pv1.items[0], reg: rQ1.creadas[0] });
+  const pv2 = await call('dr-preview-falta', { tipoFaltaId: tQ.id, fecha: '2027-06-03', funcionarioIds: [fD.id] });
+  ok(pv2.items[0].resultado === 'MULTA' && pv2.items[0].nOcurrencia === 2 && approx(pv2.items[0].monto, 30000), 'preview 2.ª ocurrencia = MULTA 30.000', pv2.items[0]);
+  const nFaltasQ1 = await ds.getRepository(DrFalta).count();
+  ok(nFaltasQ1 === nFaltasQ0 + 1, 'preview de la multa tampoco crea faltas', [nFaltasQ0, nFaltasQ1]);
+  const rQ2 = await call('dr-registrar-falta', { tipoFaltaId: tQ.id, fecha: '2027-06-03', funcionarioIds: [fD.id] });
+  ok(rQ2.creadas[0].resultado === pv2.items[0].resultado && rQ2.creadas[0].nOcurrencia === pv2.items[0].nOcurrencia && approx(rQ2.creadas[0].montoCalculado, pv2.items[0].monto),
+    'registro MULTA = lo que mostró la preview', { pv: pv2.items[0], reg: rQ2.creadas[0] });
+  // Tardanza: CARLA ya tiene la penalización automática de asistencias el 04/05 (ver P); la [DR] de BETO no cuenta.
+  const nFaltasQ2 = await ds.getRepository(DrFalta).count();
+  const pvT = await call('dr-preview-falta', { tipoFaltaId: tTard.id, fecha: '2027-05-04', funcionarioIds: [fC.id, fB.id], minutosTardanza: 20 });
+  const pvC = pvT.items.find((i: any) => i.funcionarioId === fC.id);
+  const pvB = pvT.items.find((i: any) => i.funcionarioId === fB.id);
+  ok(pvC?.resultado === 'IGNORADA' && approx(pvC.monto, 0) && pvC.nOcurrencia === null && !!pvC.motivo, 'preview tardanza: CARLA IGNORADA (multa automática ese día)', pvC);
+  ok(pvB?.resultado === 'MULTA' && approx(pvB.monto, 10000), 'preview tardanza: BETO MULTA (la [DR] no cuenta como automática)', pvB);
+  ok(await ds.getRepository(DrFalta).count() === nFaltasQ2, 'preview de tardanza no crea faltas');
+  await como(colab, () => rechaza(call('dr-preview-falta', { tipoFaltaId: tQ.id, fecha: '2027-06-04', funcionarioIds: [fD.id] }), 'FORBIDDEN', 'colaborador sin RRHH_DR_REGISTRAR no usa la preview'));
 
   await ds.destroy();
   console.log(`\n[disciplina-e2e] ${passed} OK, ${failed} fallas`);
