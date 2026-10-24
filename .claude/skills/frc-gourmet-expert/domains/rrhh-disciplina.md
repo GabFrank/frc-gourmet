@@ -300,6 +300,22 @@ Por tipo de falta: `advertenciasPrevias`, `montoMulta`, `escalaMontos`, `reinici
 SEMANAL arranca el lunes (el motor acepta otro inicio, el handler no lo pasa) y la
 «advertencia de tolerancia» del motor (`advertirDentroTolerancia`) no está expuesta.
 
+## Pantallas desktop (fase 2)
+
+En `src/app/pages/rrhh/disciplina/`, desde *RRHH › Disciplina y reconocimiento*
+(`menu-tree.ts`):
+
+| Pantalla | Permiso | Qué hace |
+|---|---|---|
+| `registro-disciplina` | `RRHH_DR_REGISTRAR` | Pestañas Faltas y Errores: registrar (diálogos `registrar-falta-dialog`, `registrar-error-dialog`) e historial filtrable |
+| `aprobaciones-disciplina` | `RRHH_DR_APROBAR` | Pestañas Pendientes, Apeladas y Premios |
+| `config-disciplina` | `RRHH_DR_CONFIGURAR` | Catálogos genéricos por pestaña (formulario `dr-form-dialog`) y botón «Cargar ejemplo Cocina» |
+
+`disciplina-api.service.ts` envuelve los canales `dr-*`. Los datos de ejemplo
+(`ejemplo-cocina.ts`) son solo semilla editable: los carga `cargarEjemploCocina`, que es
+idempotente y se prueba con `npm run test:disciplina-ejemplo`. Para probar pantallas sin
+Electron: `scripts/ui-sandbox.ts` (app web contra una base temporal).
+
 ## Handlers
 
 `disciplina.handler.ts` (faltas), `disciplina-votacion.handler.ts` (períodos y votación),
@@ -321,7 +337,7 @@ suites DR **no** están en `scripts/run-all-tests.js` (no corren con `test:all`)
 
 Manual: `docs/testing/TESTING-CHECKLIST-DISCIPLINA-RECONOCIMIENTO.md`.
 
-## Limitaciones conocidas (fase 1)
+## Limitaciones conocidas
 
 1. **Carrera en el primer INSERT del agregado de votos.** Si dos personas votan a la vez y
    la fila (período, evaluado, pregunta) todavía no existe, las dos hacen `insert` y una
@@ -330,8 +346,7 @@ Manual: `docs/testing/TESTING-CHECKLIST-DISCIPLINA-RECONOCIMIENTO.md`.
    Ver [../reference/known-bugs.md](../reference/known-bugs.md).
 2. **Doble descuento si la falta DR se carga antes que la asistencia.** El chequeo de
    tardanza solo mira las Penalizaciones automáticas que ya existen.
-3. **Sin UI.** Fase 2 (desktop: configuración, registro, aprobaciones, ejemplo Cocina) y
-   fase 3 (PWA: registro rápido, puntaje, votación, Mi resumen).
-4. Aprobar un premio **no** marca el borrador del mes como desactualizado (las faltas sí):
-   si ya había borrador, hay que regenerarlo a mano para que tome el Bono.
+3. **Sin UI mobile.** La fase 2 trajo las pantallas desktop; falta la fase 3 (PWA:
+   registro rápido, puntaje, votación, Mi resumen y apelación del funcionario).
+4. ~~Aprobar un premio no marcaba el borrador como desactualizado~~: corregido en fase 2.
 5. La apertura y el cierre automático de encuestas por día y hora no están implementados.

@@ -162,6 +162,7 @@ Registrados en `register-all-handlers.ts` justo después de `registerAsistencias
 | | `dr-mis-faltas`, `dr-apelar-falta`, `dr-renunciar-apelacion` | MIS_DATOS |
 | | `dr-aprobar-falta`, `dr-justificar-falta`, `dr-anular-falta` | APROBAR |
 | `disciplina-votacion.handler.ts` | `dr-abrir-periodo`, `dr-cerrar-periodo` | APROBAR |
+| | `dr-get-periodos` | APROBAR \| RESULTADOS_VER |
 | | `dr-mis-encuestas-pendientes`, `dr-votar` | VOTAR |
 | | `dr-get-resultados-encuesta` | RESULTADOS_VER |
 | `disciplina-premios.handler.ts` | `dr-calcular-premio`, `dr-aprobar-premio` | APROBAR |

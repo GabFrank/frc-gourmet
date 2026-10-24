@@ -1,4 +1,4 @@
-# Checklist de pruebas — Disciplina y Reconocimiento (fase 1, backend)
+# Checklist de pruebas — Disciplina y Reconocimiento (fases 1 y 2)
 
 Feature: módulo RRHH **Disciplina y Reconocimiento (DR)** (PR #313): faltas con advertencia,
 multa y apelación; errores con puntos; puntaje diario por criterios; votación anónima entre
@@ -210,20 +210,42 @@ pregunta ESCALA 1–5 obligatoria y una TEXTO opcional. `dr-abrir-periodo` con `
 
 ---
 
-## Fase 2 (UI) — pendiente
+## Fase 2 (UI desktop)
 
-Se completa cuando existan las pantallas. A probar entonces:
+Probar en modo oscuro y, si se puede, sobre una copia de la base real (nunca producción).
+Sin Electron: `npx ts-node ... scripts/ui-sandbox.ts` levanta la app web contra una base
+temporal (ver cabecera del script).
 
-- [ ] Desktop *RRHH › Disciplina y reconocimiento*: configuración en pestañas (grupos y
-      pesos, faltas y checklists, gravedades y errores, premios y criterios, encuestas con
-      constructor y vista previa, parámetros); botón «Cargar ejemplo Cocina» idempotente,
-      con la multa colectiva desactivada.
-- [ ] Registro e historial filtrable; vista previa «será ADVERTENCIA / MULTA ₲…».
-- [ ] Bandeja de aprobaciones y apelaciones (plazo visible, selección múltiple).
-- [ ] Cierre de período: ranking, empates, monto editable, «Aprobar y enviar a
-      liquidación».
-- [ ] Aviso del constructor de encuestas sobre el anonimato de las respuestas de texto en
-      grupos chicos.
-- [ ] Fase 3 PWA: registro rápido, error en 3 toques, puntaje del día, votación paso a paso
-      con envío único y «Ya votaste», Mi resumen con «Apelar» y plazo. Capturas mobile
-      (390 px) y desktop (1920 px).
+### 11. Menú y permisos
+- [ ] *RRHH › Disciplina y reconocimiento* muestra 3 entradas: Registro (permiso
+      `RRHH_DR_REGISTRAR`), Aprobaciones (`RRHH_DR_APROBAR`) y Configuración
+      (`RRHH_DR_CONFIGURAR`). Un usuario sin el permiso no ve la entrada.
+
+### 12. Configuración
+- [ ] Pestañas: Tipos de falta (con checklist), Gravedades, Tipos de error, Criterios,
+      Premios, Grupos y miembros, Encuestas y preguntas.
+- [ ] Alta, edición y desactivación en cada catálogo (nada se borra); los hijos (checklist,
+      miembros, preguntas) se filtran por el padre seleccionado.
+- [ ] «Cargar ejemplo Cocina» crea los datos de ejemplo; pulsarlo de nuevo no duplica.
+      La multa colectiva queda desactivada.
+- [ ] Todos los montos y nombres se pueden editar (nada fijo en el código).
+
+### 13. Registro
+- [ ] Pestaña Faltas: registrar falta a un funcionario; el historial muestra quién la
+      registró y se filtra por fechas, funcionario y estado.
+- [ ] Pestaña Errores: registrar error con gravedad; muestra los puntos.
+
+### 14. Aprobaciones
+- [ ] Pendientes: aprobar con **otro** usuario genera la Penalización en la liquidación
+      del mes abierto. El mismo usuario que registró no puede aprobar.
+- [ ] Apeladas: la falta apelada aparece con su descargo; se resuelve aprobando (multa),
+      justificando o anulando.
+- [ ] Pendientes también permite justificar o anular.
+- [ ] Premios: calcular, revisar y aprobar; aprobar marca el borrador de liquidación como
+      desactualizado.
+
+### Fase 3 (PWA) — pendiente
+- [ ] Registro rápido, error en 3 toques, puntaje del día, votación paso a paso con envío
+      único y «Ya votaste», Mi resumen con «Apelar» y plazo. Capturas mobile (390 px).
+- [ ] Cierre de período con ranking y empates, y el aviso de anonimato del constructor de
+      encuestas en grupos chicos.
