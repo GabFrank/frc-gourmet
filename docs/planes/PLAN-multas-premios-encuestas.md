@@ -116,7 +116,7 @@ Anonimato
 - Resultados: solo admin, período cerrado y mínimo de votantes configurable (`dr.votacion.min_votantes`, 4 por defecto); si no se alcanza, el premio queda DESIERTO o se decide a mano. Se muestra solo el promedio ponderado.
 Aprobación y liquidación
 - Aprobación idempotente garantizada por la base: índice único en `dr_falta.penalizacion_id` y en `dr_resultado_premio.bono_id`, y transición de estado condicional (UPDATE … WHERE estado = esperado); doble clic no duplica.
-- Antes de vencer la apelación solo se aprueba si la persona no apeló (o renunció).
+- Antes de vencer el plazo de apelación solo se aprueba si la persona renunció a apelar; si apeló, se resuelve la apelación (APELADA).
 - «Mes abierto» por funcionario = sin liquidación o con liquidación BORRADOR. Si el mes del hecho está APROBADO/PAGADO, la Penalizacion/Bono va al siguiente mes abierto, con la fecha original en el motivo; el mes destino queda guardado (`mes_destino`).
 - Borrador desactualizado: si al aprobar/anular existe el borrador de ese funcionario y mes, se regenera en la misma operación; si falla, se marca desactualizado (`dr_liquidacion_pendiente`) y no se puede aprobar la liquidación hasta regenerarla.
 - Corrección de algo ya liquidado: ajuste compensatorio en el mes siguiente; nunca se toca una liquidación cerrada.
@@ -138,5 +138,5 @@ Entidades `dr_*` + migración (sqlite y postgres, up/down) + permisos RRHH_DR_* 
 1. Migración reversible: `test:disciplina-migracion` corre up → down → up en SQLite y Postgres (`DR_E2E_PG`); down borra solo `dr_*` y deja el resto del esquema idéntico.
 2. Permisos contra develop: `test:permisos` da los mismos asserts en develop (0ae70c8e) y en la rama (87/89; las 2 fallas son de backup-create, preexistentes, #265).
 3. Doble descuento por tardanza: `dr-registrar-falta` ignora la tardanza de un día si asistencias ya generó una Penalizacion automática (no [DR]) ese día; lo informa en `ignoradas`. Cubierto en e2e [P].
-4. Voto atómico: participación y agregados en una sola transacción; si fallan los agregados no queda «votó». Cubierto en e2e [J].
+4. Voto atómico: participación y agregados en una sola transacción, con el período re-verificado ABIERTO dentro de ella (FOR SHARE en Postgres); si fallan los agregados no queda «votó». Al cerrar, textos y participaciones se reescriben mezclados con ids nuevos (§12), lo que además corta el vínculo por metadatos de transacción (xmin) entre votante y comentario. Cubierto en e2e [J].
 5. Plazo de apelación: con el plazo vigente solo se aprueba si la persona renunció (`dr-renunciar-apelacion`, que además bloquea apelar después). Cubierto en e2e [E] y [O].

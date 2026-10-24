@@ -257,7 +257,13 @@ async function main() {
   ok(await ds.getRepository(DrParticipacion).count() === 4, '4 participaciones');
   await rechaza(call('dr-get-resultados-encuesta', per.id), 'PERIODO_ABIERTO', 'sin resultados con período abierto');
 
+  const { DrRespuestaTexto } = E('rrhh/disciplina/dr-respuesta-texto.entity');
+  const idsAntes = [...(await ds.getRepository(DrRespuestaTexto).find()), ...(await ds.getRepository(DrParticipacion).find())].map((x: any) => x.id);
   const cierre = await call('dr-cerrar-periodo', per.id);
+  const textosDesp: any[] = await ds.getRepository(DrRespuestaTexto).find();
+  const partDesp: any[] = await ds.getRepository(DrParticipacion).find();
+  ok(textosDesp.length === 3 && partDesp.length === 4 && [...textosDesp, ...partDesp].every((x) => !idsAntes.includes(x.id)),
+    'al cerrar, textos y participaciones se reescriben con ids nuevos', { t: textosDesp.length, p: partDesp.length });
   ok(cierre.votantes === 4, 'cierre con 4 votantes', cierre);
   const resu = await call('dr-get-resultados-encuesta', per.id);
   const filaFabi = resu.filas.find((f: any) => f.evaluadoId === fabi.id && f.preguntaId === qEsc.id);

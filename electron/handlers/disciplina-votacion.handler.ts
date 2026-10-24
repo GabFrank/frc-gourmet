@@ -182,6 +182,13 @@ export function registerDisciplinaVotacionHandlers(dataSource: DataSource, getCu
     // Una sola transacción: participación + agregados. Si algo falla, no queda participación
     // registrada sin su voto (y la persona puede volver a votar).
     await dataSource.transaction(async (m) => {
+      // 0) El período sigue ABIERTO dentro de la transacción (en Postgres, FOR SHARE: un cierre
+      //    concurrente espera a que termine este voto y viceversa).
+      const vigente = await m.getRepository(DrPeriodo).findOne({
+        where: { id: periodo.id } as any,
+        ...(esPostgres(dataSource) ? { lock: { mode: 'pessimistic_read' as const } } : {}),
+      });
+      if (!vigente || vigente.estado !== DrPeriodoEstado.ABIERTO) fail('PERIODO_CERRADO', 'LA ENCUESTA YA CERRÓ');
       // 1) Participación (índice único periodo+funcionario: un segundo voto choca acá).
       try {
         await m.getRepository(DrParticipacion).insert({ id: drNuevoUuid(), periodo: { id: periodo.id }, funcionario: { id: yo.id } } as any);
@@ -229,8 +236,22 @@ export function registerDisciplinaVotacionHandlers(dataSource: DataSource, getCu
         const a = descifrarAgregado<AgregadoVoto>(f.datosCifrados, clave, ctx(periodoId, f.evaluado.id, f.pregunta.id));
         await m.getRepository(DrVotoAgregado).update({ id: f.id } as any, { ...a, datosCifrados: null } as any);
       }
-      const votantes = await m.getRepository(DrParticipacion).count({ where: { periodo: { id: periodoId } } as any });
-      return { ok: true, votantes };
+      // §12: reescribir textos y participaciones en orden aleatorio (borrar + reinsertar con ids
+      // nuevos). Así ni el orden físico ni los metadatos de transacción de la base (p. ej. xmin
+      // en Postgres) vinculan un comentario con quien votó en la misma transacción.
+      const textos = await m.getRepository(DrRespuestaTexto).find({ where: { periodo: { id: periodoId } } as any, loadRelationIds: true });
+      const partes = await m.getRepository(DrParticipacion).find({ where: { periodo: { id: periodoId } } as any, loadRelationIds: true });
+      if (textos.length) await m.getRepository(DrRespuestaTexto).delete({ id: In(textos.map((t) => t.id)) } as any);
+      if (partes.length) await m.getRepository(DrParticipacion).delete({ id: In(partes.map((x) => x.id)) } as any);
+      for (const t of mezclar(textos) as any[]) {
+        await m.getRepository(DrRespuestaTexto).insert({
+          id: drNuevoUuid(), periodo: { id: periodoId }, evaluado: { id: t.evaluado }, pregunta: { id: t.pregunta }, texto: t.texto,
+        } as any);
+      }
+      for (const pa of mezclar(partes) as any[]) {
+        await m.getRepository(DrParticipacion).insert({ id: drNuevoUuid(), periodo: { id: periodoId }, funcionario: { id: pa.funcionario } } as any);
+      }
+      return { ok: true, votantes: partes.length };
     });
   });
 
