@@ -316,6 +316,9 @@ En `src/app/pages/rrhh/disciplina/`, desde *RRHH › Disciplina y reconocimiento
 idempotente y se prueba con `npm run test:disciplina-ejemplo`. Para probar pantallas sin
 Electron: `scripts/ui-sandbox.ts` (app web contra una base temporal).
 
+Separación de funciones (backend): nadie resuelve un hecho que registró ni uno cargado a su
+propio funcionario (`noAutoResolver`), y quien está entre los ganadores no aprueba el premio.
+
 ## Handlers
 
 `disciplina.handler.ts` (faltas), `disciplina-votacion.handler.ts` (períodos y votación),
@@ -349,4 +352,7 @@ Manual: `docs/testing/TESTING-CHECKLIST-DISCIPLINA-RECONOCIMIENTO.md`.
 3. **Sin UI mobile.** La fase 2 trajo las pantallas desktop; falta la fase 3 (PWA:
    registro rápido, puntaje, votación, Mi resumen y apelación del funcionario).
 4. ~~Aprobar un premio no marcaba el borrador como desactualizado~~: corregido en fase 2.
+6. Aprobar un premio toma la última propuesta guardada: si otro recalcula entre «Calcular»
+   y «Aprobar», se aprueba lo recalculado.
+7. La bandeja de aprobaciones trae hasta 1000 faltas pendientes.
 5. La apertura y el cierre automático de encuestas por día y hora no están implementados.
