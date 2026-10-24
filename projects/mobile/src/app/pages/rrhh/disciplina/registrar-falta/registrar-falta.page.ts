@@ -9,7 +9,6 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 // Mismo motor puro que usa el backend (sin dependencias de Node): la vista previa calcula igual.
-import { calcularMulta, FaltaPrevia } from '../../../../../../../../electron/services/disciplina/motor-multas';
 import {
   DR_MOBILE_STYLES, DrFuncionarioVM, drCall, drCargarFuncionarios, drFechaIso, drFiltrar, drMensajeError, drMonto,
 } from '../dr-mobile.utils';
@@ -30,16 +29,16 @@ interface TipoFaltaVM {
 }
 
 interface PreviewVM {
-  resultado: 'ADVERTENCIA' | 'MULTA' | 'NINGUNO';
+  resultado: 'ADVERTENCIA' | 'MULTA' | 'NINGUNO' | 'IGNORADA';
   monto: number;
-  n: number;
+  n: number | null;
 }
 
 interface ResultadoVM {
   nombre: string;
   resultado: string;
   monto: number;
-  n: number;
+  n: number | null;
 }
 
 /** Estados de asistencia que cuentan como «presente» para precargar las faltas colectivas. */
@@ -95,8 +94,7 @@ export class RegistrarFaltaPage implements OnInit {
 
   preview = new Map<number, PreviewVM>();
   calculandoPreview = false;
-  private previasCache = new Map<number, any[]>();
-  private previewToken = 0;
+    private previewToken = 0;
 
   creadas: ResultadoVM[] | null = null;
   ignoradas: { nombre: string; motivo: string }[] = [];
@@ -218,7 +216,7 @@ export class RegistrarFaltaPage implements OnInit {
     }
   }
 
-  /** Vista previa por funcionario con el motor de multas y sus faltas previas del mismo tipo. */
+  /** Vista previa por funcionario: el backend corre el mismo cálculo que el registro, sin guardar. */
   async actualizarPreview(): Promise<void> {
     const token = ++this.previewToken;
     const tipo = this.tipo;
@@ -230,30 +228,17 @@ export class RegistrarFaltaPage implements OnInit {
     }
     this.calculandoPreview = true;
     try {
-      const faltan = ids.filter((id) => !this.previasCache.has(id));
-      await Promise.all(
-        faltan.map(async (id) => this.previasCache.set(id, (await drCall('dr-get-faltas', { funcionarioId: id, limite: 1000 })) ?? [])),
-      );
-      if (token !== this.previewToken) return;
       const min = this.minutos.value;
+      const r = await drCall('dr-preview-falta', {
+        tipoFaltaId: tipo.id,
+        fecha,
+        funcionarioIds: ids,
+        minutosTardanza: min === null || (min as any) === '' ? undefined : Number(min),
+      });
+      if (token !== this.previewToken) return;
       const mapa = new Map<number, PreviewVM>();
-      for (const id of ids) {
-        const previas: FaltaPrevia[] = (this.previasCache.get(id) ?? [])
-          .filter((f) => f?.tipoFalta?.id === tipo.id)
-          .map((f) => ({ fecha: String(f.fecha).slice(0, 10), estado: f.estado }));
-        const r = calcularMulta(
-          {
-            advertenciasPrevias: tipo.advertenciasPrevias,
-            montoMulta: tipo.montoMulta,
-            escalaMontos: tipo.escala,
-            reinicio: tipo.reinicio as any,
-            toleranciaMinutos: tipo.toleranciaMinutos,
-          } as any,
-          previas,
-          fecha,
-          { minutosTardanza: min === null || (min as any) === '' ? undefined : Number(min) },
-        );
-        mapa.set(id, { resultado: r.resultado as any, monto: r.monto, n: r.nOcurrencia });
+      for (const it of r?.items ?? []) {
+        mapa.set(it.funcionarioId, { resultado: it.resultado, monto: Number(it.monto) || 0, n: it.nOcurrencia });
       }
       this.preview = mapa;
     } catch {
@@ -300,7 +285,6 @@ export class RegistrarFaltaPage implements OnInit {
       this.ignoradas = ignoradas.map((i) => ({ nombre: this.nombre(i.funcionarioId), motivo: i.motivo }));
       const tratados = new Set<number>([...creadas.map((c) => c.funcionario?.id), ...ignoradas.map((i) => i.funcionarioId)]);
       this.enTolerancia = ids.filter((id) => !tratados.has(id)).map((id) => this.nombre(id));
-      ids.forEach((id) => this.previasCache.delete(id));
       const partes = [`${creadas.length} registrada${creadas.length === 1 ? '' : 's'}`];
       if (ignoradas.length) partes.push(`${ignoradas.length} ignorada${ignoradas.length === 1 ? '' : 's'}`);
       this.snack.open(`Falta: ${partes.join(', ')}`, 'OK', { duration: 3500 });

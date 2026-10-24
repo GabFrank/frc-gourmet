@@ -85,7 +85,7 @@
             <ng-container *ngIf="preview.get(f.id) as p">
               <span class="dr-func-extra" [class.dr-multa]="p.resultado === 'MULTA'" [class.dr-adv]="p.resultado === 'ADVERTENCIA'"
                     [class.dr-muted]="p.resultado === 'NINGUNO'">
-                {{ p.resultado === 'MULTA' ? monto(p.monto) : p.resultado === 'ADVERTENCIA' ? 'Advertencia' : 'No cuenta' }}
+                {{ p.resultado === 'MULTA' ? monto(p.monto) : p.resultado === 'ADVERTENCIA' ? 'Advertencia' : p.resultado === 'IGNORADA' ? 'Ya penalizada por asistencia' : 'No cuenta' }}
               </span>
             </ng-container>
           </button>
@@ -106,6 +106,7 @@
                   <span *ngIf="p.resultado === 'MULTA'" class="dr-multa">MULTA {{ monto(p.monto) }}</span>
                   <span *ngIf="p.resultado === 'ADVERTENCIA'" class="dr-adv">ADVERTENCIA</span>
                   <span *ngIf="p.resultado === 'NINGUNO'" class="dr-muted">Dentro de la tolerancia</span>
+                  <span *ngIf="p.resultado === 'IGNORADA'" class="dr-muted">Ya penalizada por asistencia ese día</span>
                 </ng-container>
               </div>
               <div *ngIf="totalMultas" class="dr-res-row"><strong>Total multas</strong><strong class="dr-multa">{{ monto(totalMultas) }}</strong></div>

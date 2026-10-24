@@ -276,6 +276,42 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
     });
   });
 
+  /**
+   * Vista previa de `dr-registrar-falta` sin guardar nada: por funcionario, qué resultaría
+   * (ADVERTENCIA / MULTA con monto / NINGUNO / ignorada). Mismo cálculo que el registro real,
+   * así mobile y desktop no duplican el motor. Solo lectura (transacción que no escribe).
+   */
+  ipcMain.handle('dr-preview-falta', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, P.REGISTRAR);
+    const fecha = fechaIso(data?.fecha);
+    const ids: number[] = Array.from(
+      new Set<number>((data?.funcionarioIds ?? []).map((x: any) => Number(x)).filter((x: number) => x > 0)),
+    );
+    if (!ids.length) return { items: [] };
+    const m = dataSource.manager;
+    const tipo = await m.getRepository(DrTipoFalta).findOne({ where: { id: data?.tipoFaltaId } as any, relations: ['moneda'] });
+    if (!tipo || !(tipo as any).activo) fail('NO_ENCONTRADO', 'TIPO DE FALTA INEXISTENTE O INACTIVO');
+    const esTardanza = !!(tipo as any).fuenteAsistencia || (data.minutosTardanza !== undefined && data.minutosTardanza !== null);
+    const items: { funcionarioId: number; resultado: string; monto: number; nOcurrencia: number | null; motivo?: string }[] = [];
+    for (const fid of ids) {
+      if (esTardanza) {
+        const autos = await m.getRepository(Penalizacion).find({
+          where: { funcionario: { id: fid }, autoGenerada: true, anulada: false } as any,
+        });
+        const fechasAuto = autos
+          .filter((p: any) => !String(p.descripcion ?? '').startsWith(PREFIJO_DR))
+          .map((p: any) => fechaIso(p.fecha));
+        if (debeIgnorarTardanza(fecha, fechasAuto)) {
+          items.push({ funcionarioId: fid, resultado: 'IGNORADA', monto: 0, nOcurrencia: null, motivo: 'YA TIENE PENALIZACIÓN AUTOMÁTICA DE ASISTENCIA ESE DÍA' });
+          continue;
+        }
+      }
+      const r = await calcularFalta(m, tipo, fid, fecha, data.minutosTardanza);
+      items.push({ funcionarioId: fid, resultado: r.resultado, monto: Number(r.monto) || 0, nOcurrencia: r.nOcurrencia ?? null });
+    }
+    return { items, simbolo: (tipo as any).moneda?.simbolo ?? null };
+  });
+
   ipcMain.handle('dr-get-faltas', async (_e, f: any = {}) => {
     await ensurePermission(dataSource, getCurrentUser, [P.REGISTRAR, P.APROBAR]);
     const qb = dataSource.getRepository(DrFalta).createQueryBuilder('f')
