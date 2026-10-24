@@ -147,6 +147,9 @@ async function main() {
   // ===== C) Permisos =====
   console.log('\n[C] Permisos');
   await como(colab, () => rechaza(call('dr-registrar-falta', { tipoFaltaId: tipo.id, fecha: '2026-11-05', funcionarioIds: [fB.id] }), 'FORBIDDEN', 'colaborador no registra faltas'));
+  const listaF: any[] = await call('dr-get-faltas', {});
+  ok(listaF.length > 0 && listaF.every((x) => x.detectadoPor?.nickname && !('password' in x.detectadoPor)),
+    'dr-get-faltas trae quién la registró (nickname) sin la contraseña', listaF[0]?.detectadoPor);
   await como(colab, () => rechaza(call('dr-aprobar-falta', r2.creadas[0].id), 'FORBIDDEN', 'colaborador no aprueba'));
   await rechaza(call('dr-mis-faltas'), 'FORBIDDEN', 'admin sin MIS_DATOS no usa «mis faltas»');
 
@@ -271,6 +274,10 @@ async function main() {
   ok(textosDesp.length === 3 && partDesp.length === 4 && [...textosDesp, ...partDesp].every((x) => !idsAntes.includes(x.id)),
     'al cerrar, textos y participaciones se reescriben con ids nuevos', { t: textosDesp.length, p: partDesp.length });
   ok(cierre.votantes === 4, 'cierre con 4 votantes', cierre);
+  const perCerrados: any[] = await call('dr-get-periodos', { estado: 'CERRADO' });
+  ok(perCerrados.some((x) => x.id === per.id), 'dr-get-periodos lista el período cerrado', perCerrados.map((x) => x.id));
+  ok((await call('dr-get-periodos', { estado: 'ABIERTO' })).every((x: any) => x.id !== per.id), 'dr-get-periodos filtra por estado');
+  await como(colab, () => rechaza(call('dr-get-periodos', {}), 'FORBIDDEN', 'colaborador no lista períodos'));
   const resu = await call('dr-get-resultados-encuesta', per.id);
   const filaFabi = resu.filas.find((f: any) => f.evaluadoId === fabi.id && f.preguntaId === qEsc.id);
   const filaAna = resu.filas.find((f: any) => f.evaluadoId === fA.id && f.preguntaId === qEsc.id);
@@ -325,6 +332,9 @@ async function main() {
   const leve: any = await save(DrGravedad, { nombre: 'LEVE', puntos: 1, orden: 2, activo: true });
   const teGrave: any = await save(DrTipoError, { nombre: 'PLATO FRÍO', gravedad: grave, grupo: gM, orden: 1, activo: true });
   const teLeve: any = await save(DrTipoError, { nombre: 'MESADA SUCIA', gravedad: leve, orden: 2, activo: true });
+  const tesCanal: any[] = await call('dr-get-tipos-error', {});
+  const teCanal = tesCanal.find((x) => x.id === teGrave.id);
+  ok(teCanal?.gravedad?.id === grave.id && teCanal?.grupo?.id === gM.id, 'dr-get-tipos-error trae gravedad y grupo', teCanal);
   const rE1 = await call('dr-registrar-error', { fecha: '2026-07-06', tipoErrorId: teGrave.id, funcionarioIds: [fA.id, fB.id], detalle: 'mesa 4' });
   ok(rE1.length === 2 && rE1.every((x: any) => x.puntos === 3), 'registra error a 2 personas con 3 puntos', rE1);
   await call('dr-registrar-error', { fecha: '2026-07-07', tipoErrorId: teLeve.id, funcionarioIds: [fA.id] });

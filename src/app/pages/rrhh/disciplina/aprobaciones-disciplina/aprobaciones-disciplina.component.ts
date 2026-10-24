@@ -4,8 +4,7 @@
  *    apelación y la persona no renunció (el backend también lo bloquea: PLAZO_APELACION_VIGENTE).
  *  - Apeladas: se ve el texto de la apelación; Aprobar (la rechaza) o Justificar (la acepta).
  *  - Premios: calcular la propuesta de un período CERRADO y aprobarla (crea los Bonos [DR]).
- *    TODO(backend): no hay canal para listar períodos (dr-get-periodos); por ahora el período
- *    se indica por su número.
+ *    El período se elige de la lista de períodos CERRADOS con premio (dr-get-periodos).
  * Quien registró una falta no puede resolverla (AUTO_RESOLUCION): se avisa con un mensaje claro.
  * Doble clic: botones deshabilitados durante la llamada (la base además lo garantiza).
  */
@@ -21,6 +20,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
@@ -36,6 +36,8 @@ interface FaltaBandeja {
   clave: string;
   fecha: string;
   funcionario: string;
+  /** Quién la registró (dr-get-faltas trae solo id y nickname). */
+  registro: string;
   tipo: string;
   ocurrencia: number;
   resultado: string;
@@ -71,7 +73,7 @@ const MOTIVOS_DESIERTO: Record<string, string> = {
   standalone: true,
   imports: [
     CommonModule, FormsModule, MatTabsModule, MatTableModule, MatButtonModule, MatIconModule, MatMenuModule, MatCardModule,
-    MatFormFieldModule, MatInputModule, MatTooltipModule, MatProgressSpinnerModule, MatDialogModule, MatSnackBarModule,
+    MatFormFieldModule, MatInputModule, MatSelectModule, MatTooltipModule, MatProgressSpinnerModule, MatDialogModule, MatSnackBarModule,
   ],
   templateUrl: './aprobaciones-disciplina.component.html',
   styleUrls: ['./aprobaciones-disciplina.component.scss'],
@@ -90,6 +92,7 @@ export class AprobacionesDisciplinaComponent implements OnInit {
 
   // Premios
   periodoId: number | null = null;
+  periodos: { id: number; etiqueta: string }[] = [];
   calculando = false;
   aprobandoPremio = false;
   premioCalculado = false;
@@ -114,7 +117,7 @@ export class AprobacionesDisciplinaComponent implements OnInit {
   }
 
   async recargar(): Promise<void> {
-    await Promise.all([this.cargarPendientes(), this.cargarApeladas()]);
+    await Promise.all([this.cargarPendientes(), this.cargarApeladas(), this.cargarPeriodos()]);
   }
 
   private aVista(f: any): FaltaBandeja {
@@ -127,6 +130,7 @@ export class AprobacionesDisciplinaComponent implements OnInit {
       clave: `f-${f.id}`,
       fecha: drFechaVista(f.fecha),
       funcionario: drNombreFuncionario(f.funcionario),
+      registro: f.detectadoPor?.nickname ?? '',
       tipo: f.tipoFalta?.nombre ?? '-',
       ocurrencia: Number(f.nOcurrencia) || 0,
       resultado: f.resultado,
@@ -142,6 +146,20 @@ export class AprobacionesDisciplinaComponent implements OnInit {
       apelacionFecha: f.apelacionFecha ? new Date(f.apelacionFecha) : null,
       observacion: f.observacion || '',
     };
+  }
+
+  async cargarPeriodos(): Promise<void> {
+    try {
+      const lista = (await this.api.getPeriodos({ estado: 'CERRADO', conPremio: true })) ?? [];
+      const f = (d: any) => String(d ?? '').slice(0, 10).split('-').reverse().join('/');
+      this.periodos = lista.map((p: any) => ({
+        id: p.id,
+        etiqueta: `#${p.id} · ${p.premio?.nombre ?? 'PREMIO'} · ${f(p.desde)} al ${f(p.hasta)}`,
+      }));
+      if (this.periodoId && !this.periodos.some((p) => p.id === this.periodoId)) this.periodoId = null;
+    } catch {
+      this.periodos = [];
+    }
   }
 
   async cargarPendientes(): Promise<void> {

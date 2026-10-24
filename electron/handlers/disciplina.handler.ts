@@ -267,6 +267,8 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
       .leftJoinAndSelect('fu.persona', 'pe')
       .leftJoinAndSelect('f.tipoFalta', 't')
       .leftJoinAndSelect('f.moneda', 'mo')
+      // Solo id y nickname de quien la detectó: nunca el hash de la contraseña.
+      .leftJoin('f.detectadoPor', 'dp').addSelect(['dp.id', 'dp.nickname'])
       .orderBy('f.fecha', 'DESC').addOrderBy('f.id', 'DESC');
     if (f?.funcionarioId) qb.andWhere('fu.id = :fid', { fid: f.funcionarioId });
     if (f?.estado) qb.andWhere('f.estado = :e', { e: f.estado });

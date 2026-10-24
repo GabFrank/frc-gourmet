@@ -180,6 +180,7 @@ export class DisciplinaApiService implements DrIpc {
   anularError(errorId: number, motivo: string): Promise<any> { return this.call('dr-anular-error', errorId, motivo); }
 
   // ── Premios ──
+  getPeriodos(filtros: { estado?: string; conPremio?: boolean } = {}): Promise<any[]> { return this.call('dr-get-periodos', filtros); }
   calcularPremio(periodoId: number): Promise<any> { return this.call('dr-calcular-premio', periodoId); }
   aprobarPremio(periodoId: number): Promise<any> { return this.call('dr-aprobar-premio', periodoId); }
 
