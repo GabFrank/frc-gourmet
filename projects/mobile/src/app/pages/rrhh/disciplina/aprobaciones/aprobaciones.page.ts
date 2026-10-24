@@ -9,6 +9,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '@frc/shared-core';
 import { PromptDialogComponent, PromptData } from '../../../../core/components/prompt-dialog.component';
+import { drMonto } from '../dr-mobile.utils';
 
 type Tab = 'REGISTRADA' | 'APELADA';
 
@@ -78,7 +79,7 @@ function fechaVista(f: unknown): string {
             </div>
             <span class="ap-tipo">{{ f.tipo }}<span *ngIf="f.ocurrencia"> · #{{ f.ocurrencia }}</span></span>
             <div class="ap-fila2">
-              <span *ngIf="f.esMulta" class="ap-monto">{{ f.simbolo }} {{ f.monto | number: '1.0-0' }}</span>
+              <span *ngIf="f.esMulta" class="ap-monto">{{ monto(f.monto, f.simbolo) }}</span>
               <span class="crud-sub">{{ f.fecha }}<span *ngIf="f.registro"> · registró {{ f.registro }}</span></span>
             </div>
             <ng-container *ngIf="tab === 'REGISTRADA'">
@@ -253,6 +254,10 @@ export class AprobacionesDrPage implements OnInit {
 
   private get api(): any {
     return (window as any).api;
+  }
+
+  monto(v: number, simbolo?: string | null): string {
+    return drMonto(v, simbolo);
   }
 
   ngOnInit(): void {

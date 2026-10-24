@@ -8,7 +8,6 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-// Mismo motor puro que usa el backend (sin dependencias de Node): la vista previa calcula igual.
 import {
   DR_MOBILE_STYLES, DrFuncionarioVM, drCall, drCargarFuncionarios, drFechaIso, drFiltrar, drMensajeError, drMonto,
 } from '../dr-mobile.utils';
@@ -94,7 +93,10 @@ export class RegistrarFaltaPage implements OnInit {
 
   preview = new Map<number, PreviewVM>();
   calculandoPreview = false;
-    private previewToken = 0;
+  /** La última vista previa falló (se muestra un aviso discreto). */
+  previewError = false;
+  private previewToken = 0;
+  private previewTimer: ReturnType<typeof setTimeout> | null = null;
 
   creadas: ResultadoVM[] | null = null;
   ignoradas: { nombre: string; motivo: string }[] = [];
@@ -106,7 +108,7 @@ export class RegistrarFaltaPage implements OnInit {
       if (this.tipo?.todosPresentes) this.cargarPresentes();
       this.actualizarPreview();
     });
-    this.minutos.valueChanges.subscribe(() => this.actualizarPreview());
+    this.minutos.valueChanges.subscribe(() => this.programarPreview());
     await this.cargar();
   }
 
@@ -178,7 +180,7 @@ export class RegistrarFaltaPage implements OnInit {
     if (this.creadas) return;
     if (this.seleccion.has(f.id)) this.seleccion.delete(f.id);
     else this.seleccion.add(f.id);
-    this.actualizarPreview();
+    this.programarPreview();
   }
 
   limpiarSeleccion(): void {
@@ -216,14 +218,36 @@ export class RegistrarFaltaPage implements OnInit {
     }
   }
 
+  /** Agenda la vista previa con un pequeño retardo (evita una llamada por cada toque o tecla). */
+  programarPreview(): void {
+    if (this.previewTimer) clearTimeout(this.previewTimer);
+    this.previewTimer = setTimeout(() => {
+      this.previewTimer = null;
+      void this.actualizarPreview();
+    }, 300);
+  }
+
+  /** Tardanza sin minutos cargados (no se puede calcular ni guardar). */
+  get faltanMinutos(): boolean {
+    if (!this.tipo?.tardanza) return false;
+    const m = this.minutos.value;
+    return m === null || (m as any) === '' || !Number.isFinite(Number(m));
+  }
+
   /** Vista previa por funcionario: el backend corre el mismo cálculo que el registro, sin guardar. */
   async actualizarPreview(): Promise<void> {
+    if (this.previewTimer) {
+      clearTimeout(this.previewTimer);
+      this.previewTimer = null;
+    }
     const token = ++this.previewToken;
+    this.previewError = false;
     const tipo = this.tipo;
     const fecha = this.fecha.value;
     const ids = [...this.seleccion];
-    if (!tipo || !fecha || !ids.length) {
+    if (!tipo || !fecha || !ids.length || this.faltanMinutos) {
       this.preview = new Map();
+      this.calculandoPreview = false;
       return;
     }
     this.calculandoPreview = true;
@@ -236,14 +260,21 @@ export class RegistrarFaltaPage implements OnInit {
         minutosTardanza: min === null || (min as any) === '' ? undefined : Number(min),
       });
       if (token !== this.previewToken) return;
+      if (r?.faltanMinutos) {
+        this.preview = new Map();
+        return;
+      }
       const mapa = new Map<number, PreviewVM>();
       for (const it of r?.items ?? []) {
         mapa.set(it.funcionarioId, { resultado: it.resultado, monto: Number(it.monto) || 0, n: it.nOcurrencia });
       }
       this.preview = mapa;
     } catch {
-      // Sin vista previa (p. ej. sin permiso para ver faltas): se muestra solo la regla del tipo.
-      if (token === this.previewToken) this.preview = new Map();
+      // Sin vista previa (p. ej. sin permiso para ver faltas): se muestra la regla del tipo y un aviso.
+      if (token === this.previewToken) {
+        this.preview = new Map();
+        this.previewError = true;
+      }
     } finally {
       if (token === this.previewToken) this.calculandoPreview = false;
     }
@@ -258,6 +289,7 @@ export class RegistrarFaltaPage implements OnInit {
   get puedeGuardar(): boolean {
     if (!this.tipo || !this.seleccion.size || !this.fecha.value || this.guardando) return false;
     const m = this.minutos.value;
+    if (this.tipo.tardanza) return !this.faltanMinutos && Number(m) >= 0;
     return m === null || (m as any) === '' || Number(m) >= 0;
   }
 
@@ -305,5 +337,6 @@ export class RegistrarFaltaPage implements OnInit {
     this.minutos.setValue(null, { emitEvent: false });
     this.tipo = null;
     this.preview = new Map();
+    this.previewError = false;
   }
 }

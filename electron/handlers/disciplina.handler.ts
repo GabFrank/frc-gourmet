@@ -67,6 +67,11 @@ function fechaIso(f: unknown): string {
   return s;
 }
 
+/** El tipo mide tardanzas (viene de asistencias o tiene tolerancia en minutos): exige minutos. */
+function tipoEsTardanza(tipo: any): boolean {
+  return !!tipo?.fuenteAsistencia || (tipo?.toleranciaMinutos !== null && tipo?.toleranciaMinutos !== undefined);
+}
+
 function parseEscala(txt: unknown): Record<string, number> | null {
   if (!txt) return null;
   if (typeof txt === 'object') return txt as any;
@@ -234,14 +239,17 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
       if (funcs.length !== ids.length) fail('NO_ENCONTRADO', 'HAY FUNCIONARIOS INEXISTENTES');
       const loteId = ids.length > 1 ? randomUUID() : null;
       const creadas: DrFalta[] = [];
-      const esTardanza = !!(tipo as any).fuenteAsistencia || (data.minutosTardanza !== undefined && data.minutosTardanza !== null);
+      const sinMinutos = data.minutosTardanza === undefined || data.minutosTardanza === null || (data.minutosTardanza as any) === '';
+      if (tipoEsTardanza(tipo) && sinMinutos) fail('VALIDACION', 'INDICÁ LOS MINUTOS DE TARDANZA');
+      const esTardanza = !!(tipo as any).fuenteAsistencia || !sinMinutos;
       const ignoradas: { funcionarioId: number; motivo: string }[] = [];
       for (const fid of ids) {
         // §12: no descontar dos veces la misma tardanza. Si asistencias ya generó una Penalizacion
         // automática (no DR) ese día, la tardanza DR de ese día se ignora (aunque sea de ₲0).
         if (esTardanza) {
           const autos = await m.getRepository(Penalizacion).find({
-            where: { funcionario: { id: fid }, autoGenerada: true, anulada: false } as any,
+            // Solo las del mismo día (columna `date`: la igualdad con 'YYYY-MM-DD' vale en SQLite y Postgres).
+            where: { funcionario: { id: fid }, autoGenerada: true, anulada: false, fecha } as any,
           });
           const fechasAuto = autos
             .filter((p: any) => !String(p.descripcion ?? '').startsWith(PREFIJO_DR))
@@ -279,7 +287,8 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
   /**
    * Vista previa de `dr-registrar-falta` sin guardar nada: por funcionario, qué resultaría
    * (ADVERTENCIA / MULTA con monto / NINGUNO / ignorada). Mismo cálculo que el registro real,
-   * así mobile y desktop no duplican el motor. Solo lectura (transacción que no escribe).
+   * así mobile y desktop no duplican el motor. Solo lectura: usa `dataSource.manager`, sin transacción.
+   * Si el tipo es de tardanza y faltan los minutos, devuelve `faltanMinutos: true` sin ítems.
    */
   ipcMain.handle('dr-preview-falta', async (_e, data: any) => {
     await ensurePermission(dataSource, getCurrentUser, P.REGISTRAR);
@@ -287,16 +296,21 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
     const ids: number[] = Array.from(
       new Set<number>((data?.funcionarioIds ?? []).map((x: any) => Number(x)).filter((x: number) => x > 0)),
     );
+    const tipoFaltaId = Number(data?.tipoFaltaId);
+    if (!Number.isInteger(tipoFaltaId) || tipoFaltaId <= 0) fail('VALIDACION', 'FALTA EL TIPO DE FALTA');
     if (!ids.length) return { items: [] };
     const m = dataSource.manager;
-    const tipo = await m.getRepository(DrTipoFalta).findOne({ where: { id: data?.tipoFaltaId } as any, relations: ['moneda'] });
+    const tipo = await m.getRepository(DrTipoFalta).findOne({ where: { id: tipoFaltaId } as any, relations: ['moneda'] });
     if (!tipo || !(tipo as any).activo) fail('NO_ENCONTRADO', 'TIPO DE FALTA INEXISTENTE O INACTIVO');
-    const esTardanza = !!(tipo as any).fuenteAsistencia || (data.minutosTardanza !== undefined && data.minutosTardanza !== null);
+    const simbolo = (tipo as any).moneda?.simbolo ?? null;
+    const sinMinutos = data.minutosTardanza === undefined || data.minutosTardanza === null || (data.minutosTardanza as any) === '';
+    if (tipoEsTardanza(tipo) && sinMinutos) return { items: [], simbolo, faltanMinutos: true };
+    const esTardanza = !!(tipo as any).fuenteAsistencia || !sinMinutos;
     const items: { funcionarioId: number; resultado: string; monto: number; nOcurrencia: number | null; motivo?: string }[] = [];
     for (const fid of ids) {
       if (esTardanza) {
         const autos = await m.getRepository(Penalizacion).find({
-          where: { funcionario: { id: fid }, autoGenerada: true, anulada: false } as any,
+          where: { funcionario: { id: fid }, autoGenerada: true, anulada: false, fecha } as any,
         });
         const fechasAuto = autos
           .filter((p: any) => !String(p.descripcion ?? '').startsWith(PREFIJO_DR))
@@ -309,7 +323,7 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
       const r = await calcularFalta(m, tipo, fid, fecha, data.minutosTardanza);
       items.push({ funcionarioId: fid, resultado: r.resultado, monto: Number(r.monto) || 0, nOcurrencia: r.nOcurrencia ?? null });
     }
-    return { items, simbolo: (tipo as any).moneda?.simbolo ?? null };
+    return { items, simbolo };
   });
 
   ipcMain.handle('dr-get-faltas', async (_e, f: any = {}) => {

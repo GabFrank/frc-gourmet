@@ -465,6 +465,10 @@ async function main() {
   ok(pvC?.resultado === 'IGNORADA' && approx(pvC.monto, 0) && pvC.nOcurrencia === null && !!pvC.motivo, 'preview tardanza: CARLA IGNORADA (multa automática ese día)', pvC);
   ok(pvB?.resultado === 'MULTA' && approx(pvB.monto, 10000), 'preview tardanza: BETO MULTA (la [DR] no cuenta como automática)', pvB);
   ok(await ds.getRepository(DrFalta).count() === nFaltasQ2, 'preview de tardanza no crea faltas');
+  const pvSinMin = await call('dr-preview-falta', { tipoFaltaId: tTard.id, fecha: '2027-05-06', funcionarioIds: [fB.id] });
+  ok(pvSinMin?.faltanMinutos === true && pvSinMin.items.length === 0, 'preview tardanza sin minutos: faltanMinutos, sin ítems', pvSinMin);
+  await rechaza(call('dr-registrar-falta', { tipoFaltaId: tTard.id, fecha: '2027-05-06', funcionarioIds: [fB.id] }), 'VALIDACION', 'tardanza sin minutos no se registra');
+  await rechaza(call('dr-preview-falta', { fecha: '2027-05-06', funcionarioIds: [fB.id] }), 'VALIDACION', 'preview sin tipo de falta');
   await como(colab, () => rechaza(call('dr-preview-falta', { tipoFaltaId: tQ.id, fecha: '2027-06-04', funcionarioIds: [fD.id] }), 'FORBIDDEN', 'colaborador sin RRHH_DR_REGISTRAR no usa la preview'));
 
   await ds.destroy();

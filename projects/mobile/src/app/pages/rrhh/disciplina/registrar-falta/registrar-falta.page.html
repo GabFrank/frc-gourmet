@@ -55,7 +55,8 @@
         <mat-form-field *ngIf="tipo.tardanza" appearance="outline" class="dr-full">
           <mat-label>Minutos de tardanza</mat-label>
           <input matInput type="number" inputmode="numeric" min="0" [formControl]="minutos" />
-          <mat-hint *ngIf="tipo.toleranciaMinutos !== null">Hasta {{ tipo.toleranciaMinutos }} min no cuenta</mat-hint>
+          <mat-hint *ngIf="faltanMinutos">Indicá los minutos de tardanza (0 o más)</mat-hint>
+          <mat-hint *ngIf="!faltanMinutos && tipo.toleranciaMinutos !== null">Hasta {{ tipo.toleranciaMinutos }} min no cuenta</mat-hint>
         </mat-form-field>
 
         <!-- 3. Funcionarios -->
@@ -112,7 +113,11 @@
               <div *ngIf="totalMultas" class="dr-res-row"><strong>Total multas</strong><strong class="dr-multa">{{ monto(totalMultas) }}</strong></div>
               <p class="dr-muted" style="margin: 6px 0 0">Estimado: el sistema confirma al guardar.</p>
             </ng-container>
-            <ng-template #sinPreview><span class="dr-muted">{{ regla(tipo) }}</span></ng-template>
+            <ng-template #sinPreview>
+              <span class="dr-muted">{{ regla(tipo) }}</span>
+              <p *ngIf="previewError" class="dr-muted" style="margin: 6px 0 0">No se pudo calcular la vista previa</p>
+              <p *ngIf="faltanMinutos" class="dr-muted" style="margin: 6px 0 0">Indicá los minutos de tardanza para ver la vista previa</p>
+            </ng-template>
           </div>
         </ng-container>
 

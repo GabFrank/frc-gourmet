@@ -40,7 +40,7 @@ interface TipoErrorVM {
       .re-grav { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
       .re-resumen { display: flex; flex-direction: column; gap: 6px; }
       .re-resumen strong { color: var(--text-primary); }
-      .re-link { background: none; border: 0; color: var(--primary-color); font: inherit; font-size: 0.8rem; cursor: pointer; padding: 4px; }
+      .re-link { background: none; border: 0; color: var(--primary-color, #3f51b5); font: inherit; font-size: 0.8rem; cursor: pointer; padding: 4px; }
     `,
   ],
 })

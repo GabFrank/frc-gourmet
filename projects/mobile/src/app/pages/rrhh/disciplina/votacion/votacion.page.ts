@@ -72,8 +72,11 @@ function mensajeError(e: any): string {
         <!-- Nada pendiente -->
         <div *ngIf="!actual" class="vt-listo">
           <mat-icon>how_to_vote</mat-icon>
-          <h2>Ya votaste</h2>
-          <p>No tenés encuestas pendientes por ahora.</p>
+          <ng-container *ngIf="yaVoto; else sinPendientes">
+            <h2>Ya votaste</h2>
+            <p>No tenés encuestas pendientes por ahora.</p>
+          </ng-container>
+          <ng-template #sinPendientes><h2>No tenés encuestas pendientes</h2></ng-template>
         </div>
 
         <!-- Elegir encuesta si hay varias -->
@@ -342,6 +345,8 @@ export class VotacionPage implements OnInit {
   loading = true;
   enviando = false;
   error: string | null = null;
+  /** Votó con éxito en esta sesión o el backend avisó que ya había votado. */
+  yaVoto = false;
 
   /** Respuestas en memoria: `${evaluadoId}|${preguntaId}` -> valor. Nunca se loguean. */
   private respuestas = new Map<string, Valor>();
@@ -469,6 +474,7 @@ export class VotacionPage implements OnInit {
     try {
       await this.api.callIpc('dr-votar', enc.periodoId, respuestas);
       this.respuestas = new Map();
+      this.yaVoto = true;
       this.snack.open('¡Gracias! Tu voto anónimo fue registrado', 'OK', { duration: 4000 });
       this.pendientes = this.pendientes.filter((p) => p.periodoId !== enc.periodoId);
       this.actual = null;
@@ -478,6 +484,7 @@ export class VotacionPage implements OnInit {
       this.snack.open(msg, 'Cerrar', { duration: 6000 });
       // Ya votó (otro dispositivo) o la encuesta cerró: se refresca la lista.
       if (/YA VOTASTE|YA CERR/i.test(msg)) {
+        if (/YA VOTASTE/i.test(msg)) this.yaVoto = true;
         this.respuestas = new Map();
         this.actual = null;
         await this.cargar();
