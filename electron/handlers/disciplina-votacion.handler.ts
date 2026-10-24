@@ -6,8 +6,9 @@
  *  - dr_participacion guarda SOLO que el funcionario votó en el período (para no votar dos veces).
  *  - dr_voto_agregado guarda la SUMA por (período, evaluado, pregunta), cifrada con AES-GCM
  *    mientras el período está ABIERTO (clave en un archivo de userData, fuera de la base).
- *  - Participación y agregados se escriben en transacciones separadas: ninguna fila de votos
- *    tiene votante, y no se registra el contenido del voto en logs.
+ *  - Participación y agregados se escriben en UNA sola transacción (si falla algo, no queda
+ *    «votó» sin voto contado). Ninguna fila de votos tiene votante y no se registra el
+ *    contenido del voto en logs.
  *  - Los textos libres (dr_respuesta_texto) no tienen votante; se muestran mezclados.
  *  - Resultados: solo con el período cerrado y con un mínimo de votantes.
  */
@@ -175,20 +176,19 @@ export function registerDisciplinaVotacionHandlers(dataSource: DataSource, getCu
       aError(e);
     }
 
-    // 1) Participación (índice único periodo+funcionario: un segundo voto choca acá).
-    try {
-      await dataSource.transaction((m) =>
-        m.getRepository(DrParticipacion).insert({ id: drNuevoUuid(), periodo: { id: periodo.id }, funcionario: { id: yo.id } } as any),
-      );
-    } catch {
-      fail('YA_VOTO', 'YA VOTASTE EN ESTA ENCUESTA');
-    }
-
-    // 2) Agregados cifrados + textos, sin votante.
     const peso = Number(mio.pesoVoto) || 1;
     const tipoDe = new Map(preguntas.map((q) => [String(q.id), q.tipo]));
     const clave = claveVotos();
+    // Una sola transacción: participación + agregados. Si algo falla, no queda participación
+    // registrada sin su voto (y la persona puede volver a votar).
     await dataSource.transaction(async (m) => {
+      // 1) Participación (índice único periodo+funcionario: un segundo voto choca acá).
+      try {
+        await m.getRepository(DrParticipacion).insert({ id: drNuevoUuid(), periodo: { id: periodo.id }, funcionario: { id: yo.id } } as any);
+      } catch {
+        fail('YA_VOTO', 'YA VOTASTE EN ESTA ENCUESTA');
+      }
+      // 2) Agregados cifrados + textos, sin votante.
       for (const r of respuestas) {
         const tipo = tipoDe.get(String(r.preguntaId))!;
         if (r.valor === null || r.valor === undefined || (typeof r.valor === 'string' && !r.valor.trim())) continue;

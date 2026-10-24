@@ -11,6 +11,9 @@
  *  G) Mes con liquidación APROBADA → la multa va al mes siguiente.
  *  H) Anular falta aprobada → Penalizacion anulada. Justificar apelación → sin penalización.
  *  I) Handlers viejos no pueden editar una Penalizacion [DR].
+ *  E') Plazo de apelación: no se aprueba antes de que venza salvo renuncia del funcionario.
+ *  J') Voto atómico: si fallan los agregados no queda la participación.
+ *  P) Tardanza: sin doble descuento si asistencias ya generó una multa automática ese día.
  *
  * Uso: npm run test:disciplina-e2e
  */
@@ -155,6 +158,11 @@ async function main() {
 
   // ===== E) Aprobar MULTA =====
   console.log('\n[E] Aprobar multa → Penalizacion [DR]');
+  // Plazo de apelación (48 h) vigente: no se aprueba hasta que venza o la persona renuncie.
+  await rechaza(call('dr-aprobar-falta', r2.creadas[0].id, 'ok'), 'PLAZO_APELACION_VIGENTE', 'no aprueba con el plazo de apelación vigente');
+  await como(colab, () => rechaza(call('dr-renunciar-apelacion', faltaB.id), 'NO_ENCONTRADO', 'no renuncia por una falta ajena'));
+  await como(colab, () => call('dr-renunciar-apelacion', r2.creadas[0].id));
+  await como(colab, () => rechaza(call('dr-apelar-falta', r2.creadas[0].id, 'me arrepentí'), 'RENUNCIO_APELACION', 'tras renunciar ya no puede apelar'));
   const ap = await call('dr-aprobar-falta', r2.creadas[0].id, 'ok');
   ok(!!ap.penalizacionId && ap.mesDestino === '2026-11', 'crea penalización en mes 2026-11', ap);
   const pen: any = await ds.getRepository(Penalizacion).findOne({ where: { id: ap.penalizacionId }, relations: ['funcionario'] });
@@ -173,6 +181,7 @@ async function main() {
   console.log('\n[G] Mes con liquidación aprobada → mes siguiente');
   await call('aprobar-liquidacion-sueldo', liq.id);
   const r3 = await call('dr-registrar-falta', { tipoFaltaId: tipo.id, fecha: '2026-11-20', funcionarioIds: [fA.id] });
+  await como(colab, () => call('dr-renunciar-apelacion', r3.creadas[0].id));
   const ap3 = await call('dr-aprobar-falta', r3.creadas[0].id);
   ok(ap3.mesDestino === '2026-12', 'va a 2026-12', ap3);
   const pen3: any = await ds.getRepository(Penalizacion).findOne({ where: { id: ap3.penalizacionId } });
@@ -227,6 +236,12 @@ async function main() {
     { evaluadoId: o.f.id, preguntaId: qEsc.id, valor: o.f.id === fabi.id ? 5 : 3 },
     { evaluadoId: o.f.id, preguntaId: qTxt.id, valor: o.f.id === fabi.id ? `bien ${v.f.id}` : '' },
   ]);
+  // Atomicidad: si falla la escritura de los agregados, tampoco queda la participación (puede volver a votar).
+  await ds.query('ALTER TABLE dr_voto_agregado RENAME TO dr_voto_agregado_bk');
+  await como(colab, () => rechaza(withRequestUser(colab, () => call('dr-votar', per.id, envio(votantes[0]))) as Promise<any>, /.+/, 'voto falla si no se pueden guardar los agregados'));
+  await ds.query('ALTER TABLE dr_voto_agregado_bk RENAME TO dr_voto_agregado');
+  ok(await ds.getRepository(DrParticipacion).count() === 0, 'voto fallido no deja participación registrada');
+  ok(await ds.getRepository(E('rrhh/disciplina/dr-respuesta-texto.entity').DrRespuestaTexto).count() === 0, 'voto fallido no deja comentarios sueltos');
   for (const v of votantes) await como(v.u, () => withRequestUser(v.u, () => call('dr-votar', per.id, envio(v))) as Promise<any>);
   await como(colab, () => rechaza(call('dr-votar', per.id, envio(votantes[0])), 'YA_VOTO', 'no vota dos veces'));
   await como(colab, () => rechaza(call('dr-votar', per.id, [{ evaluadoId: fA.id, preguntaId: qEsc.id, valor: 5 }]), /.+/, 'rechaza autovoto / envío incompleto'));
@@ -353,6 +368,8 @@ async function main() {
   await call('dr-registrar-falta', { tipoFaltaId: tipo.id, fecha: '2027-02-03', funcionarioIds: [fB.id] });
   const rT = await call('dr-registrar-falta', { tipoFaltaId: tipo.id, fecha: '2027-02-10', funcionarioIds: [fB.id] });
   const liqB = await call('generar-liquidacion-borrador', { funcionarioId: fB.id, periodo: '2027-02', monedaPagoId: pyg.id });
+  await rechaza(call('dr-aprobar-falta', rT.creadas[0].id), 'PLAZO_APELACION_VIGENTE', 'BETO: plazo vigente, no se aprueba');
+  await ds.getRepository(DrFalta).update({ id: rT.creadas[0].id }, { apelacionVence: new Date(Date.now() - 60_000) } as any); // venció el plazo
   const apT = await call('dr-aprobar-falta', rT.creadas[0].id);
   ok(apT.cuotas.length === 2 && apT.cuotas[0].mes === '2027-02' && approx(apT.cuotas[0].monto, 30000) && apT.cuotas[1].mes === '2027-03' && approx(apT.cuotas[1].monto, 20000),
     'multa 50.000 con tope 30.000 → 30.000 feb + 20.000 mar', apT.cuotas);
@@ -366,6 +383,27 @@ async function main() {
   await call('aprobar-liquidacion-sueldo', liqB2.id);
   await rechaza(call('dr-anular-falta', rT.creadas[0].id, 'error'), 'LIQUIDACION_CERRADA', 'no se anula si una cuota está en liquidación aprobada');
   await cfgRepo.update({ clave: 'DR_TOPE_DESCUENTO_MENSUAL' }, { valor: '0' });
+
+  // ===== P) Doble descuento por tardanza =====
+  console.log('\n[P] Tardanza: sin doble descuento con la multa automática de asistencias');
+  const tTard = await call('dr-save-tipo-falta', {
+    nombre: 'llegada tarde', advertenciasPrevias: 0, montoMulta: 10000, moneda: { id: pyg.id },
+    reinicio: 'MENSUAL', plazoApelacionHoras: 0, toleranciaMinutos: 5, fuenteAsistencia: true, activo: true,
+  });
+  // Asistencias ya descontó la tardanza de CARLA el 04/05 (penalización automática, aunque sea ₲0).
+  await save(Penalizacion, { funcionario: fC, tipo: 'TARDANZA', descripcion: 'TARDANZA AUTOMATICA', monto: 0, fecha: '2027-05-04', anulada: false, autoGenerada: true, registradoPor: admin });
+  // Una penalización [DR] ese mismo día de BETO no cuenta como «automática de asistencias».
+  await save(Penalizacion, { funcionario: fB, tipo: 'OTRO', descripcion: '[DR] OTRA FALTA (FALTA 999)', monto: 1000, fecha: '2027-05-04', anulada: false, autoGenerada: true, registradoPor: admin });
+  const rP = await call('dr-registrar-falta', { tipoFaltaId: tTard.id, fecha: '2027-05-04', funcionarioIds: [fC.id, fB.id], minutosTardanza: 20 });
+  ok(rP.creadas.length === 1 && rP.creadas[0].funcionario.id === fB.id, 'CARLA ignorada (ya tiene multa automática ese día), BETO sí', rP);
+  ok(rP.ignoradas.length === 1 && rP.ignoradas[0].funcionarioId === fC.id, 'la respuesta informa a CARLA como ignorada', rP.ignoradas);
+  const rP2 = await call('dr-registrar-falta', { tipoFaltaId: tTard.id, fecha: '2027-05-05', funcionarioIds: [fC.id], minutosTardanza: 20 });
+  ok(rP2.creadas.length === 1 && rP2.creadas[0].resultado === 'MULTA' && approx(rP2.creadas[0].montoCalculado, 10000), 'otro día sin multa automática: CARLA sí recibe la multa DR', rP2.creadas[0]);
+  const apTard = await call('dr-aprobar-falta', rP2.creadas[0].id); // plazo 0 h: ya vencido
+  ok(!!apTard.penalizacionId, 'con plazo de apelación 0 h se aprueba enseguida', apTard);
+  const penC: any[] = await ds.getRepository(Penalizacion).find({ where: { funcionario: { id: fC.id }, anulada: false } });
+  const porDia = (d: string) => penC.filter((p) => String(p.fecha).slice(0, 10) === d).length;
+  ok(porDia('2027-05-04') === 1 && porDia('2027-05-05') === 1, 'CARLA: una sola penalización por día', penC.map((p) => [p.fecha, p.descripcion]));
 
   await ds.destroy();
   console.log(`\n[disciplina-e2e] ${passed} OK, ${failed} fallas`);

@@ -133,3 +133,10 @@ Datos de cocina
 
 ## 13. Alcance de la fase 1 (este PR)
 Entidades `dr_*` + migración (sqlite y postgres, up/down) + permisos RRHH_DR_* y roles plantilla + motor puro (`electron/services/disciplina/`) + handlers RPC con validación de permiso e identidad desde la sesión + permisos en get-penalizaciones/get-bonos + bloqueo de edición DR desde handlers viejos + suite `test:disciplina-e2e`. Sin pantallas. No toca cobro, factura ni punto de venta.
+
+## 14. Cierre de observaciones de la auditoría del diff (antes del merge, pedido del propietario 24/10)
+1. Migración reversible: `test:disciplina-migracion` corre up → down → up en SQLite y Postgres (`DR_E2E_PG`); down borra solo `dr_*` y deja el resto del esquema idéntico.
+2. Permisos contra develop: `test:permisos` da los mismos asserts en develop (0ae70c8e) y en la rama (87/89; las 2 fallas son de backup-create, preexistentes, #265).
+3. Doble descuento por tardanza: `dr-registrar-falta` ignora la tardanza de un día si asistencias ya generó una Penalizacion automática (no [DR]) ese día; lo informa en `ignoradas`. Cubierto en e2e [P].
+4. Voto atómico: participación y agregados en una sola transacción; si fallan los agregados no queda «votó». Cubierto en e2e [J].
+5. Plazo de apelación: con el plazo vigente solo se aprueba si la persona renunció (`dr-renunciar-apelacion`, que además bloquea apelar después). Cubierto en e2e [E] y [O].

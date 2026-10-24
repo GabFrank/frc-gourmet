@@ -37,6 +37,7 @@ import {
   DisciplinaError,
   EstadosLiquidacionPorMes,
   FaltaPrevia,
+  debeIgnorarTardanza,
 } from '../services/disciplina';
 
 const P = {
@@ -210,7 +211,23 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
       if (funcs.length !== ids.length) fail('NO_ENCONTRADO', 'HAY FUNCIONARIOS INEXISTENTES');
       const loteId = ids.length > 1 ? randomUUID() : null;
       const creadas: DrFalta[] = [];
+      const esTardanza = !!(tipo as any).fuenteAsistencia || (data.minutosTardanza !== undefined && data.minutosTardanza !== null);
+      const ignoradas: { funcionarioId: number; motivo: string }[] = [];
       for (const fid of ids) {
+        // §12: no descontar dos veces la misma tardanza. Si asistencias ya generó una Penalizacion
+        // automática (no DR) ese día, la tardanza DR de ese día se ignora (aunque sea de ₲0).
+        if (esTardanza) {
+          const autos = await m.getRepository(Penalizacion).find({
+            where: { funcionario: { id: fid }, autoGenerada: true, anulada: false } as any,
+          });
+          const fechasAuto = autos
+            .filter((p: any) => !String(p.descripcion ?? '').startsWith(PREFIJO_DR))
+            .map((p: any) => fechaIso(p.fecha));
+          if (debeIgnorarTardanza(fecha, fechasAuto)) {
+            ignoradas.push({ funcionarioId: fid, motivo: 'YA TIENE PENALIZACIÓN AUTOMÁTICA DE ASISTENCIA ESE DÍA' });
+            continue;
+          }
+        }
         const r = await calcularFalta(m, tipo, fid, fecha, data.minutosTardanza);
         if (r.resultado === 'NINGUNO') continue; // tardanza dentro de tolerancia: no cuenta como falta
         const falta = m.getRepository(DrFalta).create({
@@ -232,7 +249,7 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
         await setEntityUserTracking(dataSource, falta, user.id, false);
         creadas.push(await m.getRepository(DrFalta).save(falta));
       }
-      return { creadas, loteId };
+      return { creadas, loteId, ignoradas };
     });
   });
 
@@ -271,11 +288,26 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
     if (!falta || falta.funcionario.id !== func.id) fail('NO_ENCONTRADO', 'FALTA NO ENCONTRADA');
     const vence = (falta as any).apelacionVence;
     if (vence && new Date(vence).getTime() < Date.now()) fail('PLAZO_VENCIDO', 'VENCIÓ EL PLAZO PARA APELAR');
+    if ((falta as any).renunciaApelacion) fail('RENUNCIO_APELACION', 'YA RENUNCIASTE A APELAR ESTA FALTA');
     const res = await dataSource.getRepository(DrFalta).update(
-      { id: faltaId, estado: DrFaltaEstado.REGISTRADA } as any,
+      { id: faltaId, estado: DrFaltaEstado.REGISTRADA, renunciaApelacion: false } as any,
       { estado: DrFaltaEstado.APELADA, apelacionTexto: up(texto), apelacionFecha: new Date() } as any,
     );
     if (!res.affected) fail('ESTADO_INVALIDO', 'LA FALTA YA NO SE PUEDE APELAR');
+    return { ok: true };
+  });
+
+  /** El funcionario renuncia a apelar (acepta la falta): desde ahí se puede aprobar sin esperar el plazo. */
+  ipcMain.handle('dr-renunciar-apelacion', async (_e, faltaId: number) => {
+    const user = await ensurePermission(dataSource, getCurrentUser, P.MIS_DATOS);
+    const func = await funcionarioDeSesion(dataSource, user);
+    const falta = await dataSource.getRepository(DrFalta).findOne({ where: { id: faltaId } as any, relations: ['funcionario'] });
+    if (!falta || falta.funcionario.id !== func.id) fail('NO_ENCONTRADO', 'FALTA NO ENCONTRADA');
+    const res = await dataSource.getRepository(DrFalta).update(
+      { id: faltaId, estado: DrFaltaEstado.REGISTRADA } as any,
+      { renunciaApelacion: true } as any,
+    );
+    if (!res.affected) fail('ESTADO_INVALIDO', 'LA FALTA YA NO ADMITE RENUNCIA');
     return { ok: true };
   });
 
@@ -291,6 +323,12 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
       });
       if (!falta) fail('NO_ENCONTRADO', 'FALTA NO ENCONTRADA');
       if (![DrFaltaEstado.REGISTRADA, DrFaltaEstado.APELADA].includes(falta.estado)) fail('ESTADO_INVALIDO', 'LA FALTA YA FUE RESUELTA');
+      // §12: con el plazo de apelación vigente solo se aprueba si la persona renunció a apelar.
+      // (Si apeló, la falta está APELADA y se resuelve con la apelación a la vista.)
+      if (falta.estado === DrFaltaEstado.REGISTRADA && !falta.renunciaApelacion && falta.apelacionVence
+        && new Date(falta.apelacionVence).getTime() > Date.now()) {
+        fail('PLAZO_APELACION_VIGENTE', 'TODAVÍA CORRE EL PLAZO DE APELACIÓN: ESPERÁ A QUE VENZA O A QUE LA PERSONA RENUNCIE');
+      }
 
       let penalizacion: Penalizacion | null = null;
       let mes: string | null = null;
