@@ -33,7 +33,7 @@ import { seedSystemData } from '../electron/utils/seed-system';
  * Sandbox de pruebas de UI (sin Electron): base SQLite temporal con datos de
  * prueba + todos los handlers + /api/rpc + el desktop servido como web en /admin/.
  * Requiere antes: `npx ng build --configuration web` (dist/frc-gourmet-web).
- * Uso: npx ts-node --transpile-only --project tsconfig.typeorm.json scripts/ui-sandbox.ts [puerto]
+ * Uso: npx ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/ui-sandbox.ts [puerto]
  * Usuarios: admin/admin (todos los permisos) y david/david (rol admin, segundo aprobador).
  * NUNCA apuntar a una base real: siempre recrea .tmp/ui-sandbox.db.
  */
@@ -63,10 +63,10 @@ async function main() {
 
   const uRepo = dataSource.getRepository(Usuario);
   let admin: any = await uRepo.findOne({ where: { nickname: 'ADMIN' } }) || await uRepo.findOne({ where: { nickname: 'admin' } });
-  if (admin) { admin.password = await hashPassword('admin'); await uRepo.save(admin); }
+  if (admin) { admin.password = await hashPassword('admin'); admin.mustChangePassword = false; await uRepo.save(admin); }
   const rolAdmin: any = (await dataSource.getRepository(UsuarioRole).findOne({ where: { usuario: { id: admin?.id } }, relations: ['role'] }))?.role
     || await dataSource.getRepository(Role).findOne({ where: {} });
-  const david: any = await save(Usuario, { nickname: 'DAVID', password: await hashPassword('david'), activo: true });
+  const david: any = await save(Usuario, { nickname: 'DAVID', password: await hashPassword('david'), activo: true, mustChangePassword: false });
   if (rolAdmin) await save(UsuarioRole, { usuario: david, role: rolAdmin });
 
   const pyg: any = await dataSource.getRepository(Moneda).findOne({ where: { principal: true } }) || await save(Moneda, { denominacion: 'GUARANI', simbolo: 'Gs', principal: true, activo: true });

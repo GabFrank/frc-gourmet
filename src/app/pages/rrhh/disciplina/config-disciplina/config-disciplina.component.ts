@@ -193,7 +193,6 @@ export class ConfigDisciplinaComponent implements OnInit {
     });
     const tiposError = this.seccion({
       id: 'tipos-error', titulo: 'Tipos de error', canal: 'tipos-error', singular: 'tipo de error',
-      aviso: 'La lista no trae la gravedad ni el grupo de cada tipo (el backend no los devuelve): al editar, dejá el campo vacío para conservar el actual.',
       columnas: [
         { key: 'nombre', label: 'Nombre', valor: (r) => r.nombre },
         { key: 'area', label: 'Área', valor: (r) => r.area || '-' },
