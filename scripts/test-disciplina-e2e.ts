@@ -96,8 +96,12 @@ async function main() {
   const colab: any = await save(Usuario, { nickname: 'COLAB', password: 'x', activo: true });
   await permisos(colab, 'COLABORADOR_DR_TEST', ['RRHH_DR_MIS_DATOS', 'RRHH_DR_VOTAR']);
 
+  const aprobador: any = await save(Usuario, { nickname: 'APROBADOR', password: 'x', activo: true });
+  await permisos(aprobador, 'APROBADOR_DR', ['RRHH_DR_APROBAR', 'RRHH_DR_CONFIGURAR', 'RRHH_DR_REGISTRAR']);
   let actual: any = admin;
   const como = async <T>(u: any, fn: () => Promise<T>) => { const prev = actual; actual = u; try { return await fn(); } finally { actual = prev; } };
+  // Separación de funciones: resuelve un usuario distinto del que registró.
+  const resolver = (canal: string, ...a: any[]) => como(aprobador, () => call(canal, ...a));
   await seedLiquidacionConceptos(ds);
   registerDisciplinaHandlers(ds, () => actual);
   registerDisciplinaVotacionHandlers(ds, () => actual);
@@ -159,15 +163,17 @@ async function main() {
   // ===== E) Aprobar MULTA =====
   console.log('\n[E] Aprobar multa → Penalizacion [DR]');
   // Plazo de apelación (48 h) vigente: no se aprueba hasta que venza o la persona renuncie.
-  await rechaza(call('dr-aprobar-falta', r2.creadas[0].id, 'ok'), 'PLAZO_APELACION_VIGENTE', 'no aprueba con el plazo de apelación vigente');
+  await rechaza(resolver('dr-aprobar-falta', r2.creadas[0].id, 'ok'), 'PLAZO_APELACION_VIGENTE', 'no aprueba con el plazo de apelación vigente');
   await como(colab, () => rechaza(call('dr-renunciar-apelacion', faltaB.id), 'NO_ENCONTRADO', 'no renuncia por una falta ajena'));
   await como(colab, () => call('dr-renunciar-apelacion', r2.creadas[0].id));
   await como(colab, () => rechaza(call('dr-apelar-falta', r2.creadas[0].id, 'me arrepentí'), 'RENUNCIO_APELACION', 'tras renunciar ya no puede apelar'));
-  const ap = await call('dr-aprobar-falta', r2.creadas[0].id, 'ok');
+  const ap = await resolver('dr-aprobar-falta', r2.creadas[0].id, 'ok');
   ok(!!ap.penalizacionId && ap.mesDestino === '2026-11', 'crea penalización en mes 2026-11', ap);
   const pen: any = await ds.getRepository(Penalizacion).findOne({ where: { id: ap.penalizacionId }, relations: ['funcionario'] });
   ok(pen && pen.descripcion.startsWith('[DR]') && approx(pen.monto, 50000) && pen.funcionario.id === fA.id, 'penalización [DR] 50.000 a ANA', pen?.descripcion);
-  await rechaza(call('dr-aprobar-falta', r2.creadas[0].id), 'ESTADO_INVALIDO', 'segunda aprobación rechazada');
+  await rechaza(resolver('dr-aprobar-falta', r2.creadas[0].id), 'ESTADO_INVALIDO', 'segunda aprobación rechazada');
+  await rechaza(call('dr-anular-falta', r2.creadas[0].id, 'X'), 'AUTO_RESOLUCION', 'quien registró la falta no la anula');
+  await rechaza(call('dr-aprobar-falta', r1.creadas[0].id), 'AUTO_RESOLUCION', 'quien registró la falta no la aprueba');
   const nPen = await ds.getRepository(Penalizacion).count();
   ok(nPen === 1, 'sigue habiendo 1 sola penalización', nPen);
 
@@ -182,21 +188,21 @@ async function main() {
   await call('aprobar-liquidacion-sueldo', liq.id);
   const r3 = await call('dr-registrar-falta', { tipoFaltaId: tipo.id, fecha: '2026-11-20', funcionarioIds: [fA.id] });
   await como(colab, () => call('dr-renunciar-apelacion', r3.creadas[0].id));
-  const ap3 = await call('dr-aprobar-falta', r3.creadas[0].id);
+  const ap3 = await resolver('dr-aprobar-falta', r3.creadas[0].id);
   ok(ap3.mesDestino === '2026-12', 'va a 2026-12', ap3);
   const pen3: any = await ds.getRepository(Penalizacion).findOne({ where: { id: ap3.penalizacionId } });
   ok(String(pen3.fecha).slice(0, 7) === '2026-12', 'fecha de la penalización en diciembre', pen3.fecha);
-  await rechaza(call('dr-anular-falta', r2.creadas[0].id, 'error'), 'LIQUIDACION_CERRADA', 'no anula multa ya liquidada (aprobada)');
+  await rechaza(resolver('dr-anular-falta', r2.creadas[0].id, 'error'), 'LIQUIDACION_CERRADA', 'no anula multa ya liquidada (aprobada)');
 
   // ===== H) Anular / justificar =====
   console.log('\n[H] Anular y justificar');
-  await call('dr-anular-falta', r3.creadas[0].id, 'cargada por error');
+  await resolver('dr-anular-falta', r3.creadas[0].id, 'cargada por error');
   const pen3b: any = await ds.getRepository(Penalizacion).findOne({ where: { id: ap3.penalizacionId } });
   ok(pen3b.anulada === true, 'anular falta → penalización anulada', pen3b.anulada);
-  await call('dr-justificar-falta', r1.creadas[0].id, 'apelación aceptada');
+  await resolver('dr-justificar-falta', r1.creadas[0].id, 'apelación aceptada');
   const just: any = await ds.getRepository(DrFalta).findOne({ where: { id: r1.creadas[0].id }, relations: ['penalizacion'] });
   ok(just.estado === 'JUSTIFICADA' && !just.penalizacion, 'justificada sin penalización', just.estado);
-  await rechaza(call('dr-justificar-falta', r1.creadas[0].id, 'otra vez'), 'ESTADO_INVALIDO', 'no se justifica dos veces');
+  await rechaza(resolver('dr-justificar-falta', r1.creadas[0].id, 'otra vez'), 'ESTADO_INVALIDO', 'no se justifica dos veces');
 
   // ===== I) Protección en handlers viejos =====
   console.log('\n[I] Handlers viejos no editan [DR]');
@@ -346,6 +352,11 @@ async function main() {
   const pCrit: any = await save(DrPremio, { nombre: 'COCINERO DE LA SEMANA', monto: 100000, moneda: pyg, periodo: 'SEMANAL', metodo: 'CRITERIOS', reglaEmpate: 'DIVIDIR', grupo: gM, orden: 3, activo: true });
   const c1: any = await save(DrCriterio, { premio: pCrit, texto: 'LIMPIEZA', escalaMin: 0, escalaMax: 2, orden: 1, activo: true });
   const c2: any = await save(DrCriterio, { premio: pCrit, texto: 'PUNTUALIDAD', escalaMin: 0, escalaMax: 2, orden: 2, activo: true });
+  // Catálogo de criterios por canal (antes exigía `nombre`, que DrCriterio no tiene).
+  const cCanal: any = await call('dr-save-criterios', { premio: { id: pCrit.id }, texto: 'orden de mesada', escalaMin: 0, escalaMax: 2, orden: 9, activo: false });
+  ok(!!cCanal?.id, 'dr-save-criterios guarda un criterio por canal');
+  const listaCrit: any[] = await call('dr-get-criterios', { incluirInactivos: true });
+  ok(listaCrit.some((c: any) => c.id === cCanal.id && c.texto === 'ORDEN DE MESADA'), 'dr-get-criterios lista el criterio en MAYÚSCULAS');
   await call('dr-puntuar', { fecha: '2026-07-06', puntajes: [
     { funcionarioId: fA.id, criterioId: c1.id, valor: 2 }, { funcionarioId: fA.id, criterioId: c2.id, valor: 1 },
     { funcionarioId: fB.id, criterioId: c1.id, valor: 2 }, { funcionarioId: fB.id, criterioId: c2.id, valor: 0 },
@@ -374,9 +385,9 @@ async function main() {
   await call('dr-registrar-falta', { tipoFaltaId: tipo.id, fecha: '2027-02-03', funcionarioIds: [fB.id] });
   const rT = await call('dr-registrar-falta', { tipoFaltaId: tipo.id, fecha: '2027-02-10', funcionarioIds: [fB.id] });
   const liqB = await call('generar-liquidacion-borrador', { funcionarioId: fB.id, periodo: '2027-02', monedaPagoId: pyg.id });
-  await rechaza(call('dr-aprobar-falta', rT.creadas[0].id), 'PLAZO_APELACION_VIGENTE', 'BETO: plazo vigente, no se aprueba');
+  await rechaza(resolver('dr-aprobar-falta', rT.creadas[0].id), 'PLAZO_APELACION_VIGENTE', 'BETO: plazo vigente, no se aprueba');
   await ds.getRepository(DrFalta).update({ id: rT.creadas[0].id }, { apelacionVence: new Date(Date.now() - 60_000) } as any); // venció el plazo
-  const apT = await call('dr-aprobar-falta', rT.creadas[0].id);
+  const apT = await resolver('dr-aprobar-falta', rT.creadas[0].id);
   ok(apT.cuotas.length === 2 && apT.cuotas[0].mes === '2027-02' && approx(apT.cuotas[0].monto, 30000) && apT.cuotas[1].mes === '2027-03' && approx(apT.cuotas[1].monto, 20000),
     'multa 50.000 con tope 30.000 → 30.000 feb + 20.000 mar', apT.cuotas);
   const pendO = await ds.getRepository(DrLiquidacionPendiente).count({ where: { mes: '2027-02', estado: 'PENDIENTE' } });
@@ -387,7 +398,7 @@ async function main() {
   ok(approx(detB.totalDescuentos, 30000), 'borrador regenerado descuenta solo la cuota de 30.000', detB.totalDescuentos);
   ok(await ds.getRepository(DrLiquidacionPendiente).count({ where: { estado: 'PENDIENTE' } }) === 0, 'regenerar resuelve el pendiente');
   await call('aprobar-liquidacion-sueldo', liqB2.id);
-  await rechaza(call('dr-anular-falta', rT.creadas[0].id, 'error'), 'LIQUIDACION_CERRADA', 'no se anula si una cuota está en liquidación aprobada');
+  await rechaza(resolver('dr-anular-falta', rT.creadas[0].id, 'error'), 'LIQUIDACION_CERRADA', 'no se anula si una cuota está en liquidación aprobada');
   await cfgRepo.update({ clave: 'DR_TOPE_DESCUENTO_MENSUAL' }, { valor: '0' });
 
   // ===== P) Doble descuento por tardanza =====
@@ -405,7 +416,7 @@ async function main() {
   ok(rP.ignoradas.length === 1 && rP.ignoradas[0].funcionarioId === fC.id, 'la respuesta informa a CARLA como ignorada', rP.ignoradas);
   const rP2 = await call('dr-registrar-falta', { tipoFaltaId: tTard.id, fecha: '2027-05-05', funcionarioIds: [fC.id], minutosTardanza: 20 });
   ok(rP2.creadas.length === 1 && rP2.creadas[0].resultado === 'MULTA' && approx(rP2.creadas[0].montoCalculado, 10000), 'otro día sin multa automática: CARLA sí recibe la multa DR', rP2.creadas[0]);
-  const apTard = await call('dr-aprobar-falta', rP2.creadas[0].id); // plazo 0 h: ya vencido
+  const apTard = await resolver('dr-aprobar-falta', rP2.creadas[0].id); // plazo 0 h: ya vencido
   ok(!!apTard.penalizacionId, 'con plazo de apelación 0 h se aprueba enseguida', apTard);
   const penC: any[] = await ds.getRepository(Penalizacion).find({ where: { funcionario: { id: fC.id }, anulada: false } });
   const porDia = (d: string) => penC.filter((p) => String(p.fecha).slice(0, 10) === d).length;

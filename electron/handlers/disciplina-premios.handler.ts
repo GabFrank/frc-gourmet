@@ -6,6 +6,7 @@
  * SALDO_PUNTOS (puntos iniciales − Σ errores VIGENTES del período, tipos del grupo del premio o globales).
  */
 import { ipcMain } from 'electron';
+import { marcarBorradorDesactualizado } from './disciplina.handler';
 import { Between, DataSource } from 'typeorm';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { Bono } from '../../src/app/database/entities/rrhh/bono.entity';
@@ -165,6 +166,7 @@ export function registerDisciplinaPremiosHandlers(dataSource: DataSource, getCur
           { estado: DrResultadoEstado.APROBADO, montoAprobado: monto, bono: { id: guardado.id }, mesDestino: mes, aprobadoPor: { id: user.id }, aprobadoEn: new Date() } as any,
         );
         if (!res.affected) fail('ESTADO_INVALIDO', 'EL RESULTADO CAMBIÓ MIENTRAS SE APROBABA');
+        await marcarBorradorDesactualizado(m, g.funcionario.id, mes, `PREMIO PERÍODO ${periodo.id} APROBADO`);
         bonos.push(guardado.id);
       }
       await m.getRepository(DrPeriodo).update({ id: periodoId } as any, { estado: DrPeriodoEstado.APROBADO, aprobadoPor: { id: user.id }, aprobadoEn: new Date() } as any);

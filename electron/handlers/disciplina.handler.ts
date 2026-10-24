@@ -103,8 +103,15 @@ async function drDescontadoEnMes(m: EntityManager, funcionarioId: number, mes: s
   return pens.filter((p: any) => fechaIso(p.fecha).slice(0, 7) === mes).reduce((s, p: any) => s + (Number(p.monto) || 0), 0);
 }
 
+/** Separación de funciones: quien registró la falta no la aprueba, justifica ni anula. */
+function noAutoResolver(falta: any, user: { id: number }): void {
+  if (falta?.detectadoPor?.id && falta.detectadoPor.id === user.id) {
+    fail('AUTO_RESOLUCION', 'NO PODÉS RESOLVER UNA FALTA QUE REGISTRASTE VOS: LA RESUELVE OTRO APROBADOR');
+  }
+}
+
 /** Si hay un borrador de liquidación de ese funcionario y mes, queda desactualizado hasta regenerarlo. */
-async function marcarBorradorDesactualizado(m: EntityManager, funcionarioId: number, mes: string | null, motivo: string): Promise<void> {
+export async function marcarBorradorDesactualizado(m: EntityManager, funcionarioId: number, mes: string | null, motivo: string): Promise<void> {
   if (!mes) return;
   const liq = await m.getRepository(LiquidacionSueldo).findOne({ where: { funcionario: { id: funcionarioId }, periodo: mes } as any });
   if (!liq || (liq.estado as string) !== 'BORRADOR') return;
@@ -319,9 +326,10 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
       const repo = m.getRepository(DrFalta);
       const falta: any = await repo.findOne({
         where: { id: faltaId } as any,
-        relations: ['funcionario', 'funcionario.monedaSalario', 'tipoFalta', 'moneda'],
+        relations: ['funcionario', 'funcionario.monedaSalario', 'tipoFalta', 'moneda', 'detectadoPor'],
       });
       if (!falta) fail('NO_ENCONTRADO', 'FALTA NO ENCONTRADA');
+      noAutoResolver(falta, user);
       if (![DrFaltaEstado.REGISTRADA, DrFaltaEstado.APELADA].includes(falta.estado)) fail('ESTADO_INVALIDO', 'LA FALTA YA FUE RESUELTA');
       // §12: con el plazo de apelación vigente solo se aprueba si la persona renunció a apelar.
       // (Si apeló, la falta está APELADA y se resuelve con la apelación a la vista.)
@@ -396,8 +404,9 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
       if (!motivo || !String(motivo).trim()) fail('VALIDACION', 'EL MOTIVO ES OBLIGATORIO');
       return dataSource.transaction(async (m) => {
         const repo = m.getRepository(DrFalta);
-        const falta: any = await repo.findOne({ where: { id: faltaId } as any, relations: ['penalizacion', 'funcionario'] });
+        const falta: any = await repo.findOne({ where: { id: faltaId } as any, relations: ['penalizacion', 'funcionario', 'detectadoPor'] });
         if (!falta) fail('NO_ENCONTRADO', 'FALTA NO ENCONTRADA');
+        noAutoResolver(falta, user);
         const permitidos = estadoFinal === DrFaltaEstado.JUSTIFICADA
           ? [DrFaltaEstado.REGISTRADA, DrFaltaEstado.APELADA]
           : [DrFaltaEstado.REGISTRADA, DrFaltaEstado.APELADA, DrFaltaEstado.APROBADA];

@@ -41,7 +41,7 @@ const CATALOGOS: Catalogo[] = [
   { canal: 'premios', entidad: DrPremio, relaciones: ['moneda', 'encuesta', 'grupo'], requeridos: ['nombre', 'metodo'], orden: { orden: 'ASC' }, noNegativos: ['monto'] },
   { canal: 'tipos-error', entidad: DrTipoError, relaciones: [], requeridos: ['nombre'], orden: { nombre: 'ASC' } },
   { canal: 'gravedades', entidad: DrGravedad, relaciones: [], requeridos: ['nombre'], orden: { nombre: 'ASC' } },
-  { canal: 'criterios', entidad: DrCriterio, relaciones: [], requeridos: ['nombre'], orden: { nombre: 'ASC' } },
+  { canal: 'criterios', entidad: DrCriterio, relaciones: ['premio'], requeridos: ['premio', 'texto'], orden: { orden: 'ASC', id: 'ASC' } },
   { canal: 'checklist-items', entidad: DrChecklistItem, relaciones: [], requeridos: [], orden: { id: 'ASC' } },
 ];
 
