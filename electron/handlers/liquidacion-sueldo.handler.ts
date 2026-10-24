@@ -1,3 +1,4 @@
+import { bloquearSiEsDr, PERMISOS_LECTURA_BONOS } from '../utils/disciplina-proteccion';
 import { ipcMain } from 'electron';
 import { Between, DataSource, Not } from 'typeorm';
 import { LiquidacionSueldo } from '../../src/app/database/entities/rrhh/liquidacion-sueldo.entity';
@@ -21,6 +22,7 @@ import { CuentaPorPagarCuota } from '../../src/app/database/entities/financiero/
 import { CuotaEstado } from '../../src/app/database/entities/financiero/cuentas-por-pagar-enums';
 import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
 import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
+import { DrLiquidacionPendiente } from '../../src/app/database/entities/rrhh/disciplina/dr-liquidacion-pendiente.entity';
 import { MovimientoCliente } from '../../src/app/database/entities/financiero/movimiento-cliente.entity';
 import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
 import {
@@ -828,6 +830,11 @@ export function registerLiquidacionSueldoHandlers(
       liq.totalNeto = tot.neto;
       await setEntityUserTracking(dataSource, liq, userId, true);
       await liqRepo.save(liq);
+      // DR: el borrador regenerado ya refleja las multas/premios aprobados o anulados.
+      await queryRunner.manager.getRepository(DrLiquidacionPendiente).update(
+        { funcionario: { id: funcionarioId }, mes: periodo, estado: 'PENDIENTE' } as any,
+        { estado: 'RESUELTO', resueltoEn: new Date() } as any,
+      );
 
       await queryRunner.commitTransaction();
       return liq;
@@ -922,6 +929,11 @@ export function registerLiquidacionSueldoHandlers(
     const liq = await repo.findOne({ where: { id } });
     if (!liq) throw new Error(`Liquidacion ${id} no encontrada`);
     if (liq.estado !== LiquidacionSueldoEstado.BORRADOR) throw new Error('Solo BORRADOR puede ser aprobado');
+    const liqFull: any = await repo.findOne({ where: { id }, relations: ['funcionario'] });
+    const drPend = await dataSource.getRepository(DrLiquidacionPendiente).count({
+      where: { funcionario: { id: liqFull?.funcionario?.id }, mes: liq.periodo, estado: 'PENDIENTE' } as any,
+    });
+    if (drPend) throw new Error('LIQUIDACIÓN DESACTUALIZADA POR CAMBIOS DE DISCIPLINA: REGENERÁ EL BORRADOR ANTES DE APROBAR');
     const userId = getCurrentUser()?.id;
     const userEntity = userId
       ? await dataSource.getRepository(Usuario).findOne({ where: { id: userId } })
@@ -1120,6 +1132,7 @@ export function registerLiquidacionSueldoHandlers(
 
   // ============= BONOS =============
   ipcMain.handle('get-bonos', async (_e, filtros: any) => {
+    await ensurePermission(dataSource, getCurrentUser, PERMISOS_LECTURA_BONOS);
     const repo = dataSource.getRepository(Bono);
     const qb = repo.createQueryBuilder('b')
       .leftJoinAndSelect('b.funcionario', 'f')
@@ -1138,6 +1151,7 @@ export function registerLiquidacionSueldoHandlers(
     const repo = dataSource.getRepository(Bono);
     const funcionario = await dataSource.getRepository(Funcionario).findOne({ where: { id: data.funcionarioId } });
     if (!funcionario) throw new Error(`Funcionario ${data.funcionarioId} no encontrado`);
+    bloquearSiEsDr(data.motivo, 'BONO');
     const entity = repo.create({
       funcionario,
       tipo: data.tipo,
@@ -1157,6 +1171,7 @@ export function registerLiquidacionSueldoHandlers(
     const repo = dataSource.getRepository(Bono);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Bono ${id} no encontrado`);
+    bloquearSiEsDr(existing.motivo, 'BONO');
     existing.anulado = true;
     await setEntityUserTracking(dataSource, existing, getCurrentUser()?.id, true);
     return await repo.save(existing);

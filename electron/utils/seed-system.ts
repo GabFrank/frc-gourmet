@@ -619,6 +619,17 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       'MUSICA_VER',
     ],
   },
+  // Disciplina y Reconocimiento: el auditor registra faltas/errores y carga el
+  // puntaje diario; el colaborador solo vota y ve lo suyo. Aprobar, configurar y
+  // ver resultados NO van en plantillas: los asigna el propietario.
+  {
+    descripcion: 'AUDITOR_DR',
+    permisos: ['RRHH_DR_REGISTRAR', 'RRHH_DR_PUNTUAR', 'RRHH_DR_VOTAR', 'RRHH_DR_MIS_DATOS'],
+  },
+  {
+    descripcion: 'COLABORADOR_DR',
+    permisos: ['RRHH_DR_VOTAR', 'RRHH_DR_MIS_DATOS'],
+  },
 ];
 
 /**

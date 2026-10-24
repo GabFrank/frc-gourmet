@@ -58,6 +58,11 @@ import { registerCotizacionMercadoHandlers } from '../handlers/cotizacion-mercad
 import { registerPermissionsHandlers } from '../handlers/permissions.handler';
 import { registerConfiguracionRrhhHandlers } from '../handlers/configuracion-rrhh.handler';
 import { registerRrhhFuncionariosHandlers } from '../handlers/rrhh-funcionarios.handler';
+import { registerDisciplinaHandlers } from '../handlers/disciplina.handler';
+import { registerDisciplinaVotacionHandlers } from '../handlers/disciplina-votacion.handler';
+import { registerDisciplinaPremiosHandlers } from '../handlers/disciplina-premios.handler';
+import { registerDisciplinaCatalogosHandlers } from '../handlers/disciplina-catalogos.handler';
+import { registerDisciplinaPuntosHandlers } from '../handlers/disciplina-puntos.handler';
 import { registerFuncionarioDocumentosHandlers } from '../handlers/funcionario-documentos.handler';
 import { registerAsistenciasHandlers } from '../handlers/asistencias.handler';
 import { registerAsistenciaFacialHandlers } from '../handlers/asistencia-facial.handler';
@@ -148,6 +153,11 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerRrhhFuncionariosHandlers(dataSource, getCurrentUser); // RRHH Fase 1: Cargos + Funcionarios + Historicos
   registerFuncionarioDocumentosHandlers(dataSource, getCurrentUser); // RRHH Fase 1: Documentos del funcionario (filesystem)
   registerAsistenciasHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Turnos + Asistencias + Penalizaciones
+  registerDisciplinaHandlers(dataSource, getCurrentUser); // RRHH: Disciplina y Reconocimiento (faltas → Penalizacion [DR])
+  registerDisciplinaVotacionHandlers(dataSource, getCurrentUser); // RRHH: DR votación anónima (agregados cifrados)
+  registerDisciplinaPremiosHandlers(dataSource, getCurrentUser); // RRHH: DR premios → Bono [DR]
+  registerDisciplinaCatalogosHandlers(dataSource, getCurrentUser); // RRHH: DR catálogos configurables
+  registerDisciplinaPuntosHandlers(dataSource, getCurrentUser); // RRHH: DR errores/puntos y puntaje por criterios
   registerAsistenciaFacialHandlers(dataSource, getCurrentUser); // RRHH: Reconocimiento facial (rostros + fichaje)
   registerFaceModelsHandlers(dataSource, getCurrentUser); // RRHH: Modelos de reconocimiento facial (descarga/serve)
   registerFeriadosHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Feriados

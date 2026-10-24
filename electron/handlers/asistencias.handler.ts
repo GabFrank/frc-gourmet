@@ -1,3 +1,4 @@
+import { bloquearSiEsDr, PERMISOS_LECTURA_PENALIZACIONES } from '../utils/disciplina-proteccion';
 import { ipcMain } from 'electron';
 import { Between, DataSource } from 'typeorm';
 import { Turno } from '../../src/app/database/entities/rrhh/turno.entity';
@@ -324,6 +325,7 @@ export function registerAsistenciasHandlers(
 
   // ==================== PENALIZACIONES ====================
   ipcMain.handle('get-penalizaciones', async (_e, filtros: any) => {
+    await ensurePermission(dataSource, getCurrentUser, PERMISOS_LECTURA_PENALIZACIONES);
     const repo = dataSource.getRepository(Penalizacion);
     const qb = repo.createQueryBuilder('p')
       .leftJoinAndSelect('p.funcionario', 'f')
@@ -344,6 +346,7 @@ export function registerAsistenciasHandlers(
     const repo = dataSource.getRepository(Penalizacion);
     const funcionario = await dataSource.getRepository(Funcionario).findOne({ where: { id: data.funcionarioId } });
     if (!funcionario) throw new Error(`Funcionario ${data.funcionarioId} no encontrado`);
+    bloquearSiEsDr(data.descripcion, 'PENALIZACION');
     const entity = repo.create({
       funcionario,
       tipo: data.tipo,
@@ -363,6 +366,8 @@ export function registerAsistenciasHandlers(
     const existing = await repo.findOne({ where: { id: data.id } });
     if (!existing) throw new Error(`Penalizacion ${data.id} no encontrada`);
     if (existing.anulada) throw new Error('No se puede editar una penalizacion anulada');
+    bloquearSiEsDr(existing.descripcion, 'PENALIZACION');
+    bloquearSiEsDr(data.descripcion, 'PENALIZACION');
     if (data.tipo !== undefined) existing.tipo = data.tipo;
     if (data.descripcion !== undefined) existing.descripcion = data.descripcion;
     if (data.monto !== undefined) existing.monto = data.monto;
@@ -376,6 +381,7 @@ export function registerAsistenciasHandlers(
     const repo = dataSource.getRepository(Penalizacion);
     const existing = await repo.findOne({ where: { id } });
     if (!existing) throw new Error(`Penalizacion ${id} no encontrada`);
+    bloquearSiEsDr(existing.descripcion, 'PENALIZACION');
     existing.anulada = true;
     await setEntityUserTracking(dataSource, existing, getCurrentUser()?.id, true);
     return await repo.save(existing);
