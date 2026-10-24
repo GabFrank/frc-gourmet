@@ -439,6 +439,60 @@ interpreta `YYYY-MM-DD` como fecha local y deja los ISO con hora al parser nativ
 
 ## RRHH / Financiero
 
+### DR: el catálogo de criterios no se puede guardar ni listar — ABIERTO (alto, bloquea la UI de fase 2)
+
+**Síntoma:** `dr-save-criterios` responde siempre «FALTA NOMBRE» y `dr-get-criterios` falla al ordenar.
+
+**Causa:** en `electron/handlers/disciplina-catalogos.handler.ts` la entrada `criterios` exige y ordena por `nombre`, pero `DrCriterio` solo tiene `texto`. El e2e no lo detecta porque crea los criterios directo en la base.
+
+**Fix propuesto:** `requeridos: ['texto']`, `orden: { orden: 'ASC', id: 'ASC' }` y un test que use el canal. Se arregla en el PR de la fase 2.
+
+### DR: aprobar un premio no marca desactualizado el borrador de liquidación — ABIERTO (medio)
+
+**Causa:** `dr-aprobar-premio` crea el Bono pero, a diferencia de las faltas, no registra el borrador existente en `dr_liquidacion_pendiente`. Un borrador ya generado no incluye el Bono hasta que se regenere a mano.
+
+**Fix propuesto:** reutilizar el mismo marcado que usa la aprobación de faltas. Las suites `test:disciplina-*` tampoco están en `scripts/run-all-tests.js` (no corren con `test:all`).
+
+### DR: dos votos simultáneos sobre un agregado nuevo devuelven un error crudo — ABIERTO (menor)
+
+**Síntoma:** en una encuesta de Disciplina y Reconocimiento, dos personas envían el voto
+casi al mismo tiempo y una recibe un error de base de datos (violación de
+`UQ_dr_voto_agregado_periodo_eval_preg`) en vez de un mensaje del módulo.
+
+**Causa:** `dr-votar` (`electron/handlers/disciplina-votacion.handler.ts`) busca la fila de
+`dr_voto_agregado` (período, evaluado, pregunta) y, si no existe, la inserta. En Postgres el
+`FOR UPDATE` solo bloquea filas **existentes**: en el primer voto de cada combinación las dos
+transacciones ven «no hay fila», las dos insertan y la segunda choca con el índice único. En
+SQLite la escritura está serializada y no pasa.
+
+**Impacto:** ninguno sobre los datos. Toda la transacción revierte (participación incluida),
+así que no queda «votó» sin voto contado y **reintentar funciona**. Solo es un mensaje feo y
+un reintento manual.
+
+**Fix propuesto:** atrapar la violación de unicidad en ese `insert` y reintentar el voto
+(releer la fila ya creada con lock y hacer `update`), o crear las filas vacías de agregados al
+abrir el período (`dr-abrir-periodo`) para que siempre haya fila que bloquear.
+
+### DR: la tardanza se descuenta dos veces si la falta DR se carga antes que la asistencia — ABIERTO (medio)
+
+**Síntoma:** un funcionario con una falta DR de tardanza aprobada y, el mismo día, una
+`Penalizacion` automática de asistencias: dos descuentos por la misma llegada tarde.
+
+**Causa:** la protección es en un solo sentido. `dr-registrar-falta` ignora la tardanza si
+**ya existe** una Penalizacion `autoGenerada` (no `[DR]`) ese día, pero
+`crearAsistenciaInterno` (`asistencias.handler.ts`) genera la auto-penalización por tardanza
+(`PENALIZACION_AUTO_TARDANZA`, encendida por defecto) sin mirar si hay una falta DR de ese
+día. Si la falta DR se registra primero y la asistencia después, quedan las dos.
+
+**Mitigación hoy:** antes de activar el módulo, decidir cuál de los dos descuenta la tardanza
+(apagar `PENALIZACION_AUTO_TARDANZA` o no usar tipos de falta DR de tardanza). Tests:
+`npm run test:disciplina-e2e` bloque [P] cubre solo el orden asistencia → falta DR.
+
+**Fix propuesto:** que la auto-penalización de asistencias también se saltee si hay una
+`DrFalta` de tardanza no anulada/justificada de ese funcionario y día, o que la falta DR de
+tardanza se derive siempre de la asistencia (`fuenteAsistencia`) en vez de cargarse a mano.
+Detalle en [../domains/rrhh-disciplina.md](../domains/rrhh-disciplina.md).
+
 ### Operación Financiera: campos requeridos que la UI no poblaba — RESUELTO (2026-08)
 
 **Síntoma:** en la PWA, *Gestión de Caja Mayor → Operaciones financieras*, el

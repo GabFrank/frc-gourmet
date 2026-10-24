@@ -72,6 +72,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | **RRHH** (funcionarios, asistencias, vales, vacaciones) | [domains/rrhh.md](domains/rrhh.md) |
 | **RRHH — Fichaje facial** (reconocimiento facial de asistencia, embeddings on-device, match 1:N, liveness, geocerca, kiosco PWA) | [domains/rrhh-asistencia-facial.md](domains/rrhh-asistencia-facial.md) |
 | **Liquidaciones, comisiones** (sueldo, aguinaldo, equipos) | [domains/rrhh-liquidaciones.md](domains/rrhh-liquidaciones.md) |
+| **RRHH — Disciplina y Reconocimiento** (faltas/multas con apelación, errores con puntos, puntaje por criterios, votación anónima, premios → Penalizacion/Bono `[DR]`; fase 1 solo backend) | [domains/rrhh-disciplina.md](domains/rrhh-disciplina.md) |
 | **Personas, Clientes, Usuarios** | [domains/personas-clientes.md](domains/personas-clientes.md) |
 | **Impresoras térmicas** | [domains/cocina-impresion.md](domains/cocina-impresion.md) |
 | **Qué imprime el sistema y para qué** (catálogo de los 13 tickets, ruteo por rol de impresora, convenciones de formato) | [domains/tickets-impresos.md](domains/tickets-impresos.md) |
@@ -129,6 +130,10 @@ Estas las debo respetar SIEMPRE, sin que el usuario las repita:
 
 > Esta sección puede quedar desactualizada. Si el usuario pregunta por estado actual, **revisar `git log` y memorias antes de responder**.
 > Canal alpha en `develop` va por **`v1.21.0-alpha.98`** (2026-07). El "primer stable v1.1.0" del snapshot viejo es historia lejana.
+
+### Sesión 2026-10-24 — Disciplina y Reconocimiento, fase 1 (backend)
+
+- **Disciplina y Reconocimiento (DR) fase 1 MERGED (PR #313):** módulo RRHH nuevo, **solo backend** (sin pantallas; fase 2 desktop, fase 3 PWA). 19 tablas `dr_*` (migración aditiva `1792785488053-DisciplinaReconocimiento`, up/down probada en SQLite y Postgres), motor puro en `electron/services/disciplina/` y 5 handlers `disciplina*.handler.ts`. Faltas con advertencias previas, escala y reinicio, **apelación con plazo y renuncia**; la multa recién existe al **aprobar** y sale como `Penalizacion` `[DR]` (concepto `PENALIZACION`) al primer mes de liquidación abierto, con tope mensual opcional en cuotas (`DR_TOPE_DESCUENTO_MENSUAL`, 0 = apagado) y `dr_liquidacion_pendiente` que bloquea aprobar un borrador desactualizado. Errores con puntos, puntaje diario por criterios y **votación anónima** (sin voto individual: agregados cifrados AES-GCM mientras el período está abierto, participación separada, textos reescritos mezclados al cerrar, mínimo de votantes). Premios por VOTACION / CRITERIOS / SALDO_PUNTOS → `Bono` `[DR]` (`BONO_MANUAL`). 7 permisos `RRHH_DR_*` + roles plantilla `AUDITOR_DR` / `COLABORADOR_DR`; `get-penalizaciones` y `get-bonos` pasan a exigir permiso y los handlers viejos no tocan registros `[DR]`. Tests: `npm run test:disciplina-motor`, `test:disciplina-e2e`, `test:disciplina-migracion` (no están en `test:all`). Manual: `docs/testing/TESTING-CHECKLIST-DISCIPLINA-RECONOCIMIENTO.md`. ⚠️ Dos limitaciones abiertas (carrera en el primer voto, doble descuento si la falta DR se carga antes que la asistencia) → [reference/known-bugs.md](reference/known-bugs.md). Detalles → [domains/rrhh-disciplina.md](domains/rrhh-disciplina.md).
 
 ### Sesión 2026-08-27 — Cobro consolidado de CPC (multi-cuota + descuento)
 

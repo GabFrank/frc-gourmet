@@ -154,6 +154,34 @@ Si era BORRADOR/APROBADA: solo marca ANULADA (sin efectos cruzados).
 
 → `project_anular_liquidacion_sueldo`
 
+### Disciplina y Reconocimiento (DR) en la liquidación (desde PR #313)
+
+El módulo DR **no agrega conceptos ni toca el armado del borrador**: lo aprobado se
+materializa como registros normales que el paso 3 ya toma. Modelo completo en
+[rrhh-disciplina.md](rrhh-disciplina.md).
+
+- **Multa aprobada** (`dr-aprobar-falta`) → `Penalizacion` tipo `OTRO`, `autoGenerada: true`,
+  descripción `[DR] <TIPO> #<n> (FALTA <id>)` → item **`PENALIZACION`** (DESCUENTO,
+  `referenciaTipo=PENALIZACION`). Con tope mensual (`DR_TOPE_DESCUENTO_MENSUAL` > 0) se parte
+  en varias Penalizacion `… CUOTA k/n`, una por mes.
+- **Premio aprobado** (`dr-aprobar-premio`) → `Bono` tipo `DESEMPENIO`, motivo
+  `[DR] <PREMIO> (PERÍODO <id>)` → item **`BONO_MANUAL`** (HABER, `referenciaTipo=BONO`).
+- **Mes destino:** el primer mes **abierto** del funcionario (sin liquidación o en BORRADOR;
+  las ANULADAS no cuentan) desde el mes del hecho. Si el mes del hecho ya está APROBADA o
+  PAGADA, la Penalizacion/Bono se fecha el día 1 del mes siguiente abierto. Nunca se toca
+  una liquidación cerrada; anular una falta cuya multa ya está en una liquidación
+  APROBADA/PAGADA se rechaza (`LIQUIDACION_CERRADA`).
+- **Moneda:** la de la multa/premio debe ser la del sueldo (`MONEDA_DISTINTA` si no).
+- **Borrador desactualizado:** si al aprobar/anular/justificar una falta ya hay BORRADOR de
+  ese funcionario y mes, se crea un `dr_liquidacion_pendiente` PENDIENTE.
+  `aprobar-liquidacion-sueldo` lo rechaza con `LIQUIDACIÓN DESACTUALIZADA POR CAMBIOS DE
+  DISCIPLINA: REGENERÁ EL BORRADOR ANTES DE APROBAR`; `generar-liquidacion-borrador` lo
+  pasa a RESUELTO al regenerar. ⚠️ Aprobar un **premio** no crea el pendiente: si había
+  borrador, regenerarlo a mano.
+- **Protección:** las Penalizacion/Bono `[DR]` no se editan ni anulan desde
+  `update/anular-penalizacion` ni `anular-bono` (`FORBIDDEN`); `get-bonos` (y
+  `get-penalizaciones`) exigen permiso de RRHH.
+
 ## Liquidación Final (egreso)
 
 ```typescript

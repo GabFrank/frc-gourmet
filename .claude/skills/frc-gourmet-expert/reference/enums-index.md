@@ -245,6 +245,43 @@ TipoNotificacionRrhh = PRESTAMO_VENCIDO | CUOTA_VENCIDA | CUMPLEANIOS | VACACION
 PrioridadNotificacion = ALTA | MEDIA | BAJA
 ```
 
+### RRHH — Disciplina y Reconocimiento (`rrhh/disciplina/`, PR #313)
+
+Todos se guardan como `text` (CHECK en SQLite). → [domains/rrhh-disciplina.md](../domains/rrhh-disciplina.md).
+
+```typescript
+// rrhh/disciplina/dr-falta.enum.ts
+DrFaltaEstado = REGISTRADA | APELADA | APROBADA | JUSTIFICADA | ANULADA
+DrFaltaResultado = ADVERTENCIA | MULTA          // el motor además devuelve NINGUNO (tardanza en tolerancia: no se crea la falta)
+
+// rrhh/disciplina/dr-tipo-falta.enum.ts
+DrModoAplicacion = INDIVIDUAL | TODOS_PRESENTES
+DrReinicio = NUNCA | SEMANAL | MENSUAL
+
+// rrhh/disciplina/dr-error-estado.enum.ts
+DrErrorEstado = VIGENTE | ANULADO
+
+// rrhh/disciplina/dr-grupo-rol.enum.ts
+DrGrupoRol = MIEMBRO | AUDITOR
+
+// rrhh/disciplina/dr-premio.enum.ts
+DrPremioPeriodo = SEMANAL | QUINCENAL | MENSUAL
+DrPremioMetodo = CRITERIOS | VOTACION | SALDO_PUNTOS
+DrReglaEmpate = DIVIDIR | MONTO_COMPLETO_CADA_UNO | DESIERTO   // el motor usa 'MONTO_COMPLETO_CU'; el handler traduce
+
+// rrhh/disciplina/dr-pregunta-tipo.enum.ts
+DrPreguntaTipo = ESCALA | SI_NO | TEXTO
+
+// rrhh/disciplina/dr-periodo-estado.enum.ts
+DrPeriodoEstado = ABIERTO | CERRADO | APROBADO
+
+// rrhh/disciplina/dr-resultado-estado.enum.ts
+DrResultadoEstado = PROPUESTO | APROBADO | DESIERTO | ANULADO
+
+// rrhh/disciplina/dr-liquidacion-pendiente-estado.enum.ts
+DrLiquidacionPendienteEstado = PENDIENTE | RESUELTO
+```
+
 ## Caja PdV
 
 ```typescript
