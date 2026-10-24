@@ -1,0 +1,134 @@
+<div class="crud-page">
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+  <button *ngIf="error" mat-stroked-button (click)="cargar()">Reintentar</button>
+
+  <ng-container *ngIf="!loading && !error">
+    <!-- Resultado -->
+    <ng-container *ngIf="creadas; else formulario">
+      <div class="dr-step-title"><mat-icon>task_alt</mat-icon> Resultado</div>
+      <div class="dr-box">
+        <div *ngIf="!creadas.length" class="dr-muted">No se registró ninguna falta.</div>
+        <div class="dr-res-row" *ngFor="let c of creadas">
+          <span>{{ c.nombre }} <span class="dr-muted" *ngIf="c.n">· {{ c.n }}.ª vez</span></span>
+          <span [class.dr-multa]="c.resultado === 'MULTA'" [class.dr-adv]="c.resultado !== 'MULTA'">
+            {{ c.resultado === 'MULTA' ? 'MULTA ' + monto(c.monto) : 'ADVERTENCIA' }}
+          </span>
+        </div>
+      </div>
+      <ng-container *ngIf="ignoradas.length">
+        <div class="dr-step-title"><mat-icon>block</mat-icon> Ignoradas</div>
+        <div class="dr-box">
+          <div class="dr-res-row" *ngFor="let i of ignoradas">
+            <span>{{ i.nombre }}</span><span class="dr-muted">{{ i.motivo }}</span>
+          </div>
+        </div>
+      </ng-container>
+      <p *ngIf="enTolerancia.length" class="dr-muted">Dentro de la tolerancia (no cuenta): {{ enTolerancia.join(', ') }}</p>
+      <div class="dr-actions">
+        <button mat-flat-button color="primary" (click)="nueva()"><mat-icon>add</mat-icon> Registrar otra</button>
+      </div>
+    </ng-container>
+
+    <ng-template #formulario>
+      <!-- 1. Tipo -->
+      <div class="dr-step-title"><span class="dr-step-num">1</span> Tipo de falta</div>
+      <p *ngIf="!tipos.length" class="crud-empty">No hay tipos de falta activos. Configuralos en Disciplina.</p>
+      <div class="dr-tipos">
+        <button type="button" *ngFor="let t of tipos" class="dr-tipo" [class.sel]="tipo?.id === t.id" (click)="elegirTipo(t)">
+          <span class="dr-tipo-nombre">{{ t.nombre }}</span>
+          <span class="dr-tipo-sub">
+            {{ t.advertenciasPrevias ? t.advertenciasPrevias + ' adv. → ' : '' }}{{ monto(t.montoMulta, t.simbolo) }}
+          </span>
+          <span *ngIf="t.todosPresentes" class="dr-chip">Todos los presentes</span>
+        </button>
+      </div>
+      <p *ngIf="tipo" class="dr-muted" style="margin: 8px 2px 0">{{ regla(tipo) }}</p>
+
+      <ng-container *ngIf="tipo">
+        <!-- 2. Fecha / minutos -->
+        <div class="dr-step-title"><span class="dr-step-num">2</span> Cuándo</div>
+        <mat-form-field appearance="outline" class="dr-full">
+          <mat-label>Fecha</mat-label>
+          <input matInput type="date" [formControl]="fecha" />
+        </mat-form-field>
+        <mat-form-field *ngIf="tipo.tardanza" appearance="outline" class="dr-full">
+          <mat-label>Minutos de tardanza</mat-label>
+          <input matInput type="number" inputmode="numeric" min="0" [formControl]="minutos" />
+          <mat-hint *ngIf="tipo.toleranciaMinutos !== null">Hasta {{ tipo.toleranciaMinutos }} min no cuenta</mat-hint>
+        </mat-form-field>
+
+        <!-- 3. Funcionarios -->
+        <div class="dr-step-title"><span class="dr-step-num">3</span> Funcionario(s)</div>
+        <div class="dr-sel-bar">
+          <span>{{ seleccion.size }} elegido{{ seleccion.size === 1 ? '' : 's' }}</span>
+          <span *ngIf="tipo.todosPresentes && presentesCargados !== null">· {{ presentesCargados }} presentes precargados</span>
+          <mat-spinner *ngIf="cargandoPresentes" diameter="16"></mat-spinner>
+          <span class="crud-spacer" style="flex: 1"></span>
+          <button *ngIf="tipo.todosPresentes" mat-stroked-button (click)="cargarPresentes()">
+            <mat-icon>groups</mat-icon> Presentes
+          </button>
+          <button *ngIf="seleccion.size" mat-button (click)="limpiarSeleccion()">Limpiar</button>
+        </div>
+        <mat-form-field appearance="outline" class="dr-full">
+          <mat-label>Buscar funcionario</mat-label>
+          <mat-icon matPrefix>search</mat-icon>
+          <input matInput [formControl]="busqueda" />
+          <button *ngIf="busqueda.value" matSuffix mat-icon-button (click)="busqueda.setValue('')" aria-label="Limpiar">
+            <mat-icon>close</mat-icon>
+          </button>
+        </mat-form-field>
+        <div class="dr-funcs">
+          <button type="button" *ngFor="let f of visibles" class="dr-func" [class.sel]="seleccion.has(f.id)" (click)="toggle(f)">
+            <mat-icon>{{ seleccion.has(f.id) ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+            <span class="dr-func-nombre">{{ f.nombre }}</span>
+            <ng-container *ngIf="preview.get(f.id) as p">
+              <span class="dr-func-extra" [class.dr-multa]="p.resultado === 'MULTA'" [class.dr-adv]="p.resultado === 'ADVERTENCIA'"
+                    [class.dr-muted]="p.resultado === 'NINGUNO'">
+                {{ p.resultado === 'MULTA' ? monto(p.monto) : p.resultado === 'ADVERTENCIA' ? 'Advertencia' : 'No cuenta' }}
+              </span>
+            </ng-container>
+          </button>
+          <p *ngIf="!visibles.length" class="crud-empty">Sin resultados</p>
+        </div>
+
+        <!-- Vista previa -->
+        <ng-container *ngIf="seleccion.size">
+          <div class="dr-step-title">
+            <mat-icon>visibility</mat-icon> Será
+            <mat-spinner *ngIf="calculandoPreview" diameter="14"></mat-spinner>
+          </div>
+          <div class="dr-box">
+            <ng-container *ngIf="preview.size; else sinPreview">
+              <div class="dr-res-row" *ngFor="let f of seleccionados">
+                <span>{{ f.nombre }} <span class="dr-muted" *ngIf="preview.get(f.id)?.n">· {{ preview.get(f.id)?.n }}.ª vez</span></span>
+                <ng-container *ngIf="preview.get(f.id) as p">
+                  <span *ngIf="p.resultado === 'MULTA'" class="dr-multa">MULTA {{ monto(p.monto) }}</span>
+                  <span *ngIf="p.resultado === 'ADVERTENCIA'" class="dr-adv">ADVERTENCIA</span>
+                  <span *ngIf="p.resultado === 'NINGUNO'" class="dr-muted">Dentro de la tolerancia</span>
+                </ng-container>
+              </div>
+              <div *ngIf="totalMultas" class="dr-res-row"><strong>Total multas</strong><strong class="dr-multa">{{ monto(totalMultas) }}</strong></div>
+              <p class="dr-muted" style="margin: 6px 0 0">Estimado: el sistema confirma al guardar.</p>
+            </ng-container>
+            <ng-template #sinPreview><span class="dr-muted">{{ regla(tipo) }}</span></ng-template>
+          </div>
+        </ng-container>
+
+        <!-- 4. Detalle -->
+        <div class="dr-step-title"><span class="dr-step-num">4</span> Detalle (opcional)</div>
+        <mat-form-field appearance="outline" class="dr-full">
+          <mat-label>Detalle</mat-label>
+          <textarea matInput rows="2" [formControl]="detalle"></textarea>
+        </mat-form-field>
+
+        <div class="dr-actions">
+          <button mat-flat-button color="primary" [disabled]="!puedeGuardar" (click)="guardar()">
+            <mat-spinner *ngIf="guardando" diameter="20" style="display: inline-block; margin-right: 8px"></mat-spinner>
+            Registrar falta{{ seleccion.size > 1 ? ' (' + seleccion.size + ')' : '' }}
+          </button>
+        </div>
+      </ng-container>
+    </ng-template>
+  </ng-container>
+</div>
