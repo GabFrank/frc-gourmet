@@ -1,0 +1,89 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+.contenedor-raiz {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.page-header {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  h2 { margin: 0; font-size: 20px; color: var(--text-primary); }
+}
+.acciones-header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.hint-config, .nota, .aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  mat-icon { font-size: 18px; width: 18px; height: 18px; flex-shrink: 0; }
+}
+.hint-config { flex-shrink: 0; mat-icon { color: var(--info-color); } }
+.nota mat-icon { color: var(--warning-color); }
+.aviso { margin-bottom: 8px; mat-icon { color: var(--info-color); } }
+.tabs { flex: 1; min-height: 0; }
+::ng-deep .tabs .mat-mdc-tab-body-wrapper { flex: 1; min-height: 0; }
+.tab-icon { margin-right: 6px; }
+.tab-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 2px;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+}
+.seccion { flex-shrink: 0; }
+.seccion-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  h3 { margin: 0; font-size: 16px; color: var(--text-primary); }
+}
+.padre-select { min-width: 280px; }
+.spacer { flex: 1; }
+.table-scroll { max-height: 55vh; overflow: auto; }
+table { width: 100%; }
+.mat-mdc-header-cell { background: var(--surface); }
+.num { text-align: right; }
+.inactivo { color: var(--text-disabled); }
+.acc-col { width: 56px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--surface);
+}
+.chip-ok { background: var(--success-color); }
+.chip-off { background: var(--warning-color); }
+.vacio { padding: 16px; text-align: center; color: var(--text-secondary); }
+mat-progress-spinner { display: inline-block; margin-right: 6px; vertical-align: middle; }
+.spinning { animation: spin 1s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

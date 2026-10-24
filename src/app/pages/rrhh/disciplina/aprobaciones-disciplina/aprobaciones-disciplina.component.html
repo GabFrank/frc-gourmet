@@ -1,0 +1,229 @@
+<div class="contenedor-raiz">
+  <div class="page-header">
+    <div class="titulo">
+      <mat-icon>fact_check</mat-icon>
+      <h2>Aprobaciones de disciplina y reconocimiento</h2>
+    </div>
+    <button mat-stroked-button (click)="recargar()" [disabled]="cargandoPendientes || cargandoApeladas">
+      <mat-icon [class.spinning]="cargandoPendientes || cargandoApeladas">refresh</mat-icon> Actualizar
+    </button>
+  </div>
+  <p class="hint">Quien registró una falta no puede resolverla: la aprueba, justifica o anula otro aprobador.</p>
+
+  <mat-tab-group class="tabs" animationDuration="0ms">
+    <!-- ───────────── PENDIENTES ───────────── -->
+    <mat-tab>
+      <ng-template mat-tab-label><mat-icon class="tab-icon">pending_actions</mat-icon>Pendientes ({{ totalPendientes }})</ng-template>
+      <div class="tab-body">
+        <mat-card>
+          <mat-card-content>
+            <div class="table-scroll">
+              <table mat-table [dataSource]="pendientes">
+                <ng-container matColumnDef="fecha">
+                  <th mat-header-cell *matHeaderCellDef>Fecha</th>
+                  <td mat-cell *matCellDef="let f">{{ f.fecha }}</td>
+                </ng-container>
+                <ng-container matColumnDef="funcionario">
+                  <th mat-header-cell *matHeaderCellDef>Funcionario</th>
+                  <td mat-cell *matCellDef="let f">{{ f.funcionario }}</td>
+                </ng-container>
+                <ng-container matColumnDef="tipo">
+                  <th mat-header-cell *matHeaderCellDef>Tipo de falta</th>
+                  <td mat-cell *matCellDef="let f">{{ f.tipo }} <span class="sub">#{{ f.ocurrencia }}</span></td>
+                </ng-container>
+                <ng-container matColumnDef="resultado">
+                  <th mat-header-cell *matHeaderCellDef>Resultado</th>
+                  <td mat-cell *matCellDef="let f">
+                    <span class="chip" [class.chip-rojo]="f.esMulta" [class.chip-amarillo]="!f.esMulta">{{ f.resultado }}</span>
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="monto">
+                  <th mat-header-cell *matHeaderCellDef class="num">Monto</th>
+                  <td mat-cell *matCellDef="let f" class="num">{{ f.moneda }} {{ f.monto | number:'1.0-2' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="vence">
+                  <th mat-header-cell *matHeaderCellDef>Apelación vence</th>
+                  <td mat-cell *matCellDef="let f">
+                    {{ f.vence ? (f.vence | date:'dd/MM/yyyy HH:mm') : '-' }}
+                    <span *ngIf="f.plazoAbierto" class="chip chip-naranja">PLAZO ABIERTO</span>
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="renuncia">
+                  <th mat-header-cell *matHeaderCellDef>Renunció a apelar</th>
+                  <td mat-cell *matCellDef="let f">
+                    <span class="chip" [class.chip-verde]="f.renuncio" [class.chip-celeste]="!f.renuncio">{{ f.renuncio ? 'SÍ' : 'NO' }}</span>
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="observacion">
+                  <th mat-header-cell *matHeaderCellDef>Observación</th>
+                  <td mat-cell *matCellDef="let f" class="texto-largo">{{ f.observacion || '-' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="acciones">
+                  <th mat-header-cell *matHeaderCellDef class="acc-col"></th>
+                  <td mat-cell *matCellDef="let f" class="acc-col">
+                    <mat-progress-spinner *ngIf="procesando === f.clave" mode="indeterminate" diameter="22"></mat-progress-spinner>
+                    <button *ngIf="procesando !== f.clave" mat-icon-button [matMenuTriggerFor]="mp" [disabled]="!!procesando">
+                      <mat-icon>more_vert</mat-icon>
+                    </button>
+                    <mat-menu #mp="matMenu">
+                      <span [matTooltip]="f.motivoNoAprobar" matTooltipPosition="left">
+                        <button mat-menu-item (click)="aprobar(f, false)" [disabled]="!f.puedeAprobar">
+                          <mat-icon>check_circle</mat-icon><span>Aprobar</span>
+                        </button>
+                      </span>
+                      <button mat-menu-item (click)="justificar(f)">
+                        <mat-icon>verified</mat-icon><span>Justificar</span>
+                      </button>
+                      <button mat-menu-item (click)="anular(f)">
+                        <mat-icon>cancel</mat-icon><span>Anular</span>
+                      </button>
+                    </mat-menu>
+                  </td>
+                </ng-container>
+                <tr mat-header-row *matHeaderRowDef="colsPendientes; sticky: true"></tr>
+                <tr mat-row *matRowDef="let row; columns: colsPendientes"></tr>
+              </table>
+              <div *ngIf="cargandoPendientes" class="spinner"><mat-progress-spinner mode="indeterminate" diameter="36"></mat-progress-spinner></div>
+              <div *ngIf="!cargandoPendientes && pendientes.length === 0" class="vacio">No hay faltas pendientes.</div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </mat-tab>
+
+    <!-- ───────────── APELADAS ───────────── -->
+    <mat-tab>
+      <ng-template mat-tab-label><mat-icon class="tab-icon">record_voice_over</mat-icon>Apeladas ({{ totalApeladas }})</ng-template>
+      <div class="tab-body">
+        <mat-card>
+          <mat-card-content>
+            <div class="table-scroll">
+              <table mat-table [dataSource]="apeladas">
+                <ng-container matColumnDef="fecha">
+                  <th mat-header-cell *matHeaderCellDef>Fecha</th>
+                  <td mat-cell *matCellDef="let f">{{ f.fecha }}</td>
+                </ng-container>
+                <ng-container matColumnDef="funcionario">
+                  <th mat-header-cell *matHeaderCellDef>Funcionario</th>
+                  <td mat-cell *matCellDef="let f">{{ f.funcionario }}</td>
+                </ng-container>
+                <ng-container matColumnDef="tipo">
+                  <th mat-header-cell *matHeaderCellDef>Tipo de falta</th>
+                  <td mat-cell *matCellDef="let f">{{ f.tipo }} <span class="sub">#{{ f.ocurrencia }}</span></td>
+                </ng-container>
+                <ng-container matColumnDef="resultado">
+                  <th mat-header-cell *matHeaderCellDef>Resultado</th>
+                  <td mat-cell *matCellDef="let f">
+                    <span class="chip" [class.chip-rojo]="f.esMulta" [class.chip-amarillo]="!f.esMulta">{{ f.resultado }}</span>
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="monto">
+                  <th mat-header-cell *matHeaderCellDef class="num">Monto</th>
+                  <td mat-cell *matCellDef="let f" class="num">{{ f.moneda }} {{ f.monto | number:'1.0-2' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="apelacion">
+                  <th mat-header-cell *matHeaderCellDef>Apelación</th>
+                  <td mat-cell *matCellDef="let f" class="apelacion">
+                    <div class="apelacion-texto">«{{ f.apelacionTexto }}»</div>
+                    <div class="sub" *ngIf="f.apelacionFecha">{{ f.apelacionFecha | date:'dd/MM/yyyy HH:mm' }}</div>
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="acciones">
+                  <th mat-header-cell *matHeaderCellDef class="acc-col"></th>
+                  <td mat-cell *matCellDef="let f" class="acc-col">
+                    <mat-progress-spinner *ngIf="procesando === f.clave" mode="indeterminate" diameter="22"></mat-progress-spinner>
+                    <button *ngIf="procesando !== f.clave" mat-icon-button [matMenuTriggerFor]="ma" [disabled]="!!procesando">
+                      <mat-icon>more_vert</mat-icon>
+                    </button>
+                    <mat-menu #ma="matMenu">
+                      <button mat-menu-item (click)="aprobar(f, true)">
+                        <mat-icon>check_circle</mat-icon><span>Aprobar (rechazar apelación)</span>
+                      </button>
+                      <button mat-menu-item (click)="justificar(f)">
+                        <mat-icon>verified</mat-icon><span>Justificar (aceptar apelación)</span>
+                      </button>
+                      <button mat-menu-item (click)="anular(f)">
+                        <mat-icon>cancel</mat-icon><span>Anular</span>
+                      </button>
+                    </mat-menu>
+                  </td>
+                </ng-container>
+                <tr mat-header-row *matHeaderRowDef="colsApeladas; sticky: true"></tr>
+                <tr mat-row *matRowDef="let row; columns: colsApeladas"></tr>
+              </table>
+              <div *ngIf="cargandoApeladas" class="spinner"><mat-progress-spinner mode="indeterminate" diameter="36"></mat-progress-spinner></div>
+              <div *ngIf="!cargandoApeladas && apeladas.length === 0" class="vacio">No hay apelaciones pendientes.</div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </mat-tab>
+
+    <!-- ───────────── PREMIOS ───────────── -->
+    <mat-tab>
+      <ng-template mat-tab-label><mat-icon class="tab-icon">emoji_events</mat-icon>Premios</ng-template>
+      <div class="tab-body">
+        <mat-card>
+          <mat-card-content>
+            <p class="hint todo">
+              <mat-icon>construction</mat-icon>
+              <span>Todavía no hay un listado de períodos en el sistema: indicá el número del período (ya CERRADO) para calcular
+                la propuesta de ganadores y aprobarla.</span>
+            </p>
+            <div class="filtros">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>N.º de período</mat-label>
+                <input matInput type="number" min="1" [(ngModel)]="periodoId" (keyup.enter)="calcularPremio()" />
+              </mat-form-field>
+              <button mat-flat-button color="primary" (click)="calcularPremio()" [disabled]="!periodoId || calculando || aprobandoPremio">
+                <mat-progress-spinner *ngIf="calculando" class="inline" mode="indeterminate" diameter="18"></mat-progress-spinner>
+                <mat-icon *ngIf="!calculando">calculate</mat-icon> Calcular propuesta
+              </button>
+              <button mat-flat-button color="primary" (click)="aprobarPremio()" [disabled]="!premioHayGanadores || calculando || aprobandoPremio">
+                <mat-progress-spinner *ngIf="aprobandoPremio" class="inline" mode="indeterminate" diameter="18"></mat-progress-spinner>
+                <mat-icon *ngIf="!aprobandoPremio">task_alt</mat-icon> Aprobar premio
+              </button>
+            </div>
+
+            <div *ngIf="premioCalculado" class="premio-resumen">
+              <span>Período #{{ premioPeriodoCalculado }}</span>
+              <span [class]="premioClaseEstado">{{ premioEstado }}</span>
+              <span *ngIf="premioMotivo" class="motivo">{{ premioMotivo }}</span>
+              <span *ngIf="premioVotantes !== null" class="sub">
+                Votantes: {{ premioVotantes | number:'1.0-2' }} (mínimo {{ premioMinVotantes | number:'1.0-2' }})
+              </span>
+            </div>
+
+            <div class="table-scroll" *ngIf="premioCalculado">
+              <table mat-table [dataSource]="ranking">
+                <ng-container matColumnDef="posicion">
+                  <th mat-header-cell *matHeaderCellDef class="num">Puesto</th>
+                  <td mat-cell *matCellDef="let r" class="num">{{ r.posicion | number:'1.0-2' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="nombre">
+                  <th mat-header-cell *matHeaderCellDef>Funcionario</th>
+                  <td mat-cell *matCellDef="let r">{{ r.nombre }}</td>
+                </ng-container>
+                <ng-container matColumnDef="puntaje">
+                  <th mat-header-cell *matHeaderCellDef class="num">Puntaje</th>
+                  <td mat-cell *matCellDef="let r" class="num">{{ r.puntaje | number:'1.0-2' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="ganador">
+                  <th mat-header-cell *matHeaderCellDef>Ganador</th>
+                  <td mat-cell *matCellDef="let r"><span *ngIf="r.ganador" class="chip chip-verde">GANADOR</span></td>
+                </ng-container>
+                <ng-container matColumnDef="monto">
+                  <th mat-header-cell *matHeaderCellDef class="num">Monto propuesto</th>
+                  <td mat-cell *matCellDef="let r" class="num">{{ r.montoPropuesto | number:'1.0-2' }}</td>
+                </ng-container>
+                <tr mat-header-row *matHeaderRowDef="colsRanking; sticky: true"></tr>
+                <tr mat-row *matRowDef="let row; columns: colsRanking"></tr>
+              </table>
+              <div *ngIf="ranking.length === 0" class="vacio">Sin participantes.</div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</div>

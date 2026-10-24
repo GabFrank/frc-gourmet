@@ -1,0 +1,43 @@
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 16px;
+  min-width: 620px;
+  padding-top: 8px;
+}
+.completo { grid-column: 1 / -1; }
+.mayus { text-transform: uppercase; }
+.ok, .error, .ignoradas p {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+.ok mat-icon { color: var(--success-color); }
+.error { color: var(--error-color); }
+.ignoradas {
+  margin-top: 12px;
+  h4 { margin: 0 0 6px; color: var(--text-primary); }
+  mat-icon { color: var(--warning-color); font-size: 18px; width: 18px; height: 18px; }
+}
+.tabla-resultado {
+  width: 100%;
+  border-collapse: collapse;
+  th, td { padding: 6px 8px; border-bottom: 1px solid var(--border-color); text-align: left; }
+  th { color: var(--text-secondary); font-weight: 500; }
+}
+.num { text-align: right !important; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--surface);
+}
+.chip-multa { background: var(--error-color); }
+.chip-adv { background: var(--warning-color); }
+.chip-info { background: var(--info-color); }
+mat-progress-spinner { display: inline-block; margin-right: 6px; vertical-align: middle; }

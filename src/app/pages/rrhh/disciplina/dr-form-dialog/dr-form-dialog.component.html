@@ -1,0 +1,61 @@
+<h2 mat-dialog-title>{{ data.titulo }}</h2>
+<mat-dialog-content>
+  <p class="aviso" *ngIf="data.aviso"><mat-icon>info</mat-icon><span>{{ data.aviso }}</span></p>
+  <form [formGroup]="form" class="grid" (ngSubmit)="guardar()">
+    <ng-container *ngFor="let c of campos">
+      <ng-container [ngSwitch]="c.tipo">
+        <div *ngSwitchCase="'bool'" [class]="c.claseAncho + ' toggle'">
+          <mat-slide-toggle [formControlName]="c.key">{{ c.label }}</mat-slide-toggle>
+          <small *ngIf="c.hint">{{ c.hint }}</small>
+        </div>
+        <mat-form-field *ngSwitchCase="'select'" appearance="outline" [class]="c.claseAncho">
+          <mat-label>{{ c.label }}</mat-label>
+          <mat-select [formControlName]="c.key" [required]="c.esRequerido">
+            <mat-option *ngIf="!c.esRequerido" [value]="null">—</mat-option>
+            <mat-option *ngFor="let o of c.opciones" [value]="o.valor">{{ o.label }}</mat-option>
+          </mat-select>
+          <mat-hint *ngIf="c.hint">{{ c.hint }}</mat-hint>
+        </mat-form-field>
+        <mat-form-field *ngSwitchCase="'textarea'" appearance="outline" [class]="c.claseAncho">
+          <mat-label>{{ c.label }}</mat-label>
+          <textarea matInput rows="2" [formControlName]="c.key" [required]="c.esRequerido" class="mayus"></textarea>
+          <mat-hint *ngIf="c.hint">{{ c.hint }}</mat-hint>
+        </mat-form-field>
+        <mat-form-field *ngSwitchCase="'json'" appearance="outline" [class]="c.claseAncho">
+          <mat-label>{{ c.label }}</mat-label>
+          <textarea matInput rows="2" [formControlName]="c.key"></textarea>
+          <mat-hint *ngIf="c.hint">{{ c.hint }}</mat-hint>
+        </mat-form-field>
+        <mat-form-field *ngSwitchCase="'numero'" appearance="outline" [class]="c.claseAncho">
+          <mat-label>{{ c.label }}</mat-label>
+          <input matInput type="number" [formControlName]="c.key" [required]="c.esRequerido" />
+          <mat-hint *ngIf="c.hint">{{ c.hint }}</mat-hint>
+        </mat-form-field>
+        <mat-form-field *ngSwitchCase="'entero'" appearance="outline" [class]="c.claseAncho">
+          <mat-label>{{ c.label }}</mat-label>
+          <input matInput type="number" step="1" [formControlName]="c.key" [required]="c.esRequerido" />
+          <mat-hint *ngIf="c.hint">{{ c.hint }}</mat-hint>
+        </mat-form-field>
+        <mat-form-field *ngSwitchCase="'hora'" appearance="outline" [class]="c.claseAncho">
+          <mat-label>{{ c.label }}</mat-label>
+          <input matInput placeholder="HH:MM" [formControlName]="c.key" [required]="c.esRequerido" />
+          <mat-hint *ngIf="c.hint">{{ c.hint }}</mat-hint>
+        </mat-form-field>
+        <mat-form-field *ngSwitchDefault appearance="outline" [class]="c.claseAncho">
+          <mat-label>{{ c.label }}</mat-label>
+          <input matInput [formControlName]="c.key" [required]="c.esRequerido" class="mayus" />
+          <mat-hint *ngIf="c.hint">{{ c.hint }}</mat-hint>
+        </mat-form-field>
+      </ng-container>
+    </ng-container>
+    <button type="submit" hidden></button>
+  </form>
+  <p class="error" *ngIf="error"><mat-icon>error</mat-icon><span>{{ error }}</span></p>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="cancelar()" [disabled]="guardando">Cancelar</button>
+  <button mat-flat-button color="primary" type="button" (click)="guardar()" [disabled]="form.invalid || guardando">
+    <mat-progress-spinner *ngIf="guardando" mode="indeterminate" diameter="18"></mat-progress-spinner>
+    {{ esEdicion ? 'Guardar cambios' : 'Crear' }}
+  </button>
+</mat-dialog-actions>

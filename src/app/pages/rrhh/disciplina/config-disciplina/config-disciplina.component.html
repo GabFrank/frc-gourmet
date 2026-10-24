@@ -1,0 +1,100 @@
+<div class="contenedor-raiz">
+  <div class="page-header">
+    <div class="titulo">
+      <mat-icon>military_tech</mat-icon>
+      <h2>Configuración de disciplina y reconocimiento</h2>
+    </div>
+    <div class="acciones-header">
+      <mat-slide-toggle [(ngModel)]="incluirInactivos" (change)="cambiarInactivos()">Ver inactivos</mat-slide-toggle>
+      <button mat-stroked-button (click)="recargarTodo()">
+        <mat-icon>refresh</mat-icon> Actualizar
+      </button>
+      <button mat-stroked-button (click)="abrirConfiguracionRrhh()"
+              matTooltip="El tope mensual de descuentos (DR_TOPE_DESCUENTO_MENSUAL) y el mínimo de votantes (DR_VOTACION_MIN_VOTANTES) se editan en Configuración RRHH">
+        <mat-icon>tune</mat-icon> Tope y mínimo de votantes
+      </button>
+      <button mat-flat-button color="primary" (click)="cargarEjemplo()" [disabled]="cargandoEjemplo">
+        <mat-progress-spinner *ngIf="cargandoEjemplo" mode="indeterminate" diameter="18"></mat-progress-spinner>
+        <mat-icon *ngIf="!cargandoEjemplo">restaurant</mat-icon> Cargar ejemplo Cocina
+      </button>
+    </div>
+  </div>
+
+  <p class="hint-config">
+    <mat-icon>info</mat-icon>
+    <span>Los parámetros generales <b>DR_TOPE_DESCUENTO_MENSUAL</b> (tope de multas por funcionario y mes, 0 = sin tope) y
+      <b>DR_VOTACION_MIN_VOTANTES</b> (mínimo de votantes para premiar por votación) se editan en <b>Configuración RRHH</b>.
+      Nada se borra: los registros se desactivan.</span>
+  </p>
+
+  <mat-tab-group class="tabs" animationDuration="0ms">
+    <mat-tab *ngFor="let p of pestanias">
+      <ng-template mat-tab-label>
+        <mat-icon class="tab-icon">{{ p.icon }}</mat-icon>{{ p.label }}
+      </ng-template>
+      <div class="tab-body">
+        <p class="nota" *ngIf="p.nota"><mat-icon>warning</mat-icon><span>{{ p.nota }}</span></p>
+        <mat-card *ngFor="let s of p.secciones" class="seccion">
+          <mat-card-content>
+            <div class="seccion-header">
+              <h3>{{ s.titulo }}</h3>
+              <mat-form-field *ngIf="s.padre" appearance="outline" class="padre-select" subscriptSizing="dynamic">
+                <mat-label>{{ s.padre.label }}</mat-label>
+                <mat-select [(ngModel)]="s.padreId" (selectionChange)="cambiarPadre(s)">
+                  <mat-option *ngFor="let o of s.padreOpciones" [value]="o.valor">{{ o.label }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <span class="spacer"></span>
+              <button mat-icon-button (click)="cargar(s)" [disabled]="s.cargando" matTooltip="Actualizar">
+                <mat-icon [class.spinning]="s.cargando">refresh</mat-icon>
+              </button>
+              <button mat-flat-button color="primary" (click)="abrirForm(s, null)" [disabled]="s.sinPadre">
+                <mat-icon>add</mat-icon> Nuevo
+              </button>
+            </div>
+            <p class="aviso" *ngIf="s.aviso"><mat-icon>info</mat-icon><span>{{ s.aviso }}</span></p>
+            <p class="vacio" *ngIf="s.sinPadre">Primero creá un registro en «{{ s.padre?.label }}».</p>
+
+            <div class="table-scroll" *ngIf="!s.sinPadre">
+              <table mat-table [dataSource]="s.filas">
+                <ng-container *ngFor="let c of s.columnas" [matColumnDef]="c.key">
+                  <th mat-header-cell *matHeaderCellDef [class.num]="c.numero">{{ c.label }}</th>
+                  <td mat-cell *matCellDef="let f" [class.num]="c.numero" [class.inactivo]="!f.activo">
+                    <ng-container *ngIf="c.numero; else texto">{{ f.celdas[c.key] | number:'1.0-2' }}</ng-container>
+                    <ng-template #texto>{{ f.celdas[c.key] }}</ng-template>
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="estado">
+                  <th mat-header-cell *matHeaderCellDef>Estado</th>
+                  <td mat-cell *matCellDef="let f">
+                    <span class="chip" [class.chip-ok]="f.activo" [class.chip-off]="!f.activo">{{ f.activo ? 'ACTIVO' : 'INACTIVO' }}</span>
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="acciones">
+                  <th mat-header-cell *matHeaderCellDef class="acc-col"></th>
+                  <td mat-cell *matCellDef="let f" class="acc-col">
+                    <button mat-icon-button [matMenuTriggerFor]="menu" [disabled]="procesandoId === f.clave" (click)="$event.stopPropagation()">
+                      <mat-icon>more_vert</mat-icon>
+                    </button>
+                    <mat-menu #menu="matMenu">
+                      <button mat-menu-item (click)="abrirForm(s, f)">
+                        <mat-icon>edit</mat-icon><span>Editar</span>
+                      </button>
+                      <button mat-menu-item (click)="cambiarActivo(s, f)">
+                        <mat-icon>{{ f.activo ? 'toggle_off' : 'toggle_on' }}</mat-icon>
+                        <span>{{ f.activo ? 'Desactivar' : 'Activar' }}</span>
+                      </button>
+                    </mat-menu>
+                  </td>
+                </ng-container>
+                <tr mat-header-row *matHeaderRowDef="s.cols; sticky: true"></tr>
+                <tr mat-row *matRowDef="let row; columns: s.cols"></tr>
+              </table>
+              <div class="vacio" *ngIf="!s.cargando && s.filas.length === 0">Sin registros.</div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</div>
