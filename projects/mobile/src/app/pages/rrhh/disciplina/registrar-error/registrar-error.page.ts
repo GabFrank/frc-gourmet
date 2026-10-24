@@ -104,6 +104,10 @@ export class RegistrarErrorPage implements OnInit {
     else this.seleccion.add(f.id);
   }
 
+  get nombresSeleccionados(): string {
+    return this.seleccionados.map((s) => s.nombre).join(', ');
+  }
+
   get seleccionados(): DrFuncionarioVM[] {
     return this.funcionarios.filter((f) => this.seleccion.has(f.id));
   }

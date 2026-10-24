@@ -71,7 +71,7 @@
           <span><strong>{{ tipo.nombre }}</strong> <span class="dr-muted">· {{ tipo.gravedad }}</span></span>
           <span class="re-puntos">−{{ tipo.puntos }} pts por funcionario</span>
           <span class="dr-muted">{{ seleccionados.length }} funcionario{{ seleccionados.length === 1 ? '' : 's' }}:</span>
-          <span>{{ seleccionados.map(s => s.nombre).join(', ') }}</span>
+          <span>{{ nombresSeleccionados }}</span>
         </div>
         <mat-form-field appearance="outline" class="dr-full" style="margin-top: 12px">
           <mat-label>Fecha</mat-label>
