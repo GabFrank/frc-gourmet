@@ -1,6 +1,8 @@
 /**
  * Tablero de Funciones y Tareas (permiso RRHH_FT_VER_TODO): cumplimiento del día por
- * funcionario, tareas vencidas, avisos (ft-avisos) y propuestas de falta (nivel 3).
+ * funcionario, tareas vencidas (con «no aplica»), bandeja de verificación (tareas HECHAS:
+ * verificar / rechazar, permiso RRHH_FT_VERIFICAR, validado en el backend), avisos (ft-avisos)
+ * y propuestas de falta (nivel 3).
  */
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -16,6 +18,9 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { firstValueFrom } from 'rxjs';
+import { PromptDialogComponent, PromptDialogData } from '../../../../shared/components/prompt-dialog/prompt-dialog.component';
 import {
   FT_CANALES, FT_ESTADOS_AVISO, FT_ESTADOS_PROPUESTA, FuncionesTareasApiService, ftMensajeError,
 } from '../funciones-tareas-api.service';
@@ -29,18 +34,30 @@ interface FilaCumplimiento {
   porcentaje: number;
 }
 
-function hoyLocal(): string {
-  const d = new Date();
+function diaLocal(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
+
+function hoyLocal(): string {
+  return diaLocal(new Date());
+}
+
+/** 'YYYY-MM-DD' menos n días (local). */
+function restarDias(dia: string, n: number): string {
+  const [y, m, d] = dia.split('-').map(Number);
+  return diaLocal(new Date(y, m - 1, d - n));
+}
+
+/** Días hacia atrás que mira la bandeja de verificación (el backend acepta hasta 31). */
+const DIAS_VERIFICACION = 7;
 
 @Component({
   selector: 'app-tablero-funciones-tareas',
   standalone: true,
   imports: [
     CommonModule, FormsModule, MatTabsModule, MatTableModule, MatButtonModule, MatIconModule, MatCardModule,
-    MatFormFieldModule, MatInputModule, MatSelectModule, MatTooltipModule, MatProgressBarModule, MatSnackBarModule,
+    MatFormFieldModule, MatInputModule, MatSelectModule, MatTooltipModule, MatProgressBarModule, MatSnackBarModule, MatDialogModule,
   ],
   templateUrl: './tablero-funciones-tareas.component.html',
   styleUrls: ['./tablero-funciones-tareas.component.scss'],
@@ -58,7 +75,11 @@ export class TableroFuncionesTareasComponent implements OnInit {
   vencidas: any[] = [];
   totalPct = 0;
   readonly cumpCols = ['funcionario', 'total', 'cumplidas', 'pendientes', 'vencidas', 'porcentaje'];
-  readonly vencCols = ['funcionario', 'titulo', 'vence', 'critica'];
+  readonly vencCols = ['funcionario', 'titulo', 'vence', 'critica', 'acciones'];
+
+  porVerificar: any[] = [];
+  readonly diasVerificacion = DIAS_VERIFICACION;
+  readonly verifCols = ['fecha', 'funcionario', 'titulo', 'hechaEn', 'hechaPor', 'detalle', 'acciones'];
 
   avisos: any[] = [];
   avisoCanal: string | null = null;
@@ -69,7 +90,16 @@ export class TableroFuncionesTareasComponent implements OnInit {
   propEstado: string | null = 'PENDIENTE';
   readonly propCols = ['creadaEn', 'funcionario', 'tarea', 'motivo', 'estado', 'acciones'];
 
-  constructor(private api: FuncionesTareasApiService, private snack: MatSnackBar) {}
+  constructor(private api: FuncionesTareasApiService, private snack: MatSnackBar, private dialog: MatDialog) {}
+
+  /** Pide un texto en un diálogo; undefined si se cancela. */
+  private async pedirTexto(data: PromptDialogData): Promise<string | undefined> {
+    const ref = this.dialog.open(PromptDialogComponent, {
+      width: '460px',
+      data: { cancelText: 'Cancelar', ...data },
+    });
+    return firstValueFrom(ref.afterClosed());
+  }
 
   ngOnInit() {
     this.refrescar();
@@ -88,7 +118,7 @@ export class TableroFuncionesTareasComponent implements OnInit {
   }
 
   async refrescar() {
-    await Promise.all([this.cargarTareas(), this.cargarAvisos(), this.cargarPropuestas()]);
+    await Promise.all([this.cargarTareas(), this.cargarPorVerificar(), this.cargarAvisos(), this.cargarPropuestas()]);
   }
 
   async cargarTareas() {
@@ -117,6 +147,70 @@ export class TableroFuncionesTareasComponent implements OnInit {
     });
   }
 
+  // ───────── Bandeja de verificación ─────────
+  async cargarPorVerificar() {
+    await this.ejecutar(async () => {
+      const hasta = this.fecha;
+      const desde = restarDias(hasta, DIAS_VERIFICACION - 1);
+      this.porVerificar = (await this.api.tareasList({ desde, hasta, estado: 'HECHA' })) ?? [];
+    });
+  }
+
+  itemsHechos(t: any): string {
+    const items = t?.items ?? [];
+    return items.length ? `${items.filter((i: any) => i.hecho).length}/${items.length} ítems` : '';
+  }
+
+  async verificar(t: any) {
+    const nota = await this.pedirTexto({
+      title: 'Verificar tarea',
+      message: `${t.funcionario?.nombre ?? ''} — ${t.titulo}`,
+      label: 'Nota de verificación (opcional)',
+      required: false,
+      confirmText: 'Verificar',
+    });
+    if (nota === undefined) return;
+    await this.ejecutar(async () => {
+      await this.api.tareaVerificar(t.id, nota || undefined);
+      await Promise.all([this.cargarPorVerificar(), this.cargarTareasSiMismoDia(t)]);
+    }, 'TAREA VERIFICADA');
+  }
+
+  async rechazar(t: any) {
+    const motivo = await this.pedirTexto({
+      title: 'Rechazar tarea',
+      message: `${t.funcionario?.nombre ?? ''} — ${t.titulo}\nLa tarea vuelve a quedar abierta para que la rehaga.`,
+      label: 'Motivo del rechazo',
+      required: true,
+      confirmText: 'Rechazar',
+    });
+    if (!motivo) return;
+    await this.ejecutar(async () => {
+      await this.api.tareaRechazar(t.id, motivo);
+      await Promise.all([this.cargarPorVerificar(), this.cargarTareasSiMismoDia(t)]);
+    }, 'TAREA RECHAZADA');
+  }
+
+  /** «No aplica» de un encargado: tareas PENDIENTES, VENCIDAS o RECHAZADAS de otro funcionario. */
+  async noAplica(t: any) {
+    const motivo = await this.pedirTexto({
+      title: 'Marcar como «no aplica»',
+      message: `${t.funcionario?.nombre ?? ''} — ${t.titulo}`,
+      label: 'Por qué no aplica',
+      required: true,
+      confirmText: 'No aplica',
+    });
+    if (!motivo) return;
+    await this.ejecutar(async () => {
+      await this.api.tareaNoAplica(t.id, motivo);
+      await this.cargarTareas();
+    }, 'TAREA MARCADA COMO NO APLICA');
+  }
+
+  private async cargarTareasSiMismoDia(t: any) {
+    if (String(t?.fecha ?? '').slice(0, 10) === this.fecha) await this.cargarTareas();
+  }
+
   async cargarAvisos() {
     await this.ejecutar(async () => {
       const filtros: any = { desde: this.fecha, hasta: this.fecha };
@@ -135,10 +229,16 @@ export class TableroFuncionesTareasComponent implements OnInit {
   }
 
   async resolver(p: any, estado: 'REGISTRADA' | 'DESCARTADA') {
-    const nota = prompt(estado === 'REGISTRADA'
-      ? 'Nota (opcional). Cargá la falta en Disciplina antes de marcarla como registrada.'
-      : 'Motivo para descartar (opcional)') ?? null;
-    if (nota === null) return;
+    const registrar = estado === 'REGISTRADA';
+    const nota = await this.pedirTexto({
+      title: registrar ? 'Marcar propuesta como registrada' : 'Descartar propuesta',
+      message: `${p.funcionario?.nombre ?? ''} — ${p.tarea?.titulo ?? ''}`
+        + (registrar ? '\nCargá la falta en Disciplina antes de marcarla como registrada.' : ''),
+      label: registrar ? 'Nota (opcional)' : 'Motivo para descartar (opcional)',
+      required: false,
+      confirmText: registrar ? 'Registrada' : 'Descartar',
+    });
+    if (nota === undefined) return;
     await this.ejecutar(async () => {
       await this.api.propuestaResolver(p.id, { estado, nota: nota || undefined });
       await this.cargarPropuestas();

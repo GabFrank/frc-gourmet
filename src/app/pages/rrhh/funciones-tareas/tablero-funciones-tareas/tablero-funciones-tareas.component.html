@@ -64,8 +64,63 @@
           <th mat-header-cell *matHeaderCellDef>Crítica</th>
           <td mat-cell *matCellDef="let r"><mat-icon *ngIf="r.critica" class="ft-mal">priority_high</mat-icon></td>
         </ng-container>
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let r">
+            <button mat-icon-button matTooltip="No aplica (con motivo)" (click)="noAplica(r)" [disabled]="cargando"><mat-icon>do_not_disturb_on</mat-icon></button>
+          </td>
+        </ng-container>
         <tr mat-header-row *matHeaderRowDef="vencCols"></tr>
         <tr mat-row *matRowDef="let row; columns: vencCols"></tr>
+      </table>
+    </mat-tab>
+
+    <mat-tab [label]="'Por verificar (' + porVerificar.length + ')'">
+      <div class="ft-barra">
+        <span>Tareas hechas en los últimos {{ diasVerificacion }} días hasta la fecha elegida, pendientes de verificar.</span>
+        <button mat-button (click)="cargarPorVerificar()" [disabled]="cargando"><mat-icon>refresh</mat-icon> Actualizar</button>
+      </div>
+      <div *ngIf="!porVerificar.length" class="ft-vacio">No hay tareas pendientes de verificar.</div>
+      <table mat-table [dataSource]="porVerificar" class="ft-tabla" *ngIf="porVerificar.length">
+        <ng-container matColumnDef="fecha">
+          <th mat-header-cell *matHeaderCellDef>Día</th>
+          <td mat-cell *matCellDef="let r">{{ r.fecha | slice: 0:10 }}</td>
+        </ng-container>
+        <ng-container matColumnDef="funcionario">
+          <th mat-header-cell *matHeaderCellDef>Funcionario</th>
+          <td mat-cell *matCellDef="let r">{{ r.funcionario?.nombre }}</td>
+        </ng-container>
+        <ng-container matColumnDef="titulo">
+          <th mat-header-cell *matHeaderCellDef>Tarea</th>
+          <td mat-cell *matCellDef="let r">
+            {{ r.titulo }} <mat-icon *ngIf="r.critica" class="ft-mal ft-ico" matTooltip="Crítica">priority_high</mat-icon>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="hechaEn">
+          <th mat-header-cell *matHeaderCellDef>Hecha</th>
+          <td mat-cell *matCellDef="let r">{{ r.hechaEn | date: 'dd/MM HH:mm' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="hechaPor">
+          <th mat-header-cell *matHeaderCellDef>Marcó</th>
+          <td mat-cell *matCellDef="let r">{{ r.hechaPor?.nickname }}</td>
+        </ng-container>
+        <ng-container matColumnDef="detalle">
+          <th mat-header-cell *matHeaderCellDef>Detalle</th>
+          <td mat-cell *matCellDef="let r">
+            <div *ngIf="itemsHechos(r)">{{ itemsHechos(r) }}</div>
+            <div *ngIf="r.nota" class="ft-nota">{{ r.nota }}</div>
+            <a *ngIf="r.evidenciaUrl" [href]="r.evidenciaUrl" target="_blank" rel="noopener">Ver foto</a>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let r">
+            <button mat-icon-button color="primary" matTooltip="Verificar" (click)="verificar(r)" [disabled]="cargando"><mat-icon>verified</mat-icon></button>
+            <button mat-icon-button color="warn" matTooltip="Rechazar (con motivo)" (click)="rechazar(r)" [disabled]="cargando"><mat-icon>undo</mat-icon></button>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="verifCols"></tr>
+        <tr mat-row *matRowDef="let row; columns: verifCols"></tr>
       </table>
     </mat-tab>
 

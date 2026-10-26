@@ -18,6 +18,9 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { firstValueFrom } from 'rxjs';
+import { ConfirmationDialogComponent } from '../../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import {
   FT_ANCLAS, FT_CANALES, FT_EVENTOS, FT_EVIDENCIAS, FT_MOMENTOS_AVISO, FT_RECURRENCIAS, FT_TIPOS,
   FuncionesTareasApiService, ftMensajeError,
@@ -30,7 +33,7 @@ const DIAS = ['LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB', 'DOM'];
   standalone: true,
   imports: [
     CommonModule, FormsModule, MatTabsModule, MatTableModule, MatButtonModule, MatIconModule, MatCardModule,
-    MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule, MatCheckboxModule, MatTooltipModule, MatSnackBarModule,
+    MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule, MatCheckboxModule, MatTooltipModule, MatSnackBarModule, MatDialogModule,
   ],
   templateUrl: './config-funciones-tareas.component.html',
   styleUrls: ['./config-funciones-tareas.component.scss'],
@@ -48,6 +51,9 @@ export class ConfigFuncionesTareasComponent implements OnInit {
   cargos: any[] = [];
   funcionarios: any[] = [];
   turnos: any[] = [];
+  /** Áreas (dr_grupo) y tipos de falta de Disciplina: requieren permisos DR; si no hay, quedan vacíos. */
+  grupos: any[] = [];
+  tiposFalta: any[] = [];
   cargando = false;
 
   // Funciones
@@ -67,18 +73,32 @@ export class ConfigFuncionesTareasComponent implements OnInit {
   ultimoTick: any = null;
   lock: any = null;
 
-  constructor(private api: FuncionesTareasApiService, private snack: MatSnackBar) {}
+  constructor(private api: FuncionesTareasApiService, private snack: MatSnackBar, private dialog: MatDialog) {}
+
+  private async confirmar(title: string, message: string, confirmText = 'Borrar'): Promise<boolean> {
+    const ref = this.dialog.open(ConfirmationDialogComponent, {
+      width: '420px',
+      data: { title, message, confirmText, cancelText: 'Cancelar' },
+    });
+    return (await firstValueFrom(ref.afterClosed())) === true;
+  }
 
   async ngOnInit() {
     await this.ejecutar(async () => {
-      const [cargos, funcs, turnos] = await Promise.all([
+      // get-cargos / get-turnos devuelven la entidad plana (id, nombre, ...); get-funcionarios
+      // filtra activos con `soloActivos` y trae `persona` (nombre, apellido) y `cargo`.
+      const [cargos, funcs, turnos, grupos, tiposFalta] = await Promise.all([
         this.api.call<any[]>('get-cargos'),
-        this.api.call<any[]>('get-funcionarios', { activo: true }),
+        this.api.call<any[]>('get-funcionarios', { soloActivos: true }),
         this.api.call<any[]>('get-turnos').catch(() => []),
+        this.api.call<any[]>('dr-get-grupos').catch(() => []),
+        this.api.call<any[]>('dr-get-tipos-falta').catch(() => []),
       ]);
       this.cargos = cargos ?? [];
       this.funcionarios = funcs ?? [];
       this.turnos = turnos ?? [];
+      this.grupos = grupos ?? [];
+      this.tiposFalta = tiposFalta ?? [];
     });
     await Promise.all([this.cargarFunciones(), this.cargarPlantillas(), this.cargarConfig()]);
   }
@@ -147,7 +167,7 @@ export class ConfigFuncionesTareasComponent implements OnInit {
   }
 
   async borrarFuncion(r: any) {
-    if (!confirm(`¿Borrar la función «${r.descripcion}»?`)) return;
+    if (!(await this.confirmar('Borrar función', `¿Borrar la función «${r.descripcion}»?`))) return;
     await this.ejecutar(async () => { await this.api.funcionesDelete(r.id); await this.cargarFunciones(); }, 'FUNCIÓN BORRADA');
   }
 
@@ -160,10 +180,11 @@ export class ConfigFuncionesTareasComponent implements OnInit {
 
   nuevaPlantilla() {
     this.plEdit = {
-      titulo: '', descripcion: '', tipo: 'SIMPLE', recurrencia: 'DIARIA', ancla: 'INICIO_TURNO', evidencia: 'NINGUNA',
+      titulo: '', instrucciones: '', tipo: 'SIMPLE', recurrencia: 'DIARIA', ancla: 'INICIO_TURNO', evidencia: 'NINGUNA',
       offsetInicioMin: 0, duracionMin: 60, horaFija: '', diasSemana: 0, diaMes: null, fechaUnica: null, evento: null, eventoCaja: null,
-      requiereVerificacion: false, verificadorCargoId: null, activo: true,
-      tipoAlcance: 'cargo', cargoId: null, turnoId: null, funcionarioId: null,
+      requiereVerificacion: false, verificadorCargoId: null, activo: true, critica: false, peso: 1,
+      tipoAlcance: 'cargo', cargoId: null, turnoId: null, funcionarioId: null, grupoId: null,
+      reemplazaPlantillaId: null, tipoFaltaId: null, criterioId: null,
       items: [], reglas: [],
     };
   }
@@ -176,11 +197,29 @@ export class ConfigFuncionesTareasComponent implements OnInit {
         tipoAlcance: p.funcionario ? 'funcionario' : p.grupo ? 'grupo' : 'cargo',
         cargoId: p.cargo?.id ?? null, turnoId: p.turno?.id ?? null, funcionarioId: p.funcionario?.id ?? null,
         grupoId: p.grupo?.id ?? null, verificadorCargoId: p.verificadorCargo?.id ?? null,
+        reemplazaPlantillaId: p.reemplazaPlantilla?.id ?? null, tipoFaltaId: p.tipoFalta?.id ?? null,
+        criterioId: p.criterio?.id ?? null,
         horaFija: p.horaFija ? String(p.horaFija).slice(0, 5) : '',
         items: (p.items ?? []).map((i: any) => ({ id: i.id, texto: i.texto, orden: i.orden, obligatorio: i.obligatorio })),
         reglas: (p.reglas ?? []).map((x: any) => ({ id: x.id, momento: x.momento, minutos: x.minutos, nivel: x.nivel, canal: x.canal, destino: x.destino, activo: x.activo })),
       };
     });
+  }
+
+  /** Plantillas generales (sin funcionario) que una específica puede reemplazar. */
+  get plantillasGenerales(): any[] {
+    return this.plantillas.filter((p) => !p.funcionario && p.id !== this.plEdit?.id);
+  }
+
+  /** El tipo de falta actual puede estar inactivo o no venir en la lista (sin permiso DR). */
+  get tipoFaltaFueraDeLista(): boolean {
+    const id = this.plEdit?.tipoFaltaId;
+    return !!id && !this.tiposFalta.some((t) => t.id === id);
+  }
+
+  get grupoFueraDeLista(): boolean {
+    const id = this.plEdit?.grupoId;
+    return !!id && !this.grupos.some((g) => g.id === id);
   }
 
   diaMarcado(i: number): boolean { return ((this.plEdit?.diasSemana ?? 0) & (1 << i)) !== 0; }
@@ -194,7 +233,7 @@ export class ConfigFuncionesTareasComponent implements OnInit {
   async guardarPlantilla() {
     const e = this.plEdit;
     const data: any = {
-      id: e.id, titulo: e.titulo, descripcion: e.descripcion, tipo: e.tipo, recurrencia: e.recurrencia, ancla: e.ancla,
+      id: e.id, titulo: e.titulo, instrucciones: e.instrucciones || null, tipo: e.tipo, recurrencia: e.recurrencia, ancla: e.ancla,
       evidencia: e.evidencia, offsetInicioMin: Number(e.offsetInicioMin) || 0, duracionMin: Number(e.duracionMin) || 0,
       horaFija: e.ancla === 'HORA_FIJA' ? e.horaFija : null,
       diasSemana: e.recurrencia === 'DIAS_SEMANA' ? e.diasSemana : null,
@@ -205,15 +244,25 @@ export class ConfigFuncionesTareasComponent implements OnInit {
       requiereVerificacion: !!e.requiereVerificacion,
       verificadorCargoId: e.requiereVerificacion ? e.verificadorCargoId : null,
       activo: e.activo,
+      critica: !!e.critica,
+      peso: e.peso === null || e.peso === undefined || e.peso === '' ? 1 : Number(e.peso),
+      // El backend pisa con null lo que no viene: se mandan siempre (criterio se conserva tal cual).
+      tipoFaltaId: e.tipoFaltaId || null,
+      criterioId: e.criterioId || null,
       vigenciaDesde: e.vigenciaDesde || null, vigenciaHasta: e.vigenciaHasta || null,
       items: e.tipo === 'CHECKLIST' ? e.items.map((it: any, i: number) => ({ ...it, orden: i })) : [],
       reglas: e.reglas.map((r: any) => ({ ...r, destino: r.destino || null })),
     };
-    if (e.tipoAlcance === 'funcionario') data.funcionarioId = e.funcionarioId;
-    else if (e.tipoAlcance === 'grupo') data.grupoId = e.grupoId;
-    else { data.cargoId = e.cargoId; data.turnoId = e.turnoId || null; }
-    if (e.reemplazaPlantilla?.id) data.reemplazaPlantillaId = e.reemplazaPlantilla.id;
-    if (e.tipoFalta?.id) data.tipoFaltaId = e.tipoFalta.id;
+    if (e.tipoAlcance === 'funcionario') {
+      data.funcionarioId = e.funcionarioId;
+      // Solo una específica (de un funcionario) puede reemplazar a una general.
+      data.reemplazaPlantillaId = e.reemplazaPlantillaId || null;
+    } else if (e.tipoAlcance === 'grupo') {
+      data.grupoId = Number(e.grupoId) || null;
+    } else {
+      data.cargoId = e.cargoId;
+      data.turnoId = e.turnoId || null;
+    }
     await this.ejecutar(async () => {
       await this.api.plantillasSave(data);
       this.plEdit = null;
@@ -226,7 +275,8 @@ export class ConfigFuncionesTareasComponent implements OnInit {
   }
 
   async borrarPlantilla(r: any) {
-    if (!confirm(`¿Borrar la plantilla «${r.titulo}»?`)) return;
+    if (!(await this.confirmar('Borrar plantilla',
+      `¿Borrar la plantilla «${r.titulo}»? Si ya generó tareas o la reemplaza otra, desactivala en vez de borrarla.`))) return;
     await this.ejecutar(async () => { await this.api.plantillasDelete(r.id); await this.cargarPlantillas(); }, 'PLANTILLA BORRADA');
   }
 

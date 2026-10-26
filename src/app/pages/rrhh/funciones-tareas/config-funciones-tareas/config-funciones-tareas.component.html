@@ -151,8 +151,8 @@
             <input matInput [(ngModel)]="plEdit.titulo" />
           </mat-form-field>
           <mat-form-field appearance="outline" style="width: 100%">
-            <mat-label>Descripción</mat-label>
-            <textarea matInput rows="2" [(ngModel)]="plEdit.descripcion"></textarea>
+            <mat-label>Instrucciones</mat-label>
+            <textarea matInput rows="2" [(ngModel)]="plEdit.instrucciones"></textarea>
           </mat-form-field>
 
           <div class="ft-sub">Alcance</div>
@@ -162,6 +162,7 @@
               <mat-select [(ngModel)]="plEdit.tipoAlcance">
                 <mat-option value="cargo">Un cargo (y turno)</mat-option>
                 <mat-option value="funcionario">Un funcionario</mat-option>
+                <mat-option value="grupo">Un área (grupo de Disciplina)</mat-option>
               </mat-select>
             </mat-form-field>
             <ng-container *ngIf="plEdit.tipoAlcance === 'cargo'">
@@ -185,6 +186,28 @@
                 <mat-option *ngFor="let f of funcionarios" [value]="f.id">{{ nombreFunc(f) }}</mat-option>
               </mat-select>
             </mat-form-field>
+            <mat-form-field appearance="outline" *ngIf="plEdit.tipoAlcance === 'funcionario'">
+              <mat-label>Reemplaza a la plantilla general</mat-label>
+              <mat-select [(ngModel)]="plEdit.reemplazaPlantillaId">
+                <mat-option [value]="null">Ninguna (se suma a las generales)</mat-option>
+                <mat-option *ngFor="let g of plantillasGenerales" [value]="g.id">{{ g.titulo }} — {{ alcance(g) }}</mat-option>
+              </mat-select>
+              <mat-hint>Ese funcionario recibe esta en lugar de la general.</mat-hint>
+            </mat-form-field>
+            <ng-container *ngIf="plEdit.tipoAlcance === 'grupo'">
+              <mat-form-field appearance="outline" *ngIf="grupos.length">
+                <mat-label>Área</mat-label>
+                <mat-select [(ngModel)]="plEdit.grupoId">
+                  <mat-option *ngIf="grupoFueraDeLista" [value]="plEdit.grupoId">{{ plEdit.grupo?.nombre || ('#' + plEdit.grupoId) }}</mat-option>
+                  <mat-option *ngFor="let g of grupos" [value]="g.id">{{ g.nombre }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <!-- Sin permiso de lectura de Disciplina (dr-get-grupos) no hay lista: se carga el id del grupo. -->
+              <mat-form-field appearance="outline" *ngIf="!grupos.length">
+                <mat-label>Id del área (grupo de Disciplina)</mat-label>
+                <input matInput type="number" min="1" [(ngModel)]="plEdit.grupoId" />
+              </mat-form-field>
+            </ng-container>
           </div>
 
           <div class="ft-sub">Cuándo</div>
@@ -271,6 +294,26 @@
               </mat-select>
             </mat-form-field>
             <mat-slide-toggle [(ngModel)]="plEdit.activo">Activa</mat-slide-toggle>
+          </div>
+
+          <div class="ft-sub">Importancia y escalamiento</div>
+          <div class="ft-fila">
+            <mat-slide-toggle [(ngModel)]="plEdit.critica">Crítica</mat-slide-toggle>
+            <mat-form-field appearance="outline" style="width: 110px">
+              <mat-label>Peso</mat-label>
+              <input matInput type="number" min="0" max="1000" [(ngModel)]="plEdit.peso" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" *ngIf="tiposFalta.length || plEdit.tipoFaltaId">
+              <mat-label>Tipo de falta al escalar (nivel 3)</mat-label>
+              <mat-select [(ngModel)]="plEdit.tipoFaltaId">
+                <mat-option [value]="null">Sin propuesta de falta</mat-option>
+                <mat-option *ngIf="tipoFaltaFueraDeLista" [value]="plEdit.tipoFaltaId">{{ plEdit.tipoFalta?.nombre || ('#' + plEdit.tipoFaltaId) }}</mat-option>
+                <mat-option *ngFor="let t of tiposFalta" [value]="t.id">{{ t.nombre }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <span *ngIf="!tiposFalta.length && !plEdit.tipoFaltaId" class="ft-nota">
+              No hay tipos de falta disponibles (se cargan en Disciplina).
+            </span>
           </div>
 
           <ng-container *ngIf="plEdit.tipo === 'CHECKLIST'">
