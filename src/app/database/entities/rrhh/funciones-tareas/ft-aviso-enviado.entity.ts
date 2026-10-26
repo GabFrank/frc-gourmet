@@ -39,5 +39,5 @@ export class FtAvisoEnviado extends BaseModel {
   intentos!: number;
 
   @Column({ name: 'enviado_en', nullable: true })
-  enviadoEn?: Date | null;
+  enviadoEn?: Date;
 }

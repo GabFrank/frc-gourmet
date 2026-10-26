@@ -21,5 +21,5 @@ export class FtTareaItem extends BaseModel {
   hecho!: boolean;
 
   @Column({ name: 'hecho_en', nullable: true })
-  hechoEn?: Date | null;
+  hechoEn?: Date;
 }

@@ -49,14 +49,14 @@ export class FtTarea extends BaseModel {
   hechaPor?: Usuario | null;
 
   @Column({ name: 'hecha_en', nullable: true })
-  hechaEn?: Date | null;
+  hechaEn?: Date;
 
   @ManyToOne(() => Usuario, { nullable: true })
   @JoinColumn({ name: 'verificada_por_id' })
   verificadaPor?: Usuario | null;
 
   @Column({ name: 'verificada_en', nullable: true })
-  verificadaEn?: Date | null;
+  verificadaEn?: Date;
 
   @Column({ type: 'text', nullable: true })
   nota?: string | null;
