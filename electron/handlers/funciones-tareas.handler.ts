@@ -1,5 +1,5 @@
 /**
- * Funciones y Tareas (FT) — handlers RPC, fase 1 (ABM + operación).
+ * Funciones y Tareas (FT) — handlers RPC: ABM, operación (fase 1) y foto, avisos y propuestas (fase 2).
  * Ver docs/planes/PLAN-funciones-tareas.md (§5; §10 y §11 prevalecen).
  *
  * Todos los canales `ft-*` llaman `ensurePermission`: `/api/rpc` es default-allow y el guard
@@ -24,16 +24,20 @@ import { FtReglaAviso } from '../../src/app/database/entities/rrhh/funciones-tar
 import { FtTarea } from '../../src/app/database/entities/rrhh/funciones-tareas/ft-tarea.entity';
 import { FtTareaItem } from '../../src/app/database/entities/rrhh/funciones-tareas/ft-tarea-item.entity';
 import { FtConfig } from '../../src/app/database/entities/rrhh/funciones-tareas/ft-config.entity';
+import { FtAvisoEnviado } from '../../src/app/database/entities/rrhh/funciones-tareas/ft-aviso-enviado.entity';
+import { FtPropuestaFalta } from '../../src/app/database/entities/rrhh/funciones-tareas/ft-propuesta-falta.entity';
 import {
-  FtAncla, FtCanalAviso, FtEstadoTarea, FtEvento, FtEvidencia, FtMomentoAviso, FtOrigenTarea, FtRecurrencia, FtTipoTarea,
+  FtAncla, FtCanalAviso, FtEstadoAviso, FtEstadoPropuesta, FtEstadoTarea, FtEvento, FtEventoCaja, FtEvidencia, FtMomentoAviso,
+  FtMomentoAvisoRegistro, FtOrigenTarea, FtRecurrencia, FtTipoTarea,
 } from '../../src/app/database/entities/rrhh/funciones-tareas/ft.enums';
 import { ensurePermission, getEffectiveUser, getUserPermissionCodes } from '../utils/auth.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { buscarFuncionarioDeUsuario, funcionarioDeSesion } from '../utils/funcionario-sesion.utils';
 import {
-  ahoraFt, esDiaValido, esHoraValida, fechaLocal, fechaLocalHoy, paramTs, sumarDias, sumarMinutos,
+  ahoraFt, enHora, esDiaValido, esHoraValida, fechaLocal, fechaLocalHoy, paramTs, sumarDias, sumarMinutos,
 } from '../services/funciones-tareas/fechas';
-import { FT_CLAVES, FT_CONFIG_DEFAULTS, FT_CONFIG_EDITABLE, escribirConfigFt } from '../services/funciones-tareas/config';
+import { FT_CLAVES, FT_CONFIG_DEFAULTS, FT_CONFIG_EDITABLE, configFtEntero, escribirConfigFt } from '../services/funciones-tareas/config';
+import { ErrorEvidenciaFt, bytesDeBase64, esUrlEvidenciaFt, guardarEvidenciaFt } from '../services/funciones-tareas/evidencias';
 import { cargoVigente } from '../services/funciones-tareas/vigencia';
 
 const P = {
@@ -262,6 +266,8 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
     const ancla = enumValido(FtAncla, data?.ancla, 'ancla', FtAncla.INICIO_TURNO);
     const evidencia = enumValido(FtEvidencia, data?.evidencia, 'evidencia', FtEvidencia.NINGUNA);
     const evento = data?.evento ? enumValido(FtEvento, data.evento, 'evento') : null;
+    const esEventoCaja = evento === FtEvento.CAJA_ABIERTA || evento === FtEvento.CAJA_CERRADA;
+    const eventoCaja = esEventoCaja && data?.eventoCaja ? enumValido(FtEventoCaja, data.eventoCaja, 'tipo de caja del evento') : null;
     let diasSemana: number | null = null;
     let diaMes: number | null = null;
     let fechaUnica: string | null = null;
@@ -348,6 +354,7 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
         diaMes,
         fechaUnica,
         evento,
+        eventoCaja,
         ancla,
         offsetInicioMin: entero(data?.offsetInicioMin, 'desfase', -24 * 60, 24 * 60, 0),
         duracionMin: entero(data?.duracionMin, 'duración', 1, 7 * 24 * 60, 60),
@@ -548,7 +555,12 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
       const ahora = ahoraFt();
       const cambios: any = {};
       if (data?.nota !== undefined) cambios.nota = up(data.nota);
-      if (data?.evidenciaUrl !== undefined) cambios.evidenciaUrl = data.evidenciaUrl ? String(data.evidenciaUrl).slice(0, 500) : null;
+      if (data?.evidenciaUrl !== undefined) {
+        const url = data.evidenciaUrl ? String(data.evidenciaUrl) : null;
+        // Solo fotos subidas con ft-tarea-subir-foto (carpeta propia, con tope de tamaño).
+        if (url && !esUrlEvidenciaFt(url)) fail('VALIDACION', 'LA FOTO SE SUBE CON ft-tarea-subir-foto');
+        cambios.evidenciaUrl = url;
+      }
 
       const itemId = Number(data?.itemId) || null;
       let completar = itemId ? false : data?.completar !== false;
@@ -728,6 +740,142 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
       return g.id;
     });
     return limpiarTarea(await cargarTarea(dataSource, id));
+  });
+  // ═════════════════════════ Fase 2: foto, avisos y propuestas de falta ═════════════════════════
+
+  /**
+   * Foto de evidencia de una tarea propia abierta (§10 B6). data: { base64 } (con o sin
+   * prefijo data:). El tope (`ft_config.foto_max_kb`) se valida acá, antes de decodificar o
+   * escribir nada. Guarda la URL en la tarea; NO la completa (eso es ft-tarea-marcar).
+   */
+  ipcMain.handle('ft-tarea-subir-foto', async (_e, tareaId: number, data: any = {}) => {
+    const user = await ensurePermission(dataSource, getCurrentUser, P.MARCAR_PROPIAS);
+    const base64 = typeof data?.base64 === 'string' ? data.base64 : '';
+    if (!base64) fail('VALIDACION', 'FALTA LA FOTO');
+    const maxKb = await configFtEntero(dataSource, FT_CLAVES.FOTO_MAX_KB, 50, 10240);
+    if (bytesDeBase64(base64) > maxKb * 1024) {
+      fail('FOTO_EXCEDIDA', `LA FOTO PESA ${Math.ceil(bytesDeBase64(base64) / 1024)} KB; EL MÁXIMO ES ${maxKb} KB`);
+    }
+    const func = await funcionarioDeSesion(dataSource, user);
+    const abiertas = [FtEstadoTarea.PENDIENTE, FtEstadoTarea.RECHAZADA];
+    const t = await cargarTarea(dataSource, Number(tareaId));
+    if (t.funcionario.id !== func.id) fail('NO_ENCONTRADO', 'TAREA NO ENCONTRADA');
+    if (!abiertas.includes(t.estado)) fail('ESTADO_INVALIDO', `LA TAREA ESTÁ ${t.estado}: NO SE PUEDE CARGAR LA FOTO`);
+    let guardada: { url: string; bytes: number };
+    try {
+      guardada = guardarEvidenciaFt(base64, t.id, maxKb * 1024);
+    } catch (e: any) {
+      if (e instanceof ErrorEvidenciaFt) fail(e.code, e.message);
+      throw e;
+    }
+    const r = await dataSource.createQueryBuilder().update(FtTarea).set({ evidenciaUrl: guardada.url } as any)
+      .where('id = :id', { id: t.id }).andWhere('estado IN (:...ab)', { ab: abiertas }).execute();
+    if (!r.affected) fail('ESTADO_INVALIDO', 'LA TAREA CAMBIÓ DE ESTADO, VOLVÉ A CARGARLA');
+    return { url: guardada.url, bytes: guardada.bytes, tarea: limpiarTarea(await cargarTarea(dataSource, t.id)) };
+  });
+
+  /** Rango de días [desde, hasta] (≤ 31) → límites datetime locales [ini, fin). */
+  function rangoDias(filtros: any, obligatorio: boolean): { desde: string; hasta: string; ini: Date; fin: Date } | null {
+    if (!obligatorio && !filtros?.desde && !filtros?.hasta) return null;
+    const hoy = fechaLocalHoy();
+    const desde = diaOpcional(filtros?.desde, 'desde') ?? hoy;
+    const hasta = diaOpcional(filtros?.hasta, 'hasta') ?? desde;
+    if (desde > hasta) fail('VALIDACION', 'EL RANGO TERMINA ANTES DE EMPEZAR');
+    if (sumarDias(desde, MAX_DIAS_RANGO - 1) < hasta) fail('RANGO_EXCEDIDO', `EL RANGO MÁXIMO ES DE ${MAX_DIAS_RANGO} DÍAS`);
+    return { desde, hasta, ini: enHora(desde, '00:00'), fin: enHora(sumarDias(hasta, 1), '00:00') };
+  }
+
+  /**
+   * Avisos registrados (§11 C3), para la bandeja de la app y para el bot Gerente.
+   * filtros: { desde, hasta (≤ 31 días, por fecha del aviso), canal?, estado?, momento?, funcionarioId? }.
+   * `enviadoPorApp`: la app ya lo mandó por WhatsApp (el Gerente no lo repite). Los de canal
+   * GERENTE quedan PARA_GERENTE: el Gerente los manda y deduplica por `id`.
+   */
+  ipcMain.handle('ft-avisos', async (_e, filtros: any = {}) => {
+    await ensurePermission(dataSource, getCurrentUser, [P.REPORTES, P.VER_TODO]);
+    const r = rangoDias(filtros, true)!;
+    const qb = dataSource.getRepository(FtAvisoEnviado).createQueryBuilder('a')
+      .leftJoinAndSelect('a.tarea', 't')
+      .leftJoinAndSelect('t.funcionario', 'f')
+      .leftJoinAndSelect('f.persona', 'pe')
+      .where('a.created_at >= :ini AND a.created_at < :fin', { ini: paramTs(dataSource, r.ini), fin: paramTs(dataSource, r.fin) })
+      .orderBy('a.id', 'ASC');
+    if (filtros?.canal) qb.andWhere('a.canal = :c', { c: enumValido(FtCanalAviso, filtros.canal, 'canal') });
+    if (filtros?.estado) qb.andWhere('a.estado = :e', { e: enumValido(FtEstadoAviso, filtros.estado, 'estado') });
+    if (filtros?.momento) qb.andWhere('a.momento = :m', { m: enumValido(FtMomentoAvisoRegistro, filtros.momento, 'momento') });
+    const fid = idDe(filtros, 'funcionario');
+    if (fid) qb.andWhere('f.id = :fid', { fid });
+    const filas = await qb.getMany();
+    const appEnvia = [FtCanalAviso.WHATSAPP, FtCanalAviso.AMBOS];
+    return filas.map((a) => ({
+      id: a.id,
+      clave: a.clave,
+      tareaId: a.tarea?.id ?? null,
+      tarea: a.tarea ? { id: a.tarea.id, titulo: a.tarea.titulo, fecha: a.tarea.fecha, inicio: a.tarea.inicio, vence: a.tarea.vence, estado: a.tarea.estado, critica: a.tarea.critica } : null,
+      funcionario: a.tarea?.funcionario ? { id: a.tarea.funcionario.id, nombre: nombreFuncionario(a.tarea.funcionario) } : null,
+      momento: a.momento,
+      nivel: a.nivel,
+      canal: a.canal,
+      destinoCanal: a.canal,
+      estado: a.estado,
+      enviadoPorApp: a.estado === FtEstadoAviso.ENVIADO && appEnvia.includes(a.canal),
+      destino: a.destino ?? null,
+      mensaje: a.mensaje ?? null,
+      intentos: a.intentos,
+      error: a.error ?? null,
+      creadoEn: a.createdAt,
+      enviadoEn: a.enviadoEn ?? null,
+    }));
+  });
+
+  /** Propuestas de falta (nivel 3). filtros: { estado?, desde?, hasta? (≤ 31 días), funcionarioId? }. */
+  ipcMain.handle('ft-propuestas-list', async (_e, filtros: any = {}) => {
+    await ensurePermission(dataSource, getCurrentUser, LECTURA_GENERAL);
+    const r = rangoDias(filtros, false);
+    const qb = dataSource.getRepository(FtPropuestaFalta).createQueryBuilder('pf')
+      .leftJoinAndSelect('pf.tarea', 't')
+      .leftJoinAndSelect('pf.funcionario', 'f')
+      .leftJoinAndSelect('f.persona', 'pe')
+      .leftJoinAndSelect('pf.tipoFalta', 'tf')
+      .leftJoinAndSelect('pf.updatedBy', 'ub')
+      .orderBy('pf.id', 'DESC')
+      .take(500);
+    if (r) qb.andWhere('pf.created_at >= :ini AND pf.created_at < :fin', { ini: paramTs(dataSource, r.ini), fin: paramTs(dataSource, r.fin) });
+    if (filtros?.estado) qb.andWhere('pf.estado = :e', { e: enumValido(FtEstadoPropuesta, filtros.estado, 'estado') });
+    const fid = idDe(filtros, 'funcionario');
+    if (fid) qb.andWhere('f.id = :fid', { fid });
+    return (await qb.getMany()).map((p) => ({
+      id: p.id,
+      estado: p.estado,
+      motivo: p.motivo,
+      funcionario: p.funcionario ? { id: p.funcionario.id, nombre: nombreFuncionario(p.funcionario) } : null,
+      tarea: p.tarea ? { id: p.tarea.id, titulo: p.tarea.titulo, fecha: p.tarea.fecha, vence: p.tarea.vence, estado: p.tarea.estado } : null,
+      tipoFalta: p.tipoFalta ? { id: p.tipoFalta.id, nombre: (p.tipoFalta as any).nombre ?? null } : null,
+      creadaEn: p.createdAt,
+      resueltaPor: p.estado !== FtEstadoPropuesta.PENDIENTE && p.updatedBy ? { id: p.updatedBy.id, nickname: p.updatedBy.nickname } : null,
+    }));
+  });
+
+  /**
+   * Resolver una propuesta PENDIENTE: REGISTRADA (ya se cargó la falta con dr-registrar-falta)
+   * o DESCARTADA. data: { estado, nota? }. Nadie resuelve una propuesta sobre sí mismo.
+   */
+  ipcMain.handle('ft-propuesta-resolver', async (_e, id: number, data: any = {}) => {
+    const user = await ensurePermission(dataSource, getCurrentUser, [P.VERIFICAR, P.CONFIGURAR]);
+    const estado = enumValido(FtEstadoPropuesta, data?.estado, 'estado');
+    if (estado === FtEstadoPropuesta.PENDIENTE) fail('VALIDACION', 'LA PROPUESTA SE RESUELVE COMO REGISTRADA O DESCARTADA');
+    const repo = dataSource.getRepository(FtPropuestaFalta);
+    const p = await repo.findOne({ where: { id: Number(id) } as any, relations: ['funcionario'] });
+    if (!p) fail('NO_ENCONTRADO', 'PROPUESTA NO ENCONTRADA');
+    const propio = await buscarFuncionarioDeUsuario(dataSource, user.id);
+    if (propio && propio.id === p.funcionario.id) fail('AUTO_RESOLUCION', 'NO PODÉS RESOLVER UNA PROPUESTA SOBRE VOS MISMO');
+    const nota = up(data?.nota);
+    const r = await dataSource.createQueryBuilder().update(FtPropuestaFalta)
+      .set({ estado, motivo: nota ? `${p.motivo} — ${estado}: ${nota}`.slice(0, 2000) : p.motivo, updatedBy: { id: user.id } } as any)
+      .where('id = :id', { id: p.id }).andWhere('estado = :pend', { pend: FtEstadoPropuesta.PENDIENTE })
+      .execute();
+    if (!r.affected) fail('ESTADO_INVALIDO', 'LA PROPUESTA YA FUE RESUELTA');
+    return { ok: true, id: p.id, estado };
   });
 }
 

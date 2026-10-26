@@ -1,5 +1,5 @@
 /**
- * Motor de Funciones y Tareas (FT) — fase 1: generación y vencimiento.
+ * Motor de Funciones y Tareas (FT): generación, vencimiento, avisos y eventos.
  * Ver docs/planes/PLAN-funciones-tareas.md §4, §10 (A3, A8, A9) y §11.
  *
  * Cada tick (solo en el proceso dueño de la base: standalone o server, nunca client):
@@ -9,8 +9,10 @@
  *     Solo se crean tareas que todavía no vencieron (si el server estuvo apagado, no aparecen
  *     de golpe tareas ya vencidas).
  *  2. Vencer: PENDIENTE con `vence` < ahora → VENCIDA.
- *  3. Pasos de fase 2 (avisos, ausentes con críticas, escalamiento → ft_propuesta_falta):
- *     se enganchan con `registrarPasoTickFt`; hoy no hay ninguno.
+ *  3. Ausente (sin marcación tras la tolerancia) con tarea crítica → aviso al encargado.
+ *  4. Avisos según `ft_regla_aviso` (dedupe `ft_aviso_enviado`), escalamiento y nivel 3 →
+ *     `ft_propuesta_falta` PENDIENTE (ver avisos.ts). Otros pasos: `registrarPasoTickFt`.
+ * Eventos (caja/compra): `ftOnEvento`, llamado post-commit desde los hooks (eventos.ts).
  *
  * Interruptor global `ft_config.activo` (apagado por defecto). Para varias PC sobre el mismo
  * Postgres, lock en base: fila `ft_config.motor_lock` con dueño + expiración, tomada con un
@@ -30,13 +32,14 @@ import { FtPlantillaTarea } from '../../../src/app/database/entities/rrhh/funcio
 import { FtTarea } from '../../../src/app/database/entities/rrhh/funciones-tareas/ft-tarea.entity';
 import { FtTareaItem } from '../../../src/app/database/entities/rrhh/funciones-tareas/ft-tarea-item.entity';
 import {
-  FtAncla, FtEstadoTarea, FtEvento, FtOrigenTarea, FtRecurrencia, FtTipoTarea,
+  FtAncla, FtEstadoTarea, FtEvento, FtEventoCaja, FtOrigenTarea, FtRecurrencia, FtTipoTarea,
 } from '../../../src/app/database/entities/rrhh/funciones-tareas/ft.enums';
 import {
   ahoraFt, bitDiaSemana, diaDe, enHora, esHoraValida, fechaLocal, minutosDe, paramTs, sumarDias, sumarMinutos, ultimoDiaMes,
 } from './fechas';
 import { FT_CLAVES, escribirConfigFt, intervaloMotorMin, motorFtActivo } from './config';
 import { cargoVigenteDe, funcionarioVigente, turnoVigenteDe } from './vigencia';
+import { pasoAusentesFt, pasoAvisosFt } from './avisos';
 
 // ───────────────────────── Reglas puras ─────────────────────────
 
@@ -54,7 +57,7 @@ function turnoValido(t: Turno | null): t is Turno {
   return !!t && !!hhmm(t.horaEntrada) && !!hhmm(t.horaSalida);
 }
 
-/** Si la plantilla corresponde a ese día por recurrencia y vigencia (EVENTO nunca: fase 2). */
+/** Si la plantilla corresponde a ese día por recurrencia y vigencia (EVENTO nunca: las genera `ftOnEvento`). */
 export function aplicaEnDia(p: FtPlantillaTarea, dia: string): boolean {
   const desde = diaDe(p.vigenciaDesde);
   const hasta = diaDe(p.vigenciaHasta);
@@ -108,7 +111,7 @@ export function ventanaDe(p: FtPlantillaTarea, dia: string, turno: Turno | null)
       break;
     }
     default:
-      return null; // EVENTO: fase 2
+      return null; // EVENTO: la ventana la arma ftOnEvento
   }
   const inicio = sumarMinutos(base, offset);
   return { inicio, vence: sumarMinutos(inicio, dur) };
@@ -147,21 +150,19 @@ function esDuplicado(e: any): boolean {
 
 export interface ResultadoGeneracion { generadas: number; existentes: number; errores: number }
 
-export async function generarTareasFt(ds: DataSource, ahora: Date = ahoraFt()): Promise<ResultadoGeneracion> {
-  const hoy = fechaLocal(ahora);
-  const dias = [sumarDias(hoy, -1), hoy];
-  const res: ResultadoGeneracion = { generadas: 0, existentes: 0, errores: 0 };
+interface ContextoFuncionarios {
+  funcionarios: Funcionario[];
+  histPor: Map<number, HistoricoCargo[]>;
+  turPor: Map<number, FuncionarioTurno[]>;
+  gruposPor: Map<number, Set<number>>;
+}
 
-  const plantillas = (await ds.getRepository(FtPlantillaTarea).find({
-    where: { activo: true } as any,
-    relations: ['cargo', 'turno', 'funcionario', 'grupo', 'reemplazaPlantilla', 'items'],
-  })).filter((p) => p.recurrencia !== FtRecurrencia.EVENTO);
-  if (!plantillas.length) return res;
-
-  const funcionarios = await ds.getRepository(Funcionario).find({ where: { activo: true } as any, relations: ['cargo'] });
-  if (!funcionarios.length) return res;
+/** Funcionarios activos con sus históricos de cargo, turnos y grupos DR (para resolver alcances). */
+async function cargarFuncionariosFt(ds: DataSource): Promise<ContextoFuncionarios> {
+  const funcionarios = await ds.getRepository(Funcionario).find({ where: { activo: true } as any, relations: ['cargo', 'usuario'] });
+  const ctx: ContextoFuncionarios = { funcionarios, histPor: new Map(), turPor: new Map(), gruposPor: new Map() };
+  if (!funcionarios.length) return ctx;
   const ids = funcionarios.map((f) => f.id);
-
   const historicos = await ds.getRepository(HistoricoCargo).find({
     where: { funcionario: { id: In(ids) } } as any, relations: ['cargo', 'funcionario'],
   });
@@ -179,13 +180,69 @@ export async function generarTareasFt(ds: DataSource, ahora: Date = ahoraFt()): 
     }
     return m;
   };
-  const histPor = porFunc(historicos);
-  const turPor = porFunc(asignaciones);
-  const gruposPor = new Map<number, Set<number>>();
+  ctx.histPor = porFunc(historicos);
+  ctx.turPor = porFunc(asignaciones);
   for (const mi of miembros) {
     if (!mi.funcionario || !mi.grupo || (mi.grupo as any).activo === false) continue;
-    (gruposPor.get(mi.funcionario.id) ?? gruposPor.set(mi.funcionario.id, new Set()).get(mi.funcionario.id)!).add(mi.grupo.id);
+    (ctx.gruposPor.get(mi.funcionario.id) ?? ctx.gruposPor.set(mi.funcionario.id, new Set()).get(mi.funcionario.id)!).add(mi.grupo.id);
   }
+  return ctx;
+}
+
+/**
+ * INSERT idempotente de una tarea (con sus ítems de checklist) en una transacción.
+ * Devuelve 'NUEVA' o 'EXISTE' (UNIQUE: ya la generó otro tick / otra PC / el mismo evento).
+ */
+async function insertarTareaFt(
+  ds: DataSource, p: FtPlantillaTarea, funcionarioId: number, dia: string,
+  v: { inicio: Date; vence: Date }, origen: FtOrigenTarea, eventoRef: string,
+): Promise<'NUEVA' | 'EXISTE'> {
+  try {
+    await ds.transaction(async (m) => {
+      const tarea = await m.getRepository(FtTarea).save(m.getRepository(FtTarea).create({
+        plantilla: { id: p.id } as any,
+        funcionario: { id: funcionarioId } as any,
+        fecha: dia,
+        inicio: v.inicio,
+        vence: v.vence,
+        estado: FtEstadoTarea.PENDIENTE,
+        titulo: p.titulo,
+        critica: !!p.critica,
+        peso: Number(p.peso) || 0,
+        origen,
+        eventoRef,
+      } as any) as unknown as FtTarea);
+      if (p.tipo === FtTipoTarea.CHECKLIST) {
+        const items = [...(p.items ?? [])].sort((a, b) => (a.orden - b.orden) || (a.id - b.id));
+        for (const it of items) {
+          await m.getRepository(FtTareaItem).save(m.getRepository(FtTareaItem).create({
+            tarea: { id: tarea.id } as any, item: { id: it.id } as any, texto: it.texto, hecho: false,
+          } as any));
+        }
+      }
+    });
+    return 'NUEVA';
+  } catch (e) {
+    if (esDuplicado(e)) return 'EXISTE';
+    throw e;
+  }
+}
+
+const RELACIONES_PLANTILLA = ['cargo', 'turno', 'funcionario', 'grupo', 'reemplazaPlantilla', 'items'];
+
+export async function generarTareasFt(ds: DataSource, ahora: Date = ahoraFt()): Promise<ResultadoGeneracion> {
+  const hoy = fechaLocal(ahora);
+  const dias = [sumarDias(hoy, -1), hoy];
+  const res: ResultadoGeneracion = { generadas: 0, existentes: 0, errores: 0 };
+
+  const plantillas = (await ds.getRepository(FtPlantillaTarea).find({
+    where: { activo: true } as any,
+    relations: RELACIONES_PLANTILLA,
+  })).filter((p) => p.recurrencia !== FtRecurrencia.EVENTO);
+  if (!plantillas.length) return res;
+
+  const { funcionarios, histPor, turPor, gruposPor } = await cargarFuncionariosFt(ds);
+  if (!funcionarios.length) return res;
 
   // Lo que ya existe para esos días (sin evento): no se intenta insertar de nuevo.
   const existentes = await ds.getRepository(FtTarea).createQueryBuilder('t')
@@ -210,33 +267,10 @@ export async function generarTareasFt(ds: DataSource, ahora: Date = ahoraFt()): 
         const v = ventanaDe(p, dia, turno);
         if (!v || v.vence.getTime() <= ahora.getTime()) continue;
         try {
-          await ds.transaction(async (m) => {
-            const tarea = await m.getRepository(FtTarea).save(m.getRepository(FtTarea).create({
-              plantilla: { id: p.id } as any,
-              funcionario: { id: f.id } as any,
-              fecha: dia,
-              inicio: v.inicio,
-              vence: v.vence,
-              estado: FtEstadoTarea.PENDIENTE,
-              titulo: p.titulo,
-              critica: !!p.critica,
-              peso: Number(p.peso) || 0,
-              origen: FtOrigenTarea.MOTOR,
-              eventoRef: '',
-            } as any) as unknown as FtTarea);
-            if (p.tipo === FtTipoTarea.CHECKLIST) {
-              const items = [...(p.items ?? [])].sort((a, b) => (a.orden - b.orden) || (a.id - b.id));
-              for (const it of items) {
-                await m.getRepository(FtTareaItem).save(m.getRepository(FtTareaItem).create({
-                  tarea: { id: tarea.id } as any, item: { id: it.id } as any, texto: it.texto, hecho: false,
-                } as any));
-              }
-            }
-          });
+          const r = await insertarTareaFt(ds, p, f.id, dia, v, FtOrigenTarea.MOTOR, '');
           ya.add(k);
-          res.generadas++;
+          if (r === 'NUEVA') res.generadas++; else res.existentes++; // EXISTE: la generó otra PC
         } catch (e) {
-          if (esDuplicado(e)) { ya.add(k); res.existentes++; continue; } // la generó otra PC
           res.errores++;
           console.warn(`[ft-motor] no se pudo generar plantilla=${p.id} funcionario=${f.id} fecha=${dia}:`, (e as any)?.message ?? e);
         }
@@ -310,7 +344,7 @@ export async function liberarLockFt(ds: DataSource, duenio = DUENIO_PROCESO): Pr
 // ───────────────────────── Tick y puntos de extensión ─────────────────────────
 
 export interface ContextoTickFt { ahora: Date; hoy: string }
-/** Paso extra del tick (fase 2: avisos, ausentes con críticas, escalamiento). Corre con el lock tomado. */
+/** Paso extra del tick (después de avisos). Corre con el lock tomado. */
 export type PasoTickFt = (ds: DataSource, ctx: ContextoTickFt) => Promise<void>;
 const pasosExtra: { nombre: string; paso: PasoTickFt }[] = [];
 
@@ -318,13 +352,84 @@ export function registrarPasoTickFt(nombre: string, paso: PasoTickFt): void {
   if (!pasosExtra.some((p) => p.nombre === nombre)) pasosExtra.push({ nombre, paso });
 }
 
+export interface ExtraEventoFt {
+  /** Eventos de caja: PDV o MAYOR (filtra plantillas con `evento_caja`). */
+  tipoCaja?: FtEventoCaja | null;
+  /** Quién disparó el evento: si su funcionario es candidato, la tarea es solo suya. */
+  usuarioId?: number | null;
+  ahora?: Date;
+}
+
+export interface ResultadoEventoFt { generadas: number; existentes: number; omitido?: 'APAGADO' | 'SIN_PLANTILLAS' }
+
+/** Día de turno de un funcionario a una hora: un turno nocturno de ayer sigue abierto hasta la salida. */
+function diaDeTurno(turnoAyer: Turno | null, ahora: Date): string {
+  const hoy = fechaLocal(ahora);
+  if (turnoValido(turnoAyer) && esTurnoNocturno(turnoAyer) && ahora.getTime() < enHora(hoy, hhmm(turnoAyer.horaSalida)!).getTime()) {
+    return sumarDias(hoy, -1);
+  }
+  return hoy;
+}
+
+function enTurno(turno: Turno | null, dia: string, ahora: Date): boolean {
+  if (!turnoValido(turno)) return false;
+  const ini = enHora(dia, hhmm(turno.horaEntrada)!);
+  const fin = enHora(dia, hhmm(turno.horaSalida)!, esTurnoNocturno(turno) ? 1 : 0);
+  return ahora.getTime() >= ini.getTime() && ahora.getTime() <= fin.getTime();
+}
+
 /**
  * Punto de entrada de eventos de negocio (caja abierta/cerrada, compra recibida), §4 y §10 A7.
- * Fase 2: los hooks post-commit de caja y compras lo llamarán con `setImmediate` + try/catch.
- * Hoy no hace nada (no se generan tareas por evento todavía).
+ * Genera las tareas de las plantillas con recurrencia EVENTO de ese evento, con
+ * `evento_ref` = '<PDV|MAYOR|COMPRA>:<ref>' (UNIQUE → llamar dos veces con el mismo evento no
+ * duplica). Responsables: los funcionarios del alcance de la plantilla; si quien disparó el
+ * evento es uno de ellos, solo él; si no, los que están en su turno ahora; si nadie, todos.
+ * Ventana: desde ahora + desfase, durante `duracion_min`. Respeta el interruptor global.
+ * Lo llaman los hooks post-commit (`dispararEventoFt`), nunca dentro de la transacción de caja.
  */
-export async function ftOnEvento(_ds: DataSource, _tipo: FtEvento, _ref: string, _extra?: Record<string, unknown>): Promise<void> {
-  return;
+export async function ftOnEvento(ds: DataSource, tipo: FtEvento, ref: string | number, extra: ExtraEventoFt = {}): Promise<ResultadoEventoFt> {
+  const res: ResultadoEventoFt = { generadas: 0, existentes: 0 };
+  if (!(await motorFtActivo(ds))) return { ...res, omitido: 'APAGADO' };
+  const ahora = extra.ahora ?? ahoraFt();
+  const hoy = fechaLocal(ahora);
+  const plantillas = (await ds.getRepository(FtPlantillaTarea).find({
+    where: { activo: true, recurrencia: FtRecurrencia.EVENTO, evento: tipo } as any,
+    relations: RELACIONES_PLANTILLA,
+  })).filter((p) => {
+    if (p.eventoCaja && p.eventoCaja !== extra.tipoCaja) return false;
+    const desde = diaDe(p.vigenciaDesde);
+    const hasta = diaDe(p.vigenciaHasta);
+    return !(desde && hoy < desde) && !(hasta && hoy > hasta);
+  });
+  if (!plantillas.length) return { ...res, omitido: 'SIN_PLANTILLAS' };
+
+  const prefijo = extra.tipoCaja ?? (tipo === FtEvento.COMPRA_RECIBIDA ? 'COMPRA' : tipo);
+  const eventoRef = `${prefijo}:${ref}`.slice(0, 60);
+  const { funcionarios, histPor, turPor, gruposPor } = await cargarFuncionariosFt(ds);
+
+  for (const p of plantillas) {
+    const candidatos: { f: Funcionario; dia: string; turno: Turno | null }[] = [];
+    for (const f of funcionarios) {
+      const turnos = turPor.get(f.id) ?? [];
+      const dia = diaDeTurno(turnoVigenteDe(turnos, sumarDias(hoy, -1)), ahora);
+      if (!funcionarioVigente(f, dia)) continue;
+      const turno = turnoVigenteDe(turnos, dia);
+      const cargo = cargoVigenteDe(f, histPor.get(f.id) ?? [], dia);
+      if (plantillasDelFuncionario(plantillas, f.id, cargo, turno, gruposPor.get(f.id) ?? new Set()).some((x) => x.id === p.id)) {
+        candidatos.push({ f, dia, turno });
+      }
+    }
+    const actor = extra.usuarioId ? candidatos.filter((c) => (c.f.usuario as any)?.id === extra.usuarioId) : [];
+    const deTurno = candidatos.filter((c) => enTurno(c.turno, c.dia, ahora));
+    const elegidos = actor.length ? actor : deTurno.length ? deTurno : candidatos;
+    const inicio = sumarMinutos(ahora, Number(p.offsetInicioMin) || 0);
+    const v = { inicio, vence: sumarMinutos(inicio, Math.max(1, Number(p.duracionMin) || 0)) };
+    for (const c of elegidos) {
+      const r = await insertarTareaFt(ds, p, c.f.id, c.dia, v, FtOrigenTarea.EVENTO, eventoRef);
+      if (r === 'NUEVA') res.generadas++; else res.existentes++;
+    }
+  }
+  return res;
 }
 
 export interface ResultadoTickFt {
@@ -333,6 +438,10 @@ export interface ResultadoTickFt {
   generadas: number;
   existentes: number;
   vencidas: number;
+  /** Avisos nuevos registrados (cualquier canal) y ausentes con tarea crítica avisados. */
+  avisos: number;
+  ausentes: number;
+  propuestas: number;
   errores: number;
   en: string;
 }
@@ -341,7 +450,9 @@ let tickEnCurso = false;
 
 export async function ejecutarTickFt(ds: DataSource, opts: { ahora?: Date; duenio?: string } = {}): Promise<ResultadoTickFt> {
   const ahora = opts.ahora ?? ahoraFt();
-  const base: ResultadoTickFt = { ejecutado: false, generadas: 0, existentes: 0, vencidas: 0, errores: 0, en: ahora.toISOString() };
+  const base: ResultadoTickFt = {
+    ejecutado: false, generadas: 0, existentes: 0, vencidas: 0, avisos: 0, ausentes: 0, propuestas: 0, errores: 0, en: ahora.toISOString(),
+  };
   if (tickEnCurso) return { ...base, omitido: 'EN_CURSO' };
   tickEnCurso = true;
   try {
@@ -353,10 +464,23 @@ export async function ejecutarTickFt(ds: DataSource, opts: { ahora?: Date; dueni
       const vencidas = await vencerTareasFt(ds, ahora);
       let errores = g.errores;
       const ctx: ContextoTickFt = { ahora, hoy: fechaLocal(ahora) };
+      // Fase 2: ausentes con críticas y avisos por regla (incluye escalamiento y nivel 3).
+      // Cada paso aislado: si uno falla, el tick sigue.
+      let ausentes = 0;
+      let avisos = 0;
+      let propuestas = 0;
+      try { ausentes = await pasoAusentesFt(ds, ctx); } catch (e) { errores++; console.warn('[ft-motor] ausentes:', (e as any)?.message ?? e); }
+      try {
+        const a = await pasoAvisosFt(ds, ctx);
+        avisos = a.registrados;
+        propuestas = a.propuestas;
+      } catch (e) { errores++; console.warn('[ft-motor] avisos:', (e as any)?.message ?? e); }
       for (const p of pasosExtra) {
         try { await p.paso(ds, ctx); } catch (e) { errores++; console.warn(`[ft-motor] paso ${p.nombre}:`, (e as any)?.message ?? e); }
       }
-      const r: ResultadoTickFt = { ejecutado: true, generadas: g.generadas, existentes: g.existentes, vencidas, errores, en: ahora.toISOString() };
+      const r: ResultadoTickFt = {
+        ejecutado: true, generadas: g.generadas, existentes: g.existentes, vencidas, avisos, ausentes, propuestas, errores, en: ahora.toISOString(),
+      };
       await escribirConfigFt(ds, FT_CLAVES.ULTIMO_TICK, JSON.stringify(r));
       return r;
     } finally {
@@ -385,8 +509,8 @@ export function startMotorFuncionesTareas(ds: DataSource, demoraInicialMs = 20_0
     timer = setTimeout(async () => {
       try {
         const r = await ejecutarTickFt(ds);
-        if (r.ejecutado && (r.generadas || r.vencidas || r.errores)) {
-          console.log(`[ft-motor] generadas=${r.generadas} vencidas=${r.vencidas} errores=${r.errores}`);
+        if (r.ejecutado && (r.generadas || r.vencidas || r.avisos || r.ausentes || r.errores)) {
+          console.log(`[ft-motor] generadas=${r.generadas} vencidas=${r.vencidas} avisos=${r.avisos} ausentes=${r.ausentes} errores=${r.errores}`);
         }
       } catch (e: any) {
         console.warn('[ft-motor] excepción en el tick:', e?.message || e);
