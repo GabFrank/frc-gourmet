@@ -34,6 +34,14 @@ export const FT_CONFIG_EDITABLE: Record<string, (v: string) => boolean> = {
   [FT_CLAVES.FOTO_MAX_KB]: (v) => /^\d+$/.test(v) && Number(v) >= 50 && Number(v) <= 10240,
 };
 
+/**
+ * ¿Es una clave editable? Propiedad PROPIA del objeto (no `in` ni `obj[clave]`, que aceptan
+ * `__proto__`, `constructor`, `toString`… del prototipo).
+ */
+export function esClaveEditableFt(clave: string): boolean {
+  return Object.prototype.hasOwnProperty.call(FT_CONFIG_EDITABLE, clave);
+}
+
 export const FT_CONFIG_DEFAULTS: Record<string, string> = {
   [FT_CLAVES.ACTIVO]: 'false',
   [FT_CLAVES.INTERVALO_MIN]: '5',

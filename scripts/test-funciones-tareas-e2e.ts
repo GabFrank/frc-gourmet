@@ -40,7 +40,10 @@ import { registerFuncionesTareasHandlers } from '../electron/handlers/funciones-
 import { registerFuncionesTareasLecturaHandlers } from '../electron/handlers/funciones-tareas-lectura.handler';
 import { clearPermissionCache } from '../electron/utils/auth.utils';
 import { ejecutarTickFt, ftOnEvento, tomarLockFt } from '../electron/services/funciones-tareas/motor';
-import { fijarEnviadorFt } from '../electron/services/funciones-tareas/avisos';
+import { correspondeAvisoFt, fijarEnviadorFt } from '../electron/services/funciones-tareas/avisos';
+import { ventanaDe } from '../electron/services/funciones-tareas/motor';
+import { esUrlEvidenciaFt } from '../electron/services/funciones-tareas/evidencias';
+import { isCarpetaEscribible, saveFileToBucket } from '../electron/utils/file-save.utils';
 import { esperarEventosFt, fijarInterceptorEventoFt } from '../electron/services/funciones-tareas/eventos';
 import { setNotificacionDataSource } from '../electron/services/notificacion.service';
 import { seedNotificaciones } from '../electron/handlers/notificaciones-config.handler';
@@ -394,6 +397,8 @@ async function main() {
     ],
   });
   ok(pa.reglas.length === 4, 'plantilla con 4 reglas (WHATSAPP, GERENTE, grupo ADM, nivel 3)');
+  /** Clave de dedupe de un aviso por regla (incluye la regla). */
+  const K = (tId: any, pl: any, momento: string, nivel: number) => `ft:${tId}:${momento}:${nivel}:r${pl.reglas.find((r: any) => r.momento === momento && r.nivel === nivel).id}`;
   await tick(L(2026, 11, 20, 7, 0));
   const tDani20: any = de(await tareas(), fDani.id, pa.id, '2026-11-20')[0];
   const tFede20: any = de(await tareas(), fFede.id, pa.id, '2026-11-20')[0];
@@ -402,7 +407,7 @@ async function main() {
   console.log('\n[F2-A] Dedupe y canal WHATSAPP');
   await tick(L(2026, 11, 20, 10, 46));
   await tick(L(2026, 11, 20, 10, 50));
-  const av1 = await avisos({ clave: `ft:${tDani20.id}:ANTES_VENCER:1` });
+  const av1 = await avisos({ clave: K(tDani20.id, pa, 'ANTES_VENCER', 1) });
   ok(av1.length === 1, '2 ticks = 1 aviso (UNIQUE clave)', av1.length);
   const directoDani = llamadas.directo.filter((x) => x.destino === '0981111111');
   ok(directoDani.length === 1 && directoDani[0].eventoCodigo === 'RECORDATORIO_TAREA', 'enviarDirecto una sola vez, al teléfono del responsable', directoDani);
@@ -419,14 +424,15 @@ async function main() {
   const nDir = llamadas.directo.length;
   const nDisp = llamadas.dispatch.length;
   await tick(L(2026, 11, 20, 11, 5));
-  const avG = await avisos({ clave: `ft:${tDani20.id}:AL_VENCER:1` });
+  const avG = await avisos({ clave: K(tDani20.id, pa, 'AL_VENCER', 1) });
   ok(avG.length === 1 && avG[0].canal === 'GERENTE' && avG[0].estado === 'PARA_GERENTE', 'regla GERENTE queda PARA_GERENTE con canal GERENTE', avG[0]);
   ok(llamadas.directo.length === nDir && llamadas.dispatch.length === nDisp, 'regla GERENTE no llama a enviarDirecto ni a dispatchEvento', { dir: llamadas.directo.length - nDir, disp: llamadas.dispatch.length - nDisp });
   await tick(L(2026, 11, 20, 11, 35));
-  const avEsc = await avisos({ clave: `ft:${tDani20.id}:ESCALAMIENTO:2` });
-  const dispDani = llamadas.dispatch.filter((x) => x.dedupeKey === `ft:${tDani20.id}:ESCALAMIENTO:2`);
+  const avEsc = await avisos({ clave: K(tDani20.id, pa, 'ESCALAMIENTO', 2) });
+  const dispDani = llamadas.dispatch.filter((x) => x.dedupeKey === K(tDani20.id, pa, 'ESCALAMIENTO', 2));
   ok(avEsc.length === 1 && avEsc[0].estado === 'ENVIADO' && avEsc[0].destino === 'GRUPO_ADM', 'nivel 2 al grupo ADM registrado y ENVIADO', avEsc[0]);
   ok(dispDani.length === 1 && dispDani[0].codigo === 'RECORDATORIO_TAREA', 'nivel 2 sale por dispatchEvento(RECORDATORIO_TAREA)', dispDani);
+  ok(Number((await ds.getRepository(FtTarea).findOneBy({ id: tDani20.id }))?.nivelEscalado) === 2, 'aviso de nivel 2 registrado → nivel_escalado de la tarea = 2');
   await tick(L(2026, 11, 20, 12, 5));
   ok((await ds.getRepository(FtPropuestaFalta).count()) === 0, 'nivel 3 con 1 vencida (umbral 2) no propone nada');
 
@@ -439,14 +445,14 @@ async function main() {
   ok(propsDani.length === 1 && propsDani[0].estado === 'PENDIENTE' && /2 VENCIDAS/.test(propsDani[0].motivo), 'reincidencia (2 en 30 días) → 1 ft_propuesta_falta PENDIENTE', propsDani.map((x: any) => [x.estado, x.motivo]));
   const drFaltas = await ds.query('SELECT COUNT(*) AS n FROM dr_falta');
   ok(Number(drFaltas[0].n) === 0, 'nunca inserta en dr_falta');
-  const avN3 = await avisos({ clave: `ft:${propsDani[0]?.tarea?.id}:ESCALAMIENTO:3` });
+  const avN3 = await avisos({ clave: K(propsDani[0]?.tarea?.id, pa, 'ESCALAMIENTO', 3) });
   ok(avN3.length === 1 && /PROPUESTA DE FALTA/.test(avN3[0].mensaje) && avN3[0].destino === '0982222222', 'y avisa al encargado', avN3[0]);
 
   console.log('\n[F2-E] ft-avisos (lectura para el Gerente)');
   const lAv = await como(uRep, () => call('ft-avisos', { desde: '2026-11-20', hasta: '2026-11-21' }));
   const gerenteAv = lAv.filter((a: any) => a.canal === 'GERENTE');
   ok(gerenteAv.length >= 2 && gerenteAv.every((a: any) => a.destinoCanal === 'GERENTE' && a.estado === 'PARA_GERENTE' && !a.enviadoPorApp), 'los avisos GERENTE aparecen en ft-avisos, sin enviar por la app', gerenteAv.length);
-  const waAv = lAv.find((a: any) => a.clave === `ft:${tDani20.id}:ANTES_VENCER:1`);
+  const waAv = lAv.find((a: any) => a.clave === K(tDani20.id, pa, 'ANTES_VENCER', 1));
   ok(waAv?.enviadoPorApp === true && waAv.funcionario?.id === fDani.id && waAv.tarea?.id === tDani20.id, 'el WHATSAPP aparece marcado enviadoPorApp', waAv);
   const soloG = await como(uRep, () => call('ft-avisos', { desde: '2026-11-20', hasta: '2026-11-21', canal: 'GERENTE', estado: 'PARA_GERENTE' }));
   ok(soloG.length === gerenteAv.length, 'filtro por canal y estado', soloG.length);
@@ -475,12 +481,12 @@ async function main() {
   const tPb: any = de(await tareas(), fDani.id, pb.id, '2026-11-22')[0];
   const nDir2 = llamadas.directo.length;
   await tick(L(2026, 11, 22, 14, 51));
-  const avOff = await avisos({ clave: `ft:${tPb.id}:ANTES_INICIO:1` });
+  const avOff = await avisos({ clave: K(tPb.id, pb, 'ANTES_INICIO', 1) });
   ok(llamadas.directo.length === nDir2, 'con NOTIF_GLOBAL_ACTIVO apagado no se llama a enviarDirecto');
   ok(avOff.length === 1 && avOff[0].estado === 'FALLIDO' && /NOTIF_GLOBAL_ACTIVO/.test(avOff[0].error), 'queda FALLIDO con el motivo', avOff[0]);
   await globalNotif(true);
   await tick(L(2026, 11, 22, 14, 56));
-  const avOn = await avisos({ clave: `ft:${tPb.id}:ANTES_INICIO:1` });
+  const avOn = await avisos({ clave: K(tPb.id, pb, 'ANTES_INICIO', 1) });
   ok(avOn[0].estado === 'ENVIADO' && avOn[0].intentos === 2 && llamadas.directo.length === nDir2 + 1, 'al prenderlo, el reintento lo envía una vez', avOn[0]);
 
   console.log('\n[F2-H] Eventos de caja');
@@ -528,7 +534,73 @@ async function main() {
   const archivo = path.join(tmpDir, 'ft-evidencias', String(foto.url).replace('app://ft-evidencias/', ''));
   ok(/^app:\/\/ft-evidencias\/ftev-\d+-.+\.png$/.test(foto.url) && fs.existsSync(archivo) && foto.tarea.evidenciaUrl === foto.url, 'foto válida guardada en ft-evidencias y vinculada a la tarea', foto.url);
   await rechaza(como(uDani, () => call('ft-tarea-marcar', tEv[0].id, { evidenciaUrl: 'https://otro.sitio/x.png' })), 'VALIDACION', 'ft-tarea-marcar no acepta URLs ajenas a ft-evidencias');
+  await rechaza(como(uDani, () => call('ft-tarea-marcar', tEv[0].id, { evidenciaUrl: `app://ft-evidencias/ftev-${tEv[0].id + 1}-1-abc.png` })), 'VALIDACION', 'ni la foto de otra tarea (prefijo ftev-<tareaId>-)');
+  await rechaza(como(uDani, () => call('ft-tarea-marcar', tEv[0].id, { evidenciaUrl: `app://ft-evidencias/ftev-${tEv[0].id}-1-abc.svg` })), 'VALIDACION', 'ni otra extensión que jpg/png/webp');
+  ok(esUrlEvidenciaFt(foto.url, tEv[0].id) && !esUrlEvidenciaFt(foto.url, tEv[0].id + 1) && !esUrlEvidenciaFt('app://ft-evidencias/ftev-x.png'), 'esUrlEvidenciaFt exige ftev-<tareaId>- y extensión de imagen');
+  const foto2 = await como(uDani, () => call('ft-tarea-subir-foto', tEv[0].id, { base64: png.toString('base64') }));
+  const archivo2 = path.join(tmpDir, 'ft-evidencias', String(foto2.url).replace('app://ft-evidencias/', ''));
+  ok(foto2.url !== foto.url && fs.existsSync(archivo2) && !fs.existsSync(archivo) && foto2.tarea.evidenciaUrl === foto2.url, 'cambiar la foto borra la anterior de esa tarea', { a: fs.existsSync(archivo), b: fs.existsSync(archivo2) });
+  let saveGen: any = null;
+  try { saveGen = await saveFileToBucket({ carpeta: 'ft-evidencias', base64: png.toString('base64'), fileName: 'x.png' }); } catch (e: any) { saveGen = { error: e?.message }; }
+  ok(!!saveGen?.error && !isCarpetaEscribible('ft-evidencias') && isCarpetaEscribible('adjuntos'), 'save-file genérico rechaza ft-evidencias (solo lectura)', saveGen);
   if (fs.existsSync(archivo)) fs.unlinkSync(archivo);
+  if (fs.existsSync(archivo2)) fs.unlinkSync(archivo2);
+
+  console.log('\n[F3] Correcciones de auditoría');
+  // 11) HORA_FIJA igual a la salida de un turno nocturno → madrugada siguiente.
+  const vSal = ventanaDe({ ancla: 'HORA_FIJA', horaFija: '06:00', offsetInicioMin: 0, duracionMin: 30 } as any, '2026-11-14', nocturno);
+  ok(!!vSal && hm(vSal.inicio) === '15 06:00', 'nocturno 22–06: HORA_FIJA 06:00 cae en la madrugada siguiente', vSal && hm(vSal.inicio));
+  // 10) claves del prototipo no son configurables.
+  await rechaza(call('ft-config-set', { constructor: 'x' }), 'VALIDACION', 'ft-config-set: «constructor» (del prototipo) no es configurable');
+  await rechaza(call('ft-config-set', JSON.parse('{"__proto__": "x", "toString": "y"}')), 'VALIDACION', 'ni «toString» / «__proto__»');
+  // 8) nivel 3 solo con AL_VENCER o ESCALAMIENTO.
+  await rechaza(call('ft-plantillas-save', {
+    titulo: 'x', funcionarioId: fFede.id, ancla: 'HORA_FIJA', horaFija: '10:00', reglas: [{ momento: 'ANTES_VENCER', minutos: 10, nivel: 3 }],
+  }), 'VALIDACION', 'regla nivel 3 con ANTES_VENCER → rechazada');
+  // 3) dos reglas del mismo momento y nivel con distintos minutos = dos avisos; 8) descartar no repropone con vencidas viejas.
+  const pn = await call('ft-plantillas-save', {
+    titulo: 'revisar heladera', funcionarioId: fFede.id, ancla: 'HORA_FIJA', horaFija: '10:00', duracionMin: 60,
+    reglas: [
+      { momento: 'ANTES_VENCER', minutos: 30, nivel: 1, canal: 'APP', destino: '0983333333' },
+      { momento: 'ANTES_VENCER', minutos: 15, nivel: 1, canal: 'APP', destino: '0983333333' },
+      { momento: 'ESCALAMIENTO', minutos: 60, nivel: 3, canal: 'APP' },
+    ],
+  });
+  await tick(L(2026, 11, 24, 7, 0));
+  const tN24: any = de(await tareas(), fFede.id, pn.id, '2026-11-24')[0];
+  await tick(L(2026, 11, 24, 10, 31));
+  await tick(L(2026, 11, 24, 10, 46));
+  const avAntes = (await avisos()).filter((a: any) => a.tarea?.id === tN24.id && a.momento === 'ANTES_VENCER');
+  ok(avAntes.length === 2 && new Set(avAntes.map((a: any) => a.clave)).size === 2, 'dos reglas ANTES_VENCER nivel 1 (30 y 15 min) → dos avisos distintos', avAntes.map((a: any) => a.clave));
+  await tick(L(2026, 11, 24, 12, 5));
+  await tick(L(2026, 11, 25, 7, 0));
+  await tick(L(2026, 11, 25, 12, 5));
+  const propsN = async () => (await ds.getRepository(FtPropuestaFalta).find({ relations: ['funcionario', 'tarea', 'tarea.plantilla'] })).filter((x: any) => x.tarea?.plantilla?.id === pn.id);
+  const pN1 = await propsN();
+  ok(pN1.length === 1 && pN1[0].estado === 'PENDIENTE', '2 vencidas → propuesta', pN1.map((x: any) => x.estado));
+  ok(Number((await ds.getRepository(FtTarea).findOneBy({ id: pN1[0]?.tarea?.id }))?.nivelEscalado) === 3, 'aviso de nivel 3 → nivel_escalado = 3');
+  await como(uVero, () => call('ft-propuesta-resolver', pN1[0].id, { estado: 'DESCARTADA' }));
+  await tick(L(2026, 11, 26, 7, 0));
+  await tick(L(2026, 11, 26, 12, 5));
+  ok((await propsN()).length === 1, 'tras DESCARTAR, una vencida nueva + las viejas no vuelven a proponer', (await propsN()).length);
+  await tick(L(2026, 11, 27, 7, 0));
+  await tick(L(2026, 11, 27, 12, 5));
+  const pN3 = await propsN();
+  ok(pN3.length === 2 && pN3.filter((x: any) => x.estado === 'PENDIENTE').length === 1 && /2 VENCIDAS/.test(pN3.find((x: any) => x.estado === 'PENDIENTE')?.motivo), 'dos vencidas posteriores a la descartada → propuesta nueva', pN3.map((x: any) => [x.estado, x.motivo]));
+  await call('ft-plantillas-set-activo', pn.id, false);
+  // 5) editar la nota conserva el historial; 4) RECHAZADA vence.
+  fijarRelojFt(L(2026, 11, 24, 13, 0));
+  const mr = await como(uVero, () => call('ft-tarea-crear-manual', { funcionarioId: fDani.id, titulo: 'ordenar deposito', fecha: '2026-11-24', inicio: L(2026, 11, 24, 13, 0), duracionMin: 60 }));
+  await como(uDani, () => call('ft-tarea-marcar', mr.id, { nota: 'ordenado' }));
+  const mrR = await call('ft-tarea-rechazar', mr.id, 'falta barrer');
+  ok(mrR.estado === 'RECHAZADA' && mrR.nota === 'ORDENADO | RECHAZO: FALTA BARRER', 'rechazo suma su segmento a la nota', mrR.nota);
+  const mrN = await como(uDani, () => call('ft-tarea-marcar', mr.id, { nota: 'ordenado y barrido', completar: false }));
+  ok(mrN.nota === 'ORDENADO Y BARRIDO | RECHAZO: FALTA BARRER', 'la persona edita su nota y el «RECHAZO:» se conserva', mrN.nota);
+  const mrN2 = await como(uDani, () => call('ft-tarea-marcar', mr.id, { nota: 'ordenado y barrido | RECHAZO: falta barrer', completar: false }));
+  ok(mrN2.nota === 'ORDENADO Y BARRIDO | RECHAZO: FALTA BARRER', 'si el cliente reenvía el historial no se duplica', mrN2.nota);
+  ok(correspondeAvisoFt({ momento: 'ANTES_VENCER', minutos: 15 } as any, { ...mrN2, estado: 'RECHAZADA' } as any, L(2026, 11, 24, 13, 50)), 'avisos ANTES_* consideran una RECHAZADA igual que PENDIENTE');
+  await tick(L(2026, 11, 24, 14, 5));
+  ok((await ds.getRepository(FtTarea).findOneBy({ id: mr.id }))?.estado === 'VENCIDA', 'una RECHAZADA con vence < ahora → VENCIDA');
   fijarEnviadorFt(null);
 
   console.log('\n[F5] Lecturas para el Gerente');

@@ -32,6 +32,19 @@ export const ALLOWED_CARPETAS = new Set<string>([
   'ft-evidencias',
 ]);
 
+/**
+ * Buckets de solo lectura para los IPC genéricos (`save-file`, `delete-file`, subida por QR):
+ * se sirven por `app://` pero solo los escribe/borra su módulo dueño. `ft-evidencias`: fotos de
+ * evidencia de Funciones y Tareas (las guarda `guardarEvidenciaFt`, con tope y validación).
+ */
+export const CARPETAS_SOLO_LECTURA = new Set<string>(['ft-evidencias']);
+
+/** ¿El bucket admite escritura/borrado por los IPC genéricos? */
+export function isCarpetaEscribible(carpeta: string): boolean {
+  if (!isCarpetaPermitida(carpeta)) return false;
+  return !CARPETAS_SOLO_LECTURA.has(carpeta.split('/')[0]);
+}
+
 // Prefijo corto por bucket — identifica el dominio sin ambigüedad en el filesystem.
 const BUCKET_PREFIX: Record<string, string> = {
   'profile-images': 'pers',
@@ -121,7 +134,7 @@ export function inferMimeType(fileName: string): string {
 export async function saveFileToBucket(input: SaveFileInput): Promise<SaveFileResult> {
   const { carpeta, base64, fileName, generateThumbnails } = input;
 
-  if (!isCarpetaPermitida(carpeta)) {
+  if (!isCarpetaEscribible(carpeta)) {
     throw new Error(`save-file: carpeta '${carpeta}' no permitida`);
   }
   const dir = path.join(app.getPath('userData'), carpeta);

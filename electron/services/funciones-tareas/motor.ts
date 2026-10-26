@@ -8,7 +8,7 @@
  *     UNIQUE (plantilla, funcionario, fecha, evento_ref) — dos ticks dejan las mismas tareas.
  *     Solo se crean tareas que todavía no vencieron (si el server estuvo apagado, no aparecen
  *     de golpe tareas ya vencidas).
- *  2. Vencer: PENDIENTE con `vence` < ahora → VENCIDA.
+ *  2. Vencer: PENDIENTE o RECHAZADA con `vence` < ahora → VENCIDA.
  *  3. Ausente (sin marcación tras la tolerancia) con tarea crítica → aviso al encargado.
  *  4. Avisos según `ft_regla_aviso` (dedupe `ft_aviso_enviado`), escalamiento y nivel 3 →
  *     `ft_propuesta_falta` PENDIENTE (ver avisos.ts). Otros pasos: `registrarPasoTickFt`.
@@ -40,6 +40,7 @@ import {
 import { FT_CLAVES, escribirConfigFt, intervaloMotorMin, motorFtActivo } from './config';
 import { cargoVigenteDe, funcionarioVigente, turnoVigenteDe } from './vigencia';
 import { pasoAusentesFt, pasoAvisosFt } from './avisos';
+import { enTransaccionSiPostgres } from '../../utils/tx.utils';
 
 // ───────────────────────── Reglas puras ─────────────────────────
 
@@ -84,7 +85,7 @@ export function aplicaEnDia(p: FtPlantillaTarea, dia: string): boolean {
 /**
  * Ventana [inicio, vence] de la plantilla para el día de entrada al turno.
  * Sin turno solo hay ventana con HORA_FIJA (§9). En un turno nocturno, una HORA_FIJA
- * anterior a la salida (00:00–salida) cae en la madrugada siguiente (sigue siendo la tarea
+ * anterior o igual a la salida (00:00–salida inclusive) cae en la madrugada siguiente (sigue siendo la tarea
  * de ese turno).
  */
 export function ventanaDe(p: FtPlantillaTarea, dia: string, turno: Turno | null): { inicio: Date; vence: Date } | null {
@@ -106,7 +107,7 @@ export function ventanaDe(p: FtPlantillaTarea, dia: string, turno: Turno | null)
       const h = hhmm(p.horaFija);
       if (!h) return null;
       // Turno nocturno: una hora entre 00:00 y la salida es la madrugada del día siguiente.
-      const madrugada = nocturno && minutosDe(h) < minutosDe(hhmm(t!.horaSalida)!);
+      const madrugada = nocturno && minutosDe(h) <= minutosDe(hhmm(t!.horaSalida)!);
       base = enHora(dia, h, madrugada ? 1 : 0);
       break;
     }
@@ -190,15 +191,29 @@ async function cargarFuncionariosFt(ds: DataSource): Promise<ContextoFuncionario
 }
 
 /**
- * INSERT idempotente de una tarea (con sus ítems de checklist) en una transacción.
+ * INSERT idempotente de una tarea (con sus ítems de checklist).
  * Devuelve 'NUEVA' o 'EXISTE' (UNIQUE: ya la generó otro tick / otra PC / el mismo evento).
+ *
+ * Postgres: una transacción (tarea + ítems juntos). SQLite: sin transacción propia (ver
+ * `enTransaccionSiPostgres`: en SQLite una transacción intercalada comparte la física con, p. ej.,
+ * `createVenta`, y su ROLLBACK desharía escrituras ajenas). Ahí se chequea antes si ya existe, el
+ * INSERT suelto que choca con el UNIQUE solo falla esa sentencia, y si fallan los ítems se borra
+ * la tarea recién creada (compensación) para que el próximo tick la vuelva a generar entera.
  */
 async function insertarTareaFt(
   ds: DataSource, p: FtPlantillaTarea, funcionarioId: number, dia: string,
   v: { inicio: Date; vence: Date }, origen: FtOrigenTarea, eventoRef: string,
 ): Promise<'NUEVA' | 'EXISTE'> {
+  const pg = ds.options.type === 'postgres';
+  if (!pg) {
+    const ya = await ds.getRepository(FtTarea).createQueryBuilder('t')
+      .where('t.plantilla_id = :p AND t.funcionario_id = :f AND t.fecha = :d AND t.evento_ref = :e', { p: p.id, f: funcionarioId, d: dia, e: eventoRef })
+      .getCount();
+    if (ya) return 'EXISTE';
+  }
+  let creadaId: number | null = null;
   try {
-    await ds.transaction(async (m) => {
+    await enTransaccionSiPostgres(ds, async (m) => {
       const tarea = await m.getRepository(FtTarea).save(m.getRepository(FtTarea).create({
         plantilla: { id: p.id } as any,
         funcionario: { id: funcionarioId } as any,
@@ -212,6 +227,7 @@ async function insertarTareaFt(
         origen,
         eventoRef,
       } as any) as unknown as FtTarea);
+      creadaId = tarea.id;
       if (p.tipo === FtTipoTarea.CHECKLIST) {
         const items = [...(p.items ?? [])].sort((a, b) => (a.orden - b.orden) || (a.id - b.id));
         for (const it of items) {
@@ -223,6 +239,11 @@ async function insertarTareaFt(
     });
     return 'NUEVA';
   } catch (e) {
+    if (!pg && creadaId) {
+      // SQLite: deshacer a mano lo que quedó a medias (no hubo transacción).
+      await ds.getRepository(FtTareaItem).delete({ tarea: { id: creadaId } } as any).catch(() => undefined);
+      await ds.getRepository(FtTarea).delete({ id: creadaId } as any).catch(() => undefined);
+    }
     if (esDuplicado(e)) return 'EXISTE';
     throw e;
   }
@@ -280,12 +301,15 @@ export async function generarTareasFt(ds: DataSource, ahora: Date = ahoraFt()): 
   return res;
 }
 
-/** PENDIENTE con `vence` < ahora → VENCIDA. Devuelve cuántas vencieron. */
+/**
+ * PENDIENTE o RECHAZADA (hay que rehacerla) con `vence` < ahora → VENCIDA. Devuelve cuántas
+ * vencieron.
+ */
 export async function vencerTareasFt(ds: DataSource, ahora: Date = ahoraFt()): Promise<number> {
   const r = await ds.createQueryBuilder()
     .update(FtTarea)
     .set({ estado: FtEstadoTarea.VENCIDA } as any)
-    .where('estado = :pend', { pend: FtEstadoTarea.PENDIENTE })
+    .where('estado IN (:...abiertas)', { abiertas: [FtEstadoTarea.PENDIENTE, FtEstadoTarea.RECHAZADA] })
     .andWhere('vence < :ahora', { ahora: paramTs(ds, ahora) })
     .execute();
   return r.affected ?? 0;

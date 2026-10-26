@@ -115,8 +115,10 @@
         <ng-container matColumnDef="acciones">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let r">
-            <button mat-icon-button color="primary" matTooltip="Verificar" (click)="verificar(r)" [disabled]="cargando"><mat-icon>verified</mat-icon></button>
-            <button mat-icon-button color="warn" matTooltip="Rechazar (con motivo)" (click)="rechazar(r)" [disabled]="cargando"><mat-icon>undo</mat-icon></button>
+            <ng-container *ngIf="puedeVerificar">
+              <button mat-icon-button color="primary" matTooltip="Verificar" (click)="verificar(r)" [disabled]="cargando"><mat-icon>verified</mat-icon></button>
+              <button mat-icon-button color="warn" matTooltip="Rechazar (con motivo)" (click)="rechazar(r)" [disabled]="cargando"><mat-icon>undo</mat-icon></button>
+            </ng-container>
           </td>
         </ng-container>
         <tr mat-header-row *matHeaderRowDef="verifCols"></tr>
@@ -217,7 +219,7 @@
         <ng-container matColumnDef="acciones">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let r">
-            <ng-container *ngIf="r.estado === 'PENDIENTE'">
+            <ng-container *ngIf="r.estado === 'PENDIENTE' && puedeResolverPropuestas">
               <button mat-icon-button color="primary" matTooltip="Marcar como registrada" (click)="resolver(r, 'REGISTRADA')"><mat-icon>gavel</mat-icon></button>
               <button mat-icon-button matTooltip="Descartar" (click)="resolver(r, 'DESCARTADA')"><mat-icon>block</mat-icon></button>
             </ng-container>

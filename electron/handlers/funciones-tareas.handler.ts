@@ -36,8 +36,9 @@ import { buscarFuncionarioDeUsuario, funcionarioDeSesion } from '../utils/funcio
 import {
   ahoraFt, enHora, esDiaValido, esHoraValida, fechaLocal, fechaLocalHoy, paramTs, sumarDias, sumarMinutos,
 } from '../services/funciones-tareas/fechas';
-import { FT_CLAVES, FT_CONFIG_DEFAULTS, FT_CONFIG_EDITABLE, configFtEntero, escribirConfigFt } from '../services/funciones-tareas/config';
-import { ErrorEvidenciaFt, bytesDeBase64, esUrlEvidenciaFt, guardarEvidenciaFt } from '../services/funciones-tareas/evidencias';
+import { FT_CLAVES, FT_CONFIG_DEFAULTS, FT_CONFIG_EDITABLE, configFtEntero, esClaveEditableFt, escribirConfigFt } from '../services/funciones-tareas/config';
+import { enTransaccionSiPostgres } from '../utils/tx.utils';
+import { ErrorEvidenciaFt, borrarEvidenciaFt, bytesDeBase64, esUrlEvidenciaFt, guardarEvidenciaFt } from '../services/funciones-tareas/evidencias';
 import { cargoVigente } from '../services/funciones-tareas/vigencia';
 
 const P = {
@@ -99,6 +100,28 @@ async function existe(m: DataSource | EntityManager, ent: any, id: number | null
 function nombreFuncionario(f: Funcionario | null | undefined): string {
   const p: any = f?.persona;
   return p ? [p.nombre, p.apellido].filter(Boolean).join(' ') : '';
+}
+
+/** Segmentos de historial que escribe el verificador en `ft_tarea.nota` (no los pisa la persona). */
+const RE_SEGMENTO_HISTORIAL = /^(RECHAZO|VERIFICACIÓN): /;
+const SEP_NOTA = ' | ';
+
+/** Parte la nota en la del funcionario y los segmentos «RECHAZO: …» / «VERIFICACIÓN: …». */
+export function partirNotaFt(nota: string | null | undefined): { propia: string | null; historial: string[] } {
+  const segs = String(nota ?? '').split(SEP_NOTA).map((x) => x.trim()).filter(Boolean);
+  const historial = segs.filter((x) => RE_SEGMENTO_HISTORIAL.test(x));
+  const propia = segs.filter((x) => !RE_SEGMENTO_HISTORIAL.test(x)).join(SEP_NOTA) || null;
+  return { propia, historial };
+}
+
+/**
+ * Nota nueva del funcionario conservando el historial de la anterior. Si el cliente reenvía la
+ * nota completa (con historial), esos segmentos no se duplican.
+ */
+export function notaConHistorialFt(anterior: string | null | undefined, nuevaPropia: string | null): string | null {
+  const { historial } = partirNotaFt(anterior);
+  const propia = partirNotaFt(nuevaPropia).propia;
+  return [propia, ...historial].filter(Boolean).join(SEP_NOTA) || null;
 }
 
 export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
@@ -317,11 +340,29 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
       destino: r?.destino ? String(r.destino).trim() || null : null,
       activo: r?.activo === undefined ? true : !!r.activo,
     }));
+    // Nivel 3 (propuesta de falta) solo tiene sentido con la tarea ya vencida.
+    for (const r of reglas) {
+      if (r.nivel === 3 && r.momento !== FtMomentoAviso.AL_VENCER && r.momento !== FtMomentoAviso.ESCALAMIENTO) {
+        fail('VALIDACION', 'UNA REGLA DE NIVEL 3 VA SOLO CON AL VENCER O ESCALAMIENTO');
+      }
+    }
 
-    return dataSource.transaction(async (m) => {
+    // Transacción solo en Postgres (tx.utils). En SQLite todo lo que puede fallar se valida
+    // ANTES de la primera escritura, para no dejar la plantilla a medias.
+    return enTransaccionSiPostgres(dataSource, async (m) => {
       const repo = m.getRepository(FtPlantillaTarea);
       const ent = esEdicion ? await repo.findOneBy({ id: data.id } as any) : repo.create();
       if (!ent) fail('NO_ENCONTRADO', 'PLANTILLA NO ENCONTRADA');
+      const itemRepo = m.getRepository(FtPlantillaItem);
+      const reglaRepo = m.getRepository(FtReglaAviso);
+      const prevItems = esEdicion ? await itemRepo.find({ where: { plantilla: { id: ent.id } } as any }) : [];
+      const prevReglas = esEdicion ? await reglaRepo.find({ where: { plantilla: { id: ent.id } } as any }) : [];
+      for (const it of items) {
+        if (it.id && !prevItems.some((x) => x.id === it.id)) fail('NO_ENCONTRADO', `ÍTEM ${it.id} NO PERTENECE A LA PLANTILLA`);
+      }
+      for (const r of reglas) {
+        if (r.id && !prevReglas.some((x) => x.id === r.id)) fail('NO_ENCONTRADO', `REGLA ${r.id} NO PERTENECE A LA PLANTILLA`);
+      }
       await existe(m, Cargo, cargoId, 'CARGO');
       await existe(m, Turno, turnoId, 'TURNO');
       await existe(m, Funcionario, funcId, 'FUNCIONARIO');
@@ -373,8 +414,6 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
       const guardada = await repo.save(ent);
 
       // Ítems: upsert por id, borrar los que no vinieron.
-      const itemRepo = m.getRepository(FtPlantillaItem);
-      const prevItems = esEdicion ? await itemRepo.find({ where: { plantilla: { id: guardada.id } } as any }) : [];
       const quedan = new Set<number>();
       for (const it of items) {
         let fila = it.id ? prevItems.find((x) => x.id === it.id) : undefined;
@@ -387,8 +426,6 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
       const borrarItems = prevItems.filter((x) => !quedan.has(x.id)).map((x) => x.id);
       if (borrarItems.length) await itemRepo.delete({ id: In(borrarItems) } as any);
 
-      const reglaRepo = m.getRepository(FtReglaAviso);
-      const prevReglas = esEdicion ? await reglaRepo.find({ where: { plantilla: { id: guardada.id } } as any }) : [];
       const quedanR = new Set<number>();
       for (const r of reglas) {
         let fila = r.id ? prevReglas.find((x) => x.id === r.id) : undefined;
@@ -416,7 +453,8 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
   /** Borra solo si nunca generó tareas ni la reemplaza otra; si no, desactivarla. */
   ipcMain.handle('ft-plantillas-delete', async (_e, id: number) => {
     await ensurePermission(dataSource, getCurrentUser, P.CONFIGURAR);
-    return dataSource.transaction(async (m) => {
+    return enTransaccionSiPostgres(dataSource, async (m) => {
+      if (!(await m.getRepository(FtPlantillaTarea).count({ where: { id } as any }))) fail('NO_ENCONTRADO', 'PLANTILLA NO ENCONTRADA');
       const usadas = await m.getRepository(FtTarea).count({ where: { plantilla: { id } } as any });
       const reemplazos = await m.getRepository(FtPlantillaTarea).count({ where: { reemplazaPlantilla: { id } } as any });
       if (usadas || reemplazos) fail('EN_USO', 'LA PLANTILLA YA TIENE TAREAS O LA REEMPLAZA OTRA: DESACTIVALA EN VEZ DE BORRARLA');
@@ -436,7 +474,7 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
     const filas = await dataSource.getRepository(FtConfig).find();
     const out: Record<string, any> = { ...FT_CONFIG_DEFAULTS };
     for (const f of filas) {
-      if (f.clave in FT_CONFIG_EDITABLE) out[f.clave] = f.valor ?? '';
+      if (esClaveEditableFt(f.clave)) out[f.clave] = f.valor ?? '';
     }
     const json = (clave: string) => {
       const v = filas.find((f) => f.clave === clave)?.valor;
@@ -451,13 +489,14 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
     if (!valores || typeof valores !== 'object') fail('VALIDACION', 'NADA PARA GUARDAR');
     const limpio: [string, string][] = [];
     for (const [clave, raw] of Object.entries(valores)) {
-      const valida = FT_CONFIG_EDITABLE[clave];
+      const valida = esClaveEditableFt(clave) ? FT_CONFIG_EDITABLE[clave] : null;
       if (!valida) fail('VALIDACION', `CLAVE NO CONFIGURABLE: ${clave}`);
       const v = typeof raw === 'boolean' ? String(raw) : String(raw ?? '').trim();
       if (!valida(v)) fail('VALIDACION', `VALOR INVÁLIDO PARA ${clave}: ${v}`);
       limpio.push([clave, v]);
     }
-    await dataSource.transaction(async (m) => {
+    // Validado todo antes: en SQLite (sin transacción, tx.utils) no queda a medias por validación.
+    await enTransaccionSiPostgres(dataSource, async (m) => {
       for (const [c, v] of limpio) await escribirConfigFt(m, c, v);
     });
     return { ok: true };
@@ -548,18 +587,28 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
     const user = await ensurePermission(dataSource, getCurrentUser, P.MARCAR_PROPIAS);
     const func = await funcionarioDeSesion(dataSource, user);
     const abiertas = [FtEstadoTarea.PENDIENTE, FtEstadoTarea.RECHAZADA];
-    const res = await dataSource.transaction(async (m) => {
+    const pg = dataSource.options.type === 'postgres';
+    let fotoAnterior: string | null = null;
+    // Transacción solo en Postgres (tx.utils); ahí además se bloquea la fila de la tarea y los
+    // ítems se releen de la base, así dos marcas simultáneas del checklist no se pisan.
+    const res = await enTransaccionSiPostgres(dataSource, async (m) => {
+      if (pg) {
+        await m.getRepository(FtTarea).createQueryBuilder('t').setLock('pessimistic_write')
+          .where('t.id = :id', { id: Number(tareaId) }).getOne();
+      }
       const t = await cargarTarea(m, Number(tareaId));
       if (t.funcionario.id !== func.id) fail('NO_ENCONTRADO', 'TAREA NO ENCONTRADA');
       if (!abiertas.includes(t.estado)) fail('ESTADO_INVALIDO', `LA TAREA ESTÁ ${t.estado}: NO SE PUEDE MARCAR`);
       const ahora = ahoraFt();
       const cambios: any = {};
-      if (data?.nota !== undefined) cambios.nota = up(data.nota);
+      // La persona escribe solo su parte: el historial «RECHAZO:» / «VERIFICACIÓN:» se conserva.
+      if (data?.nota !== undefined) cambios.nota = notaConHistorialFt(t.nota, up(data.nota));
       if (data?.evidenciaUrl !== undefined) {
         const url = data.evidenciaUrl ? String(data.evidenciaUrl) : null;
-        // Solo fotos subidas con ft-tarea-subir-foto (carpeta propia, con tope de tamaño).
-        if (url && !esUrlEvidenciaFt(url)) fail('VALIDACION', 'LA FOTO SE SUBE CON ft-tarea-subir-foto');
+        // Solo fotos de ESTA tarea subidas con ft-tarea-subir-foto (carpeta propia, con tope).
+        if (url && !esUrlEvidenciaFt(url, t.id)) fail('VALIDACION', 'LA FOTO SE SUBE CON ft-tarea-subir-foto');
         cambios.evidenciaUrl = url;
+        if (t.evidenciaUrl && t.evidenciaUrl !== url) fotoAnterior = t.evidenciaUrl;
       }
 
       const itemId = Number(data?.itemId) || null;
@@ -570,6 +619,12 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
         const hecho = data?.hecho === undefined ? true : !!data.hecho;
         await m.getRepository(FtTareaItem).update({ id: it.id } as any, { hecho, hechoEn: hecho ? ahora : null } as any);
         it.hecho = hecho;
+        if (pg) {
+          // Recontar desde la base (con la fila de la tarea bloqueada): lo que marcó otro en paralelo.
+          const enBase = await m.getRepository(FtTareaItem).find({ where: { tarea: { id: t.id } } as any, relations: ['item'] });
+          const porId = new Map(enBase.map((x) => [x.id, x.hecho]));
+          for (const x of t.items ?? []) if (porId.has(x.id)) x.hecho = !!porId.get(x.id);
+        }
         const obligatoriosOk = (t.items ?? []).every((i) => i.hecho || (i.item ? !i.item.obligatorio : false));
         if (hecho && obligatoriosOk) completar = true;
       }
@@ -584,7 +639,7 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
       }
       if (completar) {
         const ev = t.plantilla?.evidencia ?? FtEvidencia.NINGUNA;
-        if (ev === FtEvidencia.NOTA && !notaFinal) {
+        if (ev === FtEvidencia.NOTA && !partirNotaFt(notaFinal).propia) {
           if (!itemId) fail('EVIDENCIA_REQUERIDA', 'ESTA TAREA PIDE UNA NOTA PARA DARLA POR HECHA');
           completar = false;
         }
@@ -601,6 +656,7 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
       }
       return t.id;
     });
+    if (fotoAnterior) borrarEvidenciaFt(fotoAnterior, res); // después del commit
     return limpiarTarea(await cargarTarea(dataSource, res));
   });
 
@@ -702,7 +758,12 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
     const vence = data?.vence ? new Date(data.vence) : sumarMinutos(inicio, entero(data?.duracionMin, 'duración', 1, 7 * 24 * 60, 60));
     if (isNaN(vence.getTime()) || vence.getTime() <= inicio.getTime()) fail('VALIDACION', 'EL VENCIMIENTO TIENE QUE SER POSTERIOR AL INICIO');
 
-    const id = await dataSource.transaction(async (m) => {
+    const itemsIn: string[] | null = Array.isArray(data?.items) && data.items.length
+      ? data.items.map((x: any) => up(typeof x === 'string' ? x : x?.texto) ?? '')
+      : null;
+    if (itemsIn?.some((x) => !x)) fail('VALIDACION', 'HAY UN ÍTEM SIN TEXTO');
+    // Transacción solo en Postgres (tx.utils): en SQLite se valida todo antes de escribir.
+    const id = await enTransaccionSiPostgres(dataSource, async (m) => {
       await existe(m, Funcionario, funcId, 'FUNCIONARIO');
       const plantilla = plantillaId
         ? await m.getRepository(FtPlantillaTarea).findOne({ where: { id: plantillaId } as any, relations: ['items'] })
@@ -726,8 +787,8 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
       } as any) as unknown as FtTarea;
       await setEntityUserTracking(dataSource, t, user.id, false);
       const g = await repo.save(t);
-      const textos: { texto: string; itemId: number | null }[] = Array.isArray(data?.items) && data.items.length
-        ? data.items.map((x: any) => ({ texto: up(typeof x === 'string' ? x : x?.texto) ?? '', itemId: null }))
+      const textos: { texto: string; itemId: number | null }[] = itemsIn
+        ? itemsIn.map((texto) => ({ texto, itemId: null }))
         : plantilla?.tipo === FtTipoTarea.CHECKLIST
           ? [...(plantilla.items ?? [])].sort((a, b) => (a.orden - b.orden) || (a.id - b.id)).map((i) => ({ texto: i.texto, itemId: i.id }))
           : [];
@@ -770,7 +831,12 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
     }
     const r = await dataSource.createQueryBuilder().update(FtTarea).set({ evidenciaUrl: guardada.url } as any)
       .where('id = :id', { id: t.id }).andWhere('estado IN (:...ab)', { ab: abiertas }).execute();
-    if (!r.affected) fail('ESTADO_INVALIDO', 'LA TAREA CAMBIÓ DE ESTADO, VOLVÉ A CARGARLA');
+    if (!r.affected) {
+      borrarEvidenciaFt(guardada.url, t.id); // no quedó vinculada
+      fail('ESTADO_INVALIDO', 'LA TAREA CAMBIÓ DE ESTADO, VOLVÉ A CARGARLA');
+    }
+    // Cambió la foto: la anterior de esta tarea ya no la referencia nadie.
+    if (t.evidenciaUrl && t.evidenciaUrl !== guardada.url) borrarEvidenciaFt(t.evidenciaUrl, t.id);
     return { url: guardada.url, bytes: guardada.bytes, tarea: limpiarTarea(await cargarTarea(dataSource, t.id)) };
   });
 

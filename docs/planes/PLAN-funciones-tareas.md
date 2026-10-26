@@ -54,7 +54,7 @@ Fechas: helpers de `electron/services/disciplina/fechas.ts` y `fechaParamSql` (l
 - Cada tick, para hoy (y ayer hasta el fin de un turno nocturno que cruza medianoche):
   1. Generar: funcionarios activos × cargo vigente × turno vigente × plantillas aplicables → `INSERT` idempotente (UNIQUE). Las específicas se suman a las generales o las reemplazan.
   2. Ausente (sin marcación tras la tolerancia) con tarea crítica → aviso al encargado para reasignar (no reasigna solo).
-  3. Avisos según `ft_regla_aviso`, dedupe con clave `ft:<tarea>:<momento>:<nivel>`.
+  3. Avisos según `ft_regla_aviso`, dedupe con clave `ft:<tarea>:<momento>:<nivel>:r<regla>`.
   4. Vencer: `PENDIENTE` con `vence < ahora` → `VENCIDA`.
   5. Nivel 3 (reincidencia configurable, ej. 3 vencidas en 30 días): crea una **propuesta** de hecho en Disciplina pendiente de aprobación; nunca multa directa.
 - Eventos: hooks en los handlers de abrir/cerrar caja y recepción de compra llaman `ftOnEvento(tipo, ref)` **después del commit** y dentro de try/catch (un fallo del módulo nunca rompe la caja). **Toca punto de venta → prueba real de abrir/cerrar caja en sandbox antes del merge.**

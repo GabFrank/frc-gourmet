@@ -3,7 +3,7 @@
  * Ver docs/planes/PLAN-funciones-tareas.md §4, §10 (A1, A5, A6) y §11 (C2, C3).
  *
  * Dedupe atómico: cada aviso se INSERTA en `ft_aviso_enviado` (UNIQUE clave
- * `ft:<tarea>:<momento>:<nivel>`) ANTES de enviarlo. Si el INSERT choca, otro tick u otra PC
+ * `ft:<tarea>:<momento>:<nivel>:r<regla>`; el de ausente, `ft:<tarea>:AUSENTE:1`) ANTES de enviarlo. Si el INSERT choca, otro tick u otra PC
  * ya lo tomó y no se envía de nuevo. Un envío fallido queda FALLIDO y se reintenta (máx.
  * `MAX_INTENTOS`, solo dentro de la `GRACIA_MIN`).
  *
@@ -38,6 +38,7 @@ import { dispatchEvento, enviarDirecto, isGlobalActivo } from '../notificacion.s
 import { diaDe, enHora, paramTs, sumarDias, sumarMinutos } from './fechas';
 import { FT_CLAVES, configFt, configFtEntero } from './config';
 import { cargoVigenteDe, turnoVigenteDe } from './vigencia';
+import { enTransaccionSiPostgres } from '../../utils/tx.utils';
 
 /** Evento del catálogo de notificaciones con el que sale el aviso al grupo ADM (ya sembrado). */
 export const EVENTO_NOTIF_FT = 'RECORDATORIO_TAREA';
@@ -72,8 +73,12 @@ function enviador(): EnviadorFt {
 
 // ───────────────────────── Utilidades ─────────────────────────
 
-export function claveAvisoFt(tareaId: number, momento: string, nivel: number): string {
-  return `ft:${tareaId}:${momento}:${nivel}`;
+/**
+ * Clave de dedupe. Con `reglaId` (avisos por regla) la regla entra en la clave: dos reglas del
+ * mismo momento y nivel con distintos minutos son dos avisos distintos.
+ */
+export function claveAvisoFt(tareaId: number, momento: string, nivel: number, reglaId?: number | null): string {
+  return reglaId ? `ft:${tareaId}:${momento}:${nivel}:r${reglaId}` : `ft:${tareaId}:${momento}:${nivel}`;
 }
 
 export function esDuplicadoFt(e: any): boolean {
@@ -160,6 +165,9 @@ export type ResultadoAvisoFt = 'DUPLICADO' | FtEstadoAviso;
 /**
  * Inserta el aviso (dedupe) y lo despacha según el canal. `antesDeEnviar` corre en la misma
  * transacción que el INSERT (nivel 3: crear la propuesta), así aviso y propuesta van juntos.
+ * Solo en Postgres (`enTransaccionSiPostgres`): en SQLite se compensa a mano (si falla
+ * `antesDeEnviar`, se borra el aviso recién insertado para que el próximo tick lo reintente).
+ * Un aviso registrado de nivel mayor sube `ft_tarea.nivel_escalado`.
  */
 export async function registrarAvisoFt(
   ds: DataSource, a: AvisoNuevoFt, ahora: Date,
@@ -181,19 +189,30 @@ export async function registrarAvisoFt(
     createdAt: ahora,
   } as any;
   let id: number;
+  let insertado: number | null = null;
   try {
-    // Sin trabajo extra, un INSERT suelto (no se abre transacción: en SQLite dos transacciones
-    // intercaladas del mismo proceso comparten la física, ver withAperturaCajaLock).
+    // Sin trabajo extra, un INSERT suelto. Con trabajo extra, transacción solo en Postgres: en
+    // SQLite dos transacciones intercaladas del mismo proceso comparten la física (tx.utils).
     id = antesDeEnviar
-      ? await ds.transaction(async (m) => {
+      ? await enTransaccionSiPostgres(ds, async (m) => {
         const r = await m.getRepository(FtAvisoEnviado).insert(fila);
+        insertado = Number(r.identifiers[0]?.id) || null;
         await antesDeEnviar(m);
         return Number(r.identifiers[0]?.id);
       })
       : Number((await ds.getRepository(FtAvisoEnviado).insert(fila)).identifiers[0]?.id);
   } catch (e) {
+    if (insertado && ds.options.type !== 'postgres') {
+      await ds.getRepository(FtAvisoEnviado).delete({ id: insertado } as any).catch(() => undefined);
+    }
     if (esDuplicadoFt(e)) return 'DUPLICADO';
     throw e;
+  }
+  if (a.tareaId && a.momento !== FtMomentoAvisoRegistro.AUSENTE && a.nivel > 0) {
+    // Escalamiento alcanzado (solo sube): lo leen el tablero y los reportes.
+    await ds.createQueryBuilder().update(FtTarea).set({ nivelEscalado: a.nivel } as any)
+      .where('id = :id', { id: a.tareaId }).andWhere('nivel_escalado < :n', { n: a.nivel })
+      .execute().catch((e: any) => console.warn(`[ft-avisos] nivel_escalado tarea=${a.tareaId}:`, e?.message ?? e));
   }
   const repo = ds.getRepository(FtAvisoEnviado);
   if (a.canal === FtCanalAviso.GERENTE) {
@@ -278,7 +297,8 @@ function momentoDe(r: FtReglaAviso, t: FtTarea): Date {
 export function correspondeAvisoFt(r: FtReglaAviso, t: FtTarea, ahora: Date): boolean {
   const antes = r.momento === FtMomentoAviso.ANTES_INICIO || r.momento === FtMomentoAviso.ANTES_VENCER;
   if (antes) {
-    if (t.estado !== FtEstadoTarea.PENDIENTE || ahora.getTime() >= new Date(t.vence).getTime()) return false;
+    // RECHAZADA = hay que rehacerla: cuenta igual que PENDIENTE.
+    if ((t.estado !== FtEstadoTarea.PENDIENTE && t.estado !== FtEstadoTarea.RECHAZADA) || ahora.getTime() >= new Date(t.vence).getTime()) return false;
   } else if (t.estado !== FtEstadoTarea.VENCIDA) {
     return false;
   }
@@ -321,7 +341,7 @@ export async function pasoAvisosFt(ds: DataSource, ctx: { ahora: Date; hoy: stri
     .innerJoinAndSelect('t.funcionario', 'f')
     .leftJoinAndSelect('f.persona', 'pe')
     .where('p.id IN (:...pids)', { pids: [...porPlantilla.keys()] })
-    .andWhere('t.estado IN (:...es)', { es: [FtEstadoTarea.PENDIENTE, FtEstadoTarea.VENCIDA] })
+    .andWhere('t.estado IN (:...es)', { es: [FtEstadoTarea.PENDIENTE, FtEstadoTarea.RECHAZADA, FtEstadoTarea.VENCIDA] })
     .andWhere('t.fecha >= :desde', { desde: sumarDias(hoy, -DIAS_ATRAS) })
     .getMany();
   if (!tareas.length) return res;
@@ -341,7 +361,7 @@ export async function pasoAvisosFt(ds: DataSource, ctx: { ahora: Date; hoy: stri
   for (const t of tareas) {
     for (const r of porPlantilla.get(t.plantilla!.id) ?? []) {
       const nivel = Number(r.nivel) || 1;
-      const clave = claveAvisoFt(t.id, r.momento, nivel);
+      const clave = claveAvisoFt(t.id, r.momento, nivel, r.id);
       if (ya.has(clave) || !correspondeAvisoFt(r, t, ahora)) continue;
       const base = {
         clave, tareaId: t.id, momento: r.momento as unknown as FtMomentoAvisoRegistro, nivel,
@@ -358,12 +378,22 @@ export async function pasoAvisosFt(ds: DataSource, ctx: { ahora: Date; hoy: stri
           }
           const hasta = diaDe(t.fecha)!;
           const desde = sumarDias(hasta, -(ventana - 1));
-          const vencidas = await ds.getRepository(FtTarea).createQueryBuilder('x')
+          // Las vencidas que ya sostuvieron una propuesta resuelta (REGISTRADA o DESCARTADA) de
+          // esta plantilla y funcionario no vuelven a contar: solo las posteriores a esa tarea.
+          const ultimaResuelta = await ds.getRepository(FtPropuestaFalta).createQueryBuilder('pf')
+            .innerJoinAndSelect('pf.tarea', 'xt')
+            .where('pf.funcionario_id = :f', { f: t.funcionario.id })
+            .andWhere('xt.plantilla_id = :p', { p: t.plantilla!.id })
+            .andWhere('pf.estado <> :e', { e: FtEstadoPropuesta.PENDIENTE })
+            .orderBy('xt.vence', 'DESC')
+            .getOne();
+          const qv = ds.getRepository(FtTarea).createQueryBuilder('x')
             .where('x.funcionario_id = :f', { f: t.funcionario.id })
             .andWhere('x.plantilla_id = :p', { p: t.plantilla!.id })
             .andWhere('x.estado = :v', { v: FtEstadoTarea.VENCIDA })
-            .andWhere('x.fecha >= :desde AND x.fecha <= :hasta', { desde, hasta })
-            .getCount();
+            .andWhere('x.fecha >= :desde AND x.fecha <= :hasta', { desde, hasta });
+          if (ultimaResuelta?.tarea) qv.andWhere('x.vence > :corte', { corte: paramTs(ds, new Date(ultimaResuelta.tarea.vence)) });
+          const vencidas = await qv.getCount();
           if (vencidas < umbral) continue;
           const abierta = await ds.getRepository(FtPropuestaFalta).createQueryBuilder('pf')
             .innerJoin('pf.tarea', 'xt')

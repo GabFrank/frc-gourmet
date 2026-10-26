@@ -52,7 +52,28 @@ export function guardarEvidenciaFt(base64: string, tareaId: number, maxBytes: nu
   return { url: `app://${CARPETA_EVIDENCIAS_FT}/${nombre}`, bytes: buf.length };
 }
 
-/** Si una URL de evidencia es de la carpeta propia (lo único que acepta ft-tarea-marcar). */
-export function esUrlEvidenciaFt(url: string): boolean {
-  return /^app:\/\/ft-evidencias\/ftev-[\w.-]+$/.test(url) && !url.includes('..');
+const RE_URL_EVIDENCIA = /^app:\/\/ft-evidencias\/ftev-(\d+)-[A-Za-z0-9-]+\.(jpg|png|webp)$/;
+
+/**
+ * Si una URL de evidencia es de la carpeta propia, con el nombre que pone `guardarEvidenciaFt`
+ * (`ftev-<tareaId>-<ts>-<rand>.jpg|png|webp`). Con `tareaId`, además tiene que ser de ESA tarea (lo único
+ * que acepta ft-tarea-marcar: no se reusa la foto de otra tarea).
+ */
+export function esUrlEvidenciaFt(url: string, tareaId?: number): boolean {
+  const m = RE_URL_EVIDENCIA.exec(String(url ?? ''));
+  if (!m) return false;
+  return tareaId === undefined || Number(m[1]) === Number(tareaId);
+}
+
+/** Borra (best effort) la foto de evidencia de esa tarea. Solo archivos `ftev-<tareaId>-…`. */
+export function borrarEvidenciaFt(url: string | null | undefined, tareaId: number): boolean {
+  if (!url || !esUrlEvidenciaFt(url, tareaId)) return false;
+  try {
+    const abs = path.join(app.getPath('userData'), CARPETA_EVIDENCIAS_FT, url.replace(`app://${CARPETA_EVIDENCIAS_FT}/`, ''));
+    if (fs.existsSync(abs)) fs.unlinkSync(abs);
+    return true;
+  } catch (e: any) {
+    console.warn('[ft-evidencias] no se pudo borrar', url, e?.message ?? e);
+    return false;
+  }
 }

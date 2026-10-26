@@ -21,6 +21,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { PromptDialogComponent, PromptDialogData } from '../../../../shared/components/prompt-dialog/prompt-dialog.component';
+import { PermissionService } from '../../../../services/permission.service';
 import {
   FT_CANALES, FT_ESTADOS_AVISO, FT_ESTADOS_PROPUESTA, FuncionesTareasApiService, ftMensajeError,
 } from '../funciones-tareas-api.service';
@@ -90,7 +91,22 @@ export class TableroFuncionesTareasComponent implements OnInit {
   propEstado: string | null = 'PENDIENTE';
   readonly propCols = ['creadaEn', 'funcionario', 'tarea', 'motivo', 'estado', 'acciones'];
 
-  constructor(private api: FuncionesTareasApiService, private snack: MatSnackBar, private dialog: MatDialog) {}
+  constructor(
+    private api: FuncionesTareasApiService,
+    private snack: MatSnackBar,
+    private dialog: MatDialog,
+    private permisos: PermissionService,
+  ) {}
+
+  /** Verificar / rechazar (el backend exige RRHH_FT_VERIFICAR). Sin él no se muestran los botones. */
+  get puedeVerificar(): boolean {
+    return this.permisos.has('RRHH_FT_VERIFICAR');
+  }
+
+  /** Registrar / descartar una propuesta (el backend acepta RRHH_FT_VERIFICAR o RRHH_FT_CONFIGURAR). */
+  get puedeResolverPropuestas(): boolean {
+    return this.permisos.hasAny(['RRHH_FT_VERIFICAR', 'RRHH_FT_CONFIGURAR']);
+  }
 
   /** Pide un texto en un diálogo; undefined si se cancela. */
   private async pedirTexto(data: PromptDialogData): Promise<string | undefined> {

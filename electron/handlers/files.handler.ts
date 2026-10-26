@@ -10,6 +10,7 @@ import {
   SaveFileInput,
   SaveFileResult,
   inferMimeType,
+  isCarpetaEscribible,
   saveFileToBucket,
 } from '../utils/file-save.utils';
 
@@ -45,6 +46,9 @@ export function registerFilesHandlers(
 
   ipcMain.handle('delete-file', async (_event, input: { url: string }): Promise<{ ok: boolean }> => {
     await ensurePermission(dataSource, getCurrentUser, 'DOCUMENTOS_ADJUNTOS_ELIMINAR');
+    // Buckets de solo lectura (ft-evidencias): los borra solo su módulo.
+    const parsed = carpetaFromUrl(String(input?.url ?? ''));
+    if (!parsed || !isCarpetaEscribible(parsed.carpeta)) return { ok: false };
     const abs = urlToAbsolute(input.url);
     if (!abs) return { ok: false };
     try {

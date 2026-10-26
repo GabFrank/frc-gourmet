@@ -4,7 +4,7 @@ import { FtTarea } from './ft-tarea.entity';
 import { FtCanalAviso, FtEstadoAviso, FtMomentoAvisoRegistro } from './ft.enums';
 
 /**
- * Registro y dedupe de avisos: se inserta ANTES de enviar (UNIQUE clave `ft:<tarea>:<momento>:<nivel>`).
+ * Registro y dedupe de avisos: se inserta ANTES de enviar (UNIQUE clave `ft:<tarea>:<momento>:<nivel>:r<regla>`; ausente: `ft:<tarea>:AUSENTE:1`).
  * Con canal GERENTE la app no envía: queda PARA_GERENTE y el bot Gerente lo lee con `ft-avisos`.
  */
 @Entity('ft_aviso_enviado')
