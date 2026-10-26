@@ -69,6 +69,16 @@ import { DrParticipacion } from './entities/rrhh/disciplina/dr-participacion.ent
 import { DrVotoAgregado } from './entities/rrhh/disciplina/dr-voto-agregado.entity';
 import { DrRespuestaTexto } from './entities/rrhh/disciplina/dr-respuesta-texto.entity';
 import { DrLiquidacionPendiente } from './entities/rrhh/disciplina/dr-liquidacion-pendiente.entity';
+// RRHH - Funciones y Tareas (tablas ft_*)
+import { FtFuncion } from './entities/rrhh/funciones-tareas/ft-funcion.entity';
+import { FtPlantillaTarea } from './entities/rrhh/funciones-tareas/ft-plantilla-tarea.entity';
+import { FtPlantillaItem } from './entities/rrhh/funciones-tareas/ft-plantilla-item.entity';
+import { FtReglaAviso } from './entities/rrhh/funciones-tareas/ft-regla-aviso.entity';
+import { FtTarea } from './entities/rrhh/funciones-tareas/ft-tarea.entity';
+import { FtTareaItem } from './entities/rrhh/funciones-tareas/ft-tarea-item.entity';
+import { FtConfig } from './entities/rrhh/funciones-tareas/ft-config.entity';
+import { FtAvisoEnviado } from './entities/rrhh/funciones-tareas/ft-aviso-enviado.entity';
+import { FtPropuestaFalta } from './entities/rrhh/funciones-tareas/ft-propuesta-falta.entity';
 import { Feriado } from './entities/rrhh/feriado.entity';
 import { HoraExtra } from './entities/rrhh/hora-extra.entity';
 import { Vale } from './entities/rrhh/vale.entity';
@@ -321,6 +331,7 @@ import { PagoConsolidadoDetalleCuentaDestino1789587032713 } from './migrations/1
 import { MovimientoBancarioCuentaDestino1789587049751 } from './migrations/1789587049751-MovimientoBancarioCuentaDestino';
 import { CajaUnicaAbiertaPorDispositivo1790617935368 } from './migrations/1790617935368-CajaUnicaAbiertaPorDispositivo';
 import { DisciplinaReconocimiento1792785488053 } from './migrations/1792785488053-DisciplinaReconocimiento';
+import { FuncionesTareas1793042064365 } from './migrations/1793042064365-FuncionesTareas';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -491,6 +502,16 @@ function getEntitiesList(): any[] {
       DrVotoAgregado,
       DrRespuestaTexto,
       DrLiquidacionPendiente,
+      // Funciones y Tareas
+      FtFuncion,
+      FtPlantillaTarea,
+      FtPlantillaItem,
+      FtReglaAviso,
+      FtTarea,
+      FtTareaItem,
+      FtConfig,
+      FtAvisoEnviado,
+      FtPropuestaFalta,
       Feriado,
       HoraExtra,
       Vale,
@@ -778,6 +799,8 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     CajaUnicaAbiertaPorDispositivo1790617935368,
     // Disciplina y Reconocimiento (multas, premios, encuestas anónimas) — tablas dr_*
     DisciplinaReconocimiento1792785488053,
+    // Funciones y Tareas (funciones por cargo/funcionario, tareas y checklists) — tablas ft_*
+    FuncionesTareas1793042064365,
   ];
 }
 
