@@ -39,6 +39,8 @@ import { ListNotificacionesRrhhComponent } from 'src/app/pages/rrhh/notificacion
 import { ListPedidosOnlineComponent } from 'src/app/pages/ventas/pedidos-online/list-pedidos-online.component';
 import { MesasQrComponent } from 'src/app/pages/ventas/pedidos-online/mesas-qr/mesas-qr.component';
 import { ListPenalizacionesComponent } from 'src/app/pages/rrhh/penalizaciones/list-penalizaciones.component';
+import { ConfigFuncionesTareasComponent } from 'src/app/pages/rrhh/funciones-tareas/config-funciones-tareas/config-funciones-tareas.component';
+import { TableroFuncionesTareasComponent } from 'src/app/pages/rrhh/funciones-tareas/tablero-funciones-tareas/tablero-funciones-tareas.component';
 import { ListPermisosComponent } from 'src/app/pages/personalizacion/permisos/list-permisos/list-permisos.component';
 import { ListPersonasComponent } from 'src/app/pages/personas/personas/list-personas.component';
 import { ListPlantillasComponent } from 'src/app/pages/facturacion/plantillas/list-plantillas/list-plantillas.component';
@@ -402,6 +404,17 @@ export const MENU_TREE: MenuNode[] = [
           { id: 'vacaciones', label: 'Vacaciones', icon: 'beach_access', permiso: 'RRHH_VACACION_GESTIONAR',
             keywords: ['vacaciones', 'descanso'],
             action: { component: ListVacacionesComponent, title: 'Vacaciones', tabId: 'vacaciones-tab', data: NAV } },
+        ],
+      },
+      {
+        id: 'grp-rrhh-ft', label: 'Funciones y tareas', icon: 'task_alt',
+        children: [
+          { id: 'ft-tablero', label: 'Tablero de tareas', icon: 'insights', permiso: 'RRHH_FT_VER_TODO',
+            keywords: ['tareas', 'funciones', 'checklist', 'cumplimiento', 'vencidas', 'avisos', 'propuestas'],
+            action: { component: TableroFuncionesTareasComponent, title: 'Tablero de tareas', tabId: 'ft-tablero-tab', data: NAV } },
+          { id: 'ft-config', label: 'Configurar funciones y tareas', icon: 'playlist_add_check', permiso: 'RRHH_FT_CONFIGURAR', esConfig: true,
+            keywords: ['tareas', 'funciones', 'plantillas', 'checklist', 'avisos', 'motor'],
+            action: { component: ConfigFuncionesTareasComponent, title: 'Funciones y tareas', tabId: 'ft-config-tab', data: NAV } },
         ],
       },
       {
