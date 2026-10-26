@@ -1,0 +1,44 @@
+<h2 mat-dialog-title>Registrar error</h2>
+<mat-dialog-content>
+  <form *ngIf="!guardado" [formGroup]="form" class="grid" (ngSubmit)="guardar()">
+    <mat-form-field appearance="outline">
+      <mat-label>Tipo de error</mat-label>
+      <mat-select formControlName="tipoErrorId" required>
+        <mat-option *ngFor="let t of data.tiposError" [value]="t.id">{{ t.nombre }}</mat-option>
+      </mat-select>
+      <mat-hint *ngIf="data.tiposError.length === 0">No hay tipos de error activos: configuralos primero.</mat-hint>
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Fecha</mat-label>
+      <input matInput [matDatepicker]="dp" formControlName="fecha" required />
+      <mat-datepicker-toggle matSuffix [for]="dp"></mat-datepicker-toggle>
+      <mat-datepicker #dp></mat-datepicker>
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="completo">
+      <mat-label>Funcionarios</mat-label>
+      <mat-select formControlName="funcionarioIds" multiple required>
+        <mat-option *ngFor="let f of data.funcionarios" [value]="f.id">{{ f.nombre }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="completo">
+      <mat-label>Detalle</mat-label>
+      <textarea matInput rows="2" formControlName="detalle" class="mayus"></textarea>
+    </mat-form-field>
+    <button type="submit" hidden></button>
+  </form>
+  <div *ngIf="guardado" class="resultado">
+    <p class="ok"><mat-icon>check_circle</mat-icon><span>Error registrado. Los puntos son los de la gravedad vigente hoy.</span></p>
+    <table class="tabla-resultado">
+      <tr><th>Funcionario</th><th class="num">Puntos</th></tr>
+      <tr *ngFor="let c of creados"><td>{{ c.nombre }}</td><td class="num">{{ c.puntos | number:'1.0-2' }}</td></tr>
+    </table>
+  </div>
+  <p class="error" *ngIf="error"><mat-icon>error</mat-icon><span>{{ error }}</span></p>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="cerrar()" [disabled]="guardando">{{ guardado ? 'Cerrar' : 'Cancelar' }}</button>
+  <button *ngIf="!guardado" mat-flat-button color="primary" type="button" (click)="guardar()" [disabled]="form.invalid || guardando">
+    <mat-progress-spinner *ngIf="guardando" mode="indeterminate" diameter="18"></mat-progress-spinner>
+    Registrar
+  </button>
+</mat-dialog-actions>

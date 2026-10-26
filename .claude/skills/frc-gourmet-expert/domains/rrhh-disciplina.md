@@ -5,9 +5,9 @@
 > métodos de cálculo. Lo aprobado se materializa como **`Penalizacion` / `Bono` normales**
 > marcados con el prefijo `[DR]`, así la liquidación de sueldo los toma sin cambios.
 >
-> **Fase 1 (PR #313): solo backend.** Entidades `dr_*`, migración, permisos, motor puro,
-> handlers RPC y tres suites de test. **No hay pantallas todavía** (fase 2 desktop,
-> fase 3 PWA). Todo se ejercita por IPC / `POST /api/rpc`.
+> **Fase 1 (PR #313):** backend (entidades `dr_*`, migración, permisos, motor puro,
+> handlers RPC y tres suites de test). **Fase 2:** pantallas desktop. **Fase 3:** pantallas
+> PWA mobile (ver «Pantallas mobile»).
 
 ## Principios de diseño (el porqué)
 
@@ -116,6 +116,10 @@ REGISTRADA ──(funcionario apela, dentro del plazo)──▶ APELADA
    - Tardanza con `minutos ≤ toleranciaMinutos` → resultado NINGUNO: **no se crea la falta**.
    - `apelacionVence = ahora + plazoApelacionHoras`.
    - Devuelve `{ creadas, loteId, ignoradas }`.
+   - **Vista previa** (`dr-preview-falta`, `RRHH_DR_REGISTRAR`, solo lectura): mismos datos
+     de entrada, mismo cálculo (`calcularFalta` + chequeo de tardanza), no guarda nada.
+     Devuelve `{ items: [{ funcionarioId, resultado: ADVERTENCIA|MULTA|NINGUNO|IGNORADA,
+     monto, nOcurrencia, motivo? }], simbolo }`. La usa la PWA para no duplicar el motor.
 2. **Apelación** (`dr-apelar-falta`, `RRHH_DR_MIS_DATOS`, solo el dueño de la falta): exige
    texto, plazo vigente (`PLAZO_VENCIDO`) y que no haya renunciado (`RENUNCIO_APELACION`).
    UPDATE condicional `estado=REGISTRADA AND renunciaApelacion=false` → APELADA.
@@ -218,6 +222,25 @@ es idempotente: mismas entradas → mismo resultado.
 `[DR] <PREMIO> (PERÍODO <id>)`, `autorizadoPor` = aprobador), con UPDATE condicional sobre
 el resultado, y pasa el período a APROBADO.
 
+Fase 4 — antes de aprobar: `dr-get-resultados-premio` devuelve el ranking guardado (ids,
+estado, montos) y `dr-ajustar-resultado-premio` permite corregir el monto a pagar
+(`montoAprobado`) o elegir/quitar ganador a mano (empate `DESIERTO` o sin mínimo de votantes:
+al elegir uno, el período DESIERTO pasa a PROPUESTO). UPDATE condicional por estado, queda
+«AJUSTE MANUAL POR <usuario>» en `observacion`; nunca sobre APROBADO.
+
+## Tablero y reporte por persona (fase 4)
+
+`disciplina-reportes.handler.ts`, solo lectura (`RRHH_DR_APROBAR` o `RRHH_DR_RESULTADOS_VER`),
+rango de fechas locales ≤ 366 días:
+- `dr-tablero({ desde, hasta, grupoId? })`: por funcionario, advertencias, multas, faltas sin
+  resolver, errores y puntos, puntaje diario promedio (Σ criterios por día), multas y premios en
+  sueldo y neto; más `totales`. Cuentan las faltas REGISTRADA/APELADA/APROBADA; el monto de multa
+  sale de la Penalizacion `[DR]` no anulada de las APROBADAS; el de premio, de los resultados
+  APROBADOS cuyo período termina en el rango.
+- `dr-reporte-persona({ funcionarioId, desde, hasta })`: faltas, errores, puntaje diario y
+  premios del rango, y `netoPorMes` (premios − multas por mes destino de liquidación).
+Nunca exponen votos individuales (la encuesta sigue saliendo solo por `dr-get-resultados-encuesta`).
+
 ## Integración con la liquidación de sueldo
 
 - **Mes abierto** por funcionario = sin liquidación o con liquidación BORRADOR (las ANULADAS
@@ -300,6 +323,46 @@ Por tipo de falta: `advertenciasPrevias`, `montoMulta`, `escalaMontos`, `reinici
 SEMANAL arranca el lunes (el motor acepta otro inicio, el handler no lo pasa) y la
 «advertencia de tolerancia» del motor (`advertirDentroTolerancia`) no está expuesta.
 
+## Pantallas desktop (fases 2 y 4)
+
+En `src/app/pages/rrhh/disciplina/`, desde *RRHH › Disciplina y reconocimiento*
+(`menu-tree.ts`):
+
+| Pantalla | Permiso | Qué hace |
+|---|---|---|
+| `registro-disciplina` | `RRHH_DR_REGISTRAR` | Pestañas Faltas y Errores: registrar (diálogos `registrar-falta-dialog`, `registrar-error-dialog`) e historial filtrable |
+| `aprobaciones-disciplina` | `RRHH_DR_APROBAR` | Pestañas Pendientes, Apeladas y Premios (fase 4: cerrar período abierto, ranking con monto editable y elegir/quitar ganador antes de aprobar) |
+| `resultados-disciplina` | `RRHH_DR_RESULTADOS_VER` | Fase 4. Tablero (tarjetas por persona con semáforo: rojo neto < 0, amarillo con hechos, verde limpio), Por persona (neto por mes de sueldo, export CSV) y Encuesta (promedios por persona y pregunta, % de «Sí», comentarios mezclados; nada si no hay mínimo de votantes) |
+| `config-disciplina` | `RRHH_DR_CONFIGURAR` | Catálogos genéricos por pestaña (formulario `dr-form-dialog`) y botón «Cargar ejemplo Cocina» |
+
+`disciplina-api.service.ts` envuelve los canales `dr-*`. Los datos de ejemplo
+(`ejemplo-cocina.ts`) son solo semilla editable: los carga `cargarEjemploCocina`, que es
+idempotente y se prueba con `npm run test:disciplina-ejemplo`. Para probar pantallas sin
+Electron: `scripts/ui-sandbox.ts` (app web contra una base temporal).
+
+Separación de funciones (backend): nadie resuelve un hecho que registró ni uno cargado a su
+propio funcionario (`noAutoResolver`), y quien está entre los ganadores no aprueba el premio.
+
+## Pantallas mobile (fase 3)
+
+En `projects/mobile/src/app/pages/rrhh/disciplina/` (helpers en `dr-mobile.utils.ts`),
+entradas en `RRHH_ITEMS` de `projects/mobile/src/app/app.routes.ts`. La configuración y los
+reportes quedan en desktop.
+
+| Ruta | Página | Permiso | Canales |
+|---|---|---|---|
+| `/rrhh/disciplina/falta` | `registrar-falta` | `RRHH_DR_REGISTRAR` | `dr-get-tipos-falta`, `dr-preview-falta`, `dr-registrar-falta` |
+| `/rrhh/disciplina/error` | `registrar-error` | `RRHH_DR_REGISTRAR` | `dr-get-tipos-error`, `dr-registrar-error` |
+| `/rrhh/disciplina/puntaje` | `puntaje-dia` | `RRHH_DR_PUNTUAR` | `dr-get-premios`, `dr-get-criterios`, `dr-get-grupo-miembros`, `dr-get-puntajes`, `dr-puntuar` |
+| `/rrhh/disciplina/votar` | `votacion` | `RRHH_DR_VOTAR` | `dr-mis-encuestas-pendientes`, `dr-votar` |
+| `/rrhh/disciplina/mi-resumen` | `mi-resumen` | `RRHH_DR_MIS_DATOS` | `dr-mis-faltas`, `dr-mis-puntos`, `dr-mis-premios`, `dr-apelar-falta`, `dr-renunciar-apelacion` |
+| `/rrhh/disciplina/aprobaciones` | `aprobaciones` (M6) | `RRHH_DR_APROBAR` | `dr-get-faltas`, `dr-aprobar-falta`, `dr-justificar-falta`, `dr-anular-falta` |
+
+Límites de la PWA: M6 resuelve **solo faltas** (los premios se aprueban únicamente en
+desktop); el bloqueo de «hecho propio» no se anticipa en la UI mobile, depende del error del
+backend (`noAutoResolver`); puntaje del día y votación usan `confirm()` del navegador para
+descartar cambios sin guardar.
+
 ## Handlers
 
 `disciplina.handler.ts` (faltas), `disciplina-votacion.handler.ts` (períodos y votación),
@@ -321,7 +384,7 @@ suites DR **no** están en `scripts/run-all-tests.js` (no corren con `test:all`)
 
 Manual: `docs/testing/TESTING-CHECKLIST-DISCIPLINA-RECONOCIMIENTO.md`.
 
-## Limitaciones conocidas (fase 1)
+## Limitaciones conocidas
 
 1. **Carrera en el primer INSERT del agregado de votos.** Si dos personas votan a la vez y
    la fila (período, evaluado, pregunta) todavía no existe, las dos hacen `insert` y una
@@ -330,8 +393,11 @@ Manual: `docs/testing/TESTING-CHECKLIST-DISCIPLINA-RECONOCIMIENTO.md`.
    Ver [../reference/known-bugs.md](../reference/known-bugs.md).
 2. **Doble descuento si la falta DR se carga antes que la asistencia.** El chequeo de
    tardanza solo mira las Penalizaciones automáticas que ya existen.
-3. **Sin UI.** Fase 2 (desktop: configuración, registro, aprobaciones, ejemplo Cocina) y
-   fase 3 (PWA: registro rápido, puntaje, votación, Mi resumen).
-4. Aprobar un premio **no** marca el borrador del mes como desactualizado (las faltas sí):
-   si ya había borrador, hay que regenerarlo a mano para que tome el Bono.
+3. **PWA parcial (fase 3).** Sin aprobación de premios en mobile (solo desktop); «hecho
+   propio» en mobile solo se ve al fallar el backend; descarte de puntajes/votos con
+   `confirm()` nativo. Ver «Pantallas mobile».
+4. ~~Aprobar un premio no marcaba el borrador como desactualizado~~: corregido en fase 2.
+6. Aprobar un premio toma la última propuesta guardada: si otro recalcula entre «Calcular»
+   y «Aprobar», se aprueba lo recalculado.
+7. La bandeja de aprobaciones trae hasta 1000 faltas pendientes.
 5. La apertura y el cierre automático de encuestas por día y hora no están implementados.

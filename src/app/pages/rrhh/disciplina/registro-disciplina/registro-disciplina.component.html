@@ -1,0 +1,217 @@
+<div class="contenedor-raiz">
+  <div class="page-header">
+    <div class="titulo">
+      <mat-icon>assignment_late</mat-icon>
+      <h2>Registro de disciplina</h2>
+    </div>
+  </div>
+
+  <mat-tab-group class="tabs" animationDuration="0ms">
+    <!-- ───────────── FALTAS ───────────── -->
+    <mat-tab>
+      <ng-template mat-tab-label><mat-icon class="tab-icon">gavel</mat-icon>Faltas</ng-template>
+      <div class="tab-body">
+        <mat-card class="card-flex">
+          <mat-card-content>
+            <div class="filtros">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Desde</mat-label>
+                <input matInput [matDatepicker]="fd" [(ngModel)]="fDesde" />
+                <mat-datepicker-toggle matSuffix [for]="fd"></mat-datepicker-toggle>
+                <mat-datepicker #fd></mat-datepicker>
+              </mat-form-field>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Hasta</mat-label>
+                <input matInput [matDatepicker]="fh" [(ngModel)]="fHasta" />
+                <mat-datepicker-toggle matSuffix [for]="fh"></mat-datepicker-toggle>
+                <mat-datepicker #fh></mat-datepicker>
+              </mat-form-field>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="ancho">
+                <mat-label>Funcionario</mat-label>
+                <mat-select [(ngModel)]="fFuncionarioId">
+                  <mat-option [value]="null">Todos</mat-option>
+                  <mat-option *ngFor="let f of funcionarios" [value]="f.id">{{ f.nombre }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Estado</mat-label>
+                <mat-select [(ngModel)]="fEstado">
+                  <mat-option [value]="null">Todos</mat-option>
+                  <mat-option *ngFor="let e of estadosFalta" [value]="e">{{ e }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <button mat-flat-button color="primary" (click)="cargarFaltas()" [disabled]="cargandoFaltas">
+                <mat-icon>search</mat-icon> Filtrar
+              </button>
+              <span class="spacer"></span>
+              <button mat-flat-button color="primary" (click)="registrarFalta()">
+                <mat-icon>add</mat-icon> Registrar falta
+              </button>
+            </div>
+
+            <div class="table-scroll">
+              <table mat-table [dataSource]="faltas">
+                <ng-container matColumnDef="fecha">
+                  <th mat-header-cell *matHeaderCellDef>Fecha</th>
+                  <td mat-cell *matCellDef="let f">{{ f.fecha }}</td>
+                </ng-container>
+                <ng-container matColumnDef="funcionario">
+                  <th mat-header-cell *matHeaderCellDef>Funcionario</th>
+                  <td mat-cell *matCellDef="let f">{{ f.funcionario }}</td>
+                </ng-container>
+                <ng-container matColumnDef="tipo">
+                  <th mat-header-cell *matHeaderCellDef>Tipo de falta</th>
+                  <td mat-cell *matCellDef="let f">{{ f.tipo }}</td>
+                </ng-container>
+                <ng-container matColumnDef="ocurrencia">
+                  <th mat-header-cell *matHeaderCellDef class="num">N.º</th>
+                  <td mat-cell *matCellDef="let f" class="num">{{ f.ocurrencia | number:'1.0-2' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="resultado">
+                  <th mat-header-cell *matHeaderCellDef>Resultado</th>
+                  <td mat-cell *matCellDef="let f">
+                    <span class="chip" [class.chip-rojo]="f.esMulta" [class.chip-amarillo]="!f.esMulta">{{ f.resultado }}</span>
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="monto">
+                  <th mat-header-cell *matHeaderCellDef class="num">Monto</th>
+                  <td mat-cell *matCellDef="let f" class="num">{{ f.moneda }} {{ f.monto | number:'1.0-2' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="estado">
+                  <th mat-header-cell *matHeaderCellDef>Estado</th>
+                  <td mat-cell *matCellDef="let f"><span [class]="f.claseEstado" [matTooltip]="f.resolucion">{{ f.estado }}</span></td>
+                </ng-container>
+                <ng-container matColumnDef="vence">
+                  <th mat-header-cell *matHeaderCellDef>Apelación vence</th>
+                  <td mat-cell *matCellDef="let f">{{ f.vence ? (f.vence | date:'dd/MM/yyyy HH:mm') : '-' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="observacion">
+                  <th mat-header-cell *matHeaderCellDef>Observación</th>
+                  <td mat-cell *matCellDef="let f" class="texto-largo">{{ f.observacion || '-' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="acciones">
+                  <th mat-header-cell *matHeaderCellDef class="acc-col"></th>
+                  <td mat-cell *matCellDef="let f" class="acc-col">
+                    <ng-container *appHasPermission="'RRHH_DR_APROBAR'">
+                      <button *ngIf="f.anulable" mat-icon-button [matMenuTriggerFor]="mf" [disabled]="procesandoId === f.clave">
+                        <mat-icon>more_vert</mat-icon>
+                      </button>
+                      <mat-menu #mf="matMenu">
+                        <button mat-menu-item (click)="anularFalta(f)">
+                          <mat-icon>cancel</mat-icon><span>Anular</span>
+                        </button>
+                      </mat-menu>
+                    </ng-container>
+                  </td>
+                </ng-container>
+                <tr mat-header-row *matHeaderRowDef="colsFaltas; sticky: true"></tr>
+                <tr mat-row *matRowDef="let row; columns: colsFaltas"></tr>
+              </table>
+              <div *ngIf="cargandoFaltas" class="spinner"><mat-progress-spinner mode="indeterminate" diameter="36"></mat-progress-spinner></div>
+              <div *ngIf="!cargandoFaltas && faltas.length === 0" class="vacio">Sin faltas para el filtro.</div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </mat-tab>
+
+    <!-- ───────────── ERRORES ───────────── -->
+    <mat-tab>
+      <ng-template mat-tab-label><mat-icon class="tab-icon">report</mat-icon>Errores</ng-template>
+      <div class="tab-body">
+        <mat-card class="card-flex">
+          <mat-card-content>
+            <div class="filtros">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Desde</mat-label>
+                <input matInput [matDatepicker]="ed" [(ngModel)]="eDesde" required />
+                <mat-datepicker-toggle matSuffix [for]="ed"></mat-datepicker-toggle>
+                <mat-datepicker #ed></mat-datepicker>
+              </mat-form-field>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Hasta</mat-label>
+                <input matInput [matDatepicker]="eh" [(ngModel)]="eHasta" required />
+                <mat-datepicker-toggle matSuffix [for]="eh"></mat-datepicker-toggle>
+                <mat-datepicker #eh></mat-datepicker>
+              </mat-form-field>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="ancho">
+                <mat-label>Funcionario</mat-label>
+                <mat-select [(ngModel)]="eFuncionarioId">
+                  <mat-option [value]="null">Todos</mat-option>
+                  <mat-option *ngFor="let f of funcionarios" [value]="f.id">{{ f.nombre }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Estado</mat-label>
+                <mat-select [(ngModel)]="eEstado">
+                  <mat-option [value]="null">Todos</mat-option>
+                  <mat-option *ngFor="let e of estadosError" [value]="e">{{ e }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <button mat-flat-button color="primary" (click)="cargarErrores()" [disabled]="cargandoErrores">
+                <mat-icon>search</mat-icon> Filtrar
+              </button>
+              <span class="spacer"></span>
+              <button mat-flat-button color="primary" (click)="registrarError()">
+                <mat-icon>add</mat-icon> Registrar error
+              </button>
+            </div>
+            <p class="hint">El rango de fechas filtra solo si se indican desde y hasta.</p>
+
+            <div class="table-scroll">
+              <table mat-table [dataSource]="errores">
+                <ng-container matColumnDef="fecha">
+                  <th mat-header-cell *matHeaderCellDef>Fecha</th>
+                  <td mat-cell *matCellDef="let e">{{ e.fecha }}</td>
+                </ng-container>
+                <ng-container matColumnDef="funcionario">
+                  <th mat-header-cell *matHeaderCellDef>Funcionario</th>
+                  <td mat-cell *matCellDef="let e">{{ e.funcionario }}</td>
+                </ng-container>
+                <ng-container matColumnDef="tipo">
+                  <th mat-header-cell *matHeaderCellDef>Tipo de error</th>
+                  <td mat-cell *matCellDef="let e">{{ e.tipo }}</td>
+                </ng-container>
+                <ng-container matColumnDef="gravedad">
+                  <th mat-header-cell *matHeaderCellDef>Gravedad</th>
+                  <td mat-cell *matCellDef="let e">{{ e.gravedad }}</td>
+                </ng-container>
+                <ng-container matColumnDef="puntos">
+                  <th mat-header-cell *matHeaderCellDef class="num">Puntos</th>
+                  <td mat-cell *matCellDef="let e" class="num">{{ e.puntos | number:'1.0-2' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="detalle">
+                  <th mat-header-cell *matHeaderCellDef>Detalle</th>
+                  <td mat-cell *matCellDef="let e" class="texto-largo">{{ e.detalle || '-' }}</td>
+                </ng-container>
+                <ng-container matColumnDef="estado">
+                  <th mat-header-cell *matHeaderCellDef>Estado</th>
+                  <td mat-cell *matCellDef="let e"><span [class]="e.claseEstado" [matTooltip]="e.motivo">{{ e.estado }}</span></td>
+                </ng-container>
+                <ng-container matColumnDef="acciones">
+                  <th mat-header-cell *matHeaderCellDef class="acc-col"></th>
+                  <td mat-cell *matCellDef="let e" class="acc-col">
+                    <ng-container *appHasPermission="'RRHH_DR_APROBAR'">
+                      <button *ngIf="e.anulable" mat-icon-button [matMenuTriggerFor]="me" [disabled]="procesandoId === e.clave">
+                        <mat-icon>more_vert</mat-icon>
+                      </button>
+                      <mat-menu #me="matMenu">
+                        <button mat-menu-item (click)="anularError(e)">
+                          <mat-icon>cancel</mat-icon><span>Anular</span>
+                        </button>
+                      </mat-menu>
+                    </ng-container>
+                  </td>
+                </ng-container>
+                <tr mat-header-row *matHeaderRowDef="colsErrores; sticky: true"></tr>
+                <tr mat-row *matRowDef="let row; columns: colsErrores"></tr>
+              </table>
+              <div *ngIf="cargandoErrores" class="spinner"><mat-progress-spinner mode="indeterminate" diameter="36"></mat-progress-spinner></div>
+              <div *ngIf="!cargandoErrores && errores.length === 0" class="vacio">Sin errores para el filtro.</div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</div>

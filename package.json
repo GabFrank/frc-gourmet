@@ -48,6 +48,7 @@
     "test:cobro-parcial": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-cobro-parcial-e2e.ts",
     "test:funcionario-vales": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-funcionario-vales-e2e.ts",
     "test:disciplina-motor": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-disciplina-motor.ts",
+    "test:disciplina-ejemplo": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-disciplina-ejemplo.ts",
     "test:disciplina-e2e": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-disciplina-e2e.ts",
     "test:disciplina-migracion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-disciplina-migracion.ts",
     "test:funciones-tareas": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-funciones-tareas-e2e.ts",

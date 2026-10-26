@@ -1,0 +1,64 @@
+<h2 mat-dialog-title>Registrar falta</h2>
+<mat-dialog-content>
+  <form *ngIf="!guardado" [formGroup]="form" class="grid" (ngSubmit)="guardar()">
+    <mat-form-field appearance="outline" class="completo">
+      <mat-label>Tipo de falta</mat-label>
+      <mat-select formControlName="tipoFaltaId" required>
+        <mat-option *ngFor="let t of tipos" [value]="t.id">{{ t.label }}</mat-option>
+      </mat-select>
+      <mat-hint *ngIf="tipos.length === 0">No hay tipos de falta activos: configuralos primero.</mat-hint>
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Fecha del hecho</mat-label>
+      <input matInput [matDatepicker]="dp" formControlName="fecha" required />
+      <mat-datepicker-toggle matSuffix [for]="dp"></mat-datepicker-toggle>
+      <mat-datepicker #dp></mat-datepicker>
+    </mat-form-field>
+    <mat-form-field appearance="outline" *ngIf="tipoEsTardanza">
+      <mat-label>Minutos de tardanza</mat-label>
+      <input matInput type="number" min="0" formControlName="minutosTardanza" />
+      <mat-hint>Dentro de la tolerancia no cuenta como falta</mat-hint>
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="completo">
+      <mat-label>Funcionarios</mat-label>
+      <mat-select formControlName="funcionarioIds" multiple required>
+        <mat-option *ngFor="let f of data.funcionarios" [value]="f.id">{{ f.nombre }}</mat-option>
+      </mat-select>
+      <mat-hint>Varios funcionarios = un mismo lote (una falta para cada uno)</mat-hint>
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="completo">
+      <mat-label>Observación</mat-label>
+      <textarea matInput rows="2" formControlName="observacion" class="mayus"></textarea>
+    </mat-form-field>
+    <button type="submit" hidden></button>
+  </form>
+
+  <div *ngIf="guardado" class="resultado">
+    <p class="ok"><mat-icon>check_circle</mat-icon><span>Registro guardado. Queda REGISTRADA hasta que la apruebe otro usuario (y venza el plazo de apelación).</span></p>
+    <table class="tabla-resultado" *ngIf="creadas.length">
+      <tr><th>Funcionario</th><th>Ocurrencia</th><th>Resultado</th><th class="num">Monto</th></tr>
+      <tr *ngFor="let c of creadas">
+        <td>{{ c.nombre }}</td>
+        <td>#{{ c.ocurrencia }}</td>
+        <td><span class="chip" [class.chip-multa]="c.esMulta" [class.chip-adv]="!c.esMulta">{{ c.resultado }}</span></td>
+        <td class="num">{{ c.monto | number:'1.0-2' }}</td>
+      </tr>
+    </table>
+    <div *ngIf="ignoradas.length" class="ignoradas">
+      <h4>Ignoradas</h4>
+      <p *ngFor="let i of ignoradas"><mat-icon>block</mat-icon><span><b>{{ i.nombre }}</b>: {{ i.motivo }}</span></p>
+    </div>
+    <div *ngIf="enTolerancia.length" class="ignoradas">
+      <h4>Dentro de la tolerancia (no cuenta como falta)</h4>
+      <p *ngFor="let n of enTolerancia"><mat-icon>schedule</mat-icon><span>{{ n }}</span></p>
+    </div>
+  </div>
+  <p class="error" *ngIf="error"><mat-icon>error</mat-icon><span>{{ error }}</span></p>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="cerrar()" [disabled]="guardando">{{ guardado ? 'Cerrar' : 'Cancelar' }}</button>
+  <button *ngIf="!guardado" mat-flat-button color="primary" type="button" (click)="guardar()" [disabled]="form.invalid || guardando">
+    <mat-progress-spinner *ngIf="guardando" mode="indeterminate" diameter="18"></mat-progress-spinner>
+    Registrar
+  </button>
+</mat-dialog-actions>

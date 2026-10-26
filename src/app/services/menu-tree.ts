@@ -58,6 +58,10 @@ import { ModeConfigComponent } from 'src/app/pages/configuracion/mode-config/mod
 import { ProductosDashboardComponent } from 'src/app/pages/productos/dashboard/productos-dashboard.component';
 import { ReportesRrhhPageComponent } from 'src/app/pages/rrhh/reportes/reportes-rrhh-page.component';
 import { RrhhDashboardComponent } from 'src/app/pages/rrhh/dashboard/rrhh-dashboard.component';
+import { ConfigDisciplinaComponent } from 'src/app/pages/rrhh/disciplina/config-disciplina/config-disciplina.component';
+import { RegistroDisciplinaComponent } from 'src/app/pages/rrhh/disciplina/registro-disciplina/registro-disciplina.component';
+import { AprobacionesDisciplinaComponent } from 'src/app/pages/rrhh/disciplina/aprobaciones-disciplina/aprobaciones-disciplina.component';
+import { ResultadosDisciplinaComponent } from 'src/app/pages/rrhh/disciplina/resultados-disciplina/resultados-disciplina.component';
 import { TiendaOnlineConfigComponent } from 'src/app/pages/ventas/pedidos-online/tienda-online-config.component';
 import { VentasDashboardComponent } from 'src/app/pages/ventas/dashboard/ventas-dashboard.component';
 import { VentasReportesComponent } from 'src/app/pages/reportes/ventas-reportes/ventas-reportes.component';
@@ -387,6 +391,23 @@ export const MENU_TREE: MenuNode[] = [
           { id: 'penalizaciones', label: 'Penalizaciones', icon: 'gavel', permiso: 'RRHH_PENALIZACION_REGISTRAR',
             keywords: ['penalizaciones', 'sanciones'],
             action: { component: ListPenalizacionesComponent, title: 'Penalizaciones', tabId: 'penalizaciones-tab', data: NAV } },
+        ],
+      },
+      {
+        id: 'grp-rrhh-disciplina', label: 'Disciplina y reconocimiento', icon: 'military_tech',
+        children: [
+          { id: 'dr-registro', label: 'Registro de faltas y errores', icon: 'assignment_late', permiso: 'RRHH_DR_REGISTRAR',
+            keywords: ['disciplina', 'faltas', 'multas', 'advertencias', 'errores', 'registrar falta'],
+            action: { component: RegistroDisciplinaComponent, title: 'Registro de disciplina', tabId: 'dr-registro-tab', data: NAV } },
+          { id: 'dr-aprobaciones', label: 'Aprobaciones y apelaciones', icon: 'fact_check', permiso: 'RRHH_DR_APROBAR',
+            keywords: ['disciplina', 'aprobar', 'apelaciones', 'multas', 'premios', 'bandeja'],
+            action: { component: AprobacionesDisciplinaComponent, title: 'Aprobaciones de disciplina', tabId: 'dr-aprobaciones-tab', data: NAV } },
+          { id: 'dr-resultados', label: 'Tablero y resultados', icon: 'insights', permiso: 'RRHH_DR_RESULTADOS_VER',
+            keywords: ['disciplina', 'tablero', 'ranking', 'reporte', 'resultados', 'encuesta', 'multas', 'premios', 'neto'],
+            action: { component: ResultadosDisciplinaComponent, title: 'Resultados de disciplina', tabId: 'dr-resultados-tab', data: NAV } },
+          { id: 'dr-config', label: 'Configuración de disciplina', icon: 'tune', permiso: 'RRHH_DR_CONFIGURAR', esConfig: true,
+            keywords: ['disciplina', 'reconocimiento', 'tipos de falta', 'gravedades', 'premios', 'encuestas', 'criterios', 'grupos'],
+            action: { component: ConfigDisciplinaComponent, title: 'Configuración de disciplina', tabId: 'dr-config-tab', data: NAV } },
         ],
       },
       {
