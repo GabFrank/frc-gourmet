@@ -56,6 +56,11 @@ interface FaltaBandeja {
 }
 
 interface FilaPremio {
+  /** id de dr_resultado_premio (para el ajuste manual). */
+  id?: number;
+  estado?: string;
+  /** Monto a pagar editable (montoAprobado ?? montoPropuesto). */
+  montoEditar?: number;
   posicion: number;
   nombre: string;
   puntaje: number;
@@ -93,7 +98,9 @@ export class AprobacionesDisciplinaComponent implements OnInit {
 
   // Premios
   periodoId: number | null = null;
-  periodos: { id: number; etiqueta: string }[] = [];
+  periodos: { id: number; etiqueta: string; estado: string }[] = [];
+  cerrandoPeriodo = false;
+  ajustando: number | null = null;
   calculando = false;
   aprobandoPremio = false;
   premioCalculado = false;
@@ -105,7 +112,7 @@ export class AprobacionesDisciplinaComponent implements OnInit {
   premioHayGanadores = false;
   premioPeriodoCalculado: number | null = null;
   ranking: FilaPremio[] = [];
-  colsRanking = ['posicion', 'nombre', 'puntaje', 'ganador', 'monto'];
+  colsRanking = ['posicion', 'nombre', 'puntaje', 'ganador', 'monto', 'ajuste'];
 
   constructor(
     private api: DisciplinaApiService,
@@ -155,11 +162,16 @@ export class AprobacionesDisciplinaComponent implements OnInit {
 
   async cargarPeriodos(): Promise<void> {
     try {
-      const lista = (await this.api.getPeriodos({ estado: 'CERRADO', conPremio: true })) ?? [];
+      const [cerrados, abiertos] = await Promise.all([
+        this.api.getPeriodos({ estado: 'CERRADO', conPremio: true }),
+        this.api.getPeriodos({ estado: 'ABIERTO', conPremio: true }),
+      ]);
+      const lista = [...(abiertos ?? []), ...(cerrados ?? [])];
       const f = (d: any) => String(d ?? '').slice(0, 10).split('-').reverse().join('/');
       this.periodos = lista.map((p: any) => ({
         id: p.id,
-        etiqueta: `#${p.id} · ${p.premio?.nombre ?? 'PREMIO'} · ${f(p.desde)} al ${f(p.hasta)}`,
+        etiqueta: `#${p.id} · ${p.premio?.nombre ?? 'PREMIO'} · ${f(p.desde)} al ${f(p.hasta)} · ${p.estado}`,
+        estado: p.estado,
       }));
       if (this.periodoId && !this.periodos.some((p) => p.id === this.periodoId)) this.periodoId = null;
     } catch {
@@ -295,10 +307,90 @@ export class AprobacionesDisciplinaComponent implements OnInit {
       this.premioHayGanadores = this.premioEstado !== 'DESIERTO' && this.ranking.some((x) => x.ganador);
       this.premioPeriodoCalculado = id;
       this.premioCalculado = true;
+      await this.recargarResultados(id);
     } catch (e) {
       this.error(e);
     } finally {
       this.calculando = false;
+    }
+  }
+
+  get periodoSeleccionadoAbierto(): boolean {
+    return this.periodos.find((p) => p.id === this.periodoId)?.estado === 'ABIERTO';
+  }
+
+  /** D4: cierra el período (deja de aceptar votos/puntajes) para poder calcular el premio. */
+  async cerrarPeriodo(): Promise<void> {
+    const id = Number(this.periodoId);
+    if (!id || this.cerrandoPeriodo) return;
+    const ok = await firstValueFrom(this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: `Cerrar el período #${id}`,
+        message: 'Después de cerrar no se aceptan más votos ni puntajes de este período. Se puede calcular y revisar el premio antes de aprobarlo.',
+        confirmText: 'Cerrar período',
+        cancelText: 'Cancelar',
+      },
+    }).afterClosed());
+    if (!ok) return;
+    this.cerrandoPeriodo = true;
+    try {
+      await this.api.cerrarPeriodo(id);
+      this.snackBar.open('PERÍODO CERRADO', 'Cerrar', { duration: 4000 });
+      await this.cargarPeriodos();
+      this.periodoId = id;
+    } catch (e) {
+      this.error(e);
+    } finally {
+      this.cerrandoPeriodo = false;
+    }
+  }
+
+  /** Trae el ranking guardado (ids y estado) para poder ajustarlo. */
+  private async recargarResultados(periodoId: number): Promise<void> {
+    const filas: any[] = (await this.api.getResultadosPremio(periodoId)) ?? [];
+    this.ranking = filas.map((x) => ({
+      id: x.id,
+      estado: x.estado,
+      posicion: Number(x.posicion) || 0,
+      nombre: x.funcionario,
+      puntaje: Number(x.puntaje) || 0,
+      ganador: !!x.ganador,
+      montoPropuesto: x.montoAprobado != null ? Number(x.montoAprobado) : Number(x.montoPropuesto) || 0,
+      montoEditar: x.montoAprobado != null ? Number(x.montoAprobado) : Number(x.montoPropuesto) || 0,
+    }));
+    const estados = new Set(this.ranking.map((r) => r.estado));
+    if (estados.has('APROBADO')) this.premioEstado = 'APROBADO';
+    else if (estados.has('PROPUESTO')) this.premioEstado = this.premioEstado === 'DESIERTO' ? 'PROPUESTO' : this.premioEstado || 'PROPUESTO';
+    this.premioClaseEstado = drClaseEstado(this.premioEstado);
+    this.premioHayGanadores = this.ranking.some((x) => x.ganador && x.estado === 'PROPUESTO');
+  }
+
+  puedeAjustar(r: FilaPremio): boolean {
+    return !!r.id && r.estado !== 'APROBADO' && this.premioEstado !== 'APROBADO';
+  }
+
+  /** D4: guarda el monto a pagar de un ganador o elige ganador a mano (empate desierto / sin mínimo). */
+  async ajustar(r: FilaPremio, cambios: { monto?: boolean; ganador?: boolean }): Promise<void> {
+    const periodoId = this.premioPeriodoCalculado;
+    if (!periodoId || !r.id || this.ajustando) return;
+    if (cambios.monto && !(Number(r.montoEditar) >= 0)) {
+      this.snackBar.open('EL MONTO TIENE QUE SER MAYOR O IGUAL A CERO', 'Cerrar', { duration: 4000 });
+      return;
+    }
+    this.ajustando = r.id;
+    try {
+      await this.api.ajustarResultadoPremio({
+        periodoId,
+        resultadoId: r.id,
+        ...(cambios.monto ? { montoAprobado: Number(r.montoEditar) } : {}),
+        ...(cambios.ganador !== undefined ? { ganador: cambios.ganador } : {}),
+      });
+      this.snackBar.open('AJUSTE GUARDADO', 'Cerrar', { duration: 3000 });
+      await this.recargarResultados(periodoId);
+    } catch (e) {
+      this.error(e);
+    } finally {
+      this.ajustando = null;
     }
   }
 
@@ -322,6 +414,7 @@ export class AprobacionesDisciplinaComponent implements OnInit {
       this.premioHayGanadores = false;
       this.premioEstado = 'APROBADO';
       this.premioClaseEstado = drClaseEstado('APROBADO');
+      await this.recargarResultados(id);
     } catch (e) {
       this.error(e);
     } finally {

@@ -282,6 +282,7 @@ async function main() {
   ok((await call('dr-get-periodos', { estado: 'ABIERTO' })).every((x: any) => x.id !== per.id), 'dr-get-periodos filtra por estado');
   await como(colab, () => rechaza(call('dr-get-periodos', {}), 'FORBIDDEN', 'colaborador no lista períodos'));
   const resu = await call('dr-get-resultados-encuesta', per.id);
+  ok(resu.filas.length > 0 && resu.filas.every((f: any) => typeof f.evaluado === 'string' && f.evaluado.length > 0), 'resultados de encuesta traen el nombre del evaluado', resu.filas.map((f: any) => f.evaluado));
   const filaFabi = resu.filas.find((f: any) => f.evaluadoId === fabi.id && f.preguntaId === qEsc.id);
   const filaAna = resu.filas.find((f: any) => f.evaluadoId === fA.id && f.preguntaId === qEsc.id);
   ok(resu.suficiente && filaFabi && approx(filaFabi.promedio, 5) && filaFabi.cantidad === 3, 'FABI promedio 5 con 3 votos', filaFabi);
