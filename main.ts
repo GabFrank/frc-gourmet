@@ -31,6 +31,7 @@ import { seedConfiguracionRrhh } from './electron/handlers/configuracion-rrhh.ha
 import { seedLiquidacionConceptos } from './electron/handlers/liquidacion-sueldo.handler';
 import { generarNotificacionesRrhh } from './electron/handlers/notificaciones-rrhh.handler';
 import { startAutoBackupScheduler } from './electron/handlers/backup.handler';
+import { startMotorFuncionesTareas, stopMotorFuncionesTareas } from './electron/services/funciones-tareas/motor';
 import { seedNotificaciones } from './electron/handlers/notificaciones-config.handler';
 import { seedInitialData } from './electron/utils/seed-data';
 import { runBootstrapMigrations } from './electron/utils/db-migrations-bootstrap';
@@ -202,6 +203,13 @@ function initializeDatabase() {
       process.env['FRC_APP_MODE'] = settings.mode;
       if (settings.mode === 'client' && settings.network?.serverUrl) {
         process.env['FRC_SERVER_URL'] = settings.network.serverUrl;
+      }
+
+      // Funciones y Tareas: el motor corre solo en el proceso dueño de la base (standalone o
+      // server), nunca en client. Arranca con el interruptor ft_config.activo apagado por defecto;
+      // con varias PC sobre el mismo Postgres coordina con el lock en base (ft_config.motor_lock).
+      if (settings.mode !== 'client') {
+        startMotorFuncionesTareas(dataSource);
       }
 
       // F5 paso 3: cargar el Dispositivo configurado localmente (si existe)
@@ -1190,6 +1198,10 @@ app.on('window-all-closed', () => {
     }
     app.quit();
   }
+});
+
+app.on('will-quit', () => {
+  stopMotorFuncionesTareas();
 });
 
 app.on('before-quit', async (event) => {
