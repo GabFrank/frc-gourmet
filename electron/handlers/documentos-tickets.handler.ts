@@ -687,10 +687,10 @@ export async function printComandaInternal(
       } else if (v.ensambladoDescripcion) {
         lines.push(ticketText(`   ${String(v.ensambladoDescripcion).toUpperCase()}`));
       }
-      // QUITAR — lo más crítico en cocina: se imprime invertido (fondo negro).
-      // El video inverso ya destaca por sí solo, sin agrandar la fuente.
+      // QUITAR — lo más crítico en cocina: invertido (fondo negro) y en doble
+      // alto (#315): en tamaño normal se pasaba por alto.
       for (const ing of (removidosByItem.get(v.id) || [])) {
-        lines.push(ticketText(`SIN ${ing}`, { bold: true, invert: true }));
+        lines.push(ticketText(`SIN ${ing}`, { bold: true, invert: true, size: 'tall' }));
       }
       // CAMBIAR — destacado en negrita, tamaño normal.
       for (const c of (cambiosByItem.get(v.id) || [])) {
