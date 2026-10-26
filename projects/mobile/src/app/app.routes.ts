@@ -25,6 +25,9 @@ const RRHH_ITEMS: SectionItem[] = [
   { label: 'Horas extra', icon: 'more_time', path: '/rrhh/horas-extra', enabled: true, permiso: 'RRHH_ASISTENCIA_REGISTRAR' },
   { label: 'Permisos', icon: 'verified_user', path: '/rrhh/permisos', enabled: true, permiso: 'SISTEMA_PERMISO_GESTIONAR' },
   { label: 'Notificaciones', icon: 'notifications', path: '/rrhh/notificaciones', enabled: true, permiso: 'RRHH_NOTIFICACIONES_VER' },
+  // Funciones y tareas (FT) — fase 4 mobile. Configuración y tablero están en desktop.
+  { label: 'Mis tareas', icon: 'task_alt', path: '/rrhh/mis-tareas', enabled: true, permiso: 'RRHH_FT_MARCAR_PROPIAS' },
+  { label: 'Verificar tareas', icon: 'rule', path: '/rrhh/verificar-tareas', enabled: true, permiso: 'RRHH_FT_VERIFICAR' },
 ];
 
 /** Opciones de Configuración (se van habilitando por ola). Hoy: Música ambiente. */
@@ -742,6 +745,18 @@ export const routes: Routes = [
         canActivate: [permisoGuard],
         data: { title: 'Notificaciones', permiso: 'RRHH_NOTIFICACIONES_VER' },
         loadComponent: () => import('./pages/rrhh/notificaciones/notificaciones-list.page').then((m) => m.NotificacionesListPage),
+      },
+      {
+        path: 'rrhh/mis-tareas',
+        canActivate: [permisoGuard],
+        data: { title: 'Mis tareas', permiso: 'RRHH_FT_MARCAR_PROPIAS' },
+        loadComponent: () => import('./pages/rrhh/funciones-tareas/mis-tareas/mis-tareas.page').then((m) => m.MisTareasPage),
+      },
+      {
+        path: 'rrhh/verificar-tareas',
+        canActivate: [permisoGuard],
+        data: { title: 'Verificar tareas', permiso: 'RRHH_FT_VERIFICAR' },
+        loadComponent: () => import('./pages/rrhh/funciones-tareas/verificar/verificar-tareas.page').then((m) => m.VerificarTareasPage),
       },
       {
         path: 'financiero',
