@@ -69,6 +69,12 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'RRHH_DR_RESULTADOS_VER', descripcion: 'Ver resultados de premios y encuestas (periodo cerrado)', modulo: 'RRHH' },
   { codigo: 'RRHH_DR_VOTAR', descripcion: 'Votar en encuestas anonimas de companeros', modulo: 'RRHH' },
   { codigo: 'RRHH_DR_MIS_DATOS', descripcion: 'Ver mis faltas, puntos y premios, y apelar', modulo: 'RRHH' },
+  // RRHH - Funciones y Tareas (FT)
+  { codigo: 'RRHH_FT_CONFIGURAR', descripcion: 'Configurar funciones, plantillas de tareas/checklists, avisos y el motor', modulo: 'RRHH' },
+  { codigo: 'RRHH_FT_VER_TODO', descripcion: 'Ver las tareas de todos los funcionarios', modulo: 'RRHH' },
+  { codigo: 'RRHH_FT_MARCAR_PROPIAS', descripcion: 'Ver y marcar mis tareas y checklists', modulo: 'RRHH' },
+  { codigo: 'RRHH_FT_VERIFICAR', descripcion: 'Verificar o rechazar tareas de otros y crear tareas manuales', modulo: 'RRHH' },
+  { codigo: 'RRHH_FT_REPORTES', descripcion: 'Ver reportes de cumplimiento de tareas (solo lectura)', modulo: 'RRHH' },
   // Compras - Importacion OCR/IA
   { codigo: 'COMPRAS_IMPORTAR_FACTURA', descripcion: 'Importar facturas de compra con OCR + IA', modulo: 'COMPRAS' },
   { codigo: 'SISTEMA_CONFIGURAR_IA', descripcion: 'Configurar credenciales y parametros de IA (OCR de facturas)', modulo: 'SISTEMA' },

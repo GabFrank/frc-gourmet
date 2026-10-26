@@ -628,7 +628,8 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
   },
   {
     descripcion: 'COLABORADOR_DR',
-    permisos: ['RRHH_DR_VOTAR', 'RRHH_DR_MIS_DATOS'],
+    // Funciones y Tareas: el mismo público que vota en DR marca sus propias tareas.
+    permisos: ['RRHH_DR_VOTAR', 'RRHH_DR_MIS_DATOS', 'RRHH_FT_MARCAR_PROPIAS'],
   },
 ];
 
