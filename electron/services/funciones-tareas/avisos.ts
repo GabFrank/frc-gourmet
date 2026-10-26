@@ -176,6 +176,9 @@ export async function registrarAvisoFt(
     destino: destino || null,
     mensaje: a.mensaje,
     intentos: 0,
+    // Hora del módulo (no la del motor de base): la gracia del reintento y el rango de
+    // ft-avisos se miden con el mismo reloj que el resto del motor.
+    createdAt: ahora,
   } as any;
   let id: number;
   try {
@@ -381,6 +384,7 @@ export async function pasoAvisosFt(ds: DataSource, ctx: { ahora: Date; hoy: stri
               tipoFalta: t.plantilla?.tipoFalta ? ({ id: t.plantilla.tipoFalta.id } as any) : null,
               motivo,
               estado: FtEstadoPropuesta.PENDIENTE,
+              createdAt: ahora,
             } as any);
           });
           if (rr !== 'DUPLICADO') res.propuestas++;

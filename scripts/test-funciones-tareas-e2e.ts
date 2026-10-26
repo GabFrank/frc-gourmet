@@ -19,6 +19,11 @@
  *  K) Permisos: con solo RRHH_FT_REPORTES se rechaza ft-tarea-marcar.
  *  L) No aplica, tarea manual, vencimiento PENDIENTE→VENCIDA.
  *  M) Lock en base: con un lock ajeno vigente el tick no corre; vencido, sí.
+ * Fase 2 (F2-*): dedupe de avisos (2 ticks = 1), canal WHATSAPP enviado por la app, ausente con
+ *  crítica, canal GERENTE sin enviarDirecto/dispatchEvento (mockeados) y visible en ft-avisos,
+ *  grupo ADM por dispatchEvento, nivel 3 → ft_propuesta_falta PENDIENTE (nunca dr_falta),
+ *  resolver propuestas, NOTIF_GLOBAL_ACTIVO apagado no envía, evento de caja idempotente, hook
+ *  con error forzado no rompe abrir caja, foto excedida/no imagen rechazada.
  *
  * Uso: npm run test:funciones-tareas   ·   FT_E2E_PG=ft_e2e npm run test:funciones-tareas
  */
@@ -33,7 +38,13 @@ import { invokeHandlerWithContext } from '../electron/utils/handler-registry';
 import { getDataSourceOptions } from '../src/app/database/database.config';
 import { registerFuncionesTareasHandlers } from '../electron/handlers/funciones-tareas.handler';
 import { clearPermissionCache } from '../electron/utils/auth.utils';
-import { ejecutarTickFt, tomarLockFt } from '../electron/services/funciones-tareas/motor';
+import { ejecutarTickFt, ftOnEvento, tomarLockFt } from '../electron/services/funciones-tareas/motor';
+import { fijarEnviadorFt } from '../electron/services/funciones-tareas/avisos';
+import { esperarEventosFt, fijarInterceptorEventoFt } from '../electron/services/funciones-tareas/eventos';
+import { setNotificacionDataSource } from '../electron/services/notificacion.service';
+import { seedNotificaciones } from '../electron/handlers/notificaciones-config.handler';
+import { registerFinancieroHandlers } from '../electron/handlers/financiero.handler';
+import { registerCajaMayorHandlers } from '../electron/handlers/caja-mayor.handler';
 import { fijarRelojFt } from '../electron/services/funciones-tareas/fechas';
 
 let passed = 0, failed = 0;
@@ -336,6 +347,187 @@ async function main() {
   const antesOff = (await tareas()).length;
   const roff = await tick(L(2026, 11, 17, 7, 0));
   ok(roff.omitido === 'APAGADO' && (await tareas()).length === antesOff, 'al apagarlo deja de generar');
+
+  // ═════════════════════════ FASE 2 ═════════════════════════
+  // Aislado de lo anterior: se apagan las plantillas de fase 1 y se usa otro cargo y otras fechas.
+  console.log('\n[F2-0] Fase 2: preparación');
+  for (const p of [p1, p2, p3, p4, p5]) await call('ft-plantillas-set-activo', p.id, false);
+  await call('ft-config-set', { activo: 'true', umbral_reincidencia: '2', ventana_reincidencia_dias: '30' });
+  setNotificacionDataSource(ds);
+  await seedNotificaciones(ds); // RECORDATORIO_TAREA ya está en el catálogo
+  const { ConfiguracionNotificacion } = E('notificaciones/configuracion-notificacion.entity');
+  const globalNotif = async (on: boolean) => ds.getRepository(ConfiguracionNotificacion).update({ clave: 'NOTIF_GLOBAL_ACTIVO' }, { valor: on ? 'true' : 'false' });
+  await globalNotif(true);
+  const llamadas = { directo: [] as any[], dispatch: [] as any[] };
+  fijarEnviadorFt({
+    enviarDirecto: (async (p: any) => { llamadas.directo.push(p); return { canal: p.canal, destino: p.destino, estado: 'ENVIADO' }; }) as any,
+    dispatchEvento: (async (codigo: string, p: any) => { llamadas.dispatch.push({ codigo, ...p }); return [{ canal: 'WHATSAPP', destino: 'GRUPO-ADM', estado: 'ENVIADO' }]; }) as any,
+  });
+  const { FtAvisoEnviado } = E('rrhh/funciones-tareas/ft-aviso-enviado.entity');
+  const { FtPropuestaFalta } = E('rrhh/funciones-tareas/ft-propuesta-falta.entity');
+  const { Asistencia } = E('rrhh/asistencia.entity');
+  const avisos = async (where: any = {}) => ds.getRepository(FtAvisoEnviado).find({ where, relations: ['tarea'], order: { id: 'ASC' } });
+  const cajeroC: any = await save(Cargo, { nombre: 'CAJERO', activo: true });
+  const encargadoC: any = await save(Cargo, { nombre: 'ENCARGADO DE TURNO', activo: true });
+  const uDani: any = await save(Usuario, { nickname: 'DANI', password: 'x', activo: true });
+  await permisos(uDani, 'CAJERO_FT', ['RRHH_FT_MARCAR_PROPIAS', 'FINANCIERO_CAJA_OPERAR']);
+  await permisos(admin, 'ADMIN_CAJA', ['FINANCIERO_CAJA_GESTIONAR', 'FINANCIERO_CAJA_OPERAR']);
+  clearPermissionCache();
+  const fDani = await mkFunc('DANI', cajeroC, uDani, diurno);
+  const fFede = await mkFunc('FEDE', cajeroC, undefined, diurno);
+  const fEli = await mkFunc('ELI', encargadoC, undefined, diurno);
+  await ds.getRepository(Persona).update({ id: fDani.persona.id }, { telefono: '0981111111' });
+  await ds.getRepository(Persona).update({ id: fFede.persona.id }, { telefono: '0983333333' });
+  await ds.getRepository(Persona).update({ id: fEli.persona.id }, { telefono: '0982222222' });
+  // Fede marcó entrada el 20 → no es ausente.
+  await save(Asistencia, { funcionario: fFede, fecha: '2026-11-20', horaEntrada: '07:58', estado: 'PRESENTE', minutosTardanza: 0, justificada: false });
+  const pa = await call('ft-plantillas-save', {
+    titulo: 'arqueo de media mañana', cargoId: cajeroC.id, ancla: 'HORA_FIJA', horaFija: '10:00', duracionMin: 60, critica: true,
+    requiereVerificacion: true, verificadorCargoId: encargadoC.id,
+    reglas: [
+      { momento: 'ANTES_VENCER', minutos: 15, nivel: 1, canal: 'WHATSAPP' },
+      { momento: 'AL_VENCER', nivel: 1, canal: 'GERENTE' },
+      { momento: 'ESCALAMIENTO', minutos: 30, nivel: 2, canal: 'WHATSAPP' },
+      { momento: 'ESCALAMIENTO', minutos: 60, nivel: 3, canal: 'APP' },
+    ],
+  });
+  ok(pa.reglas.length === 4, 'plantilla con 4 reglas (WHATSAPP, GERENTE, grupo ADM, nivel 3)');
+  await tick(L(2026, 11, 20, 7, 0));
+  const tDani20: any = de(await tareas(), fDani.id, pa.id, '2026-11-20')[0];
+  const tFede20: any = de(await tareas(), fFede.id, pa.id, '2026-11-20')[0];
+  ok(!!tDani20 && !!tFede20, 'genera la tarea para los dos cajeros');
+
+  console.log('\n[F2-A] Dedupe y canal WHATSAPP');
+  await tick(L(2026, 11, 20, 10, 46));
+  await tick(L(2026, 11, 20, 10, 50));
+  const av1 = await avisos({ clave: `ft:${tDani20.id}:ANTES_VENCER:1` });
+  ok(av1.length === 1, '2 ticks = 1 aviso (UNIQUE clave)', av1.length);
+  const directoDani = llamadas.directo.filter((x) => x.destino === '0981111111');
+  ok(directoDani.length === 1 && directoDani[0].eventoCodigo === 'RECORDATORIO_TAREA', 'enviarDirecto una sola vez, al teléfono del responsable', directoDani);
+  ok(av1[0]?.estado === 'ENVIADO' && av1[0]?.canal === 'WHATSAPP' && !!av1[0]?.enviadoEn && av1[0]?.intentos === 1, 'regla WHATSAPP queda ENVIADO por la app', av1[0]);
+
+  console.log('\n[F2-B] Ausente con tarea crítica');
+  const ausDani = await avisos({ clave: `ft:${tDani20.id}:AUSENTE:1` });
+  const ausFede = await avisos({ clave: `ft:${tFede20.id}:AUSENTE:1` });
+  ok(ausDani.length === 1 && ausDani[0].momento === 'AUSENTE' && ausDani[0].destino === '0982222222', 'sin marcación tras la tolerancia → aviso al encargado (cargo verificador)', ausDani[0]);
+  ok(ausFede.length === 0, 'quien marcó entrada no genera aviso de ausente');
+  ok(ausDani[0]?.canal === 'APP' && ausDani[0]?.estado === 'ENVIADO' && !llamadas.directo.some((x) => x.destino === '0982222222'), 'canal_ausente APP por defecto: no sale por WhatsApp');
+
+  console.log('\n[F2-C] Canal GERENTE y grupo ADM');
+  const nDir = llamadas.directo.length;
+  const nDisp = llamadas.dispatch.length;
+  await tick(L(2026, 11, 20, 11, 5));
+  const avG = await avisos({ clave: `ft:${tDani20.id}:AL_VENCER:1` });
+  ok(avG.length === 1 && avG[0].canal === 'GERENTE' && avG[0].estado === 'PARA_GERENTE', 'regla GERENTE queda PARA_GERENTE con canal GERENTE', avG[0]);
+  ok(llamadas.directo.length === nDir && llamadas.dispatch.length === nDisp, 'regla GERENTE no llama a enviarDirecto ni a dispatchEvento', { dir: llamadas.directo.length - nDir, disp: llamadas.dispatch.length - nDisp });
+  await tick(L(2026, 11, 20, 11, 35));
+  const avEsc = await avisos({ clave: `ft:${tDani20.id}:ESCALAMIENTO:2` });
+  const dispDani = llamadas.dispatch.filter((x) => x.dedupeKey === `ft:${tDani20.id}:ESCALAMIENTO:2`);
+  ok(avEsc.length === 1 && avEsc[0].estado === 'ENVIADO' && avEsc[0].destino === 'GRUPO_ADM', 'nivel 2 al grupo ADM registrado y ENVIADO', avEsc[0]);
+  ok(dispDani.length === 1 && dispDani[0].codigo === 'RECORDATORIO_TAREA', 'nivel 2 sale por dispatchEvento(RECORDATORIO_TAREA)', dispDani);
+  await tick(L(2026, 11, 20, 12, 5));
+  ok((await ds.getRepository(FtPropuestaFalta).count()) === 0, 'nivel 3 con 1 vencida (umbral 2) no propone nada');
+
+  console.log('\n[F2-D] Escalamiento nivel 3 → propuesta PENDIENTE');
+  await tick(L(2026, 11, 21, 7, 0));
+  await tick(L(2026, 11, 21, 12, 5));
+  await tick(L(2026, 11, 21, 12, 10));
+  const props = await ds.getRepository(FtPropuestaFalta).find({ relations: ['funcionario', 'tarea'] });
+  const propsDani = props.filter((x: any) => x.funcionario.id === fDani.id);
+  ok(propsDani.length === 1 && propsDani[0].estado === 'PENDIENTE' && /2 VENCIDAS/.test(propsDani[0].motivo), 'reincidencia (2 en 30 días) → 1 ft_propuesta_falta PENDIENTE', propsDani.map((x: any) => [x.estado, x.motivo]));
+  const drFaltas = await ds.query('SELECT COUNT(*) AS n FROM dr_falta');
+  ok(Number(drFaltas[0].n) === 0, 'nunca inserta en dr_falta');
+  const avN3 = await avisos({ clave: `ft:${propsDani[0]?.tarea?.id}:ESCALAMIENTO:3` });
+  ok(avN3.length === 1 && /PROPUESTA DE FALTA/.test(avN3[0].mensaje) && avN3[0].destino === '0982222222', 'y avisa al encargado', avN3[0]);
+
+  console.log('\n[F2-E] ft-avisos (lectura para el Gerente)');
+  const lAv = await como(uRep, () => call('ft-avisos', { desde: '2026-11-20', hasta: '2026-11-21' }));
+  const gerenteAv = lAv.filter((a: any) => a.canal === 'GERENTE');
+  ok(gerenteAv.length >= 2 && gerenteAv.every((a: any) => a.destinoCanal === 'GERENTE' && a.estado === 'PARA_GERENTE' && !a.enviadoPorApp), 'los avisos GERENTE aparecen en ft-avisos, sin enviar por la app', gerenteAv.length);
+  const waAv = lAv.find((a: any) => a.clave === `ft:${tDani20.id}:ANTES_VENCER:1`);
+  ok(waAv?.enviadoPorApp === true && waAv.funcionario?.id === fDani.id && waAv.tarea?.id === tDani20.id, 'el WHATSAPP aparece marcado enviadoPorApp', waAv);
+  const soloG = await como(uRep, () => call('ft-avisos', { desde: '2026-11-20', hasta: '2026-11-21', canal: 'GERENTE', estado: 'PARA_GERENTE' }));
+  ok(soloG.length === gerenteAv.length, 'filtro por canal y estado', soloG.length);
+  await rechaza(como(uRep, () => call('ft-avisos', { desde: '2026-10-01', hasta: '2026-11-21' })), 'RANGO_EXCEDIDO', 'ft-avisos: más de 31 días → rechazado');
+  await rechaza(como(uVero, () => call('ft-avisos', { desde: '2026-11-20' })), 'FORBIDDEN', 'ft-avisos: solo RRHH_FT_REPORTES o VER_TODO');
+
+  console.log('\n[F2-F] Propuestas: listar y resolver');
+  const lpTodas = await como(uVero, () => call('ft-propuestas-list', { estado: 'PENDIENTE' }));
+  ok(lpTodas.length === 2, 'ft-propuestas-list PENDIENTE: Dani y Fede (los dos reincidieron)', lpTodas.length);
+  const lp = await como(uVero, () => call('ft-propuestas-list', { estado: 'PENDIENTE', funcionarioId: fDani.id }));
+  ok(lp.length === 1 && lp[0].funcionario.id === fDani.id && /2 VENCIDAS/.test(lp[0].motivo), 'filtro por funcionario', lp.length);
+  await rechaza(como(uRep, () => call('ft-propuesta-resolver', lp[0].id, { estado: 'DESCARTADA' })), 'FORBIDDEN', 'con solo REPORTES no se resuelve');
+  await rechaza(como(uVero, () => call('ft-propuesta-resolver', lp[0].id, { estado: 'PENDIENTE' })), 'VALIDACION', 'no se «resuelve» como PENDIENTE');
+  const rp = await como(uVero, () => call('ft-propuesta-resolver', lp[0].id, { estado: 'REGISTRADA', nota: 'cargada en DR' }));
+  ok(rp.estado === 'REGISTRADA', 'la encargada la marca REGISTRADA');
+  await rechaza(como(uVero, () => call('ft-propuesta-resolver', lp[0].id, { estado: 'DESCARTADA' })), 'ESTADO_INVALIDO', 'una resuelta no se vuelve a resolver');
+  await call('ft-plantillas-set-activo', pa.id, false);
+
+  console.log('\n[F2-G] NOTIF_GLOBAL_ACTIVO apagado');
+  await globalNotif(false);
+  const pb = await call('ft-plantillas-save', {
+    titulo: 'contar cambio', funcionarioId: fDani.id, ancla: 'HORA_FIJA', horaFija: '15:00', duracionMin: 30,
+    reglas: [{ momento: 'ANTES_INICIO', minutos: 10, nivel: 1, canal: 'WHATSAPP' }],
+  });
+  await tick(L(2026, 11, 22, 7, 0));
+  const tPb: any = de(await tareas(), fDani.id, pb.id, '2026-11-22')[0];
+  const nDir2 = llamadas.directo.length;
+  await tick(L(2026, 11, 22, 14, 51));
+  const avOff = await avisos({ clave: `ft:${tPb.id}:ANTES_INICIO:1` });
+  ok(llamadas.directo.length === nDir2, 'con NOTIF_GLOBAL_ACTIVO apagado no se llama a enviarDirecto');
+  ok(avOff.length === 1 && avOff[0].estado === 'FALLIDO' && /NOTIF_GLOBAL_ACTIVO/.test(avOff[0].error), 'queda FALLIDO con el motivo', avOff[0]);
+  await globalNotif(true);
+  await tick(L(2026, 11, 22, 14, 56));
+  const avOn = await avisos({ clave: `ft:${tPb.id}:ANTES_INICIO:1` });
+  ok(avOn[0].estado === 'ENVIADO' && avOn[0].intentos === 2 && llamadas.directo.length === nDir2 + 1, 'al prenderlo, el reintento lo envía una vez', avOn[0]);
+
+  console.log('\n[F2-H] Eventos de caja');
+  const pe = await call('ft-plantillas-save', {
+    titulo: 'conteo de apertura de caja', cargoId: cajeroC.id, recurrencia: 'EVENTO', evento: 'CAJA_ABIERTA', eventoCaja: 'PDV',
+    ancla: 'EVENTO', duracionMin: 30,
+  });
+  ok(pe.eventoCaja === 'PDV', 'plantilla EVENTO de caja PdV');
+  registerFinancieroHandlers(ds, () => actual);
+  registerCajaMayorHandlers(ds, () => actual);
+  const { Dispositivo } = E('financiero/dispositivo.entity');
+  const { Conteo } = E('financiero/conteo.entity');
+  const term1: any = await save(Dispositivo, { nombre: 'CAJA FT 1', activo: true, isCaja: true });
+  const term2: any = await save(Dispositivo, { nombre: 'CAJA FT 2', activo: true, isCaja: true });
+  fijarRelojFt(L(2026, 11, 23, 9, 0));
+  // Hook con error forzado: la apertura sale igual.
+  fijarInterceptorEventoFt(() => { throw new Error('FALLO FORZADO DEL MÓDULO FT'); });
+  const conteo1: any = await save(Conteo, { activo: true, tipo: 'APERTURA', fecha: new Date() });
+  let cajaErr: any = null;
+  try { cajaErr = await call('abrir-caja-desde-conteo', conteo1.id, term1.id); } catch (e: any) { cajaErr = { error: e?.message }; }
+  await esperarEventosFt();
+  ok(cajaErr?.id > 0 && cajaErr.estado === 'ABIERTO', 'hook de FT con error no rompe abrir-caja-desde-conteo', cajaErr);
+  ok((await tareas({ eventoRef: `PDV:${cajaErr?.id}` })).length === 0, 'y no genera tarea (el error quedó atrapado)');
+  fijarInterceptorEventoFt(null);
+  // Caja de Dani: la tarea es solo de quien abrió.
+  const conteo2: any = await save(Conteo, { activo: true, tipo: 'APERTURA', fecha: new Date() });
+  const cajaDani = await como(uDani, () => call('create-caja', { dispositivo: { id: term2.id }, conteoApertura: { id: conteo2.id }, fechaApertura: new Date(), activo: true, estado: 'ABIERTO' }));
+  await esperarEventosFt();
+  const tEv = await tareas({ eventoRef: `PDV:${cajaDani.id}` });
+  ok(tEv.length === 1 && tEv[0].funcionario.id === fDani.id && tEv[0].origen === 'EVENTO' && tEv[0].plantilla.id === pe.id, 'create-caja genera la tarea del evento para quien abrió', tEv.map((t: any) => [t.funcionario.id, t.origen]));
+  ok(hm(tEv[0]?.inicio) === '23 09:00' && hm(tEv[0]?.vence) === '23 09:30', 'ventana desde el evento + duración', [hm(tEv[0]?.inicio), hm(tEv[0]?.vence)]);
+  const rEv2 = await ftOnEvento(ds, 'CAJA_ABIERTA' as any, cajaDani.id, { tipoCaja: 'PDV' as any, usuarioId: uDani.id });
+  ok(rEv2.generadas === 0 && rEv2.existentes === 1 && (await tareas({ eventoRef: `PDV:${cajaDani.id}` })).length === 1, 'el mismo evento dos veces no duplica (idempotente)', rEv2);
+  const rMayor = await ftOnEvento(ds, 'CAJA_ABIERTA' as any, 99, { tipoCaja: 'MAYOR' as any });
+  ok(rMayor.omitido === 'SIN_PLANTILLAS', 'una plantilla de caja PdV no se dispara con la caja mayor', rMayor);
+
+  console.log('\n[F2-I] Foto de evidencia');
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(2000, 1)]);
+  await call('ft-config-set', { foto_max_kb: '50' });
+  const grande = Buffer.concat([png, Buffer.alloc(60 * 1024, 1)]).toString('base64');
+  await rechaza(como(uDani, () => call('ft-tarea-subir-foto', tEv[0].id, { base64: grande })), 'FOTO_EXCEDIDA', 'foto de más de foto_max_kb → rechazada');
+  await rechaza(como(uDani, () => call('ft-tarea-subir-foto', tEv[0].id, { base64: Buffer.from('no soy una imagen').toString('base64') })), 'FOTO_INVALIDA', 'algo que no es imagen → rechazado');
+  await rechaza(como(uAna, () => call('ft-tarea-subir-foto', tEv[0].id, { base64: png.toString('base64') })), 'NO_ENCONTRADO', 'no se sube foto a una tarea ajena');
+  const foto = await como(uDani, () => call('ft-tarea-subir-foto', tEv[0].id, { base64: 'data:image/png;base64,' + png.toString('base64') }));
+  const archivo = path.join(tmpDir, 'ft-evidencias', String(foto.url).replace('app://ft-evidencias/', ''));
+  ok(/^app:\/\/ft-evidencias\/ftev-\d+-.+\.png$/.test(foto.url) && fs.existsSync(archivo) && foto.tarea.evidenciaUrl === foto.url, 'foto válida guardada en ft-evidencias y vinculada a la tarea', foto.url);
+  await rechaza(como(uDani, () => call('ft-tarea-marcar', tEv[0].id, { evidenciaUrl: 'https://otro.sitio/x.png' })), 'VALIDACION', 'ft-tarea-marcar no acepta URLs ajenas a ft-evidencias');
+  if (fs.existsSync(archivo)) fs.unlinkSync(archivo);
+  fijarEnviadorFt(null);
 
   fijarRelojFt(null);
   await ds.destroy();
