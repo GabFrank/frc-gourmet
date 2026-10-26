@@ -2,6 +2,12 @@
 
 Sistema integral de gestión de empleados. ~40 entidades, 15 handlers. Implementado en 8 fases.
 
+> Submódulos con doc propio: [rrhh-asistencia-facial.md](rrhh-asistencia-facial.md) (fichaje facial),
+> [rrhh-liquidaciones.md](rrhh-liquidaciones.md), [rrhh-disciplina.md](rrhh-disciplina.md) (Disciplina y
+> Reconocimiento) y [rrhh-funciones-tareas.md](rrhh-funciones-tareas.md) (**Funciones y Tareas**: funciones
+> generales por cargo y específicas por funcionario, tareas/checklists automáticas con avisos y
+> verificación; usa `Cargo`, `HistoricoCargo`, `Turno`, `FuncionarioTurno` y `Asistencia` de este dominio).
+
 ## Por qué el modelo es este (decisiones de diseño, 2026-05)
 
 El plan original resolvió ocho preguntas antes de escribir una entidad. Siguen

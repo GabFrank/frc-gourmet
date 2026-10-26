@@ -43,6 +43,8 @@
 | **files.handler.ts** | 210 | IPCs genéricos de archivos (save/delete/read/open) + thumbnails. Reemplaza producto-images de images.handler |
 | **financiero.handler.ts** | 739 | Moneda, MonedaBillete, MonedaCambio, TipoPrecio, Dispositivo, Caja, CajaMoneda, Conteo* |
 | **funcionario-documentos.handler.ts** | 123 | FuncionarioDocumento (filesystem) |
+| **funciones-tareas.handler.ts** | 881 | Funciones y Tareas (FT): ABM de funciones y plantillas (ítems + reglas de aviso), `ft-config-*`, mis tareas, marcar/foto/no aplica, verificar/rechazar (nadie verifica lo propio), tarea manual, `ft-avisos` (contrato con el Gerente), propuestas de falta. Motor en `electron/services/funciones-tareas/`. → [domains/rrhh-funciones-tareas.md](../domains/rrhh-funciones-tareas.md) |
+| **funciones-tareas-lectura.handler.ts** | 248 | FT solo lectura para el bot Gerente y reportes: `ft-cumplimiento`, `ft-vencidas`, `ft-historico`, `ft-de-turno-hoy`, `ft-estado-motor` (REPORTES \| VER_TODO, rango ≤ 31 días) |
 | **horas-extra.handler.ts** | 91 | HoraExtra |
 | **images.handler.ts** | 31 | Solo imágenes de perfil (legacy compat). Lo nuevo usa files.handler |
 | **kds.handler.ts** | 216 | KDS: comandas en pantalla de cocina (estado por sector); ver kds-sse-routes en server/ |
@@ -175,3 +177,21 @@ Registrados en `register-all-handlers.ts` justo después de `registerAsistencias
 | | `dr-save-{…mismos 9}` | CONFIGURAR |
 
 Permisos abreviados: `RRHH_DR_<X>`. Helpers: motor puro `electron/services/disciplina/` y `electron/utils/disciplina-proteccion.ts` (`bloquearSiEsDr`, `PERMISOS_LECTURA_PENALIZACIONES`, `PERMISOS_LECTURA_BONOS`).
+
+## Handlers nuevos 2026-10 — Funciones y Tareas (rama `feat-funciones-tareas`)
+
+Registrados en `register-all-handlers.ts` (`registerFuncionesTareasHandlers`, `registerFuncionesTareasLecturaHandlers`). Todos llaman `ensurePermission` adentro (`/api/rpc` es default-allow); «mis tareas», marcar y foto toman el funcionario de la sesión. Hooks post-commit `dispararEventoFt` en `create-caja`, `update-caja` (cierre), `abrir-caja-desde-conteo`, `create-caja-mayor`, `cerrar-caja-mayor`, `finalizar-compra` y `crear-compra-simplificada`. → [domains/rrhh-funciones-tareas.md](../domains/rrhh-funciones-tareas.md).
+
+| Archivo | Canal | Permiso |
+|---|---|---|
+| `funciones-tareas.handler.ts` | `ft-funciones-list`, `ft-plantillas-list`, `ft-plantillas-get`, `ft-config-get`, `ft-tareas-list`, `ft-propuestas-list` | CONFIGURAR \| VER_TODO \| VERIFICAR \| REPORTES |
+| | `ft-funciones-{save, set-activo, delete}`, `ft-plantillas-{save, set-activo, delete}`, `ft-config-set` | CONFIGURAR |
+| | `ft-funciones-de` | lectura general o MARCAR_PROPIAS (solo las propias) |
+| | `ft-mis-tareas-hoy`, `ft-tarea-marcar`, `ft-tarea-subir-foto` | MARCAR_PROPIAS |
+| | `ft-tarea-no-aplica` | MARCAR_PROPIAS (propia) \| VERIFICAR (ajena) |
+| | `ft-tarea-verificar`, `ft-tarea-rechazar`, `ft-tarea-crear-manual` | VERIFICAR |
+| | `ft-avisos` | REPORTES \| VER_TODO |
+| | `ft-propuesta-resolver` | VERIFICAR \| CONFIGURAR |
+| `funciones-tareas-lectura.handler.ts` | `ft-cumplimiento`, `ft-vencidas`, `ft-historico`, `ft-de-turno-hoy`, `ft-estado-motor` | REPORTES \| VER_TODO |
+
+Permisos abreviados: `RRHH_FT_<X>`.

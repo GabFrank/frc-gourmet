@@ -73,6 +73,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | **RRHH — Fichaje facial** (reconocimiento facial de asistencia, embeddings on-device, match 1:N, liveness, geocerca, kiosco PWA) | [domains/rrhh-asistencia-facial.md](domains/rrhh-asistencia-facial.md) |
 | **Liquidaciones, comisiones** (sueldo, aguinaldo, equipos) | [domains/rrhh-liquidaciones.md](domains/rrhh-liquidaciones.md) |
 | **RRHH — Disciplina y Reconocimiento** (faltas/multas con apelación, errores con puntos, puntaje por criterios, votación anónima, premios → Penalizacion/Bono `[DR]`; fase 1 solo backend) | [domains/rrhh-disciplina.md](domains/rrhh-disciplina.md) |
+| **RRHH — Funciones y Tareas** (funciones por cargo/funcionario, plantillas de tareas y checklists, motor programado, avisos app/WhatsApp/Gerente, escalamiento a propuesta de falta, foto de evidencia, verificación, tareas por caja/compra) | [domains/rrhh-funciones-tareas.md](domains/rrhh-funciones-tareas.md) |
 | **Personas, Clientes, Usuarios** | [domains/personas-clientes.md](domains/personas-clientes.md) |
 | **Impresoras térmicas** | [domains/cocina-impresion.md](domains/cocina-impresion.md) |
 | **Qué imprime el sistema y para qué** (catálogo de los 13 tickets, ruteo por rol de impresora, convenciones de formato) | [domains/tickets-impresos.md](domains/tickets-impresos.md) |
@@ -130,6 +131,10 @@ Estas las debo respetar SIEMPRE, sin que el usuario las repita:
 
 > Esta sección puede quedar desactualizada. Si el usuario pregunta por estado actual, **revisar `git log` y memorias antes de responder**.
 > Canal alpha en `develop` va por **`v1.21.0-alpha.98`** (2026-07). El "primer stable v1.1.0" del snapshot viejo es historia lejana.
+
+### Sesión 2026-10-26 — Funciones y Tareas (rama `feat-funciones-tareas`, sin mergear)
+
+- **Funciones y Tareas (FT):** módulo RRHH nuevo en la rama `bot/ceo-frc-gourmet/feat-funciones-tareas` (se mergea junto con DR, PR #314). 9 tablas `ft_*` (migración aditiva `1793042064365-FuncionesTareas`, up/down/up en SQLite y Postgres), motor en `electron/services/funciones-tareas/` (tick cada `intervalo_min`, solo en standalone/server, lock en base, **apagado por defecto**), handlers `funciones-tareas.handler.ts` y `funciones-tareas-lectura.handler.ts` (lecturas para el bot Gerente). Funciones generales por cargo + específicas por funcionario; plantillas por cargo(+turno), funcionario o área (grupo DR), con reemplazo de general por específica; avisos con dedupe atómico por canal `APP`/`WHATSAPP`/`AMBOS`/`GERENTE`; nivel 3 → `ft_propuesta_falta` (nunca `dr_falta`); hooks post-commit de caja PDV/Mayor y compras que nunca rompen la operación; foto de evidencia en `ft-evidencias` (incluida en el backup); nadie verifica lo propio. 5 permisos `RRHH_FT_*`. Tests: `npm run test:funciones-tareas` (122/122) y `test:funciones-tareas-migracion` (11/11), no están en `test:all`. Pantallas: tablero y configuración en escritorio; *Mis tareas* y *Verificar tareas* en la PWA. Manual: `docs/testing/TESTING-CHECKLIST-FUNCIONES-TAREAS.md`. Detalles → [domains/rrhh-funciones-tareas.md](domains/rrhh-funciones-tareas.md).
 
 ### Sesión 2026-10-24 — Disciplina y Reconocimiento, fase 1 (backend)
 

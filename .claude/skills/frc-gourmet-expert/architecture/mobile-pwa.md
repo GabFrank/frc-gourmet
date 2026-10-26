@@ -115,6 +115,14 @@ se leen de la virtual `receta.productoVinculado`, **nunca** de `receta.producto`
 (columna deprecada, siempre NULL — leerla marcaba TODAS las recetas como pre-receta).
 → [../domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
 
+**RRHH — Funciones y Tareas (2026-10):** `pages/rrhh/funciones-tareas/` con `/rrhh/mis-tareas`
+(`RRHH_FT_MARCAR_PROPIAS`: tareas de hoy del funcionario de la sesión, checklist ítem por ítem,
+nota, foto con la cámara achicada a JPEG dentro de `foto_max_kb`, «no aplica») y
+`/rrhh/verificar-tareas` (`RRHH_FT_VERIFICAR`: HECHAS y VENCIDAS de 7 días, verificar /
+rechazar / no aplica). Llaman a los `ft-*` por `window.api.callIpc` → `/api/rpc` (no están en
+`preload.ts`); helpers en `ft-mobile.utils.ts`. Configuración y tablero solo en desktop.
+→ [../domains/rrhh-funciones-tareas.md](../domains/rrhh-funciones-tareas.md).
+
 **Diferido:** Sabores y variaciones (sabor × tamaño), Monedas (sin handler create),
 Préstamos, Config RRHH.
 

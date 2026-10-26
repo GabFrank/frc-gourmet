@@ -63,7 +63,7 @@ Todas las entidades extienden `BaseModel`: `id`, `createdAt`, `updatedAt`, `crea
 |---------|-----------|---------------------|
 | **productos** | 33 | Familia → Subfamilia → Producto → Presentacion → Precio(Venta/Costo); Receta (fases, ingredientes, intercambiables, materiales), Sabor, Combo, Promoción, Adicional, Observación, StockMovimiento, Producción, pizza (tamaño/sabor/ensamblado), ConfiguracionMonetaria, ConversionMoneda |
 | **financiero** | 35 | Moneda (billetes/cambio), TipoPrecio, Dispositivo, Caja (conteos), Caja Mayor (movimientos/saldos), Gasto, EntradaVaria, OperacionFinanciera, Cuenta por Cobrar/Pagar (cuotas), Banco (cuenta/movimiento/cheque/chequera), POS (máquina/acreditación), cobro consolidado |
-| **rrhh** | 34 | Funcionario, Cargo, Turno, Asistencia, HoraExtra, Vacación, Aguinaldo, Bono, Penalización, Vale, Liquidaciones (sueldo/final/comisión), Comisiones (reglas/equipos/requisitos), Feriado, configuración y notificaciones de RRHH |
+| **rrhh** | 34 | Funcionario, Cargo, Turno, Asistencia, HoraExtra, Vacación, Aguinaldo, Bono, Penalización, Vale, Liquidaciones (sueldo/final/comisión), Comisiones (reglas/equipos/requisitos), Feriado, configuración y notificaciones de RRHH. Además `rrhh/funciones-tareas/` (9 entidades `ft_*`, Funciones y Tareas; no incluidas en la cifra) |
 | **ventas** | 24 | Venta/VentaItem (+ adicional/ingrediente-modificación/observación/sabor), PdV (grupo/categoría/ítem/config/atajos), Mesa, Sector, Comanda/ComandaItem, Delivery/PrecioDelivery, Reserva, KdsPantalla, SectorImpresora, ProductoSector |
 | **compras** | 12 | Proveedor, ProveedorProducto, Compra/CompraDetalle/CompraCuota/CompraCategoria, Pago/PagoDetalle, FormaPago, OCR (alias producto/proveedor, documento importado) |
 | **personas** | 9 | Persona, Usuario, Role, Permission, RolePermission, UsuarioRole, Cliente, TipoCliente, Convenio |
@@ -110,7 +110,7 @@ Handlers por área (lista no exhaustiva de canales):
 - **Ventas / PdV:** `ventas`, `kds`, `documentos-tickets`, `sectores-impresoras`
 - **Compras / OCR-IA:** `compras`, `factura-import`
 - **Financiero:** `financiero`, `caja-mayor`, `banking`, `cuentas-por-cobrar`, `cuentas-por-pagar`, `movimientos-cliente`
-- **RRHH / comisiones:** `rrhh-funcionarios`, `asistencias`, `horas-extra`, `vacaciones`, `vales`, `feriados`, `comisiones`, `equipos-comision`, `liquidacion-sueldo`, `liquidacion-final`, `configuracion-rrhh`, `notificaciones-rrhh`, `reportes-rrhh`, `funcionario-documentos`
+- **RRHH / comisiones:** `rrhh-funcionarios`, `asistencias`, `horas-extra`, `vacaciones`, `vales`, `feriados`, `comisiones`, `equipos-comision`, `liquidacion-sueldo`, `liquidacion-final`, `configuracion-rrhh`, `notificaciones-rrhh`, `reportes-rrhh`, `funcionario-documentos`, `funciones-tareas`, `funciones-tareas-lectura` (Funciones y Tareas, más el motor `electron/services/funciones-tareas/`)
 - **Dashboards:** `dashboard-ventas`, `dashboard-compras`, `dashboard-productos`, `dashboard-financiero`, `dashboard-caja-mayor`, `dashboard-rrhh`, `dashboard-shortcuts`
 - **Sistema / infra:** `system`, `empresa`, `app-mode`, `db-config`, `backup`, `printers`, `images`, `adjuntos`, `files`, `remote-tunnel`, `cotizacion-mercado`, `onboarding`
 

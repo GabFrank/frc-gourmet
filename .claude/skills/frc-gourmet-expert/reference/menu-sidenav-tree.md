@@ -111,3 +111,8 @@ De izquierda a derecha:
 - **Controles de ventana custom** (`*ngIf="!isMacOS"`): minimizar / maximizar-restaurar / cerrar (vía IPC `window:*`).
 
 > El botón de notificaciones con `matBadge` está **comentado** en el template. El badge de notificaciones RRHH vive en el item "Notificaciones" del sidenav.
+
+> **Funciones y tareas** (RRHH): grupo `grp-rrhh-ft` en `src/app/services/menu-tree.ts` con dos hojas:
+> `ft-tablero` (*Tablero de tareas*, `RRHH_FT_VER_TODO`) y `ft-config` (*Configurar funciones y tareas*,
+> `RRHH_FT_CONFIGURAR`, `esConfig`). Pantallas en `src/app/pages/rrhh/funciones-tareas/`. En la PWA:
+> `/rrhh/mis-tareas` y `/rrhh/verificar-tareas`. Ver [domains/rrhh-funciones-tareas.md](../domains/rrhh-funciones-tareas.md).

@@ -153,6 +153,18 @@
 - `configuracion-rrhh.entity.ts` — ConfiguracionRrhh
 - `notificacion-rrhh.entity.ts` — NotificacionRrhh
 
+## rrhh/funciones-tareas (9)
+- `ft-funcion.entity.ts` — FtFuncion
+- `ft-plantilla-tarea.entity.ts` — FtPlantillaTarea
+- `ft-plantilla-item.entity.ts` — FtPlantillaItem
+- `ft-regla-aviso.entity.ts` — FtReglaAviso
+- `ft-tarea.entity.ts` — FtTarea
+- `ft-tarea-item.entity.ts` — FtTareaItem
+- `ft-config.entity.ts` — FtConfig
+- `ft-aviso-enviado.entity.ts` — FtAvisoEnviado
+- `ft-propuesta-falta.entity.ts` — FtPropuestaFalta
+- (enums en `ft.enums.ts`)
+
 ## ventas (24)
 - `venta.entity.ts` — Venta
 - `venta-item.entity.ts` — VentaItem
