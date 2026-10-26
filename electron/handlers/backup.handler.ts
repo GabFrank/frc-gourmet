@@ -48,6 +48,7 @@ import {
 import { buildEvolutionConfig } from '../services/notificacion.service';
 import { getEvolutionApiKey } from '../utils/notificaciones-secrets.util';
 import { sendWhatsappDocumentFile, normalizeWhatsappNumber } from '../services/whatsapp.service';
+import { CARPETA_EVIDENCIAS_FT } from '../services/funciones-tareas/evidencias';
 
 let autoBackupInterval: NodeJS.Timeout | null = null;
 let autoBackupTimeout: NodeJS.Timeout | null = null;
@@ -71,6 +72,8 @@ function imagesDirs(userDataPath: string) {
   return [
     { relRoot: 'profile-images', absDir: getProfileImagesPath(userDataPath) },
     { relRoot: 'producto-images', absDir: getProductoImagesPath(userDataPath) },
+    // Fotos de evidencia de Funciones y tareas (userData/ft-evidencias).
+    { relRoot: CARPETA_EVIDENCIAS_FT, absDir: path.join(userDataPath, CARPETA_EVIDENCIAS_FT) },
   ];
 }
 
