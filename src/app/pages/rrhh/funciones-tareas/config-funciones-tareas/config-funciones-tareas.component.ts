@@ -5,6 +5,7 @@
  */
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FtEtiquetaPipe } from '../ft-etiquetas';
 import { FormsModule } from '@angular/forms';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTableModule } from '@angular/material/table';
@@ -32,7 +33,7 @@ const DIAS = ['LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB', 'DOM'];
   selector: 'app-config-funciones-tareas',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, MatTabsModule, MatTableModule, MatButtonModule, MatIconModule, MatCardModule,
+    FtEtiquetaPipe, CommonModule, FormsModule, MatTabsModule, MatTableModule, MatButtonModule, MatIconModule, MatCardModule,
     MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule, MatCheckboxModule, MatTooltipModule, MatSnackBarModule, MatDialogModule,
   ],
   templateUrl: './config-funciones-tareas.component.html',

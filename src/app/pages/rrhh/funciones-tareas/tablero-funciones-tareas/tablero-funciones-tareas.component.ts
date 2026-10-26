@@ -6,6 +6,7 @@
  */
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FtEtiquetaPipe } from '../ft-etiquetas';
 import { FormsModule } from '@angular/forms';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTableModule } from '@angular/material/table';
@@ -57,7 +58,7 @@ const DIAS_VERIFICACION = 7;
   selector: 'app-tablero-funciones-tareas',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, MatTabsModule, MatTableModule, MatButtonModule, MatIconModule, MatCardModule,
+    FtEtiquetaPipe, CommonModule, FormsModule, MatTabsModule, MatTableModule, MatButtonModule, MatIconModule, MatCardModule,
     MatFormFieldModule, MatInputModule, MatSelectModule, MatTooltipModule, MatProgressBarModule, MatSnackBarModule, MatDialogModule,
   ],
   templateUrl: './tablero-funciones-tareas.component.html',
