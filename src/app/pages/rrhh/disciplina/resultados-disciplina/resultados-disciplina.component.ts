@@ -104,7 +104,7 @@ export class ResultadosDisciplinaComponent implements OnInit {
     return 'verde';
   }
 
-  verPersona(funcionarioId: number, tabs?: { selectedIndex: number }): void {
+  verPersona(funcionarioId: number, tabs?: { selectedIndex: number | null }): void {
     this.funcionarioId = funcionarioId;
     if (tabs) tabs.selectedIndex = 1;
     this.cargarReporte();
