@@ -123,3 +123,15 @@ B5. `/api/rpc` expone todo salvo bloqueados: cada `ft-*` llama `ensurePermission
 B6. Fotos: carpeta `ft-evidencias` con función de guardado propia y tope de tamaño validado en el handler.
 B7. Registro en `register-all-handlers.ts` con firma `(dataSource, getCurrentUser)`.
 B8. Pruebas: `scripts/test-funciones-tareas-e2e.ts` (SQLite temporal y `FT_E2E_PG=<base>`) y `test-funciones-tareas-migracion.ts`, scripts en `package.json`.
+
+## 11. App como dueña de tareas y avisos; WhatsApp coordinado con el Gerente (pedido 26/10)
+
+C1. Tareas, checklists, recordatorios y notificaciones viven y se gestionan **solo en FRC Gourmet** (motor, `ft_tarea`, `ft_aviso_enviado`, bandeja de avisos en escritorio y celular). El bot Gerente no crea ni marca tareas: lee y evalúa.
+C2. `ft_regla_aviso.canal` pasa a `APP` | `WHATSAPP` | `AMBOS` | `GERENTE`:
+  - `WHATSAPP`/`AMBOS`: lo envía la app con su servicio de WhatsApp (recordatorios y vencimientos, que no dependen de que el bot esté en línea).
+  - `GERENTE`: la app no envía; registra el aviso en `ft_aviso_enviado` con `destino_canal = 'GERENTE'` y el Gerente lo toma y lo manda por WhatsApp (resúmenes, escalamientos al grupo ADM, seguimiento con criterio).
+  - Qué regla va por cada vía se cambia desde la app, sin código.
+C3. Lectura nueva para el Gerente: `ft-avisos` (rango ≤ 31 días, filtro por canal/estado): todos los avisos con `id`, tarea, persona, momento, nivel, canal y si la app ya lo envió. Con eso el Gerente no duplica lo que la app mandó y deduplica lo suyo por `id`. Solo lectura (`RRHH_FT_REPORTES`).
+C4. Contrato con el Gerente documentado en `gourmet-api-guia` y en el doc de dominio, acordado con él antes de la fase 5.
+C5. Antes de activar avisos por la app en Don Franco: verificar que el WhatsApp de FRC Gourmet esté configurado en producción; si no, las reglas arrancan en `APP` o `GERENTE`.
+C6. e2e: regla `GERENTE` no llama a `enviarDirecto` ni a `dispatchEvento` y aparece en `ft-avisos`; regla `WHATSAPP` aparece marcada como enviada por la app.
