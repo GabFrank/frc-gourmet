@@ -334,13 +334,18 @@
         <mat-card-content>
           <mat-slide-toggle [(ngModel)]="motorActivo">Motor de tareas activo</mat-slide-toggle>
           <div class="ft-grid" style="margin-top: 12px">
-            <mat-form-field appearance="outline" *ngFor="let k of claves()">
-              <mat-label>{{ k }}</mat-label>
-              <mat-select *ngIf="k === 'canal_ausente'; else txt" [(ngModel)]="config[k]">
-                <mat-option *ngFor="let c of canales" [value]="c">{{ c }}</mat-option>
-              </mat-select>
-              <ng-template #txt><input matInput [(ngModel)]="config[k]" /></ng-template>
-            </mat-form-field>
+            <ng-container *ngFor="let k of claves()">
+              <mat-form-field appearance="outline" *ngIf="k === 'canal_ausente'">
+                <mat-label>{{ k }}</mat-label>
+                <mat-select [(ngModel)]="config[k]">
+                  <mat-option *ngFor="let c of canales" [value]="c">{{ c }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline" *ngIf="k !== 'canal_ausente'">
+                <mat-label>{{ k }}</mat-label>
+                <input matInput [(ngModel)]="config[k]" />
+              </mat-form-field>
+            </ng-container>
           </div>
           <div *ngIf="ultimoTick">Último paso del motor: {{ ultimoTick | json }}</div>
           <div *ngIf="lock">Lock: {{ lock | json }}</div>

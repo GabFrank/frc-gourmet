@@ -1,0 +1,176 @@
+<div class="ft-wrap">
+  <div class="ft-barra">
+    <mat-form-field appearance="outline">
+      <mat-label>Fecha</mat-label>
+      <input matInput type="date" [(ngModel)]="fecha" (change)="refrescar()" />
+    </mat-form-field>
+    <button mat-raised-button (click)="refrescar()" [disabled]="cargando"><mat-icon>refresh</mat-icon> Actualizar</button>
+  </div>
+
+  <mat-tab-group>
+    <mat-tab label="Cumplimiento">
+      <div class="ft-kpis">
+        <mat-card class="ft-kpi"><div class="num">{{ totalPct }}%</div><div>Cumplimiento</div></mat-card>
+        <mat-card class="ft-kpi"><div class="num">{{ tareas.length }}</div><div>Tareas</div></mat-card>
+        <mat-card class="ft-kpi"><div class="num" [class.ft-mal]="vencidas.length">{{ vencidas.length }}</div><div>Vencidas</div></mat-card>
+      </div>
+
+      <table mat-table [dataSource]="cumplimiento" class="ft-tabla">
+        <ng-container matColumnDef="funcionario">
+          <th mat-header-cell *matHeaderCellDef>Funcionario</th>
+          <td mat-cell *matCellDef="let r">{{ r.funcionario }}</td>
+        </ng-container>
+        <ng-container matColumnDef="total">
+          <th mat-header-cell *matHeaderCellDef>Total</th>
+          <td mat-cell *matCellDef="let r">{{ r.total }}</td>
+        </ng-container>
+        <ng-container matColumnDef="cumplidas">
+          <th mat-header-cell *matHeaderCellDef>Cumplidas</th>
+          <td mat-cell *matCellDef="let r">{{ r.cumplidas }}</td>
+        </ng-container>
+        <ng-container matColumnDef="pendientes">
+          <th mat-header-cell *matHeaderCellDef>Pendientes</th>
+          <td mat-cell *matCellDef="let r">{{ r.pendientes }}</td>
+        </ng-container>
+        <ng-container matColumnDef="vencidas">
+          <th mat-header-cell *matHeaderCellDef>Vencidas</th>
+          <td mat-cell *matCellDef="let r" [class.ft-mal]="r.vencidas">{{ r.vencidas }}</td>
+        </ng-container>
+        <ng-container matColumnDef="porcentaje">
+          <th mat-header-cell *matHeaderCellDef>%</th>
+          <td mat-cell *matCellDef="let r">
+            <div class="ft-pct"><mat-progress-bar mode="determinate" [value]="r.porcentaje"></mat-progress-bar>{{ r.porcentaje }}%</div>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="cumpCols"></tr>
+        <tr mat-row *matRowDef="let row; columns: cumpCols"></tr>
+      </table>
+
+      <div class="ft-sub">Vencidas</div>
+      <table mat-table [dataSource]="vencidas" class="ft-tabla">
+        <ng-container matColumnDef="funcionario">
+          <th mat-header-cell *matHeaderCellDef>Funcionario</th>
+          <td mat-cell *matCellDef="let r">{{ r.funcionario?.nombre }}</td>
+        </ng-container>
+        <ng-container matColumnDef="titulo">
+          <th mat-header-cell *matHeaderCellDef>Tarea</th>
+          <td mat-cell *matCellDef="let r">{{ r.titulo }}</td>
+        </ng-container>
+        <ng-container matColumnDef="vence">
+          <th mat-header-cell *matHeaderCellDef>Vencía</th>
+          <td mat-cell *matCellDef="let r">{{ r.vence | date: 'dd/MM HH:mm' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="critica">
+          <th mat-header-cell *matHeaderCellDef>Crítica</th>
+          <td mat-cell *matCellDef="let r"><mat-icon *ngIf="r.critica" class="ft-mal">priority_high</mat-icon></td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="vencCols"></tr>
+        <tr mat-row *matRowDef="let row; columns: vencCols"></tr>
+      </table>
+    </mat-tab>
+
+    <mat-tab label="Avisos">
+      <div class="ft-barra">
+        <mat-form-field appearance="outline">
+          <mat-label>Canal</mat-label>
+          <mat-select [(ngModel)]="avisoCanal" (selectionChange)="cargarAvisos()">
+            <mat-option [value]="null">Todos</mat-option>
+            <mat-option *ngFor="let c of canales" [value]="c">{{ c }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Estado</mat-label>
+          <mat-select [(ngModel)]="avisoEstado" (selectionChange)="cargarAvisos()">
+            <mat-option [value]="null">Todos</mat-option>
+            <mat-option *ngFor="let e of estadosAviso" [value]="e">{{ e }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+      <table mat-table [dataSource]="avisos" class="ft-tabla">
+        <ng-container matColumnDef="creadoEn">
+          <th mat-header-cell *matHeaderCellDef>Hora</th>
+          <td mat-cell *matCellDef="let r">{{ r.creadoEn | date: 'HH:mm' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="funcionario">
+          <th mat-header-cell *matHeaderCellDef>Funcionario</th>
+          <td mat-cell *matCellDef="let r">{{ r.funcionario?.nombre }}</td>
+        </ng-container>
+        <ng-container matColumnDef="tarea">
+          <th mat-header-cell *matHeaderCellDef>Tarea</th>
+          <td mat-cell *matCellDef="let r">{{ r.tarea?.titulo }}</td>
+        </ng-container>
+        <ng-container matColumnDef="momento">
+          <th mat-header-cell *matHeaderCellDef>Momento</th>
+          <td mat-cell *matCellDef="let r">{{ r.momento }}</td>
+        </ng-container>
+        <ng-container matColumnDef="nivel">
+          <th mat-header-cell *matHeaderCellDef>Nivel</th>
+          <td mat-cell *matCellDef="let r">{{ r.nivel }}</td>
+        </ng-container>
+        <ng-container matColumnDef="canal">
+          <th mat-header-cell *matHeaderCellDef>Canal</th>
+          <td mat-cell *matCellDef="let r">{{ r.canal }}</td>
+        </ng-container>
+        <ng-container matColumnDef="estado">
+          <th mat-header-cell *matHeaderCellDef>Estado</th>
+          <td mat-cell *matCellDef="let r" [class.ft-mal]="r.estado === 'FALLIDO'">{{ r.estado }}</td>
+        </ng-container>
+        <ng-container matColumnDef="destino">
+          <th mat-header-cell *matHeaderCellDef>Destino</th>
+          <td mat-cell *matCellDef="let r">{{ r.destino }}</td>
+        </ng-container>
+        <ng-container matColumnDef="error">
+          <th mat-header-cell *matHeaderCellDef>Error</th>
+          <td mat-cell *matCellDef="let r" [matTooltip]="r.mensaje || ''">{{ r.error }}</td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="avisoCols"></tr>
+        <tr mat-row *matRowDef="let row; columns: avisoCols"></tr>
+      </table>
+    </mat-tab>
+
+    <mat-tab label="Propuestas de falta">
+      <div class="ft-barra">
+        <mat-form-field appearance="outline">
+          <mat-label>Estado</mat-label>
+          <mat-select [(ngModel)]="propEstado" (selectionChange)="cargarPropuestas()">
+            <mat-option [value]="null">Todas</mat-option>
+            <mat-option *ngFor="let e of estadosPropuesta" [value]="e">{{ e }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+      <table mat-table [dataSource]="propuestas" class="ft-tabla">
+        <ng-container matColumnDef="creadaEn">
+          <th mat-header-cell *matHeaderCellDef>Fecha</th>
+          <td mat-cell *matCellDef="let r">{{ r.creadaEn | date: 'dd/MM HH:mm' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="funcionario">
+          <th mat-header-cell *matHeaderCellDef>Funcionario</th>
+          <td mat-cell *matCellDef="let r">{{ r.funcionario?.nombre }}</td>
+        </ng-container>
+        <ng-container matColumnDef="tarea">
+          <th mat-header-cell *matHeaderCellDef>Tarea</th>
+          <td mat-cell *matCellDef="let r">{{ r.tarea?.titulo }}</td>
+        </ng-container>
+        <ng-container matColumnDef="motivo">
+          <th mat-header-cell *matHeaderCellDef>Motivo</th>
+          <td mat-cell *matCellDef="let r">{{ r.motivo }}</td>
+        </ng-container>
+        <ng-container matColumnDef="estado">
+          <th mat-header-cell *matHeaderCellDef>Estado</th>
+          <td mat-cell *matCellDef="let r">{{ r.estado }}</td>
+        </ng-container>
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let r">
+            <ng-container *ngIf="r.estado === 'PENDIENTE'">
+              <button mat-icon-button color="primary" matTooltip="Marcar como registrada" (click)="resolver(r, 'REGISTRADA')"><mat-icon>gavel</mat-icon></button>
+              <button mat-icon-button matTooltip="Descartar" (click)="resolver(r, 'DESCARTADA')"><mat-icon>block</mat-icon></button>
+            </ng-container>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="propCols"></tr>
+        <tr mat-row *matRowDef="let row; columns: propCols"></tr>
+      </table>
+    </mat-tab>
+  </mat-tab-group>
+</div>

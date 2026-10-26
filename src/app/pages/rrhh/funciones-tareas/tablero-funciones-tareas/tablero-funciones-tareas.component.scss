@@ -1,0 +1,10 @@
+.ft-wrap { padding: 12px; }
+.ft-barra { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.ft-tabla { width: 100%; }
+.ft-kpis { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.ft-kpi { min-width: 160px; padding: 12px; text-align: center; }
+.ft-kpi .num { font-size: 28px; font-weight: 600; }
+.ft-mal { color: #c62828; }
+.ft-sub { margin: 16px 0 4px; font-weight: 500; }
+.ft-pct { display: flex; align-items: center; gap: 8px; min-width: 140px; }
+.ft-pct mat-progress-bar { width: 80px; }
