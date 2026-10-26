@@ -140,3 +140,22 @@ Entidades `dr_*` + migración (sqlite y postgres, up/down) + permisos RRHH_DR_* 
 3. Doble descuento por tardanza: `dr-registrar-falta` ignora la tardanza de un día si asistencias ya generó una Penalizacion automática (no [DR]) ese día; lo informa en `ignoradas`. Cubierto en e2e [P].
 4. Voto atómico: participación y agregados en una sola transacción, con el período re-verificado ABIERTO dentro de ella (FOR SHARE en Postgres); si fallan los agregados no queda «votó». Al cerrar, textos y participaciones se reescriben mezclados con ids nuevos (§12), lo que además corta el vínculo por metadatos de transacción (xmin) entre votante y comentario. Cubierto en e2e [J].
 5. Plazo de apelación: con el plazo vigente solo se aprueba si la persona renunció (`dr-renunciar-apelacion`, que además bloquea apelar después). Cubierto en e2e [E] y [O].
+
+## 15. Alcance de la fase 4 (misma rama del PR #314; merge junto con fases 2 y 3, decisión del propietario 24/10)
+El motor de cierre ya existe desde la fase 1 (`dr-cerrar-periodo`, `dr-calcular-premio`, `dr-aprobar-premio`, `dr-get-resultados-encuesta`). La fase 4 suma lo que falta para operarlo desde escritorio:
+
+Backend (handlers nuevos, con `ensurePermission`; sin migración salvo que la auditoría lo pida)
+- `dr-get-resultados-premio(periodoId)`: ranking del período (posición, puntaje, ganador, monto propuesto/aprobado, estado), con permiso APROBAR o RESULTADOS.
+- `dr-ajustar-resultado-premio({ periodoId, resultadoId, montoAprobado?, ganador? })`: monto editable y elección manual de ganador en empate DESIERTO o con mínimo de votantes no alcanzado. Solo con resultado PROPUESTO/DESIERTO; UPDATE condicional por estado; queda quién y cuándo. No se puede sobre APROBADO.
+- `dr-tablero({ desde, hasta, grupoId? })`: por funcionario, faltas (advertencias/multas), errores y puntos, puntaje diario promedio, multas y premios en ₲. Solo agregados; nunca votos individuales.
+- `dr-reporte-persona({ funcionarioId, desde, hasta })`: detalle de hechos y el neto que impacta en sueldo (premios − multas) por mes destino, cruzado con Penalizacion/Bono «[DR]».
+
+Pantallas desktop (RRHH › Disciplina y reconocimiento)
+- D4 Cierre de período: lista de períodos (abierto/cerrado/aprobado) → cerrar → calcular → ranking con empates resaltados, monto editable, elegir ganador si quedó desierto → «Aprobar y enviar a liquidación» (confirmación con resumen).
+- D5 Tablero semanal en pantalla completa (tarjetas por persona, semáforo), pensado para la revisión de los lunes.
+- D6 Reporte por persona y período con neto, export Excel/PDF con lo que ya usa el sistema.
+- D7 Resultados de encuesta (período cerrado, mínimo de votantes, solo promedios y textos mezclados).
+
+Pruebas
+- e2e: ranking y empate DIVIDIR/MONTO_COMPLETO/DESIERTO; ajuste de monto y de ganador; ajuste rechazado sobre APROBADO; doble aprobación no duplica Bono; tablero y reporte cuadran con Penalizacion/Bono creados; 403 sin permiso.
+- UI: recorrido D4→liquidación borrador y D5–D7 en la copia de Don Franco, modo oscuro, capturas al propietario.
