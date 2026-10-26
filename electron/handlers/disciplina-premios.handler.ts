@@ -7,7 +7,7 @@
  */
 import { ipcMain } from 'electron';
 import { marcarBorradorDesactualizado, funcionarioIdDeUsuario } from './disciplina.handler';
-import { Between, DataSource } from 'typeorm';
+import { Between, DataSource, IsNull } from 'typeorm';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { Bono } from '../../src/app/database/entities/rrhh/bono.entity';
 import { BonoTipo } from '../../src/app/database/entities/rrhh/bono-tipo.enum';
@@ -112,6 +112,10 @@ export function registerDisciplinaPremiosHandlers(dataSource: DataSource, getCur
       }
       // Recalcular reemplaza la propuesta anterior (nunca una aprobada: se valida arriba).
       await m.getRepository(DrResultadoPremio).delete({ periodo: { id: periodoId } } as any);
+      // Anonimato: con menos votantes que el mínimo no se guarda ni se devuelve el puntaje por persona
+      // (con 1 o 2 votantes el puntaje revelaría el voto de cada uno).
+      const ocultar = premio.metodo === 'VOTACION' && cantidadVotantes != null && minVotantes != null && cantidadVotantes < minVotantes;
+      if (ocultar) r.ranking = r.ranking.map((f: any) => ({ ...f, puntaje: 0, posicion: null as any }));
       for (const f of r.ranking) {
         await m.getRepository(DrResultadoPremio).save(m.getRepository(DrResultadoPremio).create({
           periodo: { id: periodoId }, funcionario: { id: f.funcionarioId }, puntaje: f.puntaje, posicion: f.posicion,
@@ -157,15 +161,23 @@ export function registerDisciplinaPremiosHandlers(dataSource: DataSource, getCur
     const user = await ensurePermission(dataSource, getCurrentUser, APROBAR);
     return dataSource.transaction(async (m) => {
       const repo = m.getRepository(DrResultadoPremio);
-      const fila: any = await repo.findOne({ where: { id: d?.resultadoId, periodo: { id: d?.periodoId } } as any, relations: ['periodo', 'periodo.premio'] });
+      const fila: any = await repo.findOne({ where: { id: d?.resultadoId, periodo: { id: d?.periodoId } } as any, relations: ['periodo', 'periodo.premio', 'funcionario'] });
       if (!fila) fail('NO_ENCONTRADO', 'RESULTADO NO ENCONTRADO');
       if (fila.estado === DrResultadoEstado.APROBADO) fail('ESTADO_INVALIDO', 'EL PREMIO YA FUE APROBADO');
+      if (fila.periodo?.estado !== DrPeriodoEstado.CERRADO) fail('ESTADO_INVALIDO', 'SOLO SE AJUSTA UN PERÍODO CERRADO Y SIN APROBAR');
+      const aprobadas = await repo.count({ where: { periodo: { id: d.periodoId }, estado: DrResultadoEstado.APROBADO } as any });
+      if (aprobadas) fail('ESTADO_INVALIDO', 'EL PREMIO YA FUE APROBADO');
+      const propioAj = await funcionarioIdDeUsuario(m, user.id);
+      if (propioAj && fila.funcionario?.id === propioAj) fail('AUTO_RESOLUCION', 'NO PODÉS AJUSTAR TU PROPIO RESULTADO');
+      if (d.ganador === true && fila.estado !== DrResultadoEstado.DESIERTO) {
+        fail('VALIDACION', 'EL GANADOR SE ELIGE A MANO SOLO CUANDO EL PREMIO QUEDÓ DESIERTO');
+      }
       const cambios: any = {};
       if (d.montoAprobado !== undefined) {
         if (d.montoAprobado !== null && (!Number.isFinite(Number(d.montoAprobado)) || Number(d.montoAprobado) < 0)) {
           fail('VALIDACION', 'EL MONTO TIENE QUE SER UN NÚMERO MAYOR O IGUAL A CERO');
         }
-        cambios.montoAprobado = d.montoAprobado === null ? null : Math.round(Number(d.montoAprobado));
+        cambios.montoAprobado = d.montoAprobado === null ? null : Math.round(Number(d.montoAprobado) * 100) / 100;
       }
       if (d.ganador !== undefined) {
         cambios.ganador = !!d.ganador;
@@ -193,6 +205,7 @@ export function registerDisciplinaPremiosHandlers(dataSource: DataSource, getCur
     return dataSource.transaction(async (m) => {
       const periodo: any = await m.getRepository(DrPeriodo).findOne({ where: { id: periodoId } as any, relations: ['premio'] });
       if (!periodo?.premio) fail('NO_ENCONTRADO', 'EL PERÍODO NO TIENE PREMIO');
+      if (periodo.estado !== DrPeriodoEstado.CERRADO) fail('ESTADO_INVALIDO', 'EL PREMIO SE APRUEBA CON EL PERÍODO CERRADO Y SIN APROBAR');
       const ganadores: any[] = await m.getRepository(DrResultadoPremio).find({
         where: { periodo: { id: periodoId }, ganador: true, estado: DrResultadoEstado.PROPUESTO } as any,
         relations: ['funcionario', 'funcionario.monedaSalario', 'moneda'],
@@ -230,7 +243,7 @@ export function registerDisciplinaPremiosHandlers(dataSource: DataSource, getCur
         await setEntityUserTracking(dataSource, bono, user.id, false);
         const guardado = await m.getRepository(Bono).save(bono);
         const res = await m.getRepository(DrResultadoPremio).update(
-          { id: g.id, estado: DrResultadoEstado.PROPUESTO } as any,
+          { id: g.id, estado: DrResultadoEstado.PROPUESTO, ganador: true, montoAprobado: g.montoAprobado == null ? IsNull() : g.montoAprobado } as any,
           { estado: DrResultadoEstado.APROBADO, montoAprobado: monto, bono: { id: guardado.id }, mesDestino: mes, aprobadoPor: { id: user.id }, aprobadoEn: new Date() } as any,
         );
         if (!res.affected) fail('ESTADO_INVALIDO', 'EL RESULTADO CAMBIÓ MIENTRAS SE APROBABA');

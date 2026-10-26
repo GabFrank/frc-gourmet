@@ -311,7 +311,10 @@ async function main() {
   const aj = await call('dr-ajustar-resultado-premio', { periodoId: per.id, resultadoId: filaGanK.id, montoAprobado: 100000 });
   ok(aj.ok === true, 'ajuste de monto aceptado con el premio PROPUESTO', aj);
   await como(colab, () => rechaza(call('dr-ajustar-resultado-premio', { periodoId: per.id, resultadoId: filaGanK.id, montoAprobado: 1 }), 'FORBIDDEN', 'colaborador no ajusta premios'));
+  const otraK = resK.find((x: any) => x.funcionarioId !== fabi.id);
+  if (otraK) await rechaza(call('dr-ajustar-resultado-premio', { periodoId: per.id, resultadoId: otraK.id, ganador: true }), 'VALIDACION', 'no se elige ganador a mano si el premio no quedó desierto');
   const apP = await call('dr-aprobar-premio', per.id);
+  if (otraK) await rechaza(call('dr-ajustar-resultado-premio', { periodoId: per.id, resultadoId: otraK.id, montoAprobado: 5 }), 'ESTADO_INVALIDO', 'tras aprobar no se ajusta ninguna fila del ranking');
   const resK2 = await call('dr-get-resultados-premio', per.id);
   ok(resK2.find((x: any) => x.funcionarioId === fabi.id)?.estado === 'APROBADO' && resK2.find((x: any) => x.funcionarioId === fabi.id)?.bonoId === apP.bonos[0], 'resultado APROBADO con su bono', resK2);
   await rechaza(call('dr-ajustar-resultado-premio', { periodoId: per.id, resultadoId: filaGanK.id, montoAprobado: 1 }), 'ESTADO_INVALIDO', 'no se ajusta un premio aprobado');
