@@ -300,7 +300,18 @@ async function main() {
   const calc = await call('dr-calcular-premio', per.id);
   const gan = calc.ranking.filter((x: any) => x.ganador);
   ok(calc.estado === 'GANADOR' && gan.length === 1 && gan[0].funcionarioId === fabi.id && approx(gan[0].montoPropuesto, 100000), 'gana FABI 100.000', calc);
+  // Fase 4: ranking guardado y ajuste manual antes de aprobar.
+  const resK = await call('dr-get-resultados-premio', per.id);
+  const filaGanK = resK.find((x: any) => x.funcionarioId === fabi.id);
+  ok(resK.length === calc.ranking.length && filaGanK?.ganador && filaGanK.estado === 'PROPUESTO', 'get-resultados-premio devuelve el ranking', resK);
+  await rechaza(call('dr-ajustar-resultado-premio', { periodoId: per.id, resultadoId: filaGanK.id, montoAprobado: -1 }), 'VALIDACION', 'ajuste con monto negativo rechazado');
+  const aj = await call('dr-ajustar-resultado-premio', { periodoId: per.id, resultadoId: filaGanK.id, montoAprobado: 100000 });
+  ok(aj.ok === true, 'ajuste de monto aceptado con el premio PROPUESTO', aj);
+  await como(colab, () => rechaza(call('dr-ajustar-resultado-premio', { periodoId: per.id, resultadoId: filaGanK.id, montoAprobado: 1 }), 'FORBIDDEN', 'colaborador no ajusta premios'));
   const apP = await call('dr-aprobar-premio', per.id);
+  const resK2 = await call('dr-get-resultados-premio', per.id);
+  ok(resK2.find((x: any) => x.funcionarioId === fabi.id)?.estado === 'APROBADO' && resK2.find((x: any) => x.funcionarioId === fabi.id)?.bonoId === apP.bonos[0], 'resultado APROBADO con su bono', resK2);
+  await rechaza(call('dr-ajustar-resultado-premio', { periodoId: per.id, resultadoId: filaGanK.id, montoAprobado: 1 }), 'ESTADO_INVALIDO', 'no se ajusta un premio aprobado');
   const bono: any = await ds.getRepository(Bono).findOne({ where: { id: apP.bonos[0] }, relations: ['funcionario'] });
   ok(bono && bono.motivo.startsWith('[DR]') && approx(bono.monto, 100000) && bono.funcionario.id === fabi.id, 'Bono [DR] 100.000 a FABI', bono?.motivo);
   await rechaza(call('dr-aprobar-premio', per.id), 'ESTADO_INVALIDO', 'no se aprueba dos veces');

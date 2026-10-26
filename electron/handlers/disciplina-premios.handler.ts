@@ -123,6 +123,70 @@ export function registerDisciplinaPremiosHandlers(dataSource: DataSource, getCur
     });
   });
 
+  /** Ranking guardado de un período (fase 4, pantalla D4 de cierre). */
+  ipcMain.handle('dr-get-resultados-premio', async (_e, periodoId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, [APROBAR, 'RRHH_DR_RESULTADOS_VER']);
+    const filas: any[] = await dataSource.getRepository(DrResultadoPremio).find({
+      where: { periodo: { id: periodoId } } as any,
+      relations: ['funcionario', 'funcionario.persona', 'moneda', 'bono', 'aprobadoPor'],
+      order: { posicion: 'ASC', id: 'ASC' } as any,
+    });
+    return filas.map((f) => ({
+      id: f.id,
+      funcionarioId: f.funcionario?.id,
+      funcionario: nombreDe(f.funcionario),
+      puntaje: Number(f.puntaje) || 0,
+      posicion: f.posicion ?? null,
+      ganador: !!f.ganador,
+      montoPropuesto: Number(f.montoPropuesto) || 0,
+      montoAprobado: f.montoAprobado == null ? null : Number(f.montoAprobado),
+      monedaId: f.moneda?.id ?? null,
+      estado: f.estado,
+      bonoId: f.bono?.id ?? null,
+      mesDestino: f.mesDestino ?? null,
+      observacion: f.observacion ?? null,
+    }));
+  });
+
+  /**
+   * Ajuste manual antes de aprobar (fase 4): monto a pagar y/o ganador. Sirve para un premio
+   * DESIERTO (empate con regla DESIERTO o sin mínimo de votantes) o para corregir el monto.
+   * Nunca sobre un período con resultados APROBADOS. Queda registrado quién ajustó.
+   */
+  ipcMain.handle('dr-ajustar-resultado-premio', async (_e, d: { periodoId: number; resultadoId: number; montoAprobado?: number | null; ganador?: boolean }) => {
+    const user = await ensurePermission(dataSource, getCurrentUser, APROBAR);
+    return dataSource.transaction(async (m) => {
+      const repo = m.getRepository(DrResultadoPremio);
+      const fila: any = await repo.findOne({ where: { id: d?.resultadoId, periodo: { id: d?.periodoId } } as any, relations: ['periodo', 'periodo.premio'] });
+      if (!fila) fail('NO_ENCONTRADO', 'RESULTADO NO ENCONTRADO');
+      if (fila.estado === DrResultadoEstado.APROBADO) fail('ESTADO_INVALIDO', 'EL PREMIO YA FUE APROBADO');
+      const cambios: any = {};
+      if (d.montoAprobado !== undefined) {
+        if (d.montoAprobado !== null && (!Number.isFinite(Number(d.montoAprobado)) || Number(d.montoAprobado) < 0)) {
+          fail('VALIDACION', 'EL MONTO TIENE QUE SER UN NÚMERO MAYOR O IGUAL A CERO');
+        }
+        cambios.montoAprobado = d.montoAprobado === null ? null : Math.round(Number(d.montoAprobado));
+      }
+      if (d.ganador !== undefined) {
+        cambios.ganador = !!d.ganador;
+        if (d.ganador && !(Number(fila.montoPropuesto) > 0) && cambios.montoAprobado == null && fila.montoAprobado == null) {
+          cambios.montoPropuesto = Number(fila.periodo?.premio?.monto) || 0;
+        }
+      }
+      if (!Object.keys(cambios).length) fail('VALIDACION', 'NADA PARA AJUSTAR');
+      const quien = `${user.nickname ?? user.id}`.toUpperCase();
+      cambios.observacion = `AJUSTE MANUAL POR ${quien} ${new Date().toISOString().slice(0, 16)}`;
+      const res = await repo.update({ id: fila.id, estado: fila.estado } as any, cambios);
+      if (!res.affected) fail('ESTADO_INVALIDO', 'EL RESULTADO CAMBIÓ MIENTRAS SE AJUSTABA');
+      // Un premio desierto con ganador elegido a mano pasa a PROPUESTO para poder aprobarse.
+      if (fila.estado === DrResultadoEstado.DESIERTO && d.ganador) {
+        const desiertas = await repo.find({ where: { periodo: { id: d.periodoId }, estado: DrResultadoEstado.DESIERTO } as any });
+        if (desiertas.length) await repo.update(desiertas.map((x: any) => x.id), { estado: DrResultadoEstado.PROPUESTO } as any);
+      }
+      return { ok: true };
+    });
+  });
+
   /** Aprueba los ganadores propuestos: Bono [DR] por cada uno en el mes de liquidación abierto. */
   ipcMain.handle('dr-aprobar-premio', async (_e, periodoId: number) => {
     const user = await ensurePermission(dataSource, getCurrentUser, APROBAR);
