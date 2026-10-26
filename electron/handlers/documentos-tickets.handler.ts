@@ -696,8 +696,12 @@ export async function printComandaInternal(
       for (const c of (cambiosByItem.get(v.id) || [])) {
         lines.push(ticketText(`CAMBIAR ${c}`, { bold: true }));
       }
-      // AGREGAR — en negrita para diferenciar de las observaciones.
-      for (const t of (adicionalesByItem.get(v.id) || [])) lines.push(ticketText(`   ADD ${t}`, { bold: true }));
+      // AGREGAR — negrita y doble alto (#315): en cocina el extra es tan
+      // crítico como el producto; en tamaño normal se pasaba por alto. El
+      // doble alto no cambia el ancho, así que no altera las columnas.
+      for (const t of (adicionalesByItem.get(v.id) || [])) {
+        lines.push(ticketText(`   ADD ${t}`, { bold: true, size: 'tall' }));
+      }
       for (const t of (observacionesByItem.get(v.id) || [])) lines.push(ticketText(`   >> ${t}`));
       lines.push(ticketBlank());
     }
