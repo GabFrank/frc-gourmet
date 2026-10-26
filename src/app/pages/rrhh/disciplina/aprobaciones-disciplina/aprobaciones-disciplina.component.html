@@ -231,7 +231,7 @@
                         <button mat-icon-button matTooltip="Guardar monto" (click)="ajustar(r, { monto: true })" [disabled]="ajustando === r.id"><mat-icon>save</mat-icon></button>
                         <button mat-icon-button matTooltip="Quitar como ganador" (click)="ajustar(r, { ganador: false })" [disabled]="ajustando === r.id"><mat-icon>person_remove</mat-icon></button>
                       </ng-container>
-                      <button mat-stroked-button *ngIf="!r.ganador" (click)="ajustar(r, { ganador: true })" [disabled]="ajustando === r.id">
+                      <button mat-stroked-button *ngIf="!r.ganador && r.estado === 'DESIERTO'" (click)="ajustar(r, { ganador: true })" [disabled]="ajustando === r.id">
                         <mat-icon>emoji_events</mat-icon> Elegir ganador
                       </button>
                     </div>
