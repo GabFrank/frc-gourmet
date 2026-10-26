@@ -31,6 +31,7 @@ import { registerDisciplinaVotacionHandlers } from '../electron/handlers/discipl
 import { registerDisciplinaPremiosHandlers } from '../electron/handlers/disciplina-premios.handler';
 import { registerDisciplinaCatalogosHandlers } from '../electron/handlers/disciplina-catalogos.handler';
 import { registerDisciplinaPuntosHandlers } from '../electron/handlers/disciplina-puntos.handler';
+import { registerDisciplinaReportesHandlers } from '../electron/handlers/disciplina-reportes.handler';
 import { withRequestUser } from '../electron/utils/auth.utils';
 import { registerAsistenciasHandlers } from '../electron/handlers/asistencias.handler';
 import { registerLiquidacionSueldoHandlers, seedLiquidacionConceptos } from '../electron/handlers/liquidacion-sueldo.handler';
@@ -109,6 +110,7 @@ async function main() {
   registerDisciplinaPremiosHandlers(ds, () => actual);
   registerDisciplinaCatalogosHandlers(ds, () => actual);
   registerDisciplinaPuntosHandlers(ds, () => actual);
+  registerDisciplinaReportesHandlers(ds, () => actual);
   registerAsistenciasHandlers(ds, () => actual);
   registerLiquidacionSueldoHandlers(ds, () => actual);
 
@@ -481,6 +483,36 @@ async function main() {
   await rechaza(call('dr-registrar-falta', { tipoFaltaId: tTard.id, fecha: '2027-05-06', funcionarioIds: [fB.id] }), 'VALIDACION', 'tardanza sin minutos no se registra');
   await rechaza(call('dr-preview-falta', { fecha: '2027-05-06', funcionarioIds: [fB.id] }), 'VALIDACION', 'preview sin tipo de falta');
   await como(colab, () => rechaza(call('dr-preview-falta', { tipoFaltaId: tQ.id, fecha: '2027-06-04', funcionarioIds: [fD.id] }), 'FORBIDDEN', 'colaborador sin RRHH_DR_REGISTRAR no usa la preview'));
+
+  // ===== R) Fase 4: tablero y reporte por persona (cuadran con Penalizacion/Bono [DR]) =====
+  console.log('\n[R] Tablero y reporte');
+  const RD = '2026-07-01', RH = '2027-06-30';
+  const tab = await call('dr-tablero', { desde: RD, hasta: RH });
+  const faltasAprob: any[] = await ds.getRepository(DrFalta).createQueryBuilder('f')
+    .leftJoinAndSelect('f.penalizacion', 'p').leftJoinAndSelect('f.funcionario', 'fu')
+    .where('f.estado = :e', { e: 'APROBADA' }).andWhere('f.fecha BETWEEN :d AND :h', { d: RD, h: RH }).getMany();
+  const espMultas = faltasAprob.filter((f) => f.penalizacion && !f.penalizacion.anulada).reduce((a, f) => a + Number(f.penalizacion.monto), 0);
+  ok(approx(tab.totales.montoMultas, espMultas) && espMultas > 0, 'tablero: multas = Σ Penalizacion [DR] de faltas aprobadas', [tab.totales.montoMultas, espMultas]);
+  const bonosDr: any[] = (await ds.getRepository(Bono).find()).filter((b: any) => String(b.motivo).startsWith('[DR]') && !b.anulado);
+  const espPremios = bonosDr.reduce((a, b) => a + Number(b.monto), 0);
+  ok(approx(tab.totales.montoPremios, espPremios) && espPremios > 0, 'tablero: premios = Σ Bono [DR]', [tab.totales.montoPremios, espPremios]);
+  ok(approx(tab.totales.neto, espPremios - espMultas), 'tablero: neto = premios − multas', tab.totales);
+  ok(tab.filas.every((r: any) => !('votos' in r) && !('respuestas' in r)), 'tablero no expone votos');
+  const filaTabFabi = tab.filas.find((r: any) => r.funcionarioId === fabi.id);
+  ok(filaTabFabi && filaTabFabi.premiosGanados >= 1, 'tablero: FABI con su premio ganado', filaTabFabi);
+  const repF = await call('dr-reporte-persona', { funcionarioId: fabi.id, desde: RD, hasta: RH });
+  ok(approx(repF.neto, filaTabFabi.neto) && repF.netoPorMes.every((m: any) => /^\d{4}-\d{2}$|SIN MES/.test(m.mes)), 'reporte FABI: neto igual al del tablero, por mes destino', { rep: repF.netoPorMes, tab: filaTabFabi.neto });
+  for (const r of tab.filas.slice(0, 5)) {
+    const rp = await call('dr-reporte-persona', { funcionarioId: r.funcionarioId, desde: RD, hasta: RH });
+    ok(approx(rp.neto, r.neto), `reporte ${r.funcionario}: neto cuadra con el tablero`, [rp.neto, r.neto]);
+  }
+  await rechaza(call('dr-tablero', { desde: '2026-01-01', hasta: '2027-06-30' }), 'VALIDACION', 'tablero: rango > 366 días rechazado');
+  await rechaza(call('dr-tablero', { desde: '2027-02-01', hasta: '2027-01-01' }), 'VALIDACION', 'tablero: desde > hasta rechazado');
+  await rechaza(call('dr-reporte-persona', { funcionarioId: 999999, desde: RD, hasta: RH }), 'NO_ENCONTRADO', 'reporte de funcionario inexistente');
+  await como(colab, () => rechaza(call('dr-tablero', { desde: RD, hasta: RH }), 'FORBIDDEN', 'colaborador no ve el tablero'));
+  await como(colab, () => rechaza(call('dr-reporte-persona', { funcionarioId: fabi.id, desde: RD, hasta: RH }), 'FORBIDDEN', 'colaborador no ve reportes de otros'));
+  const tabG = await call('dr-tablero', { desde: RD, hasta: RH, grupoId: grupo.id });
+  ok(tabG.filas.length <= tab.filas.length, 'tablero filtra por grupo', [tabG.filas.length, tab.filas.length]);
 
   await ds.destroy();
   console.log(`\n[disciplina-e2e] ${passed} OK, ${failed} fallas`);
