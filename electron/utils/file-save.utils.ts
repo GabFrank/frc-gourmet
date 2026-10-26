@@ -29,6 +29,7 @@ export const ALLOWED_CARPETAS = new Set<string>([
   'adjuntos',
   'logos',
   'rostros',
+  'ft-evidencias',
 ]);
 
 // Prefijo corto por bucket — identifica el dominio sin ambigüedad en el filesystem.
@@ -43,6 +44,7 @@ const BUCKET_PREFIX: Record<string, string> = {
   'adjuntos': 'adj',
   'logos': 'logo',
   'rostros': 'rostro',
+  'ft-evidencias': 'ftev',
 };
 
 export interface SaveFileInput {

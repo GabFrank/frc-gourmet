@@ -35,6 +35,8 @@ import {
 } from '../utils/caja-abierta.utils';
 import { emitCajaCambio } from '../utils/mesa-emit.utils';
 import { enTransaccionSiPostgres } from '../utils/tx.utils';
+import { dispararEventoFt } from '../services/funciones-tareas/eventos';
+import { FtEvento, FtEventoCaja } from '../../src/app/database/entities/rrhh/funciones-tareas/ft.enums';
 
 interface EnvioCierreResult {
   ok: boolean;
@@ -748,6 +750,8 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
       const creada = Array.isArray(abierta) ? abierta[0] : abierta;
       if (creada?.id) {
         await emitCajaCambio(dataSource, creada.id, creada.estado ?? estadoFinal, dispositivoId);
+        // Funciones y Tareas: post-commit, nunca lanza ni demora la apertura.
+        dispararEventoFt(dataSource, FtEvento.CAJA_ABIERTA, creada.id, FtEventoCaja.PDV, getCurrentUser()?.id);
       }
       return creada;
     } catch (error) {
@@ -914,6 +918,8 @@ export function registerFinancieroHandlers(dataSource: DataSource, getCurrentUse
         } catch (e) {
           console.error(`[update-caja] no se pudo auto-generar el retiro del cierre de la caja ${id}:`, e);
         }
+        // Funciones y Tareas: post-commit, nunca lanza ni demora el cierre.
+        dispararEventoFt(dataSource, FtEvento.CAJA_CERRADA, id, FtEventoCaja.PDV, getCurrentUser()?.id);
         // Envío automático del resumen por WhatsApp (best-effort, no bloquea).
         setImmediate(() => {
           enviarCierreCajaWhatsapp(dataSource, id)

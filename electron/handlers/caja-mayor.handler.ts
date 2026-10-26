@@ -52,6 +52,8 @@ import { generarRetiroDelCierre } from './retiro-cierre.util';
 import { getMovimientosBancariosUnificados } from '../utils/movimientos-bancarios';
 import { dispatchEvento } from '../services/notificacion.service';
 import { selectUsuarioPublico } from '../utils/select-usuario-publico.util';
+import { dispararEventoFt } from '../services/funciones-tareas/eventos';
+import { FtEvento, FtEventoCaja } from '../../src/app/database/entities/rrhh/funciones-tareas/ft.enums';
 
 // Alias local para mantener firma legacy de actualizarSaldo
 const actualizarSaldo = actualizarSaldoCajaMayor;
@@ -267,7 +269,10 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         estado: CajaMayorEstado.ABIERTA,
       });
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
-      return await repo.save(entity);
+      const saved: any = await repo.save(entity);
+      // Funciones y Tareas: post-commit, nunca lanza ni demora la apertura.
+      dispararEventoFt(dataSource, FtEvento.CAJA_ABIERTA, saved?.id, FtEventoCaja.MAYOR, getCurrentUser()?.id);
+      return saved;
     } catch (error) {
       console.error('Error creating caja mayor:', error);
       throw error;
@@ -301,6 +306,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       const saved = await repo.save(entity);
       // Notificar el cierre (no bloquea ni rompe el cierre si falla el envio).
       notificarCierreCajaMayor(dataSource, id).catch(() => undefined);
+      // Funciones y Tareas: post-commit, nunca lanza ni demora el cierre.
+      dispararEventoFt(dataSource, FtEvento.CAJA_CERRADA, id, FtEventoCaja.MAYOR, getCurrentUser()?.id);
       return saved;
     } catch (error) {
       console.error(`Error cerrando caja mayor ID ${id}:`, error);
@@ -2032,6 +2039,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       // nueva sin recargar. Best-effort — nunca rompe la apertura.
       if (abierta?.id) {
         await emitCajaCambio(dataSource, abierta.id, abierta.estado ?? CajaEstado.ABIERTO, dispositivoId);
+        // Funciones y Tareas: post-commit, nunca lanza ni demora la apertura.
+        dispararEventoFt(dataSource, FtEvento.CAJA_ABIERTA, abierta.id, FtEventoCaja.PDV, getCurrentUser()?.id);
       }
       return abierta;
     } catch (error) {
