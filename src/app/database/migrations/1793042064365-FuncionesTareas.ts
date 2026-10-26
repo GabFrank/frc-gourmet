@@ -28,6 +28,8 @@ const ACTIVO: Col = { n: 'activo', t: 'bool', nn: true, def: true };
 const ORDEN: Col = { n: 'orden', t: 'int', nn: true, def: 0 };
 const MOMENTOS = ['ANTES_INICIO', 'ANTES_VENCER', 'AL_VENCER', 'ESCALAMIENTO'];
 const CANALES = ['APP', 'WHATSAPP', 'AMBOS', 'GERENTE'];
+/** Momentos de un aviso registrado: los de las reglas + AUSENTE (sin marcación con tarea crítica). */
+const MOMENTOS_AVISO = [...MOMENTOS, 'AUSENTE'];
 
 const TABLAS: Tabla[] = [
   {
@@ -73,6 +75,8 @@ const TABLAS: Tabla[] = [
       { n: 'dia_mes', t: 'int' },
       { n: 'fecha_unica', t: 'date' },
       { n: 'evento', t: 'enum', vals: ['CAJA_ABIERTA', 'CAJA_CERRADA', 'COMPRA_RECIBIDA'], nullable: true },
+      // Solo eventos de caja: PDV o MAYOR; NULL = cualquiera de las dos.
+      { n: 'evento_caja', t: 'enum', vals: ['PDV', 'MAYOR'], nullable: true },
       { n: 'ancla', t: 'enum', vals: ['INICIO_TURNO', 'FIN_TURNO', 'HORA_FIJA', 'EVENTO'], def: 'INICIO_TURNO' },
       { n: 'offset_inicio_min', t: 'int', nn: true, def: 0 },
       { n: 'duracion_min', t: 'int', nn: true, def: 60 },
@@ -151,13 +155,14 @@ const TABLAS: Tabla[] = [
     cols: [
       { n: 'clave', t: 'varchar', len: 120, nn: true },
       { n: 'tarea_id', t: 'fk', ref: 'ft_tarea', del: 'SET NULL' },
-      { n: 'momento', t: 'enum', vals: MOMENTOS },
+      { n: 'momento', t: 'enum', vals: MOMENTOS_AVISO },
       { n: 'nivel', t: 'int', nn: true, def: 1 },
       { n: 'canal', t: 'enum', vals: CANALES },
       { n: 'estado', t: 'enum', vals: ['PENDIENTE', 'ENVIADO', 'FALLIDO', 'PARA_GERENTE'], def: 'PENDIENTE' },
       { n: 'destino', t: 'text' },
       { n: 'mensaje', t: 'text' },
       { n: 'intentos', t: 'int', nn: true, def: 0 },
+      { n: 'error', t: 'text' },
       { n: 'enviado_en', t: 'ts' },
     ],
     indices: [{ nombre: 'UQ_ft_aviso_enviado_clave', cols: ['clave'], unico: true }],

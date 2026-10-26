@@ -1,7 +1,7 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseModel } from '../../base.entity';
 import { FtTarea } from './ft-tarea.entity';
-import { FtCanalAviso, FtEstadoAviso, FtMomentoAviso } from './ft.enums';
+import { FtCanalAviso, FtEstadoAviso, FtMomentoAvisoRegistro } from './ft.enums';
 
 /**
  * Registro y dedupe de avisos: se inserta ANTES de enviar (UNIQUE clave `ft:<tarea>:<momento>:<nivel>`).
@@ -17,8 +17,8 @@ export class FtAvisoEnviado extends BaseModel {
   @JoinColumn({ name: 'tarea_id' })
   tarea?: FtTarea | null;
 
-  @Column({ type: 'text', enum: FtMomentoAviso })
-  momento!: FtMomentoAviso;
+  @Column({ type: 'text', enum: FtMomentoAvisoRegistro })
+  momento!: FtMomentoAvisoRegistro;
 
   @Column({ type: 'integer', default: 1 })
   nivel!: number;
@@ -37,6 +37,10 @@ export class FtAvisoEnviado extends BaseModel {
 
   @Column({ type: 'integer', default: 0 })
   intentos!: number;
+
+  /** Por qué no salió (FALLIDO): sin destino, NOTIF_GLOBAL_ACTIVO apagado, error del proveedor… */
+  @Column({ type: 'text', nullable: true })
+  error?: string | null;
 
   @Column({ name: 'enviado_en', nullable: true })
   enviadoEn?: Date;

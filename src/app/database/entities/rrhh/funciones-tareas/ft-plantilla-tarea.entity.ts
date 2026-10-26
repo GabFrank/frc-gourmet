@@ -6,7 +6,7 @@ import { Turno } from '../turno.entity';
 import { DrGrupo } from '../disciplina/dr-grupo.entity';
 import { DrTipoFalta } from '../disciplina/dr-tipo-falta.entity';
 import { DrCriterio } from '../disciplina/dr-criterio.entity';
-import { FtAncla, FtEvento, FtEvidencia, FtRecurrencia, FtTipoTarea } from './ft.enums';
+import { FtAncla, FtEvento, FtEventoCaja, FtEvidencia, FtRecurrencia, FtTipoTarea } from './ft.enums';
 import { FtPlantillaItem } from './ft-plantilla-item.entity';
 import { FtReglaAviso } from './ft-regla-aviso.entity';
 
@@ -72,6 +72,10 @@ export class FtPlantillaTarea extends BaseModel {
 
   @Column({ type: 'text', enum: FtEvento, nullable: true })
   evento?: FtEvento | null;
+
+  /** Eventos de caja: solo PDV o solo MAYOR; null = cualquiera. */
+  @Column({ name: 'evento_caja', type: 'text', enum: FtEventoCaja, nullable: true })
+  eventoCaja?: FtEventoCaja | null;
 
   // ── Ventana ──
   @Column({ type: 'text', enum: FtAncla, default: FtAncla.INICIO_TURNO })
