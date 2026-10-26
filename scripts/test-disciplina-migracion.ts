@@ -55,10 +55,16 @@ async function main() {
 
   const migs = ds.migrations.map((m: any) => m.name || m.constructor.name);
   const nombreDr = migs.find((n) => /DisciplinaReconocimiento/.test(n));
-  ok(!!nombreDr && migs[migs.length - 1] === nombreDr, 'la migración DR es la última registrada', migs.slice(-2));
+  ok(!!nombreDr, 'la migración DR está registrada', migs.slice(-2));
+  // Las migraciones posteriores a DR (p. ej. FuncionesTareas) se deshacen para dejar DR última.
+  const posteriores = nombreDr ? migs.length - 1 - migs.indexOf(nombreDr) : 0;
+  const hastaDr = async () => {
+    await ds.runMigrations({ transaction: 'each' });
+    for (let i = 0; i < posteriores; i++) await ds.undoLastMigration({ transaction: 'each' });
+  };
 
-  // Todo hasta antes de DR: se corre todo y se deshace DR para obtener el «antes».
-  await ds.runMigrations({ transaction: 'each' });
+  // Todo hasta DR inclusive; después se deshace DR para obtener el «antes».
+  await hastaDr();
   const conDr = await esquema();
   const tablasDr = drDe(conDr);
   const esperadas = ds.entityMetadatas.map((m) => m.tableName).filter((t) => t.startsWith('dr_')).sort();
@@ -71,7 +77,7 @@ async function main() {
   const reg = await ds.query(`SELECT name FROM "${tablaMig}"`);
   ok(!reg.some((r: any) => /DisciplinaReconocimiento/.test(r.name)), 'down quita el registro de la migración');
 
-  await ds.runMigrations({ transaction: 'each' });
+  await hastaDr();
   const reUp = await esquema();
   ok(JSON.stringify(drDe(reUp)) === JSON.stringify(tablasDr) && canon(reUp) === canon(conDr), 'up de nuevo deja el mismo esquema');
 
