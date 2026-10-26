@@ -116,7 +116,7 @@ De izquierda a derecha:
 
 > El botón de notificaciones con `matBadge` está **comentado** en el template. El badge de notificaciones RRHH vive en el item "Notificaciones" del sidenav.
 
-> **Disciplina y reconocimiento** (RRHH): las tres pantallas viven en `src/app/pages/rrhh/disciplina/`
-> (ids de hoja `dr-registro`, `dr-aprobaciones`, `dr-config`). La configuración tiene un acceso a
+> **Disciplina y reconocimiento** (RRHH): las cuatro pantallas viven en `src/app/pages/rrhh/disciplina/`
+> (ids de hoja `dr-registro`, `dr-aprobaciones`, `dr-resultados`, `dr-config`). La configuración tiene un acceso a
 > *Configuración RRHH* para `DR_TOPE_DESCUENTO_MENSUAL` y `DR_VOTACION_MIN_VOTANTES` (no se duplican).
 > Ver [../domains/rrhh-disciplina.md](../domains/rrhh-disciplina.md).

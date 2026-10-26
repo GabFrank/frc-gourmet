@@ -33,6 +33,7 @@
 | **disciplina.handler.ts** | 502 | Disciplina y Reconocimiento (DR): DrTipoFalta + DrFalta. Registro (motor de multas, lote, tardanza sin doble descuento), apelación/renuncia por identidad de sesión, vista previa sin guardar (`dr-preview-falta`), aprobación idempotente → Penalizacion `[DR]` (mes abierto, tope en cuotas, `dr_liquidacion_pendiente`), justificar/anular. → [domains/rrhh-disciplina.md](../domains/rrhh-disciplina.md) |
 | **disciplina-catalogos.handler.ts** | 97 | DR: `dr-get-*` / `dr-save-*` genérico para grupos, miembros, encuestas, preguntas, premios, tipos de error, gravedades, criterios y checklist (textos en MAYÚSCULAS) |
 | **disciplina-premios.handler.ts** | 175 | DR: cálculo de premios (VOTACION / CRITERIOS / SALDO_PUNTOS, reglas de empate) y aprobación → Bono `[DR]` |
+| **disciplina-reportes.handler.ts** | 150 | DR (fase 4): tablero y reporte por persona, solo lectura y solo agregados (multas = Penalizacion `[DR]` de faltas aprobadas; premios = resultados APROBADOS) |
 | **disciplina-puntos.handler.ts** | 171 | DR: errores con puntos (DrError), puntaje diario por criterios (DrPuntajeCriterio), mis puntos / mis premios |
 | **disciplina-votacion.handler.ts** | 294 | DR: períodos y votación anónima (participación + agregados cifrados AES-GCM en una transacción; clave `userData/dr-votos.key`), cierre con reescritura mezclada, resultados con mínimo de votantes |
 | **documentos-tickets.handler.ts** | 962 | Tickets térmicos (comanda multi-sector, venta, recibos, vales) |
@@ -165,7 +166,9 @@ Registrados en `register-all-handlers.ts` justo después de `registerAsistencias
 | | `dr-get-periodos` | APROBAR \| RESULTADOS_VER |
 | | `dr-mis-encuestas-pendientes`, `dr-votar` | VOTAR |
 | | `dr-get-resultados-encuesta` | RESULTADOS_VER |
-| `disciplina-premios.handler.ts` | `dr-calcular-premio`, `dr-aprobar-premio` | APROBAR |
+| `disciplina-premios.handler.ts` | `dr-calcular-premio`, `dr-aprobar-premio`, `dr-ajustar-resultado-premio` (monto/ganador, nunca sobre APROBADO) | APROBAR |
+| | `dr-get-resultados-premio` | APROBAR \| RESULTADOS_VER |
+| `disciplina-reportes.handler.ts` | `dr-tablero` (agregados por funcionario), `dr-reporte-persona` (hechos y neto por mes destino); rango ≤ 366 días | APROBAR \| RESULTADOS_VER |
 | `disciplina-puntos.handler.ts` | `dr-registrar-error` | REGISTRAR |
 | | `dr-anular-error` | APROBAR |
 | | `dr-get-errores` | REGISTRAR \| APROBAR \| RESULTADOS_VER |

@@ -302,6 +302,26 @@ Dos usuarios: **admin** (todos los `RRHH_DR_*`) y **colaborador** (solo `COLABOR
       se muestra el error (mobile no la deshabilita de antemano).
 - [ ] Los premios **no** se aprueban acá: solo desde desktop (pestaña Premios).
 
+### 22. Cierre de período y ajuste del premio (desktop, Aprobaciones › Premios)
+- [ ] Elegir un período ABIERTO → «Cerrar período» pide confirmación; luego figura como CERRADO
+      y ya no acepta votos ni puntajes. «Calcular» está deshabilitado mientras esté abierto.
+- [ ] Calcular: ranking con puesto, puntaje, ganador y monto; con empate DIVIDIR el monto se
+      reparte, con MONTO_COMPLETO cada uno cobra entero, con DESIERTO no hay ganador.
+- [ ] Desierto o sin mínimo de votantes: «Elegir ganador» lo marca y habilita «Aprobar premio».
+- [ ] Editar el monto de un ganador y guardar; monto negativo se rechaza. Quitar ganador.
+- [ ] Aprobar: crea un Bono `[DR]` por ganador en el mes abierto; después no se puede ajustar
+      ni aprobar de nuevo (los botones de ajuste desaparecen).
+
+### 23. Tablero y resultados (desktop, `RRHH_DR_RESULTADOS_VER`)
+- [ ] Tablero: tarjetas por persona con semáforo (rojo neto negativo, amarillo con hechos,
+      verde sin hechos) y totales; filtra por rango y por área/grupo.
+- [ ] Los montos cuadran con Penalizaciones y Bonos `[DR]` del mismo rango.
+- [ ] Tocar una tarjeta abre «Por persona» con faltas, errores, premios, puntaje diario y neto
+      por mes de sueldo; «Exportar CSV» baja el detalle.
+- [ ] Encuesta: con período cerrado y mínimo de votantes, promedios por persona y pregunta
+      (Sí/No en %) y comentarios mezclados; sin mínimo, aviso de anonimato y sin datos.
+- [ ] Rango mayor a 366 días o «desde» posterior a «hasta»: mensaje de error.
+- [ ] Usuario sin el permiso: no ve la entrada del menú y el backend rechaza la consulta.
+
 ### Pendiente
-- [ ] Cierre de período con ranking y empates, y el aviso de anonimato del constructor de
-      encuestas en grupos chicos.
+- [ ] Aviso de anonimato del constructor de encuestas en grupos chicos.

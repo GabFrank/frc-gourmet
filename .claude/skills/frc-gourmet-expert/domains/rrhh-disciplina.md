@@ -222,6 +222,25 @@ es idempotente: mismas entradas → mismo resultado.
 `[DR] <PREMIO> (PERÍODO <id>)`, `autorizadoPor` = aprobador), con UPDATE condicional sobre
 el resultado, y pasa el período a APROBADO.
 
+Fase 4 — antes de aprobar: `dr-get-resultados-premio` devuelve el ranking guardado (ids,
+estado, montos) y `dr-ajustar-resultado-premio` permite corregir el monto a pagar
+(`montoAprobado`) o elegir/quitar ganador a mano (empate `DESIERTO` o sin mínimo de votantes:
+al elegir uno, el período DESIERTO pasa a PROPUESTO). UPDATE condicional por estado, queda
+«AJUSTE MANUAL POR <usuario>» en `observacion`; nunca sobre APROBADO.
+
+## Tablero y reporte por persona (fase 4)
+
+`disciplina-reportes.handler.ts`, solo lectura (`RRHH_DR_APROBAR` o `RRHH_DR_RESULTADOS_VER`),
+rango de fechas locales ≤ 366 días:
+- `dr-tablero({ desde, hasta, grupoId? })`: por funcionario, advertencias, multas, faltas sin
+  resolver, errores y puntos, puntaje diario promedio (Σ criterios por día), multas y premios en
+  sueldo y neto; más `totales`. Cuentan las faltas REGISTRADA/APELADA/APROBADA; el monto de multa
+  sale de la Penalizacion `[DR]` no anulada de las APROBADAS; el de premio, de los resultados
+  APROBADOS cuyo período termina en el rango.
+- `dr-reporte-persona({ funcionarioId, desde, hasta })`: faltas, errores, puntaje diario y
+  premios del rango, y `netoPorMes` (premios − multas por mes destino de liquidación).
+Nunca exponen votos individuales (la encuesta sigue saliendo solo por `dr-get-resultados-encuesta`).
+
 ## Integración con la liquidación de sueldo
 
 - **Mes abierto** por funcionario = sin liquidación o con liquidación BORRADOR (las ANULADAS
@@ -304,7 +323,7 @@ Por tipo de falta: `advertenciasPrevias`, `montoMulta`, `escalaMontos`, `reinici
 SEMANAL arranca el lunes (el motor acepta otro inicio, el handler no lo pasa) y la
 «advertencia de tolerancia» del motor (`advertirDentroTolerancia`) no está expuesta.
 
-## Pantallas desktop (fase 2)
+## Pantallas desktop (fases 2 y 4)
 
 En `src/app/pages/rrhh/disciplina/`, desde *RRHH › Disciplina y reconocimiento*
 (`menu-tree.ts`):
@@ -312,7 +331,8 @@ En `src/app/pages/rrhh/disciplina/`, desde *RRHH › Disciplina y reconocimiento
 | Pantalla | Permiso | Qué hace |
 |---|---|---|
 | `registro-disciplina` | `RRHH_DR_REGISTRAR` | Pestañas Faltas y Errores: registrar (diálogos `registrar-falta-dialog`, `registrar-error-dialog`) e historial filtrable |
-| `aprobaciones-disciplina` | `RRHH_DR_APROBAR` | Pestañas Pendientes, Apeladas y Premios |
+| `aprobaciones-disciplina` | `RRHH_DR_APROBAR` | Pestañas Pendientes, Apeladas y Premios (fase 4: cerrar período abierto, ranking con monto editable y elegir/quitar ganador antes de aprobar) |
+| `resultados-disciplina` | `RRHH_DR_RESULTADOS_VER` | Fase 4. Tablero (tarjetas por persona con semáforo: rojo neto < 0, amarillo con hechos, verde limpio), Por persona (neto por mes de sueldo, export CSV) y Encuesta (promedios por persona y pregunta, % de «Sí», comentarios mezclados; nada si no hay mínimo de votantes) |
 | `config-disciplina` | `RRHH_DR_CONFIGURAR` | Catálogos genéricos por pestaña (formulario `dr-form-dialog`) y botón «Cargar ejemplo Cocina» |
 
 `disciplina-api.service.ts` envuelve los canales `dr-*`. Los datos de ejemplo
