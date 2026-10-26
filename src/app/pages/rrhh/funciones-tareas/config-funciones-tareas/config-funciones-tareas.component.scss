@@ -1,0 +1,10 @@
+.ft-wrap { padding: 12px; }
+.ft-barra { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.ft-tabla { width: 100%; }
+.ft-edit { margin-top: 12px; }
+.ft-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0 12px; }
+.ft-fila { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ft-fila .ancho { flex: 1 1 260px; }
+.ft-sub { margin: 12px 0 4px; font-weight: 500; }
+.ft-inactivo { opacity: 0.5; }
+.ft-dias { display: flex; gap: 8px; }
