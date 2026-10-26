@@ -37,6 +37,7 @@ import { DataSource } from 'typeorm';
 import { invokeHandlerWithContext } from '../electron/utils/handler-registry';
 import { getDataSourceOptions } from '../src/app/database/database.config';
 import { registerFuncionesTareasHandlers } from '../electron/handlers/funciones-tareas.handler';
+import { registerFuncionesTareasLecturaHandlers } from '../electron/handlers/funciones-tareas-lectura.handler';
 import { clearPermissionCache } from '../electron/utils/auth.utils';
 import { ejecutarTickFt, ftOnEvento, tomarLockFt } from '../electron/services/funciones-tareas/motor';
 import { fijarEnviadorFt } from '../electron/services/funciones-tareas/avisos';
@@ -117,6 +118,7 @@ async function main() {
   const como = async <T>(u: any, fn: () => Promise<T>) => { const prev = actual; actual = u; try { return await fn(); } finally { actual = prev; } };
   clearPermissionCache();
   registerFuncionesTareasHandlers(ds, () => actual);
+  registerFuncionesTareasLecturaHandlers(ds, () => actual);
 
   const pyg: any = await save(Moneda, { denominacion: 'GUARANI', simbolo: 'Gs', principal: true, activo: true });
   const cocinero: any = await save(Cargo, { nombre: 'COCINERO', activo: true });
@@ -528,6 +530,27 @@ async function main() {
   await rechaza(como(uDani, () => call('ft-tarea-marcar', tEv[0].id, { evidenciaUrl: 'https://otro.sitio/x.png' })), 'VALIDACION', 'ft-tarea-marcar no acepta URLs ajenas a ft-evidencias');
   if (fs.existsSync(archivo)) fs.unlinkSync(archivo);
   fijarEnviadorFt(null);
+
+  console.log('\n[F5] Lecturas para el Gerente');
+  const todas: any[] = await call('ft-tareas-list', { desde: '2026-11-01', hasta: '2026-11-30' });
+  const cump = await como(uRep, () => call('ft-cumplimiento', { mes: '2026-11' }));
+  ok(cump.desde === '2026-11-01' && cump.hasta === '2026-11-30' && cump.total.asignadas === todas.length, 'ft-cumplimiento por mes cuenta todas las tareas del mes', { total: cump.total.asignadas, n: todas.length });
+  const sumaFilas = cump.filas.reduce((a: number, x: any) => a + x.asignadas, 0);
+  const hechasOk = todas.filter((t) => ['HECHA', 'VERIFICADA'].includes(t.estado)).length;
+  const base = todas.length - todas.filter((t) => t.estado === 'NO_APLICA').length;
+  ok(sumaFilas === todas.length && cump.total.cumplimiento === (base ? Math.round((hechasOk * 1000) / base) / 10 : null), 'filas por persona suman el total y el % es (hechas+verificadas)/(asignadas-no aplica)', { sumaFilas, pct: cump.total.cumplimiento });
+  const porCargo = await como(uRep, () => call('ft-cumplimiento', { mes: '2026-11', agrupar: 'cargo' }));
+  ok(porCargo.filas.reduce((a: number, x: any) => a + x.asignadas, 0) === todas.length && porCargo.filas.some((x: any) => x.nombre === 'COCINERO'), 'agrupado por cargo vigente', porCargo.filas.map((x: any) => x.nombre));
+  await rechaza(como(uRep, () => call('ft-cumplimiento', { desde: '2026-10-01', hasta: '2026-11-30' })), 'RANGO_EXCEDIDO', 'ft-cumplimiento: más de 31 días → rechazado');
+  await rechaza(como(uAna, () => call('ft-cumplimiento', {})), 'FORBIDDEN', 'una colaboradora no lee el cumplimiento de todos');
+  const venc = await como(uRep, () => call('ft-vencidas', { desde: '2026-11-01', hasta: '2026-11-30' }));
+  ok(Array.isArray(venc) && venc.length >= todas.filter((t) => t.estado === 'VENCIDA').length && venc.every((v: any) => v.responsable?.id > 0 && v.atrasoMin >= 0), 'ft-vencidas trae las vencidas con responsable y atraso', venc.length);
+  const hist = await como(uRep, () => call('ft-historico', { mes: '2026-11', por: 'semana' }));
+  ok(hist.periodos.length >= 1 && hist.periodos.every((p: any) => /^2026-1[01]-\d\d$/.test(p.periodo)) && Array.isArray(hist.reincidencias), 'ft-historico por semana (lunes) con reincidencias', hist.periodos.map((p: any) => p.periodo));
+  const deTurno = await como(uRep, () => call('ft-de-turno-hoy', '2026-11-14'));
+  ok(deTurno.fecha === '2026-11-14' && deTurno.personas.every((p: any) => p.turno?.id > 0), 'ft-de-turno-hoy lista solo quienes tienen turno ese día', deTurno.personas.length);
+  const motor = await como(uRep, () => call('ft-estado-motor'));
+  ok(typeof motor.activo === 'boolean' && motor.intervaloMin >= 1 && motor.ultimoTick?.ejecutado !== undefined, 'ft-estado-motor devuelve activo, intervalo y último tick', motor);
 
   fijarRelojFt(null);
   await ds.destroy();

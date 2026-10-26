@@ -64,6 +64,7 @@ import { registerDisciplinaPremiosHandlers } from '../handlers/disciplina-premio
 import { registerDisciplinaCatalogosHandlers } from '../handlers/disciplina-catalogos.handler';
 import { registerDisciplinaPuntosHandlers } from '../handlers/disciplina-puntos.handler';
 import { registerFuncionesTareasHandlers } from '../handlers/funciones-tareas.handler';
+import { registerFuncionesTareasLecturaHandlers } from '../handlers/funciones-tareas-lectura.handler';
 import { registerFuncionarioDocumentosHandlers } from '../handlers/funcionario-documentos.handler';
 import { registerAsistenciasHandlers } from '../handlers/asistencias.handler';
 import { registerAsistenciaFacialHandlers } from '../handlers/asistencia-facial.handler';
@@ -160,6 +161,7 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerDisciplinaCatalogosHandlers(dataSource, getCurrentUser); // RRHH: DR catálogos configurables
   registerDisciplinaPuntosHandlers(dataSource, getCurrentUser); // RRHH: DR errores/puntos y puntaje por criterios
   registerFuncionesTareasHandlers(dataSource, getCurrentUser); // RRHH: Funciones y Tareas (ABM, mis tareas, verificar)
+  registerFuncionesTareasLecturaHandlers(dataSource, getCurrentUser); // RRHH: FT lecturas para el Gerente y reportes
   registerAsistenciaFacialHandlers(dataSource, getCurrentUser); // RRHH: Reconocimiento facial (rostros + fichaje)
   registerFaceModelsHandlers(dataSource, getCurrentUser); // RRHH: Modelos de reconocimiento facial (descarga/serve)
   registerFeriadosHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Feriados
