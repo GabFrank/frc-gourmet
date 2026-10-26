@@ -1,0 +1,183 @@
+<div class="contenedor-raiz">
+  <div class="page-header">
+    <div class="titulo"><mat-icon>insights</mat-icon><h2>Resultados de disciplina y reconocimiento</h2></div>
+    <div class="filtros">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Desde</mat-label>
+        <input matInput type="date" [(ngModel)]="desde" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Hasta</mat-label>
+        <input matInput type="date" [(ngModel)]="hasta" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Área / grupo</mat-label>
+        <mat-select [(ngModel)]="grupoId">
+          <mat-option [value]="null">Todos</mat-option>
+          <mat-option *ngFor="let g of grupos" [value]="g.id">{{ g.nombre }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <button mat-flat-button color="primary" (click)="cargarTablero(); cargarReporte()" [disabled]="cargandoTablero">
+        <mat-icon>refresh</mat-icon> Actualizar
+      </button>
+    </div>
+  </div>
+
+  <mat-tab-group class="tabs" #tabs animationDuration="0ms">
+    <!-- D5 Tablero -->
+    <mat-tab>
+      <ng-template mat-tab-label><mat-icon class="tab-icon">dashboard</mat-icon>Tablero</ng-template>
+      <div class="tab-body">
+        <div class="spinner" *ngIf="cargandoTablero"><mat-spinner diameter="32"></mat-spinner></div>
+        <ng-container *ngIf="!cargandoTablero && tablero">
+          <div class="kpis">
+            <mat-card class="kpi"><div class="kpi-valor">{{ tablero.totales.funcionarios }}</div><div class="kpi-label">Personas con hechos</div></mat-card>
+            <mat-card class="kpi"><div class="kpi-valor">{{ tablero.totales.advertencias }}</div><div class="kpi-label">Advertencias</div></mat-card>
+            <mat-card class="kpi"><div class="kpi-valor rojo">{{ tablero.totales.multas }}</div><div class="kpi-label">Multas</div></mat-card>
+            <mat-card class="kpi"><div class="kpi-valor">{{ tablero.totales.errores }}</div><div class="kpi-label">Errores</div></mat-card>
+            <mat-card class="kpi"><div class="kpi-valor rojo">₲ {{ tablero.totales.montoMultas | number:'1.0-0' }}</div><div class="kpi-label">Multas en sueldo</div></mat-card>
+            <mat-card class="kpi"><div class="kpi-valor verde">₲ {{ tablero.totales.montoPremios | number:'1.0-0' }}</div><div class="kpi-label">Premios en sueldo</div></mat-card>
+            <mat-card class="kpi"><div class="kpi-valor" [class.rojo]="tablero.totales.neto < 0" [class.verde]="tablero.totales.neto > 0">₲ {{ tablero.totales.neto | number:'1.0-0' }}</div><div class="kpi-label">Neto</div></mat-card>
+          </div>
+          <div class="vacio" *ngIf="!tablero.filas.length">Sin hechos en el rango elegido.</div>
+          <div class="tarjetas">
+            <mat-card *ngFor="let r of tablero.filas" class="persona" [ngClass]="'sem-' + semaforo(r)" (click)="verPersona(r.funcionarioId, tabs)"
+              matTooltip="Ver el detalle de {{ r.funcionario }}">
+              <div class="persona-cab">
+                <span class="dot"></span>
+                <span class="persona-nombre">{{ r.funcionario }}</span>
+                <span class="spacer"></span>
+                <mat-icon *ngIf="r.premiosGanados" class="trofeo" matTooltip="Premios ganados">emoji_events</mat-icon>
+              </div>
+              <div class="persona-grid">
+                <div><span class="n">{{ r.advertencias }}</span><span class="l">Advert.</span></div>
+                <div><span class="n">{{ r.multas }}</span><span class="l">Multas</span></div>
+                <div><span class="n">{{ r.errores }}</span><span class="l">Errores</span></div>
+                <div><span class="n">{{ r.puntajeDiarioPromedio ?? '–' }}</span><span class="l">Puntaje/día</span></div>
+              </div>
+              <div class="persona-pie">
+                <span class="rojo" *ngIf="r.montoMultas">− ₲ {{ r.montoMultas | number:'1.0-0' }}</span>
+                <span class="verde" *ngIf="r.montoPremios">+ ₲ {{ r.montoPremios | number:'1.0-0' }}</span>
+                <span class="spacer"></span>
+                <strong [class.rojo]="r.neto < 0" [class.verde]="r.neto > 0">₲ {{ r.neto | number:'1.0-0' }}</strong>
+              </div>
+              <div class="pendientes" *ngIf="r.faltasPendientes">{{ r.faltasPendientes }} falta(s) sin resolver</div>
+            </mat-card>
+          </div>
+        </ng-container>
+      </div>
+    </mat-tab>
+
+    <!-- D6 Reporte por persona -->
+    <mat-tab>
+      <ng-template mat-tab-label><mat-icon class="tab-icon">person_search</mat-icon>Por persona</ng-template>
+      <div class="tab-body">
+        <div class="filtros">
+          <mat-form-field appearance="outline" class="ancho" subscriptSizing="dynamic">
+            <mat-label>Funcionario</mat-label>
+            <mat-select [(ngModel)]="funcionarioId" (selectionChange)="cargarReporte()">
+              <mat-option *ngFor="let f of funcionarios" [value]="f.id">{{ f.nombre }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <span class="spacer"></span>
+          <button mat-stroked-button (click)="exportarReporte()" [disabled]="!reporte"><mat-icon>download</mat-icon> Exportar CSV</button>
+        </div>
+        <div class="spinner" *ngIf="cargandoReporte"><mat-spinner diameter="32"></mat-spinner></div>
+        <div class="vacio" *ngIf="!cargandoReporte && !reporte">Elegí un funcionario (o tocá su tarjeta en el tablero).</div>
+        <ng-container *ngIf="!cargandoReporte && reporte">
+          <div class="kpis">
+            <mat-card class="kpi" *ngFor="let m of reporte.netoPorMes">
+              <div class="kpi-valor" [class.rojo]="m.neto < 0" [class.verde]="m.neto > 0">₲ {{ m.neto | number:'1.0-0' }}</div>
+              <div class="kpi-label">Sueldo {{ m.mes }} · −{{ m.multas | number:'1.0-0' }} / +{{ m.premios | number:'1.0-0' }}</div>
+            </mat-card>
+            <mat-card class="kpi"><div class="kpi-valor" [class.rojo]="reporte.neto < 0" [class.verde]="reporte.neto > 0">₲ {{ reporte.neto | number:'1.0-0' }}</div><div class="kpi-label">Neto del rango</div></mat-card>
+          </div>
+          <div class="columnas">
+            <mat-card class="bloque">
+              <h3>Faltas ({{ reporte.faltas.length }})</h3>
+              <table mat-table [dataSource]="reporte.faltas">
+                <ng-container matColumnDef="fecha"><th mat-header-cell *matHeaderCellDef>Fecha</th><td mat-cell *matCellDef="let f">{{ fechaVista(f.fecha) }}</td></ng-container>
+                <ng-container matColumnDef="tipo"><th mat-header-cell *matHeaderCellDef>Tipo</th><td mat-cell *matCellDef="let f">{{ f.tipo }} <span class="sub">({{ f.resultado }})</span></td></ng-container>
+                <ng-container matColumnDef="estado"><th mat-header-cell *matHeaderCellDef>Estado</th><td mat-cell *matCellDef="let f"><span [class]="claseEstado(f.estado)">{{ f.estado }}</span></td></ng-container>
+                <ng-container matColumnDef="monto"><th mat-header-cell *matHeaderCellDef class="num">En sueldo</th><td mat-cell *matCellDef="let f" class="num">{{ f.montoEnSueldo ? ('− ₲ ' + (f.montoEnSueldo | number:'1.0-0')) : '–' }}</td></ng-container>
+                <tr mat-header-row *matHeaderRowDef="['fecha','tipo','estado','monto']"></tr>
+                <tr mat-row *matRowDef="let row; columns: ['fecha','tipo','estado','monto']"></tr>
+              </table>
+            </mat-card>
+            <mat-card class="bloque">
+              <h3>Errores ({{ reporte.errores.length }})</h3>
+              <table mat-table [dataSource]="reporte.errores">
+                <ng-container matColumnDef="fecha"><th mat-header-cell *matHeaderCellDef>Fecha</th><td mat-cell *matCellDef="let e">{{ fechaVista(e.fecha) }}</td></ng-container>
+                <ng-container matColumnDef="tipo"><th mat-header-cell *matHeaderCellDef>Tipo</th><td mat-cell *matCellDef="let e">{{ e.tipo }}</td></ng-container>
+                <ng-container matColumnDef="puntos"><th mat-header-cell *matHeaderCellDef class="num">Puntos</th><td mat-cell *matCellDef="let e" class="num">{{ e.puntos }}</td></ng-container>
+                <ng-container matColumnDef="estado"><th mat-header-cell *matHeaderCellDef>Estado</th><td mat-cell *matCellDef="let e"><span [class]="claseEstado(e.estado)">{{ e.estado }}</span></td></ng-container>
+                <tr mat-header-row *matHeaderRowDef="['fecha','tipo','puntos','estado']"></tr>
+                <tr mat-row *matRowDef="let row; columns: ['fecha','tipo','puntos','estado']"></tr>
+              </table>
+            </mat-card>
+            <mat-card class="bloque">
+              <h3>Premios ({{ reporte.premios.length }})</h3>
+              <table mat-table [dataSource]="reporte.premios">
+                <ng-container matColumnDef="premio"><th mat-header-cell *matHeaderCellDef>Premio</th><td mat-cell *matCellDef="let p">{{ p.premio }} <span class="sub">{{ fechaVista(p.desde) }}–{{ fechaVista(p.hasta) }}</span></td></ng-container>
+                <ng-container matColumnDef="posicion"><th mat-header-cell *matHeaderCellDef class="num">Puesto</th><td mat-cell *matCellDef="let p" class="num">{{ p.posicion ?? '–' }} <mat-icon *ngIf="p.ganador" class="trofeo mini">emoji_events</mat-icon></td></ng-container>
+                <ng-container matColumnDef="estado"><th mat-header-cell *matHeaderCellDef>Estado</th><td mat-cell *matCellDef="let p"><span [class]="claseEstado(p.estado)">{{ p.estado }}</span></td></ng-container>
+                <ng-container matColumnDef="monto"><th mat-header-cell *matHeaderCellDef class="num">En sueldo</th><td mat-cell *matCellDef="let p" class="num">{{ p.montoEnSueldo ? ('+ ₲ ' + (p.montoEnSueldo | number:'1.0-0')) : '–' }}</td></ng-container>
+                <tr mat-header-row *matHeaderRowDef="['premio','posicion','estado','monto']"></tr>
+                <tr mat-row *matRowDef="let row; columns: ['premio','posicion','estado','monto']"></tr>
+              </table>
+            </mat-card>
+            <mat-card class="bloque" *ngIf="reporte.puntajeDiario.length">
+              <h3>Puntaje diario</h3>
+              <div class="barras">
+                <div class="barra" *ngFor="let d of reporte.puntajeDiario" [matTooltip]="fechaVista(d.fecha) + ': ' + d.total">
+                  <div class="relleno" [style.height.%]="d.total > 0 ? (100 * d.total / maxPuntaje) : 2"></div>
+                </div>
+              </div>
+            </mat-card>
+          </div>
+        </ng-container>
+      </div>
+    </mat-tab>
+
+    <!-- D7 Resultados de encuesta -->
+    <mat-tab>
+      <ng-template mat-tab-label><mat-icon class="tab-icon">how_to_vote</mat-icon>Encuesta</ng-template>
+      <div class="tab-body">
+        <div class="filtros">
+          <mat-form-field appearance="outline" class="ancho" subscriptSizing="dynamic">
+            <mat-label>Período cerrado</mat-label>
+            <mat-select [(ngModel)]="periodoId" (selectionChange)="cargarEncuesta()">
+              <mat-option *ngFor="let p of periodos" [value]="p.id">{{ etiquetaPeriodo(p) }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+        <p class="hint"><mat-icon>lock</mat-icon> Solo promedios por persona y pregunta. Los votos individuales no se guardan ni se muestran.</p>
+        <div class="spinner" *ngIf="cargandoEncuesta"><mat-spinner diameter="32"></mat-spinner></div>
+        <div class="vacio" *ngIf="!cargandoEncuesta && !periodos.length">Todavía no hay períodos de encuesta cerrados.</div>
+        <ng-container *ngIf="!cargandoEncuesta && encuesta">
+          <div class="aviso" *ngIf="!encuesta.suficiente">
+            <mat-icon>visibility_off</mat-icon> Votaron {{ encuesta.votantes }} de un mínimo de {{ encuesta.minimo }}: no se muestran resultados para proteger el anonimato.
+          </div>
+          <ng-container *ngIf="encuesta.suficiente">
+            <div class="sub">Votaron {{ encuesta.votantes }} personas (mínimo {{ encuesta.minimo }}). En preguntas Sí/No se muestra el % de «Sí».</div>
+            <div class="table-scroll">
+              <table class="matriz">
+                <thead><tr><th>Persona</th><th *ngFor="let p of preguntasEncuesta" class="num">{{ p }}</th></tr></thead>
+                <tbody>
+                  <tr *ngFor="let f of filasEncuesta">
+                    <td>{{ f.evaluado }}</td>
+                    <td *ngFor="let p of preguntasEncuesta" class="num">{{ f.valores[p] ?? '–' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <mat-card class="bloque" *ngIf="encuesta.textos?.length">
+              <h3>Comentarios (mezclados)</h3>
+              <ul class="comentarios"><li *ngFor="let t of encuesta.textos">{{ t.texto }}</li></ul>
+            </mat-card>
+          </ng-container>
+        </ng-container>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</div>

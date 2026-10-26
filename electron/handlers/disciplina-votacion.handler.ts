@@ -283,7 +283,7 @@ export function registerDisciplinaVotacionHandlers(dataSource: DataSource, getCu
     });
     const textos = await dataSource.getRepository(DrRespuestaTexto).find({
       where: { periodo: { id: periodoId } } as any,
-      relations: ['evaluado', 'pregunta'],
+      relations: ['evaluado', 'evaluado.persona', 'pregunta'],
     });
     return {
       votantes,
@@ -291,7 +291,7 @@ export function registerDisciplinaVotacionHandlers(dataSource: DataSource, getCu
       suficiente: true,
       filas: filas.map((f: any) => ({
         evaluadoId: f.evaluado.id,
-        evaluado: f.evaluado.persona?.nombre ?? '',
+        evaluado: `${f.evaluado.persona?.nombre ?? ''} ${f.evaluado.persona?.apellido ?? ''}`.trim(),
         preguntaId: f.pregunta.id,
         pregunta: f.pregunta.texto,
         tipo: f.pregunta.tipo,

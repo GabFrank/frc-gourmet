@@ -59,6 +59,7 @@ import { RrhhDashboardComponent } from 'src/app/pages/rrhh/dashboard/rrhh-dashbo
 import { ConfigDisciplinaComponent } from 'src/app/pages/rrhh/disciplina/config-disciplina/config-disciplina.component';
 import { RegistroDisciplinaComponent } from 'src/app/pages/rrhh/disciplina/registro-disciplina/registro-disciplina.component';
 import { AprobacionesDisciplinaComponent } from 'src/app/pages/rrhh/disciplina/aprobaciones-disciplina/aprobaciones-disciplina.component';
+import { ResultadosDisciplinaComponent } from 'src/app/pages/rrhh/disciplina/resultados-disciplina/resultados-disciplina.component';
 import { TiendaOnlineConfigComponent } from 'src/app/pages/ventas/pedidos-online/tienda-online-config.component';
 import { VentasDashboardComponent } from 'src/app/pages/ventas/dashboard/ventas-dashboard.component';
 import { VentasReportesComponent } from 'src/app/pages/reportes/ventas-reportes/ventas-reportes.component';
@@ -399,6 +400,9 @@ export const MENU_TREE: MenuNode[] = [
           { id: 'dr-aprobaciones', label: 'Aprobaciones y apelaciones', icon: 'fact_check', permiso: 'RRHH_DR_APROBAR',
             keywords: ['disciplina', 'aprobar', 'apelaciones', 'multas', 'premios', 'bandeja'],
             action: { component: AprobacionesDisciplinaComponent, title: 'Aprobaciones de disciplina', tabId: 'dr-aprobaciones-tab', data: NAV } },
+          { id: 'dr-resultados', label: 'Tablero y resultados', icon: 'insights', permiso: 'RRHH_DR_RESULTADOS_VER',
+            keywords: ['disciplina', 'tablero', 'ranking', 'reporte', 'resultados', 'encuesta', 'multas', 'premios', 'neto'],
+            action: { component: ResultadosDisciplinaComponent, title: 'Resultados de disciplina', tabId: 'dr-resultados-tab', data: NAV } },
           { id: 'dr-config', label: 'Configuración de disciplina', icon: 'tune', permiso: 'RRHH_DR_CONFIGURAR', esConfig: true,
             keywords: ['disciplina', 'reconocimiento', 'tipos de falta', 'gravedades', 'premios', 'encuestas', 'criterios', 'grupos'],
             action: { component: ConfigDisciplinaComponent, title: 'Configuración de disciplina', tabId: 'dr-config-tab', data: NAV } },

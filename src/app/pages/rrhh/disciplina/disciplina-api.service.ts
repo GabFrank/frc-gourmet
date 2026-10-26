@@ -183,6 +183,16 @@ export class DisciplinaApiService implements DrIpc {
   getPeriodos(filtros: { estado?: string; conPremio?: boolean } = {}): Promise<any[]> { return this.call('dr-get-periodos', filtros); }
   calcularPremio(periodoId: number): Promise<any> { return this.call('dr-calcular-premio', periodoId); }
   aprobarPremio(periodoId: number): Promise<any> { return this.call('dr-aprobar-premio', periodoId); }
+  cerrarPeriodo(periodoId: number): Promise<any> { return this.call('dr-cerrar-periodo', periodoId); }
+  getResultadosPremio(periodoId: number): Promise<any[]> { return this.call('dr-get-resultados-premio', periodoId); }
+  ajustarResultadoPremio(d: { periodoId: number; resultadoId: number; montoAprobado?: number | null; ganador?: boolean }): Promise<any> {
+    return this.call('dr-ajustar-resultado-premio', d);
+  }
+  getResultadosEncuesta(periodoId: number): Promise<any> { return this.call('dr-get-resultados-encuesta', periodoId); }
+
+  // ── Tablero y reportes (fase 4, solo lectura) ──
+  getTablero(q: { desde: string; hasta: string; grupoId?: number | null }): Promise<any> { return this.call('dr-tablero', q); }
+  getReportePersona(q: { funcionarioId: number; desde: string; hasta: string }): Promise<any> { return this.call('dr-reporte-persona', q); }
 
   // ── Ejemplo ──
   cargarEjemploCocina(monedaId?: number | null): Promise<DrEjemploResultado> { return cargarEjemploCocina(this, { monedaId }); }
