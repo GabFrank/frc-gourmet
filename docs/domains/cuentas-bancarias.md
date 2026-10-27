@@ -66,6 +66,7 @@ export class CuentaBancaria extends BaseModel {
 
 2. **POS → Acreditación**
    - `AcreditacionPos` genera `MovimientoBancario` que aumenta saldo de `CuentaBancaria`
+   - Por medio de pago (issue #320): ver «Acreditaciones POS por medio de pago» abajo.
 
 3. **Pago consolidado → Origen de fondos**
    - Línea de pago con `fuente=CUENTA_BANCARIA` usa `CuentaBancaria` como **origen** de la transferencia
@@ -476,3 +477,22 @@ export class CuentaBancariaDestino extends BaseModel {
 ---
 
 **Fin del documento.**
+
+
+---
+
+## Acreditaciones POS por medio de pago (issue #320)
+
+Plan: `docs/planes/PLAN-acreditaciones-pos.md`. Cálculo puro: `electron/services/acreditaciones-pos/calculo.ts`.
+Handlers: `electron/handlers/acreditaciones-pos-reglas.handler.ts` (+ `create-acreditacion-pos` y el scheduler en `banking.handler.ts`).
+
+- **Medio del pago** (`QR`, `DEBITO`, `CREDITO`): se elige en el cobro y se guarda en `pagos_detalles.medio_pos` y en `acreditaciones_pos.medio`. Nunca bloquea el cobro.
+- **`MaquinaPosRegla`** (`maquinas_pos_reglas`, una por máquina + medio): plazo en días hábiles o corridos, desde el día de proceso o de la venta, corrimiento a hábil, % comisión (truncada a una unidad), % IVA de la comisión, % retención renta (del bruto), % retención IVA (del IVA de la venta = bruto / divisor), modo `NETO` o `BRUTO_COMISION_APARTE`, `verificada`, `activo`.
+- **Sin regla activa** para el medio: el cálculo de siempre (`porcentajeComision` y `minutosAcreditacion` de la máquina).
+- **Feriados**: tabla `feriados` (RRHH), los activos.
+- **`MaquinaPos.autoAcreditar`** (default true = comportamiento anterior). En false, el scheduler no suma lo vencido: queda PENDIENTE con fecha pasada («vencida sin conciliar», estado derivado, sin cambiar el CHECK de SQLite).
+- **`ConciliacionPos`** (`conciliaciones_pos`): un crédito real (cuenta, fecha, monto, referencia) contra N acreditaciones PENDIENTE de esa cuenta. Suma el crédito al saldo (un `MovimientoBancario` ACREDITACION_POS), marca VERIFICADO (la diferencia queda en la última, CON_DIFERENCIA) y guarda `conciliacion_id`. No se concilia dos veces el mismo crédito ni la misma acreditación. **Deshacer**: movimiento AJUSTE_NEGATIVO por el monto y las acreditaciones vuelven a PENDIENTE.
+- **Valores observados** (`REGLAS_OBSERVADAS`): Bancard crédito verificada con 91 boletas reales (3 % truncado a decenas + IVA 10 % + ret. renta 1 % + ret. IVA 10 % del IVA de la venta; 2 días hábiles desde el proceso). uPay y Bancard débito se cargan **inactivas, sin verificar**. Stone: sin extracto.
+- **Resumen** (`get-resumen-acreditaciones-pos`): pendiente por cuenta y fecha; comisiones, IVA de comisión y retenciones por máquina y medio. Informativo: lo valida el contador.
+
+Canales IPC: `get-maquina-pos-reglas`, `save-maquina-pos-regla`, `delete-maquina-pos-regla`, `cargar-reglas-observadas-pos`, `sugerir-conciliacion-pos`, `conciliar-acreditaciones-pos`, `deshacer-conciliacion-pos`, `get-conciliaciones-pos`, `get-resumen-acreditaciones-pos` (permisos BANCOS_VER / BANCOS_GESTIONAR).
