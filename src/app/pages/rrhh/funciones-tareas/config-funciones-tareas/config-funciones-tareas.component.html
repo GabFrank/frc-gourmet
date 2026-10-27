@@ -1,0 +1,403 @@
+<div class="ft-wrap">
+  <mat-tab-group>
+    <!-- ═════════ Funciones ═════════ -->
+    <mat-tab label="Funciones">
+      <div class="ft-barra">
+        <mat-form-field appearance="outline">
+          <mat-label>Ver por</mat-label>
+          <mat-select [(ngModel)]="fnFiltroTipo" (selectionChange)="fnFiltroId = null; cargarFunciones()">
+            <mat-option value="cargo">Cargo</mat-option>
+            <mat-option value="funcionario">Funcionario</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>{{ fnFiltroTipo === 'cargo' ? 'Cargo' : 'Funcionario' }}</mat-label>
+          <mat-select [(ngModel)]="fnFiltroId" (selectionChange)="cargarFunciones()">
+            <mat-option [value]="null">Todos</mat-option>
+            <ng-container *ngIf="fnFiltroTipo === 'cargo'">
+              <mat-option *ngFor="let c of cargos" [value]="c.id">{{ c.nombre }}</mat-option>
+            </ng-container>
+            <ng-container *ngIf="fnFiltroTipo === 'funcionario'">
+              <mat-option *ngFor="let f of funcionarios" [value]="f.id">{{ nombreFunc(f) }}</mat-option>
+            </ng-container>
+          </mat-select>
+        </mat-form-field>
+        <button mat-raised-button color="primary" (click)="nuevaFuncion()"><mat-icon>add</mat-icon> Nueva función</button>
+      </div>
+
+      <table mat-table [dataSource]="funciones" class="ft-tabla">
+        <ng-container matColumnDef="descripcion">
+          <th mat-header-cell *matHeaderCellDef>Descripción</th>
+          <td mat-cell *matCellDef="let r">{{ r.descripcion }}</td>
+        </ng-container>
+        <ng-container matColumnDef="alcance">
+          <th mat-header-cell *matHeaderCellDef>Alcance</th>
+          <td mat-cell *matCellDef="let r">{{ alcance(r) }}</td>
+        </ng-container>
+        <ng-container matColumnDef="orden">
+          <th mat-header-cell *matHeaderCellDef>Orden</th>
+          <td mat-cell *matCellDef="let r">{{ r.orden }}</td>
+        </ng-container>
+        <ng-container matColumnDef="activo">
+          <th mat-header-cell *matHeaderCellDef>Activa</th>
+          <td mat-cell *matCellDef="let r">
+            <mat-slide-toggle [checked]="r.activo" (change)="activoFuncion(r, $event.checked)"></mat-slide-toggle>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let r">
+            <button mat-icon-button (click)="editarFuncion(r)" matTooltip="Editar"><mat-icon>edit</mat-icon></button>
+            <button mat-icon-button (click)="borrarFuncion(r)" matTooltip="Borrar"><mat-icon>delete</mat-icon></button>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="fnCols"></tr>
+        <tr mat-row *matRowDef="let row; columns: fnCols" [class.ft-inactivo]="!row.activo"></tr>
+      </table>
+
+      <mat-card *ngIf="fnEdit" class="ft-edit">
+        <mat-card-title>{{ fnEdit.id ? 'Editar función' : 'Nueva función' }}</mat-card-title>
+        <mat-card-content>
+          <div class="ft-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>Para</mat-label>
+              <mat-select [(ngModel)]="fnEdit.tipoAlcance" (selectionChange)="fnEdit.alcanceId = null">
+                <mat-option value="cargo">Un cargo</mat-option>
+                <mat-option value="funcionario">Un funcionario</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>{{ fnEdit.tipoAlcance === 'cargo' ? 'Cargo' : 'Funcionario' }}</mat-label>
+              <mat-select [(ngModel)]="fnEdit.alcanceId">
+                <ng-container *ngIf="fnEdit.tipoAlcance === 'cargo'">
+                  <mat-option *ngFor="let c of cargos" [value]="c.id">{{ c.nombre }}</mat-option>
+                </ng-container>
+                <ng-container *ngIf="fnEdit.tipoAlcance === 'funcionario'">
+                  <mat-option *ngFor="let f of funcionarios" [value]="f.id">{{ nombreFunc(f) }}</mat-option>
+                </ng-container>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Orden</mat-label>
+              <input matInput type="number" [(ngModel)]="fnEdit.orden" />
+            </mat-form-field>
+          </div>
+          <mat-form-field appearance="outline" style="width: 100%">
+            <mat-label>Descripción</mat-label>
+            <input matInput [(ngModel)]="fnEdit.descripcion" />
+          </mat-form-field>
+          <mat-form-field appearance="outline" style="width: 100%">
+            <mat-label>Detalle</mat-label>
+            <textarea matInput rows="3" [(ngModel)]="fnEdit.detalle"></textarea>
+          </mat-form-field>
+          <mat-slide-toggle [(ngModel)]="fnEdit.activo">Activa</mat-slide-toggle>
+        </mat-card-content>
+        <mat-card-actions>
+          <button mat-button (click)="fnEdit = null">Cancelar</button>
+          <button mat-raised-button color="primary" [disabled]="cargando" (click)="guardarFuncion()">Guardar</button>
+        </mat-card-actions>
+      </mat-card>
+    </mat-tab>
+
+    <!-- ═════════ Plantillas ═════════ -->
+    <mat-tab label="Plantillas de tareas">
+      <div class="ft-barra">
+        <button mat-raised-button color="primary" (click)="nuevaPlantilla()"><mat-icon>add</mat-icon> Nueva plantilla</button>
+        <button mat-button (click)="cargarPlantillas()"><mat-icon>refresh</mat-icon> Actualizar</button>
+      </div>
+      <table mat-table [dataSource]="plantillas" class="ft-tabla">
+        <ng-container matColumnDef="titulo">
+          <th mat-header-cell *matHeaderCellDef>Título</th>
+          <td mat-cell *matCellDef="let r">{{ r.titulo }}</td>
+        </ng-container>
+        <ng-container matColumnDef="alcance">
+          <th mat-header-cell *matHeaderCellDef>Alcance</th>
+          <td mat-cell *matCellDef="let r">{{ alcance(r) }}</td>
+        </ng-container>
+        <ng-container matColumnDef="tipo">
+          <th mat-header-cell *matHeaderCellDef>Tipo</th>
+          <td mat-cell *matCellDef="let r">{{ r.tipo | ftEtiqueta }}</td>
+        </ng-container>
+        <ng-container matColumnDef="recurrencia">
+          <th mat-header-cell *matHeaderCellDef>Recurrencia</th>
+          <td mat-cell *matCellDef="let r">{{ r.recurrencia | ftEtiqueta }}{{ r.evento ? ' (' + (r.evento | ftEtiqueta) + ')' : '' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="ancla">
+          <th mat-header-cell *matHeaderCellDef>Ancla</th>
+          <td mat-cell *matCellDef="let r">{{ r.ancla | ftEtiqueta }}{{ r.horaFija ? ' ' + (r.horaFija | slice: 0:5) : '' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="activo">
+          <th mat-header-cell *matHeaderCellDef>Activa</th>
+          <td mat-cell *matCellDef="let r">
+            <mat-slide-toggle [checked]="r.activo" (change)="activoPlantilla(r, $event.checked)"></mat-slide-toggle>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let r">
+            <button mat-icon-button (click)="editarPlantilla(r)" matTooltip="Editar"><mat-icon>edit</mat-icon></button>
+            <button mat-icon-button (click)="borrarPlantilla(r)" matTooltip="Borrar"><mat-icon>delete</mat-icon></button>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="plCols"></tr>
+        <tr mat-row *matRowDef="let row; columns: plCols" [class.ft-inactivo]="!row.activo"></tr>
+      </table>
+
+      <mat-card *ngIf="plEdit" class="ft-edit">
+        <mat-card-title>{{ plEdit.id ? 'Editar plantilla' : 'Nueva plantilla' }}</mat-card-title>
+        <mat-card-content>
+          <mat-form-field appearance="outline" style="width: 100%">
+            <mat-label>Título</mat-label>
+            <input matInput [(ngModel)]="plEdit.titulo" />
+          </mat-form-field>
+          <mat-form-field appearance="outline" style="width: 100%">
+            <mat-label>Instrucciones</mat-label>
+            <textarea matInput rows="2" [(ngModel)]="plEdit.instrucciones"></textarea>
+          </mat-form-field>
+
+          <div class="ft-sub">Alcance</div>
+          <div class="ft-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>Para</mat-label>
+              <mat-select [(ngModel)]="plEdit.tipoAlcance">
+                <mat-option value="cargo">Un cargo (y turno)</mat-option>
+                <mat-option value="funcionario">Un funcionario</mat-option>
+                <mat-option value="grupo">Un área (grupo de Disciplina)</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <ng-container *ngIf="plEdit.tipoAlcance === 'cargo'">
+              <mat-form-field appearance="outline">
+                <mat-label>Cargo</mat-label>
+                <mat-select [(ngModel)]="plEdit.cargoId">
+                  <mat-option *ngFor="let c of cargos" [value]="c.id">{{ c.nombre }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Turno (opcional)</mat-label>
+                <mat-select [(ngModel)]="plEdit.turnoId">
+                  <mat-option [value]="null">Todos</mat-option>
+                  <mat-option *ngFor="let t of turnos" [value]="t.id">{{ t.nombre ?? t.descripcion ?? t.id }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+            </ng-container>
+            <mat-form-field appearance="outline" *ngIf="plEdit.tipoAlcance === 'funcionario'">
+              <mat-label>Funcionario</mat-label>
+              <mat-select [(ngModel)]="plEdit.funcionarioId">
+                <mat-option *ngFor="let f of funcionarios" [value]="f.id">{{ nombreFunc(f) }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline" *ngIf="plEdit.tipoAlcance === 'funcionario'">
+              <mat-label>Reemplaza a la plantilla general</mat-label>
+              <mat-select [(ngModel)]="plEdit.reemplazaPlantillaId">
+                <mat-option [value]="null">Ninguna (se suma a las generales)</mat-option>
+                <mat-option *ngFor="let g of plantillasGenerales" [value]="g.id">{{ g.titulo }} — {{ alcance(g) }}</mat-option>
+              </mat-select>
+              <mat-hint>Ese funcionario recibe esta en lugar de la general.</mat-hint>
+            </mat-form-field>
+            <ng-container *ngIf="plEdit.tipoAlcance === 'grupo'">
+              <mat-form-field appearance="outline" *ngIf="grupos.length">
+                <mat-label>Área</mat-label>
+                <mat-select [(ngModel)]="plEdit.grupoId">
+                  <mat-option *ngIf="grupoFueraDeLista" [value]="plEdit.grupoId">{{ plEdit.grupo?.nombre || ('#' + plEdit.grupoId) }}</mat-option>
+                  <mat-option *ngFor="let g of grupos" [value]="g.id">{{ g.nombre }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <!-- Sin permiso de lectura de Disciplina (dr-get-grupos) no hay lista: se carga el id del grupo. -->
+              <mat-form-field appearance="outline" *ngIf="!grupos.length">
+                <mat-label>Id del área (grupo de Disciplina)</mat-label>
+                <input matInput type="number" min="1" [(ngModel)]="plEdit.grupoId" />
+              </mat-form-field>
+            </ng-container>
+          </div>
+
+          <div class="ft-sub">Cuándo</div>
+          <div class="ft-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>Tipo</mat-label>
+              <mat-select [(ngModel)]="plEdit.tipo">
+                <mat-option *ngFor="let t of tipos" [value]="t">{{ t | ftEtiqueta }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Recurrencia</mat-label>
+              <mat-select [(ngModel)]="plEdit.recurrencia" (selectionChange)="plEdit.ancla = $event.value === 'EVENTO' ? 'EVENTO' : (plEdit.ancla === 'EVENTO' ? 'INICIO_TURNO' : plEdit.ancla)">
+                <mat-option *ngFor="let r of recurrencias" [value]="r">{{ r | ftEtiqueta }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Ancla</mat-label>
+              <mat-select [(ngModel)]="plEdit.ancla">
+                <mat-option *ngFor="let a of anclas" [value]="a">{{ a | ftEtiqueta }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline" *ngIf="plEdit.ancla === 'HORA_FIJA'">
+              <mat-label>Hora fija</mat-label>
+              <input matInput type="time" [(ngModel)]="plEdit.horaFija" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" *ngIf="plEdit.recurrencia === 'MENSUAL'">
+              <mat-label>Día del mes</mat-label>
+              <input matInput type="number" min="1" max="31" [(ngModel)]="plEdit.diaMes" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" *ngIf="plEdit.recurrencia === 'UNICA'">
+              <mat-label>Fecha</mat-label>
+              <input matInput type="date" [(ngModel)]="plEdit.fechaUnica" />
+            </mat-form-field>
+            <ng-container *ngIf="plEdit.recurrencia === 'EVENTO'">
+              <mat-form-field appearance="outline">
+                <mat-label>Evento</mat-label>
+                <mat-select [(ngModel)]="plEdit.evento">
+                  <mat-option *ngFor="let ev of eventos" [value]="ev">{{ ev | ftEtiqueta }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline" *ngIf="plEdit.evento === 'CAJA_ABIERTA' || plEdit.evento === 'CAJA_CERRADA'">
+                <mat-label>Tipo de caja</mat-label>
+                <mat-select [(ngModel)]="plEdit.eventoCaja">
+                  <mat-option [value]="null">Cualquiera</mat-option>
+                  <mat-option value="PDV">Punto de venta</mat-option>
+                  <mat-option value="MAYOR">Caja mayor</mat-option>
+                </mat-select>
+              </mat-form-field>
+            </ng-container>
+            <mat-form-field appearance="outline">
+              <mat-label>Desfase desde el ancla (min)</mat-label>
+              <input matInput type="number" [(ngModel)]="plEdit.offsetInicioMin" />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Duración (min)</mat-label>
+              <input matInput type="number" min="1" [(ngModel)]="plEdit.duracionMin" />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Evidencia</mat-label>
+              <mat-select [(ngModel)]="plEdit.evidencia">
+                <mat-option *ngFor="let e of evidencias" [value]="e">{{ e | ftEtiqueta }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Vigente desde</mat-label>
+              <input matInput type="date" [(ngModel)]="plEdit.vigenciaDesde" />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Vigente hasta</mat-label>
+              <input matInput type="date" [(ngModel)]="plEdit.vigenciaHasta" />
+            </mat-form-field>
+          </div>
+          <div class="ft-dias" *ngIf="plEdit.recurrencia === 'DIAS_SEMANA'">
+            <mat-checkbox *ngFor="let d of dias; let i = index" [checked]="diaMarcado(i)" (change)="toggleDia(i)">{{ d }}</mat-checkbox>
+          </div>
+
+          <div class="ft-fila">
+            <mat-slide-toggle [(ngModel)]="plEdit.requiereVerificacion">Requiere verificación</mat-slide-toggle>
+            <mat-form-field appearance="outline" *ngIf="plEdit.requiereVerificacion">
+              <mat-label>Cargo verificador</mat-label>
+              <mat-select [(ngModel)]="plEdit.verificadorCargoId">
+                <mat-option *ngFor="let c of cargos" [value]="c.id">{{ c.nombre }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-slide-toggle [(ngModel)]="plEdit.activo">Activa</mat-slide-toggle>
+          </div>
+
+          <div class="ft-sub">Importancia y escalamiento</div>
+          <div class="ft-fila">
+            <mat-slide-toggle [(ngModel)]="plEdit.critica">Crítica</mat-slide-toggle>
+            <mat-form-field appearance="outline" style="width: 110px">
+              <mat-label>Peso</mat-label>
+              <input matInput type="number" min="0" max="1000" [(ngModel)]="plEdit.peso" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" *ngIf="tiposFalta.length || plEdit.tipoFaltaId">
+              <mat-label>Tipo de falta al escalar (nivel 3)</mat-label>
+              <mat-select [(ngModel)]="plEdit.tipoFaltaId">
+                <mat-option [value]="null">Sin propuesta de falta</mat-option>
+                <mat-option *ngIf="tipoFaltaFueraDeLista" [value]="plEdit.tipoFaltaId">{{ plEdit.tipoFalta?.nombre || ('#' + plEdit.tipoFaltaId) }}</mat-option>
+                <mat-option *ngFor="let t of tiposFalta" [value]="t.id">{{ t.nombre }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <span *ngIf="!tiposFalta.length && !plEdit.tipoFaltaId" class="ft-nota">
+              No hay tipos de falta disponibles (se cargan en Disciplina).
+            </span>
+          </div>
+
+          <ng-container *ngIf="plEdit.tipo === 'CHECKLIST'">
+            <div class="ft-sub">Ítems del checklist</div>
+            <div class="ft-fila" *ngFor="let it of plEdit.items; let i = index">
+              <mat-form-field appearance="outline" class="ancho">
+                <mat-label>Ítem {{ i + 1 }}</mat-label>
+                <input matInput [(ngModel)]="it.texto" />
+              </mat-form-field>
+              <mat-checkbox [(ngModel)]="it.obligatorio">Obligatorio</mat-checkbox>
+              <button mat-icon-button (click)="quitarItem(i)"><mat-icon>close</mat-icon></button>
+            </div>
+            <button mat-button (click)="agregarItem()"><mat-icon>add</mat-icon> Agregar ítem</button>
+          </ng-container>
+
+          <div class="ft-sub">Reglas de aviso</div>
+          <div class="ft-fila" *ngFor="let r of plEdit.reglas; let i = index">
+            <mat-form-field appearance="outline">
+              <mat-label>Momento</mat-label>
+              <mat-select [(ngModel)]="r.momento">
+                <mat-option *ngFor="let m of momentos" [value]="m">{{ m | ftEtiqueta }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline" style="width: 110px">
+              <mat-label>Minutos</mat-label>
+              <input matInput type="number" min="0" [(ngModel)]="r.minutos" />
+            </mat-form-field>
+            <mat-form-field appearance="outline" style="width: 90px">
+              <mat-label>Nivel</mat-label>
+              <mat-select [(ngModel)]="r.nivel">
+                <mat-option [value]="1">1</mat-option>
+                <mat-option [value]="2">2</mat-option>
+                <mat-option [value]="3">3</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Canal</mat-label>
+              <mat-select [(ngModel)]="r.canal">
+                <mat-option *ngFor="let c of canales" [value]="c">{{ c | ftEtiqueta }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Destino (teléfono, opcional)</mat-label>
+              <input matInput [(ngModel)]="r.destino" />
+            </mat-form-field>
+            <mat-checkbox [(ngModel)]="r.activo">Activa</mat-checkbox>
+            <button mat-icon-button (click)="quitarRegla(i)"><mat-icon>close</mat-icon></button>
+          </div>
+          <button mat-button (click)="agregarRegla()"><mat-icon>add_alert</mat-icon> Agregar aviso</button>
+        </mat-card-content>
+        <mat-card-actions>
+          <button mat-button (click)="plEdit = null">Cancelar</button>
+          <button mat-raised-button color="primary" [disabled]="cargando" (click)="guardarPlantilla()">Guardar</button>
+        </mat-card-actions>
+      </mat-card>
+    </mat-tab>
+
+    <!-- ═════════ Motor ═════════ -->
+    <mat-tab label="Configuración del motor">
+      <mat-card class="ft-edit">
+        <mat-card-content>
+          <mat-slide-toggle [(ngModel)]="motorActivo">Motor de tareas activo</mat-slide-toggle>
+          <div class="ft-grid" style="margin-top: 12px">
+            <ng-container *ngFor="let k of claves()">
+              <mat-form-field appearance="outline" *ngIf="k === 'canal_ausente'">
+                <mat-label>{{ k }}</mat-label>
+                <mat-select [(ngModel)]="config[k]">
+                  <mat-option *ngFor="let c of canales" [value]="c">{{ c | ftEtiqueta }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline" *ngIf="k !== 'canal_ausente'">
+                <mat-label>{{ k }}</mat-label>
+                <input matInput [(ngModel)]="config[k]" />
+              </mat-form-field>
+            </ng-container>
+          </div>
+          <div *ngIf="ultimoTick">Último paso del motor: {{ ultimoTick | json }}</div>
+          <div *ngIf="lock">Lock: {{ lock | json }}</div>
+        </mat-card-content>
+        <mat-card-actions>
+          <button mat-button (click)="cargarConfig()">Descartar</button>
+          <button mat-raised-button color="primary" [disabled]="cargando" (click)="guardarConfig()">Guardar</button>
+        </mat-card-actions>
+      </mat-card>
+    </mat-tab>
+  </mat-tab-group>
+</div>

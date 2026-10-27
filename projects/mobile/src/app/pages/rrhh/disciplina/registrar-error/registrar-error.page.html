@@ -1,0 +1,93 @@
+<div class="crud-page">
+  <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
+  <p *ngIf="error" class="crud-error">{{ error }}</p>
+  <button *ngIf="error" mat-stroked-button (click)="cargar()">Reintentar</button>
+
+  <ng-container *ngIf="!loading && !error">
+    <!-- Resultado -->
+    <ng-container *ngIf="creados; else pasos">
+      <div class="dr-step-title"><mat-icon>task_alt</mat-icon> Registrado: {{ tipo?.nombre }}</div>
+      <div class="dr-box">
+        <div class="dr-res-row" *ngFor="let c of creados">
+          <span>{{ c.nombre }}</span><span class="re-puntos">−{{ c.puntos }} pts</span>
+        </div>
+      </div>
+      <div class="dr-actions">
+        <button mat-flat-button color="primary" (click)="nuevo()"><mat-icon>add</mat-icon> Registrar otro</button>
+      </div>
+    </ng-container>
+
+    <ng-template #pasos>
+      <!-- Paso 1: tipo de error -->
+      <ng-container *ngIf="paso === 1">
+        <div class="dr-step-title"><span class="dr-step-num">1</span> ¿Qué error?</div>
+        <p *ngIf="!tipos.length" class="crud-empty">No hay tipos de error activos. Configuralos en Disciplina.</p>
+        <div class="dr-tipos">
+          <button type="button" *ngFor="let t of tipos" class="dr-tipo" [class.sel]="tipo?.id === t.id" (click)="elegirTipo(t)">
+            <span class="dr-tipo-nombre">{{ t.nombre }}</span>
+            <span class="dr-tipo-sub">
+              <span class="re-grav" *ngIf="t.color" [style.background]="t.color"></span>{{ t.gravedad }}
+              <span class="re-puntos"> · −{{ t.puntos }} pts</span>
+            </span>
+          </button>
+        </div>
+      </ng-container>
+
+      <!-- Paso 2: funcionarios -->
+      <ng-container *ngIf="paso === 2 && tipo">
+        <div class="dr-step-title">
+          <span class="dr-step-num">2</span> ¿Quién? <span class="dr-muted">· {{ tipo.nombre }}</span>
+          <span style="flex: 1"></span><button class="re-link" (click)="volver()">Cambiar</button>
+        </div>
+        <mat-form-field appearance="outline" class="dr-full">
+          <mat-label>Buscar funcionario</mat-label>
+          <mat-icon matPrefix>search</mat-icon>
+          <input matInput [formControl]="busqueda" />
+          <button *ngIf="busqueda.value" matSuffix mat-icon-button (click)="busqueda.setValue('')" aria-label="Limpiar">
+            <mat-icon>close</mat-icon>
+          </button>
+        </mat-form-field>
+        <div class="dr-funcs">
+          <button type="button" *ngFor="let f of visibles" class="dr-func" [class.sel]="seleccion.has(f.id)" (click)="toggle(f)">
+            <mat-icon>{{ seleccion.has(f.id) ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+            <span class="dr-func-nombre">{{ f.nombre }}</span>
+          </button>
+          <p *ngIf="!visibles.length" class="crud-empty">Sin resultados</p>
+        </div>
+        <div class="dr-actions">
+          <button mat-flat-button color="primary" [disabled]="!seleccion.size" (click)="irAConfirmar()">
+            Continuar{{ seleccion.size ? ' (' + seleccion.size + ')' : '' }}
+          </button>
+        </div>
+      </ng-container>
+
+      <!-- Paso 3: confirmar -->
+      <ng-container *ngIf="paso === 3 && tipo">
+        <div class="dr-step-title">
+          <span class="dr-step-num">3</span> Confirmar
+          <span style="flex: 1"></span><button class="re-link" (click)="volver()">Volver</button>
+        </div>
+        <div class="dr-box re-resumen">
+          <span><strong>{{ tipo.nombre }}</strong> <span class="dr-muted">· {{ tipo.gravedad }}</span></span>
+          <span class="re-puntos">−{{ tipo.puntos }} pts por funcionario</span>
+          <span class="dr-muted">{{ seleccionados.length }} funcionario{{ seleccionados.length === 1 ? '' : 's' }}:</span>
+          <span>{{ nombresSeleccionados }}</span>
+        </div>
+        <mat-form-field appearance="outline" class="dr-full" style="margin-top: 12px">
+          <mat-label>Fecha</mat-label>
+          <input matInput type="date" [formControl]="fecha" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="dr-full">
+          <mat-label>Detalle (opcional)</mat-label>
+          <textarea matInput rows="2" [formControl]="detalle"></textarea>
+        </mat-form-field>
+        <div class="dr-actions">
+          <button mat-flat-button color="warn" [disabled]="guardando || !fecha.value" (click)="confirmar()">
+            <mat-spinner *ngIf="guardando" diameter="20" style="display: inline-block; margin-right: 8px"></mat-spinner>
+            Registrar error
+          </button>
+        </div>
+      </ng-container>
+    </ng-template>
+  </ng-container>
+</div>

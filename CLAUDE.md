@@ -67,7 +67,7 @@ Entities live under `src/app/database/entities/<domain>/` (~157 entities). Main 
 - **compras/** — Proveedor, Compra/CompraDetalle, Pago/PagoDetalle, ProveedorProducto.
 - **ventas/** — Venta/VentaItem, PdV (categorías/config/atajos), Mesa, Comanda/ComandaItem, Delivery, Sector, KdsPantalla.
 - **personas/** — Persona, Usuario, Role/Permission/RolePermission/UsuarioRole, Cliente/TipoCliente, Convenio.
-- **rrhh/** — Funcionario, Cargo, Asistencia/Turno, HoraExtra, Vale, LiquidacionSueldo, Aguinaldo/Bono, Vacacion, Comisiones (reglas/equipos/liquidaciones), ConfiguracionRrhh, NotificacionRrhh.
+- **rrhh/** — Funcionario, Cargo, Asistencia/Turno, HoraExtra, Vale, LiquidacionSueldo, Aguinaldo/Bono, Vacacion, Comisiones (reglas/equipos/liquidaciones), ConfiguracionRrhh, NotificacionRrhh; **Funciones y Tareas** (`rrhh/funciones-tareas/`, tablas `ft_*`: funciones por cargo/funcionario, plantillas de tareas/checklists, tareas, avisos y propuestas de falta).
 - **auth/** — LoginSession, RefreshToken. **ia/** — config de OCR/IA. **sistema/**, **personalizacion/**, **shared/** (Adjunto).
 
 ## Coding Rules

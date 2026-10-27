@@ -8,6 +8,7 @@ import { ipcMain } from 'electron';
 import { Between, DataSource } from 'typeorm';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { Funcionario } from '../../src/app/database/entities/rrhh/funcionario.entity';
+import { noAutoResolver } from './disciplina.handler';
 import { DrError } from '../../src/app/database/entities/rrhh/disciplina/dr-error.entity';
 import { DrErrorEstado } from '../../src/app/database/entities/rrhh/disciplina/dr-error-estado.enum';
 import { DrTipoError } from '../../src/app/database/entities/rrhh/disciplina/dr-tipo-error.entity';
@@ -74,14 +75,19 @@ export function registerDisciplinaPuntosHandlers(dataSource: DataSource, getCurr
   });
 
   ipcMain.handle('dr-anular-error', async (_e, errorId: number, motivo: string) => {
-    await ensurePermission(dataSource, getCurrentUser, P.APROBAR);
+    const user = await ensurePermission(dataSource, getCurrentUser, P.APROBAR);
     if (!motivo || !String(motivo).trim()) fail('VALIDACION', 'INDICÁ EL MOTIVO DE LA ANULACIÓN');
-    const res = await dataSource.getRepository(DrError).update(
-      { id: errorId, estado: DrErrorEstado.VIGENTE } as any,
-      { estado: DrErrorEstado.ANULADO, motivoAnulacion: up(motivo) } as any,
-    );
-    if (!res.affected) fail('ESTADO_INVALIDO', 'EL ERROR NO EXISTE O YA FUE ANULADO');
-    return { ok: true };
+    return dataSource.transaction(async (m) => {
+      const err: any = await m.getRepository(DrError).findOne({ where: { id: errorId } as any, relations: ['funcionario', 'registradoPor'] });
+      if (!err) fail('NO_ENCONTRADO', 'ERROR NO ENCONTRADO');
+      await noAutoResolver(m, err, user, 'registradoPor');
+      const res = await m.getRepository(DrError).update(
+        { id: errorId, estado: DrErrorEstado.VIGENTE } as any,
+        { estado: DrErrorEstado.ANULADO, motivoAnulacion: up(motivo) } as any,
+      );
+      if (!res.affected) fail('ESTADO_INVALIDO', 'EL ERROR NO EXISTE O YA FUE ANULADO');
+      return { ok: true };
+    });
   });
 
   ipcMain.handle('dr-get-errores', async (_e, f: { desde?: string; hasta?: string; funcionarioId?: number; estado?: string } = {}) => {

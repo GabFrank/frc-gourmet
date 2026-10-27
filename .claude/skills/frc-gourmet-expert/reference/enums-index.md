@@ -282,6 +282,26 @@ DrResultadoEstado = PROPUESTO | APROBADO | DESIERTO | ANULADO
 DrLiquidacionPendienteEstado = PENDIENTE | RESUELTO
 ```
 
+### RRHH — Funciones y Tareas (`rrhh/funciones-tareas/ft.enums.ts`)
+
+Todos se guardan como `text` (CHECK en SQLite). → [domains/rrhh-funciones-tareas.md](../domains/rrhh-funciones-tareas.md).
+
+```typescript
+FtTipoTarea = SIMPLE | CHECKLIST
+FtRecurrencia = DIARIA | DIAS_SEMANA | MENSUAL | UNICA | EVENTO      // dias_semana: bitmask lun=1 … dom=64
+FtEvento = CAJA_ABIERTA | CAJA_CERRADA | COMPRA_RECIBIDA
+FtEventoCaja = PDV | MAYOR                                           // filtra eventos de caja; null = cualquiera
+FtAncla = INICIO_TURNO | FIN_TURNO | HORA_FIJA | EVENTO
+FtEvidencia = NINGUNA | NOTA | FOTO
+FtMomentoAviso = ANTES_INICIO | ANTES_VENCER | AL_VENCER | ESCALAMIENTO           // de una regla
+FtMomentoAvisoRegistro = ANTES_INICIO | ANTES_VENCER | AL_VENCER | ESCALAMIENTO | AUSENTE  // ft_aviso_enviado
+FtCanalAviso = APP | WHATSAPP | AMBOS | GERENTE    // GERENTE: la app no envía, lo manda el bot Gerente
+FtEstadoTarea = PENDIENTE | HECHA | VERIFICADA | VENCIDA | NO_APLICA | RECHAZADA
+FtOrigenTarea = MOTOR | EVENTO | MANUAL
+FtEstadoAviso = PENDIENTE | ENVIADO | FALLIDO | PARA_GERENTE
+FtEstadoPropuesta = PENDIENTE | REGISTRADA | DESCARTADA
+```
+
 ## Caja PdV
 
 ```typescript

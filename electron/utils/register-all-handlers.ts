@@ -63,6 +63,9 @@ import { registerDisciplinaVotacionHandlers } from '../handlers/disciplina-votac
 import { registerDisciplinaPremiosHandlers } from '../handlers/disciplina-premios.handler';
 import { registerDisciplinaCatalogosHandlers } from '../handlers/disciplina-catalogos.handler';
 import { registerDisciplinaPuntosHandlers } from '../handlers/disciplina-puntos.handler';
+import { registerDisciplinaReportesHandlers } from '../handlers/disciplina-reportes.handler';
+import { registerFuncionesTareasHandlers } from '../handlers/funciones-tareas.handler';
+import { registerFuncionesTareasLecturaHandlers } from '../handlers/funciones-tareas-lectura.handler';
 import { registerFuncionarioDocumentosHandlers } from '../handlers/funcionario-documentos.handler';
 import { registerAsistenciasHandlers } from '../handlers/asistencias.handler';
 import { registerAsistenciaFacialHandlers } from '../handlers/asistencia-facial.handler';
@@ -158,6 +161,9 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerDisciplinaPremiosHandlers(dataSource, getCurrentUser); // RRHH: DR premios → Bono [DR]
   registerDisciplinaCatalogosHandlers(dataSource, getCurrentUser); // RRHH: DR catálogos configurables
   registerDisciplinaPuntosHandlers(dataSource, getCurrentUser); // RRHH: DR errores/puntos y puntaje por criterios
+  registerDisciplinaReportesHandlers(dataSource, getCurrentUser); // RRHH: DR tablero y reporte por persona (solo lectura)
+  registerFuncionesTareasHandlers(dataSource, getCurrentUser); // RRHH: Funciones y Tareas (ABM, mis tareas, verificar)
+  registerFuncionesTareasLecturaHandlers(dataSource, getCurrentUser); // RRHH: FT lecturas para el Gerente y reportes
   registerAsistenciaFacialHandlers(dataSource, getCurrentUser); // RRHH: Reconocimiento facial (rostros + fichaje)
   registerFaceModelsHandlers(dataSource, getCurrentUser); // RRHH: Modelos de reconocimiento facial (descarga/serve)
   registerFeriadosHandlers(dataSource, getCurrentUser); // RRHH Fase 2: Feriados

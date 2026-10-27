@@ -39,6 +39,8 @@ import { ListNotificacionesRrhhComponent } from 'src/app/pages/rrhh/notificacion
 import { ListPedidosOnlineComponent } from 'src/app/pages/ventas/pedidos-online/list-pedidos-online.component';
 import { MesasQrComponent } from 'src/app/pages/ventas/pedidos-online/mesas-qr/mesas-qr.component';
 import { ListPenalizacionesComponent } from 'src/app/pages/rrhh/penalizaciones/list-penalizaciones.component';
+import { ConfigFuncionesTareasComponent } from 'src/app/pages/rrhh/funciones-tareas/config-funciones-tareas/config-funciones-tareas.component';
+import { TableroFuncionesTareasComponent } from 'src/app/pages/rrhh/funciones-tareas/tablero-funciones-tareas/tablero-funciones-tareas.component';
 import { ListPermisosComponent } from 'src/app/pages/personalizacion/permisos/list-permisos/list-permisos.component';
 import { ListPersonasComponent } from 'src/app/pages/personas/personas/list-personas.component';
 import { ListPlantillasComponent } from 'src/app/pages/facturacion/plantillas/list-plantillas/list-plantillas.component';
@@ -56,6 +58,10 @@ import { ModeConfigComponent } from 'src/app/pages/configuracion/mode-config/mod
 import { ProductosDashboardComponent } from 'src/app/pages/productos/dashboard/productos-dashboard.component';
 import { ReportesRrhhPageComponent } from 'src/app/pages/rrhh/reportes/reportes-rrhh-page.component';
 import { RrhhDashboardComponent } from 'src/app/pages/rrhh/dashboard/rrhh-dashboard.component';
+import { ConfigDisciplinaComponent } from 'src/app/pages/rrhh/disciplina/config-disciplina/config-disciplina.component';
+import { RegistroDisciplinaComponent } from 'src/app/pages/rrhh/disciplina/registro-disciplina/registro-disciplina.component';
+import { AprobacionesDisciplinaComponent } from 'src/app/pages/rrhh/disciplina/aprobaciones-disciplina/aprobaciones-disciplina.component';
+import { ResultadosDisciplinaComponent } from 'src/app/pages/rrhh/disciplina/resultados-disciplina/resultados-disciplina.component';
 import { TiendaOnlineConfigComponent } from 'src/app/pages/ventas/pedidos-online/tienda-online-config.component';
 import { VentasDashboardComponent } from 'src/app/pages/ventas/dashboard/ventas-dashboard.component';
 import { VentasReportesComponent } from 'src/app/pages/reportes/ventas-reportes/ventas-reportes.component';
@@ -388,6 +394,23 @@ export const MENU_TREE: MenuNode[] = [
         ],
       },
       {
+        id: 'grp-rrhh-disciplina', label: 'Disciplina y reconocimiento', icon: 'military_tech',
+        children: [
+          { id: 'dr-registro', label: 'Registro de faltas y errores', icon: 'assignment_late', permiso: 'RRHH_DR_REGISTRAR',
+            keywords: ['disciplina', 'faltas', 'multas', 'advertencias', 'errores', 'registrar falta'],
+            action: { component: RegistroDisciplinaComponent, title: 'Registro de disciplina', tabId: 'dr-registro-tab', data: NAV } },
+          { id: 'dr-aprobaciones', label: 'Aprobaciones y apelaciones', icon: 'fact_check', permiso: 'RRHH_DR_APROBAR',
+            keywords: ['disciplina', 'aprobar', 'apelaciones', 'multas', 'premios', 'bandeja'],
+            action: { component: AprobacionesDisciplinaComponent, title: 'Aprobaciones de disciplina', tabId: 'dr-aprobaciones-tab', data: NAV } },
+          { id: 'dr-resultados', label: 'Tablero y resultados', icon: 'insights', permiso: 'RRHH_DR_RESULTADOS_VER',
+            keywords: ['disciplina', 'tablero', 'ranking', 'reporte', 'resultados', 'encuesta', 'multas', 'premios', 'neto'],
+            action: { component: ResultadosDisciplinaComponent, title: 'Resultados de disciplina', tabId: 'dr-resultados-tab', data: NAV } },
+          { id: 'dr-config', label: 'Configuración de disciplina', icon: 'tune', permiso: 'RRHH_DR_CONFIGURAR', esConfig: true,
+            keywords: ['disciplina', 'reconocimiento', 'tipos de falta', 'gravedades', 'premios', 'encuestas', 'criterios', 'grupos'],
+            action: { component: ConfigDisciplinaComponent, title: 'Configuración de disciplina', tabId: 'dr-config-tab', data: NAV } },
+        ],
+      },
+      {
         id: 'grp-rrhh-anticipos', label: 'Anticipos y Beneficios', icon: 'savings',
         children: [
           { id: 'vales', label: 'Vales', icon: 'receipt_long', permiso: 'RRHH_VALE_CREAR',
@@ -402,6 +425,17 @@ export const MENU_TREE: MenuNode[] = [
           { id: 'vacaciones', label: 'Vacaciones', icon: 'beach_access', permiso: 'RRHH_VACACION_GESTIONAR',
             keywords: ['vacaciones', 'descanso'],
             action: { component: ListVacacionesComponent, title: 'Vacaciones', tabId: 'vacaciones-tab', data: NAV } },
+        ],
+      },
+      {
+        id: 'grp-rrhh-ft', label: 'Funciones y tareas', icon: 'task_alt',
+        children: [
+          { id: 'ft-tablero', label: 'Tablero de tareas', icon: 'insights', permiso: 'RRHH_FT_VER_TODO',
+            keywords: ['tareas', 'funciones', 'checklist', 'cumplimiento', 'vencidas', 'avisos', 'propuestas'],
+            action: { component: TableroFuncionesTareasComponent, title: 'Tablero de tareas', tabId: 'ft-tablero-tab', data: NAV } },
+          { id: 'ft-config', label: 'Configurar funciones y tareas', icon: 'playlist_add_check', permiso: 'RRHH_FT_CONFIGURAR', esConfig: true,
+            keywords: ['tareas', 'funciones', 'plantillas', 'checklist', 'avisos', 'motor'],
+            action: { component: ConfigFuncionesTareasComponent, title: 'Funciones y tareas', tabId: 'ft-config-tab', data: NAV } },
         ],
       },
       {

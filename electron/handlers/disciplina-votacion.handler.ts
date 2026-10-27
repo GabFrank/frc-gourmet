@@ -106,6 +106,19 @@ async function miembrosDeEncuesta(ds: DataSource, encuesta: DrEncuesta): Promise
 const esPostgres = (ds: DataSource) => ds.options.type === 'postgres';
 
 export function registerDisciplinaVotacionHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
+  /** Lista los períodos (más recientes primero) para elegirlos en pantalla. filtros: { estado?, conPremio? } */
+  ipcMain.handle('dr-get-periodos', async (_e, f: any = {}) => {
+    await ensurePermission(dataSource, getCurrentUser, [P.APROBAR, P.RESULTADOS]);
+    const qb = dataSource.getRepository(DrPeriodo).createQueryBuilder('p')
+      .leftJoinAndSelect('p.premio', 'pr')
+      .leftJoinAndSelect('p.encuesta', 'en')
+      .orderBy('p.desde', 'DESC').addOrderBy('p.id', 'DESC');
+    if (f?.estado) qb.andWhere('p.estado = :e', { e: f.estado });
+    if (f?.conPremio) qb.andWhere('pr.id IS NOT NULL');
+    qb.take(Math.min(Number(f?.limite) || 100, 500));
+    return qb.getMany();
+  });
+
   /** Abre un período de encuesta (y opcionalmente de premio). data: { encuestaId?, premioId?, desde, hasta } */
   ipcMain.handle('dr-abrir-periodo', async (_e, data: any) => {
     await ensurePermission(dataSource, getCurrentUser, P.APROBAR);
@@ -270,7 +283,7 @@ export function registerDisciplinaVotacionHandlers(dataSource: DataSource, getCu
     });
     const textos = await dataSource.getRepository(DrRespuestaTexto).find({
       where: { periodo: { id: periodoId } } as any,
-      relations: ['evaluado', 'pregunta'],
+      relations: ['evaluado', 'evaluado.persona', 'pregunta'],
     });
     return {
       votantes,
@@ -278,7 +291,7 @@ export function registerDisciplinaVotacionHandlers(dataSource: DataSource, getCu
       suficiente: true,
       filas: filas.map((f: any) => ({
         evaluadoId: f.evaluado.id,
-        evaluado: f.evaluado.persona?.nombre ?? '',
+        evaluado: `${f.evaluado.persona?.nombre ?? ''} ${f.evaluado.persona?.apellido ?? ''}`.trim(),
         preguntaId: f.pregunta.id,
         pregunta: f.pregunta.texto,
         tipo: f.pregunta.tipo,

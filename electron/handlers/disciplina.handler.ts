@@ -67,6 +67,11 @@ function fechaIso(f: unknown): string {
   return s;
 }
 
+/** El tipo mide tardanzas (viene de asistencias o tiene tolerancia en minutos): exige minutos. */
+function tipoEsTardanza(tipo: any): boolean {
+  return !!tipo?.fuenteAsistencia || (tipo?.toleranciaMinutos !== null && tipo?.toleranciaMinutos !== undefined);
+}
+
 function parseEscala(txt: unknown): Record<string, number> | null {
   if (!txt) return null;
   if (typeof txt === 'object') return txt as any;
@@ -103,8 +108,31 @@ async function drDescontadoEnMes(m: EntityManager, funcionarioId: number, mes: s
   return pens.filter((p: any) => fechaIso(p.fecha).slice(0, 7) === mes).reduce((s, p: any) => s + (Number(p.monto) || 0), 0);
 }
 
+/** Funcionario vinculado al usuario de la sesión (null si no tiene). */
+export async function funcionarioIdDeUsuario(m: EntityManager, userId: number): Promise<number | null> {
+  const f = await m.getRepository(Funcionario).findOne({ where: { usuario: { id: userId } } as any });
+  return f?.id ?? null;
+}
+
+/**
+ * Separación de funciones: quien registró el hecho no lo resuelve, y nadie resuelve un hecho
+ * propio (la falta o el error cargado a su funcionario).
+ */
+export async function noAutoResolver(
+  m: EntityManager, hecho: any, user: { id: number }, registrador: 'detectadoPor' | 'registradoPor' = 'detectadoPor',
+): Promise<void> {
+  const reg = hecho?.[registrador];
+  if (reg?.id && reg.id === user.id) {
+    fail('AUTO_RESOLUCION', 'NO PODÉS RESOLVER ALGO QUE REGISTRASTE VOS: LO RESUELVE OTRO APROBADOR');
+  }
+  const propio = await funcionarioIdDeUsuario(m, user.id);
+  if (propio && hecho?.funcionario?.id === propio) {
+    fail('AUTO_RESOLUCION', 'NO PODÉS RESOLVER UN HECHO TUYO: LO RESUELVE OTRO APROBADOR');
+  }
+}
+
 /** Si hay un borrador de liquidación de ese funcionario y mes, queda desactualizado hasta regenerarlo. */
-async function marcarBorradorDesactualizado(m: EntityManager, funcionarioId: number, mes: string | null, motivo: string): Promise<void> {
+export async function marcarBorradorDesactualizado(m: EntityManager, funcionarioId: number, mes: string | null, motivo: string): Promise<void> {
   if (!mes) return;
   const liq = await m.getRepository(LiquidacionSueldo).findOne({ where: { funcionario: { id: funcionarioId }, periodo: mes } as any });
   if (!liq || (liq.estado as string) !== 'BORRADOR') return;
@@ -211,14 +239,17 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
       if (funcs.length !== ids.length) fail('NO_ENCONTRADO', 'HAY FUNCIONARIOS INEXISTENTES');
       const loteId = ids.length > 1 ? randomUUID() : null;
       const creadas: DrFalta[] = [];
-      const esTardanza = !!(tipo as any).fuenteAsistencia || (data.minutosTardanza !== undefined && data.minutosTardanza !== null);
+      const sinMinutos = data.minutosTardanza === undefined || data.minutosTardanza === null || (data.minutosTardanza as any) === '';
+      if (tipoEsTardanza(tipo) && sinMinutos) fail('VALIDACION', 'INDICÁ LOS MINUTOS DE TARDANZA');
+      const esTardanza = !!(tipo as any).fuenteAsistencia || !sinMinutos;
       const ignoradas: { funcionarioId: number; motivo: string }[] = [];
       for (const fid of ids) {
         // §12: no descontar dos veces la misma tardanza. Si asistencias ya generó una Penalizacion
         // automática (no DR) ese día, la tardanza DR de ese día se ignora (aunque sea de ₲0).
         if (esTardanza) {
           const autos = await m.getRepository(Penalizacion).find({
-            where: { funcionario: { id: fid }, autoGenerada: true, anulada: false } as any,
+            // Solo las del mismo día (columna `date`: la igualdad con 'YYYY-MM-DD' vale en SQLite y Postgres).
+            where: { funcionario: { id: fid }, autoGenerada: true, anulada: false, fecha } as any,
           });
           const fechasAuto = autos
             .filter((p: any) => !String(p.descripcion ?? '').startsWith(PREFIJO_DR))
@@ -253,6 +284,48 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
     });
   });
 
+  /**
+   * Vista previa de `dr-registrar-falta` sin guardar nada: por funcionario, qué resultaría
+   * (ADVERTENCIA / MULTA con monto / NINGUNO / ignorada). Mismo cálculo que el registro real,
+   * así mobile y desktop no duplican el motor. Solo lectura: usa `dataSource.manager`, sin transacción.
+   * Si el tipo es de tardanza y faltan los minutos, devuelve `faltanMinutos: true` sin ítems.
+   */
+  ipcMain.handle('dr-preview-falta', async (_e, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, P.REGISTRAR);
+    const fecha = fechaIso(data?.fecha);
+    const ids: number[] = Array.from(
+      new Set<number>((data?.funcionarioIds ?? []).map((x: any) => Number(x)).filter((x: number) => x > 0)),
+    );
+    const tipoFaltaId = Number(data?.tipoFaltaId);
+    if (!Number.isInteger(tipoFaltaId) || tipoFaltaId <= 0) fail('VALIDACION', 'FALTA EL TIPO DE FALTA');
+    if (!ids.length) return { items: [] };
+    const m = dataSource.manager;
+    const tipo = await m.getRepository(DrTipoFalta).findOne({ where: { id: tipoFaltaId } as any, relations: ['moneda'] });
+    if (!tipo || !(tipo as any).activo) fail('NO_ENCONTRADO', 'TIPO DE FALTA INEXISTENTE O INACTIVO');
+    const simbolo = (tipo as any).moneda?.simbolo ?? null;
+    const sinMinutos = data.minutosTardanza === undefined || data.minutosTardanza === null || (data.minutosTardanza as any) === '';
+    if (tipoEsTardanza(tipo) && sinMinutos) return { items: [], simbolo, faltanMinutos: true };
+    const esTardanza = !!(tipo as any).fuenteAsistencia || !sinMinutos;
+    const items: { funcionarioId: number; resultado: string; monto: number; nOcurrencia: number | null; motivo?: string }[] = [];
+    for (const fid of ids) {
+      if (esTardanza) {
+        const autos = await m.getRepository(Penalizacion).find({
+          where: { funcionario: { id: fid }, autoGenerada: true, anulada: false, fecha } as any,
+        });
+        const fechasAuto = autos
+          .filter((p: any) => !String(p.descripcion ?? '').startsWith(PREFIJO_DR))
+          .map((p: any) => fechaIso(p.fecha));
+        if (debeIgnorarTardanza(fecha, fechasAuto)) {
+          items.push({ funcionarioId: fid, resultado: 'IGNORADA', monto: 0, nOcurrencia: null, motivo: 'YA TIENE PENALIZACIÓN AUTOMÁTICA DE ASISTENCIA ESE DÍA' });
+          continue;
+        }
+      }
+      const r = await calcularFalta(m, tipo, fid, fecha, data.minutosTardanza);
+      items.push({ funcionarioId: fid, resultado: r.resultado, monto: Number(r.monto) || 0, nOcurrencia: r.nOcurrencia ?? null });
+    }
+    return { items, simbolo };
+  });
+
   ipcMain.handle('dr-get-faltas', async (_e, f: any = {}) => {
     await ensurePermission(dataSource, getCurrentUser, [P.REGISTRAR, P.APROBAR]);
     const qb = dataSource.getRepository(DrFalta).createQueryBuilder('f')
@@ -260,6 +333,8 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
       .leftJoinAndSelect('fu.persona', 'pe')
       .leftJoinAndSelect('f.tipoFalta', 't')
       .leftJoinAndSelect('f.moneda', 'mo')
+      // Solo id y nickname de quien la detectó: nunca el hash de la contraseña.
+      .leftJoin('f.detectadoPor', 'dp').addSelect(['dp.id', 'dp.nickname'])
       .orderBy('f.fecha', 'DESC').addOrderBy('f.id', 'DESC');
     if (f?.funcionarioId) qb.andWhere('fu.id = :fid', { fid: f.funcionarioId });
     if (f?.estado) qb.andWhere('f.estado = :e', { e: f.estado });
@@ -319,9 +394,10 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
       const repo = m.getRepository(DrFalta);
       const falta: any = await repo.findOne({
         where: { id: faltaId } as any,
-        relations: ['funcionario', 'funcionario.monedaSalario', 'tipoFalta', 'moneda'],
+        relations: ['funcionario', 'funcionario.monedaSalario', 'tipoFalta', 'moneda', 'detectadoPor'],
       });
       if (!falta) fail('NO_ENCONTRADO', 'FALTA NO ENCONTRADA');
+      await noAutoResolver(m, falta, user);
       if (![DrFaltaEstado.REGISTRADA, DrFaltaEstado.APELADA].includes(falta.estado)) fail('ESTADO_INVALIDO', 'LA FALTA YA FUE RESUELTA');
       // §12: con el plazo de apelación vigente solo se aprueba si la persona renunció a apelar.
       // (Si apeló, la falta está APELADA y se resuelve con la apelación a la vista.)
@@ -396,8 +472,9 @@ export function registerDisciplinaHandlers(dataSource: DataSource, getCurrentUse
       if (!motivo || !String(motivo).trim()) fail('VALIDACION', 'EL MOTIVO ES OBLIGATORIO');
       return dataSource.transaction(async (m) => {
         const repo = m.getRepository(DrFalta);
-        const falta: any = await repo.findOne({ where: { id: faltaId } as any, relations: ['penalizacion', 'funcionario'] });
+        const falta: any = await repo.findOne({ where: { id: faltaId } as any, relations: ['penalizacion', 'funcionario', 'detectadoPor'] });
         if (!falta) fail('NO_ENCONTRADO', 'FALTA NO ENCONTRADA');
+        await noAutoResolver(m, falta, user);
         const permitidos = estadoFinal === DrFaltaEstado.JUSTIFICADA
           ? [DrFaltaEstado.REGISTRADA, DrFaltaEstado.APELADA]
           : [DrFaltaEstado.REGISTRADA, DrFaltaEstado.APELADA, DrFaltaEstado.APROBADA];

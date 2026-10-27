@@ -1,4 +1,4 @@
-# Checklist de pruebas — Disciplina y Reconocimiento (fase 1, backend)
+# Checklist de pruebas — Disciplina y Reconocimiento (fases 1, 2 y 3)
 
 Feature: módulo RRHH **Disciplina y Reconocimiento (DR)** (PR #313): faltas con advertencia,
 multa y apelación; errores con puntos; puntaje diario por criterios; votación anónima entre
@@ -210,20 +210,118 @@ pregunta ESCALA 1–5 obligatoria y una TEXTO opcional. `dr-abrir-periodo` con `
 
 ---
 
-## Fase 2 (UI) — pendiente
+## Fase 2 (UI desktop)
 
-Se completa cuando existan las pantallas. A probar entonces:
+Probar en modo oscuro y, si se puede, sobre una copia de la base real (nunca producción).
+Sin Electron: `npx ts-node ... scripts/ui-sandbox.ts` levanta la app web contra una base
+temporal (ver cabecera del script).
 
-- [ ] Desktop *RRHH › Disciplina y reconocimiento*: configuración en pestañas (grupos y
-      pesos, faltas y checklists, gravedades y errores, premios y criterios, encuestas con
-      constructor y vista previa, parámetros); botón «Cargar ejemplo Cocina» idempotente,
-      con la multa colectiva desactivada.
-- [ ] Registro e historial filtrable; vista previa «será ADVERTENCIA / MULTA ₲…».
-- [ ] Bandeja de aprobaciones y apelaciones (plazo visible, selección múltiple).
-- [ ] Cierre de período: ranking, empates, monto editable, «Aprobar y enviar a
-      liquidación».
-- [ ] Aviso del constructor de encuestas sobre el anonimato de las respuestas de texto en
-      grupos chicos.
-- [ ] Fase 3 PWA: registro rápido, error en 3 toques, puntaje del día, votación paso a paso
-      con envío único y «Ya votaste», Mi resumen con «Apelar» y plazo. Capturas mobile
-      (390 px) y desktop (1920 px).
+### 11. Menú y permisos
+- [ ] *RRHH › Disciplina y reconocimiento* muestra 3 entradas: Registro (permiso
+      `RRHH_DR_REGISTRAR`), Aprobaciones (`RRHH_DR_APROBAR`) y Configuración
+      (`RRHH_DR_CONFIGURAR`). Un usuario sin el permiso no ve la entrada.
+
+### 12. Configuración
+- [ ] Pestañas: Tipos de falta (con checklist), Gravedades, Tipos de error, Criterios,
+      Premios, Grupos y miembros, Encuestas y preguntas.
+- [ ] Alta, edición y desactivación en cada catálogo (nada se borra); los hijos (checklist,
+      miembros, preguntas) se filtran por el padre seleccionado.
+- [ ] «Cargar ejemplo Cocina» crea los datos de ejemplo; pulsarlo de nuevo no duplica.
+      La multa colectiva queda desactivada.
+- [ ] Todos los montos y nombres se pueden editar (nada fijo en el código).
+
+### 13. Registro
+- [ ] Pestaña Faltas: registrar falta a un funcionario; el historial muestra quién la
+      registró y se filtra por fechas, funcionario y estado.
+- [ ] Pestaña Errores: registrar error con gravedad; muestra los puntos.
+
+### 14. Aprobaciones
+- [ ] Pendientes: aprobar con **otro** usuario genera la Penalización en la liquidación
+      del mes abierto. El mismo usuario que registró no puede aprobar.
+- [ ] Apeladas: la falta apelada aparece con su descargo; se resuelve aprobando (multa),
+      justificando o anulando.
+- [ ] Pendientes también permite justificar o anular.
+- [ ] Premios: calcular, revisar y aprobar; aprobar marca el borrador de liquidación como
+      desactualizado.
+
+## Fase 3 (PWA mobile)
+
+Pantallas en `projects/mobile/src/app/pages/rrhh/disciplina/`, desde el menú RRHH de la PWA.
+**Requiere reiniciar la app** (el canal nuevo `dr-preview-falta` está en `electron/handlers/`).
+Cada pantalla se prueba en **modo claro y oscuro** y a **390 px** de ancho (DevTools, modo
+dispositivo): sin scroll horizontal, botones de al menos 44 px, textos sin cortar.
+Dos usuarios: **admin** (todos los `RRHH_DR_*`) y **colaborador** (solo `COLABORADOR_DR`).
+
+### 15. Menú y permisos
+- [ ] Admin ve las 6 entradas: Registrar falta, Registrar error, Puntaje del día,
+      Votación anónima, Mi resumen, Aprobaciones DR.
+- [ ] Colaborador ve solo Votación anónima y Mi resumen (`COLABORADOR_DR` = VOTAR + MIS_DATOS).
+- [ ] Entrar por URL a una ruta sin permiso (`/rrhh/disciplina/aprobaciones` con el
+      colaborador) no muestra la pantalla.
+
+### 16. Registrar falta (`/rrhh/disciplina/falta`, `RRHH_DR_REGISTRAR`)
+- [ ] Pasos tipo → cuándo → funcionario(s) → confirmar; el tipo muestra su regla y
+      «Todos los presentes» cuando corresponde.
+- [ ] Antes de confirmar, la vista previa (`dr-preview-falta`) muestra por persona
+      ADVERTENCIA / MULTA con monto y n.ª vez / dentro de tolerancia / ignorada; coincide
+      con lo que crea el registro real.
+- [ ] Tardanza: minutos dentro de la tolerancia no crean falta; con penalización automática
+      de asistencia ese día queda «Ignorada» con motivo.
+- [ ] Varios funcionarios: comparten lote; el resultado lista creadas e ignoradas.
+
+### 17. Registrar error (`/rrhh/disciplina/error`, `RRHH_DR_REGISTRAR`)
+- [ ] Tres toques: tipo (con gravedad y puntos) → quién → confirmar; muestra los puntos
+      descontados por persona.
+
+### 18. Puntaje del día (`/rrhh/disciplina/puntaje`, `RRHH_DR_PUNTUAR`)
+- [ ] Elegir premio por criterios y fecha: carga criterios, miembros del grupo y los
+      puntajes ya guardados de ese día.
+- [ ] Guardar y volver a entrar: los valores persisten (no duplica).
+- [ ] Con cambios sin guardar, cambiar de premio o fecha pide confirmar el descarte
+      (diálogo `confirm()` del navegador).
+
+### 19. Votación anónima (`/rrhh/disciplina/votar`, `RRHH_DR_VOTAR`)
+- [ ] Lista solo encuestas abiertas donde el usuario no votó; aviso de anonimato visible.
+- [ ] Paso a paso por compañero y pregunta; el envío es único; después aparece «Ya votaste».
+- [ ] Votar desde otro dispositivo / encuesta cerrada entre medio: error claro y la lista
+      se refresca.
+- [ ] Salir con respuestas cargadas pide confirmar (`confirm()`).
+
+### 20. Mi resumen (`/rrhh/disciplina/mi-resumen`, `RRHH_DR_MIS_DATOS`)
+- [ ] El colaborador ve sus faltas, puntos del período y premios; nunca los de otro.
+- [ ] Falta dentro del plazo: «Apelar» (exige texto) y «No voy a apelar» (renuncia); vencido el
+      plazo o ya renunciada, los botones no aparecen.
+- [ ] La falta apelada aparece en Aprobaciones (mobile y desktop) con su descargo.
+
+### 21. Aprobaciones DR (`/rrhh/disciplina/aprobaciones`, `RRHH_DR_APROBAR`)
+- [ ] Pendientes y apeladas; aprobar deshabilitado con motivo mientras corre el plazo y no
+      hubo renuncia.
+- [ ] Aprobar (genera la Penalización `[DR]`), justificar y anular piden motivo y quitan la
+      falta de la lista.
+- [ ] Hecho propio (falta cargada a uno mismo o registrada por uno): el backend la rechaza y
+      se muestra el error (mobile no la deshabilita de antemano).
+- [ ] Los premios **no** se aprueban acá: solo desde desktop (pestaña Premios).
+
+### 22. Cierre de período y ajuste del premio (desktop, Aprobaciones › Premios)
+- [ ] Elegir un período ABIERTO → «Cerrar período» pide confirmación; luego figura como CERRADO
+      y ya no acepta votos ni puntajes. «Calcular» está deshabilitado mientras esté abierto.
+- [ ] Calcular: ranking con puesto, puntaje, ganador y monto; con empate DIVIDIR el monto se
+      reparte, con MONTO_COMPLETO cada uno cobra entero, con DESIERTO no hay ganador.
+- [ ] Desierto o sin mínimo de votantes: «Elegir ganador» lo marca y habilita «Aprobar premio».
+- [ ] Editar el monto de un ganador y guardar; monto negativo se rechaza. Quitar ganador.
+- [ ] Aprobar: crea un Bono `[DR]` por ganador en el mes abierto; después no se puede ajustar
+      ni aprobar de nuevo (los botones de ajuste desaparecen).
+
+### 23. Tablero y resultados (desktop, `RRHH_DR_RESULTADOS_VER`)
+- [ ] Tablero: tarjetas por persona con semáforo (rojo neto negativo, amarillo con hechos,
+      verde sin hechos) y totales; filtra por rango y por área/grupo.
+- [ ] Los montos cuadran con Penalizaciones y Bonos `[DR]` del mismo rango.
+- [ ] Tocar una tarjeta abre «Por persona» con faltas, errores, premios, puntaje diario y neto
+      por mes de sueldo; «Exportar CSV» baja el detalle.
+- [ ] Encuesta: con período cerrado y mínimo de votantes, promedios por persona y pregunta
+      (Sí/No en %) y comentarios mezclados; sin mínimo, aviso de anonimato y sin datos.
+- [ ] Rango mayor a 366 días o «desde» posterior a «hasta»: mensaje de error.
+- [ ] Usuario sin el permiso: no ve la entrada del menú y el backend rechaza la consulta.
+
+### Pendiente
+- [ ] Aviso de anonimato del constructor de encuestas en grupos chicos.

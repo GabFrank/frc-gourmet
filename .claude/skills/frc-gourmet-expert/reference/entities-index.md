@@ -154,6 +154,20 @@ Tablas con prefijo `dr_`, migración `1792785488053-DisciplinaReconocimiento` (P
 | DrVotoAgregado | `dr_voto_agregado` | **Sin BaseModel.** Suma por (periodo, evaluado, pregunta) UNIQUE; `datos_cifrados` mientras está abierto |
 | DrRespuestaTexto | `dr_respuesta_texto` | **Sin BaseModel.** Texto libre sin autor ni hora |
 
+## RRHH — Funciones y Tareas (`rrhh/funciones-tareas/`) — 9
+
+Tablas con prefijo `ft_`, migración `1793042064365-FuncionesTareas` (rama `feat-funciones-tareas`). Todas heredan `BaseModel`. Enums en `ft.enums.ts`. → [domains/rrhh-funciones-tareas.md](../domains/rrhh-funciones-tareas.md).
+
+| Entidad | Tabla | Notas |
+|---|---|---|
+| FtFuncion | `ft_funcion` | Función general (cargo) o específica (funcionario): exactamente uno, CHECK `CHK_ft_funcion_duenio` |
+| FtPlantillaTarea | `ft_plantilla_tarea` | Plantilla SIMPLE/CHECKLIST: alcance (cargo+turno · funcionario · grupo DR), `reemplaza_plantilla_id`, recurrencia, ancla/ventana, evidencia, verificador, tipo de falta sugerido |
+| FtPlantillaItem / FtReglaAviso | `ft_plantilla_item` / `ft_regla_aviso` | Ítems del checklist; reglas de aviso (momento, minutos, nivel 1–3, canal APP/WHATSAPP/AMBOS/GERENTE) |
+| FtTarea / FtTareaItem | `ft_tarea` / `ft_tarea_item` | Instancia con snapshot de título/ítems. UNIQUE (plantilla, funcionario, fecha, evento_ref) = idempotencia del motor |
+| FtConfig | `ft_config` | clave/valor (UNIQUE clave): interruptor `activo`, intervalo, reincidencia, canales, tope de foto, lock y último tick |
+| FtAvisoEnviado | `ft_aviso_enviado` | UNIQUE `clave` `ft:<tarea>:<momento>:<nivel>` insertada antes de enviar (dedupe) |
+| FtPropuestaFalta | `ft_propuesta_falta` | Nivel 3: propuesta PENDIENTE/REGISTRADA/DESCARTADA (nunca crea `dr_falta`) |
+
 ## IA (`ia/`) — 2
 
 | Entidad | Notas |

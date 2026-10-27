@@ -30,9 +30,10 @@
 | **dashboard-ventas.handler.ts** | ~590 | KPIs Ventas. Devuelve además el bloque `delivery` (envíos, retiros, ingreso por envíos y `enCamino`, este último SIN filtro de período: es estado operativo) |
 | **delivery.handler.ts** | ~930 | Máquina de estados del delivery/retiro (`delivery-crear`, `-cambiar-estado`, `-actualizar-datos`, `-asignar-repartidor`, `-cancelar` transaccional, `-listar-pdv`, `-imprimir-ticket`) + **`delivery-convertir-modo`** (DELIVERY ⇄ RETIRO: mueve `venta.costoDelivery`, desasigna repartidor y sincroniza el `PedidoOnline`). El CRUD genérico de `ventas.handler.ts` rechaza estado, zona y `modo` |
 | **db-config.handler.ts** | 273 | Configuración de BD (sqlite path / postgres); `db-config-init-postgres` crea rol+DB |
-| **disciplina.handler.ts** | 439 | Disciplina y Reconocimiento (DR): DrTipoFalta + DrFalta. Registro (motor de multas, lote, tardanza sin doble descuento), apelación/renuncia por identidad de sesión, aprobación idempotente → Penalizacion `[DR]` (mes abierto, tope en cuotas, `dr_liquidacion_pendiente`), justificar/anular. → [domains/rrhh-disciplina.md](../domains/rrhh-disciplina.md) |
+| **disciplina.handler.ts** | 502 | Disciplina y Reconocimiento (DR): DrTipoFalta + DrFalta. Registro (motor de multas, lote, tardanza sin doble descuento), apelación/renuncia por identidad de sesión, vista previa sin guardar (`dr-preview-falta`), aprobación idempotente → Penalizacion `[DR]` (mes abierto, tope en cuotas, `dr_liquidacion_pendiente`), justificar/anular. → [domains/rrhh-disciplina.md](../domains/rrhh-disciplina.md) |
 | **disciplina-catalogos.handler.ts** | 97 | DR: `dr-get-*` / `dr-save-*` genérico para grupos, miembros, encuestas, preguntas, premios, tipos de error, gravedades, criterios y checklist (textos en MAYÚSCULAS) |
 | **disciplina-premios.handler.ts** | 175 | DR: cálculo de premios (VOTACION / CRITERIOS / SALDO_PUNTOS, reglas de empate) y aprobación → Bono `[DR]` |
+| **disciplina-reportes.handler.ts** | 150 | DR (fase 4): tablero y reporte por persona, solo lectura y solo agregados (multas = Penalizacion `[DR]` de faltas aprobadas; premios = resultados APROBADOS) |
 | **disciplina-puntos.handler.ts** | 171 | DR: errores con puntos (DrError), puntaje diario por criterios (DrPuntajeCriterio), mis puntos / mis premios |
 | **disciplina-votacion.handler.ts** | 294 | DR: períodos y votación anónima (participación + agregados cifrados AES-GCM en una transacción; clave `userData/dr-votos.key`), cierre con reescritura mezclada, resultados con mínimo de votantes |
 | **documentos-tickets.handler.ts** | 962 | Tickets térmicos (comanda multi-sector, venta, recibos, vales) |
@@ -43,6 +44,8 @@
 | **files.handler.ts** | 210 | IPCs genéricos de archivos (save/delete/read/open) + thumbnails. Reemplaza producto-images de images.handler |
 | **financiero.handler.ts** | 739 | Moneda, MonedaBillete, MonedaCambio, TipoPrecio, Dispositivo, Caja, CajaMoneda, Conteo* |
 | **funcionario-documentos.handler.ts** | 123 | FuncionarioDocumento (filesystem) |
+| **funciones-tareas.handler.ts** | 881 | Funciones y Tareas (FT): ABM de funciones y plantillas (ítems + reglas de aviso), `ft-config-*`, mis tareas, marcar/foto/no aplica, verificar/rechazar (nadie verifica lo propio), tarea manual, `ft-avisos` (contrato con el Gerente), propuestas de falta. Motor en `electron/services/funciones-tareas/`. → [domains/rrhh-funciones-tareas.md](../domains/rrhh-funciones-tareas.md) |
+| **funciones-tareas-lectura.handler.ts** | 248 | FT solo lectura para el bot Gerente y reportes: `ft-cumplimiento`, `ft-vencidas`, `ft-historico`, `ft-de-turno-hoy`, `ft-estado-motor` (REPORTES \| VER_TODO, rango ≤ 31 días) |
 | **horas-extra.handler.ts** | 91 | HoraExtra |
 | **images.handler.ts** | 31 | Solo imágenes de perfil (legacy compat). Lo nuevo usa files.handler |
 | **kds.handler.ts** | 216 | KDS: comandas en pantalla de cocina (estado por sector); ver kds-sse-routes en server/ |
@@ -158,13 +161,16 @@ Registrados en `register-all-handlers.ts` justo después de `registerAsistencias
 |---|---|---|
 | `disciplina.handler.ts` | `dr-get-tipos-falta` | CONFIGURAR \| REGISTRAR \| APROBAR |
 | | `dr-save-tipo-falta`, `dr-set-tipo-falta-activo` | CONFIGURAR |
-| | `dr-registrar-falta`, `dr-get-faltas` (este también con APROBAR) | REGISTRAR |
+| | `dr-registrar-falta`, `dr-preview-falta` (solo lectura, no guarda), `dr-get-faltas` (este también con APROBAR) | REGISTRAR |
 | | `dr-mis-faltas`, `dr-apelar-falta`, `dr-renunciar-apelacion` | MIS_DATOS |
 | | `dr-aprobar-falta`, `dr-justificar-falta`, `dr-anular-falta` | APROBAR |
 | `disciplina-votacion.handler.ts` | `dr-abrir-periodo`, `dr-cerrar-periodo` | APROBAR |
+| | `dr-get-periodos` | APROBAR \| RESULTADOS_VER |
 | | `dr-mis-encuestas-pendientes`, `dr-votar` | VOTAR |
 | | `dr-get-resultados-encuesta` | RESULTADOS_VER |
-| `disciplina-premios.handler.ts` | `dr-calcular-premio`, `dr-aprobar-premio` | APROBAR |
+| `disciplina-premios.handler.ts` | `dr-calcular-premio`, `dr-aprobar-premio`, `dr-ajustar-resultado-premio` (monto/ganador, nunca sobre APROBADO) | APROBAR |
+| | `dr-get-resultados-premio` | APROBAR \| RESULTADOS_VER |
+| `disciplina-reportes.handler.ts` | `dr-tablero` (agregados por funcionario), `dr-reporte-persona` (hechos y neto por mes destino); rango ≤ 366 días | APROBAR \| RESULTADOS_VER |
 | `disciplina-puntos.handler.ts` | `dr-registrar-error` | REGISTRAR |
 | | `dr-anular-error` | APROBAR |
 | | `dr-get-errores` | REGISTRAR \| APROBAR \| RESULTADOS_VER |
@@ -175,3 +181,22 @@ Registrados en `register-all-handlers.ts` justo después de `registerAsistencias
 | | `dr-save-{…mismos 9}` | CONFIGURAR |
 
 Permisos abreviados: `RRHH_DR_<X>`. Helpers: motor puro `electron/services/disciplina/` y `electron/utils/disciplina-proteccion.ts` (`bloquearSiEsDr`, `PERMISOS_LECTURA_PENALIZACIONES`, `PERMISOS_LECTURA_BONOS`).
+
+## Handlers nuevos 2026-10 — Funciones y Tareas (rama `feat-funciones-tareas`)
+
+Registrados en `register-all-handlers.ts` (`registerFuncionesTareasHandlers`, `registerFuncionesTareasLecturaHandlers`). Todos llaman `ensurePermission` adentro (`/api/rpc` es default-allow); «mis tareas», marcar y foto toman el funcionario de la sesión. Hooks post-commit `dispararEventoFt` en `create-caja`, `update-caja` (cierre), `abrir-caja-desde-conteo`, `create-caja-mayor`, `cerrar-caja-mayor`, `finalizar-compra` y `crear-compra-simplificada`. → [domains/rrhh-funciones-tareas.md](../domains/rrhh-funciones-tareas.md).
+
+| Archivo | Canal | Permiso |
+|---|---|---|
+| `funciones-tareas.handler.ts` | `ft-funciones-list`, `ft-plantillas-list`, `ft-plantillas-get`, `ft-config-get`, `ft-tareas-list`, `ft-propuestas-list` | CONFIGURAR \| VER_TODO \| VERIFICAR \| REPORTES |
+| | `ft-funciones-{save, set-activo, delete}`, `ft-plantillas-{save, set-activo, delete}`, `ft-config-set` | CONFIGURAR |
+| | `ft-funciones-de` | lectura general o MARCAR_PROPIAS (solo las propias) |
+| | `ft-mis-tareas-hoy`, `ft-tarea-marcar`, `ft-tarea-subir-foto` | MARCAR_PROPIAS |
+| | `ft-tarea-no-aplica` | MARCAR_PROPIAS (propia) \| VERIFICAR (ajena) |
+| | `ft-tarea-verificar`, `ft-tarea-rechazar`, `ft-tarea-crear-manual` | VERIFICAR |
+| | `ft-avisos` | REPORTES \| VER_TODO |
+| | `ft-propuesta-resolver` | VERIFICAR \| CONFIGURAR |
+| | `ft-aviso-marcar-enviado` | AVISOS_GERENTE \| CONFIGURAR |
+| `funciones-tareas-lectura.handler.ts` | `ft-cumplimiento`, `ft-vencidas`, `ft-historico`, `ft-de-turno-hoy`, `ft-estado-motor` | REPORTES \| VER_TODO |
+
+Permisos abreviados: `RRHH_FT_<X>`.

@@ -1,0 +1,78 @@
+// Estilos compartidos de las pantallas DR (layout full-height + chips con variables del tema).
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+.contenedor-raiz {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.page-header {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  h2 { margin: 0; font-size: 20px; color: var(--text-primary); }
+}
+.tabs { flex: 1; min-height: 0; }
+.tab-icon { margin-right: 6px; }
+.tab-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 2px;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+}
+.filtros {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 8px;
+  .ancho { min-width: 260px; }
+}
+.spacer { flex: 1; }
+.hint { margin: 0 0 8px; font-size: 12px; color: var(--text-secondary); }
+.table-scroll { max-height: calc(100vh - 330px); min-height: 200px; overflow: auto; }
+table { width: 100%; }
+.mat-mdc-header-cell { background: var(--surface); }
+.num { text-align: right; }
+.texto-largo { max-width: 320px; white-space: normal; }
+.acc-col { width: 56px; }
+.spinner { display: flex; justify-content: center; padding: 24px; }
+.vacio { padding: 16px; text-align: center; color: var(--text-secondary); }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--surface);
+}
+.chip-verde { background: var(--success-color); }
+.chip-amarillo { background: var(--warning-color); }
+.chip-naranja { background: var(--warning-color); }
+.chip-rojo { background: var(--error-color); }
+.chip-celeste { background: var(--info-color); }
+mat-progress-spinner.inline { display: inline-block; margin-right: 6px; vertical-align: middle; }

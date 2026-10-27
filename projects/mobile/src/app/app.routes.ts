@@ -25,6 +25,16 @@ const RRHH_ITEMS: SectionItem[] = [
   { label: 'Horas extra', icon: 'more_time', path: '/rrhh/horas-extra', enabled: true, permiso: 'RRHH_ASISTENCIA_REGISTRAR' },
   { label: 'Permisos', icon: 'verified_user', path: '/rrhh/permisos', enabled: true, permiso: 'SISTEMA_PERMISO_GESTIONAR' },
   { label: 'Notificaciones', icon: 'notifications', path: '/rrhh/notificaciones', enabled: true, permiso: 'RRHH_NOTIFICACIONES_VER' },
+  // Disciplina y Reconocimiento (DR) — fase 3 mobile. La configuración y los reportes están en desktop.
+  { label: 'Registrar falta', icon: 'report', path: '/rrhh/disciplina/falta', enabled: true, permiso: 'RRHH_DR_REGISTRAR' },
+  { label: 'Registrar error', icon: 'error_outline', path: '/rrhh/disciplina/error', enabled: true, permiso: 'RRHH_DR_REGISTRAR' },
+  { label: 'Puntaje del día', icon: 'star_rate', path: '/rrhh/disciplina/puntaje', enabled: true, permiso: 'RRHH_DR_PUNTUAR' },
+  { label: 'Votación anónima', icon: 'how_to_vote', path: '/rrhh/disciplina/votar', enabled: true, permiso: 'RRHH_DR_VOTAR' },
+  { label: 'Mi resumen', icon: 'insights', path: '/rrhh/disciplina/mi-resumen', enabled: true, permiso: 'RRHH_DR_MIS_DATOS' },
+  { label: 'Aprobaciones DR', icon: 'rule', path: '/rrhh/disciplina/aprobaciones', enabled: true, permiso: 'RRHH_DR_APROBAR' },
+  // Funciones y tareas (FT) — fase 4 mobile. Configuración y tablero están en desktop.
+  { label: 'Mis tareas', icon: 'task_alt', path: '/rrhh/mis-tareas', enabled: true, permiso: 'RRHH_FT_MARCAR_PROPIAS' },
+  { label: 'Verificar tareas', icon: 'rule', path: '/rrhh/verificar-tareas', enabled: true, permiso: 'RRHH_FT_VERIFICAR' },
 ];
 
 /** Opciones de Configuración (se van habilitando por ola). Hoy: Música ambiente. */
@@ -690,6 +700,42 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/rrhh/funcionarios/funcionarios-list.page').then((m) => m.FuncionariosListPage),
       },
       {
+        path: 'rrhh/disciplina/falta',
+        canActivate: [permisoGuard],
+        data: { title: 'Registrar falta', permiso: 'RRHH_DR_REGISTRAR' },
+        loadComponent: () => import('./pages/rrhh/disciplina/registrar-falta/registrar-falta.page').then((m) => m.RegistrarFaltaPage),
+      },
+      {
+        path: 'rrhh/disciplina/error',
+        canActivate: [permisoGuard],
+        data: { title: 'Registrar error', permiso: 'RRHH_DR_REGISTRAR' },
+        loadComponent: () => import('./pages/rrhh/disciplina/registrar-error/registrar-error.page').then((m) => m.RegistrarErrorPage),
+      },
+      {
+        path: 'rrhh/disciplina/puntaje',
+        canActivate: [permisoGuard],
+        data: { title: 'Puntaje del día', permiso: 'RRHH_DR_PUNTUAR' },
+        loadComponent: () => import('./pages/rrhh/disciplina/puntaje-dia/puntaje-dia.page').then((m) => m.PuntajeDiaPage),
+      },
+      {
+        path: 'rrhh/disciplina/votar',
+        canActivate: [permisoGuard],
+        data: { title: 'Votación anónima', permiso: 'RRHH_DR_VOTAR' },
+        loadComponent: () => import('./pages/rrhh/disciplina/votacion/votacion.page').then((m) => m.VotacionPage),
+      },
+      {
+        path: 'rrhh/disciplina/mi-resumen',
+        canActivate: [permisoGuard],
+        data: { title: 'Mi resumen', permiso: 'RRHH_DR_MIS_DATOS' },
+        loadComponent: () => import('./pages/rrhh/disciplina/mi-resumen/mi-resumen.page').then((m) => m.MiResumenPage),
+      },
+      {
+        path: 'rrhh/disciplina/aprobaciones',
+        canActivate: [permisoGuard],
+        data: { title: 'Aprobaciones DR', permiso: 'RRHH_DR_APROBAR' },
+        loadComponent: () => import('./pages/rrhh/disciplina/aprobaciones/aprobaciones.page').then((m) => m.AprobacionesDrPage),
+      },
+      {
         path: 'rrhh/vales',
         canActivate: [permisoGuard],
         data: { title: 'Vales', permiso: 'RRHH_VALE_CREAR' },
@@ -742,6 +788,18 @@ export const routes: Routes = [
         canActivate: [permisoGuard],
         data: { title: 'Notificaciones', permiso: 'RRHH_NOTIFICACIONES_VER' },
         loadComponent: () => import('./pages/rrhh/notificaciones/notificaciones-list.page').then((m) => m.NotificacionesListPage),
+      },
+      {
+        path: 'rrhh/mis-tareas',
+        canActivate: [permisoGuard],
+        data: { title: 'Mis tareas', permiso: 'RRHH_FT_MARCAR_PROPIAS' },
+        loadComponent: () => import('./pages/rrhh/funciones-tareas/mis-tareas/mis-tareas.page').then((m) => m.MisTareasPage),
+      },
+      {
+        path: 'rrhh/verificar-tareas',
+        canActivate: [permisoGuard],
+        data: { title: 'Verificar tareas', permiso: 'RRHH_FT_VERIFICAR' },
+        loadComponent: () => import('./pages/rrhh/funciones-tareas/verificar/verificar-tareas.page').then((m) => m.VerificarTareasPage),
       },
       {
         path: 'financiero',

@@ -30,6 +30,8 @@ import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
 import { assertCajaAbiertaSiVino, cajaDePago, cajaDeVenta } from '../utils/caja-abierta.utils';
 import { enTransaccionSiPostgres } from '../utils/tx.utils';
 import { Venta } from '../../src/app/database/entities/ventas/venta.entity';
+import { dispararEventoFt } from '../services/funciones-tareas/eventos';
+import { FtEvento } from '../../src/app/database/entities/rrhh/funciones-tareas/ft.enums';
 
 // ===== Helpers internos =====
 
@@ -741,6 +743,8 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       }
 
       await qr.commitTransaction();
+      // Funciones y Tareas: post-commit, nunca lanza ni demora la compra.
+      dispararEventoFt(dataSource, FtEvento.COMPRA_RECIBIDA, id, null, userId);
       const compraFinal = await dataSource.getRepository(Compra).findOne({
         where: { id },
         relations: ['proveedor', 'proveedor.persona', 'moneda', 'formaPago', 'compraCategoria', 'detalles', 'detalles.producto', 'detalles.presentacion', 'cuentaPorPagar', 'cuentaBancaria'],
@@ -818,6 +822,8 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       }
 
       await qr.commitTransaction();
+      // Funciones y Tareas: post-commit, nunca lanza ni demora la compra.
+      dispararEventoFt(dataSource, FtEvento.COMPRA_RECIBIDA, compraId, null, userId);
       return await dataSource.getRepository(Compra).findOne({
         where: { id: compraId },
         relations: ['proveedor', 'proveedor.persona', 'moneda', 'compraCategoria', 'cuentaPorPagar', 'cuentaBancaria'],

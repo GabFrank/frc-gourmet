@@ -32,6 +32,10 @@
    ├ Bonos                           card_giftcard  → ListBonosComponent                  [RRHH_BONO_OTORGAR]
    ├ Aguinaldos                      star           → ListAguinaldosComponent             [RRHH_LIQUIDACION_GENERAR]
    ├ Vacaciones                      beach_access   → ListVacacionesComponent             [RRHH_VACACION_GESTIONAR]
+   ├ ▾ Disciplina y reconocimiento   military_tech  (grupo `grp-rrhh-disciplina`, fase 2 DR)
+   │  ├ Registro de faltas y errores assignment_late→ RegistroDisciplinaComponent        [RRHH_DR_REGISTRAR]
+   │  ├ Aprobaciones y apelaciones  fact_check     → AprobacionesDisciplinaComponent     [RRHH_DR_APROBAR]
+   │  └ Configuración de disciplina tune           → ConfigDisciplinaComponent           [RRHH_DR_CONFIGURAR] (esConfig)
    ├ Feriados                        celebration    → ListFeriadosComponent               [RRHH_CONFIG_EDITAR]
    ├ Permisos                        verified_user  → ListPermisosComponent               [SISTEMA_PERMISO_GESTIONAR]
    └ Config RRHH                     tune           → ListConfiguracionRrhhComponent      [RRHH_CONFIG_EDITAR]
@@ -111,3 +115,12 @@ De izquierda a derecha:
 - **Controles de ventana custom** (`*ngIf="!isMacOS"`): minimizar / maximizar-restaurar / cerrar (vía IPC `window:*`).
 
 > El botón de notificaciones con `matBadge` está **comentado** en el template. El badge de notificaciones RRHH vive en el item "Notificaciones" del sidenav.
+
+> **Disciplina y reconocimiento** (RRHH): las cuatro pantallas viven en `src/app/pages/rrhh/disciplina/`
+> (ids de hoja `dr-registro`, `dr-aprobaciones`, `dr-resultados`, `dr-config`). La configuración tiene un acceso a
+> *Configuración RRHH* para `DR_TOPE_DESCUENTO_MENSUAL` y `DR_VOTACION_MIN_VOTANTES` (no se duplican).
+> Ver [../domains/rrhh-disciplina.md](../domains/rrhh-disciplina.md).
+> **Funciones y tareas** (RRHH): grupo `grp-rrhh-ft` en `src/app/services/menu-tree.ts` con dos hojas:
+> `ft-tablero` (*Tablero de tareas*, `RRHH_FT_VER_TODO`) y `ft-config` (*Configurar funciones y tareas*,
+> `RRHH_FT_CONFIGURAR`, `esConfig`). Pantallas en `src/app/pages/rrhh/funciones-tareas/`. En la PWA:
+> `/rrhh/mis-tareas` y `/rrhh/verificar-tareas`. Ver [domains/rrhh-funciones-tareas.md](../domains/rrhh-funciones-tareas.md).
