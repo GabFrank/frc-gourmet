@@ -17,6 +17,7 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { dbQuery } from '../utils/db-query';
 import { getMovimientosBancariosUnificados } from '../utils/movimientos-bancarios';
 import { ensurePermission } from '../utils/auth.utils';
+import { calcularParaMaquina } from './acreditaciones-pos-reglas.handler';
 
 // Incrementa el numero de cheque (soporta sufijos no numericos: extrae digitos finales)
 function siguienteNumeroCheque(actual: string): string {
@@ -48,8 +49,12 @@ export async function procesarAcreditacionesPendientes(dataSource: DataSource): 
     const pendientes = await repo
       .createQueryBuilder('a')
       .leftJoinAndSelect('a.cuentaBancaria', 'cb')
+      .leftJoin('a.maquinaPos', 'mp')
       .where('a.estado = :estado', { estado: AcreditacionPosEstado.PENDIENTE })
       .andWhere('a.fechaEsperadaAcreditacion <= :ahora', { ahora })
+      // Máquinas con auto_acreditar = false: quedan «vencidas sin conciliar» hasta conciliar el crédito real (#320).
+      .andWhere('(mp.id IS NULL OR mp.autoAcreditar = :auto)', { auto: true })
+      .andWhere('a.conciliacion_id IS NULL')
       .getMany();
 
     let procesadas = 0;
@@ -360,25 +365,31 @@ export function registerBankingHandlers(
       }
 
       const montoOriginal = Number(data.montoOriginal);
-      const porcComision = Number(maquina.porcentajeComision || 0);
-      const montoComision = +(montoOriginal * (porcComision / 100)).toFixed(2);
-      const montoEsperado = +(montoOriginal - montoComision).toFixed(2);
-
       const fechaTransaccion = data.fechaTransaccion ? new Date(data.fechaTransaccion) : new Date();
-      const fechaEsperada = new Date(fechaTransaccion);
-      fechaEsperada.setMinutes(fechaEsperada.getMinutes() + (maquina.minutosAcreditacion || 0));
+      // Con regla activa para el medio (issue #320) calcula comisión, IVA, retenciones y días hábiles;
+      // sin regla, el cálculo de siempre (% y minutos de la máquina).
+      const decimales = Number((maquina.cuentaBancaria as any)?.moneda?.decimales ?? 0);
+      const calc = await calcularParaMaquina(dataSource.manager, maquina, montoOriginal, fechaTransaccion, data.medio, decimales);
+      const cuotas = data.cuotas != null && Number(data.cuotas) > 0 ? Math.floor(Number(data.cuotas)) : null;
 
       const entity = repo.create({
         maquinaPos: { id: maquinaPosId } as any,
         cuentaBancaria: { id: maquina.cuentaBancaria?.id } as any,
         montoOriginal,
-        montoComision,
-        montoEsperado,
+        montoComision: calc.montoComision,
+        montoEsperado: calc.montoEsperado,
         fechaTransaccion,
-        fechaEsperadaAcreditacion: fechaEsperada,
+        fechaEsperadaAcreditacion: calc.fechaEsperadaAcreditacion,
         estado: AcreditacionPosEstado.PENDIENTE,
         ventaId: data.ventaId || null,
-      });
+        medio: calc.medio || undefined,
+        marca: data.marca ? String(data.marca).toUpperCase().slice(0, 30) : undefined,
+        cuotas: cuotas ?? undefined,
+        montoIvaComision: calc.montoIvaComision ?? undefined,
+        montoRetRenta: calc.montoRetRenta ?? undefined,
+        montoRetIva: calc.montoRetIva ?? undefined,
+        reglaId: calc.reglaId ?? undefined,
+      } as any);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       const result = await repo.save(entity);
       return Array.isArray(result) ? result[0] : result;
