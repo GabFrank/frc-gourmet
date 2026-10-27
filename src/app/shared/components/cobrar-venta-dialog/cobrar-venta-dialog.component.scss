@@ -287,6 +287,12 @@ mat-dialog-content {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
+  overflow-y: auto; // con máquina POS + medio (#320) los grupos no deben pisar la fila de valor
+}
+
+.fp-buttons.medio-buttons {
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .selection-group {
