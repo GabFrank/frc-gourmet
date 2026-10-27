@@ -3,6 +3,9 @@
  * Sin base de datos ni zona horaria: trabaja con fechas 'YYYY-MM-DD' (día local del negocio)
  * y montos en la unidad de la moneda de la cuenta.
  *
+ * Stone QR/Pix en la máquina (extracto R$ 1–30/9/2026, 302/302 cobros): 0,75 % truncado al centavo,
+ * acreditado el mismo momento (D+0) en la cuenta Stone, neto.
+ *
  * Regla verificada con el extracto Bancard crédito (91/91 boletas, 26/9–26/10/2026):
  *  comisión 3 % (redondeada a la unidad y truncada a decenas) + IVA 10 % de la comisión
  *  + retención renta 1 % del bruto + retención IVA 10 % del IVA de la venta (bruto/11)
@@ -23,7 +26,7 @@ export interface ReglaAcreditacion {
   /** Con días corridos: si la fecha resultante no es hábil, se corre al siguiente hábil. */
   correrAHabil: boolean;
   porcentajeComision: number;
-  /** Unidad a la que se trunca la comisión (10 = decenas). 0 o 1 = sin truncar. */
+  /** Unidad a la que se trunca la comisión (10 = decenas, 0.01 = centavos). 0 = sin truncar (redondeo normal). */
   redondeoComision: number;
   porcentajeIvaComision: number;
   porcentajeRetRenta: number;
@@ -113,9 +116,12 @@ export function calcularAcreditacion(
   const p = Math.pow(10, Math.max(0, Math.min(4, decimales)));
   const red = (x: number) => Math.round(x * p) / p;
 
-  let comision = red((bruto * Number(regla.porcentajeComision || 0)) / 100);
+  const comisionExacta = (bruto * Number(regla.porcentajeComision || 0)) / 100;
+  let comision = red(comisionExacta);
   const unidad = Number(regla.redondeoComision || 0);
   if (unidad > 1) comision = Math.floor(comision / unidad) * unidad;
+  // Fracción de la moneda (Stone R$: 0,75 % truncado al centavo). El épsilon evita que 1.0125 → 101.24999 trunque mal.
+  else if (unidad > 0 && unidad < 1) comision = red(Math.floor(comisionExacta / unidad + 1e-7) * unidad);
   const ivaComision = red((comision * Number(regla.porcentajeIvaComision || 0)) / 100);
   const retRenta = red((bruto * Number(regla.porcentajeRetRenta || 0)) / 100);
   const divisor = Number(regla.divisorIvaVenta || 0);
@@ -160,6 +166,13 @@ export const REGLAS_OBSERVADAS: Record<string, { medio: MedioPos; verificada: bo
       medio: 'DEBITO', verificada: false,
       regla: { plazoDias: 0, tipoDias: 'HABILES', base: 'PROCESO', correrAHabil: true, porcentajeComision: 3.7, redondeoComision: 0,
         porcentajeIvaComision: 0, porcentajeRetRenta: 0, porcentajeRetIva: 0, divisorIvaVenta: 11, modo: 'BRUTO_COMISION_APARTE' },
+    },
+  ],
+  STONE: [
+    {
+      medio: 'QR', verificada: true,
+      regla: { plazoDias: 0, tipoDias: 'CORRIDOS', base: 'TRANSACCION', correrAHabil: false, porcentajeComision: 0.75, redondeoComision: 0.01,
+        porcentajeIvaComision: 0, porcentajeRetRenta: 0, porcentajeRetIva: 0, divisorIvaVenta: 11, modo: 'NETO' },
     },
   ],
   UPAY: [

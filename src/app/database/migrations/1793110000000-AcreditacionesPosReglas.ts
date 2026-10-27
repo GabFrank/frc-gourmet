@@ -33,7 +33,7 @@ export class AcreditacionesPosReglas1793110000000 implements MigrationInterface 
       "base_plazo" varchar(20) NOT NULL DEFAULT 'PROCESO',
       "correr_a_habil" boolean NOT NULL DEFAULT ${T},
       "porcentaje_comision" ${dec}(7,3) NOT NULL DEFAULT 0,
-      "redondeo_comision" integer NOT NULL DEFAULT 0,
+      "redondeo_comision" ${dec}(10,4) NOT NULL DEFAULT 0,
       "porcentaje_iva_comision" ${dec}(7,3) NOT NULL DEFAULT 0,
       "porcentaje_ret_renta" ${dec}(7,3) NOT NULL DEFAULT 0,
       "porcentaje_ret_iva" ${dec}(7,3) NOT NULL DEFAULT 0,

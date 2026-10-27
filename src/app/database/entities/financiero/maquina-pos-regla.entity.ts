@@ -32,7 +32,8 @@ export class MaquinaPosRegla extends BaseModel {
   @Column({ type: 'decimal', precision: 7, scale: 3, name: 'porcentaje_comision', default: 0 })
   porcentajeComision!: number;
 
-  @Column({ type: 'int', name: 'redondeo_comision', default: 0 })
+  /** Unidad a la que se trunca la comisión: 10 = decenas (₲), 0.01 = centavos (R$), 0 = sin truncar. */
+  @Column({ type: 'decimal', precision: 10, scale: 4, name: 'redondeo_comision', default: 0 })
   redondeoComision!: number;
 
   @Column({ type: 'decimal', precision: 7, scale: 3, name: 'porcentaje_iva_comision', default: 0 })

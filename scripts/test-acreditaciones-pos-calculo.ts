@@ -72,9 +72,21 @@ caso('Bancard débito (sin verificar): acredita bruto, descuento aparte, mismo d
   eq(calcularAcreditacion(d, 50000, '2026-10-27').fechaEsperada, '2026-10-27');
 });
 
-caso('verificación: solo Bancard crédito está marcada como verificada', () => {
-  const v = Object.values(REGLAS_OBSERVADAS).flat().filter(r => r.verificada).map(r => r.medio);
-  eq(v, ['CREDITO']);
+caso('Stone QR (R$): los 302 cobros del extracto de septiembre, tarifa truncada al centavo y D+0', () => {
+  const q = regla('STONE', 'QR');
+  const sx = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'stone-qr-2026-09.json'), 'utf8'));
+  for (const [fecha, bruto, tarifa, neto] of sx.filas) {
+    const r = calcularAcreditacion(q, bruto, fecha, new Set(), 2);
+    eq([r.montoComision, r.montoNeto, r.montoEsperado, r.fechaEsperada], [tarifa, neto, neto, fecha], `R$ ${bruto} ${fecha}`);
+  }
+  eq(sx.filas.length, 302);
+  // Sábado y domingo también acreditan en el momento.
+  eq(fechasAcreditacion(q, '2026-09-27', new Set()).fechaEsperada, '2026-09-27');
+});
+
+caso('verificación: solo Bancard crédito y Stone QR están marcadas como verificadas', () => {
+  const v = Object.entries(REGLAS_OBSERVADAS).flatMap(([b, rs]) => rs.filter(r => r.verificada).map(r => `${b}:${r.medio}`));
+  eq(v, ['BANCARD:CREDITO', 'STONE:QR']);
 });
 
 caso('moneda con decimales (R$) y validaciones', () => {

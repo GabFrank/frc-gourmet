@@ -95,8 +95,8 @@
         </mat-form-field>
         <mat-form-field appearance="outline" class="flex">
           <mat-label>Truncar comisión a</mat-label>
-          <input matInput type="number" min="0" [(ngModel)]="f.redondeoComision">
-          <mat-hint>10 = decenas, 0 = sin truncar</mat-hint>
+          <input matInput type="number" min="0" step="0.01" [(ngModel)]="f.redondeoComision">
+          <mat-hint>10 = decenas, 0,01 = centavos, 0 = sin truncar</mat-hint>
         </mat-form-field>
         <mat-form-field appearance="outline" class="flex">
           <mat-label>IVA de la comisión %</mat-label>
