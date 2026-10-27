@@ -43,3 +43,11 @@ Feature por configuración: borrar/desactivar reglas y `autoAcreditar=true` vuel
 
 ## Entrega
 Rama `feat/acreditaciones-pos-reglas`, PR a develop. Merge = producción (canal alpha): solo con OK del propietario. Después del merge, cargar reglas en prod con backup previo y su OK.
+
+## Ajustes por auditoría del plan (27/10)
+1. **Reglas no verificadas**: solo Bancard crédito está validada (91/91). «Cargar reglas observadas» carga Bancard crédito activa; uPay QR/débito/crédito y Bancard débito quedan **inactivas y marcadas «sin verificar»** hasta tener extracto; Stone no se carga. Tests unitarios también para débito (BRUTO + comisión aparte), QR y uPay crédito con fin de semana, con los valores de la issue y rotulados como supuestos.
+2. **Vuelta atrás de datos**: cada conciliación agrupada guarda un `ConciliacionPos` (crédito real, fecha, monto, usuario, acreditaciones incluidas, movimiento bancario generado). Acción «Deshacer conciliación» (BANCOS_GESTIONAR, transaccional): revierte el movimiento y devuelve las acreditaciones a su estado previo. Las acreditaciones calculadas con regla guardan `reglaId` y el desglose: desactivar reglas no las recalcula (sin retroactivos). Revertir código = nueva versión (canal alpha); el down de la migración solo para desarrollo, no se corre en producción.
+3. **Estado VENCIDA_SIN_CONCILIAR**: se agrega al enum (columna varchar, sin CHECK que migrar; se verifica en SQLite y PG). Saldo futuro y reportes incluyen PENDIENTE + VENCIDA_SIN_CONCILIAR; la conciliación acepta ambos. Al pasar una máquina a autoAcreditar=false, sus pendientes existentes siguen la nueva regla al vencer (no se tocan saldos ya acreditados). Test de compatibilidad de consultas existentes.
+4. **Conciliación idempotente**: un `ConciliacionPos` por crédito real, con clave única (cuenta + fecha + monto + referencia opcional); una acreditación solo puede estar en una conciliación activa (FK + chequeo en transacción). La sugerencia es greedy por fecha esperada y el usuario confirma/edita la selección; sin auto-match ciego. Test de doble conciliación.
+5. **Fiscal**: el reporte rotula IVA de comisión y retenciones como «informativo, a validar por el contador»; no genera asientos.
+6. **Evidencia**: el script de verificación (91/91) se agrega como test con los 91 casos anonimizados (solo montos y fechas, sin tarjetas ni autorizaciones).
