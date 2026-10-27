@@ -75,6 +75,7 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'RRHH_FT_MARCAR_PROPIAS', descripcion: 'Ver y marcar mis tareas y checklists', modulo: 'RRHH' },
   { codigo: 'RRHH_FT_VERIFICAR', descripcion: 'Verificar o rechazar tareas de otros y crear tareas manuales', modulo: 'RRHH' },
   { codigo: 'RRHH_FT_REPORTES', descripcion: 'Ver reportes de cumplimiento de tareas (solo lectura)', modulo: 'RRHH' },
+  { codigo: 'RRHH_FT_AVISOS_GERENTE', descripcion: 'Marcar como enviados los avisos que manda el bot Gerente (canal GERENTE)', modulo: 'RRHH' },
   // Compras - Importacion OCR/IA
   { codigo: 'COMPRAS_IMPORTAR_FACTURA', descripcion: 'Importar facturas de compra con OCR + IA', modulo: 'COMPRAS' },
   { codigo: 'SISTEMA_CONFIGURAR_IA', descripcion: 'Configurar credenciales y parametros de IA (OCR de facturas)', modulo: 'SISTEMA' },

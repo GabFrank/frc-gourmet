@@ -254,6 +254,8 @@ encargado para que la **reasigne a mano** (no se reasigna sola). Presente = asis
 Canal: `ft_config.canal_ausente` (def. `APP`).
 
 **Propuestas:** `ft-propuesta-resolver(id, { estado: 'REGISTRADA'|'DESCARTADA', nota? })`.
+
+**Avisos del Gerente:** el bot Gerente manda los avisos de canal GERENTE (estado PARA_GERENTE) y los marca con `ft-aviso-marcar-enviado(id, { destino? })` → ENVIADO con `enviadoEn` y `destino`. Permiso `RRHH_FT_AVISOS_GERENTE` (para el usuario de operaciones del bot; el de lectura solo tiene `RRHH_FT_REPORTES`).
 REGISTRADA significa «ya cargué la falta con `dr-registrar-falta`»; el resolver **no** crea
 la falta ni abre el diálogo de DR. `AUTO_RESOLUCION` si la propuesta es sobre uno mismo.
 
@@ -356,6 +358,7 @@ en MAYÚSCULAS. Los ids de relación se aceptan como `cargoId` o `cargo: { id }`
 | `ft-avisos` | ver *Contrato con el Gerente* | REPORTES \| VER_TODO | avisos |
 | `ft-propuestas-list` | `{ estado?, desde?, hasta?, funcionarioId? }` (máx. 500) | lectura general | `[{ id, estado, motivo, funcionario, tarea, tipoFalta, creadaEn, resueltaPor }]` |
 | `ft-propuesta-resolver` | `(id, { estado, nota? })` | VERIFICAR \| CONFIGURAR | `{ ok, id, estado }` |
+| `ft-aviso-marcar-enviado` | `(id, { destino? })` | AVISOS_GERENTE \| CONFIGURAR | `{ id, estado, enviadoEn, yaEnviado }`. Solo canal GERENTE: PARA_GERENTE → ENVIADO (UPDATE condicional, idempotente) |
 
 Lecturas de fase 5: ver la tabla del contrato con el Gerente.
 

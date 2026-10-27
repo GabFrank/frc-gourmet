@@ -196,6 +196,7 @@ Registrados en `register-all-handlers.ts` (`registerFuncionesTareasHandlers`, `r
 | | `ft-tarea-verificar`, `ft-tarea-rechazar`, `ft-tarea-crear-manual` | VERIFICAR |
 | | `ft-avisos` | REPORTES \| VER_TODO |
 | | `ft-propuesta-resolver` | VERIFICAR \| CONFIGURAR |
+| | `ft-aviso-marcar-enviado` | AVISOS_GERENTE \| CONFIGURAR |
 | `funciones-tareas-lectura.handler.ts` | `ft-cumplimiento`, `ft-vencidas`, `ft-historico`, `ft-de-turno-hoy`, `ft-estado-motor` | REPORTES \| VER_TODO |
 
 Permisos abreviados: `RRHH_FT_<X>`.

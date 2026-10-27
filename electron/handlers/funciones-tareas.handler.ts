@@ -47,6 +47,7 @@ const P = {
   MARCAR_PROPIAS: 'RRHH_FT_MARCAR_PROPIAS',
   VERIFICAR: 'RRHH_FT_VERIFICAR',
   REPORTES: 'RRHH_FT_REPORTES',
+  AVISOS_GERENTE: 'RRHH_FT_AVISOS_GERENTE',
 };
 /** Quienes pueden leer la configuración y las tareas de cualquiera. */
 const LECTURA_GENERAL = [P.CONFIGURAR, P.VER_TODO, P.VERIFICAR, P.REPORTES];
@@ -892,6 +893,33 @@ export function registerFuncionesTareasHandlers(dataSource: DataSource, getCurre
       creadoEn: a.createdAt,
       enviadoEn: a.enviadoEn ?? null,
     }));
+  });
+
+  /**
+   * El Gerente avisa que ya mandó un aviso de canal GERENTE (PARA_GERENTE → ENVIADO).
+   * data: { destino? } (a quién lo mandó; si no, queda el del aviso). Idempotente:
+   * si ya estaba ENVIADO devuelve { yaEnviado: true } sin tocarlo. El UPDATE es
+   * condicional al estado, así dos marcas simultáneas no pisan el registro.
+   */
+  ipcMain.handle('ft-aviso-marcar-enviado', async (_e, id: number, data: any = {}) => {
+    await ensurePermission(dataSource, getCurrentUser, [P.AVISOS_GERENTE, P.CONFIGURAR]);
+    const repo = dataSource.getRepository(FtAvisoEnviado);
+    const a = await repo.findOne({ where: { id: Number(id) } as any });
+    if (!a) fail('NO_ENCONTRADO', 'AVISO NO ENCONTRADO');
+    if (a.canal !== FtCanalAviso.GERENTE) fail('VALIDACION', 'SOLO SE MARCAN LOS AVISOS DE CANAL GERENTE');
+    if (a.estado === FtEstadoAviso.ENVIADO) return { id: a.id, estado: a.estado, enviadoEn: a.enviadoEn ?? null, yaEnviado: true };
+    if (a.estado !== FtEstadoAviso.PARA_GERENTE) fail('VALIDACION', `EL AVISO ESTÁ ${a.estado}, NO PARA EL GERENTE`);
+    const destino = typeof data?.destino === 'string' && data.destino.trim() ? data.destino.trim().slice(0, 200) : a.destino ?? null;
+    const enviadoEn = ahoraFt();
+    const r = await dataSource.createQueryBuilder().update(FtAvisoEnviado)
+      .set({ estado: FtEstadoAviso.ENVIADO, enviadoEn, destino, error: null } as any)
+      .where('id = :id AND estado = :e', { id: a.id, e: FtEstadoAviso.PARA_GERENTE })
+      .execute();
+    if (!r.affected) {
+      const ahora = await repo.findOne({ where: { id: a.id } as any });
+      return { id: a.id, estado: ahora?.estado, enviadoEn: ahora?.enviadoEn ?? null, yaEnviado: ahora?.estado === FtEstadoAviso.ENVIADO };
+    }
+    return { id: a.id, estado: FtEstadoAviso.ENVIADO, enviadoEn, yaEnviado: false };
   });
 
   /** Propuestas de falta (nivel 3). filtros: { estado?, desde?, hasta? (≤ 31 días), funcionarioId? }. */

@@ -456,6 +456,18 @@ async function main() {
   ok(waAv?.enviadoPorApp === true && waAv.funcionario?.id === fDani.id && waAv.tarea?.id === tDani20.id, 'el WHATSAPP aparece marcado enviadoPorApp', waAv);
   const soloG = await como(uRep, () => call('ft-avisos', { desde: '2026-11-20', hasta: '2026-11-21', canal: 'GERENTE', estado: 'PARA_GERENTE' }));
   ok(soloG.length === gerenteAv.length, 'filtro por canal y estado', soloG.length);
+  // El Gerente marca como enviado lo que mandó (RRHH_FT_AVISOS_GERENTE)
+  await rechaza(como(uRep, () => call('ft-aviso-marcar-enviado', soloG[0].id, {})), 'FORBIDDEN', 'con solo REPORTES no se marca enviado');
+  const uGer: any = await save(Usuario, { nickname: 'GERENTE_BOT_OPS', password: 'x', activo: true });
+  await permisos(uGer, 'GERENTE_AVISOS_FT', ['RRHH_FT_REPORTES', 'RRHH_FT_AVISOS_GERENTE']);
+  const mk = await como(uGer, () => call('ft-aviso-marcar-enviado', soloG[0].id, { destino: 'ADM Restaurant / cocina' }));
+  ok(mk.estado === 'ENVIADO' && mk.yaEnviado === false && !!mk.enviadoEn, 'el Gerente marca un aviso GERENTE como ENVIADO', mk);
+  const mk2 = await como(uGer, () => call('ft-aviso-marcar-enviado', soloG[0].id, {}));
+  ok(mk2.estado === 'ENVIADO' && mk2.yaEnviado === true, 'marcarlo dos veces es idempotente', mk2);
+  await rechaza(como(uGer, () => call('ft-aviso-marcar-enviado', waAv.id, {})), 'VALIDACION', 'un aviso de otro canal no se marca');
+  const trasMarca = await como(uRep, () => call('ft-avisos', { desde: '2026-11-20', hasta: '2026-11-21', canal: 'GERENTE', estado: 'PARA_GERENTE' }));
+  const marcado = (await como(uRep, () => call('ft-avisos', { desde: '2026-11-20', hasta: '2026-11-21', canal: 'GERENTE' }))).find((a: any) => a.id === soloG[0].id);
+  ok(trasMarca.length === soloG.length - 1 && marcado?.estado === 'ENVIADO' && marcado?.destino === 'ADM Restaurant / cocina' && !marcado?.enviadoPorApp, 'queda registrado: sale de PARA_GERENTE, con destino y sin enviadoPorApp', [trasMarca.length, marcado]);
   await rechaza(como(uRep, () => call('ft-avisos', { desde: '2026-10-01', hasta: '2026-11-21' })), 'RANGO_EXCEDIDO', 'ft-avisos: más de 31 días → rechazado');
   await rechaza(como(uVero, () => call('ft-avisos', { desde: '2026-11-20' })), 'FORBIDDEN', 'ft-avisos: solo RRHH_FT_REPORTES o VER_TODO');
 
