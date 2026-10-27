@@ -45,16 +45,17 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
             <thead><tr><th>Máquina</th><th>Medio</th><th class="num">Ventas</th><th class="num">Bruto</th><th class="num">Comisión</th><th class="num">IVA com.</th><th class="num">Ret. renta</th><th class="num">Ret. IVA</th><th class="num">Neto</th></tr></thead>
             <tbody>
               <tr *ngFor="let r of resumen.porMaquinaYMedio">
-                <td>{{ r.maquina }}</td><td>{{ r.medio || 'Sin medio' }}</td><td class="num">{{ r.cantidad }}</td>
+                <td>{{ r.maquina }}<span *ngIf="r.moneda" class="hint"> ({{ r.moneda }})</span></td><td>{{ r.medio || 'Sin medio' }}</td><td class="num">{{ r.cantidad }}</td>
                 <td class="num">{{ r.bruto | number:'1.0-0' }}</td><td class="num">{{ r.comision | number:'1.0-0' }}</td>
                 <td class="num">{{ r.ivaComision | number:'1.0-0' }}</td><td class="num">{{ r.retRenta | number:'1.0-0' }}</td>
                 <td class="num">{{ r.retIva | number:'1.0-0' }}</td><td class="num">{{ r.neto | number:'1.0-0' }}</td>
               </tr>
-              <tr class="total">
-                <td colspan="2">Total</td><td class="num">{{ resumen.totales.cantidad }}</td>
-                <td class="num">{{ resumen.totales.bruto | number:'1.0-0' }}</td><td class="num">{{ resumen.totales.comision | number:'1.0-0' }}</td>
-                <td class="num">{{ resumen.totales.ivaComision | number:'1.0-0' }}</td><td class="num">{{ resumen.totales.retRenta | number:'1.0-0' }}</td>
-                <td class="num">{{ resumen.totales.retIva | number:'1.0-0' }}</td><td class="num">{{ resumen.totales.neto | number:'1.0-0' }}</td>
+              <!-- Un total por moneda: no se suman guaraníes con reales. -->
+              <tr class="total" *ngFor="let t of (resumen.totalesPorMoneda || [resumen.totales])">
+                <td colspan="2">Total {{ t.moneda }}</td><td class="num">{{ t.cantidad }}</td>
+                <td class="num">{{ t.bruto | number:'1.0-2' }}</td><td class="num">{{ t.comision | number:'1.0-2' }}</td>
+                <td class="num">{{ t.ivaComision | number:'1.0-2' }}</td><td class="num">{{ t.retRenta | number:'1.0-2' }}</td>
+                <td class="num">{{ t.retIva | number:'1.0-2' }}</td><td class="num">{{ t.neto | number:'1.0-2' }}</td>
               </tr>
             </tbody>
           </table>

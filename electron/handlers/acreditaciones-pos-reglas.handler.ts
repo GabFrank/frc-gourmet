@@ -286,6 +286,7 @@ export async function resumenAcreditaciones(manager: EntityManager, p: { desde: 
   const filas = await manager.getRepository(AcreditacionPos).createQueryBuilder('a')
     .leftJoinAndSelect('a.maquinaPos', 'mp')
     .leftJoinAndSelect('a.cuentaBancaria', 'cb')
+    .leftJoinAndSelect('cb.moneda', 'mon')
     .where('a.fechaTransaccion >= :desde AND a.fechaTransaccion < :hasta', { desde, hasta })
     .getMany();
   const pendientes = await manager.getRepository(AcreditacionPos).createQueryBuilder('a')
@@ -304,10 +305,14 @@ export async function resumenAcreditaciones(manager: EntityManager, p: { desde: 
     porCuentaDia.set(k, it);
   }
   const porMaquinaMedio = new Map<string, any>();
-  const tot = { bruto: 0, comision: 0, ivaComision: 0, retRenta: 0, retIva: 0, neto: 0, cantidad: 0 };
+  // Totales por moneda de la cuenta destino: no se suman guaraníes con reales.
+  const totPorMoneda = new Map<string, any>();
   for (const a of filas) {
-    const k = `${a.maquinaPos?.id}|${a.medio || 'SIN_MEDIO'}`;
-    const it = porMaquinaMedio.get(k) ?? { maquina: a.maquinaPos?.nombre, medio: a.medio || null, bruto: 0, comision: 0, ivaComision: 0, retRenta: 0, retIva: 0, neto: 0, cantidad: 0 };
+    const moneda = a.cuentaBancaria?.moneda?.simbolo ?? '';
+    const k = `${a.maquinaPos?.id}|${a.medio || 'SIN_MEDIO'}|${moneda}`;
+    const it = porMaquinaMedio.get(k) ?? { maquina: a.maquinaPos?.nombre, medio: a.medio || null, moneda, bruto: 0, comision: 0, ivaComision: 0, retRenta: 0, retIva: 0, neto: 0, cantidad: 0 };
+    const tot = totPorMoneda.get(moneda) ?? { moneda, principal: !!a.cuentaBancaria?.moneda?.principal, bruto: 0, comision: 0, ivaComision: 0, retRenta: 0, retIva: 0, neto: 0, cantidad: 0 };
+    totPorMoneda.set(moneda, tot);
     const v = {
       bruto: Number(a.montoOriginal) || 0, comision: Number(a.montoComision) || 0, ivaComision: Number(a.montoIvaComision) || 0,
       retRenta: Number(a.montoRetRenta) || 0, retIva: Number(a.montoRetIva) || 0,
@@ -320,10 +325,14 @@ export async function resumenAcreditaciones(manager: EntityManager, p: { desde: 
     porMaquinaMedio.set(k, it);
   }
   const r2 = (o: any) => { for (const k of ['bruto', 'comision', 'ivaComision', 'retRenta', 'retIva', 'neto']) o[k] = +Number(o[k]).toFixed(2); return o; };
+  const totalesPorMoneda = Array.from(totPorMoneda.values()).map(r2).sort((a, b) => Number(b.principal) - Number(a.principal));
+  const vacio = { moneda: '', principal: true, bruto: 0, comision: 0, ivaComision: 0, retRenta: 0, retIva: 0, neto: 0, cantidad: 0 };
   return {
     pendientePorCuentaYFecha: Array.from(porCuentaDia.values()).sort((a, b) => (a.fecha < b.fecha ? -1 : 1)),
     porMaquinaYMedio: Array.from(porMaquinaMedio.values()).map(r2),
-    totales: r2(tot),
+    // `totales`: los de la moneda principal (o la única); el resto en `totalesPorMoneda`.
+    totales: totalesPorMoneda[0] ?? vacio,
+    totalesPorMoneda,
     nota: 'IVA de comisión y retenciones: informativo, a validar por el contador.',
   };
 }
