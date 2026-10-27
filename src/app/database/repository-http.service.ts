@@ -1790,6 +1790,42 @@ export class RepositoryHttpService extends RepositoryService {
   createAcreditacionPos(data: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.createAcreditacionPos() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+
+  getMaquinaPosReglas(maquinaPosId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getMaquinaPosReglas() no esta implementado todavia.`)) as any;
+  }
+
+  saveMaquinaPosRegla(data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.saveMaquinaPosRegla() no esta implementado todavia.`)) as any;
+  }
+
+  deleteMaquinaPosRegla(id: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deleteMaquinaPosRegla() no esta implementado todavia.`)) as any;
+  }
+
+  cargarReglasObservadasPos(maquinaPosId: number, proveedor: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.cargarReglasObservadasPos() no esta implementado todavia.`)) as any;
+  }
+
+  sugerirConciliacionPos(params: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.sugerirConciliacionPos() no esta implementado todavia.`)) as any;
+  }
+
+  conciliarAcreditacionesPos(params: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.conciliarAcreditacionesPos() no esta implementado todavia.`)) as any;
+  }
+
+  deshacerConciliacionPos(id: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.deshacerConciliacionPos() no esta implementado todavia.`)) as any;
+  }
+
+  getConciliacionesPos(cuentaBancariaId?: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getConciliacionesPos() no esta implementado todavia.`)) as any;
+  }
+
+  getResumenAcreditacionesPos(params: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getResumenAcreditacionesPos() no esta implementado todavia.`)) as any;
+  }
   procesarAcreditacionesAuto(): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.procesarAcreditacionesAuto() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
