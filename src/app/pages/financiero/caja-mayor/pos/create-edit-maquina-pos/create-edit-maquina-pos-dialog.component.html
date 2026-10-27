@@ -97,7 +97,7 @@
         <mat-form-field appearance="outline">
           <mat-label>Truncar comisión a</mat-label>
           <input matInput type="number" min="0" step="0.01" [(ngModel)]="f.redondeoComision">
-          <mat-hint>10 = decenas, 0,01 = centavos, 0 = sin truncar</mat-hint>
+          <mat-hint>10 decenas · 0,01 centavos · 0 no trunca</mat-hint>
         </mat-form-field>
         <mat-form-field appearance="outline">
           <mat-label>IVA de la comisión %</mat-label>
@@ -132,7 +132,7 @@
         <span class="ejemplo">{{ f.ejemplo }}</span>
         <span class="obs" *ngIf="f.observacion">{{ f.observacion }}</span>
         <span class="spacer"></span>
-        <button mat-button color="warn" type="button" (click)="eliminarRegla(f)">Eliminar</button>
+        <button mat-stroked-button color="warn" type="button" (click)="eliminarRegla(f)">Eliminar</button>
         <button mat-raised-button color="primary" type="button" [disabled]="guardandoRegla" (click)="guardarRegla(f)">Guardar regla</button>
       </div>
     </div>

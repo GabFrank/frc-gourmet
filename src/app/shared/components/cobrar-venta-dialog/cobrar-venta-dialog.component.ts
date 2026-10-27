@@ -147,6 +147,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
 
   @ViewChild('monedaSelect') monedaSelectRef!: ElementRef;
   @ViewChild('valorInputRef') valorInputRef!: ElementRef;
+  @ViewChild('selectionPanel') selectionPanelRef?: ElementRef<HTMLElement>;
 
   // Selections
   selectedMoneda: Moneda | null = null;
@@ -619,6 +620,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
 
   // Cuando cambia la forma de pago, autoselecciona maquina POS / cuenta bancaria si solo hay 1
   onFormaPagoChange(): void {
+    this.mostrarSelectorPos();
     const maquinas = this.maquinasPosDisponibles;
     if (maquinas.length === 1) {
       this.selectedMaquinaPosId = maquinas[0].id;
@@ -643,6 +645,15 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
   onMaquinaPosSelected(mp: any): void {
     this.selectedMaquinaPosId = mp.id;
     this.aplicarMonedaDeMaquinaPos(mp);
+    this.mostrarSelectorPos();
+  }
+
+  /** Con máquina POS + medio el panel derecho no entra entero: lo baja para que se vean (#320). */
+  private mostrarSelectorPos(): void {
+    setTimeout(() => {
+      const el = this.selectionPanelRef?.nativeElement;
+      if (el && this.muestraSelectorMaquinaPos) el.querySelector('.medio-buttons')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
   }
 
   onCuentaBancariaSelected(cb: any): void {

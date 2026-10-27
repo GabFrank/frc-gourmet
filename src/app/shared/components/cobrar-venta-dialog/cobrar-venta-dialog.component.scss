@@ -295,6 +295,14 @@ mat-dialog-content {
   grid-template-columns: repeat(3, 1fr);
 }
 
+// Con máquina POS + medio hay más grupos: botones más bajos para que entren sin scroll
+.selection-panel.compacto .selection-buttons button {
+  height: 34px;
+}
+.selection-panel.compacto {
+  gap: 10px;
+}
+
 .selection-group {
   display: flex;
   flex-direction: column;
@@ -521,11 +529,16 @@ mat-dialog-actions {
 
   button {
     flex: 1;
+    min-width: 0;
     height: 42px;
+    padding: 0 8px;
     font-size: 12px;
     font-weight: 500;
     border-radius: 6px;
     color: white;
+    white-space: nowrap; // «Finalizar + Ticket (F11)» se partía y salía del botón
+    overflow: hidden;
+    text-overflow: ellipsis;
 
     mat-icon {
       margin-right: 4px;
