@@ -20,6 +20,8 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { VerificarAcreditacionDialogComponent } from './verificar-acreditacion-dialog/verificar-acreditacion-dialog.component';
+import { ConciliarCreditoDialogComponent } from './conciliacion/conciliar-credito-dialog.component';
+import { ConciliacionesPosDialogComponent } from './conciliacion/conciliaciones-pos-dialog.component';
 
 @Component({
   selector: 'app-list-acreditaciones-pos',
@@ -63,7 +65,7 @@ export class ListAcreditacionesPosComponent implements OnInit {
   estadoOptions = ['PENDIENTE', 'ACREDITADO_AUTO', 'VERIFICADO', 'CON_DIFERENCIA'];
   maquinasPos: any[] = [];
 
-  displayedColumns = ['fechaTransaccion', 'maquina', 'cuenta', 'montoOriginal', 'comision', 'montoEsperado', 'montoAcreditado', 'fechaAcred', 'estado', 'actions'];
+  displayedColumns = ['fechaTransaccion', 'maquina', 'medio', 'cuenta', 'montoOriginal', 'comision', 'montoEsperado', 'montoAcreditado', 'fechaAcred', 'estado', 'actions'];
 
   constructor(
     private repositoryService: RepositoryService,
@@ -108,7 +110,13 @@ export class ListAcreditacionesPosComponent implements OnInit {
         filtros.fechaHasta = h;
       }
       const result: any = await firstValueFrom(this.repositoryService.getAcreditacionesPos(filtros));
-      this.acreditaciones = result?.items || [];
+      // «Vencida sin conciliar» (#320): pendiente con la fecha esperada ya pasada (máquina sin auto-acreditar).
+      const ahora = Date.now();
+      this.acreditaciones = (result?.items || []).map((a: any) => {
+        const vencida = a.estado === 'PENDIENTE' && new Date(a.fechaEsperadaAcreditacion).getTime() < ahora;
+        const estadoLabel = vencida ? 'VENCIDA SIN CONCILIAR' : a.estado;
+        return { ...a, estadoLabel, estadoBg: this.estadoColor(vencida ? 'VENCIDA' : a.estado) };
+      });
       this.total = result?.total || 0;
     } catch (e) {
       console.error(e);
@@ -161,12 +169,23 @@ export class ListAcreditacionesPosComponent implements OnInit {
     ref.afterClosed().subscribe(r => { if (r) this.loadData(); });
   }
 
+  conciliarCredito(): void {
+    const ref = this.dialog.open(ConciliarCreditoDialogComponent, { width: '960px', maxWidth: '95vw' });
+    ref.afterClosed().subscribe(r => { if (r) this.loadData(); });
+  }
+
+  verConciliaciones(): void {
+    const ref = this.dialog.open(ConciliacionesPosDialogComponent, { width: '1000px', maxWidth: '95vw' });
+    ref.afterClosed().subscribe(r => { if (r) this.loadData(); });
+  }
+
   estadoColor(estado: string): string {
     switch (estado) {
       case 'PENDIENTE': return '#1976d2';
       case 'ACREDITADO_AUTO': return '#ff9800';
       case 'VERIFICADO': return '#4caf50';
       case 'CON_DIFERENCIA': return '#f44336';
+      case 'VENCIDA': return '#b26a00';
       default: return '#9e9e9e';
     }
   }

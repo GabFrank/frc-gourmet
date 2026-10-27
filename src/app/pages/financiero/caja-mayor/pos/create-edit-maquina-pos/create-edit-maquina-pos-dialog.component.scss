@@ -10,3 +10,28 @@
   .flex { flex: 1; }
 }
 .full-width { width: 100%; }
+
+.hint { margin: 0 0 8px; font-size: 12px; opacity: .7; }
+.reglas {
+  margin-top: 16px;
+  border-top: 1px solid rgba(128,128,128,.3);
+  padding-top: 8px;
+  min-width: 820px;
+  .reglas-header { display: flex; align-items: center; gap: 8px; h3 { margin: 0; } .prov { width: 170px; } }
+  .spacer { flex: 1; }
+  .regla {
+    border: 1px solid rgba(128,128,128,.35);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    &.inactiva { opacity: .7; }
+  }
+  .regla-titulo, .regla-pie { display: flex; align-items: center; gap: 12px; }
+  .medio { width: 150px; }
+  .chk { align-self: center; }
+  .chip { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+  .verificada { background: rgba(46,160,67,.2); color: #3fb950; }
+  .sin-verificar { background: rgba(210,153,34,.2); color: #d29922; }
+  .ejemplo { font-weight: 600; }
+  .obs { font-size: 12px; opacity: .7; }
+}
