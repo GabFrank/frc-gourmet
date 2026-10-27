@@ -171,6 +171,8 @@ import { CuentaBancaria } from './entities/financiero/cuenta-bancaria.entity';
 import { CuentaBancariaDestino } from './entities/financiero/cuenta-bancaria-destino.entity';
 import { MaquinaPos } from './entities/financiero/maquina-pos.entity';
 import { AcreditacionPos } from './entities/financiero/acreditacion-pos.entity';
+import { MaquinaPosRegla } from './entities/financiero/maquina-pos-regla.entity';
+import { ConciliacionPos } from './entities/financiero/conciliacion-pos.entity';
 import { MovimientoBancario } from './entities/financiero/movimiento-bancario.entity';
 
 // Compras + CuentasPorPagar (Fase 3)
@@ -332,6 +334,7 @@ import { MovimientoBancarioCuentaDestino1789587049751 } from './migrations/17895
 import { CajaUnicaAbiertaPorDispositivo1790617935368 } from './migrations/1790617935368-CajaUnicaAbiertaPorDispositivo';
 import { DisciplinaReconocimiento1792785488053 } from './migrations/1792785488053-DisciplinaReconocimiento';
 import { FuncionesTareas1793042064365 } from './migrations/1793042064365-FuncionesTareas';
+import { AcreditacionesPosReglas1793110000000 } from './migrations/1793110000000-AcreditacionesPosReglas';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -565,6 +568,8 @@ function getEntitiesList(): any[] {
       CuentaBancariaDestino,
       MaquinaPos,
       AcreditacionPos,
+      MaquinaPosRegla,
+      ConciliacionPos,
       MovimientoBancario,
       // CuentasPorPagar (Fase 3)
       CompraCategoria,
@@ -801,6 +806,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     DisciplinaReconocimiento1792785488053,
     // Funciones y Tareas (funciones por cargo/funcionario, tareas y checklists) — tablas ft_*
     FuncionesTareas1793042064365,
+    AcreditacionesPosReglas1793110000000,
   ];
 }
 

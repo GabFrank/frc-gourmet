@@ -26,6 +26,13 @@ export class MaquinaPos extends BaseModel {
   @Column({ type: 'int', default: 0, name: 'minutos_acreditacion' })
   minutosAcreditacion!: number;
 
+  /**
+   * true (por defecto, comportamiento anterior): al vencer, la acreditación se suma sola al saldo.
+   * false: queda pendiente («vencida sin conciliar» si ya pasó la fecha) hasta conciliarla con el crédito real.
+   */
+  @Column({ name: 'auto_acreditar', default: true })
+  autoAcreditar!: boolean;
+
   @Column({ default: true })
   activo!: boolean;
 }
