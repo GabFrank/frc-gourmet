@@ -114,7 +114,7 @@ export class ListAcreditacionesPosComponent implements OnInit {
       const ahora = Date.now();
       this.acreditaciones = (result?.items || []).map((a: any) => {
         const vencida = a.estado === 'PENDIENTE' && new Date(a.fechaEsperadaAcreditacion).getTime() < ahora;
-        const estadoLabel = vencida ? 'VENCIDA SIN CONCILIAR' : a.estado;
+        const estadoLabel = vencida ? 'VENCIDA SIN CONCILIAR' : String(a.estado || '').replace(/_/g, ' ');
         return { ...a, estadoLabel, estadoBg: this.estadoColor(vencida ? 'VENCIDA' : a.estado) };
       });
       this.total = result?.total || 0;

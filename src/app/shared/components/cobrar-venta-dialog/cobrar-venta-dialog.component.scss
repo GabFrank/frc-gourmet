@@ -299,6 +299,7 @@ mat-dialog-content {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex-shrink: 0; // sin esto los grupos se comprimen y el título pisa los botones (#320)
 }
 
 .selection-label {
@@ -617,12 +618,12 @@ mat-dialog-actions {
   color: #00695c;
 }
 
-.dark-theme .maquina-pos-tag {
+:host-context(.dark-theme) .maquina-pos-tag {
   background: rgba(124, 77, 255, 0.18);
   color: #b39ddb;
 }
 
-.dark-theme .cuenta-bancaria-tag {
+:host-context(.dark-theme) .cuenta-bancaria-tag {
   background: rgba(0, 230, 201, 0.18);
   color: #80cbc4;
 }
