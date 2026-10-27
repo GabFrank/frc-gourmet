@@ -3,7 +3,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 /**
  * Acreditaciones POS por medio de pago (issue #320, docs/planes/PLAN-acreditaciones-pos.md).
  *
- * ESTRICTAMENTE ADITIVO: 2 tablas nuevas y columnas nullables / con default.
+ * ESTRICTAMENTE ADITIVO: 2 tablas nuevas y columnas nullables / con default
+ * (maquinas_pos, acreditaciones_pos y pagos_detalles.medio_pos).
  * No cambia el CHECK de `acreditaciones_pos.estado` (SQLite): «vencida sin conciliar» es
  * PENDIENTE con fecha pasada en una máquina con auto_acreditar = false, así no hace falta
  * reconstruir la tabla. Sin backfill: lo existente queda como está.
@@ -69,6 +70,7 @@ export class AcreditacionesPosReglas1793110000000 implements MigrationInterface 
       if (!cols.some((c) => c.name === col)) await queryRunner.query(`ALTER TABLE "${tabla}" ADD COLUMN "${col}" ${def}`);
     };
     await addCol('maquinas_pos', 'auto_acreditar', `boolean NOT NULL DEFAULT ${T}`);
+    await addCol('pagos_detalles', 'medio_pos', 'varchar(20) NULL');
     await addCol('acreditaciones_pos', 'medio', 'varchar(20) NULL');
     await addCol('acreditaciones_pos', 'marca', 'varchar(30) NULL');
     await addCol('acreditaciones_pos', 'cuotas', 'integer NULL');
@@ -96,5 +98,6 @@ export class AcreditacionesPosReglas1793110000000 implements MigrationInterface 
       await drop('acreditaciones_pos', c);
     }
     await drop('maquinas_pos', 'auto_acreditar');
+    await drop('pagos_detalles', 'medio_pos');
   }
 }

@@ -18,6 +18,7 @@ function ok(cond: boolean, name: string, extra?: any) {
 const TABLAS = ['maquinas_pos_reglas', 'conciliaciones_pos'];
 const COLS_NUEVAS: Record<string, string[]> = {
   maquinas_pos: ['auto_acreditar'],
+  pagos_detalles: ['medio_pos'],
   acreditaciones_pos: ['medio', 'marca', 'cuotas', 'monto_iva_comision', 'monto_ret_renta', 'monto_ret_iva', 'regla_id', 'conciliacion_id'],
 };
 
