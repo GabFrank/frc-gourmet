@@ -46,16 +46,16 @@ import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmat
             <tbody>
               <tr *ngFor="let r of resumen.porMaquinaYMedio">
                 <td>{{ r.maquina }}<span *ngIf="r.moneda" class="hint"> ({{ r.moneda }})</span></td><td>{{ r.medio || 'Sin medio' }}</td><td class="num">{{ r.cantidad }}</td>
-                <td class="num">{{ r.bruto | number:'1.0-0' }}</td><td class="num">{{ r.comision | number:'1.0-0' }}</td>
-                <td class="num">{{ r.ivaComision | number:'1.0-0' }}</td><td class="num">{{ r.retRenta | number:'1.0-0' }}</td>
-                <td class="num">{{ r.retIva | number:'1.0-0' }}</td><td class="num">{{ r.neto | number:'1.0-0' }}</td>
+                <td class="num">{{ r.bruto | number:dig(r.moneda) }}</td><td class="num">{{ r.comision | number:dig(r.moneda) }}</td>
+                <td class="num">{{ r.ivaComision | number:dig(r.moneda) }}</td><td class="num">{{ r.retRenta | number:dig(r.moneda) }}</td>
+                <td class="num">{{ r.retIva | number:dig(r.moneda) }}</td><td class="num">{{ r.neto | number:dig(r.moneda) }}</td>
               </tr>
               <!-- Un total por moneda: no se suman guaraníes con reales. -->
               <tr class="total" *ngFor="let t of (resumen.totalesPorMoneda || [resumen.totales])">
                 <td colspan="2">Total {{ t.moneda }}</td><td class="num">{{ t.cantidad }}</td>
-                <td class="num">{{ t.bruto | number:'1.0-2' }}</td><td class="num">{{ t.comision | number:'1.0-2' }}</td>
-                <td class="num">{{ t.ivaComision | number:'1.0-2' }}</td><td class="num">{{ t.retRenta | number:'1.0-2' }}</td>
-                <td class="num">{{ t.retIva | number:'1.0-2' }}</td><td class="num">{{ t.neto | number:'1.0-2' }}</td>
+                <td class="num">{{ t.bruto | number:dig(t.moneda) }}</td><td class="num">{{ t.comision | number:dig(t.moneda) }}</td>
+                <td class="num">{{ t.ivaComision | number:dig(t.moneda) }}</td><td class="num">{{ t.retRenta | number:dig(t.moneda) }}</td>
+                <td class="num">{{ t.retIva | number:dig(t.moneda) }}</td><td class="num">{{ t.neto | number:dig(t.moneda) }}</td>
               </tr>
             </tbody>
           </table>
@@ -93,6 +93,11 @@ export class ConciliacionesPosDialogComponent implements OnInit {
   desde = '';
   hasta = '';
   cambio = false;
+
+  /** Guaraníes sin decimales; otras monedas (R$) con centavos. */
+  dig(moneda?: string): string {
+    return !moneda || moneda === '₲' || moneda === 'Gs' ? '1.0-0' : '1.2-2';
+  }
 
   constructor(
     private repositoryService: RepositoryService,
