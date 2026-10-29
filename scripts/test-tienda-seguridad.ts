@@ -4,6 +4,7 @@
  */
 import { clientIpDe } from '../electron/utils/client-ip.util';
 import { ipPermitidaMesa } from '../electron/utils/ip-lan.util';
+import { loginBloqueado, registrarLoginFallido, registrarLoginOk, otpIpPermitido, reiniciarLimitesTienda, LOGIN_BLOQUEO_MS } from '../electron/utils/tienda-limites';
 
 let pass = 0, fail = 0;
 function ok(c: boolean, msg: string, extra?: any) {
@@ -35,6 +36,27 @@ ok(esLanMesa(req('127.0.0.1', { 'cf-connecting-ip': '192.168.0.10' }), null) ===
 ok(esLanMesa(req('127.0.0.1', { 'cf-connecting-ip': '192.168.0.10' }), '192.168.0.0/16') === false, 'túnel con IP privada aunque esté en el rango → rechazado');
 ok(esLanMesa(req('127.0.0.1', { 'cf-connecting-ip': '181.120.5.6' }), '181.120.5.6') === true, 'túnel desde la IP pública del local cargada en el rango → permitido');
 ok(esLanMesa(req('127.0.0.1', { 'cf-connecting-ip': '181.120.9.9' }), '181.120.5.6') === false, 'túnel desde otra IP pública → rechazado');
+
+console.log('Anti fuerza bruta y topes OTP');
+reiniciarLimitesTienda();
+const t0 = 1_000_000;
+for (let i = 0; i < 4; i++) registrarLoginFallido(7, '1.1.1.1', t0);
+ok(loginBloqueado(7, '1.1.1.1', t0) === null, '4 fallos: todavía puede intentar');
+registrarLoginFallido(7, '1.1.1.1', t0);
+ok(loginBloqueado(7, '1.1.1.1', t0) === 'cuenta_bloqueada', '5 fallos cuenta+IP → bloqueada');
+ok(loginBloqueado(7, '2.2.2.2', t0) === null, 'el dueño desde otra IP no queda bloqueado');
+ok(loginBloqueado(7, '1.1.1.1', t0 + LOGIN_BLOQUEO_MS + 1) === null, 'a los 15 min se libera');
+registrarLoginOk(7, '2.2.2.2');
+reiniciarLimitesTienda();
+for (let i = 0; i < 20; i++) registrarLoginFallido(100 + i, '3.3.3.3', t0);
+ok(loginBloqueado(999, '3.3.3.3', t0) === 'ip_bloqueada', '20 fallos de una IP en cualquier cuenta → IP frenada');
+ok(loginBloqueado(999, '3.3.3.3', t0 + 61 * 60_000) === null, 'la ventana por IP es de una hora');
+reiniciarLimitesTienda();
+let otps = 0;
+for (let i = 0; i < 35; i++) if (otpIpPermitido('4.4.4.4', t0)) otps++;
+ok(otps === 30, 'OTP: 30 por IP por hora', otps);
+ok(otpIpPermitido('5.5.5.5', t0), 'OTP: otra IP sigue pudiendo');
+reiniciarLimitesTienda();
 
 console.log(`\n[tienda-seguridad] RESULTADO: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);
