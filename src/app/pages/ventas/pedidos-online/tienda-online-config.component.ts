@@ -170,7 +170,10 @@ import { RepositoryService } from '../../../database/repository.service';
               <input matInput type="password" [(ngModel)]="upayKeyNueva" maxlength="500" autocomplete="off"
                      [disabled]="!ingreso.almacenSeguroDisponible"
                      [placeholder]="ingreso.upayApiKeyGuardada ? '•••••• guardada (escribí para cambiar)' : ''">
-              <mat-hint>Se guarda cifrada en este servidor y no se vuelve a mostrar.</mat-hint>
+              <mat-hint *ngIf="ingreso.almacenSeguroDisponible">Se guarda cifrada en este servidor y no se vuelve a mostrar.</mat-hint>
+              <mat-hint *ngIf="!ingreso.almacenSeguroDisponible" class="hint-error">
+                Este servidor no tiene almacén seguro: no se puede guardar la API Key.
+              </mat-hint>
             </mat-form-field>
             <mat-form-field appearance="outline">
               <mat-label>Aviso si está pagado y sin aceptar (min)</mat-label>
