@@ -15,7 +15,7 @@ import {
 } from '../utils/customer-refresh-token.utils';
 import { registerPublicOperation } from '../server/public-routes';
 import { dispatchEvento } from '../services/notificacion.service';
-import { loginBloqueado, registrarLoginFallido, registrarLoginOk, otpIpPermitido } from '../utils/tienda-limites';
+import { reservarIntentoLogin, confirmarLoginOk, otpIpPermitido } from '../utils/tienda-limites';
 
 /**
  * Auth de CLIENTE FINAL (web de pedidos) — Fase 2.
@@ -176,21 +176,30 @@ export function registerPedidosOnlineAuthHandlers(
     if (!otp) {
       return { success: false, error: 'otp_no_encontrado_o_expirado' };
     }
-    if (otp.intentos >= OTP_MAX_INTENTOS) {
-      otp.usado = true;
-      await otpRepo().save(otp);
+    // F5 (auditoría A-auth1): el intento se reserva con un UPDATE condicionado ANTES de
+    // comparar el código. Antes el contador se leía y se escribía después de una verificación
+    // asíncrona, y muchos intentos en paralelo pasaban todos el tope de 5.
+    const reserva = await otpRepo().createQueryBuilder().update(CodigoOtp)
+      .set({ intentos: () => 'intentos + 1' } as any)
+      .where('id = :id AND usado = :no AND intentos < :max', { id: otp.id, no: false, max: OTP_MAX_INTENTOS })
+      .execute();
+    if (!reserva.affected) {
+      await otpRepo().update({ id: otp.id }, { usado: true } as any);
       return { success: false, error: 'demasiados_intentos' };
     }
+    const intentosUsados = otp.intentos + 1;
 
     const ok = await verifyPassword(String(codigo || ''), otp.codigoHash);
     if (!ok) {
-      otp.intentos += 1;
-      await otpRepo().save(otp);
-      return { success: false, error: 'codigo_incorrecto', intentosRestantes: OTP_MAX_INTENTOS - otp.intentos };
+      return { success: false, error: 'codigo_incorrecto', intentosRestantes: Math.max(0, OTP_MAX_INTENTOS - intentosUsados) };
     }
 
-    otp.usado = true;
-    await otpRepo().save(otp);
+    // Se consume una sola vez: dos verificaciones correctas a la vez no abren dos sesiones.
+    const consumo = await otpRepo().createQueryBuilder().update(CodigoOtp)
+      .set({ usado: true } as any)
+      .where('id = :id AND usado = :no', { id: otp.id, no: false })
+      .execute();
+    if (!consumo.affected) return { success: false, error: 'otp_no_encontrado_o_expirado' };
 
     // Get-or-create de la cuenta.
     let cuenta = await cuentaRepo().findOne({ where: { telefono }, relations: ['cliente'] });
@@ -218,18 +227,16 @@ export function registerPedidosOnlineAuthHandlers(
       : await cuentaRepo().findOne({ where: { telefono }, relations: ['cliente'] });
 
     // Anti fuerza bruta (PLAN-tienda-online A1.3): por cuenta+IP y por IP.
-    const bloqueo = loginBloqueado(cuenta?.id ?? null, ip);
-    if (bloqueo) return { success: false, error: 'demasiados_intentos' };
+    // F5 (A-auth2): el intento se reserva (cuenta como fallo) ANTES de la verificación asíncrona.
+    if (!reservarIntentoLogin(cuenta?.id ?? null, ip)) return { success: false, error: 'demasiados_intentos' };
     if (!cuenta || !cuenta.activo || !cuenta.passwordHash) {
-      registrarLoginFallido(cuenta?.id ?? null, ip);
       return { success: false, error: 'cuenta_o_password_invalidos' };
     }
     const ok = await verifyPassword(password, cuenta.passwordHash);
     if (!ok) {
-      registrarLoginFallido(cuenta.id, ip);
       return { success: false, error: 'cuenta_o_password_invalidos' };
     }
-    registrarLoginOk(cuenta.id, ip);
+    confirmarLoginOk(cuenta.id, ip);
 
     cuenta.ultimoLogin = new Date();
     await cuentaRepo().save(cuenta);
@@ -353,10 +360,14 @@ export function registerPedidosOnlineAuthHandlers(
     if (!idToken) return { success: false, error: 'token_faltante' };
     try {
       // Verificación vía endpoint tokeninfo de Google (sin dependencia extra).
-      const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+      const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+        { signal: AbortSignal.timeout(10_000), redirect: 'error' });
       if (!res.ok) return { success: false, error: 'google_token_invalido' };
       const info: any = await res.json();
       if (info.aud !== clientId) return { success: false, error: 'google_aud_mismatch' };
+      if (info.iss !== 'accounts.google.com' && info.iss !== 'https://accounts.google.com') {
+        return { success: false, error: 'google_token_invalido' };
+      }
       const email = String(info.email || '').trim().toLowerCase();
       // `email_verified` llega como string desde tokeninfo. Comparar contra
       // 'false' fallaba ABIERTO: undefined, un booleano nativo o el campo
@@ -374,8 +385,10 @@ export function registerPedidosOnlineAuthHandlers(
       // Cuenta con ese email que nunca lo verificó y tiene contraseña: quien la creó no
       // demostró ser dueño del email. Google sí lo demuestra: se queda el dueño real, se
       // borra la contraseña ajena y se cierran sus sesiones (PLAN-tienda-online A1).
-      if (cuenta && !cuenta.emailVerificado && cuenta.passwordHash) {
-        cuenta.passwordHash = null as any;
+      // F5 (auditoría M-auth4): también sin contraseña se cierran las sesiones previas de una
+      // cuenta cuyo email nunca se verificó (quien la abrió no demostró ser el dueño).
+      if (cuenta && !cuenta.emailVerificado) {
+        if (cuenta.passwordHash) cuenta.passwordHash = null as any;
         await revokeAllCustomerRefreshTokens(dataSource, cuenta.id);
       }
       if (!cuenta) {
