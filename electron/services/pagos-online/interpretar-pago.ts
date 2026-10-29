@@ -73,6 +73,11 @@ export function interpretarPago(sesion: any, pago: any, esperado: EsperadoPago):
   if (refPago != null && String(refPago) !== esperado.referencia) {
     return { tipo: 'INCONSISTENTE', paymentId: ses.paymentId, detalle: `referencia del pago ${refPago} ≠ ${esperado.referencia}` };
   }
+  // Plan F5 §12: sin ninguna referencia (ni en la sesión ni en el pago) no se puede saber que el
+  // cobro es de este pedido → INCONSISTENTE, hasta que uPay STG confirme otra cosa.
+  if (!refs.length && refPago == null) {
+    return { tipo: 'INCONSISTENTE', paymentId: ses.paymentId, detalle: 'uPay no informa la referencia del pago' };
+  }
   const ref = refs.length && !refs.includes(esperado.referencia) ? refs.join('|') : null;
   if (!Number.isFinite(monto) || Math.round(monto) !== Math.round(esperado.monto)) {
     return { tipo: 'INCONSISTENTE', paymentId: ses.paymentId, detalle: `monto ${monto} ≠ pedido ${esperado.monto}` };

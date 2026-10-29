@@ -61,9 +61,10 @@ const otpIpDia = new Ventana(24 * 60 * MIN);
 const registrosIp = new Ventana(60 * MIN);
 const pedidosMesa = new Ventana(60 * MIN);
 const pedidosMesaIp = new Ventana(60 * MIN);
-/** F5 (M-auth7): pedidos de invitado por mesa y por IP por hora. */
+/** F5 (M-auth7): pedidos de invitado por mesa y por IP por hora. Topes holgados (anti abuso, no
+ *  de negocio): varios comensales pueden salir por la misma IP del wifi en hora pico. */
 export const PEDIDOS_POR_MESA_HORA = 40;
-export const PEDIDOS_MESA_POR_IP_HORA = 15;
+export const PEDIDOS_MESA_POR_IP_HORA = 40;
 /** F5 (M-auth6): altas de cuenta por email por IP por hora. */
 export const REGISTROS_POR_IP_HORA = 10;
 const fallosCuenta = new Ventana(60 * MIN);
