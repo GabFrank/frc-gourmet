@@ -12,6 +12,8 @@ export interface TiendaConfig {
   prepTimeMinutos: number;
   montoMinimoPedido: number;
   googleClientId?: string | null;
+  /** Login por código de WhatsApp disponible (hay canal real de envío). */
+  otpWhatsappDisponible?: boolean;
 }
 
 /** Carga la config pública de la tienda y aplica el branding (nombre/color). */

@@ -4,7 +4,7 @@ import { DataSource, MoreThan } from 'typeorm';
 import { CuentaCliente } from '../../src/app/database/entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from '../../src/app/database/entities/pedidos-online/codigo-otp.entity';
 import { hashPassword, verifyPassword } from '../utils/password.utils';
-import { sendWhatsappOtp } from '../utils/whatsapp-sender';
+import { sendWhatsappOtp, otpWhatsappDisponible } from '../utils/whatsapp-sender';
 import { signCustomerToken } from '../utils/customer-jwt.utils';
 import {
   issueCustomerRefreshToken,
@@ -83,6 +83,9 @@ export function registerPedidosOnlineAuthHandlers(
     if (telefono.length < 6) {
       return { success: false, error: 'telefono_invalido' };
     }
+    if (!otpWhatsappDisponible()) {
+      return { success: false, error: 'otp_no_disponible' };
+    }
 
     // Anti-spam: máximo N OTP por minuto por teléfono.
     const desde = new Date(Date.now() - 60_000);
@@ -111,7 +114,7 @@ export function registerPedidosOnlineAuthHandlers(
     const envio = await sendWhatsappOtp(telefono, codigo);
     // Si el envío real falló (no dev-log), avisar al cliente en vez de dejarlo
     // esperando un código que no va a llegar.
-    if (!envio.ok && envio.provider !== 'dev-log') {
+    if (!envio.ok) {
       return { success: false, error: 'envio_fallido' };
     }
     return {
@@ -121,10 +124,8 @@ export function registerPedidosOnlineAuthHandlers(
       // En dev (sin credenciales) el proveedor es 'dev-log'; el front puede
       // avisar que el código se muestra en la consola del server.
       provider: envio.provider,
-      // Solo en modo dev-log (sin WhatsApp configurado, sin canal real de envío)
-      // devolvemos el código para poder probar el flujo sin abrir el log. En
-      // cuanto se configuran credenciales el provider es 'whatsapp-cloud' y NO
-      // se echoa nunca.
+      // Solo en modo dev-log (FRC_OTP_DEV=1 y app sin empaquetar) devolvemos el
+      // código para probar el flujo. En producción el provider nunca es dev-log.
       ...(envio.provider === 'dev-log' ? { devCodigo: codigo } : {}),
     };
   });

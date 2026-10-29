@@ -289,8 +289,20 @@ async function main() {
   ok(pPizza?.precioDesde === 45000, 'PIZZA: precioDesde global = 45000', pPizza?.precioDesde);
   ok(pPizza?.pizzaConfig?.maxSabores === 2 && pPizza?.pizzaConfig?.estrategia === 'MAYOR_PRECIO', 'PIZZA: pizzaConfig (max 2, MAYOR_PRECIO)', pPizza?.pizzaConfig);
 
-  // 2. OTP request
+  // 2a. Sin WhatsApp configurado y sin FRC_OTP_DEV: no hay login por código ni fuga del código
+  //     (PLAN-tienda-online C1: antes devolvía devCodigo a cualquiera).
   const tel = '0981123456';
+  delete process.env['FRC_OTP_DEV'];
+  const cfgSinOtp = await pub('tienda.config', []);
+  ok(cfgSinOtp.result?.otpWhatsappDisponible === false, 'C1: tienda.config otpWhatsappDisponible=false sin canal', cfgSinOtp.result?.otpWhatsappDisponible);
+  const otpSin = await pub('auth.otp.request', [tel]);
+  ok(otpSin.result?.success === false && otpSin.result?.error === 'otp_no_disponible', 'C1: otp.request sin canal → otp_no_disponible', otpSin.result);
+  ok(!JSON.stringify(otpSin).includes('devCodigo') && !otpCapturado, 'C1: no devuelve ni loguea código sin canal');
+
+  // 2. OTP request (fallback de desarrollo explícito)
+  process.env['FRC_OTP_DEV'] = '1';
+  const cfgDev = await pub('tienda.config', []);
+  ok(cfgDev.result?.otpWhatsappDisponible === true, 'tienda.config otpWhatsappDisponible=true con FRC_OTP_DEV=1');
   const otpReq = await pub('auth.otp.request', [tel]);
   ok(otpReq.result?.success === true, 'auth.otp.request success');
   ok(otpReq.result?.provider === 'dev-log', 'OTP en modo dev-log (sin credenciales)');

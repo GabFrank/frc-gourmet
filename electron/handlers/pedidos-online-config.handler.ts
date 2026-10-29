@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import { otpWhatsappDisponible } from '../utils/whatsapp-sender';
 import { DataSource } from 'typeorm';
 import { TiendaOnlineConfig } from '../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
@@ -75,6 +76,8 @@ function mapConfigPublic(cfg: TiendaOnlineConfig): any {
     montoMinimoPedido: Number(cfg.montoMinimoPedido),
     // Client ID de Google OAuth (env). Si está, el storefront muestra el botón.
     googleClientId: process.env['GOOGLE_CLIENT_ID'] || null,
+    // Login por código de WhatsApp: solo si hay un canal real de envío.
+    otpWhatsappDisponible: otpWhatsappDisponible(),
   };
 }
 
