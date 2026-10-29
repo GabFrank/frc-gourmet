@@ -160,23 +160,76 @@ internet); F2+F3 juntas; F4 cuando uPay esté probado en su sandbox.
 3. Prerrequisitos del propietario (fuera del código): cuenta WhatsApp Business en Meta con número propio y
    plantilla de autenticación aprobada; Client ID OAuth web de Google con origen `https://app.frc-gourmet.com`.
 
-### F4 — Pago online con uPay (FUERA del alcance que se aprueba ahora)
-Diseño preliminar; **no se aprueba ni implementa hasta tener la doc de la API de uPay y su sandbox**. Con eso se
-reescribe esta sección, se re-audita y se pide un OK aparte.
-Diseño independiente de la pasarela (`electron/services/pagos-online/`), primer proveedor uPay:
-1. Pedido con `metodoPago=UPAY` se crea en estado `PENDIENTE_PAGO` (nuevo), **no** se materializa ni va a
-   cocina. Se crea la orden en uPay y el cliente va a su checkout (redirect/iframe según doc).
-2. Confirmación **solo del lado servidor**: webhook firmado de uPay + consulta de estado a la API de uPay
-   antes de dar por pagado (nunca por el retorno del navegador). Idempotente por id de transacción.
-3. Pagado → `estadoPago=PAGADO`, sigue el flujo normal (materializa; si aceptación automática, a cocina). La
-   venta queda cobrada con forma de pago «uPay online» y entra a acreditaciones POS (#320) con su regla.
-4. No pagado en 15 min → `EXPIRADO`, no se cocina. Rechazo del local con pago hecho → queda marcado
-   «REEMBOLSO PENDIENTE» para hacerlo a mano en uPay (sin reembolso automático en esta fase).
-5. Interruptor `pagoOnlineActivo` (apagado por defecto) y efectivo sigue disponible.
-6. Credenciales uPay en la misma sección cifrada de F3.
-- Migración (solo agrega): `pedidos_online.estado_pago`, `pago_proveedor`, `pago_referencia`, `pago_payload_json`,
-  `pagado_en`; tabla `pagos_online_eventos`. **El `down` no borra datos de pago**: si hubo algún pago registrado,
-  el `down` aborta con error; la vuelta atrás de F4 es apagar `pagoOnlineActivo` (los datos quedan).
+### F4 — Pago online con uPay (plan reescrito 29/10 con la doc de uPay; OK aparte)
+Fuente: guías de uPay bajadas el 29/10 (`/estacion/docs-upay/`): Online Payments API (checkout hospedado), QR
+Manager y cajaPOS. **Alcance de F4: solo Online Payments API (tarjeta) en la tienda.** QR y caja uPOS sirven más
+al punto de venta: van a un plan aparte (F5/PDV), porque el cliente que pide desde su celular no puede escanear un
+QR que está en su propia pantalla.
+
+**Lo que dice la API (piloto v1, solo ambiente STG documentado):**
+- `POST /v1/payments/checkout-sessions` con `X-Api-Key` + `Idempotency-Key` (UUID v4); montos como string en
+  PYG; `merchant.seller.{id,name,operationReferenceId}` (este último único: `duplicate_reference_id`);
+  `checkout.successUrl/failureUrl`; `paymentMethod.types=["card"]`. Devuelve `sessionId`, `checkoutUrl`,
+  `expiresAt` (2 h, fijo).
+- `GET /v1/payments/checkout-sessions/{id}` → `open | complete | expired`; si `complete`, trae `paymentId`.
+- `GET /v1/payments/{id}/status` → `SUCCEEDED/APPROVED|CAPTURED` es cobrado; `DECLINED`, `REJECTED`, `ERROR`,
+  `FRAUD`, `EXPIRED`, `CANCELED` no. `POST /v1/payments/{id}/refund|cancel` existen.
+- **No hay webhooks documentados para el checkout**: la confirmación es por consulta (polling) del servidor.
+
+**Diseño** (`electron/services/pagos-online/`: interfaz `ProveedorPagoOnline` + `upay-checkout.provider.ts`; el
+cliente HTTP va inyectado para poder probar con un uPay simulado):
+1. **Config** (Config Tienda Online → nueva sección «Pago online», permiso PEDIDOS_ONLINE_CONFIGURAR):
+   interruptor `pagoOnlineActivo` (apagado por defecto), ambiente/URL base (STG por defecto; la de producción la
+   da uPay al certificar), `merchantId`, nombre del comercio y la **API Key cifrada con el mismo almacén seguro
+   de F3** (no se vuelve a mostrar). Botón «Probar conexión» = un GET de sesión inexistente (espera 404, no 401).
+   Si falta algo, la tienda no ofrece «Pagar con tarjeta» (el efectivo sigue igual).
+2. **Crear pedido con `metodoPago=UPAY`** (solo PICKUP y DELIVERY; MESA_QR sigue en efectivo/caja): el servidor
+   calcula el total como hoy (nunca el del navegador), guarda el pedido en estado nuevo **`PENDIENTE_PAGO`** (no
+   aparece para aceptar, no se materializa, no va a cocina) y crea la sesión con
+   `operationReferenceId = <numero>-<intento>`, `Idempotency-Key` = UUID guardado por intento (reintento de red =
+   misma sesión), ítems del pedido como `order.items`, `successUrl/failureUrl =
+   https://app.frc-gourmet.com/tienda/pago/<numero>`. Responde `checkoutUrl`; el storefront solo redirige si el
+   host es de uPay (`*.upay.com` / `*.upay.com.py`).
+3. **Confirmación solo del lado servidor**: (a) al volver a `/tienda/pago/<numero>` el storefront llama a
+   `pedido.pago.verificar` y el servidor consulta a uPay; (b) un job cada 60 s revisa los `PENDIENTE_PAGO` (cada
+   1 min los primeros 30 min, después cada 5 min hasta `expiresAt`). Se da por pagado **solo si** la sesión está
+   `complete`, el payment está `SUCCEEDED` (APPROVED/CAPTURED), monto y moneda coinciden con el pedido y el
+   `referenceId` es el del intento. Idempotente: índice único por `pago_id`; dos confirmaciones a la vez → una sola
+   gana (update condicionado a `estado_pago='PENDIENTE'`).
+4. **Pagado** → `estadoPago=PAGADO`, `pagadoEn`, el pedido pasa a `RECIBIDO` y sigue el flujo normal (aceptación
+   automática si está activa). Al aceptar, la venta se materializa como hoy y **queda cobrada** con una forma de
+   pago nueva «UPAY ONLINE» (sembrada, no seleccionable a mano en el PDV) por el monto pagado, en la caja de quien
+   acepta; la factura sale por el flujo normal. La forma de pago entra a acreditaciones POS (#320) con una regla
+   **desactivada** hasta tener el primer extracto de uPay.
+5. **No pagado**: `DECLINED/REJECTED/ERROR/FRAUD` → `estadoPago=FALLIDO`, el cliente ve el motivo y puede
+   reintentar (intento nuevo = sesión nueva) o cambiar a efectivo. Sesión `expired` → `EXPIRADO` y el pedido queda
+   `CANCELADO` (nunca se cocinó). **Pago que llega tarde** (pedido ya cancelado o rechazado) → `REEMBOLSO_PENDIENTE`
+   + aviso al personal por WhatsApp (evento de notificaciones de F1).
+6. **Rechazo por el local de un pedido pagado**: se permite, con confirmación que dice «hay que devolver
+   ₲X en uPay»; queda `REEMBOLSO_PENDIENTE` y se lista en la bandeja hasta marcarlo «Devuelto» (devolución
+   manual en el portal de uPay; la devolución por API queda para después, cuando la probemos en STG).
+7. **Bandeja de escritorio**: insignia «Pagado con tarjeta (uPay)» / «Esperando pago» / «Devolver», y la
+   referencia de uPay. «Mis pedidos» del cliente muestra el estado del pago.
+8. **Registro**: tabla `pagos_online_eventos` (pedido, intento, tipo, estado uPay, respuesta sin la API Key) para
+   auditar cada consulta; logs nunca imprimen la clave.
+- **Migración (solo agrega)**: `pedidos_online.estado_pago`, `pago_proveedor`, `pago_intento`,
+  `pago_sesion_id`, `pago_id` (único parcial), `pago_monto`, `pago_expira_en`, `pagado_en`; tabla
+  `pagos_online_eventos`; forma de pago «UPAY ONLINE». `estado` es varchar: `PENDIENTE_PAGO` no requiere cambio de
+  tipo. **El `down` aborta si hay algún pago registrado**; la vuelta atrás de F4 es apagar `pagoOnlineActivo`.
+- **Pruebas F4**: `test:pagos-online` (SQLite y Postgres) contra un uPay simulado (servidor HTTP local con las
+  respuestas de la doc): sesión creada, reintento con la misma Idempotency-Key, complete+SUCCEEDED, DECLINED,
+  expired, monto distinto → no se paga, referencia ajena → no se paga, doble confirmación concurrente → un solo
+  pago, pago tarde → REEMBOLSO_PENDIENTE, 401 de uPay → error claro sin crear pedido cobrable. E2E en la copia
+  (tienda en tema claro, celular) con el checkout simulado, y **cobro + factura de la venta resultante en la
+  copia** (regla alpha.159). **Antes del merge, un pago real en el STG de uPay** con las claves de prueba; si no
+  llegan, F4 queda en borrador y no se mergea (se le avisa al propietario).
+- **Riesgos**: (1) la API es piloto v1 y solo hay STG documentado → URL base configurable y certificación con uPay
+  antes de activar en producción; (2) sin webhooks, un pago puede verse con hasta 1–5 min de demora → el cliente
+  ve «confirmando pago» y el job lo resuelve; (3) toca cobro → venta cobrada automática probada con factura en la
+  copia; (4) Don Franco en canal alpha → `pagoOnlineActivo` apagado por defecto: el merge no cambia nada en el
+  local hasta que el propietario lo active con las claves de producción.
+- **Del propietario**: claves STG (API Key + merchantId) de integraciones@upay.com.py; después, certificación y
+  claves de producción; la cuenta donde acredita uPay (para la regla de acreditaciones).
 
 ### Fuera de alcance (propuesta para después)
 Avisos por WhatsApp al cliente del estado del pedido, cancelar por el cliente, vincular cuenta web con Cliente/RUC
@@ -212,6 +265,6 @@ para factura, pantalla de horarios, curaduría de carta y fotos (operativo, no c
 ## 6. Pendientes del propietario
 0. OK para F0 (verificar con un código a su número y, si se confirma, apagar la tienda desde la app).
 1. OK del plan (F1–F3) y de la estrategia de merge (F1 sola primero).
-2. Documentación de la API de uPay (y acceso a su sandbox) para F4.
+2. Claves STG de uPay (API Key + merchantId) para probar F4; certificación y claves de producción para activarlo.
 3. Cuenta WhatsApp Business (Meta) y Client ID de Google para F3.
 4. Zonas de delivery y carta (productos publicados y fotos) para salir al público.
