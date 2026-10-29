@@ -85,4 +85,22 @@ export class TiendaOnlineConfig extends BaseModel {
   /** Client ID OAuth web de Google (público). */
   @Column({ name: 'google_client_id', type: 'varchar', length: 255, nullable: true })
   googleClientId?: string;
+
+  // ── Pago online con uPay (PLAN-tienda-online F4). La API Key va al almacén seguro. ──
+  /** Ofrecer «Pagar con tarjeta» en pedidos NUEVOS. Apagarlo no corta la confirmación de los en curso. */
+  @Column({ name: 'pago_online_activo', type: 'boolean', default: false })
+  pagoOnlineActivo!: boolean;
+
+  @Column({ name: 'upay_base_url', type: 'varchar', length: 255, nullable: true })
+  upayBaseUrl?: string | null;
+
+  @Column({ name: 'upay_merchant_id', type: 'varchar', length: 64, nullable: true })
+  upayMerchantId?: string | null;
+
+  @Column({ name: 'upay_merchant_nombre', type: 'varchar', length: 150, nullable: true })
+  upayMerchantNombre?: string | null;
+
+  /** Aviso al personal si un pedido pagado no se acepta en estos minutos. */
+  @Column({ name: 'minutos_aviso_pagado_sin_aceptar', type: 'int', default: 20 })
+  minutosAvisoPagadoSinAceptar!: number;
 }

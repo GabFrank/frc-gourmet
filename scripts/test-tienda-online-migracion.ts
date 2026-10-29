@@ -51,7 +51,10 @@ async function main() {
   ok(cols.includes('idempotency_key'), 'up agrega pedidos_online.idempotency_key');
   const meta = ds.entityMetadatas.find((m) => m.tableName === 'pedidos_online')!;
   // Columnas que agregan migraciones posteriores (F2) no están todavía en este punto.
-  const POSTERIORES = ['seguimiento_token_hash'];
+  const F4_PEDIDO = ['estado_pago', 'pago_proveedor', 'pago_intento', 'pago_idem_key', 'pago_sesion_id', 'pago_checkout_url',
+    'pago_id', 'pago_monto', 'pago_expira_en', 'pago_ultima_consulta', 'pago_detalle', 'pagado_en', 'pago_aviso_sin_aceptar'];
+  const F4_CFG = ['pago_online_activo', 'upay_base_url', 'upay_merchant_id', 'upay_merchant_nombre', 'minutos_aviso_pagado_sin_aceptar'];
+  const POSTERIORES = ['seguimiento_token_hash', ...F4_PEDIDO];
   const entTodas = meta.columns.map((c) => c.databaseName).sort();
   const ent = entTodas.filter((c) => !POSTERIORES.includes(c));
   ok(JSON.stringify(ent) === JSON.stringify([...cols].sort()), 'las columnas coinciden con la entidad', [ent, cols]);
@@ -81,15 +84,16 @@ async function main() {
   ok((await columnas()).includes('idempotency_key'), 'up de nuevo la vuelve a crear');
 
   // F2: TiendaSeguimientoMesa (columna del hash de seguimiento + índice), up / down / up.
-  // Se sube todo y se baja F3 (TiendaIngresoClientes) para que F2 quede última.
+  // Se sube todo y se bajan F4 y F3 para que F2 quede última.
   await ds.runMigrations({ transaction: 'each' });
+  await ds.undoLastMigration({ transaction: 'each' });
   await ds.undoLastMigration({ transaction: 'each' });
   const ultima = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
   ok(/TiendaSeguimientoMesa/.test(String(ultima)), 'F2: TiendaSeguimientoMesa es la última migración', ultima);
   ok((await columnas()).includes('seguimiento_token_hash'), 'F2 up agrega pedidos_online.seguimiento_token_hash');
   ok((await indices()).some((n) => /IDX_pedidos_online_seguimiento/.test(n)), 'F2 up crea el índice de seguimiento');
   ok((await columnas()).includes('idempotency_key'), 'F2 no toca idempotency_key');
-  ok(JSON.stringify(entTodas) === JSON.stringify([...(await columnas())].sort()), 'F2: las columnas coinciden con la entidad completa');
+  ok(JSON.stringify(entTodas.filter((c) => !F4_PEDIDO.includes(c))) === JSON.stringify([...(await columnas())].sort()), 'F2: las columnas coinciden con la entidad (sin F4)');
   await ds.undoLastMigration({ transaction: 'each' });
   ok(!(await columnas()).includes('seguimiento_token_hash'), 'F2 down quita la columna');
   ok(!(await indices()).some((n) => /IDX_pedidos_online_seguimiento/.test(n)), 'F2 down quita el índice');
@@ -101,12 +105,13 @@ async function main() {
     ? (await ds.query(`SELECT column_name AS c FROM information_schema.columns WHERE table_schema='public' AND table_name='tienda_online_config'`)).map((r: any) => r.c)
     : (await ds.query(`PRAGMA table_info('tienda_online_config')`)).map((r: any) => r.name);
   const F3_COLS = ['whatsapp_phone_number_id', 'whatsapp_plantilla', 'whatsapp_idioma', 'google_client_id'];
+  await ds.undoLastMigration({ transaction: 'each' }); // baja F4 para que F3 quede última
   const ultimaF3 = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
   ok(/TiendaIngresoClientes/.test(String(ultimaF3)), 'F3: TiendaIngresoClientes es la última migración', ultimaF3);
   const cfgCols = await colsCfg();
   ok(F3_COLS.every((c) => cfgCols.includes(c)), 'F3 up agrega las 4 columnas', cfgCols);
   const metaCfg = ds.entityMetadatas.find((m) => m.tableName === 'tienda_online_config')!;
-  ok(JSON.stringify(metaCfg.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...cfgCols].sort()), 'F3: las columnas coinciden con la entidad');
+  ok(JSON.stringify(metaCfg.columns.map((c) => c.databaseName).filter((c) => !F4_CFG.includes(c)).sort()) === JSON.stringify([...cfgCols].sort()), 'F3: las columnas coinciden con la entidad (sin F4)');
   await ds.query(`DELETE FROM tienda_online_config`);
   await ds.query(`INSERT INTO tienda_online_config (nombre_comercio, google_client_id) VALUES ('ZT-CFG', 'x.apps.googleusercontent.com')`);
   await ds.undoLastMigration({ transaction: 'each' });
@@ -117,6 +122,32 @@ async function main() {
   await ds.runMigrations({ transaction: 'each' });
   ok((await colsCfg()).includes('google_client_id'), 'F3 up de nuevo las vuelve a crear');
   await ds.query(`DELETE FROM tienda_online_config WHERE nombre_comercio = 'ZT-CFG'`);
+
+  // F4: TiendaPagoOnline, up / down / up y down bloqueado con pagos registrados.
+  const ultimaF4 = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
+  ok(/TiendaPagoOnline/.test(String(ultimaF4)), 'F4: TiendaPagoOnline es la última migración', ultimaF4);
+  const colsF4 = await columnas();
+  ok(F4_PEDIDO.every((c) => colsF4.includes(c)), 'F4 up agrega las columnas de pago al pedido');
+  ok(JSON.stringify(entTodas) === JSON.stringify([...colsF4].sort()), 'F4: las columnas del pedido coinciden con la entidad completa');
+  ok(JSON.stringify(metaCfg.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...(await colsCfg())].sort()), 'F4: las columnas de config coinciden con la entidad');
+  ok((await indices()).includes('UQ_pedidos_online_pago_id'), 'F4 crea el índice único de pago_id');
+  const actCfg = await ds.query(`SELECT pago_online_activo AS a FROM tienda_online_config`);
+  ok(actCfg.every((r: any) => !r.a || r.a === '0'), 'F4: pago online queda apagado en las configs existentes', actCfg);
+  await ds.query(`INSERT INTO pedidos_online (numero, tipo_pedido, pago_proveedor, pago_id) VALUES ('ZT-P1', 'PICKUP', 'UPAY', 'pay-1')`);
+  ok(await falla(() => ds.query(`INSERT INTO pedidos_online (numero, tipo_pedido, pago_proveedor, pago_id) VALUES ('ZT-P2', 'PICKUP', 'UPAY', 'pay-1')`)), 'F4: un mismo pago no confirma dos pedidos');
+  ok(await falla(() => ds.undoLastMigration({ transaction: 'each' })), 'F4 down aborta si hay un pago registrado');
+  ok((await columnas()).includes('pago_id'), 'F4: tras el abort las columnas siguen');
+  await ds.query(`DELETE FROM pedidos_online WHERE numero LIKE 'ZT-P%'`);
+  await ds.undoLastMigration({ transaction: 'each' });
+  const sinF4 = await columnas();
+  const sinF4Cfg = await colsCfg();
+  ok(!F4_PEDIDO.some((c) => sinF4.includes(c)) && !F4_CFG.some((c) => sinF4Cfg.includes(c)), 'F4 down sin pagos quita las columnas');
+  const tablas = pgDb
+    ? (await ds.query(`SELECT tablename AS t FROM pg_tables WHERE schemaname='public'`)).map((r: any) => r.t)
+    : (await ds.query(`SELECT name AS t FROM sqlite_master WHERE type='table'`)).map((r: any) => r.t);
+  ok(!tablas.includes('pagos_online_eventos'), 'F4 down quita la tabla de eventos');
+  await ds.runMigrations({ transaction: 'each' });
+  ok((await columnas()).includes('pago_id'), 'F4 up de nuevo las vuelve a crear');
 
   await ds.destroy();
   console.log(`\n[tienda-migracion] ${passed} OK, ${failed} fallas`);

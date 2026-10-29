@@ -51,3 +51,31 @@ export async function setWhatsappToken(value: string): Promise<boolean> {
     return false;
   }
 }
+
+// ── API Key de uPay (PLAN-tienda-online F4): mismo almacén, otra cuenta. ──
+const ACCOUNT_UPAY_API_KEY = 'tienda-upay-api-key';
+
+export async function getUpayApiKey(): Promise<string> {
+  const k = loadKeytar();
+  if (!k) return '';
+  try {
+    return (await k.getPassword(KEYCHAIN_SERVICE, ACCOUNT_UPAY_API_KEY)) || '';
+  } catch (e) {
+    console.warn('[tienda-secrets] error leyendo keychain (uPay):', (e as Error).message);
+    return '';
+  }
+}
+
+/** Guarda (o borra, con '') la API Key de uPay. Devuelve false si no se pudo persistir. */
+export async function setUpayApiKey(value: string): Promise<boolean> {
+  const k = loadKeytar();
+  if (!k) return false;
+  try {
+    if (value) await k.setPassword(KEYCHAIN_SERVICE, ACCOUNT_UPAY_API_KEY, value);
+    else await k.deletePassword(KEYCHAIN_SERVICE, ACCOUNT_UPAY_API_KEY);
+    return true;
+  } catch (e) {
+    console.warn('[tienda-secrets] error guardando en keychain (uPay):', (e as Error).message);
+    return false;
+  }
+}
