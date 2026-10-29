@@ -1,3 +1,5 @@
+import { iniciarPagoPedido, verificarPagoPedido, VERIFICAR_MIN_MS } from '../services/pagos-online/pagos-online.service';
+import { pagoOnlineOfrecido } from '../utils/tienda-ingreso.utils';
 import { ipcMain } from 'electron';
 import { createHash, randomBytes } from 'crypto';
 import { DataSource, In, IsNull } from 'typeorm';
@@ -271,7 +273,11 @@ export function registerPedidosOnlinePedidosHandlers(
   // Reintento del mismo invitado (misma mesa y clave): el token anterior no se puede
   // recuperar (solo está el hash), así que se rota y se le entrega uno nuevo.
   const respuestaExistenteInvitado = async (p: PedidoOnline, cuenta: CuentaCliente | null) => {
-    const base = respuestaExistente(p);
+    const base: any = respuestaExistente(p);
+    if (p.estado === EstadoPedidoOnline.PENDIENTE_PAGO) {
+      const ini = await iniciarPagoPedido(dataSource, p.id);
+      if (ini.success) base.checkoutUrl = ini.checkoutUrl;
+    }
     if (cuenta || !p.mesaId) return base;
     const seg = nuevoSeguimiento();
     await pedidoRepo().update({ id: p.id }, { seguimientoTokenHash: seg.hash } as any);
@@ -300,12 +306,16 @@ export function registerPedidosOnlinePedidosHandlers(
     if (itemsIn.length > MAX_ITEMS_PEDIDO) return { success: false, error: 'demasiados_items' };
     if (itemsIn.some((it) => Number(it?.cantidad) > MAX_CANTIDAD_ITEM)) return { success: false, error: 'cantidad_excedida' };
     const metodoPagoIn = data?.metodoPago || MetodoPagoOnline.EFECTIVO;
-    // Solo efectivo hasta que exista el cobro online (F4): un pago "UPAY" sin cobrar no puede entrar.
-    if (metodoPagoIn !== MetodoPagoOnline.EFECTIVO) return { success: false, error: 'metodo_pago_no_disponible' };
 
     // Config de tienda: apertura.
     const cfg = await getTiendaConfig(dataSource);
     if (!estaAbierta(cfg)) return { success: false, error: 'tienda_cerrada' };
+    // Efectivo, o tarjeta por uPay (F4) si el local la ofrece. MESA_QR paga siempre en caja.
+    const pagaOnline = metodoPagoIn === MetodoPagoOnline.UPAY;
+    if (metodoPagoIn !== MetodoPagoOnline.EFECTIVO && !pagaOnline) return { success: false, error: 'metodo_pago_no_disponible' };
+    if (pagaOnline && (tipoPedido === TipoPedidoOnline.MESA_QR || !pagoOnlineOfrecido(cfg))) {
+      return { success: false, error: 'metodo_pago_no_disponible' };
+    }
 
     // ── Resolución del solicitante según el canal ──
     // MESA_QR: autoservicio en mesa, invitado permitido (solo nombre obligatorio,
@@ -506,8 +516,11 @@ export function registerPedidosOnlinePedidosHandlers(
     if (idemKey && (cuenta || mesa)) pedido.idempotencyKey = idemKey;
     const seguimiento = !cuenta && mesa ? nuevoSeguimiento() : null;
     if (seguimiento) pedido.seguimientoTokenHash = seguimiento.hash;
+    // Pago con tarjeta: espera la confirmación de uPay; no se acepta ni va a cocina antes (F4).
     // Aceptación automática: entra ACEPTADO directo; si no, RECIBIDO (revisión en PdV).
-    if (cfg.aceptacionAutomatica) {
+    if (pagaOnline) {
+      pedido.estado = EstadoPedidoOnline.PENDIENTE_PAGO;
+    } else if (cfg.aceptacionAutomatica) {
       pedido.estado = EstadoPedidoOnline.ACEPTADO;
       pedido.fechaAceptado = new Date();
     } else {
@@ -564,6 +577,22 @@ export function registerPedidosOnlinePedidosHandlers(
     //   es lo que evita cocinar algo que después hay que cancelar.
     // Best-effort en los dos casos: si no hay caja abierta o es ambiguo, el
     // pedido queda para la bandeja. Nunca falla el pedido por esto.
+    if (pagaOnline) {
+      const ini = await iniciarPagoPedido(dataSource, saved.id);
+      if (!ini.success) {
+        // Sin sesión de pago no hay nada cobrable: el pedido se cancela y el cliente puede
+        // volver a pedir en efectivo.
+        await pedidoRepo().update({ id: saved.id }, {
+          estado: EstadoPedidoOnline.CANCELADO, motivoRechazo: 'No se pudo iniciar el pago con tarjeta.',
+        } as any);
+        return { success: false, error: 'pago_no_iniciado', detalle: (ini as any).error, numero: saved.numero };
+      }
+      return {
+        success: true, numero: saved.numero, pedidoId: saved.id, estado: EstadoPedidoOnline.PENDIENTE_PAGO,
+        subtotal, costoEnvio, total, ventaId: null, checkoutUrl: ini.checkoutUrl,
+      };
+    }
+
     let ventaId: number | null = null;
     if (tipoPedido === TipoPedidoOnline.MESA_QR || cfg.aceptacionAutomatica) {
       try {
@@ -691,6 +720,28 @@ export function registerPedidosOnlinePedidosHandlers(
     };
   });
 
+  // ====== PAGO ONLINE (F4): iniciar / reintentar y verificar (requiere el cliente dueño) ======
+  const pedidoDelCliente = async (customerId: any, numero: any): Promise<PedidoOnline | null> => {
+    if (!customerId || !(await cuentaActiva(customerId))) return null;
+    const n = String(numero || '').trim();
+    if (!/^[A-Za-z0-9-]{1,20}$/.test(n)) return null;
+    return pedidoRepo().findOne({ where: { numero: n, cuentaCliente: { id: customerId } } });
+  };
+  ipcMain.handle('iniciar-pago-pedido-online', async (event: any, numero: string, opciones?: any) => {
+    const p = await pedidoDelCliente(event?._customerId, numero);
+    if (!p) return { success: false, error: 'pedido_no_encontrado' };
+    const r = await iniciarPagoPedido(dataSource, p.id, { nuevoIntento: !!opciones?.nuevoIntento });
+    return r;
+  });
+  ipcMain.handle('verificar-pago-pedido-online', async (event: any, numero: string) => {
+    const p = await pedidoDelCliente(event?._customerId, numero);
+    if (!p) return { success: false, error: 'pedido_no_encontrado' };
+    const r = await verificarPagoPedido(dataSource, p.id, { minIntervaloMs: VERIFICAR_MIN_MS });
+    if (r.recienPagado && r.aceptadoAutomatico) await materializarTrasPago(dataSource, p.id);
+    const q = await pedidoRepo().findOne({ where: { id: p.id }, relations: ['items'] });
+    return { success: true, pedido: q ? mapPedido(q) : null };
+  });
+
   // ---- Operaciones públicas ----
   registerPublicOperation('zonas.get', { channel: 'get-zonas-delivery-online', requiresAuth: false, description: 'Zonas de delivery activas.' });
   registerPublicOperation('envio.cotizar', { channel: 'cotizar-envio-online', requiresAuth: false, description: 'Costo de envío para una ubicación del mapa.' });
@@ -700,7 +751,33 @@ export function registerPedidosOnlinePedidosHandlers(
   registerPublicOperation('pedido.crear', { channel: 'crear-pedido-online', requiresAuth: false, optionalAuth: true, description: 'Crear un pedido online.' });
   registerPublicOperation('pedido.mis', { channel: 'get-mis-pedidos-online', requiresAuth: true, description: 'Mis pedidos.' });
   registerPublicOperation('pedido.seguimiento', { channel: 'get-pedido-online-seguimiento', requiresAuth: false, description: 'Estado del pedido del invitado de mesa por su token de seguimiento.' });
+  registerPublicOperation('pedido.pago.iniciar', { channel: 'iniciar-pago-pedido-online', requiresAuth: true, description: 'Iniciar o reintentar el pago con tarjeta de un pedido propio.' });
+  registerPublicOperation('pedido.pago.verificar', { channel: 'verificar-pago-pedido-online', requiresAuth: true, description: 'Consultar a uPay el pago de un pedido propio.' });
   registerPublicOperation('pedido.estado', { channel: 'get-pedido-online-estado', requiresAuth: true, description: 'Estado de un pedido por número.' });
+}
+
+/**
+ * Pedido recién pagado con aceptación automática: se materializa como cualquier pedido
+ * aceptado. Si falla (sin caja), el pago queda PAGADO, el pedido ACEPTADO con el error
+ * visible en la bandeja y se avisa al personal (PLAN-tienda-online F4 §9).
+ */
+export async function materializarTrasPago(dataSource: DataSource, pedidoId: number): Promise<void> {
+  try {
+    const mat = await materializarPedidoOnlineEnVenta(dataSource, pedidoId);
+    if (mat?.ventaId) return;
+    throw new Error((mat as any)?.error || 'sin venta');
+  } catch (e: any) {
+    console.warn('[pagos-online] pedido pagado sin materializar:', e?.message || e);
+    const p = await dataSource.getRepository(PedidoOnline).findOne({ where: { id: pedidoId } });
+    try {
+      const { dispatchEvento } = await import('../services/notificacion.service');
+      await dispatchEvento('TIENDA_PAGO_ONLINE', {
+        asunto: 'Tienda online: pedido pagado sin venta',
+        texto: `Pedido ${p?.numero ?? pedidoId} pagado con tarjeta y aceptado, pero no se pudo cargar la venta (${e?.message || e}). Abrí caja y usá «Reintentar» en Pedidos online.`,
+        dedupeKey: `sin-venta-${pedidoId}`,
+      });
+    } catch { /* el aviso es best-effort */ }
+  }
 }
 
 const ESTADOS_FINALES: string[] = [
@@ -721,6 +798,10 @@ function mapPedido(p: PedidoOnline): any {
     notas: p.notas ?? null,
     // El cliente ve por qué el local no tomó su pedido (PLAN-tienda-online M6).
     motivoRechazo: p.motivoRechazo ?? null,
+    metodoPago: p.metodoPago,
+    // F4: estado del pago con tarjeta (null en efectivo). El detalle interno no se expone.
+    estadoPago: p.estadoPago ?? null,
+    pagoMonto: p.pagoMonto != null ? Number(p.pagoMonto) : null,
     createdAt: p.createdAt,
     fechaAceptado: p.fechaAceptado ?? null,
     fechaListo: p.fechaListo ?? null,

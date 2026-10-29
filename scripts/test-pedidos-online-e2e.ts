@@ -776,6 +776,54 @@ async function main() {
   ok(misBaja.result?.success !== true && misBaja.result?.error === 'cuenta_invalida', 'cuenta inactiva: pedido.mis rechazado', misBaja.result);
   await dataSource.getRepository('CuentaCliente').update({ email: 'cliente@mail.com' }, { activo: true });
 
+  // 43. F4: pago con tarjeta (uPay simulado). Apagado → rechazado; activo → PENDIENTE_PAGO + checkoutUrl;
+  // pagado → RECIBIDO; MESA_QR nunca paga online; otro cliente no consulta el pago ajeno.
+  const { setPagosOnlineDeps } = await import('../electron/services/pagos-online/pagos-online.service');
+  const { cargarCredencialesTienda } = await import('../electron/utils/tienda-ingreso.utils');
+  const sesF4 = new Map<string, any>();
+  setPagosOnlineDeps({
+    apiKey: async () => 'k-e2e', avisar: async () => undefined,
+    fetch: (async (url: string, init: any) => {
+      const r = (st: number, b: any) => ({ status: st, text: async () => JSON.stringify(b) });
+      const u = new URL(url);
+      if (init.method === 'POST') {
+        const b = JSON.parse(init.body); const id = 'e2e-' + (sesF4.size + 1);
+        sesF4.set(id, { status: 'open', amount: b.amount, ref: b.merchant.seller.operationReferenceId });
+        return r(201, { sessionId: id, checkoutUrl: 'https://checkout.online-payments.upay.com/' + id, expiresAt: new Date(Date.now() + 7200_000).toISOString() });
+      }
+      const m = u.pathname.match(/checkout-sessions\/(.+)$/);
+      if (m) { const s = sesF4.get(m[1]); return r(200, { status: s.status, paymentId: s.paymentId, amount: s.amount, merchant: { referenceId: s.ref } }); }
+      return r(200, { status: 'SUCCEEDED', subStatus: 'APPROVED', amount: [...sesF4.values()][0].amount });
+    }) as any,
+  });
+  const sF4 = await pub('auth.login', ['cliente@mail.com', 'nueva-clave-9']);
+  const tF4 = sF4.result?.accessToken;
+  const bodyF4 = { tipoPedido: 'PICKUP', metodoPago: 'UPAY', items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }] };
+  const f4Apagado = await pub('pedido.crear', [bodyF4], tF4);
+  ok(f4Apagado.result?.error === 'metodo_pago_no_disponible', 'F4: con el pago online apagado, UPAY se rechaza', f4Apagado.result);
+  await dataSource.getRepository('TiendaOnlineConfig').update({}, { pagoOnlineActivo: true, upayMerchantId: 'M-E2E', aceptacionAutomatica: false });
+  await cargarCredencialesTienda(dataSource);
+  const cfgF4 = await pub('tienda.config', []);
+  ok(cfgF4.result?.pagoOnline === true, 'F4: tienda.config ofrece pago online', cfgF4.result);
+  const f4 = await pub('pedido.crear', [bodyF4], tF4);
+  ok(f4.result?.success === true && f4.result?.estado === 'PENDIENTE_PAGO' && /^https:\/\/checkout\.online-payments\.upay\.com\//.test(f4.result?.checkoutUrl), 'F4: pedido UPAY → PENDIENTE_PAGO + checkoutUrl', f4.result);
+  const pendF4 = await invokeHandlerWithContext('get-pedidos-online-admin', { userId: 1 } as any, { estado: 'RECIBIDO' }).catch(() => null);
+  ok(!Array.isArray(pendF4) || !pendF4.some((p: any) => p.numero === f4.result?.numero), 'F4: no aparece para aceptar mientras espera el pago');
+  const otraF4: any = await invokeHandlerWithContext('verificar-pago-pedido-online', { customerId: otra.id }, f4.result?.numero);
+  ok(otraF4?.success === false, 'F4: otro cliente no puede consultar el pago ajeno', otraF4);
+  const v1F4 = await pub('pedido.pago.verificar', [f4.result?.numero], tF4);
+  ok(v1F4.result?.pedido?.estado === 'PENDIENTE_PAGO' && v1F4.result?.pedido?.estadoPago === 'PENDIENTE', 'F4: sin pagar sigue esperando', v1F4.result);
+  const sid = [...sesF4.keys()][0]; sesF4.get(sid).status = 'complete'; sesF4.get(sid).paymentId = 'pay-e2e';
+  const v2F4 = await pub('pedido.pago.verificar', [f4.result?.numero], tF4);
+  ok(v2F4.result?.pedido?.estadoPago === 'PENDIENTE', 'F4: tope de 10 s entre consultas desde la tienda', v2F4.result?.pedido);
+  await dataSource.getRepository('PedidoOnline').update({ numero: f4.result?.numero }, { pagoUltimaConsulta: null });
+  const v3F4 = await pub('pedido.pago.verificar', [f4.result?.numero], tF4);
+  ok(v3F4.result?.pedido?.estado === 'RECIBIDO' && v3F4.result?.pedido?.estadoPago === 'PAGADO', 'F4: pagado → RECIBIDO para aceptar', v3F4.result?.pedido);
+  const f4Rep = await pub('pedido.crear', [{ ...bodyF4, tipoPedido: 'MESA_QR', mesaToken: 'x' }], tF4);
+  ok(f4Rep.result?.success !== true, 'F4: MESA_QR no admite pago online', f4Rep.result);
+  await dataSource.getRepository('TiendaOnlineConfig').update({}, { pagoOnlineActivo: false });
+  await cargarCredencialesTienda(dataSource);
+
   console.log = origLog;
   await fastify.close();
   await dataSource.destroy();

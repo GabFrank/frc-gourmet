@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import { pagoOnlineOfrecido } from '../utils/tienda-ingreso.utils';
 import { otpWhatsappDisponible, sendWhatsappOtp, whatsappCloudConfigurado } from '../utils/whatsapp-sender';
 import { cargarCredencialesTienda, credencialesTiendaListas, getGoogleClientId } from '../utils/tienda-ingreso.utils';
 import { almacenSeguroDisponible, getWhatsappToken, setWhatsappToken } from '../utils/tienda-secrets.util';
@@ -82,6 +83,8 @@ function mapConfigPublic(cfg: TiendaOnlineConfig): any {
     googleClientId: getGoogleClientId(),
     // Login por código de WhatsApp: solo si hay un canal real de envío.
     otpWhatsappDisponible: otpWhatsappDisponible(),
+    // F4: «Pagar con tarjeta» (uPay) solo con el interruptor y las credenciales cargadas.
+    pagoOnline: pagoOnlineOfrecido(cfg),
   };
 }
 
