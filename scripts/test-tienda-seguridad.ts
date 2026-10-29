@@ -4,7 +4,7 @@
  */
 import { clientIpDe } from '../electron/utils/client-ip.util';
 import { ipPermitidaMesa } from '../electron/utils/ip-lan.util';
-import { loginBloqueado, registrarLoginFallido, registrarLoginOk, otpIpPermitido, reiniciarLimitesTienda, LOGIN_BLOQUEO_MS, claveIp, reservarIntentoLogin, confirmarLoginOk, LOGIN_FALLOS_CUENTA_HORA } from '../electron/utils/tienda-limites';
+import { loginBloqueado, registrarLoginFallido, registrarLoginOk, otpIpPermitido, reiniciarLimitesTienda, LOGIN_BLOQUEO_MS, claveIp, reservarIntentoLogin, confirmarLoginOk, LOGIN_FALLOS_CUENTA_HORA, pedidoMesaPermitido, PEDIDOS_MESA_POR_IP_HORA, registroIpPermitido, REGISTROS_POR_IP_HORA } from '../electron/utils/tienda-limites';
 import { motivoNoMaterializable } from '../electron/utils/pedido-online-materializable';
 
 let pass = 0, fail = 0;
@@ -78,6 +78,14 @@ let cuentaFrenada = false;
 for (let i = 0; i < LOGIN_FALLOS_CUENTA_HORA; i++) registrarLoginFallido(79, `9.9.${Math.floor(i / 200)}.${i % 200}`, t0);
 cuentaFrenada = loginBloqueado(79, '8.8.8.8', t0) === 'cuenta_bloqueada';
 ok(cuentaFrenada, 'login: tope por cuenta desde muchas IP');
+reiniciarLimitesTienda();
+
+let pm = 0;
+for (let i = 0; i < PEDIDOS_MESA_POR_IP_HORA + 5; i++) if (pedidoMesaPermitido(5, '7.7.7.7', t0)) pm++;
+ok(pm === PEDIDOS_MESA_POR_IP_HORA, 'mesa QR: tope de pedidos de invitado por IP', pm);
+let rg = 0;
+for (let i = 0; i < REGISTROS_POR_IP_HORA + 3; i++) if (registroIpPermitido('7.7.7.8', t0)) rg++;
+ok(rg === REGISTROS_POR_IP_HORA, 'registro: tope de altas por IP', rg);
 reiniciarLimitesTienda();
 
 console.log('F5: qué pedido puede ir a cocina (C1)');
