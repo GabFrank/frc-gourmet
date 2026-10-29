@@ -125,6 +125,24 @@ internet); F2+F3 juntas; F4 cuando uPay esté probado en su sandbox.
 7. Escritorio: bandeja muestra personalización, referencia, ubicación y pago; «aceptar» pasa `cajaId` y muestra
    `errorMaterializacion`. Permiso de la pantalla de config alineado a PEDIDOS_ONLINE_CONFIGURAR.
 
+**F2 — decisiones cerradas tras la auditoría (29/10):**
+- Token de seguimiento de mesa: migración nueva que solo agrega `pedidos_online.seguimiento_token_hash varchar(64) null`
+  + índice. Se guarda el **SHA-256**, nunca el token en claro; el token (32 bytes aleatorios) se devuelve una sola
+  vez al crear. `pedido.estado` por token devuelve solo ese pedido (estado, ítems, motivo de rechazo; sin teléfono
+  ni dirección) y **vence** 24 h después de que el pedido llega a un estado final. Aplica el rate-limit de `/pub`.
+  Pruebas: token de otro pedido, token inventado, token vencido, token de pedido de otra mesa.
+- Caja al aceptar: verificado en `materializarPedidoOnlineEnVenta` (`ventas.handler.ts:261-299`): **nunca** crea
+  venta sin caja (sin caja abierta → `no_hay_caja_abierta`; varias → `caja_ambigua_especificar_cajaId`). F2 solo
+  muestra ese error al operador en lugar de tragarlo, y manda el `cajaId` de la caja abierta del usuario.
+- Permiso de la pantalla de config: `PEDIDOS_ONLINE_CONFIGURAR` ya está en el rol GERENTE por seed
+  (`seed-system.ts:488`) y ADMIN tiene todo; nadie que hoy pueda guardar la config pierde acceso.
+- Servidor fuente de verdad: `pedido.crear` ignora precios del cliente y recalcula; la revalidación del carrito
+  es solo para que el cliente vea el mismo número antes de confirmar. Se agrega test que manda un precio falso.
+- Copia de pruebas: facturación electrónica en ambiente de pruebas o deshabilitada (se verifica la config antes de
+  facturar), `FRC_OTP_DEV=1` y sin `WHATSAPP_CLOUD_TOKEN`, así no sale nada a clientes reales.
+- Rollback más fino: dos commits dentro del PR (backend+escritorio / storefront visual). Orden: F1 se mergea antes
+  que F2.
+
 ### F3 — Login WhatsApp y Google con credenciales desde la app
 1. En «Config Tienda Online» (escritorio): sección «Ingreso de clientes»:
    - WhatsApp Cloud API: Phone Number ID, plantilla, idioma y token. El token se guarda cifrado con la clave
