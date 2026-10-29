@@ -391,7 +391,12 @@ async function main() {
   // Un pedido sin mesa YA NO es un error: desde que PICKUP/DELIVERY se
   // materializan, abre su propia venta sin mesa marcada canalOrigen=WEB. Lo que
   // acá importa es que ese camino no toque ninguna mesa.
-  const pedidoSinMesa = await save(PedidoOnline, { numero: `T-${String(++numeroSeq).padStart(6, '0')}`, tipoPedido: 'PICKUP', estado: 'RECIBIDO', canalOrigen: 'WEB', metodoPago: 'EFECTIVO', subtotal: 0, costoEnvio: 0, total: 0 });
+  // F5 (C1): un PICKUP RECIBIDO sin aceptar ya no va a cocina; aceptado, sí.
+  const pedidoSinAceptar = await save(PedidoOnline, { numero: `T-${String(++numeroSeq).padStart(6, '0')}`, tipoPedido: 'PICKUP', estado: 'RECIBIDO', canalOrigen: 'WEB', metodoPago: 'EFECTIVO', subtotal: 0, costoEnvio: 0, total: 0 });
+  let errSinAceptar = '';
+  try { await materializarPedidoOnlineEnVenta(ds, pedidoSinAceptar.id); } catch (e: any) { errSinAceptar = e?.message || String(e); }
+  ok(errSinAceptar === 'pedido_no_aceptado', 'F5: PICKUP sin aceptar no se materializa', errSinAceptar);
+  const pedidoSinMesa = await save(PedidoOnline, { numero: `T-${String(++numeroSeq).padStart(6, '0')}`, tipoPedido: 'PICKUP', estado: 'ACEPTADO', canalOrigen: 'WEB', metodoPago: 'EFECTIVO', subtotal: 0, costoEnvio: 0, total: 0 });
   const resSinMesa = await materializarPedidoOnlineEnVenta(ds, pedidoSinMesa.id);
   ok(!!resSinMesa.ventaId, 'pedido sin mesaId → abre su propia venta');
   const ventaSinMesa = await R(Venta).findOne({ where: { id: resSinMesa.ventaId }, relations: ['mesa'] });
