@@ -4,14 +4,18 @@ import { DataSource, MoreThan } from 'typeorm';
 import { CuentaCliente } from '../../src/app/database/entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from '../../src/app/database/entities/pedidos-online/codigo-otp.entity';
 import { hashPassword, verifyPassword } from '../utils/password.utils';
-import { sendWhatsappOtp } from '../utils/whatsapp-sender';
+import { sendWhatsappOtp, otpWhatsappDisponible } from '../utils/whatsapp-sender';
+import { getGoogleClientId } from '../utils/tienda-ingreso.utils';
 import { signCustomerToken } from '../utils/customer-jwt.utils';
 import {
   issueCustomerRefreshToken,
   rotateCustomerRefreshToken,
   revokeCustomerRefreshToken,
+  revokeAllCustomerRefreshTokens,
 } from '../utils/customer-refresh-token.utils';
 import { registerPublicOperation } from '../server/public-routes';
+import { dispatchEvento } from '../services/notificacion.service';
+import { loginBloqueado, registrarLoginFallido, registrarLoginOk, otpIpPermitido } from '../utils/tienda-limites';
 
 /**
  * Auth de CLIENTE FINAL (web de pedidos) — Fase 2.
@@ -28,6 +32,8 @@ import { registerPublicOperation } from '../server/public-routes';
 
 const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutos
 const OTP_MAX_INTENTOS = 5;
+const OTP_MAX_POR_DIA_TELEFONO = 10;
+const otpMaxGlobalDia = (): number => Number(process.env['FRC_OTP_MAX_GLOBAL_DIA']) || 300;
 const OTP_MAX_POR_MINUTO = 3;
 
 /** Normaliza a solo dígitos (código de país incluido). */
@@ -78,10 +84,24 @@ export function registerPedidosOnlineAuthHandlers(
   }
 
   // ============== OTP REQUEST ==============
+  // Aviso al staff (evento TIENDA_OTP_TOPE, por el WhatsApp de avisos): una vez por día
+  // al pasar el 80 % del tope global y otra al llegar. Best-effort: nunca frena el OTP.
+  function avisarTopeOtp(nivel: '80' | 'tope', usados: number, tope: number): void {
+    const dia = new Date().toISOString().slice(0, 10);
+    const texto = nivel === 'tope'
+      ? `⚠️ Tienda online: se llegó al tope de ${tope} códigos de ingreso en 24 h. Hasta que baje, nadie nuevo puede entrar por WhatsApp. Si no es una campaña, puede ser un abuso.`
+      : `Tienda online: ya se pidieron ${usados} de ${tope} códigos de ingreso en 24 h (80 %). Al llegar al tope se corta el envío.`;
+    dispatchEvento('TIENDA_OTP_TOPE', { asunto: 'Tienda online: códigos de ingreso', texto, dedupeKey: `${nivel}-${dia}` })
+      .catch((e) => console.warn('[otp] aviso de tope falló:', e?.message || e));
+  }
+
   ipcMain.handle('pub-otp-request', async (_event: any, telefonoRaw: string) => {
     const telefono = normalizarTelefono(telefonoRaw);
     if (telefono.length < 6) {
       return { success: false, error: 'telefono_invalido' };
+    }
+    if (!otpWhatsappDisponible()) {
+      return { success: false, error: 'otp_no_disponible' };
     }
 
     // Anti-spam: máximo N OTP por minuto por teléfono.
@@ -90,6 +110,25 @@ export function registerPedidosOnlineAuthHandlers(
       where: { telefono, createdAt: MoreThan(desde) as any },
     });
     if (recientes >= OTP_MAX_POR_MINUTO) {
+      return { success: false, error: 'demasiadas_solicitudes' };
+    }
+    // Topes diarios (PLAN-tienda-online F1): por teléfono y global, para que nadie
+    // dispare plantillas pagas de WhatsApp a muchos números.
+    const hace24h = new Date(Date.now() - 24 * 60 * 60_000);
+    const delDia = await otpRepo().count({ where: { telefono, createdAt: MoreThan(hace24h) as any } });
+    if (delDia >= OTP_MAX_POR_DIA_TELEFONO) {
+      return { success: false, error: 'demasiadas_solicitudes' };
+    }
+    const globalDia = await otpRepo().count({ where: { createdAt: MoreThan(hace24h) as any } });
+    const topeGlobal = otpMaxGlobalDia();
+    if (globalDia >= topeGlobal) {
+      console.warn(`[otp] tope global diario alcanzado (${globalDia}); envío cortado.`);
+      avisarTopeOtp('tope', globalDia, topeGlobal);
+      return { success: false, error: 'otp_no_disponible' };
+    }
+    if (globalDia + 1 >= Math.ceil(topeGlobal * 0.8)) avisarTopeOtp('80', globalDia + 1, topeGlobal);
+    // Por IP: 30 por hora (frena a quien rota números desde un mismo lugar).
+    if (!otpIpPermitido(String(_event?._clientIp || ''))) {
       return { success: false, error: 'demasiadas_solicitudes' };
     }
 
@@ -111,7 +150,7 @@ export function registerPedidosOnlineAuthHandlers(
     const envio = await sendWhatsappOtp(telefono, codigo);
     // Si el envío real falló (no dev-log), avisar al cliente en vez de dejarlo
     // esperando un código que no va a llegar.
-    if (!envio.ok && envio.provider !== 'dev-log') {
+    if (!envio.ok) {
       return { success: false, error: 'envio_fallido' };
     }
     return {
@@ -121,10 +160,8 @@ export function registerPedidosOnlineAuthHandlers(
       // En dev (sin credenciales) el proveedor es 'dev-log'; el front puede
       // avisar que el código se muestra en la consola del server.
       provider: envio.provider,
-      // Solo en modo dev-log (sin WhatsApp configurado, sin canal real de envío)
-      // devolvemos el código para poder probar el flujo sin abrir el log. En
-      // cuanto se configuran credenciales el provider es 'whatsapp-cloud' y NO
-      // se echoa nunca.
+      // Solo en modo dev-log (FRC_OTP_DEV=1 y app sin empaquetar) devolvemos el
+      // código para probar el flujo. En producción el provider nunca es dev-log.
       ...(envio.provider === 'dev-log' ? { devCodigo: codigo } : {}),
     };
   });
@@ -168,7 +205,8 @@ export function registerPedidosOnlineAuthHandlers(
   });
 
   // ============== LOGIN POR PASSWORD ==============
-  ipcMain.handle('pub-cliente-login-password', async (_event: any, identificador: string, password: string) => {
+  ipcMain.handle('pub-cliente-login-password', async (event: any, identificador: string, password: string) => {
+    const ip = String(event?._clientIp || '');
     const idRaw = String(identificador || '').trim();
     if (!idRaw || !password) return { success: false, error: 'credenciales_incompletas' };
 
@@ -179,11 +217,19 @@ export function registerPedidosOnlineAuthHandlers(
       ? await cuentaRepo().findOne({ where: { email: idRaw.toLowerCase() }, relations: ['cliente'] })
       : await cuentaRepo().findOne({ where: { telefono }, relations: ['cliente'] });
 
+    // Anti fuerza bruta (PLAN-tienda-online A1.3): por cuenta+IP y por IP.
+    const bloqueo = loginBloqueado(cuenta?.id ?? null, ip);
+    if (bloqueo) return { success: false, error: 'demasiados_intentos' };
     if (!cuenta || !cuenta.activo || !cuenta.passwordHash) {
+      registrarLoginFallido(cuenta?.id ?? null, ip);
       return { success: false, error: 'cuenta_o_password_invalidos' };
     }
     const ok = await verifyPassword(password, cuenta.passwordHash);
-    if (!ok) return { success: false, error: 'cuenta_o_password_invalidos' };
+    if (!ok) {
+      registrarLoginFallido(cuenta.id, ip);
+      return { success: false, error: 'cuenta_o_password_invalidos' };
+    }
+    registrarLoginOk(cuenta.id, ip);
 
     cuenta.ultimoLogin = new Date();
     await cuentaRepo().save(cuenta);
@@ -223,7 +269,8 @@ export function registerPedidosOnlineAuthHandlers(
     const customerId = event?._customerId;
     if (!customerId) return { success: false, error: 'no_autenticado' };
     const cuenta = await cuentaRepo().findOne({ where: { id: customerId }, relations: ['cliente'] });
-    if (!cuenta) return { success: false, error: 'cuenta_no_encontrada' };
+    // Cuenta dada de baja: no sigue operando con un token viejo (PLAN-tienda-online A1).
+    if (!cuenta || !cuenta.activo) return { success: false, error: 'cuenta_no_encontrada' };
     return { success: true, cuenta: mapCuenta(cuenta) };
   });
 
@@ -232,7 +279,8 @@ export function registerPedidosOnlineAuthHandlers(
     const customerId = event?._customerId;
     if (!customerId) return { success: false, error: 'no_autenticado' };
     const cuenta = await cuentaRepo().findOne({ where: { id: customerId }, relations: ['cliente'] });
-    if (!cuenta) return { success: false, error: 'cuenta_no_encontrada' };
+    // Cuenta dada de baja: no sigue operando con un token viejo (PLAN-tienda-online A1).
+    if (!cuenta || !cuenta.activo) return { success: false, error: 'cuenta_no_encontrada' };
 
     if (data?.nombre !== undefined) cuenta.nombre = data.nombre ? String(data.nombre).toUpperCase() : undefined;
     if (data?.email !== undefined) {
@@ -246,9 +294,13 @@ export function registerPedidosOnlineAuthHandlers(
           .getOne();
         if (existe) return { success: false, error: 'email_en_uso' };
       }
-      cuenta.email = email;
-      cuenta.emailVerificado = false;
+      // Cambiar el email lo desverifica (y así Google no puede tomar la cuenta por el nuevo).
+      if ((email || null) !== (cuenta.email ? cuenta.email.toLowerCase() : null)) {
+        cuenta.email = email;
+        cuenta.emailVerificado = false;
+      }
     }
+    let cambioPassword = false;
     if (data?.password) {
       // Exigir la contraseña actual cuando ya hay una. Sin esto, un access token
       // robado -30 minutos de vida- alcanzaba para quedarse con la cuenta de
@@ -260,8 +312,12 @@ export function registerPedidosOnlineAuthHandlers(
         if (!coincide) return { success: false, error: 'password_actual_incorrecta' };
       }
       cuenta.passwordHash = await hashPassword(String(data.password));
+      cambioPassword = true;
     }
     const saved = await cuentaRepo().save(cuenta);
+    // Cambio de contraseña: se cierran las demás sesiones (refresh tokens). La actual
+    // sigue con su access token hasta que venza y se vuelve a loguear con la nueva.
+    if (cambioPassword) await revokeAllCustomerRefreshTokens(dataSource, saved.id);
     return { success: true, cuenta: mapCuenta(saved) };
   });
 
@@ -292,7 +348,7 @@ export function registerPedidosOnlineAuthHandlers(
 
   // ============== LOGIN CON GOOGLE (credential-ready) ==============
   ipcMain.handle('pub-cliente-google', async (_event: any, idToken: string) => {
-    const clientId = process.env['GOOGLE_CLIENT_ID'];
+    const clientId = getGoogleClientId();
     if (!clientId) return { success: false, error: 'google_no_configurado' };
     if (!idToken) return { success: false, error: 'token_faltante' };
     try {
@@ -314,6 +370,14 @@ export function registerPedidosOnlineAuthHandlers(
         .leftJoinAndSelect('c.cliente', 'cliente')
         .where('LOWER(c.email) = :email', { email })
         .getOne();
+      if (cuenta && !cuenta.activo) return { success: false, error: 'cuenta_invalida' };
+      // Cuenta con ese email que nunca lo verificó y tiene contraseña: quien la creó no
+      // demostró ser dueño del email. Google sí lo demuestra: se queda el dueño real, se
+      // borra la contraseña ajena y se cierran sus sesiones (PLAN-tienda-online A1).
+      if (cuenta && !cuenta.emailVerificado && cuenta.passwordHash) {
+        cuenta.passwordHash = null as any;
+        await revokeAllCustomerRefreshTokens(dataSource, cuenta.id);
+      }
       if (!cuenta) {
         cuenta = cuentaRepo().create({
           email,

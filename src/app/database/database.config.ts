@@ -335,6 +335,9 @@ import { CajaUnicaAbiertaPorDispositivo1790617935368 } from './migrations/179061
 import { DisciplinaReconocimiento1792785488053 } from './migrations/1792785488053-DisciplinaReconocimiento';
 import { FuncionesTareas1793042064365 } from './migrations/1793042064365-FuncionesTareas';
 import { AcreditacionesPosReglas1793110000000 } from './migrations/1793110000000-AcreditacionesPosReglas';
+import { TiendaOnlineSeguridad1793200000000 } from './migrations/1793200000000-TiendaOnlineSeguridad';
+import { TiendaSeguimientoMesa1793300000000 } from './migrations/1793300000000-TiendaSeguimientoMesa';
+import { TiendaIngresoClientes1793400000000 } from './migrations/1793400000000-TiendaIngresoClientes';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -807,6 +810,9 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     // Funciones y Tareas (funciones por cargo/funcionario, tareas y checklists) — tablas ft_*
     FuncionesTareas1793042064365,
     AcreditacionesPosReglas1793110000000,
+    TiendaOnlineSeguridad1793200000000,
+    TiendaSeguimientoMesa1793300000000,
+    TiendaIngresoClientes1793400000000,
   ];
 }
 

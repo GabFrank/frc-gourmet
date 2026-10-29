@@ -1110,6 +1110,9 @@ export class RepositoryHttpService extends RepositoryService {
   updateTiendaOnlineConfig(data: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.updateTiendaOnlineConfig() no esta implementado todavia.`)) as any;
   }
+  probarTiendaWhatsapp(data: { telefono: string }): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.probarTiendaWhatsapp() no esta implementado todavia.`)) as any;
+  }
   getZonasDeliveryAdmin(): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getZonasDeliveryAdmin() no esta implementado todavia.`)) as any;
   }
