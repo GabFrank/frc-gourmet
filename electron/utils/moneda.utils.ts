@@ -99,11 +99,30 @@ export async function getCotizacionBidireccional(
   origenId: number,
   destinoId: number,
 ): Promise<{ tasa: number; invertida: boolean } | null> {
-  const directa = await getCotizacionCompraLocal(dataSource, origenId, destinoId);
-  if (directa != null) return { tasa: directa, invertida: false };
+  if (origenId === destinoId) return { tasa: 1, invertida: false };
+  // `compraLocal` es SIEMPRE "unidades de la moneda principal por 1 unidad de
+  // la otra", sin importar en qué dirección esté guardada la fila (la UI guarda
+  // extranjera → principal; código viejo, principal → extranjera), y
+  // `getCotizacionCompraLocal` ya busca en las dos direcciones. La versión
+  // anterior trataba ese valor como "tasa origen → destino": Gs → USD
+  // multiplicaba por 7.500 en vez de dividir, y una deuda de 20 USD pagada
+  // con 150.000 Gs "sumaba" 1.125.000.000 (#332).
+  const principal = await getMonedaPrincipal(dataSource);
+  const principalId = (principal as any)?.id ?? null;
 
-  const inversa = await getCotizacionCompraLocal(dataSource, destinoId, origenId);
-  if (inversa != null && inversa > 0) return { tasa: 1 / inversa, invertida: true };
-
+  // extranjera → principal: multiplicar.
+  if (destinoId === principalId) {
+    const t = await getCotizacionCompraLocal(dataSource, origenId, destinoId);
+    return t != null ? { tasa: t, invertida: false } : null;
+  }
+  // principal → extranjera: dividir.
+  if (origenId === principalId) {
+    const t = await getCotizacionCompraLocal(dataSource, destinoId, origenId);
+    return t != null && t > 0 ? { tasa: 1 / t, invertida: true } : null;
+  }
+  // Dos extranjeras (USD → BRL): cruzar por la principal.
+  const tOrigen = principalId != null ? await getCotizacionCompraLocal(dataSource, origenId, principalId) : null;
+  const tDestino = principalId != null ? await getCotizacionCompraLocal(dataSource, destinoId, principalId) : null;
+  if (tOrigen != null && tDestino != null && tDestino > 0) return { tasa: tOrigen / tDestino, invertida: false };
   return null;
 }

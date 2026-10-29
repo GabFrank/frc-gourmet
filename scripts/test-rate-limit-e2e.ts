@@ -10,6 +10,10 @@
  * Test completo de 429 en producción requiere túnel Cloudflare + carga real.
  */
 
+// El mock va PRIMERO: sin él, con el binario de Electron instalado,
+// `require('electron')` devuelve una ruta y `app.getPath` revienta en
+// jwt-secret.utils (#335).
+import './_electron-mock';
 import { strict as assert } from 'assert';
 import { DataSource } from 'typeorm';
 import { Usuario } from '../src/app/database/entities/personas/usuario.entity';
@@ -29,6 +33,9 @@ async function makeRequest(
     headers: { 'Content-Type': 'application/json', ...headers },
     body: body ? JSON.stringify(body) : undefined,
   });
+  // `status` no estaba declarado: el helper lanzaba ReferenceError en la
+  // primera request (#335).
+  const status = res.status;
   let responseBody: any;
   try {
     responseBody = await res.json();

@@ -331,9 +331,10 @@ Anotá los ids de: `GUARANI`, `DOLAR`, `REAL`; `EFECTIVO`, `TARJETA DEBITO`,
 - `update-empresa [ {nombre, nombreComercial, razonSocial, ruc, direccion, telefono, email, actividadEconomica, zonaHoraria, timbradoNumero?, timbradoVigenciaHasta?, puntoExpedicion?} ]`.
   Sólo cambia las claves que mandes y este handler **sí** pasa a mayúsculas.
 - Cotización, por cada moneda extranjera:
-  `create-moneda-cambio [ {monedaOrigen:{id:GUARANI}, monedaDestino:{id:DOLAR}, compraOficial, ventaOficial, compraLocal, ventaLocal, activo:true} ]`.
-  - Los cuatro valores son **obligatorios**.
-  - **Origen = GUARANI**, porque las conversiones buscan en esa dirección.
+  `create-moneda-cambio [ {monedaOrigen:{id:DOLAR}, monedaDestino:{id:GUARANI}, compraOficial, ventaOficial, compraLocal, ventaLocal, activo:true} ]`.
+  - Los cuatro valores son **obligatorios** y son **guaraníes por 1 unidad** de la
+    moneda extranjera.
+  - **Origen = extranjera, destino = GUARANI**, igual que la UI.
 - Moneda no aceptada: `updateMoneda [id, {activo:false}]`. Preguntá antes de desactivar.
 
 ### D3. Impresoras

@@ -292,6 +292,17 @@ async function main() {
     ok(!!inversa?.invertida && Math.abs((inversa!.tasa) - 1 / 7500) < 1e-9,
       'E: Gs -> USD invierte la tasa en vez de fallar', inversa);
 
+    // Fila guardada en la dirección VIEJA (principal → extranjera). `compraLocal`
+    // sigue siendo Gs por 1 BRL: el resultado no depende de cómo esté guardada.
+    const brl: any = await save(Moneda, { denominacion: 'REAL', simbolo: 'R$', principal: false, decimales: 2, activo: true });
+    await save(MonedaCambio, { monedaOrigen: pyg, monedaDestino: brl, compraOficial: 1400, ventaOficial: 1450, compraLocal: 1500, ventaLocal: 1550, activo: true });
+    const brlPyg = await getCotizacionBidireccional(ds, brl.id, pyg.id);
+    ok(brlPyg?.tasa === 1500, 'E: BRL -> Gs multiplica aunque la fila esté guardada Gs -> BRL', brlPyg);
+    const pygBrl = await getCotizacionBidireccional(ds, pyg.id, brl.id);
+    ok(Math.abs((pygBrl?.tasa ?? 0) - 1 / 1500) < 1e-9, 'E: Gs -> BRL divide (fila en la dirección vieja)', pygBrl);
+    const usdBrl = await getCotizacionBidireccional(ds, usd.id, brl.id);
+    ok(Math.abs((usdBrl?.tasa ?? 0) - 5) < 1e-9, 'E: USD -> BRL cruza por la principal (7500 / 1500)', usdBrl);
+
     // Deuda en USD pagada con guaraníes: antes esto era un error duro.
     const gUsd: any = await gasto(20, 'SERVICIO EN USD', usd);
     const res: any = await invokeHandler('registrar-pago-consolidado', {

@@ -45,6 +45,9 @@ async function main() {
   const { PdvMesa } = E('ventas/pdv-mesa.entity');
   const { Comanda } = E('ventas/comanda.entity');
   const save = (ent: any, data: any) => ds.getRepository(ent).save(ds.getRepository(ent).create(data as any) as any);
+  // Desde #329 concluir exige un Pago vinculado, como cualquier cobro real.
+  const { Pago } = require('../src/app/database/entities/compras/pago.entity');
+  const nuevoPago = () => save(Pago, { estado: 'ABIERTO', activo: true });
 
   // Usuario con SOLO VENTAS_PDV: es exactamente lo que tiene el rol MOZO.
   const mozo: any = await save(Usuario, { nickname: 'mozo', password: 'x', activo: true });
@@ -121,8 +124,12 @@ async function main() {
   {
     const mesa: any = await nuevaMesa(5);
     await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } });
-    await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } });
-    ok(await estadoDe(mesa.id) === 'OCUPADO', 'E: una segunda venta no altera el estado', await estadoDe(mesa.id));
+    // Desde el invariante "máximo 1 venta ABIERTA por mesa" (2026-09-11) la
+    // segunda venta se RECHAZA. El test asumía que se creaba (#333).
+    let err = '';
+    try { await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } }); } catch (e: any) { err = e.message; }
+    ok(/MESA_YA_TIENE_VENTA_ABIERTA/.test(err), 'E: una segunda venta en la mesa se rechaza', err);
+    ok(await estadoDe(mesa.id) === 'OCUPADO', 'E: y la mesa sigue OCUPADA', await estadoDe(mesa.id));
   }
 
   // ═══════ [F] Venta sin mesa ═══════
@@ -216,7 +223,7 @@ async function main() {
     const venta: any = await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } });
     ok(await estadoDe(mesa.id) === 'OCUPADO', 'L: al abrir la cuenta, la columna dice OCUPADO');
 
-    await invokeHandler('updateVenta', venta.id, { estado: 'CONCLUIDA' });
+    await invokeHandler('updateVenta', venta.id, { estado: 'CONCLUIDA', pago: { id: (await nuevoPago()).id } });
     ok(await estadoDe(mesa.id) === 'DISPONIBLE',
       'L: al COBRAR, la columna vuelve a DISPONIBLE sola', await estadoDe(mesa.id));
   }
@@ -232,7 +239,7 @@ async function main() {
     const mesa: any = await nuevaMesa(14);
     const venta: any = await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } });
     await save(Comanda, { codigo: 'C-14', numero: 14, estado: 'OCUPADO', activo: true, pdv_mesa: { id: mesa.id } });
-    await invokeHandler('updateVenta', venta.id, { estado: 'CONCLUIDA' });
+    await invokeHandler('updateVenta', venta.id, { estado: 'CONCLUIDA', pago: { id: (await nuevoPago()).id } });
     ok(await estadoDe(mesa.id) === 'DISPONIBLE',
       'L: una comanda encima no mantiene la mesa ocupada', await estadoDe(mesa.id));
   }
