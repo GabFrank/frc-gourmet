@@ -447,6 +447,26 @@ async function main() {
   ok(rech?.success === true && rech?.pedido?.estado === 'RECHAZADO', 'rechazar → RECHAZADO');
   await invokeHandlerWithContext('rechazar-pedido-online', undefined, lista[2].id, 'sin stock');
 
+  // 14b. F2 (M7): sin caja abierta el aceptar NO crea venta y devuelve el motivo para el operador.
+  ok(!acep?.ventaId && /no_hay_caja_abierta|caja/.test(String(acep?.errorMaterializacion || '')),
+    'aceptar sin caja abierta: no crea venta y devuelve errorMaterializacion', { ventaId: acep?.ventaId, err: acep?.errorMaterializacion });
+  // 14c. F2 (M6): el cliente ve el motivo del rechazo y la personalización en «Mis pedidos».
+  const misRech = await pub('pedido.mis', [], token);
+  const pRech = (misRech.result?.pedidos || []).find((p: any) => p.numero === segundo.numero);
+  ok(pRech?.estado === 'RECHAZADO' && !!pRech?.motivoRechazo, 'mis pedidos: el rechazado trae motivoRechazo', pRech?.motivoRechazo);
+  ok((misRech.result?.pedidos || []).every((p: any) => (p.items || []).every((it: any) => 'personalizacion' in it)),
+    'mis pedidos: cada línea trae su personalización', null);
+  ok((misRech.result?.pedidos || []).every((p: any) => p.seguimientoTokenHash === undefined),
+    'mis pedidos: nunca expone el hash de seguimiento', null);
+  // 14d. F2: el server ignora el precio que manda el cliente y cobra el de la carta.
+  const falso = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP', idempotencyKey: 'f2-precio-falso-0001',
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1, precioUnitario: 1, precio: 1, subtotal: 1 }],
+    subtotal: 1, total: 1,
+  }], token);
+  ok(falso.result?.success === true && Number(falso.result?.total) > 1, 'precio falso del cliente se ignora: total = precio de la carta', falso.result);
+  await invokeHandlerWithContext('rechazar-pedido-online', undefined, falso.result?.pedidoId, 'prueba');
+
   // 15. pendientes (primero=LISTO ya no cuenta, segundo/tercero rechazados) = 0
   const pend = await invokeHandlerWithContext('contar-pedidos-online-pendientes', undefined);
   ok(pend?.pendientes === 0, 'contar pendientes = 0 (ya no hay RECIBIDO/ACEPTADO)', pend?.pendientes);
