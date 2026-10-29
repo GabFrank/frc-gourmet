@@ -346,6 +346,21 @@ async function main() {
   const otpBad = await pub('auth.otp.verify', [tel, '000000']);
   ok(otpBad.result?.success === false, 'OTP incorrecto/usado es rechazado');
 
+  // 3c. F5 (A-auth1): intentos en paralelo no pasan el tope de 5, y el código se consume una vez.
+  const telPar = '0981555444';
+  await pub('auth.otp.request', [telPar]);
+  const codPar = otpCapturado;
+  const malos = await Promise.all(Array.from({ length: 12 }, () => pub('auth.otp.verify', [telPar, '999999' === codPar ? '888888' : '999999'])));
+  const incorrectos = malos.filter((r: any) => r.result?.error === 'codigo_incorrecto').length;
+  ok(incorrectos <= 5, 'F5: 12 intentos en paralelo → como mucho 5 se comparan', incorrectos);
+  const trasTope = await pub('auth.otp.verify', [telPar, codPar]);
+  ok(trasTope.result?.success === false, 'F5: agotados los intentos, ni el código correcto entra', trasTope.result);
+  const telDoble = '0981555333';
+  await pub('auth.otp.request', [telDoble]);
+  const codDoble = otpCapturado;
+  const dobles = await Promise.all([pub('auth.otp.verify', [telDoble, codDoble]), pub('auth.otp.verify', [telDoble, codDoble])]);
+  ok(dobles.filter((r: any) => r.result?.success === true).length === 1, 'F5: el mismo código correcto dos veces a la vez abre una sola sesión', dobles.map((d: any) => d.result?.success));
+
   // 4. me
   const me = await pub('auth.me', [], token);
   ok(me.result?.success === true && me.result?.cuenta?.telefono === '0981123456', 'auth.me devuelve la cuenta');
@@ -510,6 +525,9 @@ async function main() {
   // el refresh viejo ya no sirve (rotación)
   const refOld = await pub('auth.refresh', [refreshTok]);
   ok(refOld.result?.success === false, 'refresh viejo invalidado tras rotar');
+  // F5 (M-auth5): reusar un refresh ya rotado cierra todas las sesiones de la cuenta.
+  const refNuevoTrasReuso = await pub('auth.refresh', [ref1.result?.refreshToken]);
+  ok(refNuevoTrasReuso.result?.success === false, 'F5: tras el reuso, el refresh nuevo también queda revocado', refNuevoTrasReuso.result);
   const token2 = ref1.result?.accessToken;
   const me2 = await pub('auth.me', [], token2);
   ok(me2.result?.success === true, 'access token nuevo funciona en auth.me');
