@@ -168,7 +168,9 @@ import { RepositoryService } from '../../../database/repository.service';
     .proveedor { border: 1px solid var(--border-color, rgba(0,0,0,.12)); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
     .proveedor-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
     .prov-nombre { font-weight: 600; color: var(--text-primary); }
-    .proveedor .grid { margin-top: 10px; }
+    .proveedor .grid { margin-top: 10px; align-items: start; }
+    /* Identificadores que distinguen mayúsculas (Client ID, plantilla): sin la mayúscula global. */
+    .proveedor input { text-transform: none !important; }
     .fila-acciones { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
     .fila-acciones button { white-space: nowrap; }
     .tel-prueba { width: 220px; }
