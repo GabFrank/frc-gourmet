@@ -93,7 +93,7 @@
           {{ sig.label }}
         </button>
 
-        <button mat-stroked-button color="warn" *ngIf="p.estadoPago === 'REEMBOLSO_PENDIENTE'" (click)="marcarDevuelto(p)">
+        <button mat-flat-button color="warn" *ngIf="p.estadoPago === 'REEMBOLSO_PENDIENTE'" (click)="marcarDevuelto(p)">
           <mat-icon>undo</mat-icon> Marcar devuelto
         </button>
 
