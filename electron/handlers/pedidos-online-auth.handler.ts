@@ -15,7 +15,7 @@ import {
 } from '../utils/customer-refresh-token.utils';
 import { registerPublicOperation } from '../server/public-routes';
 import { dispatchEvento } from '../services/notificacion.service';
-import { reservarIntentoLogin, confirmarLoginOk, otpIpPermitido } from '../utils/tienda-limites';
+import { reservarIntentoLogin, confirmarLoginOk, otpIpPermitido, registroIpPermitido } from '../utils/tienda-limites';
 
 /**
  * Auth de CLIENTE FINAL (web de pedidos) — Fase 2.
@@ -310,6 +310,7 @@ export function registerPedidosOnlineAuthHandlers(
     }
     let cambioPassword = false;
     if (data?.password) {
+      if (String(data.password).length < 8) return { success: false, error: 'password_corto' };
       // Exigir la contraseña actual cuando ya hay una. Sin esto, un access token
       // robado -30 minutos de vida- alcanzaba para quedarse con la cuenta de
       // forma permanente, incluso después de que el dueño cerrara la sesión.
@@ -335,7 +336,9 @@ export function registerPedidosOnlineAuthHandlers(
     const password = String(data?.password || '');
     const nombre = data?.nombre ? String(data.nombre).toUpperCase() : undefined;
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { success: false, error: 'email_invalido' };
-    if (password.length < 6) return { success: false, error: 'password_corto' };
+    if (password.length < 8) return { success: false, error: 'password_corto' };
+    // F5 (auditoría M-auth6): tope de altas por IP (crear cuentas en masa / enumerar emails).
+    if (!registroIpPermitido(String(_event?._clientIp || ''))) return { success: false, error: 'demasiadas_solicitudes' };
 
     const existe = await cuentaRepo()
       .createQueryBuilder('c')

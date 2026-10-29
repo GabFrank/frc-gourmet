@@ -58,6 +58,9 @@ export function claveIp(ip: string): string {
 const fallosIp = new Ventana(60 * MIN);
 const otpIp = new Ventana(60 * MIN);
 const otpIpDia = new Ventana(24 * 60 * MIN);
+const registrosIp = new Ventana(60 * MIN);
+/** F5 (M-auth6): altas de cuenta por email por IP por hora. */
+export const REGISTROS_POR_IP_HORA = 10;
 const fallosCuenta = new Ventana(60 * MIN);
 const fallosCuentaIp = new Map<string, { fallos: number; bloqueadoHasta: number }>();
 
@@ -117,7 +120,15 @@ export function otpIpPermitido(ip: string, ahora = Date.now()): boolean {
   return true;
 }
 
+/** true si la IP todavía puede crear una cuenta; si puede, la cuenta. */
+export function registroIpPermitido(ip: string, ahora = Date.now()): boolean {
+  const k = claveIp(ip);
+  if (registrosIp.contar(k, ahora) >= REGISTROS_POR_IP_HORA) return false;
+  registrosIp.sumar(k, ahora);
+  return true;
+}
+
 /** Solo para tests. */
 export function reiniciarLimitesTienda(): void {
-  fallosIp.limpiar(); otpIp.limpiar(); otpIpDia.limpiar(); fallosCuenta.limpiar(); fallosCuentaIp.clear();
+  fallosIp.limpiar(); otpIp.limpiar(); otpIpDia.limpiar(); registrosIp.limpiar(); fallosCuenta.limpiar(); fallosCuentaIp.clear();
 }
