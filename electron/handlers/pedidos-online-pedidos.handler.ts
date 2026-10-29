@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import { createHash, randomBytes } from 'crypto';
 import { DataSource, In, IsNull } from 'typeorm';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
 import { PrecioVenta } from '../../src/app/database/entities/productos/precio-venta.entity';
@@ -260,6 +261,22 @@ export function registerPedidosOnlinePedidosHandlers(
     }
     return null;
   };
+  // Seguimiento del invitado de mesa (PLAN-tienda-online F2/M6): token aleatorio de un
+  // solo uso de entrega; en la base queda solo su SHA-256.
+  const hashSeguimiento = (t: string) => createHash('sha256').update(t).digest('hex');
+  const nuevoSeguimiento = () => {
+    const token = randomBytes(32).toString('base64url');
+    return { token, hash: hashSeguimiento(token) };
+  };
+  // Reintento del mismo invitado (misma mesa y clave): el token anterior no se puede
+  // recuperar (solo está el hash), así que se rota y se le entrega uno nuevo.
+  const respuestaExistenteInvitado = async (p: PedidoOnline, cuenta: CuentaCliente | null) => {
+    const base = respuestaExistente(p);
+    if (cuenta || !p.mesaId) return base;
+    const seg = nuevoSeguimiento();
+    await pedidoRepo().update({ id: p.id }, { seguimientoTokenHash: seg.hash } as any);
+    return { ...base, seguimientoToken: seg.token };
+  };
   const respuestaExistente = (p: PedidoOnline) => ({
     success: true,
     numero: p.numero,
@@ -334,7 +351,7 @@ export function registerPedidosOnlinePedidosHandlers(
 
     if (idemKey) {
       const previo = await buscarPorIdemKey(idemKey, cuenta, mesa);
-      if (previo) return respuestaExistente(previo);
+      if (previo) return respuestaExistenteInvitado(previo, cuenta);
     }
 
     const productoRepo = dataSource.getRepository(Producto);
@@ -479,6 +496,8 @@ export function registerPedidosOnlinePedidosHandlers(
     if (mesa) pedido.mesaId = mesa.id;
     // Sin dueño (no debería pasar) no se guarda la clave: no habría índice que la cubra.
     if (idemKey && (cuenta || mesa)) pedido.idempotencyKey = idemKey;
+    const seguimiento = !cuenta && mesa ? nuevoSeguimiento() : null;
+    if (seguimiento) pedido.seguimientoTokenHash = seguimiento.hash;
     // Aceptación automática: entra ACEPTADO directo; si no, RECIBIDO (revisión en PdV).
     if (cfg.aceptacionAutomatica) {
       pedido.estado = EstadoPedidoOnline.ACEPTADO;
@@ -522,7 +541,7 @@ export function registerPedidosOnlinePedidosHandlers(
         // devuelve el pedido que ganó la carrera en vez de duplicarlo.
         if (pedido.idempotencyKey) {
           const previo = await buscarPorIdemKey(pedido.idempotencyKey, cuenta, mesa);
-          if (previo) return respuestaExistente(previo);
+          if (previo) return respuestaExistenteInvitado(previo, cuenta);
         }
         if (intento >= 6) throw e;
         pedido.numero = await siguienteNumero(pedidoRepo());
@@ -557,6 +576,8 @@ export function registerPedidosOnlinePedidosHandlers(
       costoEnvio,
       total,
       ventaId,
+      // Solo invitado de mesa: se entrega una vez; con esto sigue su pedido sin cuenta.
+      ...(seguimiento ? { seguimientoToken: seguimiento.token } : {}),
     };
   });
 
@@ -589,6 +610,25 @@ export function registerPedidosOnlinePedidosHandlers(
     });
     if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
     return { success: true, pedido: mapPedido(pedido) };
+  });
+
+  // ====== SEGUIMIENTO DEL INVITADO DE MESA (público, sin auth) ======
+  // Solo con el token entregado al crear. Devuelve ese pedido y nada más (sin teléfono
+  // ni dirección). Vence 24 h después de que el pedido llega a un estado final.
+  ipcMain.handle('get-pedido-online-seguimiento', async (_event: any, token: string) => {
+    const t = String(token || '').trim();
+    if (!/^[A-Za-z0-9_-]{20,100}$/.test(t)) return { success: false, error: 'pedido_no_encontrado' };
+    const pedido = await pedidoRepo().findOne({
+      where: { seguimientoTokenHash: hashSeguimiento(t), cuentaCliente: IsNull() },
+      relations: ['items'],
+    });
+    if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
+    if (ESTADOS_FINALES.includes(pedido.estado)) {
+      const fin = new Date(pedido.fechaEntregado || pedido.updatedAt || pedido.createdAt).getTime();
+      if (Date.now() - fin > SEGUIMIENTO_VIGENCIA_MS) return { success: false, error: 'seguimiento_vencido' };
+    }
+    const p = mapPedido(pedido);
+    return { success: true, pedido: { ...p, direccionEntrega: null } };
   });
 
   // ====== CONTEXTO DE MESA POR TOKEN (público, sin auth) — canal MESA_QR ======
@@ -651,8 +691,14 @@ export function registerPedidosOnlinePedidosHandlers(
   // cliente (validado dentro del handler). Si viene token de cliente, se resuelve.
   registerPublicOperation('pedido.crear', { channel: 'crear-pedido-online', requiresAuth: false, optionalAuth: true, description: 'Crear un pedido online.' });
   registerPublicOperation('pedido.mis', { channel: 'get-mis-pedidos-online', requiresAuth: true, description: 'Mis pedidos.' });
+  registerPublicOperation('pedido.seguimiento', { channel: 'get-pedido-online-seguimiento', requiresAuth: false, description: 'Estado del pedido del invitado de mesa por su token de seguimiento.' });
   registerPublicOperation('pedido.estado', { channel: 'get-pedido-online-estado', requiresAuth: true, description: 'Estado de un pedido por número.' });
 }
+
+const ESTADOS_FINALES: string[] = [
+  EstadoPedidoOnline.ENTREGADO, EstadoPedidoOnline.RECHAZADO, EstadoPedidoOnline.CANCELADO,
+];
+const SEGUIMIENTO_VIGENCIA_MS = 24 * 60 * 60 * 1000;
 
 function mapPedido(p: PedidoOnline): any {
   return {
