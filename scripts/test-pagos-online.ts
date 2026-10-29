@@ -249,6 +249,42 @@ async function main() {
   await tickPagosOnline(ds);
   ok(avisos.filter((a) => a.includes(p2.numero) && a.includes('sin aceptar')).length === 1, 'pagado sin aceptar a los 20 min → un solo aviso', avisos);
 
+  console.log('F5 §12: monto y moneda salen del pago, sin fallback a la sesión');
+  const sesOk = { status: 'complete', paymentId: 'p', amount: { value: '1000', currency: 'PYG' }, merchant: { referenceId: 'R-1' } };
+  const ex = { monto: 1000, referencia: 'R-1' };
+  ok(interpretarPago(sesOk, { status: 'SUCCEEDED', subStatus: 'APPROVED' }, ex).tipo === 'INCONSISTENTE', 'pago sin amount (aunque la sesión lo tenga) → no pagado');
+  ok(interpretarPago(sesOk, { status: 'SUCCEEDED', subStatus: 'APPROVED', amount: { value: '1000' } }, ex).tipo === 'INCONSISTENTE', 'pago sin moneda → no pagado');
+  ok(interpretarPago(sesOk, { status: 'SUCCEEDED', subStatus: 'APPROVED', amount: '1000' }, ex).tipo === 'INCONSISTENTE', 'amount sin objeto {value, currency} → no pagado');
+  ok(interpretarPago(sesOk, { status: 'SUCCEEDED', subStatus: 'APPROVED', amount: { value: '1000', currency: 'USD' } }, ex).tipo === 'INCONSISTENTE', 'moneda USD → no pagado');
+  ok(interpretarPago(sesOk, { status: 'SUCCEEDED', subStatus: 'APPROVED', amount: { value: '1000', currency: 'PYG' }, merchant: { seller: { operationReferenceId: 'R-9' } } }, ex).tipo === 'INCONSISTENTE', 'referencia del pago ajena → no pagado');
+  ok(interpretarPago(sesOk, { status: 'SUCCEEDED', subStatus: 'APPROVED', amount: { value: '1000', currency: 'pyg' }, merchant: { seller: { operationReferenceId: 'R-1' } } }, ex).tipo === 'PAGADO', 'monto, moneda y referencia del pago iguales → pagado');
+
+  console.log('F5 §14: pagoId duplicado no aborta el ciclo del job');
+  const pda = await nuevo(12000);
+  const pdb = await nuevo(12000);
+  const pdc = await nuevo(13000);
+  for (const x of [pda, pdb, pdc]) await iniciarPagoPedido(ds, x.id);
+  const sda = (await leer(pda.id)).pagoSesionId!;
+  pagar(sda);
+  ok((await verificarPagoPedido(ds, pda.id)).recienPagado === true, 'el primer pedido toma el pago');
+  const sdb = sesiones.get((await leer(pdb.id)).pagoSesionId!)!;
+  sdb.status = 'complete';
+  sdb.paymentId = 'pay-' + sda; // uPay devuelve el mismo paymentId para otro pedido
+  pagar((await leer(pdc.id)).pagoSesionId!);
+  await repo.update({ id: pdb.id }, { pagoUltimaConsulta: null } as any);
+  await repo.update({ id: pdc.id }, { pagoUltimaConsulta: null } as any);
+  avisos.length = 0;
+  let tickError: any = null;
+  try { await tickPagosOnline(ds, { ahora: new Date() }); } catch (e) { tickError = e; }
+  ok(!tickError, 'el tick no se corta', tickError?.message);
+  const qdb = await leer(pdb.id);
+  ok(qdb.estadoPago === EstadoPagoOnline.PENDIENTE && qdb.pagoId == null && qdb.estado === EstadoPedidoOnline.PENDIENTE_PAGO, 'el pedido con el pago repetido no se da por pagado', [qdb.estado, qdb.estadoPago, qdb.pagoId]);
+  ok((await leer(pdc.id)).estadoPago === EstadoPagoOnline.PAGADO, 'los demás pedidos del ciclo se confirman igual');
+  ok(avisos.some((a) => a.includes(pdb.numero) && a.includes('ya figura en otro pedido')), 'se avisa al personal', avisos);
+  const vdb = await verificarPagoPedido(ds, pdb.id);
+  ok(vdb.error === 'pago_id_duplicado', 'la verificación directa devuelve pago_id_duplicado', vdb);
+  ok((await ds.getRepository(PagoOnlineEvento).find({ where: { pedidoOnlineId: pdb.id } as any })).some((e: any) => e.estadoProveedor === 'pago_id_duplicado'), 'queda registrado el evento');
+
   console.log('Interruptor apagado y credenciales');
   await cfgRepo.update({ id: cfg.id }, { pagoOnlineActivo: false } as any);
   ok(!(await pagoOnlineDisponible(ds)), 'apagado: no se ofrece a pedidos nuevos');

@@ -252,7 +252,29 @@ export async function verificarPagoPedido(
   return aplicarResultado(ds, p, res, ahora);
 }
 
+/** Violación del índice único (pago_proveedor, pago_id): SQLite y Postgres. */
+function esPagoIdDuplicado(e: any): boolean {
+  const msg = String(e?.message || e || '');
+  return e?.code === '23505' || /UNIQUE constraint failed: pedidos_online\.pago/i.test(msg) || msg.includes('UQ_pedidos_online_pago_id');
+}
+
 async function aplicarResultado(ds: DataSource, p: PedidoOnline, res: ResultadoPago, ahora: Date): Promise<VerificacionResultado> {
+  try {
+    return await aplicarResultadoSinCaptura(ds, p, res, ahora);
+  } catch (e: any) {
+    // F5 (plan §14): el mismo pago de uPay ya está asignado a otro pedido. No se da por pagado
+    // este, se registra y se avisa; el ciclo del job sigue con los demás.
+    if (!(res.tipo === 'PAGADO' && esPagoIdDuplicado(e))) throw e;
+    await registrar(ds, p, 'ERROR', 'pago_id_duplicado', { paymentId: res.paymentId });
+    await avisarPersonal(
+      `Pedido ${p.numero}: uPay informa el pago ${res.paymentId}, que ya figura en otro pedido. No se dio por pagado; revisalo en uPay.`,
+      `pago-duplicado-${p.id}-${res.paymentId}`,
+    );
+    return { ...(await estadoGuardado(ds, p.id)), error: 'pago_id_duplicado' };
+  }
+}
+
+async function aplicarResultadoSinCaptura(ds: DataSource, p: PedidoOnline, res: ResultadoPago, ahora: Date): Promise<VerificacionResultado> {
   const repo = ds.getRepository(PedidoOnline);
   const cfg = await getCfg(ds);
   const base = { success: true, estado: p.estado, estadoPago: p.estadoPago ?? null } as VerificacionResultado;
