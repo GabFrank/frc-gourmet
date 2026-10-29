@@ -209,7 +209,14 @@ async function resolveAdicionales(
     total += precio;
     detalle.push({ id: ad.id, nombre: ad.nombre, precio });
   }
+  // F5 (auditoría A-F2-2): un adicional pedido que no corresponde (a los sabores elegidos o
+  // inactivo) ya no se descarta en silencio: el cliente lo vio en el carrito y lo pagaría.
+  for (const id of wanted) if (!vistos.has(id)) throw new AdicionalInvalidoError(id);
   return { total, detalle };
+}
+
+export class AdicionalInvalidoError extends Error {
+  constructor(public readonly adicionalId: number) { super('adicional_invalido'); }
 }
 
 async function siguienteNumero(repo: any): Promise<string> {
@@ -402,7 +409,13 @@ export function registerPedidosOnlinePedidosHandlers(
       // Adicionales validados contra el catálogo (precio del server, no del cliente).
       const adicionalIds: number[] = Array.isArray(it.adicionalIds) ? it.adicionalIds : [];
       const opcionRecetaIds = opcion.recetaIds ?? (opcion.recetaId ? [opcion.recetaId] : []);
-      const adic = await resolveAdicionales(dataSource, producto, opcionRecetaIds, adicionalIds);
+      let adic: Awaited<ReturnType<typeof resolveAdicionales>>;
+      try {
+        adic = await resolveAdicionales(dataSource, producto, opcionRecetaIds, adicionalIds);
+      } catch (e) {
+        if (e instanceof AdicionalInvalidoError) return { success: false, error: `adicional_invalido:${producto.nombre}` };
+        throw e;
+      }
 
       // Observaciones predefinidas elegidas (solo se guardan como snapshot).
       const observaciones: string[] = Array.isArray(it.observaciones)
@@ -773,7 +786,7 @@ export async function materializarTrasPago(dataSource: DataSource, pedidoId: num
       const { dispatchEvento } = await import('../services/notificacion.service');
       await dispatchEvento('TIENDA_PAGO_ONLINE', {
         asunto: 'Tienda online: pedido pagado sin venta',
-        texto: `Pedido ${p?.numero ?? pedidoId} pagado con tarjeta y aceptado, pero no se pudo cargar la venta (${e?.message || e}). Abrí caja y usá «Reintentar» en Pedidos online.`,
+        texto: `Pedido ${p?.numero ?? pedidoId} pagado con tarjeta y aceptado, pero no se pudo cargar la venta (${e?.message || e}). Abrí caja y usá «Enviar a cocina» en Pedidos online.`,
         dedupeKey: `sin-venta-${pedidoId}`,
       });
     } catch { /* el aviso es best-effort */ }

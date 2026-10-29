@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { In } from 'typeorm';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
+import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zona-delivery.entity';
 import { Delivery } from '../../src/app/database/entities/ventas/delivery.entity';
 import { EstadoPedidoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
@@ -140,11 +141,31 @@ export function registerPedidosOnlineAdminHandlers(
     if (pedido.estado !== EstadoPedidoOnline.RECIBIDO) {
       return { success: false, error: 'estado_invalido', estadoActual: pedido.estado };
     }
-    pedido.estado = EstadoPedidoOnline.ACEPTADO;
-    pedido.fechaAceptado = new Date();
-    // Vínculo a una venta ya creada a mano (compat; el camino normal materializa acá).
-    if (data?.ventaId) pedido.ventaId = data.ventaId;
-    const saved = await repo().save(pedido);
+    // F5 (auditoría C2/M-F2-7): sin una caja abierta de quien acepta no se acepta. Antes el
+    // pedido quedaba ACEPTADO sin venta (invisible para el PdV) o caía en una caja ajena.
+    if (!data?.ventaId) {
+      const cajaId = Number(data?.cajaId) || 0;
+      const caja = cajaId ? await dataSource.getRepository(Caja).findOne({ where: { id: cajaId } }) : null;
+      if (!caja || caja.estado !== CajaEstado.ABIERTO) {
+        return { success: false, error: 'sin_caja' };
+      }
+    }
+    // Transición atómica RECIBIDO → ACEPTADO (F5, M-F2-8): un rechazo o una aceptación
+    // concurrente gana una sola vez.
+    const upd = await repo().createQueryBuilder().update(PedidoOnline)
+      .set({
+        estado: EstadoPedidoOnline.ACEPTADO,
+        fechaAceptado: new Date(),
+        // Vínculo a una venta ya creada a mano (compat; el camino normal materializa acá).
+        ...(data?.ventaId ? { ventaId: Number(data.ventaId) } : {}),
+      } as any)
+      .where('id = :id AND estado = :est', { id: pedido.id, est: EstadoPedidoOnline.RECIBIDO })
+      .execute();
+    if (!upd.affected) {
+      const actual = await repo().findOne({ where: { id: pedidoId } });
+      return { success: false, error: 'estado_invalido', estadoActual: actual?.estado };
+    }
+    const saved = (await repo().findOne({ where: { id: pedidoId } }))!;
 
     // Materializar en la misma acción: crear la Venta y mandar a cocina.
     // Best-effort a propósito: un problema de caja no debe deshacer la
@@ -340,6 +361,12 @@ export function registerPedidosOnlineAdminHandlers(
     const permitidos = TRANSICIONES[pedido.estado] || [];
     if (!permitidos.includes(nuevoEstado as EstadoPedidoOnline)) {
       return { success: false, error: 'transicion_invalida', estadoActual: pedido.estado, permitidos };
+    }
+    // F5 (auditoría C2): un pedido aceptado sin venta no avanza a mano: primero «Enviar a
+    // cocina» (que crea la venta). Si no, quedaba en preparación sin cuenta ni comanda.
+    if (pedido.estado === EstadoPedidoOnline.ACEPTADO && !pedido.ventaId
+        && nuevoEstado !== EstadoPedidoOnline.RECHAZADO && nuevoEstado !== EstadoPedidoOnline.CANCELADO) {
+      return { success: false, error: 'sin_venta', estadoActual: pedido.estado };
     }
 
     // Si el pedido tiene un Delivery detrás, la transición equivalente se delega

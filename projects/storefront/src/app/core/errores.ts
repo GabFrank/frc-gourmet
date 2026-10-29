@@ -7,6 +7,7 @@ const MENSAJES: Record<string, string> = {
   producto_no_disponible: 'Uno de los productos ya no está disponible. Revisá tu pedido.',
   producto_inexistente: 'Uno de los productos ya no está en la carta. Revisá tu pedido.',
   opcion_invalida: 'Una de las opciones elegidas ya no está disponible. Revisá tu pedido.',
+  adicional_invalido: 'Uno de los adicionales elegidos no corresponde a ese producto o ya no está disponible. Revisá tu pedido.',
   sabor_o_tamano_invalido: 'Uno de los sabores o tamaños ya no está disponible. Revisá tu pedido.',
   demasiados_sabores: 'Elegiste más sabores de los permitidos.',
   cantidad_excedida: 'La cantidad de un producto es demasiado grande.',

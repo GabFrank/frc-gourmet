@@ -9,7 +9,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { RepositoryService } from '../../../database/repository.service';
 import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
-import { of } from 'rxjs';
+import { firstValueFrom, of } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
 import { AuthService } from '../../../services/auth.service';
 
@@ -90,8 +90,12 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
    * cuenta de la mesa y lo manda a cocina. Resuelve la única caja abierta; si hay
    * más de una, avisa (habría que materializar desde el PdV de esa caja).
    */
-  enviarACocina(p: any): void {
-    this.api.callIpc('materializar-pedido-online-en-venta', p.id).then((res: any) => {
+  async enviarACocina(p: any): Promise<void> {
+    const usuarioId = this.auth.currentUser?.id;
+    const caja: any = usuarioId
+      ? await firstValueFrom(this.repo.getCajaAbiertaByUsuario(usuarioId).pipe(catchError(() => of(null))))
+      : null;
+    this.api.callIpc('materializar-pedido-online-en-venta', p.id, caja?.id ? { cajaId: caja.id } : undefined).then((res: any) => {
       if (res?.ventaId) {
         this.snack.open(`Pedido ${p.numero} enviado a cocina`, 'OK', { duration: 2500 });
         this.cargar(true);
@@ -101,6 +105,8 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
     }).catch((e: any) => {
       const msg = String(e?.message || e);
       const amigable = /no_hay_caja_abierta/.test(msg) ? 'No hay una caja abierta.'
+        : /pedido_sin_pago_confirmado/.test(msg) ? 'El pago con tarjeta todavía no está confirmado.'
+        : /pedido_no_aceptado|no_materializable/.test(msg) ? 'Primero hay que aceptar el pedido.'
         : /caja_ambigua/.test(msg) ? 'Hay más de una caja abierta; abrí el pedido desde el PdV de la caja correspondiente.'
         : msg;
       this.snack.open('No se pudo enviar a cocina: ' + amigable, 'OK', { duration: 5000 });
@@ -160,6 +166,8 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
             this.snack.open(`Pedido ${p.numero} aceptado`, 'OK', { duration: 2500 });
           }
           this.cargar(true);
+        } else if (res?.error === 'sin_caja') {
+          this.snack.open('Para aceptar un pedido tenés que tener tu caja abierta.', 'OK', { duration: 5000 });
         } else {
           this.snack.open('No se pudo aceptar: ' + (res?.error || ''), 'OK', { duration: 3500 });
         }
