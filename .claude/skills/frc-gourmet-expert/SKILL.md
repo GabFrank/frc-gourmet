@@ -51,6 +51,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | **Modo cliente/servidor** (F4 standalone/server/client, Fastify, HTTP routing, device_id) | [architecture/cliente-servidor.md](architecture/cliente-servidor.md) |
 | **Cliente Mobile (PWA)** (`projects/mobile`, shim HTTP→/api/rpc, shell mobile, cobertura admin) | [architecture/mobile-pwa.md](architecture/mobile-pwa.md) |
 | **Setup en PC nueva / Postgres** (la app crea la DB, configurar, modos, primer login) | [workflows/setup-pc-nueva.md](workflows/setup-pc-nueva.md) |
+| **Instalación + carga inicial por un agente** (entrevista, modo server, `/api/rpc` con JWT, orden de carga, payloads) | [`docs/runbooks/RUNBOOK-INSTALACION-Y-CARGA-INICIAL.md`](../../../docs/runbooks/RUNBOOK-INSTALACION-Y-CARGA-INICIAL.md) |
 | **Release y deploy** (semantic-release, canales, GitHub Actions, auto-update, deploy a un local real) | [workflows/release-y-deploy.md](workflows/release-y-deploy.md) |
 | `main.ts`, ciclo de vida Electron, custom protocols | [architecture/electron-bootstrap.md](architecture/electron-bootstrap.md) |
 | Tabs, sidenav, layout principal, ThemeService | [architecture/frontend-shell.md](architecture/frontend-shell.md) |
