@@ -82,3 +82,14 @@ export async function revokeCustomerRefreshToken(dataSource: DataSource, plain: 
   await repo.update({ id: found.id }, { revokedAt: new Date() });
   return true;
 }
+
+/** Revoca todas las sesiones vigentes de una cuenta (cambio de contraseña, toma por Google). */
+export async function revokeAllCustomerRefreshTokens(dataSource: DataSource, cuentaId: number): Promise<number> {
+  const res = await dataSource.getRepository(CustomerRefreshToken)
+    .createQueryBuilder()
+    .update()
+    .set({ revokedAt: new Date() })
+    .where('cuenta_cliente_id = :id AND revoked_at IS NULL', { id: cuentaId })
+    .execute();
+  return res.affected ?? 0;
+}

@@ -7,6 +7,7 @@
   border: 1.5px solid var(--sf-border); background: var(--sf-surface);
   color: var(--sf-text); font-weight: 600; font-size: 14px;
 }
+.metodo-tab { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .metodo-tab.active { border-color: var(--sf-primary); color: var(--sf-primary); background: var(--sf-primary-surface); }
 
 .lbl { display: block; font-size: 13px; color: var(--sf-text-muted); margin: 12px 0 4px; }

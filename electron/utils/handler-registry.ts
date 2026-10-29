@@ -60,6 +60,8 @@ export interface HandlerInvocationContext {
   customerId?: number | null;
   /** IP de origen del request HTTP (para validaciones de red, ej. MESA_QR LAN). */
   clientIp?: string | null;
+  /** El request llegó por el túnel de Cloudflare (internet), no por la LAN. */
+  viaTunel?: boolean | null;
 }
 
 /**
@@ -98,6 +100,7 @@ export async function invokeHandlerWithContext(
   if (context?.deviceId != null) fakeEvent._deviceId = context.deviceId;
   if (context?.customerId != null) fakeEvent._customerId = context.customerId;
   if (context?.clientIp != null) fakeEvent._clientIp = context.clientIp;
+  if (context?.viaTunel != null) fakeEvent._viaTunel = !!context.viaTunel;
   return fn(fakeEvent, ...args);
 }
 

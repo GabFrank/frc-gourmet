@@ -163,7 +163,9 @@ textarea.sf-input { height: auto; padding: 12px 14px; resize: vertical; }
 
 /* ---- Barra sticky inferior (CTA / carrito) ---- */
 .sf-sticky-bar {
-  position: sticky; bottom: 0; left: 0; right: 0;
+  /* fixed: con poco contenido, sticky quedaba flotando a media pantalla */
+  position: fixed; bottom: 0; left: 0; right: 0;
+  max-width: var(--sf-max); margin: 0 auto;
   background: var(--sf-surface);
   box-shadow: var(--sf-shadow-sticky);
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom));

@@ -113,6 +113,16 @@ export class PedidoOnline extends BaseModel {
   @Column({ name: 'fecha_entregado', nullable: true })
   fechaEntregado?: Date;
 
+  // Clave de idempotencia del cliente (uuid por intento). Única por cuenta o, si es
+  // invitado, por mesa: índices únicos parciales de la migración TiendaOnlineSeguridad.
+  @Column({ name: 'idempotency_key', type: 'varchar', length: 64, nullable: true })
+  idempotencyKey?: string;
+
+  // F2 (M6): SHA-256 del token de seguimiento del invitado de mesa. El token en claro
+  // se devuelve una sola vez al crear el pedido; acá nunca se guarda.
+  @Column({ name: 'seguimiento_token_hash', type: 'varchar', length: 64, nullable: true, select: false })
+  seguimientoTokenHash?: string;
+
   @OneToMany('PedidoOnlineItem', 'pedido', { cascade: true })
   items?: PedidoOnlineItem[];
 }
