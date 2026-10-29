@@ -74,7 +74,8 @@ import { condicionCanal, esCanalValido } from '../utils/canal-venta.utils';
 import { limiteFechaSqlite } from '../utils/db-query';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
-import { EstadoPedidoOnline, TipoPedidoOnline, EstadoPagoOnline, FORMA_PAGO_UPAY } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { EstadoPedidoOnline, TipoPedidoOnline, EstadoPagoOnline, MetodoPagoOnline, FORMA_PAGO_UPAY } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { TiendaOnlineConfig } from '../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { PagoEstado } from '../../src/app/database/entities/compras/estado.enum';
@@ -226,6 +227,30 @@ async function assertNoVentaAbiertaEnMesa(
  * validación de mesa (autoservicio habilitado + LAN). El ipc handler la envuelve
  * con ensurePermission para el uso manual del cajero.
  */
+/**
+ * F5 (auditoría C1): por qué un pedido online NO puede pasar a venta/cocina, o null si puede.
+ * - Con tarjeta (UPAY): solo con el pago confirmado (PAGADO).
+ * - ACEPTADO: sí. RECIBIDO: solo de mesa (QR) o con aceptación automática del local.
+ * - Cualquier otro estado (PENDIENTE_PAGO, RECHAZADO, CANCELADO, en curso...): no.
+ */
+export function motivoNoMaterializable(
+  p: Pick<PedidoOnline, 'estado' | 'tipoPedido' | 'mesaId' | 'metodoPago' | 'estadoPago'>,
+  aceptacionAutomatica: boolean,
+): string | null {
+  if (p.estado === EstadoPedidoOnline.RECHAZADO || p.estado === EstadoPedidoOnline.CANCELADO) {
+    return 'pedido_rechazado_durante_materializacion';
+  }
+  if (p.metodoPago === MetodoPagoOnline.UPAY && p.estadoPago !== EstadoPagoOnline.PAGADO) {
+    return 'pedido_sin_pago_confirmado';
+  }
+  if (p.estado === EstadoPedidoOnline.ACEPTADO) return null;
+  if (p.estado === EstadoPedidoOnline.RECIBIDO) {
+    const esMesa = !!p.mesaId || p.tipoPedido === TipoPedidoOnline.MESA_QR;
+    return esMesa || aceptacionAutomatica ? null : 'pedido_no_aceptado';
+  }
+  return 'pedido_en_estado_no_materializable';
+}
+
 export async function materializarPedidoOnlineEnVenta(
   dataSource: DataSource,
   pedidoId: number,
@@ -258,6 +283,13 @@ export async function materializarPedidoOnlineEnVenta(
     // Idempotencia autoritativa BAJO lock: evita doble materialización del mismo pedido.
     if (pedido.ventaId) {
       return { ventaId: pedido.ventaId, yaMaterializado: true, itemsCreados: 0, observacionesNoMapeadas: [] };
+    }
+
+    // F5 (C1): chequeo temprano (el autoritativo va dentro de la tx, más abajo).
+    {
+      const cfgPre = await dataSource.getRepository(TiendaOnlineConfig).findOne({ where: {}, order: { id: 'ASC' } as any });
+      const motivoPre = motivoNoMaterializable(pedido, !!cfgPre?.aceptacionAutomatica);
+      if (motivoPre) throw new Error(motivoPre);
     }
 
     // Caja: la del parámetro o la única caja abierta.
@@ -582,9 +614,14 @@ export async function materializarPedidoOnlineEnVenta(
     // ya impresa: el operador rechazó y la cocina cocinó igual.
     const estadoActual = await qr.manager.getRepository(PedidoOnline).findOne({
       where: { id: pedidoId },
-      select: ['id', 'estado', 'ventaId'],
+      select: ['id', 'estado', 'ventaId', 'tipoPedido', 'mesaId', 'metodoPago', 'estadoPago'],
     });
     if (!estadoActual) throw new Error(`Pedido online ${pedidoId} no encontrado`);
+    // F5 (auditoría C1): solo va a cocina un pedido aceptado (o de mesa / con aceptación
+    // automática) y, si es con tarjeta, ya pagado. Se chequea acá, dentro de la tx.
+    const cfgTienda = await qr.manager.getRepository(TiendaOnlineConfig).findOne({ where: {}, order: { id: 'ASC' } as any });
+    const motivoNo = motivoNoMaterializable(estadoActual, !!cfgTienda?.aceptacionAutomatica);
+    if (motivoNo) throw new Error(motivoNo);
     if (
       estadoActual.estado === EstadoPedidoOnline.RECHAZADO ||
       estadoActual.estado === EstadoPedidoOnline.CANCELADO

@@ -10,7 +10,7 @@
  *   `pagoOnlineActivo` esté apagado: apagarlo solo deja de ofrecer el pago a pedidos nuevos.
  */
 import { randomUUID } from 'crypto';
-import { DataSource, In, IsNull, Not } from 'typeorm';
+import { Brackets, DataSource, In, IsNull, Not } from 'typeorm';
 import { PedidoOnline } from '../../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { PagoOnlineEvento } from '../../../src/app/database/entities/pedidos-online/pago-online-evento.entity';
 import { TiendaOnlineConfig } from '../../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
@@ -141,8 +141,21 @@ export async function iniciarPagoPedido(
     if (p.estadoPago !== EstadoPagoOnline.FALLIDO) return { success: false, error: 'pago_en_curso' };
     intento += 1;
     idem = randomUUID();
+    // F5 (auditoría A-pay3): se RECLAMA el intento con un UPDATE condicionado. Dos reintentos a
+    // la vez abrían dos sesiones en uPay y la que no quedaba guardada seguía siendo pagable.
+    const claim = await repo.createQueryBuilder().update(PedidoOnline)
+      .set({
+        pagoIntento: intento, pagoIdemKey: idem, pagoProveedor: PROVEEDOR_UPAY,
+        estadoPago: EstadoPagoOnline.PENDIENTE, pagoSesionId: null, pagoCheckoutUrl: null,
+      } as any)
+      .where('id = :id AND estado_pago = :fal AND pago_sesion_id = :ses AND COALESCE(pago_intento, 1) = :prev', {
+        id: p.id, fal: EstadoPagoOnline.FALLIDO, ses: p.pagoSesionId, prev: p.pagoIntento ?? 1,
+      })
+      .execute();
+    if (!claim.affected) return { success: false, error: 'pago_en_curso' };
+  } else {
+    await repo.update({ id: p.id }, { pagoIntento: intento, pagoIdemKey: idem, pagoProveedor: PROVEEDOR_UPAY } as any);
   }
-  await repo.update({ id: p.id }, { pagoIntento: intento, pagoIdemKey: idem, pagoProveedor: PROVEEDOR_UPAY } as any);
   p.pagoIntento = intento;
 
   const base = (opts.urlPublica || URL_PUBLICA_DEF).replace(/\/+$/, '');
@@ -372,33 +385,70 @@ export async function tickPagosOnline(
   const ahora = opts.ahora ?? new Date();
   const repo = ds.getRepository(PedidoOnline);
   let consultados = 0, pagados = 0;
-  const enEspera = await repo.find({
-    where: [
-      { estadoPago: In([EstadoPagoOnline.PENDIENTE, EstadoPagoOnline.FALLIDO]), pagoSesionId: Not(IsNull()) },
-      // Pago tardío posible: venció o se canceló hace menos de 1 día.
-      { estadoPago: EstadoPagoOnline.EXPIRADO, pagoSesionId: Not(IsNull()) },
-    ],
-    take: 50,
-    order: { id: 'ASC' },
-  });
+  // F5 (auditoría A-pay1/A-pay2): el filtro va en SQL y se ordena por la consulta más vieja,
+  // así 50 pedidos trabados no tapan a los nuevos. EXPIRADO se mira 24 h desde el vencimiento
+  // de la sesión (no desde updatedAt, que se renueva con cada consulta).
+  const hace24h = new Date(ahora.getTime() - 24 * 3600_000);
+  const enEspera = await repo.createQueryBuilder('p')
+    .where('p.pago_sesion_id IS NOT NULL')
+    .andWhere(new Brackets((w) => {
+      w.where('p.estado_pago IN (:...vivos)', { vivos: [EstadoPagoOnline.PENDIENTE, EstadoPagoOnline.FALLIDO] })
+        .orWhere('(p.estado_pago = :exp AND p.pago_expira_en > :hace24h)', { exp: EstadoPagoOnline.EXPIRADO, hace24h });
+    }))
+    .orderBy('p.pago_ultima_consulta', 'ASC', 'NULLS FIRST')
+    .addOrderBy('p.id', 'ASC')
+    .take(50)
+    .getMany();
   for (const p of enEspera) {
-    if (p.estadoPago === EstadoPagoOnline.EXPIRADO && ahora.getTime() - new Date(p.updatedAt).getTime() > 24 * 3600_000) continue;
-    const ultima = p.pagoUltimaConsulta ? new Date(p.pagoUltimaConsulta).getTime() : 0;
-    const vence = p.pagoExpiraEn ? new Date(p.pagoExpiraEn).getTime() : Infinity;
-    // Vencida la sesión: una última consulta enseguida (sin esperar la cadencia).
-    const debida = ahora.getTime() - ultima >= cadenciaMs(p.createdAt, ahora) || (ahora.getTime() > vence && ultima <= vence);
-    if (!debida) continue;
-    consultados++;
-    const r = await verificarPagoPedido(ds, p.id, { ahora });
-    if (r.recienPagado) {
-      pagados++;
-      if (r.aceptadoAutomatico && opts.alPagar) {
-        try {
-          await opts.alPagar(p.id);
-        } catch (e: any) {
-          console.warn('[pagos-online] materializar tras pago falló:', e?.message || e);
+    try {
+      const ultima = p.pagoUltimaConsulta ? new Date(p.pagoUltimaConsulta).getTime() : 0;
+      const vence = p.pagoExpiraEn ? new Date(p.pagoExpiraEn).getTime() : Infinity;
+      // Vencida la sesión: una última consulta enseguida (sin esperar la cadencia).
+      const debida = ahora.getTime() - ultima >= cadenciaMs(p.createdAt, ahora) || (ahora.getTime() > vence && ultima <= vence);
+      if (!debida) continue;
+      consultados++;
+      const r = await verificarPagoPedido(ds, p.id, { ahora });
+      if (r.recienPagado) {
+        pagados++;
+        if (r.aceptadoAutomatico && opts.alPagar) {
+          try {
+            await opts.alPagar(p.id);
+          } catch (e: any) {
+            console.warn('[pagos-online] materializar tras pago falló:', e?.message || e);
+          }
         }
+        continue;
       }
+      // F5 (M-pay1): un pago rechazado que nadie reintenta no queda vivo para siempre. Pasadas
+      // 2 h de la creación y con la sesión vencida, se cancela (la consulta de recién fue la última).
+      if (r.estadoPago === EstadoPagoOnline.FALLIDO && r.estado === EstadoPedidoOnline.PENDIENTE_PAGO
+          && ahora.getTime() - new Date(p.createdAt).getTime() > 2 * 3600_000 && ahora.getTime() > vence) {
+        const c = await repo.createQueryBuilder().update(PedidoOnline)
+          .set({
+            estadoPago: EstadoPagoOnline.EXPIRADO, estado: EstadoPedidoOnline.CANCELADO,
+            motivoRechazo: 'El pago con tarjeta fue rechazado y no se reintentó a tiempo.',
+          } as any)
+          .where('id = :id AND estado = :est AND estado_pago = :fal', {
+            id: p.id, est: EstadoPedidoOnline.PENDIENTE_PAGO, fal: EstadoPagoOnline.FALLIDO,
+          })
+          .execute();
+        if (c.affected) await registrar(ds, p, 'EXPIRADO', 'fallido sin reintento', null);
+      }
+    } catch (e: any) {
+      // Un pedido con un problema (p. ej. pagoId duplicado, M-pay5) no corta el ciclo de los demás.
+      console.warn(`[pagos-online] pedido ${p.id}:`, e?.message || e);
+    }
+  }
+
+  // F5 (auditoría C2): pagado y aceptado (aceptación automática) pero sin venta, p. ej. porque
+  // no había caja abierta: se reintenta en cada ciclo; el aviso al personal se deduplica.
+  if (opts.alPagar) {
+    const sinVenta = await repo.find({
+      where: { estadoPago: EstadoPagoOnline.PAGADO, estado: EstadoPedidoOnline.ACEPTADO, ventaId: IsNull() },
+      take: 20, order: { id: 'ASC' },
+    });
+    for (const p of sinVenta) {
+      try { await opts.alPagar(p.id); } catch (e: any) { console.warn('[pagos-online] reintento sin venta:', e?.message || e); }
     }
   }
 
