@@ -50,7 +50,10 @@ async function main() {
   const cols = await columnas();
   ok(cols.includes('idempotency_key'), 'up agrega pedidos_online.idempotency_key');
   const meta = ds.entityMetadatas.find((m) => m.tableName === 'pedidos_online')!;
-  const ent = meta.columns.map((c) => c.databaseName).sort();
+  // Columnas que agregan migraciones posteriores (F2) no están todavía en este punto.
+  const POSTERIORES = ['seguimiento_token_hash'];
+  const entTodas = meta.columns.map((c) => c.databaseName).sort();
+  const ent = entTodas.filter((c) => !POSTERIORES.includes(c));
   ok(JSON.stringify(ent) === JSON.stringify([...cols].sort()), 'las columnas coinciden con la entidad', [ent, cols]);
   const idx = await indices();
   ok(['UQ_pedidos_online_cuenta_idem', 'UQ_pedidos_online_mesa_idem', 'IDX_pedidos_online_cuenta_cliente'].every((n) => idx.includes(n)), 'up crea los 3 índices', idx);
@@ -76,6 +79,20 @@ async function main() {
   ok(!(await indices()).some((n) => /idem|IDX_pedidos_online_cuenta_cliente/.test(n)), 'down quita los índices');
   await hasta();
   ok((await columnas()).includes('idempotency_key'), 'up de nuevo la vuelve a crear');
+
+  // F2: TiendaSeguimientoMesa (columna del hash de seguimiento + índice), up / down / up.
+  await ds.runMigrations({ transaction: 'each' });
+  const ultima = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
+  ok(/TiendaSeguimientoMesa/.test(String(ultima)), 'F2: TiendaSeguimientoMesa es la última migración', ultima);
+  ok((await columnas()).includes('seguimiento_token_hash'), 'F2 up agrega pedidos_online.seguimiento_token_hash');
+  ok((await indices()).some((n) => /IDX_pedidos_online_seguimiento/.test(n)), 'F2 up crea el índice de seguimiento');
+  ok((await columnas()).includes('idempotency_key'), 'F2 no toca idempotency_key');
+  ok(JSON.stringify(entTodas) === JSON.stringify([...(await columnas())].sort()), 'F2: las columnas coinciden con la entidad completa');
+  await ds.undoLastMigration({ transaction: 'each' });
+  ok(!(await columnas()).includes('seguimiento_token_hash'), 'F2 down quita la columna');
+  ok(!(await indices()).some((n) => /IDX_pedidos_online_seguimiento/.test(n)), 'F2 down quita el índice');
+  await ds.runMigrations({ transaction: 'each' });
+  ok((await columnas()).includes('seguimiento_token_hash'), 'F2 up de nuevo la vuelve a crear');
 
   await ds.destroy();
   console.log(`\n[tienda-migracion] ${passed} OK, ${failed} fallas`);
