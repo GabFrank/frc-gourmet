@@ -16,8 +16,27 @@ export function getGoogleClientId(): string | null {
   return googleClientIdOverride || process.env['GOOGLE_CLIENT_ID'] || null;
 }
 
-/** Lee la config + el token del keychain y actualiza lo que usan el login y el envío. */
-export async function cargarCredencialesTienda(dataSource: DataSource): Promise<void> {
+// Las cargas se encadenan: dos guardados seguidos no pueden dejar en memoria la lectura vieja.
+let cola: Promise<void> = Promise.resolve();
+
+/**
+ * Lee la config + el token del keychain y actualiza lo que usan el login y el envío.
+ * La promesa devuelta sirve también para esperar la carga inicial.
+ */
+export function cargarCredencialesTienda(dataSource: DataSource): Promise<void> {
+  const siguiente = cola.then(() => leerYAplicar(dataSource));
+  cola = siguiente.catch((e) => {
+    console.warn('[tienda-ingreso] no se pudieron cargar las credenciales:', e?.message || e);
+  });
+  return siguiente;
+}
+
+/** Espera las cargas pendientes (la inicial incluida). Nunca rechaza. */
+export function credencialesTiendaListas(): Promise<void> {
+  return cola;
+}
+
+async function leerYAplicar(dataSource: DataSource): Promise<void> {
   const cfg = await dataSource.getRepository(TiendaOnlineConfig).findOne({ where: {}, order: { id: 'ASC' } });
   const token = await getWhatsappToken();
   setWhatsappOverrides({

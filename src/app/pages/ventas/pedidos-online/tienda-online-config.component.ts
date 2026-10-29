@@ -81,7 +81,8 @@ import { RepositoryService } from '../../../database/repository.service';
 
         <h3 class="sub">Ingreso de clientes</h3>
         <p class="ayuda">Vacío = se usan las variables de entorno del servidor. El token se guarda cifrado en el
-          servidor y nunca se vuelve a mostrar.</p>
+          servidor y nunca se vuelve a mostrar. La plantilla tiene que ser de categoría <b>Autenticación</b>, con
+          el botón «Copiar código».</p>
         <div class="proveedor">
           <div class="proveedor-head">
             <span class="prov-nombre">WhatsApp (código de ingreso)</span>
@@ -117,7 +118,7 @@ import { RepositoryService } from '../../../database/repository.service';
             <button mat-stroked-button *ngIf="ingreso.whatsappTokenGuardado" (click)="borrarToken()" [disabled]="guardando">
               <mat-icon>key_off</mat-icon> Quitar token
             </button>
-            <mat-form-field appearance="outline" class="tel-prueba">
+            <mat-form-field appearance="outline" class="tel-prueba" subscriptSizing="dynamic">
               <mat-label>Teléfono de prueba</mat-label>
               <input matInput [(ngModel)]="telefonoPrueba" placeholder="595981123456" maxlength="20" inputmode="tel">
             </mat-form-field>
@@ -170,7 +171,7 @@ import { RepositoryService } from '../../../database/repository.service';
     .proveedor .grid { margin-top: 10px; }
     .fila-acciones { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
     .fila-acciones button { white-space: nowrap; }
-    .tel-prueba { width: 220px; margin-bottom: -1.25em; }
+    .tel-prueba { width: 220px; }
     .full-width { width: 100%; margin-top: 10px; }
     .hint-error { color: var(--error-color); }
     @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
@@ -200,6 +201,7 @@ export class TiendaOnlineConfigComponent implements OnInit {
     whatsapp_no_configurado: 'WhatsApp no está configurado',
     telefono_invalido: 'Teléfono inválido: con código de país, solo números',
     envio_fallido: 'WhatsApp rechazó el envío',
+    demasiadas_pruebas: 'Esperá un minuto entre pruebas (máximo 5 por hora)',
   };
 
   private mensajeError(res: any): string {
@@ -239,8 +241,24 @@ export class TiendaOnlineConfigComponent implements OnInit {
   }
 
   borrarToken(): void {
+    if (!confirm('¿Quitar el token de WhatsApp? El ingreso por código deja de funcionar hasta cargar otro.')) return;
     this.tokenNuevo = '';
-    this.guardar({ whatsappTokenBorrar: true });
+    this.guardando = true;
+    this.repo.updateTiendaOnlineConfig({ whatsappTokenBorrar: true }).subscribe({
+      next: (res) => {
+        this.guardando = false;
+        if (res?.success) {
+          this.ingreso = res.config?.ingreso || {};
+          this.snack.open('Token quitado', 'OK', { duration: 2500 });
+        } else {
+          this.snack.open(this.mensajeError(res), 'OK', { duration: 4000 });
+        }
+      },
+      error: (e) => {
+        this.guardando = false;
+        this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 });
+      },
+    });
   }
 
   probarWhatsapp(): void {

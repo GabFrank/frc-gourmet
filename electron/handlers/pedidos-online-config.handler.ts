@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { otpWhatsappDisponible, sendWhatsappOtp, whatsappCloudConfigurado } from '../utils/whatsapp-sender';
-import { cargarCredencialesTienda, getGoogleClientId } from '../utils/tienda-ingreso.utils';
+import { cargarCredencialesTienda, credencialesTiendaListas, getGoogleClientId } from '../utils/tienda-ingreso.utils';
 import { almacenSeguroDisponible, getWhatsappToken, setWhatsappToken } from '../utils/tienda-secrets.util';
 import { randomInt } from 'crypto';
 import { DataSource } from 'typeorm';
@@ -105,7 +105,7 @@ async function estadoIngreso(): Promise<any> {
 const RE_PHONE_ID = /^\d{6,30}$/;
 const RE_PLANTILLA = /^[a-z0-9_]{1,120}$/;
 const RE_IDIOMA = /^[a-z]{2,3}(_[A-Z]{2})?$/;
-const RE_GOOGLE_ID = /^[0-9a-z-]+\.apps\.googleusercontent\.com$/;
+const RE_GOOGLE_ID = /^[\w-]+\.apps\.googleusercontent\.com$/i;
 
 /**
  * Valida y aplica los campos de ingreso de clientes. Vacío = se borra el valor y vuelve a
@@ -141,12 +141,16 @@ export function registerPedidosOnlineConfigHandlers(
   getCurrentUser: () => any,
 ): void {
   // Credenciales de ingreso cargadas en la app (F3): prioridad sobre las de entorno.
-  cargarCredencialesTienda(dataSource).catch((e) =>
-    console.warn('[tienda-config] no se pudieron cargar las credenciales de ingreso:', e?.message || e),
-  );
+  // Los handlers que dependen de ellas esperan esta carga (credencialesTiendaListas).
+  cargarCredencialesTienda(dataSource).catch(() => undefined);
+
+  // «Probar envío» manda una plantilla paga de Meta: como mucho 1 por minuto por teléfono y
+  // 5 por hora en total (en memoria; alcanza para probar y corta un uso en bucle).
+  const pruebasEnviadas: Array<{ telefono: string; en: number }> = [];
 
   // Público: el storefront lee la config.
   ipcMain.handle('get-tienda-online-config-public', async () => {
+    await credencialesTiendaListas();
     const pub = mapConfigPublic(await getTiendaConfig(dataSource));
     // Delivery solo si hay alguna zona activa dibujada: sin zona no se puede
     // cobrar el envío (PLAN-tienda-online A3).
@@ -160,6 +164,7 @@ export function registerPedidosOnlineConfigHandlers(
   // Admin: leer la config completa (para la pantalla).
   ipcMain.handle('get-tienda-online-config', async () => {
     await ensurePermission(dataSource, getCurrentUser, PERM);
+    await credencialesTiendaListas();
     const cfg = await getTiendaConfig(dataSource);
     return { ...cfg, abiertaAhora: estaAbierta(cfg), ingreso: await estadoIngreso() };
   });
@@ -193,15 +198,18 @@ export function registerPedidosOnlineConfigHandlers(
     const errIngreso = aplicarIngreso(cfg, data);
     if (errIngreso) return { success: false, error: errIngreso };
     // Token: solo escritura. Se manda para cambiarlo; `whatsappTokenBorrar` lo quita.
-    if (data.whatsappTokenBorrar) {
-      await setWhatsappToken('');
-    } else if (data.whatsappToken !== undefined && String(data.whatsappToken).trim()) {
-      if (!almacenSeguroDisponible()) return { success: false, error: 'almacen_seguro_no_disponible' };
-      const ok = await setWhatsappToken(String(data.whatsappToken).trim());
-      if (!ok) return { success: false, error: 'token_no_guardado' };
+    // Se valida antes y se escribe en el keychain después de guardar la fila, así un error
+    // al guardar no deja el token cambiado.
+    const tokenNuevo = data.whatsappToken !== undefined ? String(data.whatsappToken).trim() : '';
+    if (tokenNuevo && !data.whatsappTokenBorrar && !almacenSeguroDisponible()) {
+      return { success: false, error: 'almacen_seguro_no_disponible' };
     }
     const saved = await repo.save(cfg);
+    let tokenOk = true;
+    if (data.whatsappTokenBorrar) tokenOk = await setWhatsappToken('');
+    else if (tokenNuevo) tokenOk = await setWhatsappToken(tokenNuevo);
     await cargarCredencialesTienda(dataSource);
+    if (!tokenOk) return { success: false, error: 'token_no_guardado' };
     return { success: true, config: { ...saved, abiertaAhora: estaAbierta(saved), ingreso: await estadoIngreso() } };
   });
 
@@ -212,6 +220,12 @@ export function registerPedidosOnlineConfigHandlers(
     if (!whatsappCloudConfigurado()) return { success: false, error: 'whatsapp_no_configurado' };
     const telefono = String(data?.telefono ?? '').replace(/\D/g, '');
     if (telefono.length < 8 || telefono.length > 15) return { success: false, error: 'telefono_invalido' };
+    const ahora = Date.now();
+    while (pruebasEnviadas.length && ahora - pruebasEnviadas[0].en > 3_600_000) pruebasEnviadas.shift();
+    if (pruebasEnviadas.length >= 5 || pruebasEnviadas.some((p) => p.telefono === telefono && ahora - p.en < 60_000)) {
+      return { success: false, error: 'demasiadas_pruebas' };
+    }
+    pruebasEnviadas.push({ telefono, en: ahora });
     const codigo = String(randomInt(0, 1_000_000)).padStart(6, '0');
     const envio = await sendWhatsappOtp(telefono, codigo);
     if (!envio.ok) return { success: false, error: 'envio_fallido', detalle: envio.detail || null };
