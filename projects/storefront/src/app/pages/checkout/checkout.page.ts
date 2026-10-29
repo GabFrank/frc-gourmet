@@ -243,6 +243,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
       case 'falta_direccion': return 'Ingresá la dirección.';
       case 'falta_ubicacion_mapa': return 'Marcá en el mapa dónde entregamos.';
       case 'fuera_de_cobertura': return 'Todavía no llegamos a esa zona. Podés elegir Retiro, o escribirnos.';
+      case 'delivery_no_disponible': return 'Por ahora no hacemos delivery por la tienda. Podés elegir Retiro.';
       case 'monto_minimo_global': return `El pedido mínimo es ${res.montoMinimo}. Tu subtotal es ${res.subtotal}.`;
       case 'tienda_cerrada': return 'La tienda está cerrada en este momento.';
       case 'pickup_no_disponible': return 'El retiro no está disponible.';

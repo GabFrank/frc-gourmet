@@ -289,6 +289,12 @@ async function main() {
   ok(pPizza?.precioDesde === 45000, 'PIZZA: precioDesde global = 45000', pPizza?.precioDesde);
   ok(pPizza?.pizzaConfig?.maxSabores === 2 && pPizza?.pizzaConfig?.estrategia === 'MAYOR_PRECIO', 'PIZZA: pizzaConfig (max 2, MAYOR_PRECIO)', pPizza?.pizzaConfig);
 
+  // A3: sin zonas dibujadas no hay delivery (antes salía con envío gratis).
+  const cfgZonas = await pub('tienda.config', []);
+  ok(cfgZonas.result?.permiteDelivery === false, 'A3: sin zonas con polígono tienda.config.permiteDelivery=false', cfgZonas.result?.permiteDelivery);
+  const cotSin = await pub('envio.cotizar', [-25.3, -57.6]);
+  ok(cotSin.result?.cubierto === false && cotSin.result?.sinZonasDefinidas === true, 'A3: envio.cotizar sin zonas → no cubierto', cotSin.result);
+
   // 2a. Sin WhatsApp configurado y sin FRC_OTP_DEV: no hay login por código ni fuga del código
   //     (PLAN-tienda-online C1: antes devolvía devCodigo a cualquiera).
   const tel = '0981123456';
@@ -357,6 +363,13 @@ async function main() {
   }], token);
   ok(delivBajo.result?.error === 'monto_minimo_no_alcanzado', 'DELIVERY bajo mínimo → error', delivBajo.result?.error);
 
+  // A3: DELIVERY sin zona dibujada ni zona elegida → rechazado (antes envío 0).
+  const delivSinZona = await pub('pedido.crear', [{
+    tipoPedido: 'DELIVERY', direccionEntrega: 'Calle 1', latitud: -24.06, longitud: -54.31,
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 3 }],
+  }], token);
+  ok(delivSinZona.result?.error === 'delivery_no_disponible', 'A3: DELIVERY sin zonas → delivery_no_disponible', delivSinZona.result);
+
   // 8. DELIVERY válido (3×25000=75000 ≥ 50000) + envío 15000
   const deliv = await pub('pedido.crear', [{
     tipoPedido: 'DELIVERY', zonaDeliveryId: seeded.zona.id, direccionEntrega: 'Calle 1',
@@ -413,7 +426,7 @@ async function main() {
   // 16. config pública (default: abierta, ambos tipos)
   const cfgPub = await pub('tienda.config');
   ok(cfgPub.result?.abiertaAhora === true, 'tienda.config: abierta por default');
-  ok(cfgPub.result?.permitePickup === true && cfgPub.result?.permiteDelivery === true, 'ambos tipos habilitados por default');
+  ok(cfgPub.result?.permitePickup === true && cfgPub.result?.permiteDelivery === false, 'pickup por default; delivery apagado mientras no haya zona dibujada (A3)', cfgPub.result);
 
   // 17. refresh token: rota y emite nuevo access
   const ref1 = await pub('auth.refresh', [refreshTok]);
