@@ -13,6 +13,7 @@ import { IconComponent } from '../../core/icon.component';
 import { TipoPedido } from '../../core/models';
 import { GuaraniPipe, guarani } from '../../core/guarani.pipe';
 import { mensajeError } from '../../core/errores';
+import { esUrlCheckoutUpay } from '../../core/pago-online';
 
 declare const L: any;
 
@@ -41,6 +42,11 @@ export class CheckoutPage implements OnInit, OnDestroy {
   }
 
   tipo: TipoPedido = 'PICKUP';
+  /** F4: efectivo o tarjeta (uPay), solo si el local la ofrece. */
+  metodoPago: 'EFECTIVO' | 'UPAY' = 'EFECTIVO';
+  get pagoOnline(): boolean {
+    return !this.mesa.enMesa && !!this.config.config?.pagoOnline;
+  }
   direccion = '';
   referencia = '';
   notas = '';
@@ -244,7 +250,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
       direccionEntrega: this.tipo === 'DELIVERY' ? direccionFinal : null,
       referenciaDireccion: this.referencia.trim() || null,
       notas: this.notas.trim() || null,
-      metodoPago: 'EFECTIVO',
+      metodoPago: this.pagoOnline ? this.metodoPago : 'EFECTIVO',
     };
     if (this.faltaNombreCuenta) {
       const nombre = this.nombreCuenta.trim();
@@ -261,6 +267,12 @@ export class CheckoutPage implements OnInit, OnDestroy {
         if (res?.success) {
           if (this.faltaNombreCuenta && this.auth.cuenta) this.auth.cuenta.nombre = this.nombreCuenta.trim().toUpperCase();
           this.cart.limpiar();
+          // Tarjeta: a la página de pago de uPay (solo si la dirección es de uPay).
+          if (res.checkoutUrl) {
+            if (esUrlCheckoutUpay(res.checkoutUrl)) { window.location.href = res.checkoutUrl; return; }
+            this.router.navigate(['/pago', res.numero]);
+            return;
+          }
           this.router.navigate(['/mis-pedidos'], { queryParams: { nuevo: res.numero } });
         }
         else this.error = this.mensajeError(res);
@@ -305,6 +317,8 @@ export class CheckoutPage implements OnInit, OnDestroy {
       case 'mesa_no_habilitada': return 'La mesa no está habilitada. Pedile al mozo que active el autoservicio.';
       case 'fuera_de_red_local': return 'Para pedir en la mesa tenés que estar conectado al WiFi del local.';
       case 'falta_nombre': return 'Ingresá tu nombre para el pedido.';
+      case 'metodo_pago_no_disponible': return 'El pago con tarjeta no está disponible ahora. Elegí efectivo.';
+      case 'pago_no_iniciado': return 'No pudimos abrir el pago con tarjeta. Probá de nuevo o elegí efectivo.';
       default: return mensajeError(res?.error, 'No se pudo crear el pedido. Probá de nuevo.');
     }
   }
