@@ -28,6 +28,8 @@ import { registerPublicOperation } from '../server/public-routes';
 
 const OTP_TTL_MS = 5 * 60 * 1000; // 5 minutos
 const OTP_MAX_INTENTOS = 5;
+const OTP_MAX_POR_DIA_TELEFONO = 10;
+const otpMaxGlobalDia = (): number => Number(process.env['FRC_OTP_MAX_GLOBAL_DIA']) || 300;
 const OTP_MAX_POR_MINUTO = 3;
 
 /** Normaliza a solo dígitos (código de país incluido). */
@@ -94,6 +96,18 @@ export function registerPedidosOnlineAuthHandlers(
     });
     if (recientes >= OTP_MAX_POR_MINUTO) {
       return { success: false, error: 'demasiadas_solicitudes' };
+    }
+    // Topes diarios (PLAN-tienda-online F1): por teléfono y global, para que nadie
+    // dispare plantillas pagas de WhatsApp a muchos números.
+    const hace24h = new Date(Date.now() - 24 * 60 * 60_000);
+    const delDia = await otpRepo().count({ where: { telefono, createdAt: MoreThan(hace24h) as any } });
+    if (delDia >= OTP_MAX_POR_DIA_TELEFONO) {
+      return { success: false, error: 'demasiadas_solicitudes' };
+    }
+    const globalDia = await otpRepo().count({ where: { createdAt: MoreThan(hace24h) as any } });
+    if (globalDia >= otpMaxGlobalDia()) {
+      console.warn(`[otp] tope global diario alcanzado (${globalDia}); envío cortado.`);
+      return { success: false, error: 'otp_no_disponible' };
     }
 
     // Invalidar OTPs previos no usados de este teléfono.
