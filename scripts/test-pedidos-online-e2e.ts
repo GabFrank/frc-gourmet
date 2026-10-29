@@ -595,6 +595,28 @@ async function main() {
   ok(itMitad?.personalizacion?.sabores?.length === 2 && Math.abs(itMitad.personalizacion.sabores[0].proporcion - 0.5) < 1e-6,
     'PIZZA mitad: snapshot con 2 sabores y proporción 0.5', itMitad?.personalizacion?.sabores);
 
+  // 39. idempotencia (PLAN-tienda-online A2.4): mismo uuid del mismo dueño → mismo pedido.
+  const idemBody = (key: string) => [{
+    tipoPedido: 'PICKUP', idempotencyKey: key,
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }],
+  }];
+  const idemKey = 'a1b2c3d4-0000-4000-8000-00000000abcd';
+  const idem1 = await pub('pedido.crear', idemBody(idemKey), token2);
+  const idem2 = await pub('pedido.crear', idemBody(idemKey), token2);
+  ok(idem1.result?.success === true && idem2.result?.numero === idem1.result?.numero && idem2.result?.repetido === true,
+    'idempotencia: reintento con la misma clave devuelve el mismo pedido', [idem1.result?.numero, idem2.result]);
+  const idem3 = await pub('pedido.crear', idemBody('a1b2c3d4-0000-4000-8000-00000000abce'), token2);
+  ok(idem3.result?.success === true && idem3.result?.numero !== idem1.result?.numero, 'idempotencia: clave nueva crea otro pedido', idem3.result);
+  const cuentasRepo = dataSource.getRepository('CuentaCliente');
+  const otra: any = await cuentasRepo.save(cuentasRepo.create({ telefono: '0981999888', telefonoVerificado: true, nombre: 'OTRA CUENTA', activo: true }));
+  const idemOtra: any = await invokeHandlerWithContext('crear-pedido-online', { customerId: otra.id }, idemBody(idemKey)[0]);
+  ok(idemOtra?.success === true && idemOtra?.numero !== idem1.result?.numero && !idemOtra?.repetido,
+    'idempotencia: la misma clave de otra cuenta no devuelve el pedido ajeno', idemOtra);
+  const nIdem = await dataSource.getRepository('PedidoOnline').count({ where: { idempotencyKey: idemKey } });
+  ok(nIdem === 2, 'idempotencia: un pedido por dueño con esa clave (2 dueños → 2)', nIdem);
+  const idemBasura = await pub('pedido.crear', idemBody("x'; drop"), token2);
+  ok(idemBasura.result?.success === true && !idemBasura.result?.repetido, 'idempotencia: clave inválida se ignora (pedido normal)', idemBasura.result);
+
   console.log = origLog;
   await fastify.close();
   await dataSource.destroy();
