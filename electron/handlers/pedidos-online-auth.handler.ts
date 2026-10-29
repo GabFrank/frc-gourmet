@@ -238,7 +238,8 @@ export function registerPedidosOnlineAuthHandlers(
     const customerId = event?._customerId;
     if (!customerId) return { success: false, error: 'no_autenticado' };
     const cuenta = await cuentaRepo().findOne({ where: { id: customerId }, relations: ['cliente'] });
-    if (!cuenta) return { success: false, error: 'cuenta_no_encontrada' };
+    // Cuenta dada de baja: no sigue operando con un token viejo (PLAN-tienda-online A1).
+    if (!cuenta || !cuenta.activo) return { success: false, error: 'cuenta_no_encontrada' };
     return { success: true, cuenta: mapCuenta(cuenta) };
   });
 
@@ -247,7 +248,8 @@ export function registerPedidosOnlineAuthHandlers(
     const customerId = event?._customerId;
     if (!customerId) return { success: false, error: 'no_autenticado' };
     const cuenta = await cuentaRepo().findOne({ where: { id: customerId }, relations: ['cliente'] });
-    if (!cuenta) return { success: false, error: 'cuenta_no_encontrada' };
+    // Cuenta dada de baja: no sigue operando con un token viejo (PLAN-tienda-online A1).
+    if (!cuenta || !cuenta.activo) return { success: false, error: 'cuenta_no_encontrada' };
 
     if (data?.nombre !== undefined) cuenta.nombre = data.nombre ? String(data.nombre).toUpperCase() : undefined;
     if (data?.email !== undefined) {
