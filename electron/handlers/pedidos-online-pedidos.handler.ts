@@ -235,11 +235,25 @@ export function registerPedidosOnlinePedidosHandlers(
   });
 
   // ============== CREAR PEDIDO (público, requiere cliente) ==============
+  const MAX_ITEMS_PEDIDO = 40;
+  const MAX_CANTIDAD_ITEM = 50;
+  const recortar = (v: any, max: number): string | undefined => {
+    const t = v == null ? '' : String(v).trim();
+    return t ? t.slice(0, max) : undefined;
+  };
+
   ipcMain.handle('crear-pedido-online', async (event: any, data: any) => {
     const customerId = event?._customerId;
     const tipoPedido: TipoPedidoOnline = data?.tipoPedido || TipoPedidoOnline.PICKUP;
+    if (!Object.values(TipoPedidoOnline).includes(tipoPedido)) return { success: false, error: 'tipo_pedido_invalido' };
     const itemsIn: any[] = Array.isArray(data?.items) ? data.items : [];
     if (!itemsIn.length) return { success: false, error: 'pedido_sin_items' };
+    // Topes de entrada (PLAN-tienda-online A2).
+    if (itemsIn.length > MAX_ITEMS_PEDIDO) return { success: false, error: 'demasiados_items' };
+    if (itemsIn.some((it) => Number(it?.cantidad) > MAX_CANTIDAD_ITEM)) return { success: false, error: 'cantidad_excedida' };
+    const metodoPagoIn = data?.metodoPago || MetodoPagoOnline.EFECTIVO;
+    // Solo efectivo hasta que exista el cobro online (F4): un pago "UPAY" sin cobrar no puede entrar.
+    if (metodoPagoIn !== MetodoPagoOnline.EFECTIVO) return { success: false, error: 'metodo_pago_no_disponible' };
 
     // Config de tienda: apertura.
     const cfg = await getTiendaConfig(dataSource);
@@ -434,26 +448,27 @@ export function registerPedidosOnlinePedidosHandlers(
     } else {
       pedido.estado = EstadoPedidoOnline.RECIBIDO;
     }
+    // El canal lo decide el servidor, no el cliente.
     pedido.canalOrigen = tipoPedido === TipoPedidoOnline.MESA_QR
       ? CanalPedidoOnline.QR_MESA
-      : (data?.canalOrigen || CanalPedidoOnline.WEB);
+      : CanalPedidoOnline.WEB;
     // MESA_QR: el pago es SIEMPRE en la caja física; el método queda EFECTIVO.
     pedido.metodoPago = tipoPedido === TipoPedidoOnline.MESA_QR
       ? MetodoPagoOnline.EFECTIVO
-      : (data?.metodoPago || MetodoPagoOnline.EFECTIVO);
-    pedido.fechaProgramada = data?.fechaProgramada ? new Date(data.fechaProgramada) : undefined;
+      : metodoPagoIn;
+    // fechaProgramada no tiene UI ni flujo: se ignora (antes se guardaba sin validar).
     pedido.subtotal = subtotal;
     pedido.costoEnvio = costoEnvio;
     pedido.total = total;
     if (monedaId != null) pedido.moneda = { id: monedaId } as any;
     if (zona) pedido.zonaDelivery = zona;
-    pedido.direccionEntrega = data?.direccionEntrega || undefined;
-    pedido.referenciaDireccion = data?.referenciaDireccion || undefined;
+    pedido.direccionEntrega = recortar(data?.direccionEntrega, 500);
+    pedido.referenciaDireccion = recortar(data?.referenciaDireccion, 255);
     if (tipoPedido === TipoPedidoOnline.DELIVERY) {
       if (typeof data?.latitud === 'number') pedido.latitud = data.latitud;
       if (typeof data?.longitud === 'number') pedido.longitud = data.longitud;
     }
-    pedido.notas = data?.notas || undefined;
+    pedido.notas = recortar(data?.notas, 500);
     pedido.items = itemsToSave;
 
     // El número (`count()+1`) puede colisionar con pedidos concurrentes (ej. un

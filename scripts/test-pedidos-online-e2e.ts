@@ -370,6 +370,17 @@ async function main() {
   }], token);
   ok(delivSinZona.result?.error === 'delivery_no_disponible', 'A3: DELIVERY sin zonas → delivery_no_disponible', delivSinZona.result);
 
+  // A2: validaciones de entrada.
+  const base = { tipoPedido: 'PICKUP', items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }] };
+  const upay = await pub('pedido.crear', [{ ...base, metodoPago: 'UPAY' }], token);
+  ok(upay.result?.error === 'metodo_pago_no_disponible', 'A2: metodoPago UPAY sin cobro online → rechazado', upay.result);
+  const tipoMal = await pub('pedido.crear', [{ ...base, tipoPedido: 'XX' }], token);
+  ok(tipoMal.result?.error === 'tipo_pedido_invalido', 'A2: tipoPedido inválido → rechazado', tipoMal.result);
+  const cantMal = await pub('pedido.crear', [{ ...base, items: [{ ...base.items[0], cantidad: 51 }] }], token);
+  ok(cantMal.result?.error === 'cantidad_excedida', 'A2: cantidad > 50 → rechazado', cantMal.result);
+  const muchos = await pub('pedido.crear', [{ ...base, items: Array.from({ length: 41 }, () => base.items[0]) }], token);
+  ok(muchos.result?.error === 'demasiados_items', 'A2: más de 40 ítems → rechazado', muchos.result);
+
   // 8. DELIVERY válido (3×25000=75000 ≥ 50000) + envío 15000
   const deliv = await pub('pedido.crear', [{
     tipoPedido: 'DELIVERY', zonaDeliveryId: seeded.zona.id, direccionEntrega: 'Calle 1',
