@@ -7,6 +7,7 @@
  *   WHATSAPP_PHONE_NUMBER_ID   — id del número emisor
  *   WHATSAPP_OTP_TEMPLATE      — nombre de la plantilla aprobada (default 'otp_codigo')
  *   WHATSAPP_OTP_LANG          — locale de la plantilla (default 'es')
+ *   WHATSAPP_OTP_BOTON         — '1' si la plantilla es de Autenticación con botón «Copiar código»
  *
  * Desde F3 los valores cargados en «Config Tienda Online» (BD + token en keytar) tienen
  * prioridad sobre las variables de entorno: el handler de config los deja en memoria con
@@ -40,8 +41,12 @@ export function setWhatsappOverrides(o: WhatsappOverrides): void {
   overrides = { ...o };
 }
 
-function credenciales(): { token: string; phoneId: string; template: string; lang: string } {
+function credenciales(): { token: string; phoneId: string; template: string; lang: string; boton: boolean } {
   return {
+    // La plantilla cargada en la pantalla es de categoría Autenticación (lo pide la ayuda de
+    // la pantalla), que exige el código también en el botón «Copiar código». Las instalaciones
+    // que solo usan variables de entorno siguen mandando solo el cuerpo, salvo WHATSAPP_OTP_BOTON=1.
+    boton: overrides.plantilla ? true : process.env['WHATSAPP_OTP_BOTON'] === '1',
     token: overrides.token || process.env['WHATSAPP_CLOUD_TOKEN'] || '',
     phoneId: overrides.phoneNumberId || process.env['WHATSAPP_PHONE_NUMBER_ID'] || '',
     template: overrides.plantilla || process.env['WHATSAPP_OTP_TEMPLATE'] || 'otp_codigo',
@@ -90,7 +95,7 @@ export async function sendWhatsappOtp(telefono: string, codigo: string): Promise
     return { ok: true, provider: 'dev-log', detail: 'sin credenciales; código logueado' };
   }
 
-  const { token, phoneId, template, lang } = credenciales();
+  const { token, phoneId, template, lang, boton } = credenciales();
 
   try {
     const res = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
@@ -99,6 +104,7 @@ export async function sendWhatsappOtp(telefono: string, codigo: string): Promise
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(10000),
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         to: telefono,
@@ -106,19 +112,16 @@ export async function sendWhatsappOtp(telefono: string, codigo: string): Promise
         template: {
           name: template,
           language: { code: lang },
-          // Plantilla de categoría Autenticación (la que exige Meta para códigos): el código
-          // va en el cuerpo y también en el botón «Copiar código» (index 0).
+          // En una plantilla de Autenticación el código va en el cuerpo y también en el
+          // botón «Copiar código» (index 0); mandarlo a una plantilla sin botón la rechaza Meta.
           components: [
             {
               type: 'body',
               parameters: [{ type: 'text', text: codigo }],
             },
-            {
-              type: 'button',
-              sub_type: 'url',
-              index: '0',
-              parameters: [{ type: 'text', text: codigo }],
-            },
+            ...(boton
+              ? [{ type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: codigo }] }]
+              : []),
           ],
         },
       }),
@@ -138,6 +141,6 @@ export async function sendWhatsappOtp(telefono: string, codigo: string): Promise
     return { ok: true, provider: 'whatsapp-cloud' };
   } catch (e: any) {
     console.error('[whatsapp-otp] error de red:', e?.message || e);
-    return { ok: false, provider: 'whatsapp-cloud', detail: String(e?.message || e) };
+    return { ok: false, provider: 'whatsapp-cloud', detail: String(e?.message || e).slice(0, 200) };
   }
 }

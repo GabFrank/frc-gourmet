@@ -616,6 +616,16 @@ async function main() {
     ok(!!envio && envio.url.includes('/109876543210/messages'), 'F3: el envío usa el Phone Number ID de la pantalla', envio?.url);
     ok(envio?.body?.template?.name === 'codigo_ingreso' && envio?.body?.to === '595981123456', 'F3: plantilla y teléfono normalizado', envio?.body?.template?.name);
     ok(envio?.body?.template?.components?.some((c: any) => c.type === 'button' && c.sub_type === 'url'), 'F3: lleva el botón «Copiar código» (plantilla de autenticación)');
+    const pRep: any = await invokeHandlerWithContext('probar-tienda-whatsapp', undefined, { telefono: '595981123456' });
+    ok(pRep?.error === 'demasiadas_pruebas', 'F3: segunda prueba al mismo teléfono en menos de 1 minuto → frenada', pRep);
+
+    // Solo variables de entorno (sin plantilla en pantalla): el envío real no lleva el botón,
+    // así las plantillas existentes sin botón siguen funcionando.
+    await invokeHandlerWithContext('update-tienda-online-config', undefined, { whatsappPlantilla: '' });
+    llamadas.length = 0;
+    const pEnv: any = await invokeHandlerWithContext('probar-tienda-whatsapp', undefined, { telefono: '595982000111' });
+    const envioEnv = llamadas.find((l) => l.url.includes('graph.facebook.com'));
+    ok(pEnv?.success === true && !envioEnv?.body?.template?.components?.some((c: any) => c.type === 'button'), 'F3: sin plantilla en pantalla no se manda el botón', envioEnv?.body?.template);
 
     // Vaciar los campos vuelve a las variables de entorno.
     await invokeHandlerWithContext('update-tienda-online-config', undefined, {
