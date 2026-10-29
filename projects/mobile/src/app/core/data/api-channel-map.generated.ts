@@ -3,7 +3,7 @@
  * AUTO-GENERADO por scripts/generate-mobile-api-map.js — NO editar a mano.
  * Mapa método de window.api → canal IPC (extraído de preload.ts).
  * Regenerar tras tocar preload.ts: `node scripts/generate-mobile-api-map.js`.
- * Total: 865 métodos.
+ * Total: 874 métodos.
  */
 export const API_CHANNEL_MAP: Record<string, string> = {
   "abrirCajaDesdeConteo": "abrir-caja-desde-conteo",
@@ -81,6 +81,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "cancelarCuentaPorCobrar": "cancelar-cuenta-por-cobrar",
   "cancelarCuentaPorPagar": "cancelar-cuenta-por-pagar",
   "cancelarVacacionPeriodo": "cancelar-vacacion-periodo",
+  "cargarReglasObservadasPos": "cargar-reglas-observadas-pos",
   "cerrarCajaMayor": "cerrar-caja-mayor",
   "cerrarComanda": "cerrarComanda",
   "cerrarFuncionarioTurno": "cerrar-funcionario-turno",
@@ -90,6 +91,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "cobrarCheque": "cobrar-cheque",
   "cobrarCpcCuota": "cobrar-cpc-cuota",
   "cobrarVentaCredito": "cobrar-venta-credito",
+  "conciliarAcreditacionesPos": "conciliar-acreditaciones-pos",
   "confirmarVale": "confirmar-vale",
   "contarPedidosOnlinePendientes": "contar-pedidos-online-pendientes",
   "countNotificacionesNoLeidas": "count-notificaciones-no-leidas",
@@ -242,6 +244,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "deleteFuncionarioDocumento": "delete-funcionario-documento",
   "deleteGastoCategoria": "delete-gasto-categoria",
   "deleteMaquinaPos": "delete-maquina-pos",
+  "deleteMaquinaPosRegla": "delete-maquina-pos-regla",
   "deleteMoneda": "delete-moneda",
   "deleteMonedaBillete": "delete-moneda-billete",
   "deleteMonedaCambio": "delete-moneda-cambio",
@@ -305,6 +308,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "deliveryListarRepartidores": "delivery-listar-repartidores",
   "desasignarFuncionarioRegla": "desasignar-funcionario-regla",
   "desasignarReglaEquipo": "desasignar-regla-equipo",
+  "deshacerConciliacionPos": "deshacer-conciliacion-pos",
   "desvincularRecetaDeProducto": "desvincular-receta-de-producto",
   "downloadFaceModels": "download-face-models",
   "editCajaMayorMovimiento": "edit-caja-mayor-movimiento",
@@ -414,6 +418,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getCompraDetalles": "getCompraDetalles",
   "getCompras": "getCompras",
   "getComprasPaginado": "get-compras-paginado",
+  "getConciliacionesPos": "get-conciliaciones-pos",
   "getConfiguracionMonetaria": "get-configuracion-monetaria",
   "getConfiguracionRrhh": "get-configuracion-rrhh",
   "getConfiguracionesRrhh": "get-configuraciones-rrhh",
@@ -498,6 +503,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getLiquidacionesSueldo": "get-liquidaciones-sueldo",
   "getLoginSessions": "getLoginSessions",
   "getMaquinaPos": "get-maquina-pos",
+  "getMaquinaPosReglas": "get-maquina-pos-reglas",
   "getMaquinasPos": "get-maquinas-pos",
   "getMenuConfig": "get-menu-config",
   "getMoneda": "get-moneda",
@@ -612,6 +618,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getReserva": "getReserva",
   "getReservas": "getReservas",
   "getReservasActivas": "getReservasActivas",
+  "getResumenAcreditacionesPos": "get-resumen-acreditaciones-pos",
   "getResumenCaja": "getResumenCaja",
   "getRetiroCaja": "get-retiro-caja",
   "getRetirosCaja": "get-retiros-caja",
@@ -733,6 +740,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "saveCajaMayorConfiguracion": "save-caja-mayor-configuracion",
   "saveCajasMonedas": "save-cajas-monedas",
   "saveFile": "save-file",
+  "saveMaquinaPosRegla": "save-maquina-pos-regla",
   "saveMenuConfig": "save-menu-config",
   "saveProfileImage": "save-profile-image",
   "scanNetworkPrinters": "scan-network-printers",
@@ -751,6 +759,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "setPresentacionPrincipal": "set-presentacion-principal",
   "setRecetaFaseIngredientes": "set-receta-fase-ingredientes",
   "setRolePermissions": "set-role-permissions",
+  "sugerirConciliacionPos": "sugerir-conciliacion-pos",
   "testPrinterConnection": "test-printer-connection",
   "togglePresentacionActivo": "toggle-presentacion-activo",
   "transferirVentaPdv": "transferir-venta-pdv",

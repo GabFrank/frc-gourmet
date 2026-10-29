@@ -824,6 +824,15 @@ export abstract class RepositoryService {
   abstract getAcreditacionesPos(filtros?: any): Observable<any>;
   abstract getAcreditacionPos(id: number): Observable<any>;
   abstract createAcreditacionPos(data: any): Observable<any>;
+  abstract getMaquinaPosReglas(maquinaPosId: number): Observable<any>;
+  abstract saveMaquinaPosRegla(data: any): Observable<any>;
+  abstract deleteMaquinaPosRegla(id: number): Observable<any>;
+  abstract cargarReglasObservadasPos(maquinaPosId: number, proveedor: string): Observable<any>;
+  abstract sugerirConciliacionPos(params: any): Observable<any>;
+  abstract conciliarAcreditacionesPos(params: any): Observable<any>;
+  abstract deshacerConciliacionPos(id: number): Observable<any>;
+  abstract getConciliacionesPos(cuentaBancariaId?: number): Observable<any>;
+  abstract getResumenAcreditacionesPos(params: any): Observable<any>;
   abstract procesarAcreditacionesAuto(): Observable<any>;
   abstract verificarAcreditacionPos(id: number, montoAcreditado: number): Observable<any>;
   abstract getAcreditacionesPendientes(): Observable<any[]>;

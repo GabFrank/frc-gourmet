@@ -5,6 +5,12 @@
       <button mat-stroked-button (click)="toggleFiltros()">
         <mat-icon>{{showFiltros ? 'expand_less' : 'filter_list'}}</mat-icon> Filtros
       </button>
+      <button mat-stroked-button (click)="verConciliaciones()">
+        <mat-icon>fact_check</mat-icon> Conciliaciones y resumen
+      </button>
+      <button mat-stroked-button (click)="conciliarCredito()">
+        <mat-icon>account_balance</mat-icon> Conciliar crédito
+      </button>
       <button mat-raised-button color="primary" (click)="procesarAuto()" [disabled]="procesando">
         <mat-icon>autorenew</mat-icon> Procesar Auto
       </button>
@@ -58,6 +64,10 @@
         <th mat-header-cell *matHeaderCellDef>Maquina</th>
         <td mat-cell *matCellDef="let r">{{r.maquinaPos?.nombre}}</td>
       </ng-container>
+      <ng-container matColumnDef="medio">
+        <th mat-header-cell *matHeaderCellDef>Medio</th>
+        <td mat-cell *matCellDef="let r">{{r.medio || '—'}}</td>
+      </ng-container>
       <ng-container matColumnDef="cuenta">
         <th mat-header-cell *matHeaderCellDef>Cuenta</th>
         <td mat-cell *matCellDef="let r">{{r.cuentaBancaria?.nombre}}</td>
@@ -86,7 +96,7 @@
         <th mat-header-cell *matHeaderCellDef>Estado</th>
         <td mat-cell *matCellDef="let r">
           <mat-chip-listbox>
-            <mat-chip [ngStyle]="{'background-color': estadoColor(r.estado), 'color': 'white'}">{{r.estado}}</mat-chip>
+            <mat-chip [ngStyle]="{'background-color': r.estadoBg, 'color': 'white'}">{{r.estadoLabel}}</mat-chip>
           </mat-chip-listbox>
         </td>
       </ng-container>

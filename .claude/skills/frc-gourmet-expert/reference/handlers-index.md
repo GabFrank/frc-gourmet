@@ -12,6 +12,7 @@
 | **auth.handler.ts** | 212 | Login/logout, LoginSession, JWT (`getJwtSecret`), `verifyPassword` (bcrypt) |
 | **backup.handler.ts** | 548 | Backup/restore de BD + `startAutoBackupScheduler` |
 | **banking.handler.ts** | 916 | CuentaBancaria, MovimientoBancario, MaquinaPos, AcreditacionPos, Chequera, Cheque + `startAcreditacionesScheduler` |
+| **acreditaciones-pos-reglas.handler.ts** | 435 | MaquinaPosRegla (reglas por medio), ConciliacionPos (conciliar/deshacer), resumen de comisiones y retenciones (#320) |
 | **caja-mayor.handler.ts** | 2530 | CajaMayor*, Gasto*, RetiroCaja*, EntradaVaria*, OperacionFinanciera*. Incluye `anular-caja-mayor-movimiento` y `recalcular-saldos`. |
 | **caja-mayor-utils.ts** | 51 | (no es handler) `actualizarSaldoCajaMayor()`, `esIngreso()` — helpers del módulo financiero |
 | **comisiones.handler.ts** | 723 | ReglaComision*, FuncionarioReglaComision, LiquidacionComision* + motor de evaluación |

@@ -3299,6 +3299,34 @@ contextBridge.exposeInMainWorld('api', {
   createAcreditacionPos: async (data: any): Promise<any> => {
     return await ipcRenderer.invoke('create-acreditacion-pos', data);
   },
+  getMaquinaPosReglas: async (maquinaPosId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-maquina-pos-reglas', maquinaPosId);
+  },
+  saveMaquinaPosRegla: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('save-maquina-pos-regla', data);
+  },
+  deleteMaquinaPosRegla: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('delete-maquina-pos-regla', id);
+  },
+  cargarReglasObservadasPos: async (maquinaPosId: number, proveedor: string): Promise<any> => {
+    return await ipcRenderer.invoke('cargar-reglas-observadas-pos', maquinaPosId, proveedor);
+  },
+  sugerirConciliacionPos: async (params: any): Promise<any> => {
+    return await ipcRenderer.invoke('sugerir-conciliacion-pos', params);
+  },
+  conciliarAcreditacionesPos: async (params: any): Promise<any> => {
+    return await ipcRenderer.invoke('conciliar-acreditaciones-pos', params);
+  },
+  deshacerConciliacionPos: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('deshacer-conciliacion-pos', id);
+  },
+  getConciliacionesPos: async (cuentaBancariaId?: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-conciliaciones-pos', cuentaBancariaId);
+  },
+  getResumenAcreditacionesPos: async (params: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-resumen-acreditaciones-pos', params);
+  },
+
   procesarAcreditacionesAuto: async (): Promise<any> => {
     return await ipcRenderer.invoke('procesar-acreditaciones-auto');
   },

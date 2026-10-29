@@ -78,6 +78,8 @@ interface DetalleRow {
   valorDisplay: string; // pre-formatted: "PYG 40,000" or "USD 6.35"
   maquinaPosId?: number; // máquina POS elegida para esta línea (si la formaPago tiene maquinasPos)
   maquinaPosNombre?: string;
+  /** Medio del pago con POS (QR / DEBITO / CREDITO): define la regla de acreditación (#320). */
+  medioPos?: string;
   cuentaBancariaId?: number; // cuenta bancaria elegida (transferencia / PIX). Acreditacion instantanea.
   cuentaBancariaNombre?: string;
   /**
@@ -145,11 +147,19 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
 
   @ViewChild('monedaSelect') monedaSelectRef!: ElementRef;
   @ViewChild('valorInputRef') valorInputRef!: ElementRef;
+  @ViewChild('selectionPanel') selectionPanelRef?: ElementRef<HTMLElement>;
 
   // Selections
   selectedMoneda: Moneda | null = null;
   selectedFormaPago: FormasPago | null = null;
   selectedMaquinaPosId: number | null = null;
+  /** Medio del pago con POS. Por defecto crédito; queda el último elegido en el diálogo. Nunca bloquea el cobro. */
+  selectedMedioPos: 'QR' | 'DEBITO' | 'CREDITO' = 'CREDITO';
+  readonly mediosPos: { valor: 'QR' | 'DEBITO' | 'CREDITO'; label: string }[] = [
+    { valor: 'CREDITO', label: 'Crédito' },
+    { valor: 'DEBITO', label: 'Débito' },
+    { valor: 'QR', label: 'QR' },
+  ];
   selectedCuentaBancariaId: number | null = null;
   valorInput = 0;
   observacionInput = '';
@@ -430,6 +440,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
               // recargar y la `AcreditacionPos` / la transferencia no se creaban
               // nunca, en silencio (el bloque que las genera no bloquea).
               maquinaPosId: d.maquinaPosId ?? undefined,
+              medioPos: d.medioPos ?? undefined,
               cuentaBancariaId: d.cuentaBancariaId ?? undefined,
               cobroParcialId: d.cobroParcialId ?? null,
               puedeEliminarse: d.cobroParcialId == null,
@@ -609,6 +620,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
 
   // Cuando cambia la forma de pago, autoselecciona maquina POS / cuenta bancaria si solo hay 1
   onFormaPagoChange(): void {
+    this.mostrarSelectorPos();
     const maquinas = this.maquinasPosDisponibles;
     if (maquinas.length === 1) {
       this.selectedMaquinaPosId = maquinas[0].id;
@@ -626,9 +638,22 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     }
   }
 
+  onMedioPosSelected(medio: 'QR' | 'DEBITO' | 'CREDITO'): void {
+    this.selectedMedioPos = medio;
+  }
+
   onMaquinaPosSelected(mp: any): void {
     this.selectedMaquinaPosId = mp.id;
     this.aplicarMonedaDeMaquinaPos(mp);
+    this.mostrarSelectorPos();
+  }
+
+  /** Con máquina POS + medio el panel derecho no entra entero: lo baja para que se vean (#320). */
+  private mostrarSelectorPos(): void {
+    setTimeout(() => {
+      const el = this.selectionPanelRef?.nativeElement;
+      if (el && this.muestraSelectorMaquinaPos) el.querySelector('.medio-buttons')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
   }
 
   onCuentaBancariaSelected(cb: any): void {
@@ -940,6 +965,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
         // finalizar desde otra terminal) tiene que seguir estando, si no la
         // AcreditacionPos / la transferencia no se generan nunca.
         maquinaPosId: tipo === TipoDetalle.PAGO ? (this.selectedMaquinaPosId || null) : null,
+        medioPos: tipo === TipoDetalle.PAGO && this.selectedMaquinaPosId ? this.selectedMedioPos : null,
         cuentaBancariaId: tipo === TipoDetalle.PAGO ? (this.selectedCuentaBancariaId || null) : null,
         // El backend valida que esta terminal pueda registrar pagos en la caja.
         validarDispositivoCaja: true,
@@ -960,6 +986,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
         valorDisplay: this.formatValor(this.valorInput, this.selectedMoneda),
         maquinaPosId: tipo === TipoDetalle.PAGO ? (this.selectedMaquinaPosId || undefined) : undefined,
         maquinaPosNombre: tipo === TipoDetalle.PAGO ? (maquinaSeleccionada?.nombre || undefined) : undefined,
+        medioPos: tipo === TipoDetalle.PAGO && this.selectedMaquinaPosId ? this.selectedMedioPos : undefined,
         cuentaBancariaId: tipo === TipoDetalle.PAGO ? (this.selectedCuentaBancariaId || undefined) : undefined,
         cuentaBancariaNombre: tipo === TipoDetalle.PAGO ? (cuentaSeleccionada?.nombre || undefined) : undefined,
       }];
@@ -1023,6 +1050,7 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
         activo: true,
         observacion: row.observacion,
         maquinaPosId: row.maquinaPosId ?? null,
+        medioPos: row.medioPos ?? null,
         cuentaBancariaId: row.cuentaBancariaId ?? null,
         validarDispositivoCaja: true,
       } as any));
@@ -1414,6 +1442,8 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       try {
         await firstValueFrom(this.repositoryService.createAcreditacionPos({
           maquinaPosId: det.maquinaPosId!,
+          // Sin medio (líneas viejas) el backend usa el % de la máquina, como antes.
+          medio: det.medioPos,
           montoOriginal: det.valor,
           // La moneda de la línea: el backend rechaza si no coincide con la de
           // la cuenta destino, para no acreditar 40 dólares como 40 guaraníes.

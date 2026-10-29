@@ -59,9 +59,15 @@ async function main() {
 
   const migs = ds.migrations.map((m: any) => m.name || m.constructor.name);
   const nombreFt = migs.find((n) => /FuncionesTareas/.test(n));
-  ok(!!nombreFt && migs[migs.length - 1] === nombreFt, 'la migración FuncionesTareas es la última registrada', migs.slice(-2));
+  ok(!!nombreFt, 'la migración FuncionesTareas está registrada', migs.slice(-2));
+  // Las migraciones posteriores a FT (p. ej. AcreditacionesPosReglas) se deshacen para dejar FT última.
+  const posteriores = nombreFt ? migs.length - 1 - migs.indexOf(nombreFt) : 0;
+  const hastaFt = async () => {
+    await ds.runMigrations({ transaction: 'each' });
+    for (let i = 0; i < posteriores; i++) await ds.undoLastMigration({ transaction: 'each' });
+  };
 
-  await ds.runMigrations({ transaction: 'each' });
+  await hastaFt();
   const conFt = await esquema();
   const tablasFt = ftDe(conFt);
   const esperadas = ds.entityMetadatas.map((m) => m.tableName).filter((t) => t.startsWith('ft_')).sort();
@@ -89,7 +95,7 @@ async function main() {
   ok(!reg.some((r: any) => /FuncionesTareas/.test(r.name)), 'down quita el registro de la migración');
   ok(reg.some((r: any) => /DisciplinaReconocimiento/.test(r.name)), 'la migración anterior (DR) sigue aplicada');
 
-  await ds.runMigrations({ transaction: 'each' });
+  await hastaFt();
   const reUp = await esquema();
   ok(JSON.stringify(ftDe(reUp)) === JSON.stringify(tablasFt) && canon(reUp) === canon(conFt), 'up de nuevo deja el mismo esquema');
   ok(JSON.stringify(await indices()) === JSON.stringify(idx), 'y los mismos índices');

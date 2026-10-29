@@ -784,6 +784,15 @@ interface ElectronAPI {
   getAcreditacionesPos: (filtros?: any) => Promise<any>;
   getAcreditacionPos: (id: number) => Promise<any>;
   createAcreditacionPos: (data: any) => Promise<any>;
+  getMaquinaPosReglas: (maquinaPosId: number) => Promise<any>;
+  saveMaquinaPosRegla: (data: any) => Promise<any>;
+  deleteMaquinaPosRegla: (id: number) => Promise<any>;
+  cargarReglasObservadasPos: (maquinaPosId: number, proveedor: string) => Promise<any>;
+  sugerirConciliacionPos: (params: any) => Promise<any>;
+  conciliarAcreditacionesPos: (params: any) => Promise<any>;
+  deshacerConciliacionPos: (id: number) => Promise<any>;
+  getConciliacionesPos: (cuentaBancariaId?: number) => Promise<any>;
+  getResumenAcreditacionesPos: (params: any) => Promise<any>;
   procesarAcreditacionesAuto: () => Promise<any>;
   verificarAcreditacionPos: (id: number, montoAcreditado: number) => Promise<any>;
   getAcreditacionesPendientes: () => Promise<any[]>;
@@ -3475,6 +3484,42 @@ export class RepositoryIpcService extends RepositoryService {
   }
   createAcreditacionPos(data: any): Observable<any> {
     return from(this.api.createAcreditacionPos(data));
+  }
+
+  getMaquinaPosReglas(maquinaPosId: number): Observable<any> {
+    return from(this.api.getMaquinaPosReglas(maquinaPosId));
+  }
+
+  saveMaquinaPosRegla(data: any): Observable<any> {
+    return from(this.api.saveMaquinaPosRegla(data));
+  }
+
+  deleteMaquinaPosRegla(id: number): Observable<any> {
+    return from(this.api.deleteMaquinaPosRegla(id));
+  }
+
+  cargarReglasObservadasPos(maquinaPosId: number, proveedor: string): Observable<any> {
+    return from(this.api.cargarReglasObservadasPos(maquinaPosId, proveedor));
+  }
+
+  sugerirConciliacionPos(params: any): Observable<any> {
+    return from(this.api.sugerirConciliacionPos(params));
+  }
+
+  conciliarAcreditacionesPos(params: any): Observable<any> {
+    return from(this.api.conciliarAcreditacionesPos(params));
+  }
+
+  deshacerConciliacionPos(id: number): Observable<any> {
+    return from(this.api.deshacerConciliacionPos(id));
+  }
+
+  getConciliacionesPos(cuentaBancariaId?: number): Observable<any> {
+    return from(this.api.getConciliacionesPos(cuentaBancariaId));
+  }
+
+  getResumenAcreditacionesPos(params: any): Observable<any> {
+    return from(this.api.getResumenAcreditacionesPos(params));
   }
   procesarAcreditacionesAuto(): Observable<any> {
     return from(this.api.procesarAcreditacionesAuto());

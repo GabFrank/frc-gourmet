@@ -287,12 +287,27 @@ mat-dialog-content {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
+  overflow-y: auto; // con máquina POS + medio (#320) los grupos no deben pisar la fila de valor
+}
+
+.fp-buttons.medio-buttons {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+// Con máquina POS + medio hay más grupos: botones más bajos para que entren sin scroll
+.selection-panel.compacto .selection-buttons button {
+  height: 34px;
+}
+.selection-panel.compacto {
+  gap: 10px;
 }
 
 .selection-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex-shrink: 0; // sin esto los grupos se comprimen y el título pisa los botones (#320)
 }
 
 .selection-label {
@@ -514,11 +529,16 @@ mat-dialog-actions {
 
   button {
     flex: 1;
+    min-width: 0;
     height: 42px;
+    padding: 0 8px;
     font-size: 12px;
     font-weight: 500;
     border-radius: 6px;
     color: white;
+    white-space: nowrap; // «Finalizar + Ticket (F11)» se partía y salía del botón
+    overflow: hidden;
+    text-overflow: ellipsis;
 
     mat-icon {
       margin-right: 4px;
@@ -611,12 +631,12 @@ mat-dialog-actions {
   color: #00695c;
 }
 
-.dark-theme .maquina-pos-tag {
+:host-context(.dark-theme) .maquina-pos-tag {
   background: rgba(124, 77, 255, 0.18);
   color: #b39ddb;
 }
 
-.dark-theme .cuenta-bancaria-tag {
+:host-context(.dark-theme) .cuenta-bancaria-tag {
   background: rgba(0, 230, 201, 0.18);
   color: #80cbc4;
 }

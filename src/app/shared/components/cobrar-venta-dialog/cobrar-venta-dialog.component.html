@@ -148,7 +148,7 @@
             <th mat-header-cell *matHeaderCellDef>Forma Pago</th>
             <td mat-cell *matCellDef="let row">
               {{ row.formaPago.nombre }}
-              <span *ngIf="row.maquinaPosNombre" class="maquina-pos-tag">{{ row.maquinaPosNombre }}</span>
+              <span *ngIf="row.maquinaPosNombre" class="maquina-pos-tag">{{ row.maquinaPosNombre }}<ng-container *ngIf="row.medioPos"> · {{ row.medioPos }}</ng-container></span>
               <span *ngIf="row.cuentaBancariaNombre" class="cuenta-bancaria-tag">{{ row.cuentaBancariaNombre }}</span>
             </td>
           </ng-container>
@@ -209,7 +209,7 @@
       </div>
 
       <!-- Right: Monedas + Formas de pago buttons -->
-      <div class="selection-panel">
+      <div class="selection-panel" #selectionPanel [class.compacto]="muestraSelectorMaquinaPos">
         <div class="selection-group">
           <span class="selection-label">Monedas</span>
           <div class="selection-buttons moneda-buttons">
@@ -254,6 +254,22 @@
               (click)="onMaquinaPosSelected(mp)"
             >
               <span class="btn-label">{{ mp.nombre }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Medio del pago con POS (#320): define plazo y descuentos de la acreditación -->
+        <div class="selection-group" *ngIf="muestraSelectorMaquinaPos">
+          <span class="selection-label">Medio</span>
+          <div class="selection-buttons fp-buttons medio-buttons">
+            <button
+              *ngFor="let m of mediosPos"
+              mat-raised-button
+              type="button"
+              [class.selected]="selectedMedioPos === m.valor"
+              (click)="onMedioPosSelected(m.valor)"
+            >
+              <span class="btn-label">{{ m.label }}</span>
             </button>
           </div>
         </div>

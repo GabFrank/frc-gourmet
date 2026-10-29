@@ -84,4 +84,10 @@ export class PagoDetalle extends BaseModel {
 
   @Column({ name: 'cuenta_bancaria_id', type: 'int', nullable: true })
   cuentaBancariaId?: number | null;
+
+  // Medio del pago con POS (QR / DEBITO / CREDITO, issue #320): se persiste como
+  // `maquinaPosId` para que la acreditación use la regla correcta aunque el cobro
+  // se finalice al reabrir el diálogo o desde otra terminal. Null = sin medio (como antes).
+  @Column({ name: 'medio_pos', type: 'varchar', length: 20, nullable: true })
+  medioPos?: string | null;
 }

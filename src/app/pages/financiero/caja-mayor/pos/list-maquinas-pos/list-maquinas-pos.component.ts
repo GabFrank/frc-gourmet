@@ -66,8 +66,10 @@ export class ListMaquinasPosComponent implements OnInit {
   }
 
   editar(m: any): void {
+    // Editar incluye las reglas por medio de pago (#320): necesita más ancho.
     const ref = this.dialog.open(CreateEditMaquinaPosDialogComponent, {
-      width: '600px',
+      width: '900px',
+      maxWidth: '95vw',
       data: { maquinaPosId: m.id },
     });
     ref.afterClosed().subscribe(r => { if (r) this.loadData(); });
