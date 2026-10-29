@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { PublicApiService } from '../../core/public-api.service';
 import { CartService, avisosRevalidacion } from '../../core/cart.service';
 import { MenuService } from '../../core/menu.service';
+import { guardarSeguimiento } from '../../core/seguimiento';
 import { AuthService } from '../../core/auth.service';
 import { ConfigService } from '../../core/config.service';
 import { MesaService } from '../../core/mesa.service';
@@ -199,6 +200,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
           this.idemKey = null;
           if (res?.success) {
             this.cart.limpiar();
+            if (res.seguimientoToken) guardarSeguimiento(res.seguimientoToken);
             this.router.navigate(['/mis-pedidos'], { queryParams: { nuevo: res.numero } });
           } else {
             this.error = this.mensajeError(res);

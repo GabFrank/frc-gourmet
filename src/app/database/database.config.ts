@@ -336,6 +336,7 @@ import { DisciplinaReconocimiento1792785488053 } from './migrations/179278548805
 import { FuncionesTareas1793042064365 } from './migrations/1793042064365-FuncionesTareas';
 import { AcreditacionesPosReglas1793110000000 } from './migrations/1793110000000-AcreditacionesPosReglas';
 import { TiendaOnlineSeguridad1793200000000 } from './migrations/1793200000000-TiendaOnlineSeguridad';
+import { TiendaSeguimientoMesa1793300000000 } from './migrations/1793300000000-TiendaSeguimientoMesa';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -809,6 +810,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     FuncionesTareas1793042064365,
     AcreditacionesPosReglas1793110000000,
     TiendaOnlineSeguridad1793200000000,
+    TiendaSeguimientoMesa1793300000000,
   ];
 }
 
