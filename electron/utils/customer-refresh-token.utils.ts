@@ -68,9 +68,28 @@ export async function rotateCustomerRefreshToken(
   oldPlain: string,
   meta?: { ip?: string; userAgent?: string },
 ): Promise<{ cuenta: CuentaCliente; refresh: IssuedCustomerRefreshToken } | null> {
-  const valid = await findValidCustomerRefreshToken(dataSource, oldPlain);
-  if (!valid) return null;
-  await dataSource.getRepository(CustomerRefreshToken).update({ id: valid.id }, { revokedAt: new Date() });
+  if (!oldPlain) return null;
+  const repo = dataSource.getRepository(CustomerRefreshToken);
+  const found = await repo.findOne({ where: { tokenHash: hashToken(oldPlain) }, relations: ['cuentaCliente'] });
+  if (!found) return null;
+  const cuentaId = (found.cuentaCliente as any)?.id;
+  // F5 (auditoría M-auth5): un refresh ya rotado que vuelve a aparecer es una copia robada (o
+  // la víctima): se cierran todas las sesiones de la cuenta.
+  if (found.revokedAt) {
+    if (cuentaId) await revokeAllCustomerRefreshTokens(dataSource, cuentaId);
+    return null;
+  }
+  if (found.expiresAt.getTime() < Date.now()) return null;
+  // Rotación atómica: de dos rotaciones simultáneas del mismo token gana una sola.
+  const r = await repo.createQueryBuilder().update(CustomerRefreshToken)
+    .set({ revokedAt: new Date() })
+    .where('id = :id AND revoked_at IS NULL', { id: found.id })
+    .execute();
+  if (!r.affected) {
+    if (cuentaId) await revokeAllCustomerRefreshTokens(dataSource, cuentaId);
+    return null;
+  }
+  const valid = found;
   const refresh = await issueCustomerRefreshToken(dataSource, valid.cuentaCliente, meta);
   return { cuenta: valid.cuentaCliente, refresh };
 }
@@ -81,4 +100,15 @@ export async function revokeCustomerRefreshToken(dataSource: DataSource, plain: 
   if (!found) return false;
   await repo.update({ id: found.id }, { revokedAt: new Date() });
   return true;
+}
+
+/** Revoca todas las sesiones vigentes de una cuenta (cambio de contraseña, toma por Google). */
+export async function revokeAllCustomerRefreshTokens(dataSource: DataSource, cuentaId: number): Promise<number> {
+  const res = await dataSource.getRepository(CustomerRefreshToken)
+    .createQueryBuilder()
+    .update()
+    .set({ revokedAt: new Date() })
+    .where('cuenta_cliente_id = :id AND revoked_at IS NULL', { id: cuentaId })
+    .execute();
+  return res.affected ?? 0;
 }

@@ -166,7 +166,7 @@ export const MENU_TREE: MenuNode[] = [
       {
         id: 'grp-ventas-config', label: 'Configuración', icon: 'settings',
         children: [
-          { id: 'tienda-online-config', label: 'Config Tienda Online', icon: 'storefront', permiso: 'VENTAS_PDV', esConfig: true,
+          { id: 'tienda-online-config', label: 'Config Tienda Online', icon: 'storefront', permiso: 'PEDIDOS_ONLINE_CONFIGURAR', esConfig: true,
             keywords: ['tienda', 'online', 'config'],
             action: { component: TiendaOnlineConfigComponent, title: 'Config Tienda Online', tabId: 'tienda-online-config-tab', data: NAV } },
           { id: 'zonas-delivery', label: 'Zonas de Delivery', icon: 'pin_drop', permiso: 'VENTAS_PDV', esConfig: true,

@@ -1,6 +1,10 @@
 <div class="sf-container co">
   <h1 class="co-title">Finalizar pedido</h1>
 
+  <div class="sf-card co-aviso" *ngIf="avisos.length" role="status">
+    <div *ngFor="let a of avisos">{{ a }}</div>
+  </div>
+
   <ng-container *ngIf="!mesa.enMesa && !auth.isAuthenticated">
     <div class="sf-card">
       <p>Necesitás ingresar para completar tu pedido.</p>
@@ -32,7 +36,7 @@
     </div>
 
     <div class="sf-card totales">
-      <div class="row grand"><strong>Total</strong><strong>{{ cart.subtotal | number:'1.0-2' }}</strong></div>
+      <div class="row grand"><strong>Total</strong><strong>{{ cart.subtotal | guarani }}</strong></div>
     </div>
 
     <p class="sf-muted pago"><sf-icon name="cash" [size]="15"></sf-icon>El pago se realiza en la caja del local.</p>
@@ -40,6 +44,11 @@
   </ng-container>
 
   <ng-container *ngIf="!mesa.enMesa && auth.isAuthenticated && config.config.abiertaAhora">
+    <!-- M5: cuenta sin nombre -->
+    <div class="sf-card" *ngIf="faltaNombreCuenta">
+      <h3>¿A nombre de quién?</h3>
+      <input class="sf-input" [(ngModel)]="nombreCuenta" placeholder="Tu nombre" maxlength="60" autocomplete="name" />
+    </div>
     <!-- Tipo -->
     <div class="sf-card">
       <h3>Tipo de pedido</h3>
@@ -82,24 +91,35 @@
 
     <!-- Totales -->
     <div class="sf-card totales">
-      <div class="row"><span>Subtotal</span><span>{{ cart.subtotal | number:'1.0-2' }}</span></div>
+      <div class="row"><span>Subtotal</span><span>{{ cart.subtotal | guarani }}</span></div>
       <div class="row" *ngIf="tipo === 'DELIVERY'">
         <span>Envío<span class="sf-muted zona" *ngIf="zonaNombre"> · {{ zonaNombre }}</span></span>
         <span *ngIf="cotizando" class="acoordinar">Calculando…</span>
         <span *ngIf="!cotizando && cubierto === false" class="acoordinar">Fuera de cobertura</span>
         <span *ngIf="!cotizando && cubierto === null" class="acoordinar">Marcá el mapa</span>
-        <span *ngIf="!cotizando && cubierto">{{ costoEnvio | number:'1.0-2' }}</span>
+        <span *ngIf="!cotizando && cubierto">{{ costoEnvio | guarani }}</span>
       </div>
-      <div class="row grand"><strong>Total</strong><strong>{{ total | number:'1.0-2' }}</strong></div>
+      <div class="row grand"><strong>Total</strong><strong>{{ total | guarani }}</strong></div>
     </div>
 
-    <p class="sf-muted pago"><sf-icon name="cash" [size]="15"></sf-icon>Pago: efectivo contra entrega/retiro.</p>
+    <div class="sf-card" *ngIf="pagoOnline; else soloEfectivo">
+      <h3>¿Cómo pagás?</h3>
+      <div class="choices">
+        <button class="choice" [class.active]="metodoPago === 'EFECTIVO'" (click)="metodoPago = 'EFECTIVO'"><sf-icon name="cash" [size]="18"></sf-icon>Efectivo</button>
+        <button class="choice" [class.active]="metodoPago === 'UPAY'" (click)="metodoPago = 'UPAY'"><sf-icon name="card" [size]="18"></sf-icon>Tarjeta</button>
+      </div>
+      <p class="sf-muted pago" *ngIf="metodoPago === 'EFECTIVO'">Pagás en efectivo al retirar o al recibir el pedido.</p>
+      <p class="sf-muted pago" *ngIf="metodoPago === 'UPAY'">Te llevamos a la página segura de uPay. El pedido va a la cocina cuando se confirma el pago.</p>
+    </div>
+    <ng-template #soloEfectivo>
+      <p class="sf-muted pago"><sf-icon name="cash" [size]="15"></sf-icon>Pago: efectivo contra entrega/retiro.</p>
+    </ng-template>
     <p class="sf-error" *ngIf="error">{{ error }}</p>
   </ng-container>
 </div>
 
 <div class="sf-sticky-bar" *ngIf="config.config.abiertaAhora && (mesa.enMesa || auth.isAuthenticated)">
   <button class="sf-btn sf-btn--block" [disabled]="enviando || cart.items.length === 0" (click)="confirmar()">
-    {{ enviando ? 'Enviando…' : ('Confirmar pedido · ' + ((mesa.enMesa ? cart.subtotal : total) | number:'1.0-2')) }}
+    {{ enviando ? 'Enviando…' : ((pagoOnline && metodoPago === 'UPAY' ? 'Pagar con tarjeta · ' : 'Confirmar pedido · ') + ((mesa.enMesa ? cart.subtotal : total) | guarani)) }}
   </button>
 </div>

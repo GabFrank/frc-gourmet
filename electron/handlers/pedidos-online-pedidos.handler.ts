@@ -1,5 +1,8 @@
+import { iniciarPagoPedido, verificarPagoPedido, VERIFICAR_MIN_MS } from '../services/pagos-online/pagos-online.service';
+import { pagoOnlineOfrecido } from '../utils/tienda-ingreso.utils';
 import { ipcMain } from 'electron';
-import { DataSource, In } from 'typeorm';
+import { createHash, randomBytes } from 'crypto';
+import { DataSource, In, IsNull } from 'typeorm';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
 import { PrecioVenta } from '../../src/app/database/entities/productos/precio-venta.entity';
 import { Receta } from '../../src/app/database/entities/productos/receta.entity';
@@ -20,7 +23,8 @@ import { registerPublicOperation } from '../server/public-routes';
 import { getTiendaConfig, estaAbierta, getPizzaConfig } from './pedidos-online-config.handler';
 import { resolverZonaPorPunto } from '../utils/geo.utils';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
-import { ipEnRangosLan } from '../utils/ip-lan.util';
+import { pedidoMesaPermitido } from '../utils/tienda-limites';
+import { ipPermitidaMesa } from '../utils/ip-lan.util';
 
 /**
  * Pedidos online — Fase 3: creación de pedido + zonas de delivery (superficie pública).
@@ -206,7 +210,14 @@ async function resolveAdicionales(
     total += precio;
     detalle.push({ id: ad.id, nombre: ad.nombre, precio });
   }
+  // F5 (auditoría A-F2-2): un adicional pedido que no corresponde (a los sabores elegidos o
+  // inactivo) ya no se descarta en silencio: el cliente lo vio en el carrito y lo pagaría.
+  for (const id of wanted) if (!vistos.has(id)) throw new AdicionalInvalidoError(id);
   return { total, detalle };
+}
+
+export class AdicionalInvalidoError extends Error {
+  constructor(public readonly adicionalId: number) { super('adicional_invalido'); }
 }
 
 async function siguienteNumero(repo: any): Promise<string> {
@@ -235,15 +246,84 @@ export function registerPedidosOnlinePedidosHandlers(
   });
 
   // ============== CREAR PEDIDO (público, requiere cliente) ==============
+  const MAX_ITEMS_PEDIDO = 40;
+  const MAX_CANTIDAD_ITEM = 50;
+  const recortar = (v: any, max: number): string | undefined => {
+    const t = v == null ? '' : String(v).trim();
+    return t ? t.slice(0, max) : undefined;
+  };
+
+  // Idempotencia (PLAN-tienda-online A2.4): el storefront manda un uuid por intento.
+  // La clave es única POR DUEÑO (cuenta o, si es invitado, mesa): una clave igual de
+  // otro dueño nunca devuelve datos ajenos, se trata como clave nueva.
+  const normalizarIdemKey = (v: any): string | null => {
+    const t = v == null ? '' : String(v).trim();
+    return /^[A-Za-z0-9-]{8,64}$/.test(t) ? t : null;
+  };
+  const buscarPorIdemKey = async (
+    key: string, cuenta: CuentaCliente | null, mesa: PdvMesa | null,
+  ): Promise<PedidoOnline | null> => {
+    if (cuenta) {
+      return pedidoRepo().findOne({ where: { idempotencyKey: key, cuentaCliente: { id: cuenta.id } } });
+    }
+    if (mesa) {
+      return pedidoRepo().findOne({ where: { idempotencyKey: key, mesaId: mesa.id, cuentaCliente: IsNull() } });
+    }
+    return null;
+  };
+  // Seguimiento del invitado de mesa (PLAN-tienda-online F2/M6): token aleatorio de un
+  // solo uso de entrega; en la base queda solo su SHA-256.
+  const hashSeguimiento = (t: string) => createHash('sha256').update(t).digest('hex');
+  const nuevoSeguimiento = () => {
+    const token = randomBytes(32).toString('base64url');
+    return { token, hash: hashSeguimiento(token) };
+  };
+  // Reintento del mismo invitado (misma mesa y clave): el token anterior no se puede
+  // recuperar (solo está el hash), así que se rota y se le entrega uno nuevo.
+  const respuestaExistenteInvitado = async (p: PedidoOnline, cuenta: CuentaCliente | null) => {
+    const base: any = respuestaExistente(p);
+    if (p.estado === EstadoPedidoOnline.PENDIENTE_PAGO) {
+      const ini = await iniciarPagoPedido(dataSource, p.id);
+      if (ini.success) base.checkoutUrl = ini.checkoutUrl;
+    }
+    if (cuenta || !p.mesaId) return base;
+    const seg = nuevoSeguimiento();
+    await pedidoRepo().update({ id: p.id }, { seguimientoTokenHash: seg.hash } as any);
+    return { ...base, seguimientoToken: seg.token };
+  };
+  const respuestaExistente = (p: PedidoOnline) => ({
+    success: true,
+    numero: p.numero,
+    pedidoId: p.id,
+    estado: p.estado,
+    subtotal: Number(p.subtotal),
+    costoEnvio: Number(p.costoEnvio),
+    total: Number(p.total),
+    ventaId: p.ventaId ?? null,
+    repetido: true,
+  });
+
   ipcMain.handle('crear-pedido-online', async (event: any, data: any) => {
     const customerId = event?._customerId;
+    const idemKey = normalizarIdemKey(data?.idempotencyKey);
     const tipoPedido: TipoPedidoOnline = data?.tipoPedido || TipoPedidoOnline.PICKUP;
+    if (!Object.values(TipoPedidoOnline).includes(tipoPedido)) return { success: false, error: 'tipo_pedido_invalido' };
     const itemsIn: any[] = Array.isArray(data?.items) ? data.items : [];
     if (!itemsIn.length) return { success: false, error: 'pedido_sin_items' };
+    // Topes de entrada (PLAN-tienda-online A2).
+    if (itemsIn.length > MAX_ITEMS_PEDIDO) return { success: false, error: 'demasiados_items' };
+    if (itemsIn.some((it) => Number(it?.cantidad) > MAX_CANTIDAD_ITEM)) return { success: false, error: 'cantidad_excedida' };
+    const metodoPagoIn = data?.metodoPago || MetodoPagoOnline.EFECTIVO;
 
     // Config de tienda: apertura.
     const cfg = await getTiendaConfig(dataSource);
     if (!estaAbierta(cfg)) return { success: false, error: 'tienda_cerrada' };
+    // Efectivo, o tarjeta por uPay (F4) si el local la ofrece. MESA_QR paga siempre en caja.
+    const pagaOnline = metodoPagoIn === MetodoPagoOnline.UPAY;
+    if (metodoPagoIn !== MetodoPagoOnline.EFECTIVO && !pagaOnline) return { success: false, error: 'metodo_pago_no_disponible' };
+    if (pagaOnline && (tipoPedido === TipoPedidoOnline.MESA_QR || !pagoOnlineOfrecido(cfg))) {
+      return { success: false, error: 'metodo_pago_no_disponible' };
+    }
 
     // ── Resolución del solicitante según el canal ──
     // MESA_QR: autoservicio en mesa, invitado permitido (solo nombre obligatorio,
@@ -264,12 +344,17 @@ export function registerPedidosOnlinePedidosHandlers(
       // local). Requiere trustProxy si el server está detrás de reverse proxy.
       if (cfg.requiereLanMesa) {
         const clientIp = String(event?._clientIp || '');
-        if (!ipEnRangosLan(clientIp, cfg.rangoLanMesa)) {
+        if (!ipPermitidaMesa(clientIp, !!event?._viaTunel, cfg.rangoLanMesa)) {
           return { success: false, error: 'fuera_de_red_local' };
         }
       }
       nombreClienteInvitado = String(data?.nombreCliente || '').trim().slice(0, 150);
       if (!nombreClienteInvitado) return { success: false, error: 'falta_nombre' };
+      // F5 (auditoría M-auth7): el invitado de mesa no tiene cuenta; tope de pedidos por mesa
+      // y por IP para que un script no llene la cocina de comandas.
+      if (!pedidoMesaPermitido(mesa.id, String(event?._clientIp || ''))) {
+        return { success: false, error: 'demasiadas_solicitudes' };
+      }
       // Si además viene autenticado, se asocia la cuenta (opcional).
       if (customerId) {
         cuenta = await dataSource.getRepository(CuentaCliente).findOne({ where: { id: customerId } });
@@ -285,6 +370,19 @@ export function registerPedidosOnlinePedidosHandlers(
       if (tipoPedido === TipoPedidoOnline.DELIVERY && !cfg.permiteDelivery) {
         return { success: false, error: 'delivery_no_disponible' };
       }
+      // M5: una cuenta sin nombre (entró por código y nunca completó sus datos) dejaba
+      // el pedido sin nombre en la bandeja. El checkout lo pide y acá queda en la cuenta.
+      if (!String(cuenta.nombre || '').trim()) {
+        const nombre = String(data?.nombreCliente || '').trim().slice(0, 150);
+        if (!nombre) return { success: false, error: 'falta_nombre' };
+        cuenta.nombre = nombre.toUpperCase();
+        await dataSource.getRepository(CuentaCliente).update({ id: cuenta.id }, { nombre: cuenta.nombre });
+      }
+    }
+
+    if (idemKey) {
+      const previo = await buscarPorIdemKey(idemKey, cuenta, mesa);
+      if (previo) return respuestaExistenteInvitado(previo, cuenta);
     }
 
     const productoRepo = dataSource.getRepository(Producto);
@@ -317,7 +415,13 @@ export function registerPedidosOnlinePedidosHandlers(
       // Adicionales validados contra el catálogo (precio del server, no del cliente).
       const adicionalIds: number[] = Array.isArray(it.adicionalIds) ? it.adicionalIds : [];
       const opcionRecetaIds = opcion.recetaIds ?? (opcion.recetaId ? [opcion.recetaId] : []);
-      const adic = await resolveAdicionales(dataSource, producto, opcionRecetaIds, adicionalIds);
+      let adic: Awaited<ReturnType<typeof resolveAdicionales>>;
+      try {
+        adic = await resolveAdicionales(dataSource, producto, opcionRecetaIds, adicionalIds);
+      } catch (e) {
+        if (e instanceof AdicionalInvalidoError) return { success: false, error: `adicional_invalido:${producto.nombre}` };
+        throw e;
+      }
 
       // Observaciones predefinidas elegidas (solo se guardan como snapshot).
       const observaciones: string[] = Array.isArray(it.observaciones)
@@ -389,6 +493,10 @@ export function registerPedidosOnlinePedidosHandlers(
         // Compat: instalaciones que todavía no dibujaron sus zonas.
         zona = zonas.find((z) => z.id === Number(data.zonaDeliveryId)) || null;
         if (!zona) return { success: false, error: 'zona_delivery_invalida' };
+      } else {
+        // Sin zonas cargadas no hay forma de cobrar el envío: antes salía gratis
+        // a cualquier dirección (PLAN-tienda-online A3).
+        return { success: false, error: 'delivery_no_disponible' };
       }
 
       if (zona) {
@@ -423,33 +531,41 @@ export function registerPedidosOnlinePedidosHandlers(
     pedido.telefonoCliente = (cuenta?.telefono ?? null) as any;
     pedido.tipoPedido = tipoPedido;
     if (mesa) pedido.mesaId = mesa.id;
+    // Sin dueño (no debería pasar) no se guarda la clave: no habría índice que la cubra.
+    if (idemKey && (cuenta || mesa)) pedido.idempotencyKey = idemKey;
+    const seguimiento = !cuenta && mesa ? nuevoSeguimiento() : null;
+    if (seguimiento) pedido.seguimientoTokenHash = seguimiento.hash;
+    // Pago con tarjeta: espera la confirmación de uPay; no se acepta ni va a cocina antes (F4).
     // Aceptación automática: entra ACEPTADO directo; si no, RECIBIDO (revisión en PdV).
-    if (cfg.aceptacionAutomatica) {
+    if (pagaOnline) {
+      pedido.estado = EstadoPedidoOnline.PENDIENTE_PAGO;
+    } else if (cfg.aceptacionAutomatica) {
       pedido.estado = EstadoPedidoOnline.ACEPTADO;
       pedido.fechaAceptado = new Date();
     } else {
       pedido.estado = EstadoPedidoOnline.RECIBIDO;
     }
+    // El canal lo decide el servidor, no el cliente.
     pedido.canalOrigen = tipoPedido === TipoPedidoOnline.MESA_QR
       ? CanalPedidoOnline.QR_MESA
-      : (data?.canalOrigen || CanalPedidoOnline.WEB);
+      : CanalPedidoOnline.WEB;
     // MESA_QR: el pago es SIEMPRE en la caja física; el método queda EFECTIVO.
     pedido.metodoPago = tipoPedido === TipoPedidoOnline.MESA_QR
       ? MetodoPagoOnline.EFECTIVO
-      : (data?.metodoPago || MetodoPagoOnline.EFECTIVO);
-    pedido.fechaProgramada = data?.fechaProgramada ? new Date(data.fechaProgramada) : undefined;
+      : metodoPagoIn;
+    // fechaProgramada no tiene UI ni flujo: se ignora (antes se guardaba sin validar).
     pedido.subtotal = subtotal;
     pedido.costoEnvio = costoEnvio;
     pedido.total = total;
     if (monedaId != null) pedido.moneda = { id: monedaId } as any;
     if (zona) pedido.zonaDelivery = zona;
-    pedido.direccionEntrega = data?.direccionEntrega || undefined;
-    pedido.referenciaDireccion = data?.referenciaDireccion || undefined;
+    pedido.direccionEntrega = recortar(data?.direccionEntrega, 500);
+    pedido.referenciaDireccion = recortar(data?.referenciaDireccion, 255);
     if (tipoPedido === TipoPedidoOnline.DELIVERY) {
       if (typeof data?.latitud === 'number') pedido.latitud = data.latitud;
       if (typeof data?.longitud === 'number') pedido.longitud = data.longitud;
     }
-    pedido.notas = data?.notas || undefined;
+    pedido.notas = recortar(data?.notas, 500);
     pedido.items = itemsToSave;
 
     // El número (`count()+1`) puede colisionar con pedidos concurrentes (ej. un
@@ -461,6 +577,12 @@ export function registerPedidosOnlinePedidosHandlers(
         saved = await pedidoRepo().save(pedido);
         break;
       } catch (e) {
+        // Reintento concurrente con la misma clave: el índice único lo frena; se
+        // devuelve el pedido que ganó la carrera en vez de duplicarlo.
+        if (pedido.idempotencyKey) {
+          const previo = await buscarPorIdemKey(pedido.idempotencyKey, cuenta, mesa);
+          if (previo) return respuestaExistenteInvitado(previo, cuenta);
+        }
         if (intento >= 6) throw e;
         pedido.numero = await siguienteNumero(pedidoRepo());
       }
@@ -474,6 +596,22 @@ export function registerPedidosOnlinePedidosHandlers(
     //   es lo que evita cocinar algo que después hay que cancelar.
     // Best-effort en los dos casos: si no hay caja abierta o es ambiguo, el
     // pedido queda para la bandeja. Nunca falla el pedido por esto.
+    if (pagaOnline) {
+      const ini = await iniciarPagoPedido(dataSource, saved.id);
+      if (!ini.success) {
+        // Sin sesión de pago no hay nada cobrable: el pedido se cancela y el cliente puede
+        // volver a pedir en efectivo.
+        await pedidoRepo().update({ id: saved.id }, {
+          estado: EstadoPedidoOnline.CANCELADO, motivoRechazo: 'No se pudo iniciar el pago con tarjeta.',
+        } as any);
+        return { success: false, error: 'pago_no_iniciado', detalle: (ini as any).error, numero: saved.numero };
+      }
+      return {
+        success: true, numero: saved.numero, pedidoId: saved.id, estado: EstadoPedidoOnline.PENDIENTE_PAGO,
+        subtotal, costoEnvio, total, ventaId: null, checkoutUrl: ini.checkoutUrl,
+      };
+    }
+
     let ventaId: number | null = null;
     if (tipoPedido === TipoPedidoOnline.MESA_QR || cfg.aceptacionAutomatica) {
       try {
@@ -494,13 +632,20 @@ export function registerPedidosOnlinePedidosHandlers(
       costoEnvio,
       total,
       ventaId,
+      // Solo invitado de mesa: se entrega una vez; con esto sigue su pedido sin cuenta.
+      ...(seguimiento ? { seguimientoToken: seguimiento.token } : {}),
     };
   });
 
   // ============== MIS PEDIDOS (público, requiere cliente) ==============
+  // Cuenta dada de baja: no sigue viendo pedidos con un token vigente (PLAN-tienda-online A1).
+  const cuentaActiva = async (id: number): Promise<boolean> =>
+    !!(await dataSource.getRepository(CuentaCliente).findOne({ where: { id, activo: true }, select: ['id'] }));
+
   ipcMain.handle('get-mis-pedidos-online', async (event: any) => {
     const customerId = event?._customerId;
     if (!customerId) return { success: false, error: 'no_autenticado' };
+    if (!(await cuentaActiva(customerId))) return { success: false, error: 'cuenta_invalida' };
     const pedidos = await pedidoRepo().find({
       where: { cuentaCliente: { id: customerId } },
       relations: ['items'],
@@ -514,12 +659,32 @@ export function registerPedidosOnlinePedidosHandlers(
   ipcMain.handle('get-pedido-online-estado', async (event: any, numero: string) => {
     const customerId = event?._customerId;
     if (!customerId) return { success: false, error: 'no_autenticado' };
+    if (!(await cuentaActiva(customerId))) return { success: false, error: 'cuenta_invalida' };
     const pedido = await pedidoRepo().findOne({
       where: { numero, cuentaCliente: { id: customerId } },
       relations: ['items'],
     });
     if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
     return { success: true, pedido: mapPedido(pedido) };
+  });
+
+  // ====== SEGUIMIENTO DEL INVITADO DE MESA (público, sin auth) ======
+  // Solo con el token entregado al crear. Devuelve ese pedido y nada más (sin teléfono
+  // ni dirección). Vence 24 h después de que el pedido llega a un estado final.
+  ipcMain.handle('get-pedido-online-seguimiento', async (_event: any, token: string) => {
+    const t = String(token || '').trim();
+    if (!/^[A-Za-z0-9_-]{20,100}$/.test(t)) return { success: false, error: 'pedido_no_encontrado' };
+    const pedido = await pedidoRepo().findOne({
+      where: { seguimientoTokenHash: hashSeguimiento(t), cuentaCliente: IsNull() },
+      relations: ['items'],
+    });
+    if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
+    if (ESTADOS_FINALES.includes(pedido.estado)) {
+      const fin = new Date(pedido.fechaEntregado || pedido.updatedAt || pedido.createdAt).getTime();
+      if (Date.now() - fin > SEGUIMIENTO_VIGENCIA_MS) return { success: false, error: 'seguimiento_vencido' };
+    }
+    const p = mapPedido(pedido);
+    return { success: true, pedido: { ...p, direccionEntrega: null } };
   });
 
   // ====== CONTEXTO DE MESA POR TOKEN (público, sin auth) — canal MESA_QR ======
@@ -554,9 +719,9 @@ export function registerPedidosOnlinePedidosHandlers(
     });
     const conPoligono = zonas.filter((z) => !!z.poligono);
     if (!conPoligono.length) {
-      // Todavía nadie dibujó las zonas: no se puede cotizar, pero tampoco se
-      // bloquea el pedido (el handler de creación mantiene el camino de compat).
-      return { success: true, cubierto: true, sinZonasDefinidas: true, costoEnvio: 0, zona: null };
+      // Todavía nadie dibujó las zonas: no se puede cotizar ni cobrar el envío,
+      // así que no hay delivery por la tienda (PLAN-tienda-online A3).
+      return { success: true, cubierto: false, sinZonasDefinidas: true, costoEnvio: 0, zona: null };
     }
     const zona = resolverZonaPorPunto(lat, lng, conPoligono as any) as ZonaDelivery | null;
     if (!zona) return { success: true, cubierto: false, costoEnvio: 0, zona: null };
@@ -574,6 +739,28 @@ export function registerPedidosOnlinePedidosHandlers(
     };
   });
 
+  // ====== PAGO ONLINE (F4): iniciar / reintentar y verificar (requiere el cliente dueño) ======
+  const pedidoDelCliente = async (customerId: any, numero: any): Promise<PedidoOnline | null> => {
+    if (!customerId || !(await cuentaActiva(customerId))) return null;
+    const n = String(numero || '').trim();
+    if (!/^[A-Za-z0-9-]{1,20}$/.test(n)) return null;
+    return pedidoRepo().findOne({ where: { numero: n, cuentaCliente: { id: customerId } } });
+  };
+  ipcMain.handle('iniciar-pago-pedido-online', async (event: any, numero: string, opciones?: any) => {
+    const p = await pedidoDelCliente(event?._customerId, numero);
+    if (!p) return { success: false, error: 'pedido_no_encontrado' };
+    const r = await iniciarPagoPedido(dataSource, p.id, { nuevoIntento: !!opciones?.nuevoIntento });
+    return r;
+  });
+  ipcMain.handle('verificar-pago-pedido-online', async (event: any, numero: string) => {
+    const p = await pedidoDelCliente(event?._customerId, numero);
+    if (!p) return { success: false, error: 'pedido_no_encontrado' };
+    const r = await verificarPagoPedido(dataSource, p.id, { minIntervaloMs: VERIFICAR_MIN_MS });
+    if (r.recienPagado && r.aceptadoAutomatico) await materializarTrasPago(dataSource, p.id);
+    const q = await pedidoRepo().findOne({ where: { id: p.id }, relations: ['items'] });
+    return { success: true, pedido: q ? mapPedido(q) : null };
+  });
+
   // ---- Operaciones públicas ----
   registerPublicOperation('zonas.get', { channel: 'get-zonas-delivery-online', requiresAuth: false, description: 'Zonas de delivery activas.' });
   registerPublicOperation('envio.cotizar', { channel: 'cotizar-envio-online', requiresAuth: false, description: 'Costo de envío para una ubicación del mapa.' });
@@ -582,8 +769,40 @@ export function registerPedidosOnlinePedidosHandlers(
   // cliente (validado dentro del handler). Si viene token de cliente, se resuelve.
   registerPublicOperation('pedido.crear', { channel: 'crear-pedido-online', requiresAuth: false, optionalAuth: true, description: 'Crear un pedido online.' });
   registerPublicOperation('pedido.mis', { channel: 'get-mis-pedidos-online', requiresAuth: true, description: 'Mis pedidos.' });
+  registerPublicOperation('pedido.seguimiento', { channel: 'get-pedido-online-seguimiento', requiresAuth: false, description: 'Estado del pedido del invitado de mesa por su token de seguimiento.' });
+  registerPublicOperation('pedido.pago.iniciar', { channel: 'iniciar-pago-pedido-online', requiresAuth: true, description: 'Iniciar o reintentar el pago con tarjeta de un pedido propio.' });
+  registerPublicOperation('pedido.pago.verificar', { channel: 'verificar-pago-pedido-online', requiresAuth: true, description: 'Consultar a uPay el pago de un pedido propio.' });
   registerPublicOperation('pedido.estado', { channel: 'get-pedido-online-estado', requiresAuth: true, description: 'Estado de un pedido por número.' });
 }
+
+/**
+ * Pedido recién pagado con aceptación automática: se materializa como cualquier pedido
+ * aceptado. Si falla (sin caja), el pago queda PAGADO, el pedido ACEPTADO con el error
+ * visible en la bandeja y se avisa al personal (PLAN-tienda-online F4 §9).
+ */
+export async function materializarTrasPago(dataSource: DataSource, pedidoId: number): Promise<void> {
+  try {
+    const mat = await materializarPedidoOnlineEnVenta(dataSource, pedidoId);
+    if (mat?.ventaId) return;
+    throw new Error((mat as any)?.error || 'sin venta');
+  } catch (e: any) {
+    console.warn('[pagos-online] pedido pagado sin materializar:', e?.message || e);
+    const p = await dataSource.getRepository(PedidoOnline).findOne({ where: { id: pedidoId } });
+    try {
+      const { dispatchEvento } = await import('../services/notificacion.service');
+      await dispatchEvento('TIENDA_PAGO_ONLINE', {
+        asunto: 'Tienda online: pedido pagado sin venta',
+        texto: `Pedido ${p?.numero ?? pedidoId} pagado con tarjeta y aceptado, pero no se pudo cargar la venta (${e?.message || e}). Abrí caja y usá «Enviar a cocina» en Pedidos online.`,
+        dedupeKey: `sin-venta-${pedidoId}`,
+      });
+    } catch { /* el aviso es best-effort */ }
+  }
+}
+
+const ESTADOS_FINALES: string[] = [
+  EstadoPedidoOnline.ENTREGADO, EstadoPedidoOnline.RECHAZADO, EstadoPedidoOnline.CANCELADO,
+];
+const SEGUIMIENTO_VIGENCIA_MS = 24 * 60 * 60 * 1000;
 
 function mapPedido(p: PedidoOnline): any {
   return {
@@ -596,6 +815,12 @@ function mapPedido(p: PedidoOnline): any {
     total: Number(p.total),
     direccionEntrega: p.direccionEntrega ?? null,
     notas: p.notas ?? null,
+    // El cliente ve por qué el local no tomó su pedido (PLAN-tienda-online M6).
+    motivoRechazo: p.motivoRechazo ?? null,
+    metodoPago: p.metodoPago,
+    // F4: estado del pago con tarjeta (null en efectivo). El detalle interno no se expone.
+    estadoPago: p.estadoPago ?? null,
+    pagoMonto: p.pagoMonto != null ? Number(p.pagoMonto) : null,
     createdAt: p.createdAt,
     fechaAceptado: p.fechaAceptado ?? null,
     fechaListo: p.fechaListo ?? null,

@@ -74,7 +74,12 @@ import { condicionCanal, esCanalValido } from '../utils/canal-venta.utils';
 import { limiteFechaSqlite } from '../utils/db-query';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
-import { EstadoPedidoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { EstadoPedidoOnline, TipoPedidoOnline, EstadoPagoOnline, FORMA_PAGO_UPAY } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { TiendaOnlineConfig } from '../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
+import { motivoNoMaterializable } from '../utils/pedido-online-materializable';
+import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
+import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
+import { PagoEstado } from '../../src/app/database/entities/compras/estado.enum';
 import { CobroParcial } from '../../src/app/database/entities/ventas/cobro-parcial.entity';
 import { CobroParcialItem } from '../../src/app/database/entities/ventas/cobro-parcial-item.entity';
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
@@ -257,6 +262,13 @@ export async function materializarPedidoOnlineEnVenta(
       return { ventaId: pedido.ventaId, yaMaterializado: true, itemsCreados: 0, observacionesNoMapeadas: [] };
     }
 
+    // F5 (C1): chequeo temprano (el autoritativo va dentro de la tx, más abajo).
+    {
+      const cfgPre = await dataSource.getRepository(TiendaOnlineConfig).findOne({ where: {}, order: { id: 'ASC' } as any });
+      const motivoPre = motivoNoMaterializable(pedido, !!cfgPre?.aceptacionAutomatica);
+      if (motivoPre) throw new Error(motivoPre);
+    }
+
     // Caja: la del parámetro o la única caja abierta.
     let cajaId: number | undefined = opts?.cajaId ? Number(opts.cajaId) : undefined;
 
@@ -406,7 +418,8 @@ export async function materializarPedidoOnlineEnVenta(
           // canales; es null en las zonas anteriores a esa unificación, y ahí
           // no hay zona que sellar.
           precioDeliveryId: esRetiro ? null : (pedido.zonaDelivery?.precioDelivery?.id ?? null),
-          cobroAnticipado: false,
+          // Pagado con tarjeta en la tienda (F4): el cobro ya está hecho.
+          cobroAnticipado: pedido.estadoPago === EstadoPagoOnline.PAGADO,
         }, userId);
         venta.delivery = delivery as any;
         venta.costoDelivery = esRetiro ? 0 : (Number(pedido.costoEnvio) || 0);
@@ -415,6 +428,32 @@ export async function materializarPedidoOnlineEnVenta(
 
       await setEntityUserTracking(dataSource, venta, userId, false);
       venta = await ventaRepo.save(venta);
+
+      // Pago con tarjeta por la tienda (PLAN-tienda-online F4): el cobro ya se hizo en uPay.
+      // Se registra como un cobro anticipado (Pago + detalle «UPAY ONLINE», que no mueve la
+      // caja física) para que el PdV vea la venta saldada y la concluya/facture como siempre.
+      if (pedido.estadoPago === EstadoPagoOnline.PAGADO) {
+        const fp = await qr.manager.getRepository(FormasPago).findOne({ where: { nombre: FORMA_PAGO_UPAY } });
+        if (!fp) throw new Error('falta la forma de pago UPAY ONLINE (migración TiendaPagoOnline)');
+        const moneda = pedido.moneda?.id
+          ? { id: pedido.moneda.id }
+          : await qr.manager.getRepository(Moneda).findOne({ where: { principal: true } });
+        if (!moneda) throw new Error('no hay moneda principal para registrar el pago online');
+        const pago = await qr.manager.getRepository(Pago).save(qr.manager.getRepository(Pago).create({
+          estado: PagoEstado.ABIERTO, caja: { id: cajaId } as any, activo: true,
+        } as any) as any) as Pago;
+        await qr.manager.getRepository(PagoDetalle).save(qr.manager.getRepository(PagoDetalle).create({
+          valor: Number(pedido.pagoMonto ?? pedido.total),
+          descripcion: `UPAY ONLINE ${pedido.numero}${pedido.pagoId ? ' · ' + pedido.pagoId : ''}`.slice(0, 255),
+          activo: true,
+          tipo: TipoDetalle.PAGO,
+          pago: { id: pago.id } as any,
+          moneda: { id: (moneda as any).id } as any,
+          formaPago: { id: fp.id } as any,
+        } as any));
+        venta.pago = { id: pago.id } as any;
+        venta = await ventaRepo.save(venta);
+      }
     }
 
     ventaId = venta.id;
@@ -552,9 +591,14 @@ export async function materializarPedidoOnlineEnVenta(
     // ya impresa: el operador rechazó y la cocina cocinó igual.
     const estadoActual = await qr.manager.getRepository(PedidoOnline).findOne({
       where: { id: pedidoId },
-      select: ['id', 'estado', 'ventaId'],
+      select: ['id', 'estado', 'ventaId', 'tipoPedido', 'mesaId', 'metodoPago', 'estadoPago'],
     });
     if (!estadoActual) throw new Error(`Pedido online ${pedidoId} no encontrado`);
+    // F5 (auditoría C1): solo va a cocina un pedido aceptado (o de mesa / con aceptación
+    // automática) y, si es con tarjeta, ya pagado. Se chequea acá, dentro de la tx.
+    const cfgTienda = await qr.manager.getRepository(TiendaOnlineConfig).findOne({ where: {}, order: { id: 'ASC' } as any });
+    const motivoNo = motivoNoMaterializable(estadoActual, !!cfgTienda?.aceptacionAutomatica);
+    if (motivoNo) throw new Error(motivoNo);
     if (
       estadoActual.estado === EstadoPedidoOnline.RECHAZADO ||
       estadoActual.estado === EstadoPedidoOnline.CANCELADO

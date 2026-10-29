@@ -405,7 +405,8 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
         this.repositoryService.aceptarPedidoOnline(p.id, { cajaId: this.data.caja.id }),
       );
       if (!res?.success) {
-        this.snackBar.open(`No se pudo aceptar: ${res?.error || ''}`, 'OK', { duration: 4000 });
+        const msg = res?.error === 'sin_caja' ? 'la caja de este PdV ya no está abierta.' : (res?.error || '');
+        this.snackBar.open(`No se pudo aceptar: ${msg}`, 'OK', { duration: 4000 });
         return;
       }
       if (res.errorMaterializacion) {
