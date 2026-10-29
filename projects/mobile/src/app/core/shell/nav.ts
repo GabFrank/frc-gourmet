@@ -33,7 +33,14 @@ export const NAV_ITEMS: NavItem[] = [
     path: '/rrhh',
     icon: 'groups',
     label: 'RRHH',
-    permisos: ['RRHH_DASHBOARD_VER', 'RRHH_FUNCIONARIO_VER'],
+    // Además de los de administración, los permisos de las pantallas del
+    // funcionario (FT y DR): sin ellos, quien solo marca sus tareas o vota no
+    // ve el ícono y no llega a /rrhh. Los tiles se filtran en SectionIndexPage.
+    permisos: [
+      'RRHH_DASHBOARD_VER', 'RRHH_FUNCIONARIO_VER',
+      'RRHH_FT_MARCAR_PROPIAS', 'RRHH_FT_VERIFICAR',
+      'RRHH_DR_REGISTRAR', 'RRHH_DR_PUNTUAR', 'RRHH_DR_VOTAR', 'RRHH_DR_MIS_DATOS', 'RRHH_DR_APROBAR',
+    ],
   },
   {
     path: '/reportes',
