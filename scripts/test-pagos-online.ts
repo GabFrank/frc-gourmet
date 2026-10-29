@@ -162,6 +162,40 @@ async function main() {
   v = await verificarPagoPedido(ds, p2.id);
   ok(v.recienPagado === true, 'el intento 2 se paga');
 
+  console.log('F5: dos reintentos a la vez (A-pay3)');
+  const pr = await nuevo(30000);
+  await iniciarPagoPedido(ds, pr.id);
+  pagar((await leer(pr.id)).pagoSesionId!, 'DECLINED', 'DECLINED');
+  await verificarPagoPedido(ds, pr.id);
+  const antes = sesiones.size;
+  const dos = await Promise.all([
+    iniciarPagoPedido(ds, pr.id, { nuevoIntento: true }), iniciarPagoPedido(ds, pr.id, { nuevoIntento: true }),
+  ]);
+  ok(dos.filter((r) => r.success).length === 1 && sesiones.size === antes + 1,
+    'F5: dos reintentos simultáneos abren UNA sola sesión nueva', [dos, sesiones.size - antes]);
+
+  console.log('F5: rechazado sin reintento se cancela (M-pay1)');
+  const pf = await nuevo(20000);
+  await iniciarPagoPedido(ds, pf.id);
+  pagar((await leer(pf.id)).pagoSesionId!, 'DECLINED', 'DECLINED');
+  await verificarPagoPedido(ds, pf.id);
+  await ds.getRepository(PedidoOnline).update({ id: pf.id }, {
+    createdAt: new Date(Date.now() - 3 * 3600_000), pagoExpiraEn: new Date(Date.now() - 3600_000), pagoUltimaConsulta: null,
+  } as any);
+  await tickPagosOnline(ds, { ahora: new Date() });
+  const qf = await leer(pf.id);
+  ok(qf.estado === EstadoPedidoOnline.CANCELADO && qf.estadoPago === EstadoPagoOnline.EXPIRADO,
+    'F5: FALLIDO de más de 2 h con sesión vencida → CANCELADO', [qf.estado, qf.estadoPago]);
+
+  console.log('F5: pagado y aceptado sin venta se reintenta (C2)');
+  const ps = await nuevo(15000);
+  await ds.getRepository(PedidoOnline).update({ id: ps.id }, {
+    estado: EstadoPedidoOnline.ACEPTADO, estadoPago: EstadoPagoOnline.PAGADO, ventaId: null,
+  } as any);
+  const llamados: number[] = [];
+  await tickPagosOnline(ds, { ahora: new Date(), alPagar: async (id) => { llamados.push(id); } });
+  ok(llamados.includes(ps.id), 'F5: el job vuelve a intentar mandar a cocina un pagado aceptado sin venta', llamados);
+
   console.log('Monto que no coincide');
   const p3 = await nuevo(80000);
   await iniciarPagoPedido(ds, p3.id);

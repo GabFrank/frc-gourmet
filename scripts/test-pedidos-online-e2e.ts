@@ -439,6 +439,12 @@ async function main() {
     items: [{ productoId: seeded.elaborado.id, opcion: { tipo: 'RECETA' }, cantidad: 1, adicionalIds: [seeded.adicional.id] }],
   }], token);
   ok(pedElab.result?.success === true && pedElab.result?.total === 47000, 'ELABORADO + adicional: total server-side = 47000', pedElab.result?.total);
+  // F5 (A-F2-2): un adicional que no corresponde ya no se descarta en silencio.
+  const adicMal = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.elaborado.id, opcion: { tipo: 'RECETA' }, cantidad: 1, adicionalIds: [seeded.adicional.id, 987654] }],
+  }], token);
+  ok(adicMal.result?.success === false && /^adicional_invalido/.test(String(adicMal.result?.error)), 'F5: adicional que no corresponde → adicional_invalido', adicMal.result);
 
   // 9. mis pedidos
   const mis = await pub('pedido.mis', [], token);
