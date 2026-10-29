@@ -28,6 +28,11 @@
         <span class="estado" [attr.data-estado]="p.estado">{{ estadoLabel(p.estado) }}</span>
       </div>
 
+      <div class="pago-online" *ngIf="pagoInsignia(p) as ins">
+        <span class="pago-chip" [attr.data-tipo]="ins.clase"><mat-icon>credit_card</mat-icon> {{ ins.texto }}</span>
+        <span class="muted ref" *ngIf="p.pagoId">Ref. uPay {{ p.pagoId }}</span>
+      </div>
+
       <div class="cliente">
         <mat-icon>person</mat-icon>
         <span>{{ p.nombreCliente || 'Cliente' }} · {{ p.telefonoCliente }}</span>
@@ -71,7 +76,9 @@
             <button mat-stroked-button color="warn" (click)="confirmarRechazo(p)">Rechazar</button>
           </ng-container>
           <ng-container *ngIf="confirmandoRechazoId === p.id">
-            <span class="confirm-text">¿Rechazar {{ p.numero }}?</span>
+            <span class="confirm-text">¿Rechazar {{ p.numero }}?
+              <span *ngIf="p.estadoPago === 'PAGADO'"> Está pagado: hay que devolver ₲ {{ p.pagoMonto | number:'1.0-0' }} desde uPay.</span>
+            </span>
             <button mat-flat-button color="warn" (click)="rechazar(p)">Sí, rechazar</button>
             <button mat-button (click)="cancelarRechazo()">Cancelar</button>
           </ng-container>
@@ -84,6 +91,10 @@
           (click)="avanzar(p, sig.estado)"
         >
           {{ sig.label }}
+        </button>
+
+        <button mat-stroked-button color="warn" *ngIf="p.estadoPago === 'REEMBOLSO_PENDIENTE'" (click)="marcarDevuelto(p)">
+          <mat-icon>undo</mat-icon> Marcar devuelto
         </button>
 
         <!-- Recovery: pedido de mesa que no se materializó (ej. sin caja abierta

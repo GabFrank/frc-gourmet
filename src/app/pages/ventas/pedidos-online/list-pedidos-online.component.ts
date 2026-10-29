@@ -47,6 +47,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
 
   readonly estados = [
     { value: 'ACTIVOS', label: 'Activos' },
+    { value: 'PENDIENTE_PAGO', label: 'Esperando pago' },
     { value: 'RECIBIDO', label: 'Recibidos' },
     { value: 'ACEPTADO', label: 'Aceptados' },
     { value: 'EN_PREPARACION', label: 'En preparación' },
@@ -58,6 +59,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
   ];
 
   private readonly estadoLabels: Record<string, string> = {
+    PENDIENTE_PAGO: 'Esperando pago',
     RECIBIDO: 'Recibido',
     ACEPTADO: 'Aceptado',
     EN_PREPARACION: 'En preparación',
@@ -180,6 +182,35 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
     return ({ EFECTIVO: 'Efectivo', BANCARD: 'Bancard', UPAY: 'uPay', PAGOPAR: 'Pagopar' } as Record<string, string>)[m] || m;
   }
 
+  /** Insignia del pago con tarjeta (F4); null en pedidos en efectivo. */
+  pagoInsignia(p: any): { texto: string; clase: string } | null {
+    switch (p?.estadoPago) {
+      case 'PAGADO': return { texto: 'Pagado con tarjeta', clase: 'ok' };
+      case 'PENDIENTE': return { texto: 'Esperando pago', clase: 'espera' };
+      case 'FALLIDO': return { texto: 'Pago rechazado', clase: 'mal' };
+      case 'EXPIRADO': return { texto: 'Pago vencido', clase: 'mal' };
+      case 'REEMBOLSO_PENDIENTE': return { texto: `Devolver ₲ ${Number(p.pagoMonto || 0).toLocaleString('es-PY')}`, clase: 'mal' };
+      case 'DEVUELTO': return { texto: 'Pago devuelto', clase: 'neutro' };
+      default: return null;
+    }
+  }
+
+  marcarDevuelto(p: any): void {
+    const monto = Number(p.pagoMonto || 0).toLocaleString('es-PY');
+    if (!confirm(`¿Ya devolviste ₲ ${monto} del pedido ${p.numero} desde el panel de uPay?`)) return;
+    this.repo.marcarPagoDevueltoPedidoOnline(p.id).subscribe({
+      next: (res) => {
+        if (res?.success) {
+          this.snack.open(`Pedido ${p.numero}: devolución registrada`, 'OK', { duration: 2500 });
+          this.cargar(true);
+        } else {
+          this.snack.open('No se pudo marcar: ' + (res?.error || ''), 'OK', { duration: 3500 });
+        }
+      },
+      error: (e) => this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 }),
+    });
+  }
+
   /** Sabores, adicionales, preferencias y nota de la línea (lo que cocina tiene que ver). */
   detalleItem(it: any): string {
     let p = it?.personalizacion;
@@ -211,7 +242,12 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
       next: (res) => {
         this.confirmandoRechazoId = null;
         if (res?.success) {
-          this.snack.open(`Pedido ${p.numero} rechazado`, 'OK', { duration: 2500 });
+          const dev = Number(res.montoDevolver || 0);
+          this.snack.open(
+            dev > 0
+              ? `Pedido ${p.numero} rechazado. Estaba pagado: devolvé ₲ ${dev.toLocaleString('es-PY')} desde uPay y marcalo como devuelto.`
+              : `Pedido ${p.numero} rechazado`,
+            'OK', { duration: dev > 0 ? 10000 : 2500 });
           this.cargar(true);
         } else {
           this.snack.open('No se pudo rechazar: ' + (res?.error || ''), 'OK', { duration: 3500 });
