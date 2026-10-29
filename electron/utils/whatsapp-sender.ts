@@ -68,9 +68,12 @@ function appEmpaquetada(): boolean {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { app } = require('electron');
-    return !!app?.isPackaged;
+    // F5 (auditoría M-auth1): falla CERRADO. Dentro de Electron sin un `app` legible se toma
+    // como empaquetada; solo fuera de Electron (tests con node) cuenta como desarrollo.
+    if (typeof app?.isPackaged === 'boolean') return app.isPackaged;
+    return !!process.versions?.electron;
   } catch {
-    return false;
+    return !!process.versions?.electron;
   }
 }
 
