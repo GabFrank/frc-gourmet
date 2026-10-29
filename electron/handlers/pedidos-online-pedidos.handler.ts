@@ -20,7 +20,7 @@ import { registerPublicOperation } from '../server/public-routes';
 import { getTiendaConfig, estaAbierta, getPizzaConfig } from './pedidos-online-config.handler';
 import { resolverZonaPorPunto } from '../utils/geo.utils';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
-import { ipEnRangosLan } from '../utils/ip-lan.util';
+import { ipPermitidaMesa } from '../utils/ip-lan.util';
 
 /**
  * Pedidos online — Fase 3: creación de pedido + zonas de delivery (superficie pública).
@@ -264,7 +264,7 @@ export function registerPedidosOnlinePedidosHandlers(
       // local). Requiere trustProxy si el server está detrás de reverse proxy.
       if (cfg.requiereLanMesa) {
         const clientIp = String(event?._clientIp || '');
-        if (!ipEnRangosLan(clientIp, cfg.rangoLanMesa)) {
+        if (!ipPermitidaMesa(clientIp, !!event?._viaTunel, cfg.rangoLanMesa)) {
           return { success: false, error: 'fuera_de_red_local' };
         }
       }
