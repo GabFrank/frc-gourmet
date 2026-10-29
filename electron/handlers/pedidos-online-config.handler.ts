@@ -1,8 +1,10 @@
 import { ipcMain } from 'electron';
 import { pagoOnlineOfrecido } from '../utils/tienda-ingreso.utils';
+import { upayConfigDe, apiKey as upayApiKeyActual } from '../services/pagos-online/pagos-online.service';
+import { UpayCheckoutProvider } from '../services/pagos-online/upay-checkout.provider';
 import { otpWhatsappDisponible, sendWhatsappOtp, whatsappCloudConfigurado } from '../utils/whatsapp-sender';
 import { cargarCredencialesTienda, credencialesTiendaListas, getGoogleClientId } from '../utils/tienda-ingreso.utils';
-import { almacenSeguroDisponible, getWhatsappToken, setWhatsappToken } from '../utils/tienda-secrets.util';
+import { almacenSeguroDisponible, getWhatsappToken, setWhatsappToken, getUpayApiKey, setUpayApiKey } from '../utils/tienda-secrets.util';
 import { randomInt } from 'crypto';
 import { DataSource } from 'typeorm';
 import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zona-delivery.entity';
@@ -102,7 +104,43 @@ async function estadoIngreso(): Promise<any> {
     whatsappConfigurado: whatsappCloudConfigurado(),
     googleClientIdEnEntorno: !!process.env['GOOGLE_CLIENT_ID'],
     googleConfigurado: !!getGoogleClientId(),
+    // F4: solo si la API Key de uPay está guardada (nunca su valor).
+    upayApiKeyGuardada: !!(await getUpayApiKey()),
   };
+}
+
+/** F4: URL base de uPay: https y dominio de uPay (STG o la de producción que den al certificar). */
+function esUrlBaseUpay(v: string): boolean {
+  try {
+    const u = new URL(v);
+    const h = u.hostname.toLowerCase();
+    return u.protocol === 'https:' && (h === 'upay.com.py' || h.endsWith('.upay.com.py') || h === 'upay.com' || h.endsWith('.upay.com'));
+  } catch {
+    return false;
+  }
+}
+
+/** Valida y aplica los campos de pago online (F4). Devuelve el código de error o null. */
+function aplicarPagoOnline(cfg: TiendaOnlineConfig, data: any): string | null {
+  const campo = (v: any) => String(v ?? '').trim();
+  if (data.upayBaseUrl !== undefined) {
+    const v = campo(data.upayBaseUrl);
+    if (v && !esUrlBaseUpay(v)) return 'upay_url_invalida';
+    cfg.upayBaseUrl = v || null;
+  }
+  if (data.upayMerchantId !== undefined) {
+    const v = campo(data.upayMerchantId);
+    if (v && !/^[\w-]{1,64}$/.test(v)) return 'upay_merchant_invalido';
+    cfg.upayMerchantId = v || null;
+  }
+  if (data.upayMerchantNombre !== undefined) cfg.upayMerchantNombre = campo(data.upayMerchantNombre).slice(0, 150) || null;
+  if (data.minutosAvisoPagadoSinAceptar !== undefined) {
+    const n = Math.round(Number(data.minutosAvisoPagadoSinAceptar));
+    if (!Number.isFinite(n) || n < 1 || n > 240) return 'minutos_aviso_invalido';
+    cfg.minutosAvisoPagadoSinAceptar = n;
+  }
+  if (data.pagoOnlineActivo !== undefined) cfg.pagoOnlineActivo = !!data.pagoOnlineActivo;
+  return null;
 }
 
 const RE_PHONE_ID = /^\d{6,30}$/;
@@ -200,6 +238,17 @@ export function registerPedidosOnlineConfigHandlers(
     // Ingreso de clientes (F3)
     const errIngreso = aplicarIngreso(cfg, data);
     if (errIngreso) return { success: false, error: errIngreso };
+    // Pago online (F4). La API Key, como el token: solo escritura y al almacén seguro.
+    const errPago = aplicarPagoOnline(cfg, data);
+    if (errPago) return { success: false, error: errPago };
+    const upayKeyNueva = data.upayApiKey !== undefined ? String(data.upayApiKey).trim() : '';
+    if (upayKeyNueva && !data.upayApiKeyBorrar && !almacenSeguroDisponible()) {
+      return { success: false, error: 'almacen_seguro_no_disponible' };
+    }
+    if (cfg.pagoOnlineActivo) {
+      const keyFinal = data.upayApiKeyBorrar ? '' : upayKeyNueva || (await upayApiKeyActual());
+      if (!cfg.upayMerchantId || !keyFinal) return { success: false, error: 'upay_faltan_credenciales' };
+    }
     // Token: solo escritura. Se manda para cambiarlo; `whatsappTokenBorrar` lo quita.
     // Se valida antes y se escribe en el keychain después de guardar la fila, así un error
     // al guardar no deja el token cambiado.
@@ -211,9 +260,27 @@ export function registerPedidosOnlineConfigHandlers(
     let tokenOk = true;
     if (data.whatsappTokenBorrar) tokenOk = await setWhatsappToken('');
     else if (tokenNuevo) tokenOk = await setWhatsappToken(tokenNuevo);
+    if (data.upayApiKeyBorrar) tokenOk = (await setUpayApiKey('')) && tokenOk;
+    else if (upayKeyNueva) tokenOk = (await setUpayApiKey(upayKeyNueva)) && tokenOk;
     await cargarCredencialesTienda(dataSource);
     if (!tokenOk) return { success: false, error: 'token_no_guardado' };
     return { success: true, config: { ...saved, abiertaAhora: estaAbierta(saved), ingreso: await estadoIngreso() } };
+  });
+
+  // Admin: prueba la conexión con uPay (F4) consultando una sesión que no existe: 404 = la
+  // API Key es válida; 401/403 = rechazada. No crea nada ni cobra.
+  ipcMain.handle('probar-tienda-upay', async () => {
+    await ensurePermission(dataSource, getCurrentUser, PERM);
+    const u = await upayConfigDe(dataSource);
+    if (!u) return { success: false, error: 'upay_faltan_credenciales' };
+    try {
+      const r = await new UpayCheckoutProvider(u).consultarSesion('00000000-0000-4000-8000-000000000000');
+      if (r.status === 401 || r.status === 403) return { success: false, error: 'upay_credenciales' };
+      if (r.status === 404 || (r.status >= 200 && r.status < 300)) return { success: true };
+      return { success: false, error: 'upay_error', detalle: `HTTP ${r.status}` };
+    } catch (e: any) {
+      return { success: false, error: 'upay_sin_conexion', detalle: e?.message || String(e) };
+    }
   });
 
   // Admin: manda un código de prueba por WhatsApp con las credenciales vigentes (F3).
