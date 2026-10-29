@@ -39,7 +39,8 @@ export function setPagosOnlineDeps(d: { fetch?: FetchLike | null; apiKey?: ApiKe
   if (d.avisar !== undefined) avisarOverride = d.avisar;
 }
 
-async function apiKey(): Promise<string> {
+/** API Key de uPay vigente (almacén seguro, o la de prueba inyectada). */
+export async function apiKey(): Promise<string> {
   if (apiKeyOverride) return apiKeyOverride();
   const { getUpayApiKey } = await import('../../utils/tienda-secrets.util');
   return getUpayApiKey();

@@ -11,6 +11,13 @@ import { getWhatsappToken } from './tienda-secrets.util';
  * siguen siendo síncronos y no leen el keychain en cada pedido.
  */
 let googleClientIdOverride: string | null = null;
+// F4: hay API Key de uPay + merchant cargados (la clave nunca queda acá, solo el sí/no).
+let upayCredencialesListas = false;
+
+/** ¿Se ofrece «Pagar con tarjeta» a pedidos nuevos? (interruptor + credenciales cargadas) */
+export function pagoOnlineOfrecido(cfg: { pagoOnlineActivo?: boolean } | null | undefined): boolean {
+  return !!cfg?.pagoOnlineActivo && upayCredencialesListas;
+}
 
 export function getGoogleClientId(): string | null {
   return googleClientIdOverride || process.env['GOOGLE_CLIENT_ID'] || null;
@@ -46,4 +53,6 @@ async function leerYAplicar(dataSource: DataSource): Promise<void> {
     idioma: cfg?.whatsappIdioma || null,
   });
   googleClientIdOverride = cfg?.googleClientId || null;
+  const { apiKey: upayApiKey } = await import('../services/pagos-online/pagos-online.service');
+  upayCredencialesListas = !!cfg?.upayMerchantId && !!(await upayApiKey());
 }
