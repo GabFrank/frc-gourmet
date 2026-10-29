@@ -158,7 +158,10 @@ export async function iniciarPagoPedido(
   }
   p.pagoIntento = intento;
 
-  const base = (opts.urlPublica || URL_PUBLICA_DEF).replace(/\/+$/, '');
+  // F5 (M-pay3): la URL pública de vuelta se puede cambiar por entorno (otro dominio o una
+  // instalación de prueba); solo https.
+  const delEntorno = String(process.env['FRC_TIENDA_URL_PUBLICA'] || '').trim();
+  const base = (opts.urlPublica || (/^https:\/\/[a-z0-9.-]+(:\d+)?\/?$/i.test(delEntorno) ? delEntorno : URL_PUBLICA_DEF)).replace(/\/+$/, '');
   const vuelta = `${base}/tienda/pago/${encodeURIComponent(p.numero)}`;
   try {
     const r = await proveedor(u).crearSesion({
