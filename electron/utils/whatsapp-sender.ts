@@ -8,14 +8,17 @@
  *   WHATSAPP_OTP_TEMPLATE      — nombre de la plantilla aprobada (default 'otp_codigo')
  *   WHATSAPP_OTP_LANG          — locale de la plantilla (default 'es')
  *
- * Si faltan las credenciales, cae a un **fallback de desarrollo** que loguea el
- * código (para poder probar el flujo end-to-end sin cuenta de Meta todavía).
+ * Si faltan las credenciales, el envío NO está disponible. Solo con
+ * `FRC_OTP_DEV=1` y la app sin empaquetar (desarrollo/tests) se usa un
+ * **fallback de desarrollo** que loguea el código. En producción nunca: antes
+ * el fallback devolvía el código al cliente y cualquiera entraba con cualquier
+ * teléfono (PLAN-tienda-online C1).
  * Reemplazar/extender con Twilio/360dialog agregando otro `SenderImpl`.
  */
 
 export interface OtpSendResult {
   ok: boolean;
-  provider: 'whatsapp-cloud' | 'dev-log';
+  provider: 'whatsapp-cloud' | 'dev-log' | 'ninguno';
   detail?: string;
 }
 
@@ -23,9 +26,32 @@ function isConfigured(): boolean {
   return !!(process.env['WHATSAPP_CLOUD_TOKEN'] && process.env['WHATSAPP_PHONE_NUMBER_ID']);
 }
 
+function appEmpaquetada(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { app } = require('electron');
+    return !!app?.isPackaged;
+  } catch {
+    return false;
+  }
+}
+
+/** Fallback de desarrollo: solo con FRC_OTP_DEV=1 y la app sin empaquetar. */
+export function otpDevPermitido(): boolean {
+  return process.env['FRC_OTP_DEV'] === '1' && !appEmpaquetada();
+}
+
+/** Hay un canal real (o el de desarrollo permitido) para mandar el código. */
+export function otpWhatsappDisponible(): boolean {
+  return isConfigured() || otpDevPermitido();
+}
+
 /** Envía el código OTP al teléfono (formato E.164 sin '+', solo dígitos). */
 export async function sendWhatsappOtp(telefono: string, codigo: string): Promise<OtpSendResult> {
   if (!isConfigured()) {
+    if (!otpDevPermitido()) {
+      return { ok: false, provider: 'ninguno', detail: 'whatsapp no configurado' };
+    }
     // Fallback de desarrollo: no hay credenciales de WhatsApp todavía.
     console.log(`[whatsapp-otp][DEV] Código para ${telefono}: ${codigo} (configurar WHATSAPP_CLOUD_TOKEN para envío real).`);
     return { ok: true, provider: 'dev-log', detail: 'sin credenciales; código logueado' };
