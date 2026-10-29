@@ -30,6 +30,8 @@ import { CommonModule } from '@angular/common';
       <ng-container *ngSwitchCase="'bike'"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></ng-container>
       <ng-container *ngSwitchCase="'plus'"><path d="M12 5v14M5 12h14"/></ng-container>
       <ng-container *ngSwitchCase="'minus'"><path d="M5 12h14"/></ng-container>
+      <ng-container *ngSwitchCase="'phone'"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></ng-container>
+      <ng-container *ngSwitchCase="'mail'"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></ng-container>
       <ng-container *ngSwitchCase="'check'"><path d="M20 6 9 17l-5-5"/></ng-container>
     </svg>
   `,

@@ -3,8 +3,8 @@
 
   <!-- Selector de método -->
   <div class="metodo-tabs" *ngIf="otpDisponible">
-    <button class="metodo-tab" [class.active]="metodo === 'telefono'" (click)="metodo = 'telefono'">📱 Teléfono</button>
-    <button class="metodo-tab" [class.active]="metodo === 'email'" (click)="metodo = 'email'">✉️ Email</button>
+    <button class="metodo-tab" [class.active]="metodo === 'telefono'" (click)="metodo = 'telefono'"><sf-icon name="phone" [size]="16"></sf-icon> Teléfono</button>
+    <button class="metodo-tab" [class.active]="metodo === 'email'" (click)="metodo = 'email'"><sf-icon name="mail" [size]="16"></sf-icon> Email</button>
   </div>
 
   <!-- ===== Teléfono / OTP ===== -->

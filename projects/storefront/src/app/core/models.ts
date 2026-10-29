@@ -150,6 +150,7 @@ export interface PedidoResumen {
   total: number;
   direccionEntrega: string | null;
   notas: string | null;
+  motivoRechazo?: string | null;
   createdAt: string;
   items: {
     nombreProducto: string;
@@ -157,5 +158,6 @@ export interface PedidoResumen {
     cantidad: number;
     precioUnitario: number;
     subtotal: number;
+    personalizacion?: any;
   }[];
 }
