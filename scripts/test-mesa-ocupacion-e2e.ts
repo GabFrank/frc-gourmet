@@ -246,7 +246,9 @@ async function main() {
   {
     // cerrarVentasAbiertasMesa tambien.
     const mesa: any = await nuevaMesa(15);
-    await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } });
+    const v: any = await invokeHandler('createVenta', { estado: 'ABIERTA', mesa: { id: mesa.id } });
+    // Concluir exige que la cuenta tenga su Pago (#329), como en un cobro real.
+    await invokeHandler('updateVenta', v.id, { pago: { id: (await nuevoPago()).id } });
     await invokeHandler('cerrarVentasAbiertasMesa', mesa.id, 'CONCLUIDA');
     ok(await estadoDe(mesa.id) === 'DISPONIBLE',
       'L: cerrarVentasAbiertasMesa deja el cache al dia', await estadoDe(mesa.id));

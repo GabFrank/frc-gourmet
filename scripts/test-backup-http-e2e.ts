@@ -15,6 +15,8 @@
 // jwt-secret.utils (#335).
 import './_electron-mock';
 import { strict as assert } from 'assert';
+import * as fs from 'fs';
+import * as path from 'path';
 import { DataSource } from 'typeorm';
 import { Usuario } from '../src/app/database/entities/personas/usuario.entity';
 import { Role } from '../src/app/database/entities/personas/role.entity';
@@ -150,6 +152,7 @@ async function main() {
 
   const baseUrl = `http://127.0.0.1:${TEST_PORT}`;
 
+  let restaurar: (() => void) | null = null;
   try {
     console.log('[test-backup-http-e2e] Server iniciado');
 
@@ -202,15 +205,24 @@ async function main() {
         'backup-create no debería responder channel_bloqueado_para_http',
       );
     }
+    // Puede fallar por filesystem (la BD del test no está en userData), pero
+    // NUNCA por permiso: eso querría decir que el usuario del JWT no llegó al
+    // handler.
+    const msgCreate = String(createRes.body?.result?.message ?? createRes.body?.error ?? '');
+    assert.ok(!/PERMISO REQUERIDO/.test(msgCreate), `El admin no debería ser rechazado por permiso, got: ${msgCreate}`);
     console.log(' ✓');
 
     // Test 3: Sin permiso → HTTP 403
     console.log('[Test 3] Sin permiso SISTEMA_BACKUP → HTTP 403');
+    const dirBackups = path.join(require('electron').app.getPath('userData'), 'backups');
+    const listar = () => (fs.existsSync(dirBackups) ? fs.readdirSync(dirBackups).sort().join('|') : '');
+    const antesSinPermiso = listar();
     const noPermRes = await makeRequest(`${baseUrl}/api/rpc`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${noPermToken}` },
       body: { method: 'backup-create', params: [{}] },
     });
+    assert.strictEqual(listar(), antesSinPermiso, 'Sin permiso NO se tiene que crear ningún archivo de backup');
     // El handler atrapa el FORBIDDEN y responde `{ success:false, message }`
     // con 200 (es lo que espera la UI). Las dos formas son un rechazo; lo que
     // no puede pasar es que el backup se cree. Mismo criterio que
@@ -224,8 +236,6 @@ async function main() {
     // Test 4: backup-send-whatsapp por HTTP ignora destino arbitrario
     console.log('[Test 4] backup-send-whatsapp HTTP ignora opts.destino arbitrario');
     // Crear archivo de backup temporal y configurar destino
-    const fs = require('fs');
-    const path = require('path');
     // El handler resuelve todo desde `app.getPath('userData')` (el mock de
     // Electron), no desde os.tmpdir(): el backup y app-settings.json tienen
     // que vivir ahí o la validación de directorio lo rechaza antes de llegar
@@ -244,6 +254,13 @@ async function main() {
       backup: {
         whatsappDestino: '595991888888', // El destino configurado
       },
+    };
+    // .tmp/ es compartido con otros tests: se restaura en el `finally`, también
+    // si un assert falla en el medio.
+    restaurar = () => {
+      try { fs.unlinkSync(testBackupPath); } catch { /* ya no está */ }
+      if (settingsPrevios != null) fs.writeFileSync(settingsPath, settingsPrevios);
+      else { try { fs.unlinkSync(settingsPath); } catch { /* ya no está */ } }
     };
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 
@@ -270,11 +287,6 @@ async function main() {
       `Debería fallar en Evolution API (pasó validaciones de archivo y destino), got: ${sendRes.body.result.message}`,
     );
 
-    // Limpiar
-    fs.unlinkSync(testBackupPath);
-    // .tmp/ es compartido con otros tests: se restaura lo que había.
-    if (settingsPrevios != null) fs.writeFileSync(settingsPath, settingsPrevios);
-    else fs.unlinkSync(settingsPath);
     console.log(' ✓');
 
     console.log('\n[test-backup-http-e2e] ✅ Todos los tests OK');
@@ -282,9 +294,9 @@ async function main() {
     console.error('\n[test-backup-http-e2e] ❌ Test falló:', err);
     throw err;
   } finally {
+    restaurar?.();
     await stopServer(fastify);
     await dataSource.destroy();
-    delete process.env.JWT_SECRET;
   }
 }
 

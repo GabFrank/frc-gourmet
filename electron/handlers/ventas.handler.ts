@@ -935,7 +935,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // vinculadas a la mesa se cierran/liberan desde su propio flujo.
       const ventasAbiertas = await repo.find({
         where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
-        relations: ['caja'],
+        relations: ['caja', 'pago'],
       });
       
       // P0-2: Gatear CUALQUIER cierre (CONCLUIDA o CANCELADA) si hay >1 ABIERTA.
@@ -946,6 +946,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       if (ventasAbiertas.length > 1) {
         throw new Error('MESA_TIENE_OTRAS_VENTAS_ABIERTAS');
       }
+
       
       // Este handler pone CONCLUIDA con `repo.save` directo, sin pasar por
       // `updateVenta`: es un tercer camino de finalización y necesita el mismo
@@ -955,6 +956,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         for (const v of ventasAbiertas) {
           await assertTerminalPuedeOperar(dataSource, _event, (v.caja as any)?.id ?? null, 'FINALIZAR');
         }
+      }
+
+      // Concluir es cobrar, también por acá: sin `Pago` vinculado no se concluye
+      // (#329). Es el mismo camino por el que se cerró sin cobro la venta 3771.
+      // Cancelar sigue sin exigirlo. Va después del gate de terminal para no
+      // tapar su error.
+      if (estado === VentaEstado.CONCLUIDA && ventasAbiertas.some((v) => !(v as any).pago?.id)) {
+        throw new Error('VENTA_SIN_PAGO: la mesa tiene una cuenta abierta sin cobro registrado.');
       }
       // Concluir es imputar plata a la caja de cada venta: si alguna de esas
       // cajas está cerrada no se concluye NINGUNA (el guard corre antes del
@@ -1600,9 +1609,15 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         // ANTES de marcar el pago (para no dejar un Pago PAGADO con la venta
         // ABIERTA si el cierre falla). La venta a crédito no pasa por acá
         // (`cobrar-venta-credito` crea su propio Pago).
-        const pagoEnPayload = Number((data?.pago as any)?.id ?? data?.pago) || null;
-        let tienePago = !!pagoEnPayload;
-        if (!tienePago) {
+        // Si el payload trae `pago`, ése es el que va a quedar (el merge lo
+        // aplica): un `pago: null` explícito no puede apoyarse en el adoptado.
+        // Y tiene que existir: un id inventado no es un cobro.
+        let tienePago: boolean;
+        if (data && Object.prototype.hasOwnProperty.call(data, 'pago')) {
+          const pagoEnPayload = Number((data?.pago as any)?.id ?? data?.pago) || null;
+          tienePago = !!pagoEnPayload
+            && !!(await dataSource.getRepository(Pago).findOne({ where: { id: pagoEnPayload } }));
+        } else {
           const conPago = await repo.findOne({ where: { id }, relations: ['pago'] });
           tienePago = !!(conPago as any)?.pago?.id;
         }
@@ -1637,14 +1652,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         fichasReimpresiones: _fichasReimpresionesIgnorado,
         ...ventaData
       } = data ?? {};
-      // Una venta que ya no está ABIERTA no cambia de canal: mesa, comanda,
+      // Una venta que ya no está ABIERTA, o que se cierra en este mismo payload,
+      // no cambia de canal: mesa, comanda,
       // delivery y canalOrigen deciden si fue a cocina y si emitió fichas
       // (`esVentaDirecta`) y alimentan los reportes por canal. Mudarla después
       // del cobro permitía, por ejemplo, convertir una venta de mesa en
       // directa en el mismo payload que la concluye (#330). Los movimientos
       // legítimos (transferir cuenta, convertir delivery ⇄ retiro) tienen
       // canales propios y no pasan por acá.
-      if (estadoAnterior !== VentaEstado.ABIERTA) {
+      const cierra = data?.estado === VentaEstado.CONCLUIDA || data?.estado === VentaEstado.CANCELADA;
+      if (estadoAnterior !== VentaEstado.ABIERTA || cierra) {
         for (const k of ['mesa', 'comanda', 'delivery', 'canalOrigen', 'mesa_id', 'comanda_id', 'delivery_id']) {
           delete (ventaData as any)[k];
         }

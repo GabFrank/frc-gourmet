@@ -302,6 +302,15 @@ async function main() {
     ok(Math.abs((pygBrl?.tasa ?? 0) - 1 / 1500) < 1e-9, 'E: Gs -> BRL divide (fila en la dirección vieja)', pygBrl);
     const usdBrl = await getCotizacionBidireccional(ds, usd.id, brl.id);
     ok(Math.abs((usdBrl?.tasa ?? 0) - 5) < 1e-9, 'E: USD -> BRL cruza por la principal (7500 / 1500)', usdBrl);
+    const brlUsd = await getCotizacionBidireccional(ds, brl.id, usd.id);
+    ok(Math.abs((brlUsd?.tasa ?? 0) - 0.2) < 1e-9, 'E: BRL -> USD es la inversa del cruce (0,2)', brlUsd);
+    const misma = await getCotizacionBidireccional(ds, usd.id, usd.id);
+    ok(misma?.tasa === 1, 'E: misma moneda → tasa 1', misma);
+    // Una cotización en 0 no es una cotización: null, nunca una división por cero.
+    const ars: any = await save(Moneda, { denominacion: 'PESO', simbolo: 'ARS', principal: false, decimales: 2, activo: true });
+    await save(MonedaCambio, { monedaOrigen: ars, monedaDestino: pyg, compraOficial: 0, ventaOficial: 0, compraLocal: 0, ventaLocal: 0, activo: true });
+    ok(await getCotizacionBidireccional(ds, pyg.id, ars.id) === null, 'E: Gs -> ARS con compraLocal 0 → null');
+    ok(await getCotizacionBidireccional(ds, usd.id, ars.id) === null, 'E: cruce contra una cotización en 0 → null');
 
     // Deuda en USD pagada con guaraníes: antes esto era un error duro.
     const gUsd: any = await gasto(20, 'SERVICIO EN USD', usd);

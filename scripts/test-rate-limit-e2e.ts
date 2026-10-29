@@ -126,6 +126,7 @@ async function main() {
     // Test 3: Login estricto (30 req/min)
     console.log('[Test 3] Login estricto: 30 req/min, 429 tras #30');
     let loginOK = 0;
+    let vio429 = false;
     for (let i = 0; i < 40; i++) {
       const res = await makeRequest(`${baseUrl}/api/auth/login`, {
         method: 'POST',
@@ -135,10 +136,14 @@ async function main() {
       else if (res.status === 429) {
         assert.ok(i >= 30, `429 antes de #30 (en ${i})`);
         console.log(` ✓ 429 tras ${i} intentos (esperado ≥30)`);
+        vio429 = true;
         break;
       }
     }
     assert.ok(loginOK >= 30, `Login no llegó a 30 requests`);
+    // Sin esto, apagar el rate limit de login dejaba el test en verde: el loop
+    // terminaba sin 429 y `loginOK >= 30` pasaba igual.
+    assert.ok(vio429, 'El login nunca respondió 429 en 40 intentos: el rate limit no está activo');
 
     console.log('\n[test-rate-limit-e2e] ✓ Tests rápidos OK');
     console.log('Nota: test completo de 429 en producción requiere túnel Cloudflare + carga real');

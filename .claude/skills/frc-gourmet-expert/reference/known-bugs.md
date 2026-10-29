@@ -73,9 +73,10 @@ Encontrados al relevar el alta por API para el runbook de instalación. Test
 - **#337:** `change-password` comparaba contra `getCurrentUser()` (la consola del
   servidor), no contra el usuario del JWT. Desde un cliente, `/admin` o la PWA nadie
   podía cambiar su contraseña, ni siquiera en el cambio forzado. Ahora usa
-  `getEffectiveUser`. ⚠️ **Patrón a vigilar:** cualquier handler que compare
-  identidad con `getCurrentUser()` directo tiene el mismo bug; `ensurePermission` no
-  lo ataja.
+  `getEffectiveUser`. ⚠️ **Patrón a vigilar:** cualquier handler que use
+  `getCurrentUser()` directo atribuye a la consola del servidor por HTTP;
+  `ensurePermission` no lo ataja. Quedan ~15 handlers así, en el issue
+  GabFrank/frc-gourmet#341 (ABIERTO).
 - **#338:** la UI leía `resp.id` de `create-usuario`, que devuelve
   `{ success, usuario }`, así que los roles no se asignaban (es de UI, prueba
   manual).
@@ -85,7 +86,17 @@ Encontrados al relevar el alta por API para el runbook de instalación. Test
   desbordaban desde 100 M Gs. Migración `CajaMayorMontosAmplios`, sólo Postgres.
 - **#332:** `getCotizacionBidireccional` trataba `compraLocal` (siempre unidades de la
   principal por 1 de la otra) como tasa origen → destino, así que Gs → USD
-  multiplicaba. Test `test:pago-consolidado-e2e`.
+  multiplicaba. El mismo error estaba en el **pago mixto de cuota CPP**
+  (`cuentas-por-pagar.handler`) y en el **pago de compra desde el cajón**
+  (`pdv-egresos.handler`): los dos usaban `getCotizacionCompraLocal` como tasa
+  línea → deuda. Ahora usan la bidireccional. Regla: `getCotizacionCompraLocal`
+  sólo sirve **hacia la moneda principal**; cualquier otra conversión va por
+  `getCotizacionBidireccional`. Tests `test:pago-consolidado-e2e` y
+  `test:alta-inicial`.
+- **#329, segunda puerta:** `cerrarVentasAbiertasMesa(CONCLUIDA)` también exige un
+  `Pago` por cuenta, y `updateVenta` no deja que un `pago: null` explícito ni un id
+  inventado pasen el chequeo. #330 también congela el canal en el mismo payload que
+  cierra la venta.
 
 ### ✅ RESUELTO — `updateVenta` dejaba concluir una venta sin cobrarla (2026-10, #329)
 

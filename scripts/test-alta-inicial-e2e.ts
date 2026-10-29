@@ -32,6 +32,7 @@ import { registerVentasHandlers } from '../electron/handlers/ventas.handler';
 import { registerProductosHandlers } from '../electron/handlers/productos.handler';
 import { registerPersonasHandlers } from '../electron/handlers/personas.handler';
 import { registerRrhhFuncionariosHandlers } from '../electron/handlers/rrhh-funcionarios.handler';
+import { registerCuentasPorPagarHandlers } from '../electron/handlers/cuentas-por-pagar.handler';
 
 let passed = 0, failed = 0;
 function ok(cond: boolean, name: string, extra?: any) {
@@ -74,6 +75,12 @@ async function main() {
   const { Producto } = E('productos/producto.entity');
   const { Subfamilia } = E('productos/subfamilia.entity');
   const { Cargo } = E('rrhh/cargo.entity');
+  const { Comanda } = E('ventas/comanda.entity');
+  const { MonedaCambio } = E('financiero/moneda-cambio.entity');
+  const { CajaMayor } = E('financiero/caja-mayor.entity');
+  const { CajaMayorSaldo } = E('financiero/caja-mayor-saldo.entity');
+  const { FormasPago } = E('compras/forma-pago.entity');
+  const { CuentaPorPagarCuota } = E('financiero/cuenta-por-pagar-cuota.entity');
 
   const save = (ent: any, data: any) => ds.getRepository(ent).save(ds.getRepository(ent).create(data as any) as any);
 
@@ -109,6 +116,7 @@ async function main() {
   registerProductosHandlers(ds, () => consola);
   registerPersonasHandlers(ds, () => consola);
   registerRrhhFuncionariosHandlers(ds, () => consola);
+  registerCuentasPorPagarHandlers(ds, () => consola);
 
   // ═══════ [#339] Alta de funcionario con cliente conveniado ═══════
   console.log('\n[#339] Alta de funcionario con "crear cliente conveniado"');
@@ -227,6 +235,76 @@ async function main() {
     await invokeHandler('updateVenta', v4.id, { mesa: { id: mesa.id } });
     const abierta: any = await ds.getRepository(Venta).findOne({ where: { id: v4.id }, relations: ['mesa'] });
     ok(abierta.mesa?.id === mesa.id, '#330: en una venta ABIERTA se sigue pudiendo asignar mesa', abierta.mesa);
+  }
+
+  // ═══════ Hallazgos de la auditoría de los arreglos ═══════
+  console.log('\n[auditoría] Casos que los arreglos dejaban pasar');
+  {
+    const disp: any = await ds.getRepository(Dispositivo).findOne({ where: {} });
+    const conteo: any = await save(Conteo, { activo: true, tipo: 'APERTURA', fecha: new Date() });
+    await ds.getRepository(Caja).update({ estado: 'ABIERTO' } as any, { estado: 'CERRADO' } as any);
+    const caja: any = await save(Caja, {
+      estado: 'ABIERTO', activo: true, fechaApertura: new Date(),
+      conteoApertura: { id: conteo.id }, dispositivo: { id: disp.id },
+    });
+    const nueva = (extra: any = {}) => save(Venta, { estado: 'ABIERTA', caja: { id: caja.id }, ...extra });
+    const pagoNuevo = () => save(Pago, { estado: 'ABIERTO', activo: true, caja: { id: caja.id } });
+
+    // #330: cambiar el canal en el MISMO payload que cierra.
+    const mesa: any = await save(PdvMesa, { numero: 21, estado: 'DISPONIBLE', activo: true, reservado: false });
+    const vMesa: any = await nueva({ mesa: { id: mesa.id } });
+    await invokeHandler('updateVenta', vMesa.id, { estado: 'CONCLUIDA', pago: { id: (await pagoNuevo()).id }, mesa: null, canalOrigen: 'WEB' });
+    const tMesa: any = await ds.getRepository(Venta).findOne({ where: { id: vMesa.id }, relations: ['mesa'] });
+    ok(tMesa.mesa?.id === mesa.id && tMesa.canalOrigen === 'LOCAL',
+       '#330: no se muda de canal en el mismo payload que concluye', { mesa: tMesa.mesa?.id, canal: tMesa.canalOrigen });
+
+    // #330: CANCELADA también congela, y comanda tampoco se puede poner.
+    const comanda: any = await save(Comanda, { codigo: 'C-21', numero: 21, estado: 'DISPONIBLE', activo: true });
+    const vCanc: any = await nueva();
+    await ds.getRepository(Venta).update(vCanc.id, { estado: 'CANCELADA' } as any);
+    await invokeHandler('updateVenta', vCanc.id, { comanda: { id: comanda.id }, mesa: { id: mesa.id } });
+    const tCanc: any = await ds.getRepository(Venta).findOne({ where: { id: vCanc.id }, relations: ['mesa', 'comanda'] });
+    ok(!tCanc.mesa && !tCanc.comanda, '#330: una venta CANCELADA no recibe mesa ni comanda', { mesa: tCanc.mesa, comanda: tCanc.comanda });
+
+    // #329: `pago: null` explícito no se apoya en el pago ya adoptado.
+    const vNull: any = await nueva();
+    await invokeHandler('updateVenta', vNull.id, { pago: { id: (await pagoNuevo()).id } });
+    await rechaza(/VENTA_SIN_PAGO/, '#329: concluir con pago:null explícito se rechaza',
+      () => invokeHandler('updateVenta', vNull.id, { estado: 'CONCLUIDA', pago: null }));
+
+    // #329: un id de Pago inventado no es un cobro.
+    const vFake: any = await nueva();
+    await rechaza(/VENTA_SIN_PAGO/, '#329: un pago inexistente no alcanza',
+      () => invokeHandler('updateVenta', vFake.id, { estado: 'CONCLUIDA', pago: { id: 999999 } }));
+
+    // #329: cerrarVentasAbiertasMesa tampoco concluye sin Pago.
+    const mesa2: any = await save(PdvMesa, { numero: 22, estado: 'OCUPADO', activo: true, reservado: false });
+    const vHuerf: any = await nueva({ mesa: { id: mesa2.id } });
+    await rechaza(/VENTA_SIN_PAGO/, '#329: cerrarVentasAbiertasMesa(CONCLUIDA) rechaza una cuenta sin cobro',
+      () => invokeHandler('cerrarVentasAbiertasMesa', mesa2.id, 'CONCLUIDA'));
+    ok((await ds.getRepository(Venta).findOneBy({ id: vHuerf.id }) as any).estado === 'ABIERTA', '#329: y la deja ABIERTA');
+    await invokeHandler('cerrarVentasAbiertasMesa', mesa2.id, 'CANCELADA');
+    ok((await ds.getRepository(Venta).findOneBy({ id: vHuerf.id }) as any).estado === 'CANCELADA', '#329: cancelarla sigue permitido');
+
+    // #332: cuota de CPP en USD pagada con guaraníes (pago mixto).
+    const gs: any = await ds.getRepository(Moneda).findOne({ where: { principal: true } as any });
+    const usd: any = await ds.getRepository(Moneda).findOne({ where: { denominacion: 'DOLAR' } as any });
+    await save(MonedaCambio, { monedaOrigen: { id: usd.id }, monedaDestino: { id: gs.id }, compraOficial: 7500, ventaOficial: 7600, compraLocal: 7500, ventaLocal: 7600, activo: true });
+    const efectivo: any = await ds.getRepository(FormasPago).findOne({ where: { nombre: 'EFECTIVO' } as any });
+    const cm: any = await save(CajaMayor, { nombre: 'CAJA MAYOR', estado: 'ABIERTA', fechaApertura: new Date(), activo: true });
+    await save(CajaMayorSaldo, { cajaMayor: { id: cm.id }, moneda: { id: gs.id }, formaPago: { id: efectivo.id }, saldo: 1_000_000 });
+    const cpp: any = await invokeHandler('create-cuenta-por-pagar', { descripcion: 'SERVICIO EN USD', montoTotal: 20, monedaId: usd.id, cantidadCuotas: 1 });
+    const cppId = cpp?.id ?? cpp?.cuentaPorPagar?.id;
+    const cuota: any = await ds.getRepository(CuentaPorPagarCuota).findOne({ where: { cuentaPorPagar: { id: cppId } } as any });
+    let rp: any;
+    try {
+      rp = await invokeHandler('pagar-cpp-cuota-mixto', {
+        cuotaId: cuota.id,
+        lineas: [{ fuente: 'CAJA_MAYOR', monedaId: gs.id, formaPagoId: efectivo.id, cajaMayorId: cm.id, monto: 150_000 }],
+      });
+    } catch (e: any) { rp = { error: e?.message }; }
+    ok(rp?.success === true && Math.abs(Number(rp.totalCpp) - 20) < 0.01,
+       '#332: 150.000 Gs pagan 20 USD de una CPP en dólares (no 1.125.000.000)', rp);
   }
 
   await ds.destroy();
