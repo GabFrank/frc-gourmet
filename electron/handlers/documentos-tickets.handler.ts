@@ -14,6 +14,7 @@
  * Permisos:
  * - `print-comanda` / `print-precuenta`: `VENTAS_PDV` o `DOCUMENTOS_IMPRIMIR_TICKET`.
  * - `print-venta-ticket`: `VENTAS_PDV` o `DOCUMENTOS_REIMPRIMIR_TICKET_VENTA`.
+ * - `print-fichas-venta`: `DOCUMENTOS_REIMPRIMIR_FICHAS` (sólo reimpresión).
  * - resto: `DOCUMENTOS_IMPRIMIR_TICKET` (o el del dominio si es más específico).
  *
  * Las funciones `printXxxInternal(...)` son llamadas también desde hooks
@@ -24,7 +25,9 @@
 import { ipcMain } from 'electron';
 import type { DataSource } from 'typeorm';
 import { In as TIn } from 'typeorm';
-import { Venta } from '../../src/app/database/entities/ventas/venta.entity';
+import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
+import { PdvConfig, FichaModo } from '../../src/app/database/entities/ventas/pdv-config.entity';
+import { esVentaDirecta, RELACIONES_VENTA_DIRECTA } from '../utils/venta-directa.utils';
 import { VentaItem, EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
 import { VentaItemAdicional } from '../../src/app/database/entities/ventas/venta-item-adicional.entity';
 import { VentaItemSabor } from '../../src/app/database/entities/ventas/venta-item-sabor.entity';
@@ -493,9 +496,10 @@ export async function printComandaInternal(
   // —así que la pantalla de cocina sí mostraba el pedido— pero acá se cortaba y
   // el papel no salía nunca, devolviendo `ok: true` sin ningún error. Un
   // delivery jamás imprimió su comanda por esto.
-  const tieneDelivery = !!(venta as any).delivery?.id;
-  const vieneDeLaWeb = ((venta as any).canalOrigen ?? 'LOCAL') !== 'LOCAL';
-  if (!mesa?.id && !comanda?.id && !tieneDelivery && !vieneDeLaWeb) {
+  //
+  // Desde las fichas de cantina el predicado vive en `esVentaDirecta`: cocina y
+  // fichas leen de la misma fuente.
+  if (esVentaDirecta(venta)) {
     // Venta directa de mostrador → no aplica ticket de cocina.
     return { ok: true, printed, errors };
   }
@@ -1166,6 +1170,310 @@ export async function printVentaTicketInternal(
 }
 
 // ============================================================
+// FICHAS DE CANTINA (venta directa)
+// ============================================================
+//
+// En la cantina de eventos el cliente paga en caja y retira en la barra con
+// fichas: un papel que vale un producto. Se emiten SOLO al concluir una venta
+// directa (`esVentaDirecta`), por la impresora de tickets de la caja que cobra.
+//
+// Tres piezas, en el mismo orden que el ticket de delivery:
+// - `buildFichasVenta`: PURA. Arma las líneas de cada ficha; es lo que testea.
+// - `printFichasVentaInternal`: resuelve la impresora y manda una ficha por
+//   trabajo de impresión.
+// - `imprimirFichasSiCorresponde`: gate + claim idempotente; la llaman los
+//   hooks post-conclusión (`updateVenta`, `cobrar-venta-credito`).
+
+/** Una ficha ya armada, con su posición en la venta (`numero`/`total`). */
+export interface FichaArmada {
+  numero: number;
+  total: number;
+  ventaItemId: number;
+  lines: TicketLine[];
+}
+
+/** Modo efectivo de un ítem: el del producto gana sobre el global. */
+export function resolverFichaModo(productoModo: string | null | undefined, globalModo: string | null | undefined): FichaModo {
+  const valido = (m: any): m is FichaModo =>
+    m === FichaModo.POR_UNIDAD || m === FichaModo.POR_ITEM || m === FichaModo.NO_IMPRIME;
+  if (valido(productoModo)) return productoModo;
+  if (valido(globalModo)) return globalModo;
+  return FichaModo.POR_UNIDAD;
+}
+
+/**
+ * Arma las fichas de una venta. No toca la impresora ni la base más allá de
+ * leer: es la función que testea `test:fichas`.
+ *
+ * - Sólo ítems ACTIVO.
+ * - `POR_UNIDAD` con cantidad entera N → N fichas; una cantidad no entera
+ *   (venta por peso) se fuerza a `POR_ITEM`, que no pierde la fracción.
+ * - El correlativo es POR VENTA (`FICHA 3/7`), no por ítem: el barman tiene que
+ *   poder contar las fichas de un mismo pago.
+ * - Precio (si `mostrarPrecio`): precio de lista efectivo, la misma fórmula que
+ *   el ticket de venta. El descuento global de la venta no se prorratea.
+ *
+ * Devuelve `null` si la venta no existe.
+ */
+export async function buildFichasVenta(
+  dataSource: DataSource,
+  ventaId: number,
+  opts: { width: number; reimpresion?: boolean },
+): Promise<FichaArmada[] | null> {
+  const venta = await dataSource.getRepository(Venta).findOne({
+    where: { id: ventaId },
+    relations: ['caja'],
+  });
+  if (!venta) return null;
+
+  const config = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+  const globalModo = (config as any)?.fichasModo ?? FichaModo.POR_UNIDAD;
+  const mostrarPrecio = !!(config as any)?.fichasMostrarPrecio;
+  const nombreEvento = String((config as any)?.fichasNombreEvento || '').trim().toUpperCase();
+
+  const items = await dataSource.getRepository(VentaItem).find({
+    where: { venta: { id: ventaId } as any, estado: EstadoVentaItem.ACTIVO },
+    relations: ['producto'],
+    order: { id: 'ASC' },
+  });
+
+  // Primero se decide cuántas fichas lleva cada ítem, para conocer el total de
+  // la venta antes de numerar.
+  type Plan = { item: VentaItem; fichas: number; modo: FichaModo; qty: number };
+  const planes: Plan[] = [];
+  for (const it of items) {
+    // `decimal` llega como string en Postgres: `Number()` antes de mirar si es entero.
+    const qty = Number((it as any).cantidad);
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+    let modo = resolverFichaModo((it as any).producto?.fichaModo, globalModo);
+    if (modo === FichaModo.NO_IMPRIME) continue;
+    if (modo === FichaModo.POR_UNIDAD && !Number.isInteger(qty)) modo = FichaModo.POR_ITEM;
+    planes.push({ item: it, modo, qty, fichas: modo === FichaModo.POR_UNIDAD ? qty : 1 });
+  }
+  const total = planes.reduce((s, p) => s + p.fichas, 0);
+  if (total === 0) return [];
+
+  const detalles = await cargarDetalleDeItems(dataSource, planes.map(p => p.item.id));
+  const width = opts.width;
+  // El tamaño `big` duplica alto y ancho: entran la mitad de columnas.
+  const anchoBig = Math.max(8, Math.floor(width / 2));
+  const cajaId = (venta as any).caja?.id;
+  const fecha = ticketFmtFechaHora((venta as any).fechaCierre || new Date());
+
+  const fichas: FichaArmada[] = [];
+  let numero = 0;
+  for (const p of planes) {
+    const it: any = p.item;
+    const nombre = String(it.producto?.nombre || 'PRODUCTO').toUpperCase();
+    const unitario = Number(it.precioVentaUnitario || 0)
+      + Number(it.precioAdicionales || 0)
+      - Number(it.descuentoUnitario || 0);
+
+    // Detalle de variación: la misma fuente que la comanda y el ticket.
+    const detalle: string[] = [];
+    const variacion = detalles.pizzaByItem.get(it.id);
+    if (variacion) {
+      const txt = componerDetalleVariacion(variacion.presentacion, variacion.sabores, {
+        mostrarPresentacion: variacion.mostrarPresentacion,
+      });
+      if (txt) detalle.push(txt);
+    } else if (it.ensambladoDescripcion) {
+      detalle.push(String(it.ensambladoDescripcion).toUpperCase());
+    }
+    for (const ing of (detalles.removidosByItem.get(it.id) || [])) detalle.push(`SIN ${ing}`);
+    for (const c of (detalles.cambiosByItem.get(it.id) || [])) detalle.push(`CAMBIAR ${c}`);
+    for (const extra of (detalles.adicionalesByItem.get(it.id) || [])) detalle.push(`+ ${extra}`);
+    for (const obs of (detalles.observacionesByItem.get(it.id) || [])) detalle.push(obs);
+
+    for (let k = 0; k < p.fichas; k++) {
+      numero++;
+      const lines: TicketLine[] = [];
+      if (nombreEvento) {
+        for (const parte of envolverDetalle(nombreEvento, width)) {
+          lines.push(ticketText(parte, { align: 'C', bold: true, size: 'tall' }));
+        }
+      }
+      lines.push(ticketSeparador('='));
+      if (p.modo === FichaModo.POR_ITEM) {
+        // La cantidad va ANTES y en grande: es lo primero que mira el barman.
+        lines.push(ticketText(ticketCantidad(p.qty, 6).trim(), { align: 'C', bold: true, size: 'big' }));
+      }
+      for (const parte of envolverDetalle(nombre, anchoBig)) {
+        lines.push(ticketText(parte, { align: 'C', bold: true, size: 'big' }));
+      }
+      for (const d of detalle) {
+        for (const parte of envolverDetalle(d, width)) lines.push(ticketText(parte, { align: 'C' }));
+      }
+      if (mostrarPrecio) {
+        const monto = p.modo === FichaModo.POR_ITEM ? unitario * p.qty : unitario;
+        lines.push(ticketText(`Gs. ${ticketFmtMonto(monto)}`, { align: 'C', bold: true }));
+      }
+      lines.push(ticketSeparador('-'));
+      lines.push(ticketKv(`FICHA ${numero}/${total}`, `VENTA #${ventaId}`, true));
+      lines.push(ticketKv(cajaId ? `CAJA ${cajaId}` : 'CAJA', fecha));
+      lines.push(ticketKv('COD', `${ventaId}-${numero}`));
+      if (opts.reimpresion) {
+        lines.push(ticketText('** REIMPRESION **', { align: 'C', bold: true }));
+      }
+      fichas.push({ numero, total, ventaItemId: it.id, lines });
+    }
+  }
+  return fichas;
+}
+
+// Inyectable sólo para tests: permite verificar cuántos trabajos se mandan y en
+// qué orden sin una impresora real.
+let printSpecImpl: typeof printTicketSpec = printTicketSpec;
+let printVentaTicketImpl: typeof printVentaTicketInternal = printVentaTicketInternal;
+/** @internal Sólo tests. Pasar `null` restaura las implementaciones reales. */
+export function __setFichasPrintImplsForTests(impls: {
+  printSpec?: typeof printTicketSpec | null;
+  printVentaTicket?: typeof printVentaTicketInternal | null;
+}): void {
+  if (impls.printSpec !== undefined) printSpecImpl = impls.printSpec ?? printTicketSpec;
+  if (impls.printVentaTicket !== undefined) printVentaTicketImpl = impls.printVentaTicket ?? printVentaTicketInternal;
+}
+
+/**
+ * Imprime las fichas de una venta por la impresora de tickets de la caja que
+ * cobra (`Dispositivo.printerTicket`, o el rol `TICKET_VENTA`).
+ *
+ * Una llamada a `printTicketSpec` POR FICHA, cada una con su corte. Un único
+ * spec con `{type:'cut'}` intermedios rebanaba el final de cada ficha (el corte
+ * intermedio no avanza el papel hasta la cuchilla) y en el fallback CUPS salía
+ * una tira continua. Si una ficha falla se corta el bucle: seguir imprimiendo
+ * sobre una impresora que no responde sólo desordena la numeración.
+ *
+ * Sin chequeo de permisos: lo llaman los hooks. El wrapper IPC
+ * (`print-fichas-venta`) pide `DOCUMENTOS_REIMPRIMIR_FICHAS`.
+ */
+export async function printFichasVentaInternal(
+  dataSource: DataSource,
+  ventaId: number,
+  opts: { printerId?: number; dispositivoId?: number; reimpresion?: boolean } = {},
+): Promise<ImpresionResultado> {
+  const venta = await dataSource.getRepository(Venta).findOne({
+    where: { id: ventaId },
+    relations: ['dispositivo'],
+  });
+  if (!venta) {
+    return { ok: false, printed: [], errors: [{ message: `Venta ${ventaId} no encontrada` }] };
+  }
+  const dispositivoId = opts.dispositivoId ?? (venta as any).dispositivo?.id;
+  const printer = await getPrinterByRol(dataSource, SectorImpresoraRol.TICKET_VENTA, {
+    printerId: opts.printerId,
+    dispositivoId,
+  });
+  if (!printer) {
+    return { ok: false, printed: [], errors: [{ message: 'No hay impresora configurada para las fichas' }] };
+  }
+
+  const width = printerWidthToChars(printer.width);
+  const fichas = await buildFichasVenta(dataSource, ventaId, { width, reimpresion: opts.reimpresion });
+  if (!fichas) {
+    return { ok: false, printed: [], errors: [{ message: `Venta ${ventaId} no encontrada` }] };
+  }
+  if (fichas.length === 0) {
+    return { ok: false, printed: [], errors: [{ printerId: printer.id, message: 'La venta no tiene ítems que emitan fichas' }] };
+  }
+
+  const printed: ImpresionResultado['printed'] = [];
+  for (const f of fichas) {
+    const res = await printSpecImpl(printer, { printerWidth: width, lines: f.lines, cutAtEnd: true });
+    if (!res.ok) {
+      const message = `Se imprimieron ${printed.length} de ${fichas.length} fichas de la venta ${ventaId}`;
+      broadcastPrinterEvent({
+        level: 'error',
+        handler: 'print-fichas-venta',
+        entityRef: { tipo: 'VENTA', id: ventaId },
+        errors: [{ printerId: printer.id, message: res.error || 'Error desconocido' }],
+        message,
+      });
+      return { ok: false, printed, errors: [{ printerId: printer.id, message: `${message}: ${res.error || 'error desconocido'}` }] };
+    }
+    printed.push({ itemId: f.ventaItemId, sectorId: null, printerId: printer.id, printerName: printer.name });
+  }
+  return { ok: true, printed, errors: [] };
+}
+
+/**
+ * Gate + claim + impresión de las fichas de una venta recién concluida.
+ *
+ * Emite si: `PdvConfig.fichasHabilitadas`, la venta está CONCLUIDA, es venta
+ * directa y tiene al menos una ficha. El claim es un UPDATE condicional sobre
+ * `fichas_emitidas_at IS NULL`: dos disparos (un reintento, o el hook de
+ * `updateVenta` y el de crédito sobre la misma venta) imprimen una sola vez.
+ *
+ * Se reclama ANTES de imprimir: si la impresora falla, la venta queda emitida
+ * sin papel. Es preferible a imprimir dos veces, que son fichas canjeables de
+ * más. El fallo llega por `broadcastPrinterEvent` y se resuelve reimprimiendo.
+ *
+ * Nunca lanza. Devuelve cuántas fichas reclamó (0 si no correspondía).
+ */
+export async function imprimirFichasSiCorresponde(
+  dataSource: DataSource,
+  ventaId: number,
+): Promise<{ emitidas: number; resultado?: ImpresionResultado }> {
+  try {
+    const config = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
+    if (!(config as any)?.fichasHabilitadas) return { emitidas: 0 };
+
+    const venta = await dataSource.getRepository(Venta).findOne({
+      where: { id: ventaId },
+      relations: [...RELACIONES_VENTA_DIRECTA],
+    });
+    if (!venta || venta.estado !== VentaEstado.CONCLUIDA) return { emitidas: 0 };
+    if ((venta as any).fichasEmitidasAt) return { emitidas: 0 };
+    if (!esVentaDirecta(venta)) return { emitidas: 0 };
+
+    // Se cuenta con el builder real (ancho irrelevante para contar).
+    const fichas = await buildFichasVenta(dataSource, ventaId, { width: 48 });
+    const n = fichas?.length ?? 0;
+    if (n === 0) return { emitidas: 0 };
+
+    const r = await dataSource.createQueryBuilder()
+      .update(Venta)
+      .set({ fichasEmitidasAt: new Date(), fichasCantidad: n } as any)
+      .where('id = :id', { id: ventaId })
+      .andWhere('fichas_emitidas_at IS NULL')
+      .execute();
+    if ((r.affected ?? 0) !== 1) return { emitidas: 0 }; // otro disparo ya las emitió
+
+    const resultado = await printFichasVentaInternal(dataSource, ventaId);
+    if (!resultado.ok) {
+      console.warn(`[fichas venta=${ventaId}]`, resultado.errors.map(e => e.message).join('; '));
+    }
+    return { emitidas: n, resultado };
+  } catch (e) {
+    console.error(`[fichas venta=${ventaId}] excepción:`, e);
+    return { emitidas: 0 };
+  }
+}
+
+/**
+ * Impresiones posteriores a concluir una venta, EN ORDEN: primero el ticket de
+ * pago (si corresponde) y después las fichas. Van en la misma cadena para que
+ * no se intercalen en la misma térmica. Las fichas no dependen del ticket: un
+ * cobro con F10 (sin ticket) igual las emite.
+ *
+ * Fire-and-forget desde los hooks; nunca lanza.
+ */
+export async function imprimirPostConclusion(
+  dataSource: DataSource,
+  ventaId: number,
+  opts: { imprimirTicket: boolean },
+): Promise<void> {
+  if (opts.imprimirTicket) {
+    try {
+      await printVentaTicketImpl(dataSource, ventaId);
+    } catch (e) {
+      console.warn('[post-conclusion] ticket de venta falló:', e);
+    }
+  }
+  await imprimirFichasSiCorresponde(dataSource, ventaId);
+}
+
+// ============================================================
 // PRINT RECIBO COBRO CPC CUOTA
 // ============================================================
 
@@ -1300,6 +1608,35 @@ export function registerDocumentosTicketsHandlers(
     return await printVentaTicketInternal(dataSource, params.ventaId, {
       printerId: params.printerId,
       dispositivoId,
+    });
+  });
+
+  // ─── FICHAS DE CANTINA (reimpresión) ────────────────────────────────────
+  // La emisión original la hacen los hooks al concluir la venta. Este canal es
+  // sólo para reimprimir: sale con la marca REIMPRESION y suma el contador.
+  ipcMain.handle('print-fichas-venta', async (_event, params: {
+    ventaId: number;
+    printerId?: number;
+  }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'DOCUMENTOS_REIMPRIMIR_FICHAS');
+    const ventaId = Number(params?.ventaId);
+    const venta = ventaId ? await dataSource.getRepository(Venta).findOneBy({ id: ventaId }) : null;
+    if (!venta) {
+      return { ok: false, printed: [], errors: [{ message: `Venta ${params?.ventaId} no encontrada` }] };
+    }
+    if (venta.estado !== VentaEstado.CONCLUIDA || !(venta as any).fichasEmitidasAt) {
+      return { ok: false, printed: [], errors: [{ message: 'La venta no emitió fichas' }] };
+    }
+    await dataSource.createQueryBuilder()
+      .update(Venta)
+      .set({ fichasReimpresiones: () => 'fichas_reimpresiones + 1' } as any)
+      .where('id = :id', { id: ventaId })
+      .execute();
+    const dispositivoId = resolveRequestDeviceId(_event) ?? undefined;
+    return await printFichasVentaInternal(dataSource, ventaId, {
+      printerId: params.printerId,
+      dispositivoId,
+      reimpresion: true,
     });
   });
 

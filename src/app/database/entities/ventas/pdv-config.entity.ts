@@ -2,6 +2,21 @@ import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import { PdvGrupoCategoria } from './pdv-grupo-categoria.entity';
 
+/**
+ * Cómo se emiten las fichas de cantina de un ítem de venta directa.
+ * - `POR_UNIDAD`: una ficha por unidad (4 cervezas → 4 fichas 1/4…4/4).
+ * - `POR_ITEM`: una sola ficha con la cantidad ("4 x CERVEZA").
+ * - `NO_IMPRIME`: el ítem no emite ficha (entradas, servicios).
+ *
+ * Se guarda como varchar sin CHECK. `Producto.fichaModo = null` hereda el
+ * global `PdvConfig.fichasModo`.
+ */
+export enum FichaModo {
+  POR_UNIDAD = 'POR_UNIDAD',
+  POR_ITEM = 'POR_ITEM',
+  NO_IMPRIME = 'NO_IMPRIME',
+}
+
 @Entity('pdv_config')
 export class PdvConfig extends BaseModel {
   @Column({ nullable: false, default: 0 })
@@ -206,4 +221,26 @@ export class PdvConfig extends BaseModel {
   /** Permitir finalizar (concluir) ventas desde terminales que no abrieron la caja. */
   @Column({ name: 'permitir_finalizar_terminal_ajena', type: 'boolean', default: false })
   permitirFinalizarTerminalAjena!: boolean;
+
+  // ─── Cantina de eventos: fichas ─────────────────────────────────────────
+  // En la venta directa (venta rápida de mostrador) el cliente paga en caja y
+  // retira en la barra con fichas impresas: un papel por producto. Se emiten
+  // SOLO al concluir la venta, por la impresora de tickets de la caja que
+  // cobra. Default `false`: ninguna instalación cambia al actualizar.
+
+  /** Emitir fichas al concluir una venta directa. */
+  @Column({ name: 'fichas_habilitadas', type: 'boolean', default: false })
+  fichasHabilitadas!: boolean;
+
+  /** Modo por defecto (`FichaModo`); cada producto puede pisarlo. */
+  @Column({ name: 'fichas_modo', type: 'varchar', length: 20, default: FichaModo.POR_UNIDAD })
+  fichasModo!: string;
+
+  /** Imprimir el precio en la ficha. */
+  @Column({ name: 'fichas_mostrar_precio', type: 'boolean', default: false })
+  fichasMostrarPrecio!: boolean;
+
+  /** Encabezado de cada ficha (nombre del evento). Se guarda en UPPERCASE. */
+  @Column({ name: 'fichas_nombre_evento', type: 'varchar', length: 120, nullable: true })
+  fichasNombreEvento?: string | null;
 }

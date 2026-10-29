@@ -94,6 +94,24 @@ export class Venta extends BaseModel {
   @Column({ name: 'canal_origen', type: 'varchar', length: 20, default: 'LOCAL' })
   canalOrigen!: 'LOCAL' | 'WEB' | 'QR_MESA';
 
+  // ─── Fichas de cantina (venta directa) ──────────────────────────────────
+  // Los escribe SOLO el backend: `updateVenta` los descarta del payload. Si
+  // un cliente pudiera mandarlos, una copia vieja de la venta resetearía el
+  // claim (doble emisión) o pondría `fichasCantidad = 0` para cancelar sin el
+  // permiso `VENTAS_CANCELAR_CON_FICHAS`.
+
+  /** Cuándo se reclamó la emisión de fichas. null = nunca se emitieron. */
+  @Column({ name: 'fichas_emitidas_at', nullable: true })
+  fichasEmitidasAt?: Date;
+
+  /** Cuántas fichas se emitieron en la emisión original. */
+  @Column({ name: 'fichas_cantidad', type: 'int', default: 0 })
+  fichasCantidad!: number;
+
+  /** Cuántas veces se reimprimieron las fichas. */
+  @Column({ name: 'fichas_reimpresiones', type: 'int', default: 0 })
+  fichasReimpresiones!: number;
+
   @ManyToOne('Comanda', { nullable: true })
   @JoinColumn({ name: 'comanda_id' })
   comanda?: any;

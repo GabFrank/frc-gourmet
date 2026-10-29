@@ -85,6 +85,12 @@ export class Producto extends BaseModel {
   @Column({ type: 'varchar', length: 20, nullable: true, name: 'estrategia_precio_variacion', comment: 'MAYOR_PRECIO | PROMEDIO. null = usar el global de PdvConfig.' })
   estrategiaPrecioVariacion?: string | null;
 
+  // Cantina de eventos: cómo emite fichas este producto en la venta directa
+  // (`FichaModo`: POR_UNIDAD | POR_ITEM | NO_IMPRIME). null = heredar
+  // `PdvConfig.fichasModo`.
+  @Column({ type: 'varchar', length: 20, nullable: true, name: 'ficha_modo', comment: 'POR_UNIDAD | POR_ITEM | NO_IMPRIME. null = usar el global de PdvConfig.' })
+  fichaModo?: string | null;
+
   // Indica si el registro está completo (precios, recetas, clasificación final).
   // Productos creados desde importación OCR/IA arrancan en false hasta que el usuario completa.
   @Column({ type: 'boolean', default: true, name: 'registro_completo' })

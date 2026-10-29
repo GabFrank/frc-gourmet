@@ -516,6 +516,9 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       'DOCUMENTOS_IMPRIMIR_TICKET',
       'DOCUMENTOS_REIMPRIMIR_COMANDA',
       'DOCUMENTOS_REIMPRIMIR_TICKET_VENTA',
+      'DOCUMENTOS_REIMPRIMIR_FICHAS',
+      // Cantina: cancelar una venta cuyas fichas ya están en manos del cliente
+      'VENTAS_CANCELAR_CON_FICHAS',
       'DOCUMENTOS_ADJUNTAR',
       'DOCUMENTOS_ADJUNTOS_ELIMINAR',
       // Musica ambiental: el gerente configura la cuenta y el repertorio
@@ -600,6 +603,8 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       'DOCUMENTOS_IMPRIMIR_TICKET',
       'DOCUMENTOS_REIMPRIMIR_COMANDA',
       'DOCUMENTOS_REIMPRIMIR_TICKET_VENTA',
+      // Cantina: el cajero reimprime las fichas cuando falla el papel
+      'DOCUMENTOS_REIMPRIMIR_FICHAS',
       // Musica: el cajero controla la reproduccion y vota "no va" desde la PWA.
       // NO configura la cuenta ni el repertorio (eso es del gerente/admin).
       'MUSICA_VER', 'MUSICA_CONTROLAR',
