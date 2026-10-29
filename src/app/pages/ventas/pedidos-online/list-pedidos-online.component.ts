@@ -271,7 +271,10 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
         if (res?.success) {
           this.cargar(true);
         } else {
-          this.snack.open('No se pudo actualizar: ' + (res?.error || ''), 'OK', { duration: 3500 });
+          const msg = res?.error === 'sin_venta'
+            ? 'el pedido todavía no tiene venta. Usá «Enviar a cocina» con tu caja abierta.'
+            : (res?.error || '');
+          this.snack.open('No se pudo actualizar: ' + msg, 'OK', { duration: 5000 });
         }
       },
       error: (e) => this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 }),
@@ -282,6 +285,8 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
   siguienteEstado(p: any): { estado: string; label: string } | null {
     switch (p.estado) {
       case 'ACEPTADO':
+        // F5 (C2): sin venta, el camino es «Enviar a cocina» (que crea la venta).
+        if (!p.ventaId) return null;
         return { estado: 'EN_PREPARACION', label: 'Marcar en preparación' };
       case 'EN_PREPARACION':
         return { estado: 'LISTO', label: 'Marcar listo' };
