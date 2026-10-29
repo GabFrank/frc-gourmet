@@ -57,7 +57,7 @@ tienda en claro.
 
 ## 2. Alcance y fases
 
-Rama única `feat/tienda-online` desde develop; cada fase es un commit/PR propio para poder mergear F1 antes.
+Rama única `bot/ceo-frc-gourmet/feat-tienda-online` desde develop; cada fase es un commit/PR propio para poder mergear F1 antes.
 Propuesta de merge (decide el propietario): **F1 sola y cuanto antes** (cierra agujeros que ya están en
 internet); F2+F3 juntas; F4 cuando uPay esté probado en su sandbox.
 
