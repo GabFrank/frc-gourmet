@@ -67,4 +67,22 @@ export class TiendaOnlineConfig extends BaseModel {
    */
   @Column({ name: 'horarios_json', type: 'text', nullable: true })
   horariosJson?: string;
+
+  /**
+   * Ingreso de clientes (PLAN-tienda-online F3). Solo datos NO secretos: el token de
+   * WhatsApp Cloud va al almacén seguro del SO (`tienda-secrets.util.ts`), nunca a la BD.
+   * Vacíos = se usan las variables de entorno (WHATSAPP_PHONE_NUMBER_ID, GOOGLE_CLIENT_ID...).
+   */
+  @Column({ name: 'whatsapp_phone_number_id', type: 'varchar', length: 64, nullable: true })
+  whatsappPhoneNumberId?: string;
+
+  @Column({ name: 'whatsapp_plantilla', type: 'varchar', length: 120, nullable: true })
+  whatsappPlantilla?: string;
+
+  @Column({ name: 'whatsapp_idioma', type: 'varchar', length: 16, nullable: true })
+  whatsappIdioma?: string;
+
+  /** Client ID OAuth web de Google (público). */
+  @Column({ name: 'google_client_id', type: 'varchar', length: 255, nullable: true })
+  googleClientId?: string;
 }

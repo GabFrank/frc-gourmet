@@ -2607,6 +2607,9 @@ contextBridge.exposeInMainWorld('api', {
   updateTiendaOnlineConfig: async (data: any): Promise<any> => {
     return await ipcRenderer.invoke('update-tienda-online-config', data);
   },
+  probarTiendaWhatsapp: async (data: { telefono: string }): Promise<any> => {
+    return await ipcRenderer.invoke('probar-tienda-whatsapp', data);
+  },
   getZonasDeliveryAdmin: async (): Promise<any[]> => {
     return await ipcRenderer.invoke('get-zonas-delivery-admin');
   },

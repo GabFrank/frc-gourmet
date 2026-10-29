@@ -5,6 +5,7 @@ import { CuentaCliente } from '../../src/app/database/entities/pedidos-online/cu
 import { CodigoOtp } from '../../src/app/database/entities/pedidos-online/codigo-otp.entity';
 import { hashPassword, verifyPassword } from '../utils/password.utils';
 import { sendWhatsappOtp, otpWhatsappDisponible } from '../utils/whatsapp-sender';
+import { getGoogleClientId } from '../utils/tienda-ingreso.utils';
 import { signCustomerToken } from '../utils/customer-jwt.utils';
 import {
   issueCustomerRefreshToken,
@@ -347,7 +348,7 @@ export function registerPedidosOnlineAuthHandlers(
 
   // ============== LOGIN CON GOOGLE (credential-ready) ==============
   ipcMain.handle('pub-cliente-google', async (_event: any, idToken: string) => {
-    const clientId = process.env['GOOGLE_CLIENT_ID'];
+    const clientId = getGoogleClientId();
     if (!clientId) return { success: false, error: 'google_no_configurado' };
     if (!idToken) return { success: false, error: 'token_faltante' };
     try {
