@@ -259,6 +259,9 @@ async function main() {
   ok(interpretarPago(sesOk, { status: 'SUCCEEDED', subStatus: 'APPROVED', amount: { value: '1000', currency: 'PYG' }, merchant: { seller: { operationReferenceId: 'R-9' } } }, ex).tipo === 'INCONSISTENTE', 'referencia del pago ajena → no pagado');
   ok(interpretarPago(sesOk, { status: 'SUCCEEDED', subStatus: 'APPROVED', amount: { value: '1000', currency: 'pyg' }, merchant: { seller: { operationReferenceId: 'R-1' } } }, ex).tipo === 'PAGADO', 'monto, moneda y referencia del pago iguales → pagado');
 
+  ok(interpretarPago({ status: 'complete', paymentId: 'p' }, { status: 'SUCCEEDED', subStatus: 'APPROVED', amount: { value: '1000', currency: 'PYG' } }, ex).tipo === 'INCONSISTENTE', 'sin referencia en sesión ni en pago → no pagado');
+  ok(interpretarPago({ status: 'complete', paymentId: 'p' }, { status: 'SUCCEEDED', subStatus: 'APPROVED', amount: { value: '1000', currency: 'PYG' }, merchant: { seller: { operationReferenceId: 'R-1' } } }, ex).tipo === 'PAGADO', 'referencia solo en el pago y correcta → pagado');
+
   console.log('F5 §14: pagoId duplicado no aborta el ciclo del job');
   const pda = await nuevo(12000);
   const pdb = await nuevo(12000);

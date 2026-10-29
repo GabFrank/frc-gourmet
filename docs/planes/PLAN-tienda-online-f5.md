@@ -24,7 +24,8 @@ módulo completo (decisión del propietario); la tienda sigue apagada en producc
 11. M-auth5 — rotación de refresh atómica; reuso de un refresh rotado revoca todo.
 12. M-pay2 — verificación de monto/moneda/referencia: monto y moneda se exigen en el PAGO
     (`amount {value, currency}`), sin fallback a la sesión; si el pago trae
-    `merchant.seller.operationReferenceId`, tiene que ser el del intento. Confirmar la forma
+    `merchant.seller.operationReferenceId`, tiene que ser el del intento; sin ninguna referencia
+    (ni sesión ni pago) → INCONSISTENTE. Confirmar la forma
     real de la respuesta con las claves STG de uPay (hasta entonces el pago sigue apagado).
 13. M-pay4 — rechazo y «a devolver» en la misma transacción.
 14. M-pay5 — un pedido con error no corta el ciclo del job; `pagoId` repetido (índice único)
