@@ -212,6 +212,32 @@ cliente HTTP va inyectado para poder probar con un uPay simulado):
    referencia de uPay. «Mis pedidos» del cliente muestra el estado del pago.
 8. **Registro**: tabla `pagos_online_eventos` (pedido, intento, tipo, estado uPay, respuesta sin la API Key) para
    auditar cada consulta; logs nunca imprimen la clave.
+9. **Ajustes tras la auditoría del plan (29/10)**:
+   - **Estados de uPay**: pagado solo con `SUCCEEDED` + `APPROVED|CAPTURED`. `DECLINED/REJECTED/ERROR/FRAUD/
+     CANCELED/EXPIRED` del payment → `FALLIDO`. Cualquier otro (`CREATED`, `PENDING/AUTHORIZED`, desconocido,
+     error de red o 5xx) → sigue `PENDIENTE_PAGO`, se registra en `pagos_online_eventos` y se vuelve a consultar;
+     **nunca** se marca pagado ni fallido por un estado que no está en esta lista.
+   - **Dónde corre**: el job vive en el proceso principal del servidor de Gourmet (el mismo que atiende la tienda
+     en app.frc-gourmet.com). Si el servidor está cerrado, la tienda tampoco toma pedidos; al volver a abrir, el job
+     revisa primero todos los `PENDIENTE_PAGO` atrasados. Antes de pasar a `EXPIRADO` se hace **una última
+     consulta** a uPay; si aparece pagado, se confirma.
+   - **Caja con aceptación automática**: el pedido pagado se acepta con el usuario configurado para la aceptación
+     automática y su caja abierta (lo mismo que hoy con efectivo). Si no hay caja abierta o la materialización falla,
+     el pedido queda `ACEPTADO` con `errorMaterializacion` (F2), **el pago queda `PAGADO`** y se avisa al personal por
+     WhatsApp; al abrir caja, «Reintentar» lo materializa cobrado. Un pago nunca se pierde por falta de caja.
+   - **Pagado sin aceptar**: si un pedido pagado no se acepta en 20 min (configurable), avisa al personal; si se
+     rechaza o vence, `REEMBOLSO_PENDIENTE`.
+   - **Aviso al cliente**: con pedido pagado rechazado o pago tardío, «Mis pedidos» muestra «Te devolvemos ₲X a tu
+     tarjeta; puede tardar hasta lo que indique tu banco» y, si el WhatsApp de F3 está configurado, se le manda ese
+     mismo texto.
+   - **Apagar el interruptor** solo deja de ofrecer «Pagar con tarjeta» a pedidos nuevos: el job y la verificación
+     siguen hasta resolver todo `PENDIENTE_PAGO` y los pagos tardíos. Si hubo pagos reales, la vuelta atrás de
+     esquema no es el `down` sino un revert del código con las columnas intactas (las columnas nuevas no molestan).
+   - **Endpoint público** `pedido.pago.verificar`: exige la sesión del cliente dueño del pedido (o el token de
+     seguimiento), no el número; tope 1 consulta a uPay cada 10 s por pedido (si no, devuelve el último estado
+     guardado) y el límite por IP de F1.
+   - **Redirección**: solo `https:` y host igual a `upay.com`/`upay.com.py` o terminado en `.upay.com` /
+     `.upay.com.py` (sufijo exacto con punto: `evilupay.com` no pasa).
 - **Migración (solo agrega)**: `pedidos_online.estado_pago`, `pago_proveedor`, `pago_intento`,
   `pago_sesion_id`, `pago_id` (único parcial), `pago_monto`, `pago_expira_en`, `pagado_en`; tabla
   `pagos_online_eventos`; forma de pago «UPAY ONLINE». `estado` es varchar: `PENDIENTE_PAGO` no requiere cambio de
