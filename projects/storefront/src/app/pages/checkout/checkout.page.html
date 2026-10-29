@@ -44,6 +44,11 @@
   </ng-container>
 
   <ng-container *ngIf="!mesa.enMesa && auth.isAuthenticated && config.config.abiertaAhora">
+    <!-- M5: cuenta sin nombre -->
+    <div class="sf-card" *ngIf="faltaNombreCuenta">
+      <h3>¿A nombre de quién?</h3>
+      <input class="sf-input" [(ngModel)]="nombreCuenta" placeholder="Tu nombre" maxlength="60" autocomplete="name" />
+    </div>
     <!-- Tipo -->
     <div class="sf-card">
       <h3>Tipo de pedido</h3>

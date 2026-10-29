@@ -34,6 +34,11 @@ export class CheckoutPage implements OnInit, OnDestroy {
   private menuSvc = inject(MenuService);
   /** Cambios de precio o productos quitados al revalidar contra la carta. */
   avisos: string[] = [];
+  /** M5: la cuenta entró por código y nunca cargó su nombre; se pide acá. */
+  nombreCuenta = '';
+  get faltaNombreCuenta(): boolean {
+    return !this.mesa.enMesa && this.auth.isAuthenticated && !String(this.auth.cuenta?.nombre || '').trim();
+  }
 
   tipo: TipoPedido = 'PICKUP';
   direccion = '';
@@ -241,6 +246,11 @@ export class CheckoutPage implements OnInit, OnDestroy {
       notas: this.notas.trim() || null,
       metodoPago: 'EFECTIVO',
     };
+    if (this.faltaNombreCuenta) {
+      const nombre = this.nombreCuenta.trim();
+      if (!nombre) { this.enviando = false; this.error = 'Ingresá tu nombre para el pedido.'; return; }
+      payload.nombreCliente = nombre;
+    }
     if (this.tipo === 'DELIVERY' && coords) {
       payload.latitud = this.lat; payload.longitud = this.lng;
     }
@@ -248,7 +258,11 @@ export class CheckoutPage implements OnInit, OnDestroy {
       next: (res) => {
         this.enviando = false;
         this.idemKey = null;
-        if (res?.success) { this.cart.limpiar(); this.router.navigate(['/mis-pedidos'], { queryParams: { nuevo: res.numero } }); }
+        if (res?.success) {
+          if (this.faltaNombreCuenta && this.auth.cuenta) this.auth.cuenta.nombre = this.nombreCuenta.trim().toUpperCase();
+          this.cart.limpiar();
+          this.router.navigate(['/mis-pedidos'], { queryParams: { nuevo: res.numero } });
+        }
         else this.error = this.mensajeError(res);
       },
       error: (e) => { this.enviando = false; this.error = mensajeError(e, 'No se pudo enviar el pedido. Probá de nuevo.'); },

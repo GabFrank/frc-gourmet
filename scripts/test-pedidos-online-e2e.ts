@@ -33,6 +33,7 @@ const PORT = 7099;
 const BASE = `http://localhost:${PORT}`;
 
 // --- mini framework de asserts ---
+let dsM5: DataSource | null = null;
 let passed = 0;
 let failed = 0;
 function ok(cond: boolean, name: string, extra?: any) {
@@ -222,6 +223,7 @@ async function seed(dataSource: DataSource): Promise<any> {
 }
 
 async function main() {
+  const cuentasRepoM5 = () => dsM5!.getRepository('CuentaCliente');
   const tmpDir = path.resolve(__dirname, '../.tmp');
   if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
   const dbFile = path.join(tmpDir, 'test-pedidos-online.db');
@@ -230,6 +232,7 @@ async function main() {
   const baseOptions = getDataSourceOptions(tmpDir);
   const dataSource = new DataSource({ ...(baseOptions as any), database: dbFile, synchronize: false, migrationsRun: false });
   await dataSource.initialize();
+  dsM5 = dataSource;
   await dataSource.runMigrations({ transaction: 'each' });
   console.log('[e2e] Migraciones OK.');
 
@@ -346,6 +349,11 @@ async function main() {
   // 4. me
   const me = await pub('auth.me', [], token);
   ok(me.result?.success === true && me.result?.cuenta?.telefono === '0981123456', 'auth.me devuelve la cuenta');
+
+  // 4b. F2 (M5): cuenta sin nombre → el pedido exige nombre (antes quedaba sin nombre en la bandeja).
+  const sinNombre = await pub('pedido.crear', [{ tipoPedido: 'PICKUP', items: [{ productoId: 1, cantidad: 1 }] }], token);
+  ok(sinNombre.result?.error === 'falta_nombre', 'M5: cuenta sin nombre → falta_nombre', sinNombre.result);
+  await pub('auth.perfil.update', [{ nombre: 'Cliente Otp' }], token);
 
   // 5. pedido.crear sin token → rechazado
   //
@@ -466,6 +474,16 @@ async function main() {
   }], token);
   ok(falso.result?.success === true && Number(falso.result?.total) > 1, 'precio falso del cliente se ignora: total = precio de la carta', falso.result);
   await invokeHandlerWithContext('rechazar-pedido-online', undefined, falso.result?.pedidoId, 'prueba');
+  // 14e. F2 (M5): el nombre que manda el checkout queda en la cuenta y en el pedido.
+  const sinNom: any = await cuentasRepoM5().save(cuentasRepoM5().create({ telefono: '0981777666', telefonoVerificado: true, activo: true }));
+  const conNom: any = await invokeHandlerWithContext('crear-pedido-online', { customerId: sinNom.id }, {
+    tipoPedido: 'PICKUP', nombreCliente: 'Rosa Paz', items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }],
+  });
+  const cuentaM5: any = await cuentasRepoM5().findOne({ where: { id: sinNom.id } });
+  const pedM5: any = await dataSource.getRepository('PedidoOnline').findOne({ where: { numero: conNom?.numero } });
+  ok(conNom?.success === true && cuentaM5?.nombre === 'ROSA PAZ' && pedM5?.nombreCliente === 'ROSA PAZ',
+    'M5: el nombre del checkout queda en la cuenta y en el pedido', [conNom, cuentaM5?.nombre, pedM5?.nombreCliente]);
+  await invokeHandlerWithContext('rechazar-pedido-online', undefined, conNom?.pedidoId, 'prueba');
 
   // 15. pendientes (primero=LISTO ya no cuenta, segundo/tercero rechazados) = 0
   const pend = await invokeHandlerWithContext('contar-pedidos-online-pendientes', undefined);
