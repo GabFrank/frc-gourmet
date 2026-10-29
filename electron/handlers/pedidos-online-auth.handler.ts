@@ -13,6 +13,7 @@ import {
   revokeAllCustomerRefreshTokens,
 } from '../utils/customer-refresh-token.utils';
 import { registerPublicOperation } from '../server/public-routes';
+import { dispatchEvento } from '../services/notificacion.service';
 import { loginBloqueado, registrarLoginFallido, registrarLoginOk, otpIpPermitido } from '../utils/tienda-limites';
 
 /**
@@ -82,6 +83,17 @@ export function registerPedidosOnlineAuthHandlers(
   }
 
   // ============== OTP REQUEST ==============
+  // Aviso al staff (evento TIENDA_OTP_TOPE, por el WhatsApp de avisos): una vez por día
+  // al pasar el 80 % del tope global y otra al llegar. Best-effort: nunca frena el OTP.
+  function avisarTopeOtp(nivel: '80' | 'tope', usados: number, tope: number): void {
+    const dia = new Date().toISOString().slice(0, 10);
+    const texto = nivel === 'tope'
+      ? `⚠️ Tienda online: se llegó al tope de ${tope} códigos de ingreso en 24 h. Hasta que baje, nadie nuevo puede entrar por WhatsApp. Si no es una campaña, puede ser un abuso.`
+      : `Tienda online: ya se pidieron ${usados} de ${tope} códigos de ingreso en 24 h (80 %). Al llegar al tope se corta el envío.`;
+    dispatchEvento('TIENDA_OTP_TOPE', { asunto: 'Tienda online: códigos de ingreso', texto, dedupeKey: `${nivel}-${dia}` })
+      .catch((e) => console.warn('[otp] aviso de tope falló:', e?.message || e));
+  }
+
   ipcMain.handle('pub-otp-request', async (_event: any, telefonoRaw: string) => {
     const telefono = normalizarTelefono(telefonoRaw);
     if (telefono.length < 6) {
@@ -107,10 +119,13 @@ export function registerPedidosOnlineAuthHandlers(
       return { success: false, error: 'demasiadas_solicitudes' };
     }
     const globalDia = await otpRepo().count({ where: { createdAt: MoreThan(hace24h) as any } });
-    if (globalDia >= otpMaxGlobalDia()) {
+    const topeGlobal = otpMaxGlobalDia();
+    if (globalDia >= topeGlobal) {
       console.warn(`[otp] tope global diario alcanzado (${globalDia}); envío cortado.`);
+      avisarTopeOtp('tope', globalDia, topeGlobal);
       return { success: false, error: 'otp_no_disponible' };
     }
+    if (globalDia + 1 >= Math.ceil(topeGlobal * 0.8)) avisarTopeOtp('80', globalDia + 1, topeGlobal);
     // Por IP: 30 por hora (frena a quien rota números desde un mismo lugar).
     if (!otpIpPermitido(String(_event?._clientIp || ''))) {
       return { success: false, error: 'demasiadas_solicitudes' };
