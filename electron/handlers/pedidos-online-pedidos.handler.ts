@@ -23,6 +23,7 @@ import { registerPublicOperation } from '../server/public-routes';
 import { getTiendaConfig, estaAbierta, getPizzaConfig } from './pedidos-online-config.handler';
 import { resolverZonaPorPunto } from '../utils/geo.utils';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
+import { pedidoMesaPermitido } from '../utils/tienda-limites';
 import { ipPermitidaMesa } from '../utils/ip-lan.util';
 
 /**
@@ -349,6 +350,11 @@ export function registerPedidosOnlinePedidosHandlers(
       }
       nombreClienteInvitado = String(data?.nombreCliente || '').trim().slice(0, 150);
       if (!nombreClienteInvitado) return { success: false, error: 'falta_nombre' };
+      // F5 (auditoría M-auth7): el invitado de mesa no tiene cuenta; tope de pedidos por mesa
+      // y por IP para que un script no llene la cocina de comandas.
+      if (!pedidoMesaPermitido(mesa.id, String(event?._clientIp || ''))) {
+        return { success: false, error: 'demasiadas_solicitudes' };
+      }
       // Si además viene autenticado, se asocia la cuenta (opcional).
       if (customerId) {
         cuenta = await dataSource.getRepository(CuentaCliente).findOne({ where: { id: customerId } });

@@ -59,6 +59,11 @@ const fallosIp = new Ventana(60 * MIN);
 const otpIp = new Ventana(60 * MIN);
 const otpIpDia = new Ventana(24 * 60 * MIN);
 const registrosIp = new Ventana(60 * MIN);
+const pedidosMesa = new Ventana(60 * MIN);
+const pedidosMesaIp = new Ventana(60 * MIN);
+/** F5 (M-auth7): pedidos de invitado por mesa y por IP por hora. */
+export const PEDIDOS_POR_MESA_HORA = 40;
+export const PEDIDOS_MESA_POR_IP_HORA = 15;
 /** F5 (M-auth6): altas de cuenta por email por IP por hora. */
 export const REGISTROS_POR_IP_HORA = 10;
 const fallosCuenta = new Ventana(60 * MIN);
@@ -128,7 +133,17 @@ export function registroIpPermitido(ip: string, ahora = Date.now()): boolean {
   return true;
 }
 
+/** true si se puede tomar otro pedido de invitado de esa mesa desde esa IP; si puede, lo cuenta. */
+export function pedidoMesaPermitido(mesaId: number, ip: string, ahora = Date.now()): boolean {
+  const km = String(mesaId), ki = claveIp(ip);
+  if (pedidosMesa.contar(km, ahora) >= PEDIDOS_POR_MESA_HORA) return false;
+  if (pedidosMesaIp.contar(ki, ahora) >= PEDIDOS_MESA_POR_IP_HORA) return false;
+  pedidosMesa.sumar(km, ahora);
+  pedidosMesaIp.sumar(ki, ahora);
+  return true;
+}
+
 /** Solo para tests. */
 export function reiniciarLimitesTienda(): void {
-  fallosIp.limpiar(); otpIp.limpiar(); otpIpDia.limpiar(); registrosIp.limpiar(); fallosCuenta.limpiar(); fallosCuentaIp.clear();
+  fallosIp.limpiar(); otpIp.limpiar(); otpIpDia.limpiar(); registrosIp.limpiar(); pedidosMesa.limpiar(); pedidosMesaIp.limpiar(); fallosCuenta.limpiar(); fallosCuentaIp.clear();
 }
