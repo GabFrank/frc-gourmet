@@ -18,7 +18,7 @@ import { esUrlCheckoutUpay, textoEstadoPago } from '../../core/pago-online';
   imports: [CommonModule, RouterLink, GuaraniPipe, IconComponent],
   template: `
     <div class="sf-container">
-      <h1 class="sf-title">Pago del pedido {{ numero }}</h1>
+      <h1 class="sf-title">Pago del pedido <span class="nowrap">{{ numero }}</span></h1>
       <p class="sf-muted" *ngIf="!auth.isAuthenticated">Ingresá para ver tu pedido. <a routerLink="/login">Ingresar</a>.</p>
       <div class="sf-card" *ngIf="pedido">
         <div class="sf-pedido-head">
@@ -43,6 +43,13 @@ import { esUrlCheckoutUpay, textoEstadoPago } from '../../core/pago-online';
       <p class="sf-muted" *ngIf="!pedido && cargando">Cargando…</p>
     </div>
   `,
+  styles: [`
+    .nowrap { white-space: nowrap; }
+    .sf-pedido-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+    .sf-ok { display: flex; align-items: flex-start; gap: 8px; color: #15803d; font-weight: 600; margin: 8px 0 16px; }
+    .sf-acciones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+    .sf-acciones .sf-btn { text-decoration: none; }
+  `],
 })
 export class PagoPage implements OnInit, OnDestroy {
   private api = inject(PublicApiService);

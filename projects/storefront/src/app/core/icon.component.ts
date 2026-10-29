@@ -23,6 +23,7 @@ import { CommonModule } from '@angular/common';
       <ng-container *ngSwitchCase="'pin'"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></ng-container>
       <ng-container *ngSwitchCase="'pencil'"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></ng-container>
       <ng-container *ngSwitchCase="'cash'"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></ng-container>
+      <ng-container *ngSwitchCase="'card'"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></ng-container>
       <ng-container *ngSwitchCase="'cart'"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2 2h2l2.4 12.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 2-1.6L23 6H5.1"/></ng-container>
       <ng-container *ngSwitchCase="'x'"><path d="M18 6 6 18M6 6l12 12"/></ng-container>
       <ng-container *ngSwitchCase="'back'"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></ng-container>
