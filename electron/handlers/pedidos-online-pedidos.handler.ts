@@ -347,6 +347,14 @@ export function registerPedidosOnlinePedidosHandlers(
       if (tipoPedido === TipoPedidoOnline.DELIVERY && !cfg.permiteDelivery) {
         return { success: false, error: 'delivery_no_disponible' };
       }
+      // M5: una cuenta sin nombre (entró por código y nunca completó sus datos) dejaba
+      // el pedido sin nombre en la bandeja. El checkout lo pide y acá queda en la cuenta.
+      if (!String(cuenta.nombre || '').trim()) {
+        const nombre = String(data?.nombreCliente || '').trim().slice(0, 150);
+        if (!nombre) return { success: false, error: 'falta_nombre' };
+        cuenta.nombre = nombre.toUpperCase();
+        await dataSource.getRepository(CuentaCliente).update({ id: cuenta.id }, { nombre: cuenta.nombre });
+      }
     }
 
     if (idemKey) {
