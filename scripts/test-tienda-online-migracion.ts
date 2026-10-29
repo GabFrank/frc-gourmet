@@ -81,7 +81,9 @@ async function main() {
   ok((await columnas()).includes('idempotency_key'), 'up de nuevo la vuelve a crear');
 
   // F2: TiendaSeguimientoMesa (columna del hash de seguimiento + índice), up / down / up.
+  // Se sube todo y se baja F3 (TiendaIngresoClientes) para que F2 quede última.
   await ds.runMigrations({ transaction: 'each' });
+  await ds.undoLastMigration({ transaction: 'each' });
   const ultima = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
   ok(/TiendaSeguimientoMesa/.test(String(ultima)), 'F2: TiendaSeguimientoMesa es la última migración', ultima);
   ok((await columnas()).includes('seguimiento_token_hash'), 'F2 up agrega pedidos_online.seguimiento_token_hash');
@@ -93,6 +95,28 @@ async function main() {
   ok(!(await indices()).some((n) => /IDX_pedidos_online_seguimiento/.test(n)), 'F2 down quita el índice');
   await ds.runMigrations({ transaction: 'each' });
   ok((await columnas()).includes('seguimiento_token_hash'), 'F2 up de nuevo la vuelve a crear');
+
+  // F3: TiendaIngresoClientes (4 columnas nullable en tienda_online_config), up / down / up.
+  const colsCfg = async (): Promise<string[]> => pgDb
+    ? (await ds.query(`SELECT column_name AS c FROM information_schema.columns WHERE table_schema='public' AND table_name='tienda_online_config'`)).map((r: any) => r.c)
+    : (await ds.query(`PRAGMA table_info('tienda_online_config')`)).map((r: any) => r.name);
+  const F3_COLS = ['whatsapp_phone_number_id', 'whatsapp_plantilla', 'whatsapp_idioma', 'google_client_id'];
+  const ultimaF3 = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
+  ok(/TiendaIngresoClientes/.test(String(ultimaF3)), 'F3: TiendaIngresoClientes es la última migración', ultimaF3);
+  const cfgCols = await colsCfg();
+  ok(F3_COLS.every((c) => cfgCols.includes(c)), 'F3 up agrega las 4 columnas', cfgCols);
+  const metaCfg = ds.entityMetadatas.find((m) => m.tableName === 'tienda_online_config')!;
+  ok(JSON.stringify(metaCfg.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...cfgCols].sort()), 'F3: las columnas coinciden con la entidad');
+  await ds.query(`DELETE FROM tienda_online_config`);
+  await ds.query(`INSERT INTO tienda_online_config (nombre_comercio, google_client_id) VALUES ('ZT-CFG', 'x.apps.googleusercontent.com')`);
+  await ds.undoLastMigration({ transaction: 'each' });
+  const sinF3 = await colsCfg();
+  ok(!F3_COLS.some((c) => sinF3.includes(c)), 'F3 down quita las 4 columnas', sinF3);
+  const fila = await ds.query(`SELECT nombre_comercio FROM tienda_online_config`);
+  ok(fila.length === 1 && fila[0].nombre_comercio === 'ZT-CFG', 'F3 down conserva la fila de config', fila);
+  await ds.runMigrations({ transaction: 'each' });
+  ok((await colsCfg()).includes('google_client_id'), 'F3 up de nuevo las vuelve a crear');
+  await ds.query(`DELETE FROM tienda_online_config WHERE nombre_comercio = 'ZT-CFG'`);
 
   await ds.destroy();
   console.log(`\n[tienda-migracion] ${passed} OK, ${failed} fallas`);

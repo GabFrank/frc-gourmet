@@ -551,6 +551,85 @@ async function main() {
   const g = await pub('auth.google', ['fake-token']);
   ok(g.result?.error === 'google_no_configurado', 'auth.google sin GOOGLE_CLIENT_ID → no_configurado');
 
+  console.log('\n[e2e] === F3: CREDENCIALES DE INGRESO DESDE LA APP ===');
+  // Validaciones: no se guardan valores con formato inválido.
+  const vPhone: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { whatsappPhoneNumberId: '12ab' });
+  ok(vPhone?.error === 'whatsapp_phone_id_invalido', 'F3: Phone Number ID con letras → rechazado', vPhone);
+  const vGoogle: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { googleClientId: 'cualquier-cosa' });
+  ok(vGoogle?.error === 'google_client_id_invalido', 'F3: Client ID de Google inválido → rechazado', vGoogle);
+  const vPlant: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { whatsappPlantilla: 'Código Ingreso' });
+  ok(vPlant?.error === 'whatsapp_plantilla_invalida', 'F3: plantilla con espacios → rechazada', vPlant);
+
+  // Google desde la pantalla: tienda.config lo publica y auth.google deja de dar no_configurado.
+  const GID = '1234-abc.apps.googleusercontent.com';
+  const gSave: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, {
+    googleClientId: GID, whatsappPhoneNumberId: '109876543210', whatsappPlantilla: 'codigo_ingreso', whatsappIdioma: 'es',
+  });
+  ok(gSave?.success === true && gSave?.config?.ingreso?.googleConfigurado === true, 'F3: Client ID de Google guardado', gSave?.config?.ingreso);
+  const cfgG = await pub('tienda.config', []);
+  ok(cfgG.result?.googleClientId === GID, 'F3: tienda.config publica el Client ID de la pantalla', cfgG.result?.googleClientId);
+  const fetchOrig = (globalThis as any).fetch;
+  const llamadas: Array<{ url: string; body: any }> = [];
+  (globalThis as any).fetch = async (url: any, init?: any) => {
+    // Solo se simulan Google y Meta; el RPC local de la tienda pasa al fetch real.
+    if (!/googleapis\.com|graph\.facebook\.com/.test(String(url))) return fetchOrig(url, init);
+    llamadas.push({ url: String(url), body: init?.body ? JSON.parse(init.body) : null });
+    if (String(url).includes('graph.facebook.com')) return { ok: true, status: 200, text: async () => '{}', json: async () => ({}) };
+    return { ok: false, status: 400, text: async () => '{}', json: async () => ({}) };
+  };
+  try {
+    const g2 = await pub('auth.google', ['fake-token']);
+    ok(g2.result?.error === 'google_token_invalido', 'F3: auth.google usa el Client ID de la pantalla (ya no no_configurado)', g2.result);
+
+    // WhatsApp: Phone Number ID cargado pero sin token → sin configurar, y la prueba no manda nada.
+    const tokenEnv = process.env['WHATSAPP_CLOUD_TOKEN'];
+    delete process.env['WHATSAPP_CLOUD_TOKEN'];
+    const est: any = await invokeHandlerWithContext('get-tienda-online-config', undefined);
+    const tieneTokenGuardado = !!est?.ingreso?.whatsappTokenGuardado;
+    if (!tieneTokenGuardado) {
+      ok(est?.ingreso?.whatsappConfigurado === false, 'F3: sin token, WhatsApp figura sin configurar', est?.ingreso);
+      const pSin: any = await invokeHandlerWithContext('probar-tienda-whatsapp', undefined, { telefono: '595981123456' });
+      ok(pSin?.error === 'whatsapp_no_configurado' && !llamadas.some((l) => l.url.includes('graph.facebook.com')), 'F3: probar envío sin token → no manda nada', pSin);
+    }
+    // Token por pantalla: nunca vuelve en la respuesta; sin almacén seguro se rechaza (no texto plano).
+    const SECRETO = 'EAAG-token-secreto-de-prueba';
+    const tSave: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { whatsappToken: SECRETO });
+    ok(!JSON.stringify(tSave).includes(SECRETO), 'F3: el token no vuelve en la respuesta de guardar');
+    ok(
+      tSave?.success === true || tSave?.error === 'almacen_seguro_no_disponible' || tSave?.error === 'token_no_guardado',
+      'F3: token guardado en almacén seguro o rechazado (nunca en la BD)', tSave?.error,
+    );
+    const filaCfg: any[] = await dataSource.query(`SELECT * FROM tienda_online_config`);
+    ok(!JSON.stringify(filaCfg).includes(SECRETO), 'F3: el token no está en la tabla tienda_online_config');
+    const estT: any = await invokeHandlerWithContext('get-tienda-online-config', undefined);
+    ok(!JSON.stringify(estT).includes(SECRETO), 'F3: get-tienda-online-config no devuelve el token');
+
+    // Con token (entorno) + datos de la pantalla: el envío usa el Phone Number ID y la plantilla cargados.
+    process.env['WHATSAPP_CLOUD_TOKEN'] = 'token-entorno';
+    await invokeHandlerWithContext('update-tienda-online-config', undefined, {});
+    const pTelMal: any = await invokeHandlerWithContext('probar-tienda-whatsapp', undefined, { telefono: '12' });
+    ok(pTelMal?.error === 'telefono_invalido', 'F3: probar envío con teléfono inválido → rechazado', pTelMal);
+    llamadas.length = 0;
+    const pOk: any = await invokeHandlerWithContext('probar-tienda-whatsapp', undefined, { telefono: '+595 981 123456' });
+    const envio = llamadas.find((l) => l.url.includes('graph.facebook.com'));
+    ok(pOk?.success === true, 'F3: probar envío con credenciales → ok', pOk);
+    ok(!!envio && envio.url.includes('/109876543210/messages'), 'F3: el envío usa el Phone Number ID de la pantalla', envio?.url);
+    ok(envio?.body?.template?.name === 'codigo_ingreso' && envio?.body?.to === '595981123456', 'F3: plantilla y teléfono normalizado', envio?.body?.template?.name);
+    ok(envio?.body?.template?.components?.some((c: any) => c.type === 'button' && c.sub_type === 'url'), 'F3: lleva el botón «Copiar código» (plantilla de autenticación)');
+
+    // Vaciar los campos vuelve a las variables de entorno.
+    await invokeHandlerWithContext('update-tienda-online-config', undefined, {
+      googleClientId: '', whatsappPhoneNumberId: '', whatsappPlantilla: '', whatsappIdioma: '', whatsappTokenBorrar: true,
+    });
+    const cfgVacio = await pub('tienda.config', []);
+    ok(cfgVacio.result?.googleClientId === (process.env['GOOGLE_CLIENT_ID'] || null), 'F3: sin valores de pantalla rige el entorno', cfgVacio.result?.googleClientId);
+    if (tokenEnv === undefined) delete process.env['WHATSAPP_CLOUD_TOKEN'];
+    else process.env['WHATSAPP_CLOUD_TOKEN'] = tokenEnv;
+    await invokeHandlerWithContext('update-tienda-online-config', undefined, {});
+  } finally {
+    (globalThis as any).fetch = fetchOrig;
+  }
+
   console.log('\n[e2e] === ZONAS DELIVERY (ADMIN CRUD) + UBICACIÓN ===');
   // 26. listar zonas (ya hay 1 del seed)
   const zonasIni: any = await invokeHandlerWithContext('get-zonas-delivery-admin', undefined);

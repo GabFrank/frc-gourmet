@@ -8,6 +8,10 @@
  *   WHATSAPP_OTP_TEMPLATE      — nombre de la plantilla aprobada (default 'otp_codigo')
  *   WHATSAPP_OTP_LANG          — locale de la plantilla (default 'es')
  *
+ * Desde F3 los valores cargados en «Config Tienda Online» (BD + token en keytar) tienen
+ * prioridad sobre las variables de entorno: el handler de config los deja en memoria con
+ * `setWhatsappOverrides` al arrancar y en cada guardado, para no hacer async este módulo.
+ *
  * Si faltan las credenciales, el envío NO está disponible. Solo con
  * `FRC_OTP_DEV=1` y la app sin empaquetar (desarrollo/tests) se usa un
  * **fallback de desarrollo** que loguea el código. En producción nunca: antes
@@ -22,8 +26,37 @@ export interface OtpSendResult {
   detail?: string;
 }
 
+export interface WhatsappOverrides {
+  token?: string | null;
+  phoneNumberId?: string | null;
+  plantilla?: string | null;
+  idioma?: string | null;
+}
+
+let overrides: WhatsappOverrides = {};
+
+/** Valores cargados desde la app (prioridad sobre las variables de entorno). */
+export function setWhatsappOverrides(o: WhatsappOverrides): void {
+  overrides = { ...o };
+}
+
+function credenciales(): { token: string; phoneId: string; template: string; lang: string } {
+  return {
+    token: overrides.token || process.env['WHATSAPP_CLOUD_TOKEN'] || '',
+    phoneId: overrides.phoneNumberId || process.env['WHATSAPP_PHONE_NUMBER_ID'] || '',
+    template: overrides.plantilla || process.env['WHATSAPP_OTP_TEMPLATE'] || 'otp_codigo',
+    lang: overrides.idioma || process.env['WHATSAPP_OTP_LANG'] || 'es',
+  };
+}
+
 function isConfigured(): boolean {
-  return !!(process.env['WHATSAPP_CLOUD_TOKEN'] && process.env['WHATSAPP_PHONE_NUMBER_ID']);
+  const c = credenciales();
+  return !!(c.token && c.phoneId);
+}
+
+/** Hay credenciales reales de WhatsApp Cloud (sin contar el fallback de desarrollo). */
+export function whatsappCloudConfigurado(): boolean {
+  return isConfigured();
 }
 
 function appEmpaquetada(): boolean {
@@ -57,10 +90,7 @@ export async function sendWhatsappOtp(telefono: string, codigo: string): Promise
     return { ok: true, provider: 'dev-log', detail: 'sin credenciales; código logueado' };
   }
 
-  const token = process.env['WHATSAPP_CLOUD_TOKEN']!;
-  const phoneId = process.env['WHATSAPP_PHONE_NUMBER_ID']!;
-  const template = process.env['WHATSAPP_OTP_TEMPLATE'] || 'otp_codigo';
-  const lang = process.env['WHATSAPP_OTP_LANG'] || 'es';
+  const { token, phoneId, template, lang } = credenciales();
 
   try {
     const res = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
@@ -76,9 +106,17 @@ export async function sendWhatsappOtp(telefono: string, codigo: string): Promise
         template: {
           name: template,
           language: { code: lang },
+          // Plantilla de categoría Autenticación (la que exige Meta para códigos): el código
+          // va en el cuerpo y también en el botón «Copiar código» (index 0).
           components: [
             {
               type: 'body',
+              parameters: [{ type: 'text', text: codigo }],
+            },
+            {
+              type: 'button',
+              sub_type: 'url',
+              index: '0',
               parameters: [{ type: 'text', text: codigo }],
             },
           ],
@@ -88,7 +126,14 @@ export async function sendWhatsappOtp(telefono: string, codigo: string): Promise
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       console.error(`[whatsapp-otp] envío falló (${res.status}): ${body}`);
-      return { ok: false, provider: 'whatsapp-cloud', detail: `HTTP ${res.status}` };
+      // El mensaje de Meta (sin el token) sirve para el botón «Probar envío».
+      let motivo = '';
+      try {
+        motivo = String(JSON.parse(body)?.error?.message || '').slice(0, 200);
+      } catch {
+        motivo = '';
+      }
+      return { ok: false, provider: 'whatsapp-cloud', detail: `HTTP ${res.status}${motivo ? ': ' + motivo : ''}` };
     }
     return { ok: true, provider: 'whatsapp-cloud' };
   } catch (e: any) {

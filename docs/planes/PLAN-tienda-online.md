@@ -145,10 +145,15 @@ internet); F2+F3 juntas; F4 cuando uPay esté probado en su sandbox.
 
 ### F3 — Login WhatsApp y Google con credenciales desde la app
 1. En «Config Tienda Online» (escritorio): sección «Ingreso de clientes»:
-   - WhatsApp Cloud API: Phone Number ID, plantilla, idioma y token. El token se guarda cifrado con la clave
-     de la máquina con `safeStorage` de Electron (DPAPI en Windows); si `safeStorage` no está disponible no se
-     guarda en texto plano: la pantalla avisa y se siguen usando variables de entorno. Nunca vuelve al cliente
-     ni a la API RPC (el handler devuelve solo «configurado sí/no»).
+   - WhatsApp Cloud API: Phone Number ID, plantilla, idioma y token. El token se guarda en el almacén seguro
+     del sistema operativo con `keytar` (Administrador de credenciales de Windows), el mismo camino que ya usan
+     los secretos de Notificaciones y el JWT (`tienda-secrets.util.ts`); si no hay almacén seguro no se guarda
+     en texto plano: la pantalla avisa y se siguen usando variables de entorno. Nunca vuelve al cliente ni a la
+     API RPC (el handler devuelve solo «configurado sí/no»). *Implementado así en vez de `safeStorage`
+     (29/10): reusa un camino probado y no agrega un cifrado propio.*
+   - Los datos no secretos (Phone Number ID, plantilla, idioma, Client ID) van en 4 columnas nullable de
+     `tienda_online_config` (migración aditiva `TiendaIngresoClientes`). La plantilla es de categoría
+     Autenticación: el código va en el cuerpo y en el botón «Copiar código».
    - Google: Client ID (público).
    - Botón «Probar envío» (manda un código a un número que se ingresa) y estado de cada proveedor.
 2. Prioridad: valores de la pantalla > variables de entorno.

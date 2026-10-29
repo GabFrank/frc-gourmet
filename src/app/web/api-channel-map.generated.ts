@@ -710,6 +710,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "pagarValeCaja": "pagar-vale-caja",
   "printReceipt": "print-receipt",
   "printTestPage": "print-test-page",
+  "probarTiendaWhatsapp": "probar-tienda-whatsapp",
   "procesarAcreditacionesAuto": "procesar-acreditaciones-auto",
   "procesarStockVenta": "procesarStockVenta",
   "programarVacacionPeriodo": "programar-vacacion-periodo",
