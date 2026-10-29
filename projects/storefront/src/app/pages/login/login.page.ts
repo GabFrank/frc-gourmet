@@ -1,4 +1,5 @@
-import { Component, inject, AfterViewInit, NgZone, ElementRef, ViewChild } from '@angular/core';
+import { Component, inject, AfterViewInit, OnDestroy, NgZone, ElementRef, ViewChild } from '@angular/core';
+import { Subscription } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -16,7 +17,7 @@ declare const google: any;
   templateUrl: './login.page.html',
   styleUrls: ['./login.page.scss'],
 })
-export class LoginPage implements AfterViewInit {
+export class LoginPage implements AfterViewInit, OnDestroy {
   private auth = inject(AuthService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
@@ -46,9 +47,20 @@ export class LoginPage implements AfterViewInit {
     return this.config.config.otpWhatsappDisponible !== false;
   }
 
+  private googleIniciado = false;
+  private configSub?: Subscription;
+
   ngAfterViewInit(): void {
-    const clientId = this.config.config.googleClientId;
-    if (clientId) this.initGoogle(clientId);
+    this.configSub = this.config.cambios$.subscribe((c) => {
+      if (c.googleClientId && !this.googleIniciado) {
+        this.googleIniciado = true;
+        this.initGoogle(c.googleClientId);
+      }
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.configSub?.unsubscribe();
   }
 
   private initGoogle(clientId: string): void {

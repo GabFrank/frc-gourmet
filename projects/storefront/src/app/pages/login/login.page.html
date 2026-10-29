@@ -49,7 +49,8 @@
   </div>
 
   <!-- ===== Google ===== -->
-  <div class="google-wrap" *ngIf="config.config.googleClientId">
+  <!-- Siempre en el DOM: si la config llega tarde, el botón igual se dibuja (M4). -->
+  <div class="google-wrap" [hidden]="!config.config.googleClientId">
     <div class="sep"><span>o</span></div>
     <div #googleBtn class="google-btn"></div>
   </div>

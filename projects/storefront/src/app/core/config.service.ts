@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { BehaviorSubject } from 'rxjs';
 import { PublicApiService } from './public-api.service';
 
 export interface TiendaConfig {
@@ -25,6 +26,8 @@ export class ConfigService {
     prepTimeMinutos: 30, montoMinimoPedido: 0,
   };
   loaded = false;
+  /** Emite la config actual y cada vez que llega del server (para lo que depende de ella, como Google). */
+  readonly cambios$ = new BehaviorSubject<TiendaConfig>(this.config);
 
   constructor(private api: PublicApiService) {}
 
@@ -38,6 +41,7 @@ export class ConfigService {
           }
         }
         this.loaded = true;
+        this.cambios$.next(this.config);
       },
       error: () => (this.loaded = true),
     });
