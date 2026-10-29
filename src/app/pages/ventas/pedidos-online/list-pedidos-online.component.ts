@@ -9,6 +9,9 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { RepositoryService } from '../../../database/repository.service';
 import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
+import { of } from 'rxjs';
+import { catchError, switchMap } from 'rxjs/operators';
+import { AuthService } from '../../../services/auth.service';
 
 /**
  * Bandeja de PEDIDOS ONLINE en el PdV (Fase 4).
@@ -44,6 +47,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
 
   readonly estados = [
     { value: 'ACTIVOS', label: 'Activos' },
+    { value: 'PENDIENTE_PAGO', label: 'Esperando pago' },
     { value: 'RECIBIDO', label: 'Recibidos' },
     { value: 'ACEPTADO', label: 'Aceptados' },
     { value: 'EN_PREPARACION', label: 'En preparación' },
@@ -55,6 +59,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
   ];
 
   private readonly estadoLabels: Record<string, string> = {
+    PENDIENTE_PAGO: 'Esperando pago',
     RECIBIDO: 'Recibido',
     ACEPTADO: 'Aceptado',
     EN_PREPARACION: 'En preparación',
@@ -72,6 +77,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
   constructor(
     private repo: RepositoryService,
     private snack: MatSnackBar,
+    private auth: AuthService,
   ) {}
 
   private get api(): any {
@@ -130,11 +136,29 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Acepta y materializa contra la caja abierta del usuario (si tiene una). El server
+   * nunca crea la venta sin caja abierta: si falla, el pedido queda aceptado y se le
+   * muestra al operador por qué no llegó a cocina (PLAN-tienda-online M7).
+   */
   aceptar(p: any): void {
-    this.repo.aceptarPedidoOnline(p.id).subscribe({
+    const usuarioId = this.auth.currentUser?.id;
+    const caja$ = usuarioId
+      ? this.repo.getCajaAbiertaByUsuario(usuarioId).pipe(catchError(() => of(null)))
+      : of(null);
+    caja$.pipe(
+      switchMap((caja: any) => this.repo.aceptarPedidoOnline(p.id, caja?.id ? { cajaId: caja.id } : undefined)),
+    ).subscribe({
       next: (res) => {
         if (res?.success) {
-          this.snack.open(`Pedido ${p.numero} aceptado`, 'OK', { duration: 2500 });
+          if (res.errorMaterializacion) {
+            this.snack.open(
+              `Pedido ${p.numero} aceptado, pero no llegó a cocina: ${this.motivoMaterializacion(res.errorMaterializacion)}`,
+              'OK', { duration: 8000 },
+            );
+          } else {
+            this.snack.open(`Pedido ${p.numero} aceptado`, 'OK', { duration: 2500 });
+          }
           this.cargar(true);
         } else {
           this.snack.open('No se pudo aceptar: ' + (res?.error || ''), 'OK', { duration: 3500 });
@@ -142,6 +166,67 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
       },
       error: (e) => this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 }),
     });
+  }
+
+  motivoMaterializacion(msg: string): string {
+    if (/no_hay_caja_abierta/.test(msg)) return 'no hay una caja abierta. Abrí una caja y usá «Enviar a cocina».';
+    if (/caja_ambigua/.test(msg)) return 'hay más de una caja abierta. Abrí el pedido desde el PdV de la caja que corresponde.';
+    return msg;
+  }
+
+  tipoLabel(tipo: string): string {
+    return ({ PICKUP: 'Retiro', DELIVERY: 'Delivery', MESA_QR: 'Mesa (QR)' } as Record<string, string>)[tipo] || tipo;
+  }
+
+  pagoLabel(m: string): string {
+    return ({ EFECTIVO: 'Efectivo', BANCARD: 'Bancard', UPAY: 'uPay', PAGOPAR: 'Pagopar' } as Record<string, string>)[m] || m;
+  }
+
+  /** Insignia del pago con tarjeta (F4); null en pedidos en efectivo. */
+  pagoInsignia(p: any): { texto: string; clase: string } | null {
+    switch (p?.estadoPago) {
+      case 'PAGADO': return { texto: 'Pagado con tarjeta', clase: 'ok' };
+      case 'PENDIENTE': return { texto: 'Esperando pago', clase: 'espera' };
+      case 'FALLIDO': return { texto: 'Pago rechazado', clase: 'mal' };
+      case 'EXPIRADO': return { texto: 'Pago vencido', clase: 'mal' };
+      case 'REEMBOLSO_PENDIENTE': return { texto: `Devolver ₲ ${Number(p.pagoMonto || 0).toLocaleString('es-PY')}`, clase: 'mal' };
+      case 'DEVUELTO': return { texto: 'Pago devuelto', clase: 'neutro' };
+      default: return null;
+    }
+  }
+
+  marcarDevuelto(p: any): void {
+    const monto = Number(p.pagoMonto || 0).toLocaleString('es-PY');
+    if (!confirm(`¿Ya devolviste ₲ ${monto} del pedido ${p.numero} desde el panel de uPay?`)) return;
+    this.repo.marcarPagoDevueltoPedidoOnline(p.id).subscribe({
+      next: (res) => {
+        if (res?.success) {
+          this.snack.open(`Pedido ${p.numero}: devolución registrada`, 'OK', { duration: 2500 });
+          this.cargar(true);
+        } else {
+          this.snack.open('No se pudo marcar: ' + (res?.error || ''), 'OK', { duration: 3500 });
+        }
+      },
+      error: (e) => this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 }),
+    });
+  }
+
+  /** Sabores, adicionales, preferencias y nota de la línea (lo que cocina tiene que ver). */
+  detalleItem(it: any): string {
+    let p = it?.personalizacion;
+    if (typeof p === 'string') { try { p = JSON.parse(p); } catch { p = null; } }
+    if (!p) return '';
+    const parts: string[] = [];
+    if (Array.isArray(p.sabores) && p.sabores.length > 1) parts.push(p.sabores.map((s: any) => s.nombre).join(' / '));
+    for (const a of p.adicionales || []) parts.push(`+ ${a.nombre}`);
+    for (const o of p.observaciones || []) parts.push(typeof o === 'string' ? o : o?.descripcion);
+    if (p.notaLibre) parts.push(`"${p.notaLibre}"`);
+    return parts.filter(Boolean).join(' · ');
+  }
+
+  mapaUrl(p: any): string | null {
+    if (p.latitud == null || p.longitud == null) return null;
+    return `https://www.google.com/maps?q=${Number(p.latitud)},${Number(p.longitud)}`;
   }
 
   confirmarRechazo(p: any): void {
@@ -157,7 +242,12 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
       next: (res) => {
         this.confirmandoRechazoId = null;
         if (res?.success) {
-          this.snack.open(`Pedido ${p.numero} rechazado`, 'OK', { duration: 2500 });
+          const dev = Number(res.montoDevolver || 0);
+          this.snack.open(
+            dev > 0
+              ? `Pedido ${p.numero} rechazado. Estaba pagado: devolvé ₲ ${dev.toLocaleString('es-PY')} desde uPay y marcalo como devuelto.`
+              : `Pedido ${p.numero} rechazado`,
+            'OK', { duration: dev > 0 ? 10000 : 2500 });
           this.cargar(true);
         } else {
           this.snack.open('No se pudo rechazar: ' + (res?.error || ''), 'OK', { duration: 3500 });

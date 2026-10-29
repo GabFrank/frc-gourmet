@@ -2,7 +2,7 @@
   <!-- Foto + volver -->
   <div class="pd-hero" [class.no-photo]="!(saborEntrada?.imageUrl || p.imageUrl | appImg)">
     <div class="pd-photo" *ngIf="(saborEntrada?.imageUrl || p.imageUrl) | appImg as img" [style.background-image]="'url(' + img + ')'"></div>
-    <button class="pd-back" (click)="volver()" aria-label="Volver">←</button>
+    <button class="pd-back" (click)="volver()" aria-label="Volver"><sf-icon name="back" [size]="20"></sf-icon></button>
   </div>
 
   <div class="sf-container pd-body">
@@ -20,7 +20,7 @@
           <input type="radio" name="tamano" [value]="t.presentacionId" [ngModel]="presSel" (ngModelChange)="setTamano(t)" />
           <span>{{ t.nombre }}</span>
         </span>
-        <span class="pd-radio-precio" *ngIf="precioTamano(t) as pt">{{ monedaSimbolo }} {{ pt | number:'1.0-2' }}</span>
+        <span class="pd-radio-precio" *ngIf="precioTamano(t) as pt">{{ pt | guarani }}</span>
       </label>
     </div>
 
@@ -55,7 +55,7 @@
           <input type="checkbox" [checked]="adicionalesSel.has(a.id)" (change)="toggleAdicional(a)" />
           <span>{{ a.nombre }}</span>
         </span>
-        <span class="pd-check-precio" *ngIf="a.precio > 0">+ {{ a.precio | number:'1.0-2' }}</span>
+        <span class="pd-check-precio" *ngIf="a.precio > 0">+ {{ a.precio | guarani }}</span>
       </label>
     </div>
 
@@ -87,7 +87,7 @@
       <button (click)="cambiarCantidad(1)">+</button>
     </div>
     <button class="sf-btn pd-add" [disabled]="!puedeAgregar" (click)="agregar()">
-      <span *ngIf="config.config.abiertaAhora">Agregar · {{ total | number:'1.0-2' }}</span>
+      <span *ngIf="config.config.abiertaAhora">Agregar · {{ total | guarani }}</span>
       <span *ngIf="!config.config.abiertaAhora">Tienda cerrada</span>
     </button>
   </div>

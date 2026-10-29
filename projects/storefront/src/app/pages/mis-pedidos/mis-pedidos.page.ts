@@ -4,11 +4,18 @@ import { RouterLink, ActivatedRoute } from '@angular/router';
 import { PublicApiService } from '../../core/public-api.service';
 import { AuthService } from '../../core/auth.service';
 import { PedidoResumen } from '../../core/models';
+import { GuaraniPipe } from '../../core/guarani.pipe';
+import { IconComponent } from '../../core/icon.component';
+import { forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
+import { tokensSeguimiento, quitarSeguimiento } from '../../core/seguimiento';
+import { textoEstadoPago } from '../../core/pago-online';
 
 /** Estados en los que ya no hay nada más que esperar. */
 const TERMINALES = ['ENTREGADO', 'RECHAZADO', 'CANCELADO'];
 
 const ESTADO_LABEL: Record<string, string> = {
+  PENDIENTE_PAGO: 'Esperando pago',
   RECIBIDO: 'Recibido',
   ACEPTADO: 'Aceptado',
   EN_PREPARACION: 'En preparación',
@@ -22,16 +29,16 @@ const ESTADO_LABEL: Record<string, string> = {
 @Component({
   selector: 'sf-mis-pedidos',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [GuaraniPipe, CommonModule, RouterLink, IconComponent],
   template: `
     <div class="sf-container">
       <h1 class="sf-title">Mis pedidos</h1>
 
       <div class="sf-ok" *ngIf="nuevo">
-        ✅ ¡Pedido {{ nuevo }} recibido! Te avisamos cuando lo confirmen.
+        <sf-icon name="check" [size]="16"></sf-icon> ¡Pedido {{ nuevo }} recibido! Te avisamos cuando lo confirmen.
       </div>
 
-      <p class="sf-muted" *ngIf="!auth.isAuthenticated">
+      <p class="sf-muted" *ngIf="!auth.isAuthenticated && !invitado">
         Ingresá para ver tus pedidos. <a routerLink="/login">Ingresar</a>.
       </p>
       <p class="sf-muted" *ngIf="cargando">Cargando…</p>
@@ -48,12 +55,19 @@ const ESTADO_LABEL: Record<string, string> = {
           <strong>{{ p.numero }}</strong>
           <span class="sf-estado" [attr.data-estado]="p.estado">{{ label(p.estado) }}</span>
         </div>
-        <div class="sf-muted sf-pedido-sub">{{ p.tipoPedido }} · {{ p.createdAt | date:'short' }}</div>
+        <div class="sf-muted sf-pedido-sub">{{ tipoLabel(p.tipoPedido) }} · {{ p.createdAt | date:'dd/MM HH:mm' }}</div>
         <div class="sf-pedido-item" *ngFor="let it of p.items">
           {{ it.cantidad }}× {{ it.nombreProducto }}
           <span class="sf-muted" *ngIf="it.nombrePresentacion">({{ it.nombrePresentacion }})</span>
+          <div class="sf-muted sf-pedido-perso" *ngIf="detalle(it) as d">{{ d }}</div>
         </div>
-        <div class="sf-pedido-total">Total: {{ p.total | number:'1.0-2' }}</div>
+        <div class="sf-muted sf-pedido-perso" *ngIf="p.notas">Nota: {{ p.notas }}</div>
+        <div class="sf-rechazo" *ngIf="(p.estado === 'RECHAZADO' || p.estado === 'CANCELADO') && p.motivoRechazo">Motivo: {{ p.motivoRechazo }}</div>
+        <div class="sf-muted sf-pago" *ngIf="pago(p) as tp">
+          {{ tp }}
+          <a *ngIf="p.estado === 'PENDIENTE_PAGO'" [routerLink]="['/pago', p.numero]">Ver pago</a>
+        </div>
+        <div class="sf-pedido-total">Total: {{ p.total | guarani }}</div>
       </div>
     </div>
   `,
@@ -67,6 +81,8 @@ const ESTADO_LABEL: Record<string, string> = {
     .sf-estado[data-estado="RECHAZADO"], .sf-estado[data-estado="CANCELADO"] { background: var(--sf-error-bg); color: var(--sf-error); }
     .sf-pedido-sub { font-size: 12px; margin: 4px 0 8px; }
     .sf-pedido-item { font-size: 14px; padding: 2px 0; }
+    .sf-pedido-perso { font-size: 12px; margin: 2px 0 0 18px; line-height: 1.4; }
+    .sf-rechazo { margin-top: 8px; font-size: 13px; color: var(--sf-error); background: var(--sf-error-bg); padding: 8px 10px; border-radius: var(--sf-radius-sm); }
     .sf-pedido-total { margin-top: 8px; font-weight: 600; }
     .sf-live { display: flex; align-items: center; gap: 10px; font-size: 12px; }
     .sf-refresh {
@@ -81,6 +97,7 @@ export class MisPedidosPage implements OnInit, OnDestroy {
   auth = inject(AuthService);
 
   pedidos: PedidoResumen[] = [];
+  invitado = false;
   cargando = false;
   nuevo: string | null = null;
   /** Marca de la última actualización, para que se note que la página está viva. */
@@ -89,7 +106,9 @@ export class MisPedidosPage implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.nuevo = this.route.snapshot.queryParamMap.get('nuevo');
-    if (!this.auth.isAuthenticated) return;
+    // Invitado de mesa sin cuenta: sigue sus pedidos con el token de esta visita.
+    this.invitado = !this.auth.isAuthenticated && tokensSeguimiento().length > 0;
+    if (!this.auth.isAuthenticated && !this.invitado) return;
     this.cargar(true);
     // Sin esto la página era una carga única: el cliente tenía que recargar el
     // navegador para ver si su pedido avanzó, y en la práctica termina llamando
@@ -104,6 +123,7 @@ export class MisPedidosPage implements OnInit, OnDestroy {
   /** `mostrarSpinner` sólo en la primera carga: el refresco es silencioso. */
   cargar(mostrarSpinner: boolean): void {
     if (mostrarSpinner) this.cargando = true;
+    if (this.invitado) { this.cargarInvitado(); return; }
     this.api.call<any>('pedido.mis').subscribe({
       next: (res) => {
         this.cargando = false;
@@ -120,7 +140,44 @@ export class MisPedidosPage implements OnInit, OnDestroy {
     });
   }
 
+  private cargarInvitado(): void {
+    const tokens = tokensSeguimiento();
+    forkJoin(tokens.map((t) => this.api.call<any>('pedido.seguimiento', [t]).pipe(catchError(() => of(null))))).subscribe((rs) => {
+      this.cargando = false;
+      const pedidos: PedidoResumen[] = [];
+      rs.forEach((r, i) => {
+        if (r?.success) pedidos.push(r.pedido);
+        else if (r && (r.error === 'pedido_no_encontrado' || r.error === 'seguimiento_vencido')) quitarSeguimiento(tokens[i]);
+      });
+      this.pedidos = pedidos;
+      this.actualizado = new Date();
+      const enCurso = pedidos.some((p: any) => !TERMINALES.includes(p.estado));
+      if (!enCurso && this.poll) { clearInterval(this.poll); this.poll = null; }
+    });
+  }
+
+  /** F4: estado del pago con tarjeta (null en efectivo). */
+  pago(p: any): string | null {
+    return textoEstadoPago(p?.estadoPago, p?.pagoMonto ?? p?.total);
+  }
+
   label(estado: string): string {
     return ESTADO_LABEL[estado] || estado;
+  }
+
+  tipoLabel(tipo: string): string {
+    return ({ PICKUP: 'Retiro en el local', DELIVERY: 'Delivery', MESA_QR: 'En la mesa' } as Record<string, string>)[tipo] || tipo;
+  }
+
+  /** Sabores, adicionales, preferencias y nota de una línea, en una sola frase. */
+  detalle(it: any): string {
+    const p = it?.personalizacion;
+    if (!p) return '';
+    const parts: string[] = [];
+    if (Array.isArray(p.sabores) && p.sabores.length > 1) parts.push(p.sabores.map((s: any) => s.nombre).join(' / '));
+    for (const a of p.adicionales || []) parts.push(`+ ${a.nombre}`);
+    for (const o of p.observaciones || []) parts.push(typeof o === 'string' ? o : o?.descripcion);
+    if (p.notaLibre) parts.push(`"${p.notaLibre}"`);
+    return parts.filter(Boolean).join(' · ');
   }
 }

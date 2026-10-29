@@ -1,20 +1,23 @@
-import { Component, inject, AfterViewInit, NgZone, ElementRef, ViewChild } from '@angular/core';
+import { Component, inject, AfterViewInit, OnDestroy, NgZone, ElementRef, ViewChild } from '@angular/core';
+import { Subscription } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ConfigService } from '../../core/config.service';
+import { mensajeError } from '../../core/errores';
+import { IconComponent } from '../../core/icon.component';
 
 declare const google: any;
 
 @Component({
   selector: 'sf-login',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [IconComponent, CommonModule, FormsModule],
   templateUrl: './login.page.html',
   styleUrls: ['./login.page.scss'],
 })
-export class LoginPage implements AfterViewInit {
+export class LoginPage implements AfterViewInit, OnDestroy {
   private auth = inject(AuthService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
@@ -39,9 +42,25 @@ export class LoginPage implements AfterViewInit {
   enviando = false;
   error: string | null = null;
 
+  /** Sin canal real de WhatsApp en el server, solo queda Email (y Google). */
+  get otpDisponible(): boolean {
+    return this.config.config.otpWhatsappDisponible !== false;
+  }
+
+  private googleIniciado = false;
+  private configSub?: Subscription;
+
   ngAfterViewInit(): void {
-    const clientId = this.config.config.googleClientId;
-    if (clientId) this.initGoogle(clientId);
+    this.configSub = this.config.cambios$.subscribe((c) => {
+      if (c.googleClientId && !this.googleIniciado) {
+        this.googleIniciado = true;
+        this.initGoogle(c.googleClientId);
+      }
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.configSub?.unsubscribe();
   }
 
   private initGoogle(clientId: string): void {
@@ -69,7 +88,7 @@ export class LoginPage implements AfterViewInit {
     this.enviando = true; this.error = null;
     this.auth.googleLogin(idToken).subscribe({
       next: (res) => { this.enviando = false; res?.success ? this.exito() : (this.error = this.msg(res?.error)); },
-      error: (e) => { this.enviando = false; this.error = 'No se pudo ingresar con Google. ' + (e?.message || ''); },
+      error: (e) => { this.enviando = false; this.error = mensajeError(e); },
     });
   }
 
@@ -84,7 +103,7 @@ export class LoginPage implements AfterViewInit {
         if (res?.success) { this.paso = 'codigo'; this.devHint = res.provider === 'dev-log'; if (res.devCodigo) { this.devCodigo = res.devCodigo; this.codigo = res.devCodigo; } }
         else this.error = this.msg(res?.error);
       },
-      error: (e) => { this.enviando = false; this.error = 'No se pudo enviar el código. ' + (e?.message || ''); },
+      error: (e) => { this.enviando = false; this.error = mensajeError(e); },
     });
   }
 
@@ -94,7 +113,7 @@ export class LoginPage implements AfterViewInit {
     this.enviando = true;
     this.auth.verificarOtp(this.telefono, this.codigo.trim()).subscribe({
       next: (res) => { this.enviando = false; res?.success ? this.exito() : (this.error = this.msg(res?.error)); },
-      error: (e) => { this.enviando = false; this.error = 'No se pudo verificar. ' + (e?.message || ''); },
+      error: (e) => { this.enviando = false; this.error = mensajeError(e); },
     });
   }
 
@@ -109,7 +128,7 @@ export class LoginPage implements AfterViewInit {
       : this.auth.loginPassword(this.email.trim(), this.password);
     obs.subscribe({
       next: (res) => { this.enviando = false; res?.success ? this.exito() : (this.error = this.msg(res?.error)); },
-      error: (e) => { this.enviando = false; this.error = 'No se pudo continuar. ' + (e?.message || ''); },
+      error: (e) => { this.enviando = false; this.error = mensajeError(e); },
     });
   }
 
@@ -131,12 +150,13 @@ export class LoginPage implements AfterViewInit {
       case 'codigo_incorrecto': return 'Código incorrecto.';
       case 'demasiados_intentos': return 'Demasiados intentos. Pedí un código nuevo.';
       case 'envio_fallido': return 'No se pudo enviar el código por WhatsApp.';
+      case 'otp_no_disponible': return 'El ingreso por WhatsApp no está disponible. Ingresá con tu email.';
       case 'email_invalido': return 'Email inválido.';
       case 'password_corto': return 'La contraseña necesita al menos 6 caracteres.';
       case 'email_en_uso': return 'Ese email ya está registrado. Probá iniciar sesión.';
       case 'cuenta_o_password_invalidos': return 'Email o contraseña incorrectos.';
       case 'google_no_configurado': return 'El login con Google no está disponible.';
-      default: return err || 'Ocurrió un error.';
+      default: return mensajeError(err);
     }
   }
 }

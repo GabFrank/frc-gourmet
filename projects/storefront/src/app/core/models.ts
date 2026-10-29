@@ -150,6 +150,11 @@ export interface PedidoResumen {
   total: number;
   direccionEntrega: string | null;
   notas: string | null;
+  motivoRechazo?: string | null;
+  /** F4: pago con tarjeta (uPay). */
+  metodoPago?: string;
+  estadoPago?: string | null;
+  pagoMonto?: number | null;
   createdAt: string;
   items: {
     nombreProducto: string;
@@ -157,5 +162,6 @@ export interface PedidoResumen {
     cantidad: number;
     precioUnitario: number;
     subtotal: number;
+    personalizacion?: any;
   }[];
 }

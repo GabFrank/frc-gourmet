@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
+import { mensajeError } from '../../core/errores';
 
 @Component({
   selector: 'sf-cuenta',
@@ -10,7 +11,7 @@ import { AuthService } from '../../core/auth.service';
   imports: [CommonModule, FormsModule],
   template: `
     <div class="sf-container narrow">
-      <h1 class="title">{{ completar ? '¡Bienvenido/a! 👋' : 'Mi cuenta' }}</h1>
+      <h1 class="title">{{ completar ? '¡Bienvenido/a!' : 'Mi cuenta' }}</h1>
 
       <div class="sf-card banner" *ngIf="completar">
         Completá tus datos para agilizar tus próximos pedidos.
@@ -92,7 +93,7 @@ export class CuentaPage implements OnInit {
       case 'password_actual_incorrecta': return 'La contraseña actual no coincide.';
       case 'cuenta_no_encontrada': return 'No encontramos tu cuenta. Volvé a ingresar.';
       case 'no_autenticado': return 'Tu sesión venció. Volvé a ingresar.';
-      default: return 'No pudimos guardar los cambios. Probá de nuevo.';
+      default: return mensajeError(codigo, 'No pudimos guardar los cambios. Probá de nuevo.');
     }
   }
 
@@ -113,7 +114,7 @@ export class CuentaPage implements OnInit {
           this.error = this.mensajeError(res?.error);
         }
       },
-      error: (e) => { this.guardando = false; this.error = e?.message || 'Error'; },
+      error: (e) => { this.guardando = false; this.error = mensajeError(e, 'No pudimos guardar los cambios. Probá de nuevo.'); },
     });
   }
 
