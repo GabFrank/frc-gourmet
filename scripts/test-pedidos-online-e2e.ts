@@ -315,9 +315,21 @@ async function main() {
   ok(!!otpCapturado, 'código OTP capturado del log', otpCapturado);
 
   // Tope global diario de OTP (anti gasto en plantillas de WhatsApp).
+  const notifMod = require('../electron/services/notificacion.service');
+  const dispatchOrig = notifMod.dispatchEvento;
+  const avisos: any[] = [];
+  notifMod.dispatchEvento = async (codigo: string, payload: any) => { avisos.push({ codigo, ...payload }); return []; };
   process.env['FRC_OTP_MAX_GLOBAL_DIA'] = '1';
   const otpTope = await pub('auth.otp.request', ['0981999888']);
   ok(otpTope.result?.error === 'otp_no_disponible', 'tope global diario de OTP corta el envío', otpTope.result);
+  ok(avisos.some((a) => a.codigo === 'TIENDA_OTP_TOPE' && /^tope-/.test(a.dedupeKey)), 'tope global: avisa al staff (TIENDA_OTP_TOPE)', avisos);
+  // Tope 2 con 1 código ya pedido: el siguiente llega al 80 %. Se pide para el mismo
+  // teléfono, así el código capturado sigue sirviendo para el verify de abajo.
+  process.env['FRC_OTP_MAX_GLOBAL_DIA'] = '2';
+  avisos.length = 0;
+  await pub('auth.otp.request', [tel]);
+  ok(avisos.some((a) => a.codigo === 'TIENDA_OTP_TOPE' && /^80-/.test(a.dedupeKey)), 'al pasar el 80 % del tope avisa una vez por día', avisos);
+  notifMod.dispatchEvento = dispatchOrig;
   delete process.env['FRC_OTP_MAX_GLOBAL_DIA'];
 
   // 3. OTP verify
