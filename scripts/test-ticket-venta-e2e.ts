@@ -22,7 +22,7 @@ import { DataSource } from 'typeorm';
 import { getDataSourceOptions } from '../src/app/database/database.config';
 import { buildVentaTicketLines, printComandaInternal } from '../electron/handlers/documentos-tickets.handler';
 import { componerEncabezadoComanda } from '../electron/utils/nombre-variacion.utils';
-import { renderTicketToPlainText, invalidateTicketEmpresaCache, sanitizarParaTicket, ticketColumns, ticketCantidad } from '../electron/utils/ticket.utils';
+import { renderTicketToPlainText, invalidateTicketEmpresaCache, sanitizarParaTicket, ticketColumns, ticketCantidad, ticketFmtFechaHora } from '../electron/utils/ticket.utils';
 
 const WIDTH = 48;
 
@@ -336,6 +336,15 @@ async function main() {
        'la Ñ sí existe en CP437 y se conserva', sanitizarParaTicket('JALAPEÑO'));
     ok(sanitizarParaTicket('PAGADO — NO COBRAR') === 'PAGADO - NO COBRAR',
        'el guion largo pasa a guion');
+    // La hora de `ticketFmtFechaHora` ('es-PY') trae un espacio duro entre
+    // «p.» y «m.» (U+00A0; según ICU, U+202F). Salía «p.?m.» en TODOS los
+    // tickets. Se arma el string a mano para no depender del ICU del runner.
+    ok(sanitizarParaTicket('06:50 p.\u00A0m.') === '06:50 p. m.',
+       'el espacio duro de la hora pasa a espacio', sanitizarParaTicket('06:50 p.\u00A0m.'));
+    ok(sanitizarParaTicket('6:50\u202FPM') === '6:50 PM',
+       'el espacio fino (U+202F) también', sanitizarParaTicket('6:50\u202FPM'));
+    ok(!sanitizarParaTicket(ticketFmtFechaHora(new Date())).includes('?'),
+       'la fecha y hora de un ticket no lleva ?', sanitizarParaTicket(ticketFmtFechaHora(new Date())));
     ok(!/[^\x00-\xFF]/.test(sanitizarParaTicket('A → B … ₲ ✓ “x”')),
        'no queda ningún carácter fuera del rango de un byte',
        sanitizarParaTicket('A → B … ₲ ✓ “x”'));

@@ -92,6 +92,10 @@ const REEMPLAZOS_TICKET: Record<string, string> = {
   '→': '->', '←': '<-', '…': '...',
   '“': '"', '”': '"', '‘': "'", '’': "'", '«': '"', '»': '"',
   '€': 'EUR', '₲': 'Gs.', '✓': 'OK', '✗': 'X', '•': '*',
+  // Espacios "duros" que mete `toLocaleString('es-PY')`: la hora sale
+  // «06:50 p. m.» con U+00A0 entre la p. y la m., y según la versión de ICU
+  // también U+202F. Sin esto TODOS los tickets imprimían «p.?m.».
+  ' ': ' ', ' ': ' ', ' ': ' ', ' ': ' ',
 };
 
 /** Los no-ASCII que CP437 SÍ tiene y conviene conservar. */

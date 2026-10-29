@@ -61,6 +61,7 @@
     "test:fichaje-facial": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-fichaje-facial.ts",
     "test:delivery-impresora": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-impresora-ruteo.ts",
     "test:delivery": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-e2e.ts",
+    "test:fichas": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-fichas-e2e.ts",
     "test:delivery-conversion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-conversion-e2e.ts",
     "test:zona-delivery-online": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-zona-delivery-online-e2e.ts",
     "test:canal-venta": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-canal-venta.ts",
