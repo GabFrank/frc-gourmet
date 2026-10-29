@@ -9,6 +9,7 @@ import {
   EstadoPedidoOnline,
   CanalPedidoOnline,
   MetodoPagoOnline,
+  EstadoPagoOnline,
 } from './pedido-online.enums';
 
 /**
@@ -122,6 +123,49 @@ export class PedidoOnline extends BaseModel {
   // se devuelve una sola vez al crear el pedido; acá nunca se guarda.
   @Column({ name: 'seguimiento_token_hash', type: 'varchar', length: 64, nullable: true, select: false })
   seguimientoTokenHash?: string;
+
+  // ── Pago online (PLAN-tienda-online F4). Todo null en pedidos en efectivo. ──
+  @Column({ name: 'estado_pago', type: 'varchar', length: 30, nullable: true })
+  estadoPago?: EstadoPagoOnline | null;
+
+  @Column({ name: 'pago_proveedor', type: 'varchar', length: 20, nullable: true })
+  pagoProveedor?: string | null;
+
+  /** Intento de pago (1, 2…): cada reintento es una sesión nueva en el proveedor. */
+  @Column({ name: 'pago_intento', type: 'int', nullable: true })
+  pagoIntento?: number | null;
+
+  /** Idempotency-Key del intento actual: un reintento de red reusa la misma sesión. */
+  @Column({ name: 'pago_idem_key', type: 'varchar', length: 64, nullable: true, select: false })
+  pagoIdemKey?: string | null;
+
+  @Column({ name: 'pago_sesion_id', type: 'varchar', length: 64, nullable: true })
+  pagoSesionId?: string | null;
+
+  @Column({ name: 'pago_checkout_url', type: 'varchar', length: 500, nullable: true, select: false })
+  pagoCheckoutUrl?: string | null;
+
+  /** Id del payment del proveedor (único: un pago confirma un solo pedido). */
+  @Column({ name: 'pago_id', type: 'varchar', length: 64, nullable: true })
+  pagoId?: string | null;
+
+  @Column({ name: 'pago_monto', type: 'decimal', precision: 18, scale: 2, nullable: true })
+  pagoMonto?: number | null;
+
+  @Column({ name: 'pago_expira_en', nullable: true })
+  pagoExpiraEn?: Date;
+
+  @Column({ name: 'pago_ultima_consulta', nullable: true })
+  pagoUltimaConsulta?: Date;
+
+  @Column({ name: 'pago_detalle', type: 'varchar', length: 255, nullable: true })
+  pagoDetalle?: string | null;
+
+  @Column({ name: 'pagado_en', nullable: true })
+  pagadoEn?: Date;
+
+  @Column({ name: 'pago_aviso_sin_aceptar', type: 'boolean', default: false })
+  pagoAvisoSinAceptar!: boolean;
 
   @OneToMany('PedidoOnlineItem', 'pedido', { cascade: true })
   items?: PedidoOnlineItem[];

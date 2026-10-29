@@ -338,6 +338,8 @@ import { AcreditacionesPosReglas1793110000000 } from './migrations/1793110000000
 import { TiendaOnlineSeguridad1793200000000 } from './migrations/1793200000000-TiendaOnlineSeguridad';
 import { TiendaSeguimientoMesa1793300000000 } from './migrations/1793300000000-TiendaSeguimientoMesa';
 import { TiendaIngresoClientes1793400000000 } from './migrations/1793400000000-TiendaIngresoClientes';
+import { TiendaPagoOnline1793500000000 } from './migrations/1793500000000-TiendaPagoOnline';
+import { PagoOnlineEvento } from './entities/pedidos-online/pago-online-evento.entity';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -453,6 +455,7 @@ function getEntitiesList(): any[] {
       CodigoOtp,
       ZonaDelivery,
       PedidoOnline,
+      PagoOnlineEvento,
       PedidoOnlineItem,
       CustomerRefreshToken,
       TiendaOnlineConfig,
@@ -813,6 +816,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     TiendaOnlineSeguridad1793200000000,
     TiendaSeguimientoMesa1793300000000,
     TiendaIngresoClientes1793400000000,
+    TiendaPagoOnline1793500000000,
   ];
 }
 
