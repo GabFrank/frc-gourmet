@@ -298,7 +298,12 @@ export class CreateEditUsuarioComponent implements OnInit {
         action = 'update';
       } else {
         savedUsuario = await firstValueFrom(this.repositoryService.createUsuario(formData));
-        usuarioId = (savedUsuario as any)?.id;
+        // `create-usuario` devuelve `{ success, usuario }`, no la entidad: con
+        // `.id` el id quedaba undefined y los roles elegidos no se asignaban.
+        if ((savedUsuario as any)?.success === false) {
+          throw new Error((savedUsuario as any)?.message || 'No se pudo crear el usuario');
+        }
+        usuarioId = (savedUsuario as any)?.usuario?.id ?? (savedUsuario as any)?.id;
         action = 'create';
       }
 

@@ -1499,6 +1499,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         && estadoAnterior === VentaEstado.ABIERTA
       ) {
         await assertCajaAbiertaSiVino(dataSource, cajaDeLaVenta, { contexto: 'updateVenta(CONCLUIDA)' });
+
       }
 
       // ─── D4 capa 2: la caja del Pago se deriva de la VENTA, server-side ────
@@ -1589,6 +1590,27 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         }
       }
 
+      // Va DESPUÉS de los guards más específicos (caja cerrada, hermanas
+      // abiertas en la mesa) para que sus errores sigan saliendo primero.
+      if (data?.estado === VentaEstado.CONCLUIDA && estadoAnterior === VentaEstado.ABIERTA) {
+        // Concluir es COBRAR: sin un `Pago` vinculado (en el payload o ya
+        // adoptado por la venta) no hay cobro. Antes bastaba `VENTAS_PDV` para
+        // pasar una venta a CONCLUIDA sin cobrarla vía /api/rpc (#329). No se
+        // exige el estado PAGADO porque el diálogo de cobro cierra la venta
+        // ANTES de marcar el pago (para no dejar un Pago PAGADO con la venta
+        // ABIERTA si el cierre falla). La venta a crédito no pasa por acá
+        // (`cobrar-venta-credito` crea su propio Pago).
+        const pagoEnPayload = Number((data?.pago as any)?.id ?? data?.pago) || null;
+        let tienePago = !!pagoEnPayload;
+        if (!tienePago) {
+          const conPago = await repo.findOne({ where: { id }, relations: ['pago'] });
+          tienePago = !!(conPago as any)?.pago?.id;
+        }
+        if (!tienePago) {
+          throw new Error('VENTA_SIN_PAGO: no se puede finalizar una venta sin registrar su cobro.');
+        }
+      }
+
       // La caja de una venta se fija al crearla y no cambia nunca. Aceptarla en
       // el merge permitía mover una venta CONCLUIDA —con todo su cobro— a otra
       // caja, sin gate y sin transición de estado: la palanca más directa para
@@ -1615,6 +1637,18 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         fichasReimpresiones: _fichasReimpresionesIgnorado,
         ...ventaData
       } = data ?? {};
+      // Una venta que ya no está ABIERTA no cambia de canal: mesa, comanda,
+      // delivery y canalOrigen deciden si fue a cocina y si emitió fichas
+      // (`esVentaDirecta`) y alimentan los reportes por canal. Mudarla después
+      // del cobro permitía, por ejemplo, convertir una venta de mesa en
+      // directa en el mismo payload que la concluye (#330). Los movimientos
+      // legítimos (transferir cuenta, convertir delivery ⇄ retiro) tienen
+      // canales propios y no pasan por acá.
+      if (estadoAnterior !== VentaEstado.ABIERTA) {
+        for (const k of ['mesa', 'comanda', 'delivery', 'canalOrigen', 'mesa_id', 'comanda_id', 'delivery_id']) {
+          delete (ventaData as any)[k];
+        }
+      }
       repo.merge(entity, ventaData);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);

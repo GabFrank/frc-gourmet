@@ -16,6 +16,7 @@ export class CajaMayorSaldo extends BaseModel {
   @JoinColumn({ name: 'forma_pago_id' })
   formaPago!: any;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  // (18,2): con (10,2) Postgres desbordaba a partir de 100.000.000 Gs (#340).
+  @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })
   saldo!: number;
 }

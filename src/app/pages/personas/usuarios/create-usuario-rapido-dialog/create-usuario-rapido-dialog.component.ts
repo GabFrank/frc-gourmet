@@ -124,7 +124,9 @@ export class CreateUsuarioRapidoDialogComponent implements OnInit {
         return;
       }
 
-      const usuarioId = (usuario as any).id;
+      // `create-usuario` devuelve `{ success, usuario }`: con `.id` quedaba
+      // undefined y los roles elegidos no se asignaban (en silencio).
+      const usuarioId = (usuario as any).usuario?.id ?? (usuario as any).id;
       // Asignar roles si vinieron seleccionados
       const roleIds: number[] = v.roleIds || [];
       for (const rid of roleIds) {

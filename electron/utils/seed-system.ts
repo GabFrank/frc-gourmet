@@ -170,21 +170,23 @@ async function seedAdminUserAndRole(dataSource: DataSource): Promise<void> {
 // ===================== TIPO CLIENTE =====================
 async function seedTipoCliente(dataSource: DataSource): Promise<void> {
   const repo = dataSource.getRepository(TipoCliente);
-  const count = await repo.count();
-  if (count > 0) {
-    console.log(`  TipoCliente: ${count} ya existen, skipping.`);
-    return;
+  if ((await repo.count()) === 0) {
+    await repo.save(repo.create({
+      descripcion: 'CONSUMIDOR FINAL', activo: true, credito: false, descuento: false, porcentaje_descuento: 0,
+    }));
+    console.log('  TipoCliente: CONSUMIDOR FINAL creado.');
   }
 
-  const tipos = [
-    { descripcion: 'CONSUMIDOR FINAL', activo: true, credito: false, descuento: false, porcentaje_descuento: 0 },
-  ];
-
-  for (const data of tipos) {
-    const entity = repo.create(data);
-    await repo.save(entity);
+  // CONVENIADO lo exige el alta de funcionario con "crear cliente conveniado"
+  // (default de la UI). Sin él, el primer funcionario de una instalación nueva
+  // fallaba y deshacía el alta entera. Se asegura por descripción (no por
+  // `count`) para que llegue también a instalaciones existentes.
+  if (!(await repo.findOne({ where: { descripcion: 'CONVENIADO' } }))) {
+    await repo.save(repo.create({
+      descripcion: 'CONVENIADO', activo: true, credito: true, descuento: false, porcentaje_descuento: 0,
+    }));
+    console.log('  TipoCliente: CONVENIADO creado.');
   }
-  console.log(`  TipoCliente: ${tipos.length} creados.`);
 }
 
 // ===================== TIPO PRECIO =====================

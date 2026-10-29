@@ -577,6 +577,9 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         taraGramos: productoData.taraGramos ?? null,
         pesoMinimoGramos: productoData.pesoMinimoGramos ?? null,
         descuentaPorReceta: productoData.descuentaPorReceta !== undefined ? productoData.descuentaPorReceta : false,
+        // Sin esto el toggle "Requiere comanda" de la UI no se guardaba nunca:
+        // la columna quedaba en su default (true) y el producto iba a cocina.
+        requiereComanda: productoData.requiereComanda !== false,
         // Variaciones (ELABORADO_CON_VARIACION): null = heredar la config global del PdV.
         maxVariacionesSimultaneas: normalizarMaxVariaciones(productoData.maxVariacionesSimultaneas),
         estrategiaPrecioVariacion: normalizarEstrategiaVariacion(productoData.estrategiaPrecioVariacion),
@@ -638,6 +641,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         (producto as any).pesoMinimoGramos = productoData.pesoMinimoGramos ?? null;
       if (productoData.descuentaPorReceta !== undefined)
         producto.descuentaPorReceta = productoData.descuentaPorReceta;
+      if (productoData.requiereComanda !== undefined)
+        (producto as any).requiereComanda = productoData.requiereComanda !== false;
 
       // Variaciones: null explícito = volver a heredar la config global del PdV
       // (TypeORM sólo genera el UPDATE con null, nunca con undefined).
