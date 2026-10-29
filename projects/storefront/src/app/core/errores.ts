@@ -45,7 +45,7 @@ const MENSAJES: Record<string, string> = {
   email_en_uso: 'Ese email ya tiene una cuenta. Ingresá con él.',
   cuenta_o_password_invalidos: 'Email o contraseña incorrectos.',
   password_incorrecto: 'Email o contraseña incorrectos.',
-  password_corto: 'La contraseña necesita al menos 6 caracteres.',
+  password_corto: 'La contraseña necesita al menos 8 caracteres.',
   password_actual_incorrecta: 'La contraseña actual no es correcta.',
   falta_password_actual: 'Ingresá tu contraseña actual.',
   google_no_configurado: 'El ingreso con Google no está disponible.',

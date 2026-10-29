@@ -41,7 +41,7 @@
     <input class="sf-input" [(ngModel)]="email" type="email" inputmode="email" placeholder="tu@email.com" />
 
     <label class="lbl">Contraseña</label>
-    <input class="sf-input" [(ngModel)]="password" type="password" placeholder="Mínimo 6 caracteres" />
+    <input class="sf-input" [(ngModel)]="password" type="password" placeholder="Mínimo 8 caracteres" />
 
     <button class="sf-btn sf-btn--block mt" [disabled]="enviando" (click)="submitEmail()">
       {{ enviando ? 'Cargando…' : (modoEmail === 'registro' ? 'Crear cuenta' : 'Ingresar') }}

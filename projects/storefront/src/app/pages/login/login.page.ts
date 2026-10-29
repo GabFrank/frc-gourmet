@@ -121,7 +121,7 @@ export class LoginPage implements AfterViewInit, OnDestroy {
   submitEmail(): void {
     this.error = null;
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(this.email.trim())) { this.error = 'Email inválido.'; return; }
-    if (this.password.length < 6) { this.error = 'La contraseña necesita al menos 6 caracteres.'; return; }
+    if (this.password.length < 8) { this.error = 'La contraseña necesita al menos 8 caracteres.'; return; }
     this.enviando = true;
     const obs = this.modoEmail === 'registro'
       ? this.auth.registrar(this.email.trim(), this.password, this.nombre.trim())
@@ -152,7 +152,7 @@ export class LoginPage implements AfterViewInit, OnDestroy {
       case 'envio_fallido': return 'No se pudo enviar el código por WhatsApp.';
       case 'otp_no_disponible': return 'El ingreso por WhatsApp no está disponible. Ingresá con tu email.';
       case 'email_invalido': return 'Email inválido.';
-      case 'password_corto': return 'La contraseña necesita al menos 6 caracteres.';
+      case 'password_corto': return 'La contraseña necesita al menos 8 caracteres.';
       case 'email_en_uso': return 'Ese email ya está registrado. Probá iniciar sesión.';
       case 'cuenta_o_password_invalidos': return 'Email o contraseña incorrectos.';
       case 'google_no_configurado': return 'El login con Google no está disponible.';
