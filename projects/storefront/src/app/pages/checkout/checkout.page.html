@@ -106,7 +106,7 @@
       <h3>¿Cómo pagás?</h3>
       <div class="choices">
         <button class="choice" [class.active]="metodoPago === 'EFECTIVO'" (click)="metodoPago = 'EFECTIVO'"><sf-icon name="cash" [size]="18"></sf-icon>Efectivo</button>
-        <button class="choice" [class.active]="metodoPago === 'UPAY'" (click)="metodoPago = 'UPAY'"><sf-icon name="receipt" [size]="18"></sf-icon>Tarjeta</button>
+        <button class="choice" [class.active]="metodoPago === 'UPAY'" (click)="metodoPago = 'UPAY'"><sf-icon name="card" [size]="18"></sf-icon>Tarjeta</button>
       </div>
       <p class="sf-muted pago" *ngIf="metodoPago === 'EFECTIVO'">Pagás en efectivo al retirar o al recibir el pedido.</p>
       <p class="sf-muted pago" *ngIf="metodoPago === 'UPAY'">Te llevamos a la página segura de uPay. El pedido va a la cocina cuando se confirma el pago.</p>
