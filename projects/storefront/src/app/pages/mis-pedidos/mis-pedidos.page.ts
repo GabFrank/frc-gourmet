@@ -9,11 +9,13 @@ import { IconComponent } from '../../core/icon.component';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { tokensSeguimiento, quitarSeguimiento } from '../../core/seguimiento';
+import { textoEstadoPago } from '../../core/pago-online';
 
 /** Estados en los que ya no hay nada más que esperar. */
 const TERMINALES = ['ENTREGADO', 'RECHAZADO', 'CANCELADO'];
 
 const ESTADO_LABEL: Record<string, string> = {
+  PENDIENTE_PAGO: 'Esperando pago',
   RECIBIDO: 'Recibido',
   ACEPTADO: 'Aceptado',
   EN_PREPARACION: 'En preparación',
@@ -60,7 +62,11 @@ const ESTADO_LABEL: Record<string, string> = {
           <div class="sf-muted sf-pedido-perso" *ngIf="detalle(it) as d">{{ d }}</div>
         </div>
         <div class="sf-muted sf-pedido-perso" *ngIf="p.notas">Nota: {{ p.notas }}</div>
-        <div class="sf-rechazo" *ngIf="p.estado === 'RECHAZADO' && p.motivoRechazo">Motivo: {{ p.motivoRechazo }}</div>
+        <div class="sf-rechazo" *ngIf="(p.estado === 'RECHAZADO' || p.estado === 'CANCELADO') && p.motivoRechazo">Motivo: {{ p.motivoRechazo }}</div>
+        <div class="sf-muted sf-pago" *ngIf="pago(p) as tp">
+          {{ tp }}
+          <a *ngIf="p.estado === 'PENDIENTE_PAGO'" [routerLink]="['/pago', p.numero]">Ver pago</a>
+        </div>
         <div class="sf-pedido-total">Total: {{ p.total | guarani }}</div>
       </div>
     </div>
@@ -148,6 +154,11 @@ export class MisPedidosPage implements OnInit, OnDestroy {
       const enCurso = pedidos.some((p: any) => !TERMINALES.includes(p.estado));
       if (!enCurso && this.poll) { clearInterval(this.poll); this.poll = null; }
     });
+  }
+
+  /** F4: estado del pago con tarjeta (null en efectivo). */
+  pago(p: any): string | null {
+    return textoEstadoPago(p?.estadoPago, p?.pagoMonto ?? p?.total);
   }
 
   label(estado: string): string {
