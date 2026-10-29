@@ -314,6 +314,12 @@ async function main() {
   ok(otpReq.result?.provider === 'dev-log', 'OTP en modo dev-log (sin credenciales)');
   ok(!!otpCapturado, 'código OTP capturado del log', otpCapturado);
 
+  // Tope global diario de OTP (anti gasto en plantillas de WhatsApp).
+  process.env['FRC_OTP_MAX_GLOBAL_DIA'] = '1';
+  const otpTope = await pub('auth.otp.request', ['0981999888']);
+  ok(otpTope.result?.error === 'otp_no_disponible', 'tope global diario de OTP corta el envío', otpTope.result);
+  delete process.env['FRC_OTP_MAX_GLOBAL_DIA'];
+
   // 3. OTP verify
   const otpVer = await pub('auth.otp.verify', [tel, otpCapturado]);
   ok(otpVer.result?.success === true && !!otpVer.result?.accessToken, 'auth.otp.verify emite accessToken');
