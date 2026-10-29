@@ -15,6 +15,8 @@ export interface TiendaConfig {
   googleClientId?: string | null;
   /** Login por código de WhatsApp disponible (hay canal real de envío). */
   otpWhatsappDisponible?: boolean;
+  /** F4: el local ofrece pagar con tarjeta (uPay) en retiro y delivery. */
+  pagoOnline?: boolean;
 }
 
 /** Carga la config pública de la tienda y aplica el branding (nombre/color). */
