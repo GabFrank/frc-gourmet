@@ -10,6 +10,10 @@
 >
 > Relevado contra el código el 2026-10-29 (rama `develop` + PR GabFrank/frc-gourmet#327).
 > Si un canal responde 404 o cambió su payload, **pará y avisá**: no improvises SQL.
+>
+> **Versión de la app:** este runbook asume una build que incluye los arreglos del
+> PR GabFrank/frc-gourmet#327 (issues #329 a #340). En una build anterior, mirá el
+> Anexo D: algunos pasos tienen un rodeo.
 
 ---
 
@@ -121,9 +125,8 @@ PR GabFrank/frc-gourmet#327):
 - **Caja mayor**: nombre (ej. CAJA MAYOR), responsable y **saldo inicial en efectivo
   por moneda**.
 
-> ⚠️ Si la base es Postgres, la caja mayor **no acepta montos ni saldos de 100.000.000
-> Gs o más** (issue GabFrank/frc-gourmet#340). Si el saldo inicial es mayor, avisá y
-> cargalo en partes o esperá el fix.
+> En builds anteriores al arreglo de #340, una base Postgres no acepta en la caja
+> mayor montos ni saldos de 100.000.000 Gs o más. Ver Anexo D.
 
 ### A7. Personal y usuarios
 
@@ -189,12 +192,17 @@ Mostrá el **resumen del plan**: conteos por bloque y detalle de lo sensible
 ### B2. Contraseña del admin (paso manual, obligatorio)
 
 El seed crea `admin` / `admin` con **cambio de contraseña obligatorio**. Mientras no
-se cambie, **todo** handler protegido responde 403 `DEBE CAMBIAR SU CONTRASEÑA`, y
-`change-password` **no funciona por HTTP** (issue GabFrank/frc-gourmet#337).
+se cambie, **todo** handler protegido responde 403 `DEBE CAMBIAR SU CONTRASEÑA`.
 
-> **Pedile al usuario** que abra la app, entre con `admin` / `admin` y ponga la
-> contraseña nueva en el diálogo. Mínimo 6 caracteres. Pedile que te la dicte para
-> usarla en la carga, o que te cree un usuario ADMINISTRADOR propio.
+> **Recomendado:** pedile al usuario que abra la app, entre con `admin` / `admin` y
+> ponga la contraseña nueva en el diálogo (mínimo 6 caracteres). Pedile que te la
+> dicte para usarla en la carga, o que te cree un usuario ADMINISTRADOR propio.
+>
+> Con los arreglos de #337 también podés hacerlo vos por HTTP después de B3:
+> `POST /api/auth/login` con admin/admin y después
+> `change-password [ {usuarioId, currentPassword:'admin', newPassword} ]`. Ese canal
+> no necesita permiso, así que funciona aunque el usuario tenga el cambio pendiente.
+> Volvé a hacer login con la contraseña nueva.
 
 Si eligieron **Postgres**, en el mismo paso (los canales de configuración de BD
 están bloqueados por HTTP):
@@ -404,20 +412,14 @@ Por persona, en este orden:
    - `create-funcionario [ {personaId, cargoId, monedaSalarioId, salarioBase, fechaIngreso:'YYYY-MM-DD', usuarioId?, ipsActivo?, numeroIps?, crearClienteConveniado:<ver nota>} ]`;
    - turno: `asignar-turno-funcionario [ {funcionarioId, turnoId, fechaDesde:'YYYY-MM-DD'} ]`.
 
-> **`crearClienteConveniado`:** el tipo de cliente `CONVENIADO` **no viene sembrado**
-> (issue GabFrank/frc-gourmet#339) y con `true` el alta falla entera. Si consumen a
-> crédito, primero creá el tipo con `create-tipo-cliente [ {descripcion:'CONVENIADO', credito:true, activo:true} ]`.
-> Si no, mandá `false`.
+> **`crearClienteConveniado`:** `true` crea un cliente CONVENIADO para que el
+> funcionario consuma a crédito. El seed crea ese tipo de cliente desde #339. Si
+> `get-tipo-clientes` no lo muestra (build anterior), crealo antes con
+> `create-tipo-cliente [ {descripcion:'CONVENIADO', credito:true, activo:true} ]` o
+> mandá `false`.
 >
-> **`mustChangePassword` para usuarios nuevos:** el cambio de contraseña **sólo
-> funciona desde la app de escritorio del servidor** (issue GabFrank/frc-gourmet#337).
-> - Si van a usar **sólo esta PC**: `true`, con una contraseña temporal; la cambian
->   al primer ingreso.
-> - Si van a entrar desde **otras terminales, tablets o celulares**: `false`, y
->   recomendá cambiarla desde esta PC.
->
-> Los roles **sí** se asignan bien por API. Desde la UI no se asignan al crear el
-> usuario (issue GabFrank/frc-gourmet#338).
+> **`mustChangePassword` para usuarios nuevos:** `true`, con una contraseña
+> temporal. Cada uno la cambia en su primer ingreso, desde cualquier terminal (#337).
 
 ### D7. Clientes (opcional)
 
@@ -430,7 +432,7 @@ Por persona, en este orden:
    - `create-familia [ {nombre, activo:true} ]`;
    - `create-subfamilia [ {nombre, familiaId, activo:true} ]`.
 2. Producto **RETAIL**, el caso común:
-   1. `create-producto [ {nombre, tipo:'RETAIL', unidadBase:'UNIDAD'|'KILOGRAMO'|'LITRO', iva:10, subfamiliaId, activo:true, esVendible:true, esComprable:true, controlaStock:true, esIngrediente:false} ]`;
+   1. `create-producto [ {nombre, tipo:'RETAIL', unidadBase:'UNIDAD'|'KILOGRAMO'|'LITRO', iva:10, subfamiliaId, activo:true, esVendible:true, esComprable:true, controlaStock:true, esIngrediente:false, requiereComanda:true|false} ]`;
    2. `create-presentacion [ {productoId, nombre:'UNIDAD', cantidad:1, principal:true, activo:true} ]`;
    3. `create-precio-venta [ {presentacionId, valor, monedaId:GUARANI, tipoPrecioId:PRECIO_NORMAL, principal:true, activo:true} ]`.
       El precio es de la **presentación completa** (un pack x6 lleva el precio del pack);
@@ -457,9 +459,8 @@ Por persona, en este orden:
    Si se agrega un tamaño después: `generate-variaciones-faltantes`.
 5. Comanda: `set-producto-sectores [productoId, [sectorId, ...]]`. Reemplaza el
    conjunto completo.
-   ⚠️ "No requiere comanda" **no se puede apagar** hoy (issue GabFrank/frc-gourmet#336).
-   Un producto sin sector igual genera una advertencia de comanda; si no debe ir a
-   cocina, dejalo sin sector y avisá.
+   Un producto que **no** va a cocina (entradas, servicios, bebidas que se sirven en
+   caja) va con `requiereComanda:false` en `create-producto`/`update-producto` (#336).
 6. Botones del PdV:
    1. `createPdvAtajoGrupo [ {nombre, posicion, activo:true} ]`;
    2. `createPdvAtajoItem [ {nombre, activo:true, colorFondo, colorTexto} ]`;
@@ -500,7 +501,7 @@ Por persona, en este orden:
    - usuarios y contraseñas temporales, **entregados una sola vez**;
    - recordatorios: verificar las reglas POS precargadas (quedaron inactivas),
      cotizaciones diarias, cambio de contraseñas;
-   - issues conocidos que los afectan (#336, #337, #338, #339, #340).
+   - si la build es anterior al PR #327, los rodeos del Anexo D que se aplicaron.
 
 ---
 
@@ -535,8 +536,8 @@ Se hacen desde la UI o editando `app-settings.json`:
 - **Otros:** `reset-database`, `restart-app`, `set-notif-secret` (API key de
   WhatsApp), `ia-config-set`, conexión de Spotify, actualizaciones (`auto-update:*`)
   y las ventanas (`window:*`).
-- **Cambio de contraseña:** por HTTP falla por un bug (#337), no porque esté
-  bloqueado.
+- **Cambio de contraseña:** **no** está bloqueado. En builds anteriores al arreglo
+  de #337 fallaba por HTTP.
 
 ## Anexo C: planillas sugeridas
 
@@ -568,14 +569,20 @@ banco,nombre_cuenta,numero,tipo,moneda,titular,alias,saldo_inicial
 nombre_pos,proveedor,cuenta_destino,comision_pct,horas_acreditacion,reglas_observadas
 ```
 
-## Anexo D: issues abiertos que afectan este runbook
+## Anexo D: arreglos de los que depende este runbook
 
-| Issue | Qué afecta | Cómo se rodea |
+Todos están en el PR GabFrank/frc-gourmet#327. Con una build **anterior**, aplicá el
+rodeo:
+
+| Issue | Qué arregla | Rodeo en una build anterior |
 |---|---|---|
-| GabFrank/frc-gourmet#336 | "No requiere comanda" no se guarda | Productos sin sector; avisar |
-| GabFrank/frc-gourmet#337 | `change-password` no funciona por HTTP | Cambiar contraseñas desde la app del servidor |
-| GabFrank/frc-gourmet#338 | La UI no asigna roles al crear un usuario | Por API se asignan bien; sólo avisar |
-| GabFrank/frc-gourmet#339 | Funcionario con cliente conveniado falla | Crear el tipo `CONVENIADO` o mandar `false` |
-| GabFrank/frc-gourmet#340 | Caja mayor en Postgres ≥ 100 M Gs | Avisar; cargar el saldo en partes |
+| GabFrank/frc-gourmet#336 | `requiereComanda` se guarda | No hay: el producto queda con comanda; dejalo sin sector |
+| GabFrank/frc-gourmet#337 | `change-password` funciona por HTTP | Cambiar las contraseñas desde la app de escritorio del servidor |
+| GabFrank/frc-gourmet#338 | La UI asigna los roles al crear un usuario | Por API se asignan bien; sólo afecta a altas manuales |
+| GabFrank/frc-gourmet#339 | El seed crea el tipo de cliente CONVENIADO | Crearlo con `create-tipo-cliente` o mandar `crearClienteConveniado:false` |
+| GabFrank/frc-gourmet#340 | Caja mayor admite ≥ 100 M Gs en Postgres | Cargar el saldo inicial en partes menores |
+| GabFrank/frc-gourmet#329 | Concluir una venta exige un `Pago` | — (no afecta la carga; sí a quien automatice ventas) |
+| GabFrank/frc-gourmet#332 | Pagos consolidados en moneda cruzada | No pagar deudas en USD/BRL con guaraníes por pago consolidado |
 
-Cuando se cierre alguno, actualizá esta tabla y la sección que lo menciona.
+Cómo saber si la build los trae: `GET /api/version` devuelve `appVersion`; compará
+con el release que incluyó el PR #327.

@@ -974,8 +974,8 @@ exactamente dos caminos y los dos llaman a `imprimirFichasSiCorresponde`
 - **Rehabilitar** (CANCELADA → CONCLUIDA desde el historial) **no** emite: sin el
   `emitirFichas`, una venta vieja que nunca emitió largaba fichas en un momento
   cualquiera.
-- **Sin `Pago` no emite.** `updateVenta` permite concluir sin cobrar (preexistente,
-  ver known-bugs); con fichas eso era entregar mercadería.
+- **Sin `Pago` no emite.** Desde #329 `updateVenta` tampoco deja concluir sin `Pago`,
+  pero el chequeo de fichas se mantiene como segunda capa.
 
 ### Claim idempotente
 
