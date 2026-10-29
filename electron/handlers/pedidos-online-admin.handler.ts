@@ -1,4 +1,6 @@
-import { marcarReembolsoSiPagado, marcarDevuelto } from '../services/pagos-online/pagos-online.service';
+import { avisarReembolso, marcarDevuelto } from '../services/pagos-online/pagos-online.service';
+
+class PedidoCambioError extends Error { constructor() { super('pedido_cambio_reintentar'); } }
 import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { In } from 'typeorm';
@@ -7,7 +9,7 @@ import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zona-delivery.entity';
 import { Delivery } from '../../src/app/database/entities/ventas/delivery.entity';
-import { EstadoPedidoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { EstadoPedidoOnline, EstadoPagoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { ensurePermission } from '../utils/auth.utils';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
 import { cancelarVentaCompletaEnTx } from '../utils/venta-reversa.utils';
@@ -262,6 +264,7 @@ export function registerPedidosOnlineAdminHandlers(
     }
 
     let reversa: any = null;
+    try {
     await dataSource.transaction(async (manager) => {
       if (pedido.ventaId) {
         reversa = await cancelarVentaCompletaEnTx(manager, dataSource, pedido.ventaId, {
@@ -269,13 +272,32 @@ export function registerPedidosOnlineAdminHandlers(
           motivo: motivoNormalizado,
         });
       }
-      pedido.estado = EstadoPedidoOnline.RECHAZADO;
-      pedido.motivoRechazo = motivoNormalizado;
-      await manager.getRepository(PedidoOnline).save(pedido);
+      // F5 (auditoría M-F2-8/M-pay4): rechazo condicionado al estado y a la venta que se
+      // revirtió (una materialización concurrente no queda pisada), y el «a devolver» del pago
+      // con tarjeta en la MISMA transacción.
+      const qb = manager.getRepository(PedidoOnline).createQueryBuilder().update(PedidoOnline)
+        .set({
+          estado: EstadoPedidoOnline.RECHAZADO,
+          motivoRechazo: motivoNormalizado,
+          ...(pedido.estadoPago === EstadoPagoOnline.PAGADO ? { estadoPago: EstadoPagoOnline.REEMBOLSO_PENDIENTE } : {}),
+        } as any)
+        .where('id = :id AND estado IN (:...cancelables)', { id: pedido.id, cancelables: ESTADOS_CANCELABLES });
+      if (pedido.ventaId) qb.andWhere('venta_id = :v', { v: pedido.ventaId });
+      else qb.andWhere('venta_id IS NULL');
+      if (pedido.estadoPago) qb.andWhere('estado_pago = :ep', { ep: pedido.estadoPago });
+      else qb.andWhere('estado_pago IS NULL');
+      const r = await qb.execute();
+      if (!r.affected) throw new PedidoCambioError();
     });
+    } catch (e) {
+      if (!(e instanceof PedidoCambioError)) throw e;
+      return { success: false, error: 'pedido_cambio_reintentar', detalle: 'El pedido cambió mientras se rechazaba. Volvé a intentarlo.' };
+    }
 
-    // Pagado con tarjeta: queda para devolver en uPay (F4 §6) y se avisa al personal.
-    const montoDevolver = await marcarReembolsoSiPagado(dataSource, pedidoId);
+    // Pagado con tarjeta: ya quedó para devolver en uPay (F4 §6); se registra y se avisa al personal.
+    const montoDevolver = pedido.estadoPago === EstadoPagoOnline.PAGADO
+      ? await avisarReembolso(dataSource, pedido)
+      : null;
 
     const saved = await repo().findOne({ where: { id: pedidoId } });
     return { success: true, pedido: mapPedidoAdmin(saved || pedido), reversa, montoDevolver };

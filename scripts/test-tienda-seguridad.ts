@@ -4,7 +4,8 @@
  */
 import { clientIpDe } from '../electron/utils/client-ip.util';
 import { ipPermitidaMesa } from '../electron/utils/ip-lan.util';
-import { loginBloqueado, registrarLoginFallido, registrarLoginOk, otpIpPermitido, reiniciarLimitesTienda, LOGIN_BLOQUEO_MS } from '../electron/utils/tienda-limites';
+import { loginBloqueado, registrarLoginFallido, registrarLoginOk, otpIpPermitido, reiniciarLimitesTienda, LOGIN_BLOQUEO_MS, claveIp, reservarIntentoLogin, confirmarLoginOk, LOGIN_FALLOS_CUENTA_HORA } from '../electron/utils/tienda-limites';
+import { motivoNoMaterializable } from '../electron/utils/pedido-online-materializable';
 
 let pass = 0, fail = 0;
 function ok(c: boolean, msg: string, extra?: any) {
@@ -57,6 +58,39 @@ for (let i = 0; i < 35; i++) if (otpIpPermitido('4.4.4.4', t0)) otps++;
 ok(otps === 30, 'OTP: 30 por IP por hora', otps);
 ok(otpIpPermitido('5.5.5.5', t0), 'OTP: otra IP sigue pudiendo');
 reiniciarLimitesTienda();
+
+console.log('F5: IPv6 /64, reserva de intentos y tope por cuenta');
+ok(claveIp('2800:a4:1234:5678:1:2:3:4') === claveIp('2800:a4:1234:5678:ffff::9'), 'IPv6: misma /64 = misma clave', claveIp('2800:a4:1234:5678:1:2:3:4'));
+ok(claveIp('2800:a4:1234:5678::1') !== claveIp('2800:a4:1234:5679::1'), 'IPv6: otra /64 = otra clave');
+ok(claveIp('::ffff:10.0.0.1') === '10.0.0.1' && claveIp('10.0.0.1') === '10.0.0.1', 'IPv4 (y mapeada) sin cambios');
+reiniciarLimitesTienda();
+// Cinco intentos "en paralelo" (reservados antes de verificar) agotan el tope: el sexto no entra.
+let reservados = 0;
+for (let i = 0; i < 8; i++) if (reservarIntentoLogin(77, '6.6.6.6', t0)) reservados++;
+ok(reservados === 5, 'login: los intentos se reservan antes de verificar (5 y bloqueo)', reservados);
+reiniciarLimitesTienda();
+ok(reservarIntentoLogin(78, '6.6.6.7', t0), 'login: reserva');
+confirmarLoginOk(78, '6.6.6.7');
+for (let i = 0; i < 4; i++) reservarIntentoLogin(78, '6.6.6.7', t0);
+ok(loginBloqueado(78, '6.6.6.7', t0) === null, 'login OK deshace la reserva (4 fallos después no bloquean)');
+reiniciarLimitesTienda();
+let cuentaFrenada = false;
+for (let i = 0; i < LOGIN_FALLOS_CUENTA_HORA; i++) registrarLoginFallido(79, `9.9.${Math.floor(i / 200)}.${i % 200}`, t0);
+cuentaFrenada = loginBloqueado(79, '8.8.8.8', t0) === 'cuenta_bloqueada';
+ok(cuentaFrenada, 'login: tope por cuenta desde muchas IP');
+reiniciarLimitesTienda();
+
+console.log('F5: qué pedido puede ir a cocina (C1)');
+const base: any = { estado: 'ACEPTADO', tipoPedido: 'PICKUP', mesaId: null, metodoPago: 'EFECTIVO', estadoPago: null };
+ok(motivoNoMaterializable(base, false) === null, 'ACEPTADO en efectivo: sí');
+ok(motivoNoMaterializable({ ...base, estado: 'RECIBIDO' }, false) === 'pedido_no_aceptado', 'RECIBIDO sin aceptación automática: no');
+ok(motivoNoMaterializable({ ...base, estado: 'RECIBIDO' }, true) === null, 'RECIBIDO con aceptación automática: sí');
+ok(motivoNoMaterializable({ ...base, estado: 'RECIBIDO', tipoPedido: 'MESA_QR', mesaId: 3 }, false) === null, 'RECIBIDO de mesa QR: sí');
+ok(motivoNoMaterializable({ ...base, estado: 'PENDIENTE_PAGO', metodoPago: 'UPAY', estadoPago: 'PENDIENTE' }, true) === 'pedido_sin_pago_confirmado', 'tarjeta sin pagar: no');
+ok(motivoNoMaterializable({ ...base, metodoPago: 'UPAY', estadoPago: 'FALLIDO' }, true) === 'pedido_sin_pago_confirmado', 'tarjeta aceptada pero pago fallido: no');
+ok(motivoNoMaterializable({ ...base, metodoPago: 'UPAY', estadoPago: 'PAGADO' }, false) === null, 'tarjeta pagada y aceptada: sí');
+ok(motivoNoMaterializable({ ...base, estado: 'RECHAZADO' }, true) === 'pedido_rechazado_durante_materializacion', 'rechazado: no');
+ok(motivoNoMaterializable({ ...base, estado: 'EN_PREPARACION' }, true) === 'pedido_en_estado_no_materializable', 'ya en preparación: no');
 
 console.log(`\n[tienda-seguridad] RESULTADO: ${pass} passed, ${fail} failed.`);
 process.exit(fail ? 1 : 0);
