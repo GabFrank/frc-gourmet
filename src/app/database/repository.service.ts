@@ -545,6 +545,8 @@ export abstract class RepositoryService {
   abstract getTiendaOnlineConfig(): Observable<any>;
   abstract updateTiendaOnlineConfig(data: any): Observable<any>;
   abstract probarTiendaWhatsapp(data: { telefono: string }): Observable<any>;
+  abstract probarTiendaUpay(): Observable<any>;
+  abstract marcarPagoDevueltoPedidoOnline(pedidoId: number): Observable<any>;
   abstract getZonasDeliveryAdmin(): Observable<any[]>;
   abstract guardarZonaDelivery(data: any): Observable<any>;
   abstract eliminarZonaDelivery(zonaId: number): Observable<any>;
