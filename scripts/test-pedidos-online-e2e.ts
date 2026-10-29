@@ -436,7 +436,17 @@ async function main() {
 
   const primero: any = lista[0];
   // 11. aceptar
-  const acep = await invokeHandlerWithContext('aceptar-pedido-online', undefined, primero.id);
+  // F5 (C2): sin una caja abierta de quien acepta, no se acepta (antes quedaba ACEPTADO sin venta).
+  const sinCaja = await invokeHandlerWithContext('aceptar-pedido-online', undefined, primero.id);
+  const trasSinCaja: any = await dataSource.getRepository('PedidoOnline').findOne({ where: { id: primero.id } });
+  ok(sinCaja?.success === false && sinCaja?.error === 'sin_caja' && trasSinCaja?.estado === 'RECIBIDO',
+    'F5: aceptar sin caja abierta → sin_caja y sigue RECIBIDO', [sinCaja, trasSinCaja?.estado]);
+  // F5 (C2): un ACEPTADO sin venta no avanza a mano.
+  await dataSource.getRepository('PedidoOnline').update({ id: lista[2].id }, { estado: 'ACEPTADO' });
+  const sinVenta = await invokeHandlerWithContext('avanzar-estado-pedido-online', undefined, lista[2].id, 'EN_PREPARACION');
+  ok(sinVenta?.success === false && sinVenta?.error === 'sin_venta', 'F5: ACEPTADO sin venta no pasa a EN_PREPARACION', sinVenta);
+  // Camino compat: aceptar vinculando una venta ya creada en el PdV.
+  const acep = await invokeHandlerWithContext('aceptar-pedido-online', undefined, primero.id, { ventaId: 999999 });
   ok(acep?.success === true && acep?.pedido?.estado === 'ACEPTADO', 'aceptar → ACEPTADO');
 
   // 12. transición inválida (ACEPTADO → LISTO no permitido directo)
@@ -456,8 +466,7 @@ async function main() {
   await invokeHandlerWithContext('rechazar-pedido-online', undefined, lista[2].id, 'sin stock');
 
   // 14b. F2 (M7): sin caja abierta el aceptar NO crea venta y devuelve el motivo para el operador.
-  ok(!acep?.ventaId && /no_hay_caja_abierta|caja/.test(String(acep?.errorMaterializacion || '')),
-    'aceptar sin caja abierta: no crea venta y devuelve errorMaterializacion', { ventaId: acep?.ventaId, err: acep?.errorMaterializacion });
+  ok(!acep?.errorMaterializacion, 'aceptar con venta vinculada: no intenta materializar', acep?.errorMaterializacion);
   // 14c. F2 (M6): el cliente ve el motivo del rechazo y la personalización en «Mis pedidos».
   const misRech = await pub('pedido.mis', [], token);
   const pRech = (misRech.result?.pedidos || []).find((p: any) => p.numero === segundo.numero);
