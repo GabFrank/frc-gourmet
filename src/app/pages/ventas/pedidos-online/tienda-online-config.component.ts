@@ -142,6 +142,51 @@ import { RepositoryService } from '../../../database/repository.service';
           </mat-form-field>
         </div>
 
+        <h3 class="sub">Pago online (uPay)</h3>
+        <p class="ayuda">El cliente paga con tarjeta en la página de uPay y el pedido llega a cocina recién cuando el pago está confirmado.</p>
+        <div class="proveedor">
+          <div class="proveedor-head">
+            <mat-slide-toggle [(ngModel)]="cfg.pagoOnlineActivo">Ofrecer pago con tarjeta</mat-slide-toggle>
+            <span class="estado-chip" [class.abierta]="cfg.pagoOnlineActivo && ingreso.upayApiKeyGuardada">
+              {{ cfg.pagoOnlineActivo && ingreso.upayApiKeyGuardada ? 'Activo' : 'Apagado' }}
+            </span>
+          </div>
+          <div class="grid">
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>URL base de uPay</mat-label>
+              <input matInput [(ngModel)]="cfg.upayBaseUrl" maxlength="255" placeholder="https://…upay.com.py">
+              <mat-hint>La que da uPay (prueba o producción). Solo https y dominio de uPay.</mat-hint>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Merchant ID</mat-label>
+              <input matInput [(ngModel)]="cfg.upayMerchantId" maxlength="64">
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Nombre del comercio</mat-label>
+              <input matInput [(ngModel)]="cfg.upayMerchantNombre" maxlength="150">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="full">
+              <mat-label>API Key de uPay</mat-label>
+              <input matInput type="password" [(ngModel)]="upayKeyNueva" maxlength="500" autocomplete="off"
+                     [disabled]="!ingreso.almacenSeguroDisponible"
+                     [placeholder]="ingreso.upayApiKeyGuardada ? '•••••• guardada (escribí para cambiar)' : ''">
+              <mat-hint>Se guarda cifrada en este servidor y no se vuelve a mostrar.</mat-hint>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Aviso si está pagado y sin aceptar (min)</mat-label>
+              <input matInput type="number" min="1" max="240" [(ngModel)]="cfg.minutosAvisoPagadoSinAceptar">
+            </mat-form-field>
+          </div>
+          <div class="fila-acciones">
+            <button mat-stroked-button *ngIf="ingreso.upayApiKeyGuardada" (click)="borrarUpayKey()" [disabled]="guardando">
+              <mat-icon>delete</mat-icon> Quitar API Key
+            </button>
+            <button mat-stroked-button (click)="probarUpay()" [disabled]="probando || !ingreso.upayApiKeyGuardada">
+              <mat-icon>wifi_tethering</mat-icon> Probar conexión
+            </button>
+          </div>
+        </div>
+
         <div class="actions">
           <button mat-flat-button color="primary" [disabled]="guardando" (click)="guardar()">
             <mat-icon>save</mat-icon> Guardar
@@ -190,6 +235,8 @@ export class TiendaOnlineConfigComponent implements OnInit {
   /** Token nuevo (solo escritura: el servidor nunca lo devuelve). */
   tokenNuevo = '';
   telefonoPrueba = '';
+  /** API Key de uPay nueva (solo escritura, F4). */
+  upayKeyNueva = '';
   ingreso: any = {};
 
   private static readonly ERRORES: Record<string, string> = {
@@ -204,6 +251,13 @@ export class TiendaOnlineConfigComponent implements OnInit {
     telefono_invalido: 'Teléfono inválido: con código de país, solo números',
     envio_fallido: 'WhatsApp rechazó el envío',
     demasiadas_pruebas: 'Esperá un minuto entre pruebas (máximo 5 por hora)',
+    upay_url_invalida: 'La URL de uPay tiene que ser https y de un dominio de uPay',
+    upay_merchant_invalido: 'Merchant ID inválido',
+    minutos_aviso_invalido: 'Los minutos de aviso van de 1 a 240',
+    upay_faltan_credenciales: 'Para activar el pago con tarjeta faltan el Merchant ID o la API Key',
+    upay_credenciales: 'uPay rechazó la API Key',
+    upay_sin_conexion: 'No se pudo conectar con uPay',
+    upay_error: 'uPay respondió con un error',
   };
 
   private mensajeError(res: any): string {
@@ -223,6 +277,7 @@ export class TiendaOnlineConfigComponent implements OnInit {
     const { ingreso, abiertaAhora, ...datos } = this.cfg;
     const payload = { ...datos, ...extra };
     if (this.tokenNuevo.trim() && !extra.whatsappTokenBorrar) payload.whatsappToken = this.tokenNuevo.trim();
+    if (this.upayKeyNueva.trim() && !extra.upayApiKeyBorrar) payload.upayApiKey = this.upayKeyNueva.trim();
     this.repo.updateTiendaOnlineConfig(payload).subscribe({
       next: (res) => {
         this.guardando = false;
@@ -230,6 +285,7 @@ export class TiendaOnlineConfigComponent implements OnInit {
           this.cfg = res.config;
           this.ingreso = res.config?.ingreso || {};
           this.tokenNuevo = '';
+          this.upayKeyNueva = '';
           this.snack.open('Configuración guardada', 'OK', { duration: 2500 });
         } else {
           this.snack.open(this.mensajeError(res), 'OK', { duration: 4000 });
@@ -258,6 +314,42 @@ export class TiendaOnlineConfigComponent implements OnInit {
       },
       error: (e) => {
         this.guardando = false;
+        this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 });
+      },
+    });
+  }
+
+  borrarUpayKey(): void {
+    if (!confirm('¿Quitar la API Key de uPay? El pago con tarjeta se apaga hasta cargar otra.')) return;
+    this.upayKeyNueva = '';
+    this.guardando = true;
+    this.repo.updateTiendaOnlineConfig({ upayApiKeyBorrar: true, pagoOnlineActivo: false }).subscribe({
+      next: (res) => {
+        this.guardando = false;
+        if (res?.success) {
+          this.cfg = res.config;
+          this.ingreso = res.config?.ingreso || {};
+          this.snack.open('API Key quitada', 'OK', { duration: 2500 });
+        } else {
+          this.snack.open(this.mensajeError(res), 'OK', { duration: 4000 });
+        }
+      },
+      error: (e) => {
+        this.guardando = false;
+        this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 });
+      },
+    });
+  }
+
+  probarUpay(): void {
+    this.probando = true;
+    this.repo.probarTiendaUpay().subscribe({
+      next: (res) => {
+        this.probando = false;
+        this.snack.open(res?.success ? 'Conexión con uPay correcta' : this.mensajeError(res), 'OK', { duration: 5000 });
+      },
+      error: (e) => {
+        this.probando = false;
         this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 });
       },
     });
