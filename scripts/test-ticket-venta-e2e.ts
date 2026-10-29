@@ -341,8 +341,10 @@ async function main() {
     // tickets. Se arma el string a mano para no depender del ICU del runner.
     ok(sanitizarParaTicket('06:50 p.\u00A0m.') === '06:50 p. m.',
        'el espacio duro de la hora pasa a espacio', sanitizarParaTicket('06:50 p.\u00A0m.'));
-    ok(sanitizarParaTicket('6:50\u202FPM') === '6:50 PM',
-       'el espacio fino (U+202F) también', sanitizarParaTicket('6:50\u202FPM'));
+    for (const esp of ['\u00A0', '\u202F', '\u2009', '\u2007']) {
+      ok(sanitizarParaTicket(`A${esp}B`) === 'A B',
+         `el espacio U+${esp.charCodeAt(0).toString(16).toUpperCase()} pasa a espacio`, sanitizarParaTicket(`A${esp}B`));
+    }
     ok(!sanitizarParaTicket(ticketFmtFechaHora(new Date())).includes('?'),
        'la fecha y hora de un ticket no lleva ?', sanitizarParaTicket(ticketFmtFechaHora(new Date())));
     ok(!/[^\x00-\xFF]/.test(sanitizarParaTicket('A → B … ₲ ✓ “x”')),

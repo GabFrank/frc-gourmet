@@ -104,6 +104,10 @@ async function main() {
   const { Moneda } = E('financiero/moneda.entity');
   const { FormasPago } = E('compras/forma-pago.entity');
   const { PdvConfig } = E('ventas/pdv-config.entity');
+  const { Pago } = E('compras/pago.entity');
+  const { Delivery } = E('ventas/delivery.entity');
+  const { Adicional } = E('productos/adicional.entity');
+  const { VentaItemAdicional } = E('ventas/venta-item-adicional.entity');
   const { PdvMesa } = E('ventas/pdv-mesa.entity');
   const { Venta } = E('ventas/venta.entity');
   const { VentaItem } = E('ventas/venta-item.entity');
@@ -193,7 +197,11 @@ async function main() {
     }
     return v;
   };
-  const concluir = (id: number) => ds.getRepository(Venta).update(id, { estado: 'CONCLUIDA', fechaCierre: new Date() } as any);
+  /** Cobro simulado: con su `Pago`, como todos los cobros reales. */
+  const nuevoPago = () => save(Pago, { estado: 'PAGADO', activo: true });
+  const concluir = async (id: number, conPago = true) => ds.getRepository(Venta).update(id, {
+    estado: 'CONCLUIDA', fechaCierre: new Date(), ...(conPago ? { pago: { id: (await nuevoPago()).id } } : {}),
+  } as any);
   const leerVenta = (id: number) => ds.getRepository(Venta).findOneBy({ id });
 
   // ═══════ [1] Gate ═══════
@@ -365,14 +373,14 @@ async function main() {
   {
     trabajos.length = 0;
     const v = await nuevaVenta([{ producto: cerveza, cantidad: 2 }]);
-    await invokeHandler('updateVenta', v.id, { estado: 'CONCLUIDA', fechaCierre: new Date(), __imprimirTicketVenta: true });
+    await invokeHandler('updateVenta', v.id, { estado: 'CONCLUIDA', fechaCierre: new Date(), pago: { id: (await nuevoPago()).id }, __imprimirTicketVenta: true });
     await esperar(async () => fichasImpresas().length === 2);
     ok(trabajos.length === 3, '6: F11 → 1 ticket + 2 fichas', trabajos.map(t => t.tipo));
     ok(trabajos[0]?.tipo === 'TICKET', '6: el ticket sale ANTES que las fichas', trabajos.map(t => t.tipo));
 
     trabajos.length = 0;
     const sinTicket = await nuevaVenta([{ producto: gaseosa, cantidad: 1 }]);
-    await invokeHandler('updateVenta', sinTicket.id, { estado: 'CONCLUIDA', fechaCierre: new Date(), __imprimirTicketVenta: false });
+    await invokeHandler('updateVenta', sinTicket.id, { estado: 'CONCLUIDA', fechaCierre: new Date(), pago: { id: (await nuevoPago()).id }, __imprimirTicketVenta: false });
     await esperar(async () => fichasImpresas().length === 1);
     ok(trabajos.length === 1 && trabajos[0].tipo === 'FICHA', '6: F10 (sin ticket) igual emite fichas', trabajos.map(t => t.tipo));
 
@@ -484,6 +492,106 @@ async function main() {
     let lanzo = false;
     try { await imprimirPostConclusion(ds, v.id, { imprimirTicket: true }); } catch { lanzo = true; }
     ok(!lanzo, '10: un ticket que explota no corta la cadena');
+  }
+
+  // ═══════ [11] Hallazgos de la auditoría de la implementación ═══════
+  console.log('\n[11] Hallazgos de la auditoría');
+  {
+    // Sin Pago no hay fichas: concluir sin cobrar no entrega mercadería.
+    const sinPago = await nuevaVenta([{ producto: cerveza, cantidad: 2 }]);
+    await concluir(sinPago.id, false);
+    ok((await imprimirFichasSiCorresponde(ds, sinPago.id)).emitidas === 0, '11: una venta CONCLUIDA sin Pago no emite');
+
+    // Rehabilitar una venta que NUNCA emitió (fichas habilitadas después) no emite.
+    usuarioActual = gerente;
+    trabajos.length = 0;
+    const vieja = await nuevaVenta([{ producto: cerveza, cantidad: 2 }]);
+    await setCfg({ fichasHabilitadas: false });
+    await invokeHandler('updateVenta', vieja.id, { estado: 'CONCLUIDA', pago: { id: (await nuevoPago()).id } });
+    await new Promise(r => setTimeout(r, 100));
+    await setCfg({ fichasHabilitadas: true });
+    await invokeHandler('updateVenta', vieja.id, { estado: 'CANCELADA' });
+    await invokeHandler('updateVenta', vieja.id, { estado: 'CONCLUIDA' });
+    await new Promise(r => setTimeout(r, 150));
+    ok(fichasImpresas().length === 0, '11: rehabilitar una venta vieja no larga fichas', fichasImpresas().length);
+    ok(!(await leerVenta(vieja.id) as any).fichasEmitidasAt, '11: ni la marca como emitida');
+    usuarioActual = cajero;
+
+    // createVenta no acepta las columnas de fichas.
+    const creada: any = await invokeHandler('createVenta', {
+      estado: 'ABIERTA', caja: { id: caja.id }, fichasEmitidasAt: new Date(), fichasCantidad: 9,
+    });
+    const leida: any = await leerVenta(creada.id);
+    ok(!leida.fichasEmitidasAt && leida.fichasCantidad === 0, '11: createVenta descarta fichas*', leida);
+
+    // Precio: adicionales y descuento entran en la fórmula; decimales como string.
+    await setCfg({ fichasMostrarPrecio: true });
+    const vp: any = await save(Venta, { estado: 'ABIERTA', caja: { id: caja.id } });
+    await save(VentaItem, {
+      venta: { id: vp.id }, producto: { id: cerveza.id }, cantidad: '2.000',
+      precioVentaUnitario: '10000.00', precioAdicionales: '2000.00', descuentoUnitario: '500.00',
+      precioCostoUnitario: 0, montoCubierto: 0, estado: 'ACTIVO',
+    });
+    let fp = (await buildFichasVenta(ds, vp.id, { width: 48 }))!;
+    ok(fp.length === 2 && texto(fp[0].lines).includes('Gs. 11.500'), '11: unitario = precio + adicionales - descuento', texto(fp[0].lines));
+    await setCfg({ fichasModo: 'POR_ITEM' });
+    fp = (await buildFichasVenta(ds, vp.id, { width: 48 }))!;
+    ok(texto(fp[0].lines).includes('Gs. 23.000'), '11: POR_ITEM = unitario x cantidad', texto(fp[0].lines));
+    await setCfg({ fichasModo: 'POR_UNIDAD', fichasMostrarPrecio: false });
+
+    // Detalle: adicionales en la ficha (misma fuente que comanda y ticket).
+    const queso: any = await save(Adicional, { nombre: 'EXTRA QUESO', precioBase: 2000, activo: true });
+    const itP: any = await ds.getRepository(VentaItem).findOne({ where: { venta: { id: vp.id } } as any });
+    await save(VentaItemAdicional, { ventaItem: { id: itP.id }, adicional: { id: queso.id }, precioCobrado: 2000, cantidad: 1, activo: true });
+    fp = (await buildFichasVenta(ds, vp.id, { width: 48 }))!;
+    ok(fp.every(f => texto(f.lines).includes('+ EXTRA QUESO')), '11: el adicional va en cada ficha', texto(fp[0].lines));
+
+    // Sin nombre de evento no hay encabezado: la ficha arranca en el separador.
+    await setCfg({ fichasNombreEvento: null });
+    fp = (await buildFichasVenta(ds, vp.id, { width: 48 }))!;
+    ok((fp[0].lines[0] as any).type === 'separator', '11: sin evento, la primera línea es el separador', fp[0].lines[0]);
+    ok(!texto(fp[0].lines).includes('REIMPRESION'), '11: la emisión original NO dice REIMPRESION');
+
+    // Ancho 32: el nombre en `big` se parte a 16 columnas.
+    const largo: any = await save(Producto, { nombre: 'BALDE PROMOCIONAL SEIS CERVEZAS', tipo: 'RETAIL', activo: true });
+    const vl = await nuevaVenta([{ producto: largo, cantidad: 1 }]);
+    const fl = (await buildFichasVenta(ds, vl.id, { width: 32 }))!;
+    const grandes = fl[0].lines.filter((l: any) => l.type === 'text' && l.size === 'big').map((l: any) => l.text);
+    ok(grandes.length >= 2 && grandes.every((t: string) => t.length <= 16), '11: en 32 columnas el nombre grande se envuelve a 16', grandes);
+
+    // Tope: una cantidad absurda no se convierte en cientos de trabajos.
+    const vt = await nuevaVenta([{ producto: cerveza, cantidad: 5000 }, { producto: gaseosa, cantidad: 3 }]);
+    const ft = (await buildFichasVenta(ds, vt.id, { width: 48 }))!;
+    ok(ft.length === 2, '11: pasado el tope, la venta sale POR_ITEM', ft.length);
+
+    // Delivery real (no un objeto literal): no emite.
+    const dv = await nuevaVenta([{ producto: cerveza, cantidad: 2 }]);
+    const del: any = await save(Delivery, { venta: { id: dv.id }, estado: 'ENTREGADO', modo: 'RETIRO', telefono: '0981000000', nombre: 'X', activo: true, fechaAbierto: new Date() });
+    await ds.getRepository(Venta).update(dv.id, { delivery: { id: del.id } } as any);
+    await concluir(dv.id);
+    ok((await imprimirFichasSiCorresponde(ds, dv.id)).emitidas === 0, '11: un delivery real concluido no emite');
+
+    // Reimpresión: el código lleva -R1, y una reimpresión que no imprime nada no suma.
+    const vr = await nuevaVenta([{ producto: cerveza, cantidad: 1 }]);
+    await concluir(vr.id);
+    await imprimirFichasSiCorresponde(ds, vr.id);
+    trabajos.length = 0;
+    await invokeHandler('print-fichas-venta', { ventaId: vr.id });
+    ok(fichasImpresas()[0]?.texto.includes(`COD ${vr.id}-1-R1`), '11: la reimpresión cambia el código (-R1)', fichasImpresas()[0]?.texto);
+    fallarDesde = 0;
+    trabajos.length = 0;
+    const rf: any = await invokeHandler('print-fichas-venta', { ventaId: vr.id });
+    fallarDesde = Infinity;
+    ok(rf?.ok === false, '11: una reimpresión fallida devuelve ok:false');
+    ok((await leerVenta(vr.id) as any).fichasReimpresiones === 1, '11: y no suma al contador');
+
+    // Config: nombre recortado a 120 y booleanos normalizados.
+    usuarioActual = gerente;
+    await invokeHandler('updatePdvConfig', cfg.id, { fichasNombreEvento: 'x'.repeat(200), fichasMostrarPrecio: 'true' });
+    const c2: any = await ds.getRepository(PdvConfig).findOneBy({ id: cfg.id });
+    ok(c2.fichasNombreEvento.length === 120, '11: el nombre del evento se recorta a 120', c2.fichasNombreEvento.length);
+    ok(c2.fichasMostrarPrecio === true, '11: un "true" string se guarda como boolean');
+    usuarioActual = cajero;
   }
 
   __setFichasPrintImplsForTests({ printSpec: null, printVentaTicket: null });

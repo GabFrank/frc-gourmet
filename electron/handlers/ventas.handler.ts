@@ -1111,7 +1111,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         });
 
         const repo = manager.getRepository(Venta);
-        const entity: any = repo.create(data);
+        // Las columnas de fichas las escribe sólo el backend, también al crear:
+        // una venta nacida con `fichasEmitidasAt` pasaba el gate de
+        // `print-fichas-venta` sin haber emitido nunca.
+        const {
+          fichasEmitidasAt: _fe, fichasCantidad: _fc, fichasReimpresiones: _fr,
+          ...dataVenta
+        } = data ?? {};
+        const entity: any = repo.create(dataVenta);
         await setEntityUserTracking(dataSource, entity, userId, false);
         if (deviceId != null) entity.dispositivo = { id: deviceId };
         const saved = await repo.save(entity);
@@ -1690,7 +1697,12 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           // térmica. Las fichas no dependen de `debeImprimir`: un cobro sin
           // ticket (F10) igual las emite si la venta es directa.
           setImmediate(() => {
-            imprimirPostConclusion(dataSource, id, { imprimirTicket: debeImprimir })
+            imprimirPostConclusion(dataSource, id, {
+              imprimirTicket: debeImprimir,
+              // Sólo un cobro emite fichas; rehabilitar (CANCELADA →
+              // CONCLUIDA) no.
+              emitirFichas: estadoAnterior === VentaEstado.ABIERTA,
+            })
               .catch(e => console.warn('[updateVenta] impresión post-conclusión falló:', e));
           });
         } catch (e) {
@@ -5262,8 +5274,12 @@ function normalizarFichasConfig(data: any): any {
   if (!data) return data;
   const out = { ...data };
   if ('fichasNombreEvento' in out) {
-    const v = out.fichasNombreEvento == null ? '' : String(out.fichasNombreEvento).trim();
+    // Recortado a 120: es el largo de la columna, y Postgres rechaza el exceso.
+    const v = out.fichasNombreEvento == null ? '' : String(out.fichasNombreEvento).trim().slice(0, 120);
     out.fichasNombreEvento = v ? v.toUpperCase() : null;
+  }
+  for (const k of ['fichasHabilitadas', 'fichasMostrarPrecio']) {
+    if (k in out) out[k] = out[k] === true || out[k] === 'true' || out[k] === 1;
   }
   if ('fichasModo' in out && !Object.values(FichaModo).includes(out.fichasModo)) {
     delete out.fichasModo;

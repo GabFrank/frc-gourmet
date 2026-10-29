@@ -1184,6 +1184,9 @@ export async function printVentaTicketInternal(
 // - `imprimirFichasSiCorresponde`: gate + claim idempotente; la llaman los
 //   hooks post-conclusión (`updateVenta`, `cobrar-venta-credito`).
 
+/** Más fichas que esto en una venta pasan todas a POR_ITEM. */
+export const MAX_FICHAS_POR_VENTA = 200;
+
 /** Una ficha ya armada, con su posición en la venta (`numero`/`total`). */
 export interface FichaArmada {
   numero: number;
@@ -1218,7 +1221,7 @@ export function resolverFichaModo(productoModo: string | null | undefined, globa
 export async function buildFichasVenta(
   dataSource: DataSource,
   ventaId: number,
-  opts: { width: number; reimpresion?: boolean },
+  opts: { width: number; reimpresion?: boolean; reimpresionNumero?: number },
 ): Promise<FichaArmada[] | null> {
   const venta = await dataSource.getRepository(Venta).findOne({
     where: { id: ventaId },
@@ -1249,6 +1252,12 @@ export async function buildFichasVenta(
     if (modo === FichaModo.NO_IMPRIME) continue;
     if (modo === FichaModo.POR_UNIDAD && !Number.isInteger(qty)) modo = FichaModo.POR_ITEM;
     planes.push({ item: it, modo, qty, fichas: modo === FichaModo.POR_UNIDAD ? qty : 1 });
+  }
+  // Tope de seguridad: un ítem con cantidad enorme (un error de carga, o un
+  // cliente vía /api/rpc) no puede convertirse en cientos de trabajos de
+  // impresión. Pasado el tope, toda la venta sale POR_ITEM.
+  if (planes.reduce((s, p) => s + p.fichas, 0) > MAX_FICHAS_POR_VENTA) {
+    for (const p of planes) { p.modo = FichaModo.POR_ITEM; p.fichas = 1; }
   }
   const total = planes.reduce((s, p) => s + p.fichas, 0);
   if (total === 0) return [];
@@ -1311,7 +1320,10 @@ export async function buildFichasVenta(
       lines.push(ticketSeparador('-'));
       lines.push(ticketKv(`FICHA ${numero}/${total}`, `VENTA #${ventaId}`, true));
       lines.push(ticketKv(cajaId ? `CAJA ${cajaId}` : 'CAJA', fecha));
-      lines.push(ticketKv('COD', `${ventaId}-${numero}`));
+      // En una reimpresión el código cambia (`-R2`): el barman distingue la
+      // copia del original aunque no lea el cartel.
+      const sufijo = opts.reimpresion ? `-R${opts.reimpresionNumero ?? 1}` : '';
+      lines.push(ticketKv('COD', `${ventaId}-${numero}${sufijo}`));
       if (opts.reimpresion) {
         lines.push(ticketText('** REIMPRESION **', { align: 'C', bold: true }));
       }
@@ -1350,7 +1362,7 @@ export function __setFichasPrintImplsForTests(impls: {
 export async function printFichasVentaInternal(
   dataSource: DataSource,
   ventaId: number,
-  opts: { printerId?: number; dispositivoId?: number; reimpresion?: boolean } = {},
+  opts: { printerId?: number; dispositivoId?: number; reimpresion?: boolean; reimpresionNumero?: number } = {},
 ): Promise<ImpresionResultado> {
   const venta = await dataSource.getRepository(Venta).findOne({
     where: { id: ventaId },
@@ -1369,7 +1381,9 @@ export async function printFichasVentaInternal(
   }
 
   const width = printerWidthToChars(printer.width);
-  const fichas = await buildFichasVenta(dataSource, ventaId, { width, reimpresion: opts.reimpresion });
+  const fichas = await buildFichasVenta(dataSource, ventaId, {
+    width, reimpresion: opts.reimpresion, reimpresionNumero: opts.reimpresionNumero,
+  });
   if (!fichas) {
     return { ok: false, printed: [], errors: [{ message: `Venta ${ventaId} no encontrada` }] };
   }
@@ -1420,11 +1434,16 @@ export async function imprimirFichasSiCorresponde(
 
     const venta = await dataSource.getRepository(Venta).findOne({
       where: { id: ventaId },
-      relations: [...RELACIONES_VENTA_DIRECTA],
+      relations: [...RELACIONES_VENTA_DIRECTA, 'pago'],
     });
     if (!venta || venta.estado !== VentaEstado.CONCLUIDA) return { emitidas: 0 };
     if ((venta as any).fichasEmitidasAt) return { emitidas: 0 };
     if (!esVentaDirecta(venta)) return { emitidas: 0 };
+    // Sin `Pago` no hay cobro. `updateVenta` deja concluir una venta sin pago
+    // (es preexistente: sólo pide VENTAS_PDV); con fichas eso sería entregar
+    // mercadería sin cobrar. Todos los cobros reales (diálogo, F2, crédito)
+    // vinculan el `Pago` a la venta al concluir.
+    if (!(venta as any).pago?.id) return { emitidas: 0 };
 
     // Se cuenta con el builder real (ancho irrelevante para contar).
     const fichas = await buildFichasVenta(dataSource, ventaId, { width: 48 });
@@ -1456,12 +1475,17 @@ export async function imprimirFichasSiCorresponde(
  * no se intercalen en la misma térmica. Las fichas no dependen del ticket: un
  * cobro con F10 (sin ticket) igual las emite.
  *
+ * `emitirFichas` lo decide el llamador: sólo un COBRO (ABIERTA → CONCLUIDA)
+ * emite. Rehabilitar desde el historial (CANCELADA → CONCLUIDA) también
+ * concluye, y sin esto una venta vieja que nunca emitió (porque las fichas se
+ * habilitaron después) largaba fichas canjeables en un momento cualquiera.
+ *
  * Fire-and-forget desde los hooks; nunca lanza.
  */
 export async function imprimirPostConclusion(
   dataSource: DataSource,
   ventaId: number,
-  opts: { imprimirTicket: boolean },
+  opts: { imprimirTicket: boolean; emitirFichas: boolean },
 ): Promise<void> {
   if (opts.imprimirTicket) {
     try {
@@ -1470,7 +1494,7 @@ export async function imprimirPostConclusion(
       console.warn('[post-conclusion] ticket de venta falló:', e);
     }
   }
-  await imprimirFichasSiCorresponde(dataSource, ventaId);
+  if (opts.emitirFichas) await imprimirFichasSiCorresponde(dataSource, ventaId);
 }
 
 // ============================================================
@@ -1614,10 +1638,10 @@ export function registerDocumentosTicketsHandlers(
   // ─── FICHAS DE CANTINA (reimpresión) ────────────────────────────────────
   // La emisión original la hacen los hooks al concluir la venta. Este canal es
   // sólo para reimprimir: sale con la marca REIMPRESION y suma el contador.
-  ipcMain.handle('print-fichas-venta', async (_event, params: {
-    ventaId: number;
-    printerId?: number;
-  }) => {
+  //
+  // No acepta `printerId`: las fichas valen producto, y el cliente no elige a
+  // qué impresora mandarlas. Siempre van a la de tickets de la terminal.
+  ipcMain.handle('print-fichas-venta', async (_event, params: { ventaId: number }) => {
     await ensurePermission(dataSource, getCurrentUser, 'DOCUMENTOS_REIMPRIMIR_FICHAS');
     const ventaId = Number(params?.ventaId);
     const venta = ventaId ? await dataSource.getRepository(Venta).findOneBy({ id: ventaId }) : null;
@@ -1627,17 +1651,23 @@ export function registerDocumentosTicketsHandlers(
     if (venta.estado !== VentaEstado.CONCLUIDA || !(venta as any).fichasEmitidasAt) {
       return { ok: false, printed: [], errors: [{ message: 'La venta no emitió fichas' }] };
     }
-    await dataSource.createQueryBuilder()
-      .update(Venta)
-      .set({ fichasReimpresiones: () => 'fichas_reimpresiones + 1' } as any)
-      .where('id = :id', { id: ventaId })
-      .execute();
     const dispositivoId = resolveRequestDeviceId(_event) ?? undefined;
-    return await printFichasVentaInternal(dataSource, ventaId, {
-      printerId: params.printerId,
+    const res = await printFichasVentaInternal(dataSource, ventaId, {
       dispositivoId,
       reimpresion: true,
+      reimpresionNumero: (Number((venta as any).fichasReimpresiones) || 0) + 1,
     });
+    // Cuenta reimpresiones EFECTIVAS: si no salió ninguna ficha (impresora
+    // apagada), el contador no se mueve. Si salió alguna, sí — ese papel ya
+    // está en la calle.
+    if (res.printed.length > 0) {
+      await dataSource.createQueryBuilder()
+        .update(Venta)
+        .set({ fichasReimpresiones: () => 'fichas_reimpresiones + 1' } as any)
+        .where('id = :id', { id: ventaId })
+        .execute();
+    }
+    return res;
   });
 
   // ─── PRE-CUENTA ─────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 # Tickets impresos — qué imprime el sistema y para qué
 
-> Trece documentos distintos salen por impresora térmica. Todos comparten el
+> Catorce documentos distintos salen por impresora térmica. Todos comparten el
 > mismo motor (`electron/utils/ticket.utils.ts` → ESC/POS), pero **no comparten
 > propósito**: cada uno se escribió para que alguien concreto haga algo
 > concreto con el papel en la mano. Antes de tocar cualquiera, preguntarse
@@ -27,6 +27,7 @@ Casi todo vive en `electron/handlers/documentos-tickets.handler.ts`.
 | 11 | **Conteo de caja** | `print-conteo-caja-ticket` | El cajero | Arqueo: qué había en el cajón |
 | 12 | **Cierre de caja** | `print-cierre-caja` | El cajero y el gerente | Resumen del turno |
 | 13 | **Página de prueba** | `print-test-page` | El técnico | Verificar que la impresora responde |
+| 14 | **Ficha de cantina** | hook post-cobro / `print-fichas-venta` (reimpresión) | El cliente, que la canjea en la barra | Vale UN producto (o N, si es POR_ITEM). Sólo venta directa. Ver abajo |
 
 ---
 
@@ -104,6 +105,11 @@ lo que sale impreso.
 
 Qué hace:
 
+- **Espacios duros a espacio** (`U+00A0`, `U+202F`, `U+2009`, `U+2007`). Desde
+  2026-10 — hasta entonces **la hora de todos los tickets salía `06:50 p.?m.`**:
+  `toLocaleString('es-PY')` separa «p.» de «m.» con un U+00A0 (y según la
+  versión de ICU, U+202F). Lo destapó el test de fichas; nadie lo había notado
+  en el papel.
 - Tipográficos con equivalente ASCII: `×`→`x`, `—`→`-`, `→`→`->`, `…`→`...`,
   comillas curvas a rectas, `₲`→`Gs.`.
 - Acentuadas que el charset no tiene: se les saca el acento. **«ANGEL» se lee;
@@ -137,6 +143,27 @@ dos cosas** — su comanda por sector y su ticket de reparto.
 > hizo que ningún delivery imprimiera su comanda durante días, en silencio.
 
 ---
+
+## Fichas de cantina (#14)
+
+En la cantina de eventos el cliente paga en caja y retira en la barra con
+fichas. Es el único ticket que **es plata**: cada papel vale un producto, así
+que casi todo su diseño es antifraude.
+
+- **Sólo venta directa** (`esVentaDirecta`: sin mesa, comanda ni delivery, canal
+  `LOCAL`) y **sólo al concluir**: nunca se entrega una ficha sin cobrar.
+- **Una ficha por trabajo de impresión**, cada una con `cutAtEnd`. Un único spec
+  con `{type:'cut'}` intermedios rebanaba el final de cada ficha (el `cut`
+  intermedio no avanza el papel hasta la cuchilla; `feedBottomSafeArea` sólo
+  corre al final) y el fallback CUPS ignora `cut`, así que salía una tira.
+- **Correlativo por venta** (`FICHA 3/7`) y código `venta-numero`.
+- **Ticket de pago antes que fichas**, en la misma cadena (`imprimirPostConclusion`).
+- **Claim antes de imprimir** (`ventas.fichas_emitidas_at`): si la impresora
+  falla quedan emitidas sin papel y se reimprimen; nunca se imprimen dos veces.
+- **Reimpresión** marcada `** REIMPRESION **`, con permiso propio y contador.
+
+Va a la impresora de tickets de la caja (`TICKET_VENTA` / `Dispositivo.printerTicket`),
+no hay rol `FICHA`. Detalle completo → [ventas-pdv.md](ventas-pdv.md) §Fichas de cantina.
 
 ## Modo del pedido en el ticket de delivery
 
