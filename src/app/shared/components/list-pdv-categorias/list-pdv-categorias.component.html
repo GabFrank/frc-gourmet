@@ -67,7 +67,7 @@
     
     <!-- Empty state -->
     <div *ngIf="!loading && dataSource.data.length === 0" class="empty-state">
-      <mat-icon>category_off</mat-icon>
+      <mat-icon>label_off</mat-icon>
       <p>No se encontraron categorías</p>
       <button mat-raised-button color="primary" (click)="createNew('grupo')">
         Crear primer grupo
