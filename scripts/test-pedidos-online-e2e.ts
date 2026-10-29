@@ -617,6 +617,26 @@ async function main() {
   const idemBasura = await pub('pedido.crear', idemBody("x'; drop"), token2);
   ok(idemBasura.result?.success === true && !idemBasura.result?.repetido, 'idempotencia: clave inválida se ignora (pedido normal)', idemBasura.result);
 
+  // 40. A1: fuerza bruta en login (5 fallos cuenta+IP → bloqueada aunque la clave sea buena).
+  for (let i = 0; i < 5; i++) await pub('auth.login', ['cliente@mail.com', 'mala-clave']);
+  const logBloq = await pub('auth.login', ['cliente@mail.com', 'secreto123']);
+  ok(logBloq.result?.error === 'demasiados_intentos', 'login: 5 fallos seguidos → demasiados_intentos', logBloq.result);
+  const { reiniciarLimitesTienda } = await import('../electron/utils/tienda-limites');
+  reiniciarLimitesTienda();
+  // 41. A1: cambio de contraseña revoca las demás sesiones (refresh tokens).
+  const s1 = await pub('auth.login', ['cliente@mail.com', 'secreto123']);
+  const s2 = await pub('auth.login', ['cliente@mail.com', 'secreto123']);
+  const cambio = await pub('auth.perfil.update', [{ password: 'nueva-clave-9', passwordActual: 'secreto123' }], s2.result?.accessToken);
+  ok(cambio.result?.success === true, 'cambio de contraseña OK', cambio.result);
+  const ref1Viejo = await pub('auth.refresh', [s1.result?.refreshToken]);
+  ok(ref1Viejo.result?.success !== true, 'cambio de contraseña: la otra sesión ya no refresca', ref1Viejo.result);
+  // 42. A1: cuenta dada de baja no ve pedidos con token vigente.
+  const sBaja = await pub('auth.login', ['cliente@mail.com', 'nueva-clave-9']);
+  await dataSource.getRepository('CuentaCliente').update({ email: 'cliente@mail.com' }, { activo: false });
+  const misBaja = await pub('pedido.mis', [], sBaja.result?.accessToken);
+  ok(misBaja.result?.success !== true && misBaja.result?.error === 'cuenta_invalida', 'cuenta inactiva: pedido.mis rechazado', misBaja.result);
+  await dataSource.getRepository('CuentaCliente').update({ email: 'cliente@mail.com' }, { activo: true });
+
   console.log = origLog;
   await fastify.close();
   await dataSource.destroy();

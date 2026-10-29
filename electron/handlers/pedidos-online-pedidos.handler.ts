@@ -561,9 +561,14 @@ export function registerPedidosOnlinePedidosHandlers(
   });
 
   // ============== MIS PEDIDOS (público, requiere cliente) ==============
+  // Cuenta dada de baja: no sigue viendo pedidos con un token vigente (PLAN-tienda-online A1).
+  const cuentaActiva = async (id: number): Promise<boolean> =>
+    !!(await dataSource.getRepository(CuentaCliente).findOne({ where: { id, activo: true }, select: ['id'] }));
+
   ipcMain.handle('get-mis-pedidos-online', async (event: any) => {
     const customerId = event?._customerId;
     if (!customerId) return { success: false, error: 'no_autenticado' };
+    if (!(await cuentaActiva(customerId))) return { success: false, error: 'cuenta_invalida' };
     const pedidos = await pedidoRepo().find({
       where: { cuentaCliente: { id: customerId } },
       relations: ['items'],
@@ -577,6 +582,7 @@ export function registerPedidosOnlinePedidosHandlers(
   ipcMain.handle('get-pedido-online-estado', async (event: any, numero: string) => {
     const customerId = event?._customerId;
     if (!customerId) return { success: false, error: 'no_autenticado' };
+    if (!(await cuentaActiva(customerId))) return { success: false, error: 'cuenta_invalida' };
     const pedido = await pedidoRepo().findOne({
       where: { numero, cuentaCliente: { id: customerId } },
       relations: ['items'],

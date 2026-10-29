@@ -10,8 +10,10 @@ import {
   issueCustomerRefreshToken,
   rotateCustomerRefreshToken,
   revokeCustomerRefreshToken,
+  revokeAllCustomerRefreshTokens,
 } from '../utils/customer-refresh-token.utils';
 import { registerPublicOperation } from '../server/public-routes';
+import { loginBloqueado, registrarLoginFallido, registrarLoginOk, otpIpPermitido } from '../utils/tienda-limites';
 
 /**
  * Auth de CLIENTE FINAL (web de pedidos) — Fase 2.
@@ -109,6 +111,10 @@ export function registerPedidosOnlineAuthHandlers(
       console.warn(`[otp] tope global diario alcanzado (${globalDia}); envío cortado.`);
       return { success: false, error: 'otp_no_disponible' };
     }
+    // Por IP: 30 por hora (frena a quien rota números desde un mismo lugar).
+    if (!otpIpPermitido(String(_event?._clientIp || ''))) {
+      return { success: false, error: 'demasiadas_solicitudes' };
+    }
 
     // Invalidar OTPs previos no usados de este teléfono.
     await otpRepo().update({ telefono, usado: false }, { usado: true });
@@ -183,7 +189,8 @@ export function registerPedidosOnlineAuthHandlers(
   });
 
   // ============== LOGIN POR PASSWORD ==============
-  ipcMain.handle('pub-cliente-login-password', async (_event: any, identificador: string, password: string) => {
+  ipcMain.handle('pub-cliente-login-password', async (event: any, identificador: string, password: string) => {
+    const ip = String(event?._clientIp || '');
     const idRaw = String(identificador || '').trim();
     if (!idRaw || !password) return { success: false, error: 'credenciales_incompletas' };
 
@@ -194,11 +201,19 @@ export function registerPedidosOnlineAuthHandlers(
       ? await cuentaRepo().findOne({ where: { email: idRaw.toLowerCase() }, relations: ['cliente'] })
       : await cuentaRepo().findOne({ where: { telefono }, relations: ['cliente'] });
 
+    // Anti fuerza bruta (PLAN-tienda-online A1.3): por cuenta+IP y por IP.
+    const bloqueo = loginBloqueado(cuenta?.id ?? null, ip);
+    if (bloqueo) return { success: false, error: 'demasiados_intentos' };
     if (!cuenta || !cuenta.activo || !cuenta.passwordHash) {
+      registrarLoginFallido(cuenta?.id ?? null, ip);
       return { success: false, error: 'cuenta_o_password_invalidos' };
     }
     const ok = await verifyPassword(password, cuenta.passwordHash);
-    if (!ok) return { success: false, error: 'cuenta_o_password_invalidos' };
+    if (!ok) {
+      registrarLoginFallido(cuenta.id, ip);
+      return { success: false, error: 'cuenta_o_password_invalidos' };
+    }
+    registrarLoginOk(cuenta.id, ip);
 
     cuenta.ultimoLogin = new Date();
     await cuentaRepo().save(cuenta);
@@ -263,9 +278,13 @@ export function registerPedidosOnlineAuthHandlers(
           .getOne();
         if (existe) return { success: false, error: 'email_en_uso' };
       }
-      cuenta.email = email;
-      cuenta.emailVerificado = false;
+      // Cambiar el email lo desverifica (y así Google no puede tomar la cuenta por el nuevo).
+      if ((email || null) !== (cuenta.email ? cuenta.email.toLowerCase() : null)) {
+        cuenta.email = email;
+        cuenta.emailVerificado = false;
+      }
     }
+    let cambioPassword = false;
     if (data?.password) {
       // Exigir la contraseña actual cuando ya hay una. Sin esto, un access token
       // robado -30 minutos de vida- alcanzaba para quedarse con la cuenta de
@@ -277,8 +296,12 @@ export function registerPedidosOnlineAuthHandlers(
         if (!coincide) return { success: false, error: 'password_actual_incorrecta' };
       }
       cuenta.passwordHash = await hashPassword(String(data.password));
+      cambioPassword = true;
     }
     const saved = await cuentaRepo().save(cuenta);
+    // Cambio de contraseña: se cierran las demás sesiones (refresh tokens). La actual
+    // sigue con su access token hasta que venza y se vuelve a loguear con la nueva.
+    if (cambioPassword) await revokeAllCustomerRefreshTokens(dataSource, saved.id);
     return { success: true, cuenta: mapCuenta(saved) };
   });
 
@@ -331,6 +354,14 @@ export function registerPedidosOnlineAuthHandlers(
         .leftJoinAndSelect('c.cliente', 'cliente')
         .where('LOWER(c.email) = :email', { email })
         .getOne();
+      if (cuenta && !cuenta.activo) return { success: false, error: 'cuenta_invalida' };
+      // Cuenta con ese email que nunca lo verificó y tiene contraseña: quien la creó no
+      // demostró ser dueño del email. Google sí lo demuestra: se queda el dueño real, se
+      // borra la contraseña ajena y se cierran sus sesiones (PLAN-tienda-online A1).
+      if (cuenta && !cuenta.emailVerificado && cuenta.passwordHash) {
+        cuenta.passwordHash = null as any;
+        await revokeAllCustomerRefreshTokens(dataSource, cuenta.id);
+      }
       if (!cuenta) {
         cuenta = cuentaRepo().create({
           email,
