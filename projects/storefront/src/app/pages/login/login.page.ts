@@ -39,6 +39,11 @@ export class LoginPage implements AfterViewInit {
   enviando = false;
   error: string | null = null;
 
+  /** Sin canal real de WhatsApp en el server, solo queda Email (y Google). */
+  get otpDisponible(): boolean {
+    return this.config.config.otpWhatsappDisponible !== false;
+  }
+
   ngAfterViewInit(): void {
     const clientId = this.config.config.googleClientId;
     if (clientId) this.initGoogle(clientId);
@@ -131,6 +136,7 @@ export class LoginPage implements AfterViewInit {
       case 'codigo_incorrecto': return 'Código incorrecto.';
       case 'demasiados_intentos': return 'Demasiados intentos. Pedí un código nuevo.';
       case 'envio_fallido': return 'No se pudo enviar el código por WhatsApp.';
+      case 'otp_no_disponible': return 'El ingreso por WhatsApp no está disponible. Ingresá con tu email.';
       case 'email_invalido': return 'Email inválido.';
       case 'password_corto': return 'La contraseña necesita al menos 6 caracteres.';
       case 'email_en_uso': return 'Ese email ya está registrado. Probá iniciar sesión.';
