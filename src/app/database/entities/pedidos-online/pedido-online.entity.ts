@@ -113,6 +113,11 @@ export class PedidoOnline extends BaseModel {
   @Column({ name: 'fecha_entregado', nullable: true })
   fechaEntregado?: Date;
 
+  // Clave de idempotencia del cliente (uuid por intento). Única por cuenta o, si es
+  // invitado, por mesa: índices únicos parciales de la migración TiendaOnlineSeguridad.
+  @Column({ name: 'idempotency_key', type: 'varchar', length: 64, nullable: true })
+  idempotencyKey?: string;
+
   @OneToMany('PedidoOnlineItem', 'pedido', { cascade: true })
   items?: PedidoOnlineItem[];
 }

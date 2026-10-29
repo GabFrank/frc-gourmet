@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { DataSource, In } from 'typeorm';
+import { DataSource, In, IsNull } from 'typeorm';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
 import { PrecioVenta } from '../../src/app/database/entities/productos/precio-venta.entity';
 import { Receta } from '../../src/app/database/entities/productos/receta.entity';
@@ -242,8 +242,39 @@ export function registerPedidosOnlinePedidosHandlers(
     return t ? t.slice(0, max) : undefined;
   };
 
+  // Idempotencia (PLAN-tienda-online A2.4): el storefront manda un uuid por intento.
+  // La clave es única POR DUEÑO (cuenta o, si es invitado, mesa): una clave igual de
+  // otro dueño nunca devuelve datos ajenos, se trata como clave nueva.
+  const normalizarIdemKey = (v: any): string | null => {
+    const t = v == null ? '' : String(v).trim();
+    return /^[A-Za-z0-9-]{8,64}$/.test(t) ? t : null;
+  };
+  const buscarPorIdemKey = async (
+    key: string, cuenta: CuentaCliente | null, mesa: PdvMesa | null,
+  ): Promise<PedidoOnline | null> => {
+    if (cuenta) {
+      return pedidoRepo().findOne({ where: { idempotencyKey: key, cuentaCliente: { id: cuenta.id } } });
+    }
+    if (mesa) {
+      return pedidoRepo().findOne({ where: { idempotencyKey: key, mesaId: mesa.id, cuentaCliente: IsNull() } });
+    }
+    return null;
+  };
+  const respuestaExistente = (p: PedidoOnline) => ({
+    success: true,
+    numero: p.numero,
+    pedidoId: p.id,
+    estado: p.estado,
+    subtotal: Number(p.subtotal),
+    costoEnvio: Number(p.costoEnvio),
+    total: Number(p.total),
+    ventaId: p.ventaId ?? null,
+    repetido: true,
+  });
+
   ipcMain.handle('crear-pedido-online', async (event: any, data: any) => {
     const customerId = event?._customerId;
+    const idemKey = normalizarIdemKey(data?.idempotencyKey);
     const tipoPedido: TipoPedidoOnline = data?.tipoPedido || TipoPedidoOnline.PICKUP;
     if (!Object.values(TipoPedidoOnline).includes(tipoPedido)) return { success: false, error: 'tipo_pedido_invalido' };
     const itemsIn: any[] = Array.isArray(data?.items) ? data.items : [];
@@ -299,6 +330,11 @@ export function registerPedidosOnlinePedidosHandlers(
       if (tipoPedido === TipoPedidoOnline.DELIVERY && !cfg.permiteDelivery) {
         return { success: false, error: 'delivery_no_disponible' };
       }
+    }
+
+    if (idemKey) {
+      const previo = await buscarPorIdemKey(idemKey, cuenta, mesa);
+      if (previo) return respuestaExistente(previo);
     }
 
     const productoRepo = dataSource.getRepository(Producto);
@@ -441,6 +477,8 @@ export function registerPedidosOnlinePedidosHandlers(
     pedido.telefonoCliente = (cuenta?.telefono ?? null) as any;
     pedido.tipoPedido = tipoPedido;
     if (mesa) pedido.mesaId = mesa.id;
+    // Sin dueño (no debería pasar) no se guarda la clave: no habría índice que la cubra.
+    if (idemKey && (cuenta || mesa)) pedido.idempotencyKey = idemKey;
     // Aceptación automática: entra ACEPTADO directo; si no, RECIBIDO (revisión en PdV).
     if (cfg.aceptacionAutomatica) {
       pedido.estado = EstadoPedidoOnline.ACEPTADO;
@@ -480,6 +518,12 @@ export function registerPedidosOnlinePedidosHandlers(
         saved = await pedidoRepo().save(pedido);
         break;
       } catch (e) {
+        // Reintento concurrente con la misma clave: el índice único lo frena; se
+        // devuelve el pedido que ganó la carrera en vez de duplicarlo.
+        if (pedido.idempotencyKey) {
+          const previo = await buscarPorIdemKey(pedido.idempotencyKey, cuenta, mesa);
+          if (previo) return respuestaExistente(previo);
+        }
         if (intento >= 6) throw e;
         pedido.numero = await siguienteNumero(pedidoRepo());
       }
