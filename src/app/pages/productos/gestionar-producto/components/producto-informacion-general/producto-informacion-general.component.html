@@ -227,6 +227,20 @@
           </mat-form-field>
         </div>
 
+        <!-- Cantina de eventos: cómo emite fichas en la venta directa -->
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Ficha de cantina</mat-label>
+            <mat-select formControlName="fichaModo">
+              <mat-option [value]="null">Igual que el PdV</mat-option>
+              <mat-option value="POR_UNIDAD">Una ficha por unidad</mat-option>
+              <mat-option value="POR_ITEM">Una ficha por ítem</mat-option>
+              <mat-option value="NO_IMPRIME">No imprime ficha</mat-option>
+            </mat-select>
+            <mat-hint>Sólo aplica si las fichas están activas en el PdV</mat-hint>
+          </mat-form-field>
+        </div>
+
         <!-- Imagen principal del producto -->
         <div class="form-row imagen-row">
           <div class="imagen-section">

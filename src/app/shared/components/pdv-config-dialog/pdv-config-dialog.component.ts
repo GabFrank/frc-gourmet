@@ -88,6 +88,14 @@ export class PdvConfigDialogComponent implements OnInit {
       // opera sobre ella.
       permitirPagosTerminalAjena: [false],
       permitirFinalizarTerminalAjena: [false],
+      // --- Cantina de eventos: fichas de la venta directa ---
+      fichasHabilitadas: [false],
+      // No tenía campo en el HTML: el ticket de pago sólo se podía apagar
+      // tocando la base. En la cantina es lo que lo vuelve opcional.
+      autoImprimirTicketVenta: [true],
+      fichasModo: ['POR_UNIDAD'],
+      fichasMostrarPrecio: [false],
+      fichasNombreEvento: ['', [Validators.maxLength(120)]],
     });
   }
 
@@ -139,6 +147,11 @@ export class PdvConfigDialogComponent implements OnInit {
           // migrar (undefined) tiene que caer en false igual.
           permitirPagosTerminalAjena: cfg.permitirPagosTerminalAjena || false,
           permitirFinalizarTerminalAjena: cfg.permitirFinalizarTerminalAjena || false,
+          fichasHabilitadas: cfg.fichasHabilitadas || false,
+          autoImprimirTicketVenta: cfg.autoImprimirTicketVenta !== false,
+          fichasModo: cfg.fichasModo || 'POR_UNIDAD',
+          fichasMostrarPrecio: cfg.fichasMostrarPrecio || false,
+          fichasNombreEvento: cfg.fichasNombreEvento || '',
         });
       }
     } catch (error) {

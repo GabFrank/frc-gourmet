@@ -15,6 +15,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatBadgeModule } from '@angular/material/badge';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 
 import { RepositoryService } from '../../../database/repository.service';
@@ -25,6 +26,7 @@ import { FiltrosVentasDialogComponent, FiltrosAvanzados } from '../../../shared/
 import { canalDeVenta, CANAL_VENTA_LABEL, ORIGEN_VENTA_LABEL } from '../../../shared/utils/canal-venta.util';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
+import { mensajeDeError } from 'src/app/shared/utils/error-message.util';
 
 export interface VentaRow {
   venta: Venta;
@@ -47,6 +49,7 @@ export interface VentaRow {
   imports: [
     CommonModule,
     FormsModule,
+    MatSnackBarModule,
     MatTableModule,
     MatButtonModule,
     MatIconModule,
@@ -93,7 +96,8 @@ export class ListVentasComponent implements OnInit {
 
   constructor(
     private repositoryService: RepositoryService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private snackBar: MatSnackBar,
   ) {
     this.fechaDesde.setHours(0, 0, 0, 0);
     this.fechaHasta.setHours(23, 59, 59, 999);
@@ -292,12 +296,18 @@ export class ListVentasComponent implements OnInit {
   }
 
   cancelarVenta(venta: Venta): void {
+    // Fichas de cantina: si la venta las emitió están en manos del cliente.
+    // El backend además exige `VENTAS_CANCELAR_CON_FICHAS`.
+    const fichas = Number((venta as any).fichasCantidad) || 0;
+    const avisoFichas = fichas > 0
+      ? ` Esta venta emitió ${fichas} ficha${fichas === 1 ? '' : 's'}: recuperalas antes de cancelar.`
+      : '';
     // Requiere admin
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       width: '400px',
       data: {
         title: 'CANCELAR VENTA',
-        message: `¿Está seguro de cancelar la venta #${venta.id}? Esta acción requiere autorización de administrador.`,
+        message: `¿Está seguro de cancelar la venta #${venta.id}? Esta acción requiere autorización de administrador.${avisoFichas}`,
       },
     });
 
@@ -305,9 +315,17 @@ export class ListVentasComponent implements OnInit {
       if (result) {
         // TODO: validar credenciales admin via validate-credentials
         const estadoAnterior = venta.estado;
-        await firstValueFrom(this.repositoryService.updateVenta(venta.id, {
-          estado: VentaEstado.CANCELADA,
-        }));
+        try {
+          await firstValueFrom(this.repositoryService.updateVenta(venta.id, {
+            estado: VentaEstado.CANCELADA,
+          }));
+        } catch (e) {
+          // Antes el rechazo quedaba en una promesa sin manejar y la pantalla
+          // no decía nada. Con fichas, el motivo (falta de permiso) importa.
+          console.error('Error cancelando venta:', e);
+          this.snackBar.open(mensajeDeError(e, 'Error al cancelar la venta'), 'CERRAR', { duration: 5000, panelClass: ['error-snackbar'] });
+          return;
+        }
         // Revertir stock si la venta estaba CONCLUIDA
         if (estadoAnterior === VentaEstado.CONCLUIDA) {
           this.repositoryService.revertirStockVenta(venta.id).subscribe({
