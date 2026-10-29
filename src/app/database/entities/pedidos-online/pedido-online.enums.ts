@@ -49,3 +49,6 @@ export enum EstadoPagoOnline {
   REEMBOLSO_PENDIENTE = 'REEMBOLSO_PENDIENTE',
   DEVUELTO = 'DEVUELTO',
 }
+
+/** Forma de pago (formas_pago.nombre) del cobro con tarjeta por la tienda. La siembra TiendaPagoOnline. */
+export const FORMA_PAGO_UPAY = 'UPAY ONLINE';
