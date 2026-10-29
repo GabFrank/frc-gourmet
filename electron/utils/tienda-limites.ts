@@ -14,6 +14,8 @@ export const LOGIN_FALLOS_CUENTA_IP = 5;
 export const LOGIN_BLOQUEO_MS = 15 * MIN;
 export const LOGIN_FALLOS_IP_HORA = 20;
 export const OTP_POR_IP_HORA = 30;
+/** F5 (M-auth3): por día, para que una sola IP no agote el tope global diario. */
+export const OTP_POR_IP_DIA = 10;
 /** F5 (A-auth2): fallos de una cuenta desde cualquier IP en una hora antes de frenarla 15 min. */
 export const LOGIN_FALLOS_CUENTA_HORA = 30;
 
@@ -55,6 +57,7 @@ export function claveIp(ip: string): string {
 
 const fallosIp = new Ventana(60 * MIN);
 const otpIp = new Ventana(60 * MIN);
+const otpIpDia = new Ventana(24 * 60 * MIN);
 const fallosCuenta = new Ventana(60 * MIN);
 const fallosCuentaIp = new Map<string, { fallos: number; bloqueadoHasta: number }>();
 
@@ -108,11 +111,13 @@ export function confirmarLoginOk(cuentaId: number, ip: string): void {
 export function otpIpPermitido(ip: string, ahora = Date.now()): boolean {
   const k = claveIp(ip);
   if (otpIp.contar(k, ahora) >= OTP_POR_IP_HORA) return false;
+  if (otpIpDia.contar(k, ahora) >= OTP_POR_IP_DIA) return false;
   otpIp.sumar(k, ahora);
+  otpIpDia.sumar(k, ahora);
   return true;
 }
 
 /** Solo para tests. */
 export function reiniciarLimitesTienda(): void {
-  fallosIp.limpiar(); otpIp.limpiar(); fallosCuenta.limpiar(); fallosCuentaIp.clear();
+  fallosIp.limpiar(); otpIp.limpiar(); otpIpDia.limpiar(); fallosCuenta.limpiar(); fallosCuentaIp.clear();
 }

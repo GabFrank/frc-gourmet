@@ -17,6 +17,8 @@ import { esUrlCheckoutUpay } from '../../core/pago-online';
 
 declare const L: any;
 
+const IDEM_STORAGE = 'sf-pedido-idem';
+
 @Component({
   selector: 'sf-checkout',
   standalone: true,
@@ -286,18 +288,36 @@ export class CheckoutPage implements OnInit, OnDestroy {
    * server pudo haberlo guardado y el reintento devuelve ese mismo pedido) y se descarta
    * cuando el server contesta, con éxito o con un error de negocio (no se guardó nada).
    */
-  private idemKey: string | null = null;
+  private _idemKey: string | null = null;
+  /**
+   * F5 (auditoría M-F2-5): la clave también se guarda en sessionStorage, atada al contenido
+   * del carrito: si el envío se cortó y el cliente recarga la página, el reintento reusa la
+   * misma clave y no duplica el pedido. Si cambió el carrito, es otro pedido y otra clave.
+   */
+  private get idemKey(): string | null { return this._idemKey; }
+  private set idemKey(v: string | null) {
+    this._idemKey = v;
+    if (v == null) { try { sessionStorage.removeItem(IDEM_STORAGE); } catch { /* sin storage */ } }
+  }
   private claveIntento(): string {
-    if (!this.idemKey) {
+    const firma = JSON.stringify(this.cart.toPedidoItems());
+    if (!this._idemKey) {
+      try {
+        const g = JSON.parse(sessionStorage.getItem(IDEM_STORAGE) || 'null');
+        if (g?.firma === firma && typeof g?.clave === 'string') this._idemKey = g.clave;
+      } catch { /* sin storage o dato roto */ }
+    }
+    if (!this._idemKey) {
       const c: any = (globalThis as any).crypto;
-      this.idemKey = typeof c?.randomUUID === 'function'
+      this._idemKey = typeof c?.randomUUID === 'function'
         ? c.randomUUID()
         : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
           const r = (Math.random() * 16) | 0;
           return (ch === 'x' ? r : (r & 0x3) | 0x8).toString(16);
         });
+      try { sessionStorage.setItem(IDEM_STORAGE, JSON.stringify({ clave: this._idemKey, firma })); } catch { /* sin storage */ }
     }
-    return this.idemKey!;
+    return this._idemKey!;
   }
 
   private mensajeError(res: any): string {
