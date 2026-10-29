@@ -957,14 +957,6 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           await assertTerminalPuedeOperar(dataSource, _event, (v.caja as any)?.id ?? null, 'FINALIZAR');
         }
       }
-
-      // Concluir es cobrar, también por acá: sin `Pago` vinculado no se concluye
-      // (#329). Es el mismo camino por el que se cerró sin cobro la venta 3771.
-      // Cancelar sigue sin exigirlo. Va después del gate de terminal para no
-      // tapar su error.
-      if (estado === VentaEstado.CONCLUIDA && ventasAbiertas.some((v) => !(v as any).pago?.id)) {
-        throw new Error('VENTA_SIN_PAGO: la mesa tiene una cuenta abierta sin cobro registrado.');
-      }
       // Concluir es imputar plata a la caja de cada venta: si alguna de esas
       // cajas está cerrada no se concluye NINGUNA (el guard corre antes del
       // bucle de saves). A diferencia del gate de terminal, este no es opt-in:
@@ -983,6 +975,13 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
               contexto: 'cerrarVentasAbiertasMesa',
               lock: 'read',
             });
+          }
+          // Concluir es cobrar, también por acá: sin `Pago` vinculado no se
+          // concluye (#329). Es el mismo camino por el que se cerró sin cobro la
+          // venta 3771. Cancelar sigue sin exigirlo. Va después del gate de
+          // terminal y del guard de caja cerrada para no tapar sus errores.
+          if (ventasAbiertas.some((v) => !(v as any).pago?.id)) {
+            throw new Error('VENTA_SIN_PAGO: la mesa tiene una cuenta abierta sin cobro registrado.');
           }
         }
         for (const v of ventasAbiertas) {
