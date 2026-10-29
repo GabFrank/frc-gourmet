@@ -389,6 +389,10 @@ export function registerPedidosOnlinePedidosHandlers(
         // Compat: instalaciones que todavía no dibujaron sus zonas.
         zona = zonas.find((z) => z.id === Number(data.zonaDeliveryId)) || null;
         if (!zona) return { success: false, error: 'zona_delivery_invalida' };
+      } else {
+        // Sin zonas cargadas no hay forma de cobrar el envío: antes salía gratis
+        // a cualquier dirección (PLAN-tienda-online A3).
+        return { success: false, error: 'delivery_no_disponible' };
       }
 
       if (zona) {
@@ -554,9 +558,9 @@ export function registerPedidosOnlinePedidosHandlers(
     });
     const conPoligono = zonas.filter((z) => !!z.poligono);
     if (!conPoligono.length) {
-      // Todavía nadie dibujó las zonas: no se puede cotizar, pero tampoco se
-      // bloquea el pedido (el handler de creación mantiene el camino de compat).
-      return { success: true, cubierto: true, sinZonasDefinidas: true, costoEnvio: 0, zona: null };
+      // Todavía nadie dibujó las zonas: no se puede cotizar ni cobrar el envío,
+      // así que no hay delivery por la tienda (PLAN-tienda-online A3).
+      return { success: true, cubierto: false, sinZonasDefinidas: true, costoEnvio: 0, zona: null };
     }
     const zona = resolverZonaPorPunto(lat, lng, conPoligono as any) as ZonaDelivery | null;
     if (!zona) return { success: true, cubierto: false, costoEnvio: 0, zona: null };
