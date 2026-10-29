@@ -55,7 +55,21 @@ Verificado el 29/10:
 Decisión del propietario (29/10): la tienda va **siempre en tema claro** (ya lo es). Pruebas de pantalla de la
 tienda en claro.
 
-## 2. Alcance y fases
+## 2. Contención inmediata (F0, hoy, sin código ni merge)
+Mientras F1 no esté en producción, el riesgo C1 está abierto. Pasos, en orden, con OK del propietario:
+1. **Verificar C1 en producción:** pedir un código (`auth.otp.request`) al número del propietario por
+   `/pub/rpc`. Si la respuesta trae `devCodigo` → C1 confirmado; si llega un WhatsApp de Meta → C1 no aplica.
+   Es la única forma de saber si prod tiene `WHATSAPP_CLOUD_TOKEN`; no cambia datos salvo un registro de OTP.
+2. **Si C1 está confirmado** (o si no se puede verificar hoy): en el escritorio de Don Franco,
+   «Config Tienda Online» → **apagar «Aceptación automática»** (los pedidos quedan en la bandeja y el
+   personal decide) **o apagar la tienda** (`activa=false`). Recomendación: apagar la tienda; en toda su
+   historia tuvo 1 pedido (de prueba), así que no se pierde venta. Lo hace el propietario desde la app
+   (mi usuario no tiene PEDIDOS_ONLINE_CONFIGURAR, y está bien). Backup JSON de la config antes.
+3. Revisar en la bandeja de pedidos online si hubo pedidos web no reconocidos desde que se publicó.
+4. La tienda se vuelve a prender recién con F1 instalada en Don Franco y verificada (punto 1 repetido:
+   sin `devCodigo`).
+
+## 3. Alcance y fases
 
 Rama única `bot/ceo-frc-gourmet/feat-tienda-online` desde develop; cada fase es un commit/PR propio para poder mergear F1 antes.
 Propuesta de merge (decide el propietario): **F1 sola y cuanto antes** (cierra agujeros que ya están en
@@ -67,23 +81,33 @@ internet); F2+F3 juntas; F4 cuando uPay esté probado en su sandbox.
    `otp_no_disponible` y el login oculta la pestaña Teléfono (queda Email/Google).
 2. **IP real detrás del túnel:** nueva util `clientIp(req)`: si el socket es loopback **y** viene
    `cf-connecting-ip` (o `x-forwarded-for` cuando el socket es loopback), esa es la IP del cliente; si no, `req.ip`.
-   Una petición con `cf-connecting-ip`/`cf-ray` **nunca** se considera LAN para MESA_QR. Rate-limit `/pub/*`
-   usa `clientIp` como `keyGenerator`. No se confía en esas cabeceras si el socket no es loopback.
+   Regla exacta: (a) socket no loopback → `req.socket.remoteAddress`, se ignoran todas las cabeceras;
+   (b) socket loopback **con** `cf-connecting-ip` → ese valor (lo pone Cloudflare y reemplaza el que mande el
+   cliente); (c) socket loopback sin `cf-connecting-ip` → loopback (acceso local). **`X-Forwarded-For` no se usa
+   nunca** (se puede forjar y Cloudflare lo encadena). `trustProxy` de Fastify queda apagado para `/pub`.
+   Cualquier petición con `cf-connecting-ip` o `cf-ray` **nunca** es LAN para MESA_QR, aunque el valor sea una IP
+   privada. Rate-limit `/pub/*` usa `clientIp` como `keyGenerator`. Tests con cabeceras forjadas
+   (XFF=192.168.0.10 desde fuera, cf-connecting-ip privado, ambas juntas).
 3. **Cuentas:**
    - Login Google sobre cuenta existente por email **no verificado** con contraseña: se marca
      `emailVerificado=true`, se borra el hash de contraseña y se revocan todos los refresh tokens (el que la
      registró pierde acceso).
    - `perfil.update`: cambiar email → `emailVerificado=false`; contraseña nueva mínimo 6; cambio de contraseña
      revoca los demás refresh tokens. `me`, `perfil.update`, `pedido.mis/estado` rechazan cuentas inactivas.
-   - Bloqueo de `auth.login` tras 5 fallos por cuenta durante 15 min.
+   - Anti fuerza bruta de `auth.login` **por par cuenta+IP** (5 fallos → 15 min para esa IP en esa cuenta) más
+     un tope por IP (20 fallos/hora en cualquier cuenta). Así un tercero no puede bloquear la cuenta de otro:
+     solo se bloquea a sí mismo. Login por Google y por código de WhatsApp no se bloquean por esto.
    - OTP: tope de 10 códigos por teléfono por día y 30 por IP por hora.
-4. **Pedido:** `idempotencyKey` (uuid del cliente, columna única nullable) → reintento devuelve el mismo pedido.
+4. **Pedido:** `idempotencyKey` (uuid v4 del cliente). Unicidad **compuesta** `(cuenta_cliente_id, idempotency_key)`;
+   para invitado de mesa `(mesa_token, idempotency_key)`. Reintento del mismo dueño devuelve su pedido; una
+   clave igual de otro dueño nunca devuelve datos ajenos (se trata como clave nueva).
    Validar `metodoPago` y `canalOrigen` contra enum (canal lo decide el servidor: WEB o MESA_QR),
    `fechaProgramada` ignorada (no hay UI), `cantidad` 1–50, ≤ 40 ítems, textos recortados a su largo de columna.
 5. **Delivery sin zonas:** si no hay zonas activas con polígono, `permiteDelivery` efectivo = false en
    `tienda.config` y `pedido.crear` DELIVERY → `delivery_no_disponible`.
-- Migración: `pedidos_online.idempotency_key varchar(64) unique null`, índice en `cuenta_cliente_id`,
-  `cuentas_cliente.login_fallidos int default 0`, `bloqueado_hasta timestamp null`. Reversible (`down`).
+- Migración (solo agrega): `pedidos_online.idempotency_key varchar(64) null` + índice único compuesto, índice en
+  `cuenta_cliente_id`, tabla `auth_intentos_fallidos (cuenta_id, ip, fallidos, bloqueado_hasta)`. Sin borrar ni
+  transformar datos existentes. `down` reversible (columnas nuevas vacías de valor histórico).
 
 ### F2 — Punta a punta (carta → carrito → pedido → local)
 1. Revalidar carrito: al abrir carrito/checkout se pide `menu.get` y se recalcula cada línea; si cambió precio o
@@ -101,14 +125,18 @@ internet); F2+F3 juntas; F4 cuando uPay esté probado en su sandbox.
 ### F3 — Login WhatsApp y Google con credenciales desde la app
 1. En «Config Tienda Online» (escritorio): sección «Ingreso de clientes»:
    - WhatsApp Cloud API: Phone Number ID, plantilla, idioma y token. El token se guarda cifrado con la clave
-     de la máquina (keytar; respaldo archivo `.local` como el JWT) — nunca vuelve al cliente ni a la API RPC.
+     de la máquina con `safeStorage` de Electron (DPAPI en Windows); si `safeStorage` no está disponible no se
+     guarda en texto plano: la pantalla avisa y se siguen usando variables de entorno. Nunca vuelve al cliente
+     ni a la API RPC (el handler devuelve solo «configurado sí/no»).
    - Google: Client ID (público).
    - Botón «Probar envío» (manda un código a un número que se ingresa) y estado de cada proveedor.
 2. Prioridad: valores de la pantalla > variables de entorno.
 3. Prerrequisitos del propietario (fuera del código): cuenta WhatsApp Business en Meta con número propio y
    plantilla de autenticación aprobada; Client ID OAuth web de Google con origen `https://app.frc-gourmet.com`.
 
-### F4 — Pago online con uPay (requiere la documentación de la API de uPay)
+### F4 — Pago online con uPay (FUERA del alcance que se aprueba ahora)
+Diseño preliminar; **no se aprueba ni implementa hasta tener la doc de la API de uPay y su sandbox**. Con eso se
+reescribe esta sección, se re-audita y se pide un OK aparte.
 Diseño independiente de la pasarela (`electron/services/pagos-online/`), primer proveedor uPay:
 1. Pedido con `metodoPago=UPAY` se crea en estado `PENDIENTE_PAGO` (nuevo), **no** se materializa ni va a
    cocina. Se crea la orden en uPay y el cliente va a su checkout (redirect/iframe según doc).
@@ -120,14 +148,15 @@ Diseño independiente de la pasarela (`electron/services/pagos-online/`), primer
    «REEMBOLSO PENDIENTE» para hacerlo a mano en uPay (sin reembolso automático en esta fase).
 5. Interruptor `pagoOnlineActivo` (apagado por defecto) y efectivo sigue disponible.
 6. Credenciales uPay en la misma sección cifrada de F3.
-- Migración: `pedidos_online.estado_pago`, `pago_proveedor`, `pago_referencia`, `pago_payload_json`,
-  `pagado_en`; tabla `pagos_online_eventos` (auditoría de webhooks). Reversible.
+- Migración (solo agrega): `pedidos_online.estado_pago`, `pago_proveedor`, `pago_referencia`, `pago_payload_json`,
+  `pagado_en`; tabla `pagos_online_eventos`. **El `down` no borra datos de pago**: si hubo algún pago registrado,
+  el `down` aborta con error; la vuelta atrás de F4 es apagar `pagoOnlineActivo` (los datos quedan).
 
 ### Fuera de alcance (propuesta para después)
 Avisos por WhatsApp al cliente del estado del pedido, cancelar por el cliente, vincular cuenta web con Cliente/RUC
 para factura, pantalla de horarios, curaduría de carta y fotos (operativo, no código).
 
-## 3. Pruebas
+## 4. Pruebas
 - Backend (ts-node, SQLite y Postgres): ampliar `test:pedidos-online`, `test:mesa-qr`,
   `test:zona-delivery-online` + nuevo `test:tienda-seguridad` (OTP sin devCodigo empaquetado, IP detrás de
   túnel, toma de cuenta, idempotencia, topes, delivery sin zonas) y `test:pagos-online` (webhook firmado,
@@ -138,17 +167,23 @@ para factura, pantalla de horarios, curaduría de carta y fotos (operativo, no c
   antes del merge; si no hay sandbox, se dice y no se mergea.
 - Gates: `build`, `check`, `test:all` (sin fallas nuevas sobre la línea base de develop), CI 4/4.
 
-## 4. Riesgos y vuelta atrás
-- F1 puede dejar sin login por teléfono si prod no tiene WhatsApp configurado: es el comportamiento buscado
-  (quedan Email y, con F3, Google). Se avisa al propietario antes del merge.
+## 5. Riesgos y vuelta atrás
+- Si F0 confirma que prod no tiene WhatsApp, F1 quita el login por teléfono hasta cargar las credenciales (F3):
+  es intencional (hoy ese login es inseguro); quedan Email y Google. Si F0 muestra que sí tiene WhatsApp, F1 no
+  cambia nada para el cliente. Se avisa al propietario antes del merge con el resultado de F0.
+- **Migraciones sobre la base real:** antes de cada merge se confirma que Don Franco tiene backup automático
+  reciente y se pide un backup manual; las migraciones solo agregan columnas/tablas (no tocan filas); después de
+  que la alpha se instala se verifica por la API que la tienda responde (`tienda.config`, `menu.get`) y que el
+  pedido de prueba no trae `devCodigo`. Un pedido de prueba real en prod solo con OK del propietario.
 - Cambio de IP real puede afectar MESA_QR en el local si el wifi pasa por el túnel: el local accede por LAN
   directa (sin cabeceras de Cloudflare), se prueba en la copia con y sin cabeceras.
 - Vuelta atrás: revert del squash-commit de cada fase; migraciones con `down`; F4 detrás de
   `pagoOnlineActivo`; F3 cae a variables de entorno si la tabla de credenciales está vacía.
 - Don Franco está en canal alpha: cada merge a develop llega solo al local. No se mergea sin OK.
 
-## 5. Pendientes del propietario
-1. OK del plan y de la estrategia de merge (F1 sola primero).
+## 6. Pendientes del propietario
+0. OK para F0 (verificar con un código a su número y, si se confirma, apagar la tienda desde la app).
+1. OK del plan (F1–F3) y de la estrategia de merge (F1 sola primero).
 2. Documentación de la API de uPay (y acceso a su sandbox) para F4.
 3. Cuenta WhatsApp Business (Meta) y Client ID de Google para F3.
 4. Zonas de delivery y carta (productos publicados y fotos) para salir al público.
