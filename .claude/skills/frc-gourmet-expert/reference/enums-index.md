@@ -80,6 +80,11 @@ PdvMesaEstado = DISPONIBLE | OCUPADO
 DeliveryEstado = ABIERTO | PARA_ENTREGA | EN_CAMINO | ENTREGADO | CANCELADO
 DeliveryModo   = DELIVERY | RETIRO        // se reparte / lo pasa a buscar
 
+// (en pdv-config.entity.ts) — fichas de cantina de la venta directa (2026-10)
+// Guardado como varchar sin CHECK en `pdv_config.fichas_modo` y
+// `producto.ficha_modo` (null en el producto = hereda el global).
+FichaModo      = POR_UNIDAD | POR_ITEM | NO_IMPRIME
+
 // (en shared/utils/canal-venta.util.ts — NO es una columna: se DERIVA)
 // Cómo llegó el pedido a manos del cliente. Fuente única compartida entre el
 // backend (que además tiene el CASE SQL equivalente en

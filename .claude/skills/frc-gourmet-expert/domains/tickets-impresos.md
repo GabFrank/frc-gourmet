@@ -160,7 +160,9 @@ que casi todo su diseño es antifraude.
 - **Ticket de pago antes que fichas**, en la misma cadena (`imprimirPostConclusion`).
 - **Claim antes de imprimir** (`ventas.fichas_emitidas_at`): si la impresora
   falla quedan emitidas sin papel y se reimprimen; nunca se imprimen dos veces.
-- **Reimpresión** marcada `** REIMPRESION **`, con permiso propio y contador.
+- **Sólo con `Pago`**: concluir sin cobrar no entrega fichas.
+- **Reimpresión** marcada `** REIMPRESION **` y con código `-R<n>`, permiso propio
+  y contador (sólo suma si salió alguna ficha). No acepta `printerId`.
 
 Va a la impresora de tickets de la caja (`TICKET_VENTA` / `Dispositivo.printerTicket`),
 no hay rol `FICHA`. Detalle completo → [ventas-pdv.md](ventas-pdv.md) §Fichas de cantina.

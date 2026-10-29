@@ -201,3 +201,20 @@ Registrados en `register-all-handlers.ts` (`registerFuncionesTareasHandlers`, `r
 | `funciones-tareas-lectura.handler.ts` | `ft-cumplimiento`, `ft-vencidas`, `ft-historico`, `ft-de-turno-hoy`, `ft-estado-motor` | REPORTES \| VER_TODO |
 
 Permisos abreviados: `RRHH_FT_<X>`.
+
+## Handlers nuevos 2026-10 — Fichas de cantina (venta directa)
+
+- **`print-fichas-venta`** (`documentos-tickets.handler.ts`) — **sólo reimpresión** de las
+  fichas de una venta CONCLUIDA que ya las emitió. Permiso `DOCUMENTOS_REIMPRIMIR_FICHAS`.
+  No acepta `printerId` (va a la impresora de tickets de la terminal). Sale con
+  `** REIMPRESION **`, código `-R<n>` y suma `ventas.fichas_reimpresiones` sólo si salió
+  alguna ficha. La emisión original no tiene canal: la hacen los hooks.
+- Funciones internas (sin IPC, sin permisos — las llaman hooks): `buildFichasVenta` (pura,
+  la que testea `test:fichas`), `printFichasVentaInternal`, `imprimirFichasSiCorresponde`
+  (gate + claim), `imprimirPostConclusion` (ticket → fichas, en orden).
+- Helper `electron/utils/venta-directa.utils.ts` → `esVentaDirecta(venta)`: predicado único
+  que comparten los tres gates de cocina y las fichas.
+- Cambios en canales existentes: `updateVenta` y `createVenta` descartan `fichas*` del
+  payload; `updateVenta` exige `VENTAS_CANCELAR_CON_FICHAS` para cancelar una venta con
+  fichas; `updatePdvConfig`/`createPdvConfig` normalizan los campos `fichas*`;
+  `createProducto`/`updateProducto` aceptan `fichaModo`.

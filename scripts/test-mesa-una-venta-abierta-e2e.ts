@@ -243,7 +243,10 @@ async function main() {
   console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
   console.log(`  ✓ ${passed}   ✗ ${failed}   Total: ${passed + failed}`);
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
-  if (failed > 0) process.exit(1);
+  // Salida explícita también en verde: el worker de reintento de comandas de
+  // ventas.handler deja un intervalo vivo, y sin esto el proceso no termina
+  // nunca — `test:all` se colgaba en esta suite.
+  process.exit(failed > 0 ? 1 : 0);
 }
 
 main().catch(e => { console.error('ERROR FATAL:', e); process.exit(1); });

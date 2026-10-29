@@ -100,6 +100,13 @@ comportamiento) y además sirve para separar el canal en los reportes.
 ⚠️ Si tocás esos hooks, acordate de cargar las relaciones: el chequeo de
 `venta.delivery?.id` da siempre falso si la consulta no la trae.
 
+Desde 2026-10 el predicado vive en **un solo lugar**,
+`esVentaDirecta(venta)` (`electron/utils/venta-directa.utils.ts`), que usan los
+tres gates de cocina **y las fichas de cantina**. La venta directa es
+exactamente la que no va a cocina y la única que emite fichas: si el predicado
+divergiera, una venta podría ir a cocina y además entregar fichas. Precondición:
+`mesa`, `comanda` y `delivery` cargadas (`RELACIONES_VENTA_DIRECTA`).
+
 
 ## Estado de la mesa: quién la ocupa y quién la libera (2026-08)
 
@@ -945,6 +952,80 @@ el segundo escritor **bloquea** en vez de pasar de largo. En SQLite queda el
 invariante determinista: el modo y el envío no se despegan tras pasar por cada
 handler.
 
+## Fichas de cantina (venta directa, 2026-10) — leer antes de tocar el cobro
+
+Modo **cantina de eventos**: el cliente paga en caja y retira en la barra con
+**fichas**, un papel por producto. Las mesas no cambian (siguen con la comanda a
+la barra). Sólo la **venta rápida** emite fichas.
+
+### Cuándo se emiten
+
+Sólo al **cobrar**: transición ABIERTA → CONCLUIDA de una venta directa
+(`esVentaDirecta`) que tiene **`Pago`**, con `PdvConfig.fichasHabilitadas`. Hay
+exactamente dos caminos y los dos llaman a `imprimirFichasSiCorresponde`
+(`documentos-tickets.handler.ts`), siempre post-commit y fire-and-forget:
+
+| Camino | Cómo |
+|---|---|
+| `updateVenta` (diálogo F10/F11, F2) | `imprimirPostConclusion(…, { imprimirTicket, emitirFichas: estadoAnterior === ABIERTA })`: ticket y después fichas, en la misma cadena |
+| `cobrar-venta-credito` | Después del commit y **fuera** del `if (imprimirPagare)`: ticket → pagaré → fichas |
+
+- **Las fichas no dependen del ticket.** F10 (sin ticket) emite fichas igual.
+- **Rehabilitar** (CANCELADA → CONCLUIDA desde el historial) **no** emite: sin el
+  `emitirFichas`, una venta vieja que nunca emitió largaba fichas en un momento
+  cualquiera.
+- **Sin `Pago` no emite.** `updateVenta` permite concluir sin cobrar (preexistente,
+  ver known-bugs); con fichas eso era entregar mercadería.
+
+### Claim idempotente
+
+`ventas.fichas_emitidas_at` se reclama con un UPDATE condicional
+(`WHERE fichas_emitidas_at IS NULL`, QueryBuilder + `affected`, portable
+SQLite/Postgres) **antes** de imprimir. Dos disparos imprimen una vez. Si la
+impresora falla, la venta queda emitida sin papel y se resuelve reimprimiendo:
+se prefirió a imprimir dos veces, que son fichas canjeables de más.
+
+`fichasEmitidasAt` / `fichasCantidad` / `fichasReimpresiones` **sólo los escribe el
+backend**: `updateVenta` y `createVenta` los descartan del payload. El PdV manda la
+venta entera, y una copia vieja reseteaba el claim (doble emisión) o ponía
+`fichasCantidad = 0` para cancelar sin permiso.
+
+### Qué se imprime
+
+Modo efectivo por ítem: `producto.fichaModo ?? pdvConfig.fichasModo`.
+`POR_UNIDAD` → N fichas; `POR_ITEM` → una con `N x`; `NO_IMPRIME` → ninguna.
+Cantidad no entera (peso) fuerza POR_ITEM. Correlativo **por venta** (`FICHA 3/7`),
+código `venta-numero`. Detalle de variación/adicionales con `cargarDetalleDeItems`.
+Precio de lista efectivo (`precio + adicionales − descuentoUnitario`, con
+`Number()`); el descuento global de la venta no se prorratea. **Tope**: más de
+`MAX_FICHAS_POR_VENTA` (200) en una venta → toda la venta sale POR_ITEM.
+
+Impresión: **un `printTicketSpec` por ficha** (ver
+[tickets-impresos.md](tickets-impresos.md) §Fichas). Impresora de tickets de la
+caja que cobra (`TICKET_VENTA` / `Dispositivo.printerTicket`). No hay rol `FICHA`:
+la resolución de tickets es por dispositivo, y un rol de sector no distingue la
+caja 1 de la caja 2 de un evento.
+
+### Cancelar y reimprimir
+
+- Cancelar una venta con `fichasCantidad > 0` exige además
+  **`VENTAS_CANCELAR_CON_FICHAS`** (sólo GERENTE), leído de la BD. La UI (últimas
+  ventas, historial) avisa "recuperá N fichas".
+- Reimprimir: canal **`print-fichas-venta`**, permiso
+  **`DOCUMENTOS_REIMPRIMIR_FICHAS`** (CAJERO y GERENTE: el cajero es quien
+  reimprime cuando falla el papel). Marca `** REIMPRESION **`, código `-R<n>`,
+  ignora `printerId` del cliente, el contador sólo suma si salió alguna ficha.
+  La reimpresión se arma con la config y los productos **de hoy**.
+- ⚠️ Instalaciones existentes: el seed no toca roles plantilla que ya existen;
+  hay que asignar los dos permisos a mano.
+
+### Límites conocidos (fase 2 en `todos-pendientes.md`)
+
+No hay canje por escaneo: nada detecta una ficha fotocopiada o una reimpresión de
+más, salvo el contador y el `-R<n>`. La PWA mobile no tiene UI de fichas (el
+backend aplica igual). Tests: `npm run test:fichas` (84). Manual:
+`docs/testing/TESTING-CHECKLIST-FICHAS-CANTINA.md`.
+
 ## Sistema de Atajos PdV
 
 Botones rápidos en el PdV para productos / categorías frecuentes.
@@ -1037,7 +1118,11 @@ Una sola fila. Campos:
 | `pizzaMaxSabores` | 2 | Máximo sabores por pizza. **Es el default**: cada producto puede sobreescribirlo con `Producto.maxVariacionesSimultaneas` |
 | `pizzaEstrategiaPrecio` | MAYOR_PRECIO | MAYOR_PRECIO o PROMEDIO. **Es el default**: se sobreescribe con `Producto.estrategiaPrecioVariacion` |
 | `autoImprimirComanda` | true | Al agregar items → imprimir comanda automáticamente a impresoras del sector |
-| `autoImprimirTicketVenta` | true | Al cobrar (CONCLUIDA) → imprimir ticket de venta automáticamente |
+| `autoImprimirTicketVenta` | true | Al concluir **sin elección explícita** → imprimir ticket de venta. En el diálogo de cobro decide F10/F11 (`__imprimirTicketVenta` gana); esto gobierna el cobro rápido F2, el crédito y el historial. Editable en la config del PdV desde 2026-10 (antes no tenía campo) |
+| `fichasHabilitadas` | false | Fichas de cantina al concluir una venta directa. Ver §Fichas de cantina |
+| `fichasModo` | POR_UNIDAD | `FichaModo` por defecto; `Producto.fichaModo` lo pisa |
+| `fichasMostrarPrecio` | false | Precio en la ficha (unitario en POR_UNIDAD, subtotal en POR_ITEM) |
+| `fichasNombreEvento` | null | Encabezado de cada ficha. UPPERCASE, máx. 120 |
 | `imprimirPrecuentaAlSolicitar` | true | Botón "Pre-cuenta" imprime sin confirmación intermedia |
 | `balanzaPrefijo` | '2' | Prefijo EAN-13 de etiqueta de balanza (buffet por peso) |
 | `balanzaModo` | PESO | Qué codifica el valor embebido: PESO o PRECIO |

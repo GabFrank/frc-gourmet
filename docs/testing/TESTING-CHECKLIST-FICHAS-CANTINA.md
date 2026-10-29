@@ -66,9 +66,10 @@ la barra.
 | # | Paso | Esperado |
 |---|---|---|
 | 3.1 | *Utilitarios → Últimas ventas*, en una venta con fichas: menú ⋮ | Aparece **Reimprimir fichas (N)** |
-| 3.2 | Reimprimir con usuario CAJERO | Salen las N fichas con `** REIMPRESION **` |
+| 3.2 | Reimprimir con usuario CAJERO | Salen las N fichas con `** REIMPRESION **` y el código termina en `-R1` (la segunda vez, `-R2`) |
 | 3.3 | Con un usuario sin `DOCUMENTOS_REIMPRIMIR_FICHAS` (p. ej. MOZO) | Mensaje de permiso requerido; no imprime |
 | 3.4 | En una venta sin fichas (de mesa) | La opción no aparece |
+| 3.5 | Con la impresora **apagada**, reimprimir | Error visible. En la base `fichas_reimpresiones` **no** sube |
 
 > ⚠️ Instalaciones existentes: los **roles plantilla no se actualizan solos**
 > (el seed no toca un rol que ya existe). Hay que darle a mano
@@ -85,6 +86,7 @@ la barra.
 | 4.4 | *Ventas → Historial* → Cancelar una venta con fichas | Mismo aviso y mismo permiso. El error se ve en pantalla (antes el historial no mostraba ningún error) |
 | 4.5 | Historial → **Rehabilitar** la venta cancelada | Vuelve a CONCLUIDA y **no** reimprime fichas |
 | 4.6 | Cancelar una venta **sin** fichas con CAJERO | Funciona como siempre |
+| 4.7 | Con fichas **apagadas**, cobrar una venta rápida. Prender fichas, cancelar esa venta desde el historial y **rehabilitarla** | **No** salen fichas: rehabilitar no es cobrar |
 
 ## Parte 5: Fallos
 
@@ -93,6 +95,7 @@ la barra.
 | 5.1 | Apagar la impresora y cobrar una venta rápida con 3 cervezas | El cobro **se completa**. Aparece el aviso de impresora del sistema |
 | 5.2 | Prender la impresora → Últimas ventas → Reimprimir fichas | Salen las 3 con `REIMPRESION` |
 | 5.3 | Terminal **sin** impresora y sin impresora default | El cobro se completa. La venta queda con fichas emitidas y se reimprime desde una terminal con impresora |
+| 5.4 | Venta rápida de 300 cervezas (o de cantidad absurda por error) | Sale **una** ficha `300 x` por ítem: pasado el tope de 200 fichas, toda la venta sale por ítem |
 
 ---
 
@@ -106,3 +109,36 @@ FROM ventas ORDER BY id DESC LIMIT 10;
 - Una venta directa cobrada tiene `fichas_emitidas_at` y `fichas_cantidad` > 0.
 - Una venta de mesa o delivery tiene `fichas_cantidad = 0`.
 - Cada reimpresión suma 1 a `fichas_reimpresiones`.
+
+---
+
+## Limitaciones de los tests automáticos
+
+Para quien corra la batería en un entorno preparado:
+
+- **`npm run test:fichas` corre sólo sobre SQLite.** En Postgres no se ejecutó nada
+  de esto:
+  - el claim (`UPDATE … WHERE fichas_emitidas_at IS NULL` + `affected`);
+  - el `fichas_reimpresiones + 1`;
+  - la migración `1793299117857-FichasCantina` sobre una base con datos.
+
+  Lo único que toca Postgres es el job *Migration run* del CI, y sólo para la
+  migración. Si hay un Postgres a mano, conviene:
+  1. levantar la app en modo server sobre Postgres y cobrar una venta rápida;
+  2. disparar dos cobros casi simultáneos de la misma venta y ver que sale una
+     sola tanda;
+  3. correr `npm run migration:generate` contra Postgres y confirmar que no
+     genera diff (el `COMMENT` de `producto.ficha_modo` es el sospechoso).
+- **La impresora es simulada** (`__setFichasPrintImplsForTests`). Los cortes, el
+  ancho real, el `big` en 58 mm y el fallback CUPS (`lp`) sólo se ven con
+  papel.
+- **No cubiertos por test automático:**
+  - el orden ticket → pagaré → fichas en el crédito **con** pagaré, porque el
+    pagaré llama a la impresora real y no se puede inyectar;
+  - el gate de `printComandaInternal` y `autoPrintComandaIfNeeded` tras el
+    refactor a `esVentaDirecta`. Sí está cubierto `crearComandaItemsSiCorresponde`,
+    y los otros dos usan exactamente el mismo predicado y las mismas relaciones;
+  - que la reimpresión use la impresora del `Dispositivo` y no la default.
+- **El build de Angular y el AOT pasan**, pero la UI (config del PdV, producto,
+  últimas ventas, historial) no tiene test automático: la cubren las partes 2 a 4
+  de este manual.

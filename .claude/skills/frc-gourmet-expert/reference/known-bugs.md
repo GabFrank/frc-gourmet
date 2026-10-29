@@ -63,6 +63,30 @@ depure esto. Se dejó como está para no tocar el camino de standalone.
 
 ## Ventas / PdV
 
+### `updateVenta` deja concluir una venta sin cobrarla — ABIERTO (preexistente, mitigado para fichas)
+
+`updateVenta` sólo pide `VENTAS_PDV`, y la transición ABIERTA → CONCLUIDA no exige un
+`Pago` ni una CPC: un cliente por `/api/rpc` puede mandar `{ estado: 'CONCLUIDA' }` sin
+cobrar. Antes eso daba un ticket sin cobro; con las fichas de cantina daba **mercadería**.
+Mitigado sólo para fichas (2026-10): `imprimirFichasSiCorresponde` exige `venta.pago`.
+El hueco de fondo sigue: falta exigir pago/CPC (o un permiso `VENTAS_CONCLUIR_SIN_PAGO`).
+
+### `updateVenta` mergea `mesa`/`comanda`/`delivery`/`canalOrigen` en cualquier estado — ABIERTO (preexistente)
+
+Una venta ya concluida puede "mudarse" de canal con un payload. Con fichas, una venta de
+mesa convertida a directa en el mismo payload que la concluye emitiría fichas **y** ya
+habría ido a cocina. Fix sugerido: descartar esas relaciones del merge cuando la venta no
+está ABIERTA. Defensa en profundidad pendiente: `cancelarVentaCompletaEnTx`
+(`venta-reversa.utils.ts`) no mira `fichasCantidad`; hoy no aplica porque sólo cancela
+delivery/web, que no emiten fichas.
+
+### ✅ RESUELTO — La hora de TODOS los tickets salía «p.?m.» (2026-10)
+
+`toLocaleString('es-PY')` separa «p.» de «m.» con un U+00A0 (según ICU, U+202F) y el
+saneador CP437 lo convertía en `?`. Ahora los espacios duros pasan a espacio
+(`REEMPLAZOS_TICKET` en `ticket.utils.ts`). Lo destapó `test:fichas`; regresión en
+`test:ticket-venta` (bloque charset).
+
 ### ✅ RESUELTO — Se podían desactivar líneas de pago de otra caja, incluso cerrada (2026-08-27)
 
 **Síntoma:** el arqueo de una caja ya cerrada cambiaba retroactivamente, después
