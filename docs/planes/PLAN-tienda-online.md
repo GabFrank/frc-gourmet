@@ -97,7 +97,8 @@ internet); F2+F3 juntas; F4 cuando uPay esté probado en su sandbox.
    - Anti fuerza bruta de `auth.login` **por par cuenta+IP** (5 fallos → 15 min para esa IP en esa cuenta) más
      un tope por IP (20 fallos/hora en cualquier cuenta). Así un tercero no puede bloquear la cuenta de otro:
      solo se bloquea a sí mismo. Login por Google y por código de WhatsApp no se bloquean por esto.
-   - OTP: tope de 10 códigos por teléfono por día y 30 por IP por hora.
+   - OTP: tope de 10 códigos por teléfono por día, 30 por IP por hora y **tope global de 300/día** (configurable);
+     al pasar el 80 % se avisa al staff por el WhatsApp de avisos y al llegar al tope se corta el envío.
 4. **Pedido:** `idempotencyKey` (uuid v4 del cliente). Unicidad **compuesta** `(cuenta_cliente_id, idempotency_key)`;
    para invitado de mesa `(mesa_token, idempotency_key)`. Reintento del mismo dueño devuelve su pedido; una
    clave igual de otro dueño nunca devuelve datos ajenos (se trata como clave nueva).
@@ -105,7 +106,9 @@ internet); F2+F3 juntas; F4 cuando uPay esté probado en su sandbox.
    `fechaProgramada` ignorada (no hay UI), `cantidad` 1–50, ≤ 40 ítems, textos recortados a su largo de columna.
 5. **Delivery sin zonas:** si no hay zonas activas con polígono, `permiteDelivery` efectivo = false en
    `tienda.config` y `pedido.crear` DELIVERY → `delivery_no_disponible`.
-- Migración (solo agrega): `pedidos_online.idempotency_key varchar(64) null` + índice único compuesto, índice en
+- Migración (solo agrega): `pedidos_online.idempotency_key varchar(64) null` + **dos índices únicos parciales** (`(cuenta_cliente_id, idempotency_key)
+  WHERE cuenta_cliente_id IS NOT NULL` y `(mesa_token, idempotency_key) WHERE mesa_token IS NOT NULL`; ambos
+  soportados igual en SQLite y Postgres, probados en los dos), índice en
   `cuenta_cliente_id`, tabla `auth_intentos_fallidos (cuenta_id, ip, fallidos, bloqueado_hasta)`. Sin borrar ni
   transformar datos existentes. `down` reversible (columnas nuevas vacías de valor histórico).
 
@@ -177,7 +180,9 @@ para factura, pantalla de horarios, curaduría de carta y fotos (operativo, no c
   pedido de prueba no trae `devCodigo`. Un pedido de prueba real en prod solo con OK del propietario.
 - Cambio de IP real puede afectar MESA_QR en el local si el wifi pasa por el túnel: el local accede por LAN
   directa (sin cabeceras de Cloudflare), se prueba en la copia con y sin cabeceras.
-- Vuelta atrás: revert del squash-commit de cada fase; migraciones con `down`; F4 detrás de
+- Vuelta atrás: revert del squash-commit de cada fase. **Revertir F1 reabre C1/C2/A1: antes (o a la vez) se
+  vuelve a apagar la tienda (F0).** Anti fuerza bruta distribuido contra una cuenta solo queda acotado por el
+  tope por IP: compromiso aceptado y documentado. migraciones con `down`; F4 detrás de
   `pagoOnlineActivo`; F3 cae a variables de entorno si la tabla de credenciales está vacía.
 - Don Franco está en canal alpha: cada merge a develop llega solo al local. No se mergea sin OK.
 
