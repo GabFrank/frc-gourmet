@@ -55,19 +55,29 @@ export function interpretarPago(sesion: any, pago: any, esperado: EsperadoPago):
     return { tipo: 'PENDIENTE', detalle: `pago ${status || '—'}/${sub || '—'}`, paymentId: ses.paymentId };
   }
 
-  // Cobrado: tiene que ser ESTE pedido y ESTE monto.
-  const monto = montoUpay(pago?.amount ?? sesion?.amount);
-  const moneda = String(pago?.amount?.currency ?? sesion?.amount?.currency ?? '').toUpperCase();
+  // Cobrado: tiene que ser ESTE pedido y ESTE monto. F5 (plan §12): monto y moneda salen del
+  // PAGO (GET /payments/{id}/status, que según la doc trae amount {value, currency}); sin
+  // fallback a la sesión, que solo dice lo que se pidió cobrar, no lo cobrado.
+  if (pago?.amount == null || typeof pago.amount !== 'object' || pago.amount.currency == null) {
+    return { tipo: 'INCONSISTENTE', paymentId: ses.paymentId, detalle: 'el pago no informa monto y moneda' };
+  }
+  const monto = montoUpay(pago.amount);
+  const moneda = String(pago.amount.currency).toUpperCase();
   // La doc no deja claro en qué campo vuelve operationReferenceId (merchant.referenceId u
-  // orderId): vale cualquiera. La sesión ya se consulta por el id guardado del intento.
+  // orderId; en el ejemplo de la doc orderId es otro valor): en la sesión vale cualquiera. Si el
+  // PAGO trae merchant.seller.operationReferenceId, tiene que ser el del intento.
   const refs = [
     sesion?.merchant?.referenceId, sesion?.merchant?.orderId, sesion?.merchant?.seller?.operationReferenceId,
   ].filter((r) => r != null).map(String);
+  const refPago = pago?.merchant?.seller?.operationReferenceId;
+  if (refPago != null && String(refPago) !== esperado.referencia) {
+    return { tipo: 'INCONSISTENTE', paymentId: ses.paymentId, detalle: `referencia del pago ${refPago} ≠ ${esperado.referencia}` };
+  }
   const ref = refs.length && !refs.includes(esperado.referencia) ? refs.join('|') : null;
   if (!Number.isFinite(monto) || Math.round(monto) !== Math.round(esperado.monto)) {
     return { tipo: 'INCONSISTENTE', paymentId: ses.paymentId, detalle: `monto ${monto} ≠ pedido ${esperado.monto}` };
   }
-  if (moneda && moneda !== 'PYG') {
+  if (moneda !== 'PYG') {
     return { tipo: 'INCONSISTENTE', paymentId: ses.paymentId, detalle: `moneda ${moneda}` };
   }
   if (ref != null) {

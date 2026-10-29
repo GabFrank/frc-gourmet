@@ -22,10 +22,13 @@ módulo completo (decisión del propietario); la tienda sigue apagada en producc
 9. M-auth2/M-auth3 — topes por IPv6 /64; 10 códigos por IP por día, antes del tope global.
 10. M-auth4 — Google cierra las sesiones de una cuenta con email sin verificar; `iss` y timeout.
 11. M-auth5 — rotación de refresh atómica; reuso de un refresh rotado revoca todo.
-12. M-pay2 — verificación de monto/moneda/referencia: regla final con las claves STG de uPay
-    (hasta entonces el pago con tarjeta sigue apagado y no se mergea).
+12. M-pay2 — verificación de monto/moneda/referencia: monto y moneda se exigen en el PAGO
+    (`amount {value, currency}`), sin fallback a la sesión; si el pago trae
+    `merchant.seller.operationReferenceId`, tiene que ser el del intento. Confirmar la forma
+    real de la respuesta con las claves STG de uPay (hasta entonces el pago sigue apagado).
 13. M-pay4 — rechazo y «a devolver» en la misma transacción.
-14. M-pay5 — un pedido con error no corta el ciclo del job.
+14. M-pay5 — un pedido con error no corta el ciclo del job; `pagoId` repetido (índice único)
+    se captura: no se da por pagado, se registra `pago_id_duplicado` y se avisa al personal.
 15. M-pay1 — FALLIDO sin reintento: se cancela pasadas 2 h y vencida la sesión.
 16. M-F2-5 — clave de idempotencia del checkout persistente (sessionStorage, atada al carrito).
 17. M-F2-7 — sin caja del usuario, no se acepta (no cae en una caja ajena).
