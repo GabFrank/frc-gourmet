@@ -1,4 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
+import { FORMA_PAGO_UPAY } from '../entities/pedidos-online/pedido-online.enums';
 
 /**
  * Tienda online F4 (docs/planes/PLAN-tienda-online.md): pago online con uPay.
@@ -76,6 +77,15 @@ export class TiendaPagoOnline1793500000000 implements MigrationInterface {
     await queryRunner.query(
       `CREATE INDEX IF NOT EXISTS "IDX_pagos_online_eventos_pedido" ON "pagos_online_eventos" ("pedido_online_id")`,
     );
+
+    // Forma de pago del cobro con tarjeta por la tienda. Inactiva: el PdV no la ofrece a
+    // mano (solo la usa la materialización de un pedido pagado); no mueve la caja física.
+    const fp = await queryRunner.query(`SELECT id FROM "formas_pago" WHERE "nombre" = '${FORMA_PAGO_UPAY}'`);
+    if (!fp.length) {
+      await queryRunner.query(
+        `INSERT INTO "formas_pago" ("nombre", "activo", "movimenta_caja", "principal", "orden") VALUES ('${FORMA_PAGO_UPAY}', ${isPg ? 'false' : '0'}, ${isPg ? 'false' : '0'}, ${isPg ? 'false' : '0'}, 99)`,
+      );
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
@@ -88,6 +98,9 @@ export class TiendaPagoOnline1793500000000 implements MigrationInterface {
           'Revertí el código y dejá las columnas (ver PLAN-tienda-online F4).',
       );
     }
+    await queryRunner.query(
+      `DELETE FROM "formas_pago" WHERE "nombre" = '${FORMA_PAGO_UPAY}' AND "id" NOT IN (SELECT "forma_pago_id" FROM "pagos_detalles" WHERE "forma_pago_id" IS NOT NULL)`,
+    );
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_pagos_online_eventos_pedido"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "pagos_online_eventos"`);
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_pedidos_online_estado_pago"`);
