@@ -36,3 +36,4 @@
 
 .pd-cta { display: flex; align-items: center; gap: 14px; }
 .pd-add { flex: 1; }
+.pd-radio.sel .pd-radio-l, .pd-check.sel .pd-check-l { font-weight: 600; color: var(--sf-primary); }

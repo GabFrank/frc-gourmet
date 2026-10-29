@@ -665,6 +665,8 @@ function mapPedido(p: PedidoOnline): any {
     total: Number(p.total),
     direccionEntrega: p.direccionEntrega ?? null,
     notas: p.notas ?? null,
+    // El cliente ve por qué el local no tomó su pedido (PLAN-tienda-online M6).
+    motivoRechazo: p.motivoRechazo ?? null,
     createdAt: p.createdAt,
     fechaAceptado: p.fechaAceptado ?? null,
     fechaListo: p.fechaListo ?? null,

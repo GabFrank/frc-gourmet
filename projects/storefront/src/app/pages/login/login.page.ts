@@ -4,13 +4,15 @@ import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ConfigService } from '../../core/config.service';
+import { mensajeError } from '../../core/errores';
+import { IconComponent } from '../../core/icon.component';
 
 declare const google: any;
 
 @Component({
   selector: 'sf-login',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [IconComponent, CommonModule, FormsModule],
   templateUrl: './login.page.html',
   styleUrls: ['./login.page.scss'],
 })
@@ -74,7 +76,7 @@ export class LoginPage implements AfterViewInit {
     this.enviando = true; this.error = null;
     this.auth.googleLogin(idToken).subscribe({
       next: (res) => { this.enviando = false; res?.success ? this.exito() : (this.error = this.msg(res?.error)); },
-      error: (e) => { this.enviando = false; this.error = 'No se pudo ingresar con Google. ' + (e?.message || ''); },
+      error: (e) => { this.enviando = false; this.error = mensajeError(e); },
     });
   }
 
@@ -89,7 +91,7 @@ export class LoginPage implements AfterViewInit {
         if (res?.success) { this.paso = 'codigo'; this.devHint = res.provider === 'dev-log'; if (res.devCodigo) { this.devCodigo = res.devCodigo; this.codigo = res.devCodigo; } }
         else this.error = this.msg(res?.error);
       },
-      error: (e) => { this.enviando = false; this.error = 'No se pudo enviar el código. ' + (e?.message || ''); },
+      error: (e) => { this.enviando = false; this.error = mensajeError(e); },
     });
   }
 
@@ -99,7 +101,7 @@ export class LoginPage implements AfterViewInit {
     this.enviando = true;
     this.auth.verificarOtp(this.telefono, this.codigo.trim()).subscribe({
       next: (res) => { this.enviando = false; res?.success ? this.exito() : (this.error = this.msg(res?.error)); },
-      error: (e) => { this.enviando = false; this.error = 'No se pudo verificar. ' + (e?.message || ''); },
+      error: (e) => { this.enviando = false; this.error = mensajeError(e); },
     });
   }
 
@@ -114,7 +116,7 @@ export class LoginPage implements AfterViewInit {
       : this.auth.loginPassword(this.email.trim(), this.password);
     obs.subscribe({
       next: (res) => { this.enviando = false; res?.success ? this.exito() : (this.error = this.msg(res?.error)); },
-      error: (e) => { this.enviando = false; this.error = 'No se pudo continuar. ' + (e?.message || ''); },
+      error: (e) => { this.enviando = false; this.error = mensajeError(e); },
     });
   }
 
@@ -142,7 +144,7 @@ export class LoginPage implements AfterViewInit {
       case 'email_en_uso': return 'Ese email ya está registrado. Probá iniciar sesión.';
       case 'cuenta_o_password_invalidos': return 'Email o contraseña incorrectos.';
       case 'google_no_configurado': return 'El login con Google no está disponible.';
-      default: return err || 'Ocurrió un error.';
+      default: return mensajeError(err);
     }
   }
 }

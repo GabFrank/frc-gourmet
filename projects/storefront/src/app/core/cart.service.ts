@@ -1,5 +1,44 @@
 import { Injectable } from '@angular/core';
-import { CartItem } from './models';
+import { guarani } from './guarani.pipe';
+import { CartItem, MenuAdicional, MenuProducto, MenuSnapshot } from './models';
+
+export interface RevalidacionCarrito {
+  cambiados: { nombre: string; antes: number; ahora: number }[];
+  quitados: string[];
+}
+
+/** Textos para el cliente a partir del resultado de `revalidar`. */
+export function avisosRevalidacion(r: RevalidacionCarrito): string[] {
+  const out: string[] = [];
+  for (const q of r.quitados) out.push(`«${q}» ya no está disponible y lo sacamos de tu pedido.`);
+  for (const c of r.cambiados) out.push(`«${c.nombre}» cambió de precio: ahora ${guarani(c.ahora)} (antes ${guarani(c.antes)}).`);
+  return out;
+}
+
+/** Precio base de una línea según la carta vigente, o null si ya no se vende. */
+export function precioBaseLinea(p: MenuProducto, it: CartItem): number | null {
+  if (it.opcion.tipo === 'PIZZA') {
+    const presId = it.opcion.presentacionId;
+    const ids = [...new Set(it.opcion.saborIds || [])]; // igual que el server: sabores únicos
+    if (!presId || !ids.length) return null;
+    const precios: number[] = [];
+    for (const id of ids) {
+      const pr = p.sabores?.find((s) => s.saborId === id)?.precios.find((x) => x.presentacionId === presId);
+      if (!pr) return null;
+      precios.push(pr.precio);
+    }
+    return p.pizzaConfig?.estrategia === 'PROMEDIO'
+      ? precios.reduce((a, b) => a + b, 0) / precios.length
+      : Math.max(...precios);
+  }
+  const op = p.opciones.find(
+    (o) =>
+      o.tipo === it.opcion.tipo &&
+      (o.presentacionId ?? null) === (it.opcion.presentacionId ?? null) &&
+      (o.recetaId ?? null) === (it.opcion.recetaId ?? null),
+  );
+  return op ? op.precio : null;
+}
 
 /** Estado del carrito (memoria + localStorage). Angular 15: sin signals. */
 @Injectable({ providedIn: 'root' })
@@ -62,6 +101,41 @@ export class CartService {
       observaciones: i.observaciones.map((o) => o.descripcion),
       notaLibre: i.notaLibre || undefined,
     }));
+  }
+
+  /**
+   * Recalcula cada línea contra la carta vigente (`menu.get`). Actualiza precio,
+   * foto y nombre; quita lo que ya no se vende. El server igual recalcula al
+   * crear el pedido: esto es para que el cliente vea el mismo número antes.
+   */
+  revalidar(menu: MenuSnapshot): RevalidacionCarrito {
+    const res: RevalidacionCarrito = { cambiados: [], quitados: [] };
+    const quedan: CartItem[] = [];
+    for (const it of this.items) {
+      const p = menu.productos.find((x) => x.id === it.productoId);
+      const base = p ? precioBaseLinea(p, it) : null;
+      const adicionales = p ? it.adicionales.map((a) => p.adicionales.find((x) => x.id === a.id) || null) : [];
+      if (!p || base == null || adicionales.some((a) => !a)) {
+        res.quitados.push(it.nombreProducto);
+        continue;
+      }
+      const nuevo = base + (adicionales as MenuAdicional[]).reduce((s, a) => s + a.precio, 0);
+      if (Math.abs(nuevo - it.precioUnitario) > 0.001) {
+        res.cambiados.push({ nombre: it.nombreProducto, antes: it.precioUnitario, ahora: nuevo });
+      }
+      const saborImg = it.opcion.saborIds?.length
+        ? p.sabores?.find((s) => s.saborId === it.opcion.saborIds![0])?.imageUrl
+        : null;
+      quedan.push({
+        ...it,
+        precioUnitario: nuevo,
+        adicionales: adicionales as MenuAdicional[],
+        imageUrl: saborImg || p.imageUrl || it.imageUrl,
+      });
+    }
+    this.items = quedan;
+    this.persist();
+    return res;
   }
 
   /** Resumen legible de la personalización de una línea. */

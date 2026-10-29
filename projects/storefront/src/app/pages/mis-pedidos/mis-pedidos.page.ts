@@ -4,6 +4,7 @@ import { RouterLink, ActivatedRoute } from '@angular/router';
 import { PublicApiService } from '../../core/public-api.service';
 import { AuthService } from '../../core/auth.service';
 import { PedidoResumen } from '../../core/models';
+import { GuaraniPipe } from '../../core/guarani.pipe';
 
 /** Estados en los que ya no hay nada más que esperar. */
 const TERMINALES = ['ENTREGADO', 'RECHAZADO', 'CANCELADO'];
@@ -22,7 +23,7 @@ const ESTADO_LABEL: Record<string, string> = {
 @Component({
   selector: 'sf-mis-pedidos',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [GuaraniPipe, CommonModule, RouterLink],
   template: `
     <div class="sf-container">
       <h1 class="sf-title">Mis pedidos</h1>
@@ -48,12 +49,15 @@ const ESTADO_LABEL: Record<string, string> = {
           <strong>{{ p.numero }}</strong>
           <span class="sf-estado" [attr.data-estado]="p.estado">{{ label(p.estado) }}</span>
         </div>
-        <div class="sf-muted sf-pedido-sub">{{ p.tipoPedido }} · {{ p.createdAt | date:'short' }}</div>
+        <div class="sf-muted sf-pedido-sub">{{ tipoLabel(p.tipoPedido) }} · {{ p.createdAt | date:'dd/MM HH:mm' }}</div>
         <div class="sf-pedido-item" *ngFor="let it of p.items">
           {{ it.cantidad }}× {{ it.nombreProducto }}
           <span class="sf-muted" *ngIf="it.nombrePresentacion">({{ it.nombrePresentacion }})</span>
+          <div class="sf-muted sf-pedido-perso" *ngIf="detalle(it) as d">{{ d }}</div>
         </div>
-        <div class="sf-pedido-total">Total: {{ p.total | number:'1.0-2' }}</div>
+        <div class="sf-muted sf-pedido-perso" *ngIf="p.notas">Nota: {{ p.notas }}</div>
+        <div class="sf-rechazo" *ngIf="p.estado === 'RECHAZADO' && p.motivoRechazo">Motivo: {{ p.motivoRechazo }}</div>
+        <div class="sf-pedido-total">Total: {{ p.total | guarani }}</div>
       </div>
     </div>
   `,
@@ -67,6 +71,8 @@ const ESTADO_LABEL: Record<string, string> = {
     .sf-estado[data-estado="RECHAZADO"], .sf-estado[data-estado="CANCELADO"] { background: var(--sf-error-bg); color: var(--sf-error); }
     .sf-pedido-sub { font-size: 12px; margin: 4px 0 8px; }
     .sf-pedido-item { font-size: 14px; padding: 2px 0; }
+    .sf-pedido-perso { font-size: 12px; margin: 2px 0 0 18px; line-height: 1.4; }
+    .sf-rechazo { margin-top: 8px; font-size: 13px; color: var(--sf-error); background: var(--sf-error-bg); padding: 8px 10px; border-radius: var(--sf-radius-sm); }
     .sf-pedido-total { margin-top: 8px; font-weight: 600; }
     .sf-live { display: flex; align-items: center; gap: 10px; font-size: 12px; }
     .sf-refresh {
@@ -122,5 +128,21 @@ export class MisPedidosPage implements OnInit, OnDestroy {
 
   label(estado: string): string {
     return ESTADO_LABEL[estado] || estado;
+  }
+
+  tipoLabel(tipo: string): string {
+    return ({ PICKUP: 'Retiro en el local', DELIVERY: 'Delivery', MESA_QR: 'En la mesa' } as Record<string, string>)[tipo] || tipo;
+  }
+
+  /** Sabores, adicionales, preferencias y nota de una línea, en una sola frase. */
+  detalle(it: any): string {
+    const p = it?.personalizacion;
+    if (!p) return '';
+    const parts: string[] = [];
+    if (Array.isArray(p.sabores) && p.sabores.length > 1) parts.push(p.sabores.map((s: any) => s.nombre).join(' / '));
+    for (const a of p.adicionales || []) parts.push(`+ ${a.nombre}`);
+    for (const o of p.observaciones || []) parts.push(typeof o === 'string' ? o : o?.descripcion);
+    if (p.notaLibre) parts.push(`"${p.notaLibre}"`);
+    return parts.filter(Boolean).join(' · ');
   }
 }
