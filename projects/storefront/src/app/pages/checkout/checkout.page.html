@@ -102,13 +102,24 @@
       <div class="row grand"><strong>Total</strong><strong>{{ total | guarani }}</strong></div>
     </div>
 
-    <p class="sf-muted pago"><sf-icon name="cash" [size]="15"></sf-icon>Pago: efectivo contra entrega/retiro.</p>
+    <div class="sf-card" *ngIf="pagoOnline; else soloEfectivo">
+      <h3>¿Cómo pagás?</h3>
+      <div class="choices">
+        <button class="choice" [class.active]="metodoPago === 'EFECTIVO'" (click)="metodoPago = 'EFECTIVO'"><sf-icon name="cash" [size]="18"></sf-icon>Efectivo</button>
+        <button class="choice" [class.active]="metodoPago === 'UPAY'" (click)="metodoPago = 'UPAY'"><sf-icon name="receipt" [size]="18"></sf-icon>Tarjeta</button>
+      </div>
+      <p class="sf-muted pago" *ngIf="metodoPago === 'EFECTIVO'">Pagás en efectivo al retirar o al recibir el pedido.</p>
+      <p class="sf-muted pago" *ngIf="metodoPago === 'UPAY'">Te llevamos a la página segura de uPay. El pedido va a la cocina cuando se confirma el pago.</p>
+    </div>
+    <ng-template #soloEfectivo>
+      <p class="sf-muted pago"><sf-icon name="cash" [size]="15"></sf-icon>Pago: efectivo contra entrega/retiro.</p>
+    </ng-template>
     <p class="sf-error" *ngIf="error">{{ error }}</p>
   </ng-container>
 </div>
 
 <div class="sf-sticky-bar" *ngIf="config.config.abiertaAhora && (mesa.enMesa || auth.isAuthenticated)">
   <button class="sf-btn sf-btn--block" [disabled]="enviando || cart.items.length === 0" (click)="confirmar()">
-    {{ enviando ? 'Enviando…' : ('Confirmar pedido · ' + ((mesa.enMesa ? cart.subtotal : total) | guarani)) }}
+    {{ enviando ? 'Enviando…' : ((pagoOnline && metodoPago === 'UPAY' ? 'Pagar con tarjeta · ' : 'Confirmar pedido · ') + ((mesa.enMesa ? cart.subtotal : total) | guarani)) }}
   </button>
 </div>
