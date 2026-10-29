@@ -55,7 +55,7 @@ ok(loginBloqueado(999, '3.3.3.3', t0 + 61 * 60_000) === null, 'la ventana por IP
 reiniciarLimitesTienda();
 let otps = 0;
 for (let i = 0; i < 35; i++) if (otpIpPermitido('4.4.4.4', t0)) otps++;
-ok(otps === 30, 'OTP: 30 por IP por hora', otps);
+ok(otps === 10, 'OTP: 10 por IP (tope diario F5 antes que el de 30 por hora)', otps);
 ok(otpIpPermitido('5.5.5.5', t0), 'OTP: otra IP sigue pudiendo');
 reiniciarLimitesTienda();
 

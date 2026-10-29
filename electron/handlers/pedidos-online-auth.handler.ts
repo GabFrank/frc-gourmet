@@ -119,6 +119,11 @@ export function registerPedidosOnlineAuthHandlers(
     if (delDia >= OTP_MAX_POR_DIA_TELEFONO) {
       return { success: false, error: 'demasiadas_solicitudes' };
     }
+    // Por IP: 30 por hora y 10 por día (frena a quien rota números desde un mismo lugar). Va
+    // ANTES del tope global (F5, M-auth3): una sola IP ya no puede agotarlo para todos.
+    if (!otpIpPermitido(String(_event?._clientIp || ''))) {
+      return { success: false, error: 'demasiadas_solicitudes' };
+    }
     const globalDia = await otpRepo().count({ where: { createdAt: MoreThan(hace24h) as any } });
     const topeGlobal = otpMaxGlobalDia();
     if (globalDia >= topeGlobal) {
@@ -127,10 +132,6 @@ export function registerPedidosOnlineAuthHandlers(
       return { success: false, error: 'otp_no_disponible' };
     }
     if (globalDia + 1 >= Math.ceil(topeGlobal * 0.8)) avisarTopeOtp('80', globalDia + 1, topeGlobal);
-    // Por IP: 30 por hora (frena a quien rota números desde un mismo lugar).
-    if (!otpIpPermitido(String(_event?._clientIp || ''))) {
-      return { success: false, error: 'demasiadas_solicitudes' };
-    }
 
     // Invalidar OTPs previos no usados de este teléfono.
     await otpRepo().update({ telefono, usado: false }, { usado: true });
