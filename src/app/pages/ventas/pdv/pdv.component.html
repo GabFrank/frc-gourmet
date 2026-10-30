@@ -833,6 +833,7 @@
         <!-- Tab selector -->
         <div class="tab-selector">
           <button
+            *ngIf="mesasHabilitadas"
             mat-flat-button
             [class.tab-active]="activeTab === 'MESAS'"
             (click)="seleccionarTab('MESAS')"
@@ -845,6 +846,7 @@
             MESAS
           </button>
           <button
+            *ngIf="comandasHabilitadas"
             mat-flat-button
             [class.tab-active]="activeTab === 'COMANDAS'"
             (click)="seleccionarTab('COMANDAS')"
@@ -859,6 +861,7 @@
           <!-- Venta directa de mostrador: sin mesa, comanda ni delivery. Es la
                única que no va a cocina y la única que emite fichas de cantina. -->
           <button
+            *ngIf="ventaRapidaHabilitada"
             mat-flat-button
             [class.tab-active]="(ventaRapidaActual || modoVentaRapida) && !deliveryActual"
             [disabled]="!!ventaRapidaActual || modoVentaRapida || !!deliveryActual"
@@ -872,7 +875,7 @@
         </div>
 
         <!-- Sector filters (shared) -->
-        <div class="bottom-buttons" data-testid="pdv-sector-filters">
+        <div class="bottom-buttons" *ngIf="!soloVentaRapida" data-testid="pdv-sector-filters">
           <button
             mat-raised-button
             [color]="selectedSectorId === null ? 'accent' : 'primary'"
@@ -895,7 +898,7 @@
         </div>
 
         <!-- MESAS tab -->
-        <div class="tables-grid" *ngIf="activeTab === 'MESAS'" data-testid="pdv-mesas-panel">
+        <div class="tables-grid" *ngIf="activeTab === 'MESAS' && mesasHabilitadas" data-testid="pdv-mesas-panel">
           <div *ngIf="loadingMesas" class="loading-mesas">
             <mat-spinner diameter="40"></mat-spinner>
             <span>Cargando mesas...</span>
@@ -927,7 +930,7 @@
         </div>
 
         <!-- COMANDAS tab -->
-        <div class="tables-grid" *ngIf="activeTab === 'COMANDAS'" data-testid="pdv-comandas-panel">
+        <div class="tables-grid" *ngIf="activeTab === 'COMANDAS' && comandasHabilitadas" data-testid="pdv-comandas-panel">
           <div *ngIf="loadingComandas" class="loading-mesas">
             <mat-spinner diameter="40"></mat-spinner>
             <span>Cargando comandas...</span>

@@ -44,7 +44,7 @@ import { CuentaPorCobrarEstado, MovimientoClienteTipo } from '../../src/app/data
 import { PdvMesa, PdvMesaEstado } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { Comanda, ComandaEstado } from '../../src/app/database/entities/ventas/comanda.entity';
 import { printComandaInternal, imprimirPostConclusion } from './documentos-tickets.handler';
-import { esVentaDirecta } from '../utils/venta-directa.utils';
+import { esVentaDirecta, RELACIONES_VENTA_DIRECTA } from '../utils/venta-directa.utils';
 import { Sector } from '../../src/app/database/entities/ventas/sector.entity';
 import { ComandaItem, ComandaItemEstado } from '../../src/app/database/entities/ventas/comanda-item.entity';
 import { ProductoSector } from '../../src/app/database/entities/productos/producto-sector.entity';
@@ -1411,6 +1411,30 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     }
   });
 
+  // La venta rápida ABIERTA de esta terminal en esta caja, si quedó una. El PdV
+  // no la tiene en ningún contenedor del salón: si se recargaba la pantalla a
+  // mitad de una venta quedaba ABIERTA e invisible, y `update-caja` rechaza el
+  // cierre con ventas abiertas. Sólo la de ESTA terminal: en una caja
+  // compartida, la de otra terminal sigue siendo de su cajero.
+  ipcMain.handle('getVentaRapidaAbierta', async (_event: any, cajaId: number) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+      const dispositivoId = resolveRequestDeviceId(_event);
+      if (!cajaId || !dispositivoId) return null;
+      const candidatas = await dataSource.getRepository(Venta).find({
+        where: { caja: { id: cajaId }, dispositivo: { id: dispositivoId }, estado: VentaEstado.ABIERTA, mesa: IsNull(), comanda: IsNull() },
+        relations: [...RELACIONES_VENTA_DIRECTA, 'caja'],
+        // `id` desempata: en SQLite `created_at` tiene resolución de segundos.
+        order: { createdAt: 'DESC', id: 'DESC' },
+        take: 10,
+      });
+      return candidatas.find((v) => esVentaDirecta(v)) ?? null;
+    } catch (error) {
+      console.error(`Error buscando venta rápida abierta de la caja ${cajaId}:`, error);
+      throw error;
+    }
+  });
+
   // Resumen completo de una caja (para diálogo de resumen)
   ipcMain.handle('getResumenCaja', async (_event: any, cajaId: number) => {
     try {
@@ -2645,6 +2669,11 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       
       // Apply updates
       repository.merge(config, normalizarFichasConfig(data) as DeepPartial<PdvConfig>);
+      // Un PdV sin ningún tipo de venta no puede vender nada.
+      if (!config.pdvMesasHabilitadas && !config.pdvComandasHabilitadas
+        && !config.pdvVentaRapidaHabilitada && !config.deliveryHabilitado) {
+        throw new Error('PDV_SIN_TIPOS_DE_VENTA: habilitá al menos un tipo de venta (mesas, comandas, venta rápida o delivery).');
+      }
       const guardado = await repository.save(config);
       // La hora de la jornada se cachea 60s en los dashboards: sin esto, el
       // usuario cambia el corte, vuelve al resumen y sigue viendo el anterior.

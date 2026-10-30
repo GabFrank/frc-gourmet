@@ -1401,6 +1401,10 @@ export class RepositoryHttpService extends RepositoryService {
   revertirStockVenta(ventaId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.revertirStockVenta() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getVentaRapidaAbierta(cajaId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getVentaRapidaAbierta() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+
   getEstadoCobroVenta(ventaId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getEstadoCobroVenta() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

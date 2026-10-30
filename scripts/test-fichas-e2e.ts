@@ -29,7 +29,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { DataSource } from 'typeorm';
 
-import { invokeHandler } from '../electron/utils/handler-registry';
+import { invokeHandler, invokeHandlerWithContext } from '../electron/utils/handler-registry';
 import { getDataSourceOptions } from '../src/app/database/database.config';
 import { registerVentasHandlers, crearComandaItemsSiCorresponde } from '../electron/handlers/ventas.handler';
 import { registerCuentasPorCobrarHandlers } from '../electron/handlers/cuentas-por-cobrar.handler';
@@ -348,6 +348,19 @@ async function main() {
     f = (await buildFichasVenta(ds, v.id, { width: 48 }))!;
     const t = texto(f[0].lines);
     ok(t.includes('AREA VIP') && !t.includes('?'), '4: "ÁREA" sale "AREA" en el papel, sin ?', t);
+
+    // Tipos de venta: nacen habilitados y no se puede apagar todo.
+    ok(guardado.pdvMesasHabilitadas === true && guardado.pdvComandasHabilitadas === true
+      && guardado.pdvVentaRapidaHabilitada === true, '4: los tipos de venta nacen habilitados', guardado);
+    await invokeHandler('updatePdvConfig', cfg.id, { pdvMesasHabilitadas: false, pdvComandasHabilitadas: false });
+    const soloRapida: any = await ds.getRepository(PdvConfig).findOneBy({ id: cfg.id });
+    ok(!soloRapida.pdvMesasHabilitadas && !soloRapida.pdvComandasHabilitadas && soloRapida.pdvVentaRapidaHabilitada,
+      '4: se puede dejar sólo venta rápida', soloRapida);
+    await rechaza(/PDV_SIN_TIPOS_DE_VENTA/, '4: apagar todos los tipos de venta se rechaza',
+      () => invokeHandler('updatePdvConfig', cfg.id, { pdvVentaRapidaHabilitada: false, deliveryHabilitado: false }));
+    const sigue: any = await ds.getRepository(PdvConfig).findOneBy({ id: cfg.id });
+    ok(sigue.pdvVentaRapidaHabilitada === true && sigue.deliveryHabilitado !== false, '4: el rechazo no persiste nada', sigue);
+    await invokeHandler('updatePdvConfig', cfg.id, { pdvMesasHabilitadas: true, pdvComandasHabilitadas: true });
     usuarioActual = cajero;
   }
 
@@ -492,6 +505,25 @@ async function main() {
     let lanzo = false;
     try { await imprimirPostConclusion(ds, v.id, { imprimirTicket: true }); } catch { lanzo = true; }
     ok(!lanzo, '10: un ticket que explota no corta la cadena');
+  }
+
+  // ═══════ [10b] Retomar la venta rápida abierta tras recargar el PdV ═══════
+  console.log('\n[10b] getVentaRapidaAbierta');
+  {
+    const otroDisp: any = await save(Dispositivo, { nombre: 'OTRA TERMINAL', activo: true });
+    const mesa: any = await save(PdvMesa, { numero: 77, estado: 'DISPONIBLE', activo: true, reservado: false });
+    const ajena = await nuevaVenta([{ producto: cerveza, cantidad: 1 }], { dispositivo: { id: otroDisp.id } });
+    await nuevaVenta([{ producto: cerveza, cantidad: 1 }], { mesa: { id: mesa.id } });
+    const propia = await nuevaVenta([{ producto: cerveza, cantidad: 2 }]);
+    const r: any = await invokeHandlerWithContext('getVentaRapidaAbierta', { deviceId: dispositivo.id }, caja.id);
+    ok(r?.id === propia.id, '10b: devuelve la venta rápida ABIERTA de esta terminal', r?.id);
+    const rOtra: any = await invokeHandlerWithContext('getVentaRapidaAbierta', { deviceId: otroDisp.id }, caja.id);
+    ok(rOtra?.id === ajena.id, '10b: cada terminal ve sólo la suya (caja compartida)', rOtra?.id);
+    await ds.getRepository(Venta).update({ id: propia.id }, { estado: 'CANCELADA' } as any);
+    await ds.getRepository(Venta).update({ id: ajena.id }, { estado: 'CANCELADA' } as any);
+    const rNada: any = await invokeHandlerWithContext('getVentaRapidaAbierta', { deviceId: dispositivo.id }, caja.id);
+    ok(rNada?.mesa == null && (rNada == null || rNada.id !== propia.id),
+      '10b: una venta de mesa o ya cerrada no se retoma como venta rápida', rNada?.id);
   }
 
   // ═══════ [11] Hallazgos de la auditoría de la implementación ═══════

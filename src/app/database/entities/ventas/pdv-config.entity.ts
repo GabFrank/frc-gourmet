@@ -127,8 +127,24 @@ export class PdvConfig extends BaseModel {
   @Column({ name: 'pdv_tab_default', type: 'varchar', default: 'MESAS' })
   pdvTabDefault!: string;
 
+  /**
+   * Sin uso: nunca se leyó en el PdV y nace en `false` en todas las bases, así
+   * que cablearlo escondía las comandas en todos lados. El tipo de venta lo
+   * deciden las tres columnas `pdv_*_habilitad*` de abajo.
+   */
   @Column({ name: 'comandas_habilitadas', default: false })
   comandasHabilitadas!: boolean;
+
+  // Tipos de venta del PdV (global). Si un tipo está apagado, su botón no se
+  // renderiza. Nacen en `true`: actualizar no cambia nada.
+  @Column({ name: 'pdv_mesas_habilitadas', type: 'boolean', default: true })
+  pdvMesasHabilitadas!: boolean;
+
+  @Column({ name: 'pdv_comandas_habilitadas', type: 'boolean', default: true })
+  pdvComandasHabilitadas!: boolean;
+
+  @Column({ name: 'pdv_venta_rapida_habilitada', type: 'boolean', default: true })
+  pdvVentaRapidaHabilitada!: boolean;
 
   /**
    * Si true, vincular una comanda a una mesa marca la mesa como OCUPADA, y al

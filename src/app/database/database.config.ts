@@ -337,6 +337,7 @@ import { FuncionesTareas1793042064365 } from './migrations/1793042064365-Funcion
 import { AcreditacionesPosReglas1793110000000 } from './migrations/1793110000000-AcreditacionesPosReglas';
 import { FichasCantina1793299117857 } from './migrations/1793299117857-FichasCantina';
 import { CajaMayorMontosAmplios1793302813170 } from './migrations/1793302813170-CajaMayorMontosAmplios';
+import { PdvTiposVenta1793381465964 } from './migrations/1793381465964-PdvTiposVenta';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -813,6 +814,8 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     FichasCantina1793299117857,
     // Caja Mayor: monto y saldo a numeric(18,2) (issue #340, sólo Postgres)
     CajaMayorMontosAmplios1793302813170,
+    // PdV: tipos de venta habilitados (mesas, comandas, venta rápida), global
+    PdvTiposVenta1793381465964,
   ];
 }
 

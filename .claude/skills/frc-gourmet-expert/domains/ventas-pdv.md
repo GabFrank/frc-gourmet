@@ -952,6 +952,41 @@ el segundo escritor **bloquea** en vez de pasar de largo. En SQLite queda el
 invariante determinista: el modo y el envío no se despegan tras pasar por cada
 handler.
 
+## Venta rápida y tipos de venta del PdV (2026-10)
+
+**Venta rápida** = venta directa de mostrador (sin mesa, comanda ni delivery,
+`canalOrigen` LOCAL). Es la única que no va a cocina y la única que emite fichas
+de cantina (`esVentaDirecta`).
+
+- Hasta el PR #327 **no había botón**: `ventaRapida()` existía sin llamadores
+  desde julio, así que la venta directa (y con ella las fichas) era inalcanzable
+  desde la UI. Ahora hay un botón **VENTA RÁPIDA** junto a MESAS/COMANDAS.
+- **La venta nace con el primer ítem**, no con el click: el botón sólo pone
+  `modoVentaRapida = true` y `getOrCreateVenta` la crea. Crearla al click dejaba
+  una venta ABIERTA vacía por cada click de más.
+- **Sin nada cargado** (modo sin venta), MESAS/COMANDAS, una mesa, una comanda o
+  Escape salen del modo sin dejar rastro. **Con la venta ya creada**, elegir mesa
+  o comanda se bloquea con aviso (cobrala o F4): todo el PdV prioriza
+  `ventaRapidaActual`, así que elegir una mesa la mostraba pero seguía operando
+  sobre la venta rápida, y elegir una comanda la soltaba huérfana.
+- **Retomar tras recargar** (`getVentaRapidaAbierta`, `VENTAS_PDV`): al fijar la
+  caja, el PdV busca la venta directa ABIERTA de **esa caja y esa terminal**
+  (`dispositivo_id`) y la retoma. Sin esto quedaba invisible y **trababa el
+  cierre de caja** (`update-caja` rechaza ventas abiertas). Sólo la de esta
+  terminal: en una caja compartida, la de otra es de su cajero.
+
+**Tipos de venta habilitados** (`PdvConfig`, global, migración `PdvTiposVenta`):
+`pdvMesasHabilitadas`, `pdvComandasHabilitadas`, `pdvVentaRapidaHabilitada`
+(nacen en `true`) + el `deliveryHabilitado` que ya existía. Lo apagado no se
+renderiza en el PdV (botón, panel y opción en el diálogo "Seleccionar Mesa o
+Comanda"). `updatePdvConfig` rechaza apagar los cuatro (`PDV_SIN_TIPOS_DE_VENTA`).
+Con **sólo venta rápida** el PdV vive en ese modo: entra directo y vuelve solo
+después de cada cobro. Es configuración de UI, no un permiso: el backend no
+impide crear una venta de mesa por `/api/rpc`.
+
+⚠️ `comandas_habilitadas` (columna vieja) **no se usa**: nunca se leyó y nace en
+`false`; cablearla escondía las comandas en todas las bases.
+
 ## Fichas de cantina (venta directa, 2026-10) — leer antes de tocar el cobro
 
 Modo **cantina de eventos**: el cliente paga en caja y retira en la barra con

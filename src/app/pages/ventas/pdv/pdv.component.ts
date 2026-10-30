@@ -198,6 +198,13 @@ export class PdvComponent implements OnInit, OnDestroy {
    */
   modoVentaRapida = false;
 
+  // Tipos de venta habilitados (PdvConfig, global). Sin config legible, todos.
+  mesasHabilitadas = true;
+  comandasHabilitadas = true;
+  ventaRapidaHabilitada = true;
+  /** Sólo venta rápida: el PdV vive en ese modo y nunca pide mesa ni comanda. */
+  soloVentaRapida = false;
+
   // Delivery activo (cuando se editan items de un delivery)
   deliveryActual: Delivery | null = null;
   /** Muestra el boton DELIVERY del PdV (Configuracion del PdV -> Delivery). */
@@ -1044,6 +1051,7 @@ export class PdvComponent implements OnInit, OnDestroy {
           // `deliveryHabilitado` es nuevo: en una base sin migrar llega
           // undefined, y ahi el modulo tiene que seguir visible.
           this.deliveryHabilitado = config?.deliveryHabilitado !== false;
+          this.aplicarTiposDeVenta(config);
         }
       } catch (e) { /* use default */ }
       finally {
@@ -1051,6 +1059,9 @@ export class PdvComponent implements OnInit, OnDestroy {
         // el aviso sigue siendo el correcto.
         this.recomputarGateTerminal();
       }
+
+      // Después de leer la config: retomar puede pisar el modo "venta rápida vacía".
+      await this.retomarVentaRapidaAbierta();
 
       try {
         const tienda: any = await firstValueFrom(this.repositoryService.getTiendaOnlineConfig());
@@ -1493,7 +1504,7 @@ export class PdvComponent implements OnInit, OnDestroy {
     this.selectedComanda = comanda;
     this.selectedMesa = null;
     this.ventaRapidaActual = null;
-    this.modoVentaRapida = false;
+    this.modoVentaRapida = this.soloVentaRapida;
     this.deliveryActual = null;
     this.isEditingClienteName = false;
 
@@ -2103,6 +2114,8 @@ export class PdvComponent implements OnInit, OnDestroy {
       }
 
       // Check if mesa, comanda, or venta rápida is selected
+      // Con sólo venta rápida habilitada no hay mesa ni comanda que elegir.
+      if (this.soloVentaRapida && !this.ventaRapidaActual) this.modoVentaRapida = true;
       if (!this.selectedMesa && !this.ventaRapidaActual && !this.modoVentaRapida && !this.selectedComanda) {
         await this.showMesaSelectionDialog();
         if (!this.selectedMesa && !this.selectedComanda) {
@@ -2203,6 +2216,8 @@ export class PdvComponent implements OnInit, OnDestroy {
     if (!result) return; // Cancelado
 
     // Asegurar mesa/comanda/venta rápida.
+    // Con sólo venta rápida habilitada no hay mesa ni comanda que elegir.
+    if (this.soloVentaRapida && !this.ventaRapidaActual) this.modoVentaRapida = true;
     if (!this.selectedMesa && !this.ventaRapidaActual && !this.modoVentaRapida && !this.selectedComanda) {
       await this.showMesaSelectionDialog();
       if (!this.selectedMesa && !this.selectedComanda) return;
@@ -2275,6 +2290,8 @@ export class PdvComponent implements OnInit, OnDestroy {
 
   private async addVariacionItem(producto: Producto, result: SeleccionarVariacionDialogResult): Promise<void> {
     // Verificar que haya mesa/comanda/venta rápida seleccionada
+    // Con sólo venta rápida habilitada no hay mesa ni comanda que elegir.
+    if (this.soloVentaRapida && !this.ventaRapidaActual) this.modoVentaRapida = true;
     if (!this.selectedMesa && !this.ventaRapidaActual && !this.modoVentaRapida && !this.selectedComanda) {
       await this.showMesaSelectionDialog();
       if (!this.selectedMesa && !this.selectedComanda) return;
@@ -2497,8 +2514,8 @@ export class PdvComponent implements OnInit, OnDestroy {
   // Add new method to show mesa selection dialog
   private async showMesaSelectionDialog(): Promise<void> {
     const dialogData = {
-      mesas: this.mesas.filter(mesa => mesa.activo && !mesa.reservado),
-      comandas: this.comandas,
+      mesas: this.mesasHabilitadas ? this.mesas.filter(mesa => mesa.activo && !mesa.reservado) : [],
+      comandas: this.comandasHabilitadas ? this.comandas : [],
       title: 'Seleccionar Mesa o Comanda',
       message: 'Seleccione dónde agregar el producto'
     };
@@ -2821,7 +2838,7 @@ export class PdvComponent implements OnInit, OnDestroy {
         // Limpiar venta rápida
         if (this.ventaRapidaActual) {
           this.ventaRapidaActual = null;
-          this.modoVentaRapida = false;
+          this.modoVentaRapida = this.soloVentaRapida;
         }
         // Salir del modo delivery: la venta ya está cobrada, dejar el cartel
         // colgado hacía creer que seguía habiendo un pedido en edición.
@@ -2889,7 +2906,7 @@ export class PdvComponent implements OnInit, OnDestroy {
           // Limpiar venta rápida
           if (this.ventaRapidaActual) {
             this.ventaRapidaActual = null;
-            this.modoVentaRapida = false;
+            this.modoVentaRapida = this.soloVentaRapida;
           }
 
           // Limpiar UI
@@ -2900,6 +2917,23 @@ export class PdvComponent implements OnInit, OnDestroy {
         }
       }
     });
+  }
+
+  /**
+   * Tipos de venta de `PdvConfig`. `!== false` porque en una base sin migrar
+   * llegan undefined y tienen que quedar habilitados.
+   */
+  private aplicarTiposDeVenta(config: any): void {
+    this.mesasHabilitadas = config?.pdvMesasHabilitadas !== false;
+    this.comandasHabilitadas = config?.pdvComandasHabilitadas !== false;
+    this.ventaRapidaHabilitada = config?.pdvVentaRapidaHabilitada !== false;
+    this.soloVentaRapida = this.ventaRapidaHabilitada && !this.mesasHabilitadas && !this.comandasHabilitadas;
+    // El tab por defecto puede apuntar a uno apagado.
+    if (this.activeTab === 'MESAS' && !this.mesasHabilitadas && this.comandasHabilitadas) this.activeTab = 'COMANDAS';
+    if (this.activeTab === 'COMANDAS' && !this.comandasHabilitadas && this.mesasHabilitadas) this.activeTab = 'MESAS';
+    if (this.soloVentaRapida && !this.ventaRapidaActual && !this.selectedMesa && !this.selectedComanda && !this.deliveryActual) {
+      this.modoVentaRapida = true;
+    }
   }
 
   async ventaRapida(): Promise<void> {
@@ -2916,9 +2950,31 @@ export class PdvComponent implements OnInit, OnDestroy {
     this.focusBuscadorConDelay();
   }
 
+  /**
+   * Retoma la venta rápida que esta terminal dejó ABIERTA en la caja (una
+   * recarga o una pestaña cerrada a mitad de la venta). Sin esto quedaba
+   * invisible —no está en ninguna mesa— y trababa el cierre de caja, que
+   * rechaza ventas abiertas. Se retoma aunque la venta rápida esté
+   * deshabilitada: esconderla no la cobra ni la cancela.
+   */
+  private async retomarVentaRapidaAbierta(): Promise<void> {
+    if (!this.caja?.id || this.ventaRapidaActual || this.selectedMesa || this.selectedComanda || this.deliveryActual) return;
+    try {
+      const venta = await firstValueFrom(this.repositoryService.getVentaRapidaAbierta(this.caja.id));
+      if (!venta?.id || this.ventaRapidaActual) return;
+      this.ventaRapidaActual = venta;
+      this.modoVentaRapida = false;
+      await this.loadVentaItemsForVenta(venta.id);
+      this.snackBar.open(`Se retomó la venta rápida #${venta.id}, que había quedado abierta.`, 'OK', { duration: 6000 });
+    } catch (e) {
+      console.warn('No se pudo buscar una venta rápida abierta:', e);
+    }
+  }
+
   /** Sale de una venta rápida que todavía no tiene venta creada: no deja rastro. */
   private salirModoVentaRapidaVacio(): void {
-    if (!this.modoVentaRapida || this.ventaRapidaActual) return;
+    // Con sólo venta rápida habilitada no hay a dónde salir.
+    if (!this.modoVentaRapida || this.ventaRapidaActual || this.soloVentaRapida) return;
     this.modoVentaRapida = false;
   }
 
@@ -3040,7 +3096,7 @@ export class PdvComponent implements OnInit, OnDestroy {
       }
       if (this.ventaRapidaActual) {
         this.ventaRapidaActual = null;
-        this.modoVentaRapida = false;
+        this.modoVentaRapida = this.soloVentaRapida;
       }
 
       this.ventaItemsDataSource.data = [];
@@ -3183,7 +3239,7 @@ export class PdvComponent implements OnInit, OnDestroy {
   cerrarModoDelivery(): void {
     this.deliveryActual = null;
     this.ventaRapidaActual = null;
-    this.modoVentaRapida = false;
+    this.modoVentaRapida = this.soloVentaRapida;
     this.ventaItemsDataSource.data = [];
     this.calculateTotals();
     this.limpiarAvisoCuentaCajaCerrada();

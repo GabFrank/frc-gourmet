@@ -55,6 +55,9 @@ export class PdvConfigDialogComponent implements OnInit {
     this.configForm = this.fb.group({
       pdvTabDefault: ['MESAS'],
       comandasHabilitadas: [false],
+      pdvMesasHabilitadas: [true],
+      pdvComandasHabilitadas: [true],
+      pdvVentaRapidaHabilitada: [true],
       ocuparMesaAlVincularComanda: [false],
       pizzaMaxSabores: [2],
       pizzaEstrategiaPrecio: ['MAYOR_PRECIO'],
@@ -120,6 +123,10 @@ export class PdvConfigDialogComponent implements OnInit {
         this.configForm.patchValue({
           pdvTabDefault: cfg.pdvTabDefault || 'MESAS',
           comandasHabilitadas: cfg.comandasHabilitadas || false,
+          // `!== false`: en una base sin migrar llegan undefined y tienen que quedar prendidos.
+          pdvMesasHabilitadas: cfg.pdvMesasHabilitadas !== false,
+          pdvComandasHabilitadas: cfg.pdvComandasHabilitadas !== false,
+          pdvVentaRapidaHabilitada: cfg.pdvVentaRapidaHabilitada !== false,
           ocuparMesaAlVincularComanda: cfg.ocuparMesaAlVincularComanda || false,
           pizzaMaxSabores: cfg.pizzaMaxSabores || 2,
           pizzaEstrategiaPrecio: cfg.pizzaEstrategiaPrecio || 'MAYOR_PRECIO',
@@ -166,6 +173,11 @@ export class PdvConfigDialogComponent implements OnInit {
     if (this.configForm.invalid) {
       this.configForm.markAllAsTouched();
       this.snackBar.open('Revisá los campos marcados', 'OK', { duration: 3000 });
+      return;
+    }
+    const v = this.configForm.value;
+    if (!v.pdvMesasHabilitadas && !v.pdvComandasHabilitadas && !v.pdvVentaRapidaHabilitada && !v.deliveryHabilitado) {
+      this.snackBar.open('Habilitá al menos un tipo de venta (mesas, comandas, venta rápida o delivery).', 'OK', { duration: 4000 });
       return;
     }
     this.isSaving = true;

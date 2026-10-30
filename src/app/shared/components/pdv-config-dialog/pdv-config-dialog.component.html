@@ -27,16 +27,31 @@
         </mat-form-field>
 
         <div class="checkbox-field">
-          <mat-checkbox formControlName="comandasHabilitadas" color="primary">
-            Comandas habilitadas
-          </mat-checkbox>
-        </div>
-
-        <div class="checkbox-field">
           <mat-checkbox formControlName="ocuparMesaAlVincularComanda" color="primary">
             Ocupar la mesa al vincular una comanda
           </mat-checkbox>
         </div>
+      </div>
+
+      <p class="config-nota"><strong>Tipos de venta habilitados</strong></p>
+      <div class="config-row">
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="pdvMesasHabilitadas" color="primary">Mesas</mat-checkbox>
+        </div>
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="pdvComandasHabilitadas" color="primary">Comandas</mat-checkbox>
+        </div>
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="pdvVentaRapidaHabilitada" color="primary">Venta rápida</mat-checkbox>
+        </div>
+      </div>
+      <div class="config-row config-hint-row">
+        <mat-icon class="hint-icon">info</mat-icon>
+        <span>
+          Lo que se apague deja de aparecer en el PdV de todas las cajas. Delivery
+          se habilita en su propia sección. Tiene que quedar al menos un tipo.
+          Con sólo venta rápida, el PdV entra directo en modo venta rápida.
+        </span>
       </div>
     </div>
 

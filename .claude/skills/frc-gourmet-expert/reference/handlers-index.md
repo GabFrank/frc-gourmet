@@ -145,6 +145,7 @@ Los handlers sensibles llaman `ensurePermission(dataSource, getCurrentUser, 'COD
 - `gastos-caja.handler.ts`, `pdv-egresos.handler.ts` — utilitarios del cajón (GastoCaja / EgresoCaja: vale, compra). → [domains/ventas-pdv.md](../domains/ventas-pdv.md).
 - `asistencia-facial.handler.ts`, `face-models.handler.ts`, `empresa.handler.ts` — fichaje facial + geocerca. → [domains/rrhh-asistencia-facial.md](../domains/rrhh-asistencia-facial.md).
 - Cobro parcial: `getEstadoCobroVenta`/`registrarCobroParcial`/`anularCobroParcial` (en `ventas.handler.ts`).
+- **`getVentaRapidaAbierta`** (`ventas.handler.ts`, `VENTAS_PDV`) — venta directa ABIERTA de la caja y de la terminal del request (más reciente). La usa el PdV para retomar una venta rápida tras recargar.
 - Cajas: `get-cajas-abiertas`, `generar-retiro-cierre-caja`, `puede-ajustar-caja`/`finalizar-ajuste-caja`.
 - Sabores: `get-all-sabores`, `reparar-recetas-compartidas` (en `recetas.handler.ts`).
 - Vínculo producto↔receta: `get-recetas-asignables`, `vincular-receta-a-producto`, `desvincular-receta-de-producto` (en `recetas.handler.ts`, perm `PRODUCTOS_GESTIONAR`). Únicos caminos válidos: **no** encadenar `update-producto` + `update-receta`. → [domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
