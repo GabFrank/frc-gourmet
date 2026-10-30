@@ -152,10 +152,15 @@ que casi todo su diseño es antifraude.
 
 - **Sólo venta directa** (`esVentaDirecta`: sin mesa, comanda ni delivery, canal
   `LOCAL`) y **sólo al concluir**: nunca se entrega una ficha sin cobrar.
-- **Una ficha por trabajo de impresión**, cada una con `cutAtEnd`. Un único spec
-  con `{type:'cut'}` intermedios rebanaba el final de cada ficha (el `cut`
-  intermedio no avanza el papel hasta la cuchilla; `feedBottomSafeArea` sólo
-  corre al final) y el fallback CUPS ignora `cut`, así que salía una tira.
+- **Todas las fichas en UN trabajo** (`printTicketSpecs`), cada una con su
+  avance arriba, avance abajo y corte. Es todo o nada.
+  - No un trabajo por ficha: mandados uno detrás de otro, la térmica perdía el
+    principio del trabajo que llegaba mientras cortaba el anterior; las fichas
+    2..N salían sin el encabezado del evento y con la línea `=` mocha
+    (verificado con papel, térmica USB de 58 mm, 2026-10-30).
+  - No un único spec con `{type:'cut'}` intermedios: el `cut` intermedio no
+    avanza el papel hasta la cuchilla y rebanaba el final de cada ficha. El
+    fallback CUPS ignora `cut`, así que ahí sale una tira.
 - **Correlativo por venta** (`FICHA 3/7`) y código `venta-numero`.
 - **Ticket de pago antes que fichas**, en la misma cadena (`imprimirPostConclusion`).
 - **Claim antes de imprimir** (`ventas.fichas_emitidas_at`): si la impresora

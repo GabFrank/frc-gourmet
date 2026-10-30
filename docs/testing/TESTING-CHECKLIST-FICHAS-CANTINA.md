@@ -43,7 +43,7 @@ disparar desde ninguna pantalla.
 | 0.5 | Desde 0.3, F4 (cancelar) | La venta se cancela y se puede volver a elegir una mesa |
 
 | 0.6 | Con una venta rápida con ítems, recargar la pantalla (F5) y volver al PdV | Aviso "Se retomó la venta rápida #N…" y la venta aparece con sus ítems |
-| 0.7 | *Configuración del PdV → Tipos de venta*: dejar sólo **Venta rápida** | El PdV entra directo en VENTA RÁPIDA y sólo muestra ese botón (sin mesas, comandas ni sectores) |
+| 0.7 | *Configuración del PdV → Tipos de venta*: dejar sólo **Venta rápida** | El PdV entra directo en VENTA RÁPIDA; el panel de mesas y comandas desaparece y los accesos rápidos ocupan toda la columna |
 | 0.8 | Con sólo venta rápida, cobrar con F2 | Después del cobro el PdV queda otra vez en VENTA RÁPIDA / NUEVA |
 | 0.9 | Apagar Mesas, Comandas, Venta rápida y Delivery y guardar | No deja: "Habilitá al menos un tipo de venta" |
 | 0.10 | Apagar sólo Mesas | No aparece el tab MESAS; el PdV abre en COMANDAS |

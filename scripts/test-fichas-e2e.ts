@@ -168,11 +168,15 @@ async function main() {
 
   // Impresora simulada: registra cada trabajo y el ticket de venta.
   const trabajos: { tipo: 'FICHA' | 'TICKET'; ventaId?: number; texto: string; cutAtEnd?: boolean }[] = [];
-  let fallarDesde = Infinity;
+  // Trabajos de impresión de fichas (uno por tanda): la térmica perdía el
+  // principio de un trabajo que llegaba mientras cortaba el anterior.
+  let trabajosFichas = 0;
+  let fallar = false;
   __setFichasPrintImplsForTests({
-    printSpec: async (_p: any, spec: any) => {
-      if (trabajos.filter(t => t.tipo === 'FICHA').length >= fallarDesde) return { ok: false, error: 'SIN PAPEL' };
-      trabajos.push({ tipo: 'FICHA', texto: texto(spec.lines), cutAtEnd: spec.cutAtEnd });
+    printSpecs: async (_p: any, specs: any[]) => {
+      if (fallar) return { ok: false, error: 'SIN PAPEL' };
+      trabajosFichas++;
+      for (const spec of specs) trabajos.push({ tipo: 'FICHA', texto: texto(spec.lines), cutAtEnd: spec.cutAtEnd });
       return { ok: true };
     },
     printVentaTicket: async (_ds: any, ventaId: number) => {
@@ -490,14 +494,25 @@ async function main() {
   console.log('\n[10] Fallo de impresión');
   {
     trabajos.length = 0;
-    fallarDesde = 2;
+    fallar = true;
     const v = await nuevaVenta([{ producto: cerveza, cantidad: 4 }]);
     await concluir(v.id);
     const r = await imprimirFichasSiCorresponde(ds, v.id);
-    fallarDesde = Infinity;
+    fallar = false;
     ok(r.resultado?.ok === false, '10: informa el fallo', r.resultado);
-    ok(fichasImpresas().length === 2, '10: corta el bucle en la ficha que falló', fichasImpresas().length);
-    ok(/2 de 4/.test(r.resultado?.errors?.[0]?.message || ''), '10: dice cuántas salieron', r.resultado?.errors);
+    ok(fichasImpresas().length === 0 && (r.resultado?.printed?.length ?? -1) === 0,
+      '10: un solo trabajo: si falla no salió ninguna', r.resultado?.printed);
+    ok(/las 4 fichas/.test(r.resultado?.errors?.[0]?.message || ''), '10: dice cuántas no salieron', r.resultado?.errors);
+
+    // Todas las fichas de una venta van en UN trabajo, cada una con su corte.
+    trabajos.length = 0;
+    const antes = trabajosFichas;
+    const v2 = await nuevaVenta([{ producto: cerveza, cantidad: 3 }]);
+    await concluir(v2.id);
+    await imprimirFichasSiCorresponde(ds, v2.id);
+    ok(trabajosFichas - antes === 1 && fichasImpresas().length === 3,
+      '10: 3 fichas salen en un solo trabajo de impresión', { trabajos: trabajosFichas - antes, fichas: fichasImpresas().length });
+    ok(fichasImpresas().every(f => f.cutAtEnd === true), '10: cada ficha lleva su corte');
     ok(!!(await leerVenta(v.id) as any).fichasEmitidasAt, '10: queda emitida (se resuelve reimprimiendo)');
 
     // `imprimirPostConclusion` no lanza aunque el ticket falle.
@@ -610,10 +625,10 @@ async function main() {
     trabajos.length = 0;
     await invokeHandler('print-fichas-venta', { ventaId: vr.id });
     ok(fichasImpresas()[0]?.texto.includes(`COD ${vr.id}-1-R1`), '11: la reimpresión cambia el código (-R1)', fichasImpresas()[0]?.texto);
-    fallarDesde = 0;
+    fallar = true;
     trabajos.length = 0;
     const rf: any = await invokeHandler('print-fichas-venta', { ventaId: vr.id });
-    fallarDesde = Infinity;
+    fallar = false;
     ok(rf?.ok === false, '11: una reimpresión fallida devuelve ok:false');
     ok((await leerVenta(vr.id) as any).fichasReimpresiones === 1, '11: y no suma al contador');
 
@@ -626,7 +641,24 @@ async function main() {
     usuarioActual = cajero;
   }
 
-  __setFichasPrintImplsForTests({ printSpec: null, printVentaTicket: null });
+  // Buffer real: un trabajo con N fichas lleva N cortes y el encabezado en cada una.
+  {
+    const { armarBufferEscPos } = require('../electron/utils/ticket.utils');
+    const specs = [1, 2, 3].map((n) => ({
+      printerWidth: 32, cutAtEnd: true,
+      lines: [{ type: 'text', text: 'FIESTA PATRONAL', align: 'C', size: 'tall' }, { type: 'separator', char: '=' }, { type: 'text', text: `FICHA ${n}/3` }],
+    }));
+    const buf: Buffer = await armarBufferEscPos({ type: 'epson', connectionType: 'lpr', width: 32, address: '127.0.0.1:1/q' }, specs);
+    const latin = buf.toString('latin1');
+    const cortes = (latin.match(/\x1dV/g) || []).length;
+    ok(cortes === 3, '12: el buffer de 3 fichas tiene 3 cortes', cortes);
+    ok((latin.match(/FIESTA PATRONAL/g) || []).length === 3 && (latin.match(/={32}/g) || []).length === 3,
+      '12: cada ficha lleva su encabezado y su línea completa');
+    const i1 = latin.indexOf('FICHA 1/3'), c1 = latin.indexOf('\x1dV'), h2 = latin.indexOf('FIESTA PATRONAL', c1);
+    ok(i1 < c1 && c1 < h2, '12: el corte de una ficha va antes del encabezado de la siguiente');
+  }
+
+  __setFichasPrintImplsForTests({ printSpecs: null, printVentaTicket: null });
   await ds.destroy();
   console.log(`\n${failed === 0 ? '✅' : '❌'} fichas: ${passed} pasaron, ${failed} fallaron\n`);
   process.exit(failed === 0 ? 0 : 1);

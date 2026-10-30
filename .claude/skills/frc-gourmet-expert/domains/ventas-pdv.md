@@ -980,8 +980,9 @@ de cantina (`esVentaDirecta`).
 (nacen en `true`) + el `deliveryHabilitado` que ya existía. Lo apagado no se
 renderiza en el PdV (botón, panel y opción en el diálogo "Seleccionar Mesa o
 Comanda"). `updatePdvConfig` rechaza apagar los cuatro (`PDV_SIN_TIPOS_DE_VENTA`).
-Con **sólo venta rápida** el PdV vive en ese modo: entra directo y vuelve solo
-después de cada cobro. Es configuración de UI, no un permiso: el backend no
+Con **sólo venta rápida** el PdV vive en ese modo: entra directo, vuelve solo
+después de cada cobro y esconde el panel de mesas/comandas (los accesos rápidos
+ocupan el espacio). Es configuración de UI, no un permiso: el backend no
 impide crear una venta de mesa por `/api/rpc`.
 
 ⚠️ `comandas_habilitadas` (columna vieja) **no se usa**: nunca se leyó y nace en
@@ -1035,7 +1036,7 @@ Precio de lista efectivo (`precio + adicionales − descuentoUnitario`, con
 `Number()`); el descuento global de la venta no se prorratea. **Tope**: más de
 `MAX_FICHAS_POR_VENTA` (200) en una venta → toda la venta sale POR_ITEM.
 
-Impresión: **un `printTicketSpec` por ficha** (ver
+Impresión: **todas las fichas en un solo trabajo** con `printTicketSpecs` (ver
 [tickets-impresos.md](tickets-impresos.md) §Fichas). Impresora de tickets de la
 caja que cobra (`TICKET_VENTA` / `Dispositivo.printerTicket`). No hay rol `FICHA`:
 la resolución de tickets es por dispositivo, y un rol de sector no distingue la

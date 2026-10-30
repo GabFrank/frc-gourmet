@@ -50,7 +50,7 @@ import {
   ticketText, ticketSeparador, ticketBlank, ticketKv, ticketColumns, ticketCantidad,
   ticketLineasFirma, ticketHeaderEmpresa,
   ticketFmtMonto, ticketFmtFecha, ticketFmtFechaHora,
-  printTicketSpec, printerWidthToChars, monedaSimboloAscii,
+  printTicketSpec, printTicketSpecs, printerWidthToChars, monedaSimboloAscii,
   crearFormateadorMonedas, ticketRubroMultimoneda, FormateadorMonedas,
   tasaVsPrincipal, montoAPrincipal,
 } from '../utils/ticket.utils';
@@ -1335,14 +1335,14 @@ export async function buildFichasVenta(
 
 // Inyectable sólo para tests: permite verificar cuántos trabajos se mandan y en
 // qué orden sin una impresora real.
-let printSpecImpl: typeof printTicketSpec = printTicketSpec;
+let printSpecsImpl: typeof printTicketSpecs = printTicketSpecs;
 let printVentaTicketImpl: typeof printVentaTicketInternal = printVentaTicketInternal;
 /** @internal Sólo tests. Pasar `null` restaura las implementaciones reales. */
 export function __setFichasPrintImplsForTests(impls: {
-  printSpec?: typeof printTicketSpec | null;
+  printSpecs?: typeof printTicketSpecs | null;
   printVentaTicket?: typeof printVentaTicketInternal | null;
 }): void {
-  if (impls.printSpec !== undefined) printSpecImpl = impls.printSpec ?? printTicketSpec;
+  if (impls.printSpecs !== undefined) printSpecsImpl = impls.printSpecs ?? printTicketSpecs;
   if (impls.printVentaTicket !== undefined) printVentaTicketImpl = impls.printVentaTicket ?? printVentaTicketInternal;
 }
 
@@ -1350,11 +1350,14 @@ export function __setFichasPrintImplsForTests(impls: {
  * Imprime las fichas de una venta por la impresora de tickets de la caja que
  * cobra (`Dispositivo.printerTicket`, o el rol `TICKET_VENTA`).
  *
- * Una llamada a `printTicketSpec` POR FICHA, cada una con su corte. Un único
- * spec con `{type:'cut'}` intermedios rebanaba el final de cada ficha (el corte
- * intermedio no avanza el papel hasta la cuchilla) y en el fallback CUPS salía
- * una tira continua. Si una ficha falla se corta el bucle: seguir imprimiendo
- * sobre una impresora que no responde sólo desordena la numeración.
+ * Todas las fichas van en UN SOLO trabajo (`printTicketSpecs`), cada una con
+ * su propio avance y corte. Antes iba un trabajo por ficha, uno detrás de otro,
+ * y la térmica perdía el principio del que llegaba mientras cortaba el anterior:
+ * las fichas 2..N salían sin el encabezado del evento (verificado con papel).
+ * Tampoco sirve un único spec con `{type:'cut'}` intermedios: el corte
+ * intermedio no avanza el papel y rebanaba el final de cada ficha.
+ *
+ * Es todo o nada: si el trabajo falla no salió ninguna, y se reimprimen todas.
  *
  * Sin chequeo de permisos: lo llaman los hooks. El wrapper IPC
  * (`print-fichas-venta`) pide `DOCUMENTOS_REIMPRIMIR_FICHAS`.
@@ -1391,22 +1394,24 @@ export async function printFichasVentaInternal(
     return { ok: false, printed: [], errors: [{ printerId: printer.id, message: 'La venta no tiene ítems que emitan fichas' }] };
   }
 
-  const printed: ImpresionResultado['printed'] = [];
-  for (const f of fichas) {
-    const res = await printSpecImpl(printer, { printerWidth: width, lines: f.lines, cutAtEnd: true });
-    if (!res.ok) {
-      const message = `Se imprimieron ${printed.length} de ${fichas.length} fichas de la venta ${ventaId}`;
-      broadcastPrinterEvent({
-        level: 'error',
-        handler: 'print-fichas-venta',
-        entityRef: { tipo: 'VENTA', id: ventaId },
-        errors: [{ printerId: printer.id, message: res.error || 'Error desconocido' }],
-        message,
-      });
-      return { ok: false, printed, errors: [{ printerId: printer.id, message: `${message}: ${res.error || 'error desconocido'}` }] };
-    }
-    printed.push({ itemId: f.ventaItemId, sectorId: null, printerId: printer.id, printerName: printer.name });
+  const res = await printSpecsImpl(
+    printer,
+    fichas.map((f) => ({ printerWidth: width, lines: f.lines, cutAtEnd: true })),
+  );
+  if (!res.ok) {
+    const message = `No se imprimieron las ${fichas.length} fichas de la venta ${ventaId}`;
+    broadcastPrinterEvent({
+      level: 'error',
+      handler: 'print-fichas-venta',
+      entityRef: { tipo: 'VENTA', id: ventaId },
+      errors: [{ printerId: printer.id, message: res.error || 'Error desconocido' }],
+      message,
+    });
+    return { ok: false, printed: [], errors: [{ printerId: printer.id, message: `${message}: ${res.error || 'error desconocido'}` }] };
   }
+  const printed: ImpresionResultado['printed'] = fichas.map((f) => (
+    { itemId: f.ventaItemId, sectorId: null, printerId: printer.id, printerName: printer.name }
+  ));
   return { ok: true, printed, errors: [] };
 }
 
