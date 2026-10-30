@@ -191,6 +191,12 @@ export class PdvComponent implements OnInit, OnDestroy {
 
   // Venta rápida (sin mesa)
   ventaRapidaActual: Venta | null = null;
+  /**
+   * El cajero eligió VENTA RÁPIDA pero todavía no cargó nada. La venta se crea
+   * con el primer ítem (`getOrCreateVenta`): crearla al click dejaba una venta
+   * ABIERTA vacía por cada click de más, y una huérfana si se cerraba la pestaña.
+   */
+  modoVentaRapida = false;
 
   // Delivery activo (cuando se editan items de un delivery)
   deliveryActual: Delivery | null = null;
@@ -1436,7 +1442,22 @@ export class PdvComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Con una venta rápida abierta no se cambia de contexto. Todas las
+   * operaciones del PdV priorizan `ventaRapidaActual`: elegir una mesa la
+   * mostraba pero seguía operando sobre la venta rápida, y elegir una comanda la
+   * soltaba ABIERTA, huérfana y sin forma de volver a ella.
+   */
+  private bloqueaPorVentaRapida(): boolean {
+    // Sin venta creada todavía (nada cargado) se sale sin preguntar.
+    this.salirModoVentaRapidaVacio();
+    if (!this.ventaRapidaActual || this.deliveryActual) return false;
+    this.snackBar.open('Hay una venta rápida abierta: cobrala o cancelala (F4) antes de elegir una mesa o comanda.', 'OK', { duration: 5000 });
+    return true;
+  }
+
   async selectComanda(comanda: any): Promise<void> {
+    if (this.bloqueaPorVentaRapida()) return;
     if (comanda.estado === 'DISPONIBLE') {
       // Abrir dialogo para asignar mesa/sector
       const dialogRef = this.dialog.open(AbrirComandaDialogComponent, {
@@ -1472,6 +1493,7 @@ export class PdvComponent implements OnInit, OnDestroy {
     this.selectedComanda = comanda;
     this.selectedMesa = null;
     this.ventaRapidaActual = null;
+    this.modoVentaRapida = false;
     this.deliveryActual = null;
     this.isEditingClienteName = false;
 
@@ -2081,7 +2103,7 @@ export class PdvComponent implements OnInit, OnDestroy {
       }
 
       // Check if mesa, comanda, or venta rápida is selected
-      if (!this.selectedMesa && !this.ventaRapidaActual && !this.selectedComanda) {
+      if (!this.selectedMesa && !this.ventaRapidaActual && !this.modoVentaRapida && !this.selectedComanda) {
         await this.showMesaSelectionDialog();
         if (!this.selectedMesa && !this.selectedComanda) {
           console.log('No se seleccionó ninguna mesa ni comanda');
@@ -2181,7 +2203,7 @@ export class PdvComponent implements OnInit, OnDestroy {
     if (!result) return; // Cancelado
 
     // Asegurar mesa/comanda/venta rápida.
-    if (!this.selectedMesa && !this.ventaRapidaActual && !this.selectedComanda) {
+    if (!this.selectedMesa && !this.ventaRapidaActual && !this.modoVentaRapida && !this.selectedComanda) {
       await this.showMesaSelectionDialog();
       if (!this.selectedMesa && !this.selectedComanda) return;
     }
@@ -2253,7 +2275,7 @@ export class PdvComponent implements OnInit, OnDestroy {
 
   private async addVariacionItem(producto: Producto, result: SeleccionarVariacionDialogResult): Promise<void> {
     // Verificar que haya mesa/comanda/venta rápida seleccionada
-    if (!this.selectedMesa && !this.ventaRapidaActual && !this.selectedComanda) {
+    if (!this.selectedMesa && !this.ventaRapidaActual && !this.modoVentaRapida && !this.selectedComanda) {
       await this.showMesaSelectionDialog();
       if (!this.selectedMesa && !this.selectedComanda) return;
     }
@@ -2526,6 +2548,16 @@ export class PdvComponent implements OnInit, OnDestroy {
     if (this.ventaRapidaActual) {
       return Promise.resolve(this.ventaRapidaActual);
     }
+    // Primer ítem de una venta rápida: recién acá nace la venta.
+    if (this.modoVentaRapida) {
+      const venta = new Venta();
+      venta.estado = VentaEstado.ABIERTA;
+      venta.caja = this.caja!;
+      this.ventaRapidaActual = await firstValueFrom(this.repositoryService.createVenta(venta));
+      // Nace en la caja activa (ya revalidada): no hay nada que avisar.
+      this.limpiarAvisoCuentaCajaCerrada();
+      return this.ventaRapidaActual;
+    }
 
     // Comanda (tarjeta de cuenta individual)
     if (this.selectedComanda) {
@@ -2789,6 +2821,7 @@ export class PdvComponent implements OnInit, OnDestroy {
         // Limpiar venta rápida
         if (this.ventaRapidaActual) {
           this.ventaRapidaActual = null;
+          this.modoVentaRapida = false;
         }
         // Salir del modo delivery: la venta ya está cobrada, dejar el cartel
         // colgado hacía creer que seguía habiendo un pedido en edición.
@@ -2856,6 +2889,7 @@ export class PdvComponent implements OnInit, OnDestroy {
           // Limpiar venta rápida
           if (this.ventaRapidaActual) {
             this.ventaRapidaActual = null;
+            this.modoVentaRapida = false;
           }
 
           // Limpiar UI
@@ -2869,30 +2903,29 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   async ventaRapida(): Promise<void> {
-    if (this.ventaRapidaActual) return;
+    if (this.ventaRapidaActual || this.modoVentaRapida) return;
     if (!(await this.asegurarCajaAbierta('abrir una venta rápida'))) return;
 
-    try {
-      const venta = new Venta();
-      venta.estado = VentaEstado.ABIERTA;
-      venta.caja = this.caja!;
-      // mesa = null (venta sin mesa)
+    // Sólo se entra en modo: la venta nace con el primer ítem (`getOrCreateVenta`).
+    this.modoVentaRapida = true;
+    this.selectedMesa = null;
+    this.selectedComanda = null;
+    this.clienteNameForm.get('nombre')?.setValue('');
+    this.ventaItemsDataSource.data = [];
+    this.calculateTotals();
+    this.focusBuscadorConDelay();
+  }
 
-      const createdVenta = await firstValueFrom(this.repositoryService.createVenta(venta));
-      this.ventaRapidaActual = createdVenta;
-      // Nace en la caja activa (ya revalidada): no hay nada que avisar.
-      this.limpiarAvisoCuentaCajaCerrada();
+  /** Sale de una venta rápida que todavía no tiene venta creada: no deja rastro. */
+  private salirModoVentaRapidaVacio(): void {
+    if (!this.modoVentaRapida || this.ventaRapidaActual) return;
+    this.modoVentaRapida = false;
+  }
 
-      // Deseleccionar mesa si había una
-      this.selectedMesa = null;
-      this.ventaItemsDataSource.data = [];
-      this.calculateTotals();
-    } catch (error) {
-      console.error('Error al crear venta rápida:', error);
-      if (!this.manejarErrorCajaCerrada(error)) {
-        this.snackBar.open(mensajeDeError(error, 'No se pudo abrir la venta rápida'), 'CERRAR', { duration: 5000 });
-      }
-    }
+  /** Cambiar a MESAS/COMANDAS abandona una venta rápida que no llegó a nacer. */
+  seleccionarTab(tab: 'MESAS' | 'COMANDAS'): void {
+    this.activeTab = tab;
+    this.salirModoVentaRapidaVacio();
   }
 
   async cobroRapido(): Promise<void> {
@@ -3007,6 +3040,7 @@ export class PdvComponent implements OnInit, OnDestroy {
       }
       if (this.ventaRapidaActual) {
         this.ventaRapidaActual = null;
+        this.modoVentaRapida = false;
       }
 
       this.ventaItemsDataSource.data = [];
@@ -3127,6 +3161,7 @@ export class PdvComponent implements OnInit, OnDestroy {
         this.deliveryActual = result.delivery;
         this.selectedMesa = null;
         this.ventaRapidaActual = result.venta;
+        this.modoVentaRapida = false;
 
         // Cargar items de la venta
         try {
@@ -3148,6 +3183,7 @@ export class PdvComponent implements OnInit, OnDestroy {
   cerrarModoDelivery(): void {
     this.deliveryActual = null;
     this.ventaRapidaActual = null;
+    this.modoVentaRapida = false;
     this.ventaItemsDataSource.data = [];
     this.calculateTotals();
     this.limpiarAvisoCuentaCajaCerrada();
@@ -3545,6 +3581,9 @@ export class PdvComponent implements OnInit, OnDestroy {
           this.cerrarModoDelivery();
         } else if (this.ventaRapidaActual) {
           // No deseleccionar — mantener venta rápida
+        } else if (this.modoVentaRapida) {
+          // Venta rápida vacía: no hay nada que perder.
+          this.salirModoVentaRapidaVacio();
         } else if (this.selectedComanda) {
           this.selectedComanda = null;
           this.ventaItemsDataSource.data = [];
@@ -3650,6 +3689,7 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   selectMesa(mesa: PdvMesa): void {
+    if (this.bloqueaPorVentaRapida()) return;
     this.selectedMesa = mesa;
     this.selectedComanda = null;
     this.estamparDetalleMesa();

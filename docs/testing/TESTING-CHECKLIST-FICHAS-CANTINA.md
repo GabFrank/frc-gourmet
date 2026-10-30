@@ -28,6 +28,22 @@ la barra.
 
 ---
 
+## Parte 0: Abrir una venta rápida
+
+La venta rápida se abre con el botón **VENTA RÁPIDA** (junto a MESAS y
+COMANDAS). Antes de este PR el botón no existía: las fichas no se podían
+disparar desde ninguna pantalla.
+
+| # | Paso | Esperado |
+|---|---|---|
+| 0.1 | Click en **VENTA RÁPIDA** sin cargar nada | El indicador dice `VENTA RÁPIDA` y `Venta ID NUEVA`. En la base **no** se crea ninguna venta |
+| 0.2 | Desde 0.1, click en **MESAS** o en una mesa, o **Escape** | Sale del modo sin aviso; con una mesa, la selecciona |
+| 0.3 | VENTA RÁPIDA → agregar un producto | Recién ahí se crea la venta (aparece su ID) |
+| 0.4 | Desde 0.3, click en una mesa o comanda | Aviso "Hay una venta rápida abierta: cobrala o cancelala (F4)…". La venta sigue en pantalla |
+| 0.5 | Desde 0.3, F4 (cancelar) | La venta se cancela y se puede volver a elegir una mesa |
+
+> Sin test automático: no hay spec del PdV. Esta parte es la única cobertura.
+
 ## Parte 1: Emisión
 
 | # | Paso | Esperado |
