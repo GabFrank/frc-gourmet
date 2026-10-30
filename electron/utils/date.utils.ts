@@ -23,17 +23,28 @@
  * del día del límite superior se cuelan en el `<=`. En un reporte mensual eso
  * significa perder el día 1 entero y sumar ventas del mes siguiente.
  *
- * En Postgres la columna es `timestamp` nativo y el driver parsea el ISO bien,
- * así que ahí se manda tal cual.
+ * En Postgres las columnas son `timestamp without time zone` y guardan la hora
+ * **local** del proceso (el driver `pg` serializa un `Date` con su offset local y
+ * Postgres descarta el offset). Comparar contra un ISO con `Z` también descarta
+ * la zona, así que el límite quedaba corrido 3 h en America/Asuncion (#317): se
+ * perdía lo de 00:00-03:00 del primer día y se sumaba lo del día siguiente. Por
+ * eso ahí se manda la hora local sin zona, armada con getters locales.
  *
  * ⚠️ Cualquier query nueva que compare `created_at` (u otra `datetime`) contra
  * una fecha tiene que pasar por acá.
  */
 export function fechaParamSql(dataSource: { options: { type: string } }, fecha: Date): string {
+  if (dataSource?.options?.type === 'postgres') return fechaLocalSinZona(fecha);
   const iso = fecha.toISOString();
-  if (dataSource?.options?.type === 'postgres') return iso;
   // '2026-08-01T18:00:00.000Z' → '2026-08-01 18:00:00.000'
   return iso.slice(0, 23).replace('T', ' ');
+}
+
+/** `Date` → `YYYY-MM-DD HH:mm:ss.SSS` en hora local, sin zona (lo que guarda un `timestamp` de Postgres). */
+function fechaLocalSinZona(d: Date): string {
+  const p = (n: number, w = 2) => String(n).padStart(w, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+    `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
 }
 
 export function parseLocalDate(s: any): Date | undefined {

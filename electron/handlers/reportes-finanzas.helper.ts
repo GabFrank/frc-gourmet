@@ -57,7 +57,7 @@ async function ingresoEgresoRango(ds: DataSource, ctx: Ctx, r: RangoFechas): Pro
     LEFT JOIN monedas m ON m.id = mv.moneda_id
     WHERE ${MOV_ACTIVO} AND mv.fecha >= ? AND mv.fecha <= ?
     GROUP BY mv.tipo_movimiento, mv.moneda_id, m.principal
-  `, [r.desde.toISOString(), r.hasta.toISOString()]);
+  `, [fechaParamSql(ds, r.desde), fechaParamSql(ds, r.hasta)]);
   let ingresos = 0, egresos = 0;
   for (const row of rows) {
     const gs = convertir(row.total, row.moneda_id, row.principal, ctx);
