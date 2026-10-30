@@ -826,7 +826,9 @@
     </mat-card>
 
     <!-- Table/Comanda tabs -->
-    <mat-card class="tables-card mesas-card" [class.disabled-section]="deliveryActual">
+    <!-- Con sólo venta rápida no hay mesas ni comandas que elegir: el panel se
+         esconde y los accesos rápidos (flex: 1) ocupan el espacio. -->
+    <mat-card *ngIf="!soloVentaRapida" class="tables-card mesas-card" [class.disabled-section]="deliveryActual">
       <mat-card-content
         style="display: flex; flex-direction: column; gap: 10px"
       >
