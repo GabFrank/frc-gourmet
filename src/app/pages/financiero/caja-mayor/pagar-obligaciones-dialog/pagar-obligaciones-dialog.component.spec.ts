@@ -31,6 +31,19 @@ describe('PagarObligacionesDialogComponent', () => {
     saldos: [{ moneda: { id: 1 }, formaPago: { id: 5 }, saldo: 10_000_000 }],
   }];
   const CUENTAS = [{ id: 9, nombre: 'CTA GS', activo: true, saldo: 5_000_000, moneda: { id: 1, simbolo: 'Gs' } }];
+  // Guardada como la guarda la UI (extranjera → principal), más una vieja del mismo
+  // par: tiene que ganar la más reciente.
+  const CAMBIOS = [
+    { monedaOrigen: { id: 2 }, monedaDestino: { id: 1 }, compraLocal: 6000, activo: true, createdAt: '2026-05-18T00:00:00Z' },
+    { monedaOrigen: { id: 2 }, monedaDestino: { id: 1 }, compraLocal: 5950, activo: true, createdAt: '2026-05-15T00:00:00Z' },
+  ];
+  /** Un gasto en DÓLARES (#332). */
+  const GASTO_USD = [{
+    origenTipo: 'GASTO', origenId: 301, numero: '#301', descripcion: 'INTERNET',
+    beneficiario: null, beneficiarioId: null, fecha: '2026-10-30',
+    monedaId: 2, monedaSimbolo: 'US$', decimales: 2,
+    montoTotal: 20, montoPagado: 0, saldoPendiente: 20, bloqueado: false,
+  }];
 
   /** Dos cuotas del MISMO cliente, en guaraníes. */
   const CUOTAS_CPC = [
@@ -103,6 +116,7 @@ describe('PagarObligacionesDialogComponent', () => {
       getCajasMayor: () => of(CAJAS),
       getCuentasBancarias: () => of(CUENTAS),
       getMonedas: () => of(MONEDAS),
+      getMonedasCambio: () => of(CAMBIOS),
       getFormasPago: () => of(FORMAS_PAGO),
       getCajaMayorConfiguracion: () => of(configCaja),
       registrarPagoConsolidado: jasmine.createSpy('registrarPagoConsolidado').and.returnValue(of({ id: 1 })),
@@ -402,6 +416,50 @@ describe('PagarObligacionesDialogComponent', () => {
 
       component.limpiarFiltro();
       expect(component.obligacionesFiltradas.length).toBe(3);
+    });
+  });
+
+  describe('cotización de una línea en otra moneda (#332)', () => {
+    it('una deuda en USD pagada con Gs: precarga 6.000 y 120.000 Gs cubren 20 US$', async () => {
+      await crear(PagoConcepto.GASTO, GASTO_USD);
+      seleccionar(301);
+      component.draft.patchValue({ fuente: 'CAJA_MAYOR', cajaMayorId: 1, formaPagoId: 5, monedaId: 1 });
+
+      expect(component.draftNecesitaCotizacion).toBeTrue();
+      expect(component.draft.get('cotizacion')!.value).toBe(6000);
+      expect(component.draftCotizacionHint).toBe('1 US$ = ? Gs');
+
+      component.draft.patchValue({ monto: 120_000 });
+      component.agregarLinea();
+
+      expect(component.lineas.length).toBe(1);
+      expect(component.lineas[0].cotizacion).toBeCloseTo(1 / 6000, 12);
+      expect(component.totalPago).toBe(20);
+      expect(component.cuadra).toBeTrue();
+    });
+
+    it('no queda el 1 de "Completar" al cambiar a guaraníes', async () => {
+      await crear(PagoConcepto.GASTO, GASTO_USD);
+      seleccionar(301);
+      component.draft.patchValue({ fuente: 'CAJA_MAYOR', cajaMayorId: 1, formaPagoId: 5 });
+      component.completarFaltante();
+      expect(component.draft.get('cotizacion')!.value).toBe(1);
+
+      component.draft.patchValue({ monedaId: 1 });
+
+      expect(component.draft.get('cotizacion')!.value).toBe(6000);
+    });
+
+    it('la cotización tipeada a mano se lee como Gs por 1 US$', async () => {
+      await crear(PagoConcepto.GASTO, GASTO_USD);
+      seleccionar(301);
+      component.draft.patchValue({ fuente: 'CAJA_MAYOR', cajaMayorId: 1, formaPagoId: 5, monedaId: 1 });
+      component.draft.patchValue({ cotizacion: 7500, monto: 150_000 });
+      component.agregarLinea();
+
+      expect(component.totalPago).toBe(20);
+      // Al backend va la tasa línea → deuda, no lo tipeado.
+      expect(component.lineas[0].cotizacion).toBeCloseTo(1 / 7500, 12);
     });
   });
 });
