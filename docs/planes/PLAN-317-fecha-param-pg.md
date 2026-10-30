@@ -26,3 +26,10 @@ día pierden lo vendido entre 00:00 y 03:00 del primer día y suman lo de 00:00�
   America/Asuncion; control que reproduce el bug con el ISO `Z`. Sin Postgres se autosaltea.
 - `test:reporte-filtro-dia-uno` (#249, SQLite) sigue pasando.
 - Sin pantalla nueva ni cambios de cobro/factura/PDV → no aplica prueba de UI con cobro.
+
+## Auditoría (2 agentes, 30/10)
+- Corregido: `reportes-finanzas.helper.ts` `ingresoEgresoRango` mandaba `toISOString()` directo; ahora pasa por
+  `fechaParamSql` y los KPIs de Ingresos/Egresos cuadran con flujo y composición (en Postgres y en SQLite).
+- Supuesto verificado: `created_at` lo completa Postgres con `now()` en la zona de la sesión. En la copia de
+  producción del 24/10 las ventas pican a las 12–13 h y 20–21 h → la base de Don Franco guarda hora local.
+- Deuda previa sin cambio (vencimientos de cheques con `toISOString()` contra columnas `date`): fuera de alcance.
