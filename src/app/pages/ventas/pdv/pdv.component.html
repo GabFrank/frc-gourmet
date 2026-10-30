@@ -151,7 +151,7 @@
     </mat-card>
 
     <!-- Venta Rápida indicator -->
-    <mat-card *ngIf="ventaRapidaActual && !deliveryActual" class="mesa-data-card" data-testid="pdv-venta-rapida-indicator">
+    <mat-card *ngIf="(ventaRapidaActual || modoVentaRapida) && !deliveryActual" class="mesa-data-card" data-testid="pdv-venta-rapida-indicator">
       <mat-card-content>
         <div class="mesa-info-row">
           <div class="mesa-info-item">
@@ -165,7 +165,7 @@
             <mat-icon>receipt</mat-icon>
             <div class="mesa-info-content">
               <span class="info-label">Venta ID</span>
-              <span class="info-value">{{ ventaRapidaActual.id }}</span>
+              <span class="info-value">{{ ventaRapidaActual?.id || 'NUEVA' }}</span>
             </div>
           </div>
         </div>
@@ -826,16 +826,19 @@
     </mat-card>
 
     <!-- Table/Comanda tabs -->
-    <mat-card class="tables-card mesas-card" [class.disabled-section]="deliveryActual">
+    <!-- Con sólo venta rápida no hay mesas ni comandas que elegir: el panel se
+         esconde y los accesos rápidos (flex: 1) ocupan el espacio. -->
+    <mat-card *ngIf="!soloVentaRapida" class="tables-card mesas-card" [class.disabled-section]="deliveryActual">
       <mat-card-content
         style="display: flex; flex-direction: column; gap: 10px"
       >
         <!-- Tab selector -->
         <div class="tab-selector">
           <button
+            *ngIf="mesasHabilitadas"
             mat-flat-button
             [class.tab-active]="activeTab === 'MESAS'"
-            (click)="activeTab = 'MESAS'"
+            (click)="seleccionarTab('MESAS')"
             [matBadge]="mesasOcupadasCount"
             matBadgeColor="warn"
             [matBadgeHidden]="mesasOcupadasCount === 0"
@@ -845,9 +848,10 @@
             MESAS
           </button>
           <button
+            *ngIf="comandasHabilitadas"
             mat-flat-button
             [class.tab-active]="activeTab === 'COMANDAS'"
-            (click)="activeTab = 'COMANDAS'"
+            (click)="seleccionarTab('COMANDAS')"
             [matBadge]="comandasOcupadasCount"
             matBadgeColor="accent"
             [matBadgeHidden]="comandasOcupadasCount === 0"
@@ -856,10 +860,24 @@
             <mat-icon>receipt_long</mat-icon>
             COMANDAS
           </button>
+          <!-- Venta directa de mostrador: sin mesa, comanda ni delivery. Es la
+               única que no va a cocina y la única que emite fichas de cantina. -->
+          <button
+            *ngIf="ventaRapidaHabilitada"
+            mat-flat-button
+            [class.tab-active]="(ventaRapidaActual || modoVentaRapida) && !deliveryActual"
+            [disabled]="!!ventaRapidaActual || modoVentaRapida || !!deliveryActual"
+            (click)="ventaRapida()"
+            data-testid="pdv-btn-venta-rapida"
+            matTooltip="Venta de mostrador, sin mesa ni comanda"
+          >
+            <mat-icon>flash_on</mat-icon>
+            VENTA RÁPIDA
+          </button>
         </div>
 
         <!-- Sector filters (shared) -->
-        <div class="bottom-buttons" data-testid="pdv-sector-filters">
+        <div class="bottom-buttons" *ngIf="!soloVentaRapida" data-testid="pdv-sector-filters">
           <button
             mat-raised-button
             [color]="selectedSectorId === null ? 'accent' : 'primary'"
@@ -882,7 +900,7 @@
         </div>
 
         <!-- MESAS tab -->
-        <div class="tables-grid" *ngIf="activeTab === 'MESAS'" data-testid="pdv-mesas-panel">
+        <div class="tables-grid" *ngIf="activeTab === 'MESAS' && mesasHabilitadas" data-testid="pdv-mesas-panel">
           <div *ngIf="loadingMesas" class="loading-mesas">
             <mat-spinner diameter="40"></mat-spinner>
             <span>Cargando mesas...</span>
@@ -914,7 +932,7 @@
         </div>
 
         <!-- COMANDAS tab -->
-        <div class="tables-grid" *ngIf="activeTab === 'COMANDAS'" data-testid="pdv-comandas-panel">
+        <div class="tables-grid" *ngIf="activeTab === 'COMANDAS' && comandasHabilitadas" data-testid="pdv-comandas-panel">
           <div *ngIf="loadingComandas" class="loading-mesas">
             <mat-spinner diameter="40"></mat-spinner>
             <span>Cargando comandas...</span>
@@ -954,7 +972,7 @@
       <!-- Botones para MESA seleccionada. La venta rápida y el delivery quedan
            fuera: el mostrador no es un contenedor del salón, y antes el botón
            TRANSFERIR se renderizaba igual pero no hacía nada. -->
-      <ng-container *ngIf="!selectedComanda && !ventaRapidaActual">
+      <ng-container *ngIf="!selectedComanda && !ventaRapidaActual && !modoVentaRapida">
         <button
           mat-raised-button
           color="primary"

@@ -55,6 +55,9 @@ export class PdvConfigDialogComponent implements OnInit {
     this.configForm = this.fb.group({
       pdvTabDefault: ['MESAS'],
       comandasHabilitadas: [false],
+      pdvMesasHabilitadas: [true],
+      pdvComandasHabilitadas: [true],
+      pdvVentaRapidaHabilitada: [true],
       ocuparMesaAlVincularComanda: [false],
       pizzaMaxSabores: [2],
       pizzaEstrategiaPrecio: ['MAYOR_PRECIO'],
@@ -88,6 +91,14 @@ export class PdvConfigDialogComponent implements OnInit {
       // opera sobre ella.
       permitirPagosTerminalAjena: [false],
       permitirFinalizarTerminalAjena: [false],
+      // --- Cantina de eventos: fichas de la venta directa ---
+      fichasHabilitadas: [false],
+      // No tenía campo en el HTML: el ticket de pago sólo se podía apagar
+      // tocando la base. En la cantina es lo que lo vuelve opcional.
+      autoImprimirTicketVenta: [true],
+      fichasModo: ['POR_UNIDAD'],
+      fichasMostrarPrecio: [false],
+      fichasNombreEvento: ['', [Validators.maxLength(120)]],
     });
   }
 
@@ -112,6 +123,10 @@ export class PdvConfigDialogComponent implements OnInit {
         this.configForm.patchValue({
           pdvTabDefault: cfg.pdvTabDefault || 'MESAS',
           comandasHabilitadas: cfg.comandasHabilitadas || false,
+          // `!== false`: en una base sin migrar llegan undefined y tienen que quedar prendidos.
+          pdvMesasHabilitadas: cfg.pdvMesasHabilitadas !== false,
+          pdvComandasHabilitadas: cfg.pdvComandasHabilitadas !== false,
+          pdvVentaRapidaHabilitada: cfg.pdvVentaRapidaHabilitada !== false,
           ocuparMesaAlVincularComanda: cfg.ocuparMesaAlVincularComanda || false,
           pizzaMaxSabores: cfg.pizzaMaxSabores || 2,
           pizzaEstrategiaPrecio: cfg.pizzaEstrategiaPrecio || 'MAYOR_PRECIO',
@@ -139,6 +154,11 @@ export class PdvConfigDialogComponent implements OnInit {
           // migrar (undefined) tiene que caer en false igual.
           permitirPagosTerminalAjena: cfg.permitirPagosTerminalAjena || false,
           permitirFinalizarTerminalAjena: cfg.permitirFinalizarTerminalAjena || false,
+          fichasHabilitadas: cfg.fichasHabilitadas || false,
+          autoImprimirTicketVenta: cfg.autoImprimirTicketVenta !== false,
+          fichasModo: cfg.fichasModo || 'POR_UNIDAD',
+          fichasMostrarPrecio: cfg.fichasMostrarPrecio || false,
+          fichasNombreEvento: cfg.fichasNombreEvento || '',
         });
       }
     } catch (error) {
@@ -153,6 +173,11 @@ export class PdvConfigDialogComponent implements OnInit {
     if (this.configForm.invalid) {
       this.configForm.markAllAsTouched();
       this.snackBar.open('Revisá los campos marcados', 'OK', { duration: 3000 });
+      return;
+    }
+    const v = this.configForm.value;
+    if (!v.pdvMesasHabilitadas && !v.pdvComandasHabilitadas && !v.pdvVentaRapidaHabilitada && !v.deliveryHabilitado) {
+      this.snackBar.open('Habilitá al menos un tipo de venta (mesas, comandas, venta rápida o delivery).', 'OK', { duration: 4000 });
       return;
     }
     this.isSaving = true;

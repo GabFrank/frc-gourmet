@@ -26,7 +26,7 @@ import { PagoEstado } from '../../src/app/database/entities/compras/estado.enum'
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
 import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
 import { ensurePermission } from '../utils/auth.utils';
-import { printVentaTicketInternal, printPagareCpcTicketInternal } from './documentos-tickets.handler';
+import { printVentaTicketInternal, printPagareCpcTicketInternal, imprimirFichasSiCorresponde } from './documentos-tickets.handler';
 import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
 import { PagoOrigenTipo } from '../../src/app/database/entities/financiero/pago-consolidado-enums';
 import { bloquearSiPagoConsolidado } from './pago-consolidado-guard';
@@ -1030,9 +1030,14 @@ export function registerCuentasPorCobrarHandlers(
       // La impresión es opt-in: solo si el usuario pidió imprimir en el diálogo
       // de cobro (por defecto NO). Si no se desea el pagaré, tampoco se imprime
       // el ticket de venta.
+      //
+      // Las fichas de cantina van FUERA de ese `if`: una venta directa a
+      // crédito sin pagaré igual entrega fichas. Corre post-commit (estamos
+      // después de `commitTransaction`), así el claim ve la venta CONCLUIDA.
+      // Orden en la térmica: ticket, pagaré, fichas.
       const imprimirPagare = data?.imprimirPagare === true;
-      if (imprimirPagare) {
-        setImmediate(async () => {
+      setImmediate(async () => {
+        if (imprimirPagare) {
           try {
             const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
             if (pdvConfig?.autoImprimirTicketVenta) {
@@ -1044,8 +1049,9 @@ export function registerCuentasPorCobrarHandlers(
           } catch (e: any) {
             console.warn('[cobrar-venta-credito] auto-print:', e?.message || e);
           }
-        });
-      }
+        }
+        await imprimirFichasSiCorresponde(dataSource, venta.id);
+      });
 
       return { success: true, ventaId: venta.id, cpcId: cpcSaved.id };
     } catch (error) {

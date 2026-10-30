@@ -1,0 +1,91 @@
+name: Build preview (sin publicar)
+
+# Instalador de Windows de una rama, SIN release ni tag: ninguna instalación lo
+# ve como actualización. Para probar o usar una rama en una máquina aislada
+# (p. ej. un evento) sin tocar a los locales que se actualizan solos.
+#
+# Se dispara con un push a `preview/**` (o a mano). El instalador queda como
+# artefacto del run de Actions.
+#
+# Versión `9.0.0-<rama>.<run>`: el sufijo no es -alpha/-beta, así que el
+# auto-updater la toma como canal stable, y con major 9 ningún release
+# publicado es "más nuevo". La máquina que la instala no se actualiza sola a una
+# versión sin los cambios de la rama. Para volver a una versión normal se
+# instala su .exe a mano.
+
+on:
+  push:
+    branches:
+      - 'preview/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Mismo runner que el release: windows-latest trae VS 2026 y rompe el
+    # rebuild nativo de node-printer (ver release.yml).
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Versión de preview
+        id: version
+        shell: bash
+        run: |
+          RAMA="${GITHUB_REF_NAME#preview/}"
+          SUFIJO=$(echo "$RAMA" | tr -c 'a-zA-Z0-9\n' '-' | tr 'A-Z' 'a-z')
+          VERSION="9.0.0-${SUFIJO}.${GITHUB_RUN_NUMBER}"
+          node -e "
+            const fs=require('fs');
+            const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+            pkg.version='${VERSION}';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2)+'\n');
+          "
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Versión: ${VERSION}" >> $GITHUB_STEP_SUMMARY
+
+      # Igual que release.yml: node-gyp de node-printer necesita distutils
+      # (Python 3.11).
+      - name: Setup Python 3.11 for node-gyp
+        id: py311
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps (con node-printer)
+        shell: bash
+        env:
+          npm_config_python: ${{ steps.py311.outputs.python-path }}
+        run: |
+          npm ci --legacy-peer-deps --omit=optional --no-audit --no-fund
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json'));p.dependencies=p.dependencies||{};p.dependencies['@thiagoelg/node-printer']=(p.optionalDependencies||{})['@thiagoelg/node-printer']||'^0.6.2';if(p.optionalDependencies)delete p.optionalDependencies['@thiagoelg/node-printer'];fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');console.log('node-printer declarado como dependency requerida');"
+          npm install --no-save --no-audit --no-fund --foreground-scripts --build-from-source @thiagoelg/node-printer@0.6.2
+          node -e "require.resolve('@thiagoelg/node-printer/package.json')"
+          rm -rf node_modules/canvas
+
+      - name: Build app
+        run: npm run build:prod
+        env:
+          NODE_OPTIONS: --max_old_space_size=8192
+
+      # --publish never: no crea release, no sube assets, no toca los
+      # manifests del auto-updater (latest.yml / alpha.yml / beta.yml).
+      - name: Package installer (sin publicar)
+        shell: bash
+        run: |
+          unset CSC_LINK CSC_KEY_PASSWORD
+          npx electron-builder --win --publish never
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: FRC-Gourmet-Setup-${{ steps.version.outputs.version }}
+          path: release/*.exe
+          retention-days: 14

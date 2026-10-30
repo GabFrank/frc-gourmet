@@ -22,6 +22,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 import { TabsService } from 'src/app/services/tabs.service';
 import { CreateEditCompraComponent } from 'src/app/pages/compras/create-edit-compra/create-edit-compra.component';
+import { tasaEntreMonedas } from 'src/app/shared/utils/conversion-moneda';
 
 /**
  * Crea+paga una compra SIMPLIFICADA o paga una cuota de compra existente con el
@@ -187,14 +188,13 @@ export class PagarCompraCajaDialogComponent implements OnInit {
     return Number.isFinite(dec) ? dec : 0;
   }
 
-  /** Cotización (compraLocal) de `origenId` → moneda destino. 1 si igual; null si falta. */
+  /**
+   * Tasa de `origenId` → moneda destino. 1 si igual; null si falta. Gs → USD
+   * divide (#332): `compraLocal` es siempre Gs por 1 extranjera.
+   */
   cotizacionA(origenId: number | null): number | null {
-    const destinoId = this.targetMonedaId;
-    if (origenId == null || destinoId == null) return null;
-    if (origenId === destinoId) return 1;
-    const c = this.cambios.find((x: any) => x?.monedaOrigen?.id === origenId && x?.monedaDestino?.id === destinoId && x?.activo !== false);
-    const tasa = c ? Number(c.compraLocal) : 0;
-    return tasa > 0 ? tasa : null;
+    const principalId = this.monedas.find((m: any) => m.principal)?.id ?? null;
+    return tasaEntreMonedas(this.cambios, origenId, this.targetMonedaId, principalId);
   }
 
   convertido(l: { monedaId: number | null; monto: number }): number | null {

@@ -684,6 +684,8 @@ export abstract class RepositoryService {
   abstract revertirStockVenta(ventaId: number): Observable<any>;
   // Cobro parcial por ítems
   abstract getEstadoCobroVenta(ventaId: number): Observable<any>;
+  /** Venta rápida ABIERTA de esta terminal en la caja (para retomarla tras recargar). */
+  abstract getVentaRapidaAbierta(cajaId: number): Observable<any>;
   abstract registrarCobroParcial(ventaId: number, payload: any): Observable<any>;
   abstract anularCobroParcial(cobroParcialId: number): Observable<any>;
   abstract searchProductosByNombre(nombre: string, mode?: 'venta' | 'compra'): Observable<Producto[]>;

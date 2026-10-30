@@ -170,21 +170,23 @@ async function seedAdminUserAndRole(dataSource: DataSource): Promise<void> {
 // ===================== TIPO CLIENTE =====================
 async function seedTipoCliente(dataSource: DataSource): Promise<void> {
   const repo = dataSource.getRepository(TipoCliente);
-  const count = await repo.count();
-  if (count > 0) {
-    console.log(`  TipoCliente: ${count} ya existen, skipping.`);
-    return;
+  if ((await repo.count()) === 0) {
+    await repo.save(repo.create({
+      descripcion: 'CONSUMIDOR FINAL', activo: true, credito: false, descuento: false, porcentaje_descuento: 0,
+    }));
+    console.log('  TipoCliente: CONSUMIDOR FINAL creado.');
   }
 
-  const tipos = [
-    { descripcion: 'CONSUMIDOR FINAL', activo: true, credito: false, descuento: false, porcentaje_descuento: 0 },
-  ];
-
-  for (const data of tipos) {
-    const entity = repo.create(data);
-    await repo.save(entity);
+  // CONVENIADO lo exige el alta de funcionario con "crear cliente conveniado"
+  // (default de la UI). Sin él, el primer funcionario de una instalación nueva
+  // fallaba y deshacía el alta entera. Se asegura por descripción (no por
+  // `count`) para que llegue también a instalaciones existentes.
+  if (!(await repo.findOne({ where: { descripcion: 'CONVENIADO' } }))) {
+    await repo.save(repo.create({
+      descripcion: 'CONVENIADO', activo: true, credito: true, descuento: false, porcentaje_descuento: 0,
+    }));
+    console.log('  TipoCliente: CONVENIADO creado.');
   }
-  console.log(`  TipoCliente: ${tipos.length} creados.`);
 }
 
 // ===================== TIPO PRECIO =====================
@@ -516,6 +518,9 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       'DOCUMENTOS_IMPRIMIR_TICKET',
       'DOCUMENTOS_REIMPRIMIR_COMANDA',
       'DOCUMENTOS_REIMPRIMIR_TICKET_VENTA',
+      'DOCUMENTOS_REIMPRIMIR_FICHAS',
+      // Cantina: cancelar una venta cuyas fichas ya están en manos del cliente
+      'VENTAS_CANCELAR_CON_FICHAS',
       'DOCUMENTOS_ADJUNTAR',
       'DOCUMENTOS_ADJUNTOS_ELIMINAR',
       // Musica ambiental: el gerente configura la cuenta y el repertorio
@@ -600,6 +605,8 @@ const ROLES_PLANTILLA: Array<{ descripcion: string; permisos: string[] }> = [
       'DOCUMENTOS_IMPRIMIR_TICKET',
       'DOCUMENTOS_REIMPRIMIR_COMANDA',
       'DOCUMENTOS_REIMPRIMIR_TICKET_VENTA',
+      // Cantina: el cajero reimprime las fichas cuando falla el papel
+      'DOCUMENTOS_REIMPRIMIR_FICHAS',
       // Musica: el cajero controla la reproduccion y vota "no va" desde la PWA.
       // NO configura la cuenta ni el repertorio (eso es del gerente/admin).
       'MUSICA_VER', 'MUSICA_CONTROLAR',

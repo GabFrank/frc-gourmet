@@ -442,6 +442,7 @@ export class GestionarProductoService {
           pesoMinimoGramos: (producto as any).pesoMinimoGramos ?? null,
           maxVariacionesSimultaneas: (producto as any).maxVariacionesSimultaneas ?? null,
           estrategiaPrecioVariacion: (producto as any).estrategiaPrecioVariacion ?? null,
+          fichaModo: (producto as any).fichaModo ?? null,
           descuentaPorReceta: (producto as any).descuentaPorReceta ?? false,
           imageUrl: (producto as any).imageUrl ?? null
         });
@@ -523,7 +524,9 @@ export class GestionarProductoService {
         // Variaciones (solo ELABORADO_CON_VARIACION). null = heredar la config
         // global del PdV (pizzaMaxSabores / pizzaEstrategiaPrecio).
         maxVariacionesSimultaneas: [null, [Validators.min(1)]],
-        estrategiaPrecioVariacion: [null]
+        estrategiaPrecioVariacion: [null],
+        // Fichas de cantina (venta directa). null = heredar el modo del PdV.
+        fichaModo: [null]
       }, { validators: this.stockRangeValidator }),
       presentaciones: this.fb.array([]),
       precios: this.fb.group({
@@ -807,6 +810,8 @@ export class GestionarProductoService {
       estrategiaPrecioVariacion: productoData.tipo === ProductoTipo.ELABORADO_CON_VARIACION
         ? (productoData.estrategiaPrecioVariacion || null)
         : null,
+      // `null` explícito: volver a heredar el modo del PdV.
+      fichaModo: productoData.fichaModo || null,
       subfamiliaId: productoData.subfamiliaId,
       imageUrl: productoData.imageUrl ?? null
     };

@@ -63,6 +63,64 @@ depure esto. Se dejó como está para no tocar el camino de standalone.
 
 ## Ventas / PdV
 
+### ✅ RESUELTO — Lote de la carga inicial (2026-10, PR #327)
+
+Encontrados al relevar el alta por API para el runbook de instalación. Test
+`test:alta-inicial` salvo donde se indica.
+
+- **#336:** `create`/`update-producto` ignoraban `requiereComanda`; el toggle de la UI
+  no se guardaba.
+- **#337:** `change-password` comparaba contra `getCurrentUser()` (la consola del
+  servidor), no contra el usuario del JWT. Desde un cliente, `/admin` o la PWA nadie
+  podía cambiar su contraseña, ni siquiera en el cambio forzado. Ahora usa
+  `getEffectiveUser`. ⚠️ **Patrón a vigilar:** cualquier handler que use
+  `getCurrentUser()` directo atribuye a la consola del servidor por HTTP;
+  `ensurePermission` no lo ataja. Quedan ~15 handlers así, en el issue
+  GabFrank/frc-gourmet#341 (ABIERTO).
+- **#338:** la UI leía `resp.id` de `create-usuario`, que devuelve
+  `{ success, usuario }`, así que los roles no se asignaban (es de UI, prueba
+  manual).
+- **#339:** el seed no creaba el tipo de cliente CONVENIADO y el primer alta de
+  funcionario (que lo pide por defecto) fallaba.
+- **#340:** el monto y el saldo de Caja Mayor eran `decimal(10,2)`; en Postgres
+  desbordaban desde 100 M Gs. Migración `CajaMayorMontosAmplios`, sólo Postgres.
+- **#332:** `getCotizacionBidireccional` trataba `compraLocal` (siempre unidades de la
+  principal por 1 de la otra) como tasa origen → destino, así que Gs → USD
+  multiplicaba. El mismo error estaba en el **pago mixto de cuota CPP**
+  (`cuentas-por-pagar.handler`) y en el **pago de compra desde el cajón**
+  (`pdv-egresos.handler`): los dos usaban `getCotizacionCompraLocal` como tasa
+  línea → deuda. Ahora usan la bidireccional. Regla: `getCotizacionCompraLocal`
+  sólo sirve **hacia la moneda principal**; cualquier otra conversión va por
+  `getCotizacionBidireccional`. Tests `test:pago-consolidado-e2e` y
+  `test:alta-inicial`.
+- **#329, segunda puerta:** `cerrarVentasAbiertasMesa(CONCLUIDA)` también exige un
+  `Pago` por cuenta, y `updateVenta` no deja que un `pago: null` explícito ni un id
+  inventado pasen el chequeo. #330 también congela el canal en el mismo payload que
+  cierra la venta.
+
+### ✅ RESUELTO — `updateVenta` dejaba concluir una venta sin cobrarla (2026-10, #329)
+
+Bastaba `VENTAS_PDV` para pasar ABIERTA → CONCLUIDA sin `Pago` por `/api/rpc`. Ahora
+esa transición exige un `Pago` vinculado (en el payload o ya adoptado). **No** se
+exige el estado PAGADO: el diálogo de cobro cierra la venta *antes* de marcar el pago.
+El chequeo va después de los guards específicos (caja cerrada, hermanas abiertas en la
+mesa) para no tapar sus errores. Rehabilitar (CANCELADA → CONCLUIDA) no lo exige.
+Test `test:alta-inicial`.
+
+### ✅ RESUELTO — `updateVenta` dejaba mudar de canal una venta ya concluida (2026-10, #330)
+
+`mesa`/`comanda`/`delivery`/`canalOrigen` se descartan del merge cuando la venta ya no
+está ABIERTA. Queda como defensa en profundidad pendiente: `cancelarVentaCompletaEnTx`
+(`venta-reversa.utils.ts`) no mira `fichasCantidad`. Hoy no aplica porque sólo cancela
+delivery y web.
+
+### ✅ RESUELTO — La hora de TODOS los tickets salía «p.?m.» (2026-10)
+
+`toLocaleString('es-PY')` separa «p.» de «m.» con un U+00A0 (según ICU, U+202F) y el
+saneador CP437 lo convertía en `?`. Ahora los espacios duros pasan a espacio
+(`REEMPLAZOS_TICKET` en `ticket.utils.ts`). Lo destapó `test:fichas`; regresión en
+`test:ticket-venta` (bloque charset).
+
 ### ✅ RESUELTO — Se podían desactivar líneas de pago de otra caja, incluso cerrada (2026-08-27)
 
 **Síntoma:** el arqueo de una caja ya cerrada cambiaba retroactivamente, después

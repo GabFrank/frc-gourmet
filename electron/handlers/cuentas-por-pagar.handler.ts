@@ -16,7 +16,7 @@ import { MovimientoBancarioTipo } from '../../src/app/database/entities/financie
 import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { TipoMovimiento } from '../../src/app/database/entities/financiero/caja-mayor-enums';
 import { PagoCuotaCppDetalle } from '../../src/app/database/entities/financiero/pago-cuota-cpp-detalle.entity';
-import { getCotizacionCompraLocal } from '../utils/moneda.utils';
+import { getCotizacionBidireccional } from '../utils/moneda.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
@@ -303,7 +303,9 @@ export async function aplicarPagoMixtoCuota(
     }
     let cotizacion: number | null = l.cotizacion != null ? Number(l.cotizacion) : null;
     if (cotizacion == null) {
-      cotizacion = await getCotizacionCompraLocal(dataSource, Number(l.monedaId), cppMonedaId);
+      // Bidireccional: `getCotizacionCompraLocal` da "Gs por 1 extranjera", no
+      // la tasa línea → deuda. Una CPP en USD pagada con Gs multiplicaba (#332).
+      cotizacion = (await getCotizacionBidireccional(dataSource, Number(l.monedaId), cppMonedaId))?.tasa ?? null;
     }
     if (cotizacion == null || !(cotizacion > 0)) {
       throw new Error('Falta la cotizacion para convertir una linea a la moneda de la deuda.');

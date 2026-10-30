@@ -10,7 +10,13 @@
  * Enmienda #6 de auditoría: test obligatorio antes de mergear.
  */
 
+// El mock va PRIMERO: sin él, con el binario de Electron instalado,
+// `require('electron')` devuelve una ruta y `app.getPath` revienta en
+// jwt-secret.utils (#335).
+import './_electron-mock';
 import { strict as assert } from 'assert';
+import * as fs from 'fs';
+import * as path from 'path';
 import { DataSource } from 'typeorm';
 import { Usuario } from '../src/app/database/entities/personas/usuario.entity';
 import { Role } from '../src/app/database/entities/personas/role.entity';
@@ -21,6 +27,9 @@ import { Dispositivo } from '../src/app/database/entities/financiero/dispositivo
 import { getDataSourceOptions } from '../src/app/database/database.config';
 import { startServer, stopServer } from '../electron/server/server';
 import * as jwt from 'jsonwebtoken';
+import { getJwtSecret } from '../electron/utils/jwt-secret.utils';
+import { registerBackupHandlers } from '../electron/handlers/backup.handler';
+import { setNotificacionDataSource } from '../electron/services/notificacion.service';
 
 const TEST_PORT = 17071;
 const JWT_SECRET = 'test-secret-backup-http';
@@ -45,8 +54,12 @@ async function makeRequest(
   return { status, body: responseBody };
 }
 
+// El server firma y verifica con `getJwtSecret()` (keytar o archivo en
+// userData); `process.env.JWT_SECRET` ya no se lee. Firmar con una constante
+// hacía que el server rechazara todos los tokens del test (#335).
+let secretoJwt = JWT_SECRET;
 function createToken(userId: number, deviceId: number): string {
-  return jwt.sign({ id: userId, device_id: deviceId }, JWT_SECRET, { expiresIn: '1h' });
+  return jwt.sign({ id: userId, device_id: deviceId }, secretoJwt, { expiresIn: '1h' });
 }
 
 async function main() {
@@ -119,8 +132,14 @@ async function main() {
   } as any);
   await dispRepo.save(device1);
 
-  // Mock JWT secret en el environment para que el server lo use
-  process.env.JWT_SECRET = JWT_SECRET;
+  // El mismo secreto que va a usar el server.
+  secretoJwt = await getJwtSecret();
+
+  // Sin registrar el handler real, /api/rpc devolvía 404 para backup-create:
+  // el Test 2 lo aceptaba ("no es 403") y el Test 3 fallaba esperando 403.
+  registerBackupHandlers(dataSource, () => null);
+  // El envío por WhatsApp lee la config de notificaciones de la base.
+  setNotificacionDataSource(dataSource);
 
   const fastify = await startServer({
     port: TEST_PORT,
@@ -133,6 +152,7 @@ async function main() {
 
   const baseUrl = `http://127.0.0.1:${TEST_PORT}`;
 
+  let restaurar: (() => void) | null = null;
   try {
     console.log('[test-backup-http-e2e] Server iniciado');
 
@@ -174,50 +194,73 @@ async function main() {
       headers: { Authorization: `Bearer ${adminToken}` },
       body: { method: 'backup-create', params: [{ includeImages: false }] },
     });
-    // Puede fallar por otros motivos (filesystem), pero NO debe ser 403 ni channel_bloqueado
+    // Puede fallar por otros motivos (filesystem), pero NO debe ser 403 ni
+    // channel_bloqueado — y tampoco 404: eso es que el handler no llegó a
+    // correr, no que lo haya autorizado.
     assert.notStrictEqual(createRes.status, 403, 'backup-create no debería estar bloqueado');
+    assert.notStrictEqual(createRes.status, 404, 'backup-create tiene que estar registrado');
     if (createRes.status !== 200 && createRes.body.error) {
       assert.ok(
         !createRes.body.error.includes('channel_bloqueado_para_http'),
         'backup-create no debería responder channel_bloqueado_para_http',
       );
     }
+    // Puede fallar por filesystem (la BD del test no está en userData), pero
+    // NUNCA por permiso: eso querría decir que el usuario del JWT no llegó al
+    // handler.
+    const msgCreate = String(createRes.body?.result?.message ?? createRes.body?.error ?? '');
+    assert.ok(!/PERMISO REQUERIDO/.test(msgCreate), `El admin no debería ser rechazado por permiso, got: ${msgCreate}`);
     console.log(' ✓');
 
     // Test 3: Sin permiso → HTTP 403
     console.log('[Test 3] Sin permiso SISTEMA_BACKUP → HTTP 403');
+    const dirBackups = path.join(require('electron').app.getPath('userData'), 'backups');
+    const listar = () => (fs.existsSync(dirBackups) ? fs.readdirSync(dirBackups).sort().join('|') : '');
+    const antesSinPermiso = listar();
     const noPermRes = await makeRequest(`${baseUrl}/api/rpc`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${noPermToken}` },
       body: { method: 'backup-create', params: [{}] },
     });
-    assert.strictEqual(noPermRes.status, 403, 'Sin permiso debería responder 403');
-    assert.ok(
-      noPermRes.body.error && (
-        noPermRes.body.error.includes('PERMISO REQUERIDO') ||
-        noPermRes.body.error.includes('SISTEMA_BACKUP')
-      ),
-      `Debería responder error de permiso, got: ${noPermRes.body.error}`,
-    );
+    assert.strictEqual(listar(), antesSinPermiso, 'Sin permiso NO se tiene que crear ningún archivo de backup');
+    // El handler atrapa el FORBIDDEN y responde `{ success:false, message }`
+    // con 200 (es lo que espera la UI). Las dos formas son un rechazo; lo que
+    // no puede pasar es que el backup se cree. Mismo criterio que
+    // `asserRpcDenied` en test:permisos.
+    const textoRechazo = String(noPermRes.body?.error ?? noPermRes.body?.result?.message ?? '');
+    const rechazado = (noPermRes.status === 403 || noPermRes.body?.result?.success === false)
+      && /PERMISO REQUERIDO|SISTEMA_BACKUP/.test(textoRechazo);
+    assert.ok(rechazado, `Sin permiso debería rechazarse, got: ${noPermRes.status} ${JSON.stringify(noPermRes.body)}`);
     console.log(' ✓');
 
     // Test 4: backup-send-whatsapp por HTTP ignora destino arbitrario
     console.log('[Test 4] backup-send-whatsapp HTTP ignora opts.destino arbitrario');
     // Crear archivo de backup temporal y configurar destino
-    const fs = require('fs');
-    const path = require('path');
-    const backupDir = path.join(tmpdir, 'backups');
+    // El handler resuelve todo desde `app.getPath('userData')` (el mock de
+    // Electron), no desde os.tmpdir(): el backup y app-settings.json tienen
+    // que vivir ahí o la validación de directorio lo rechaza antes de llegar
+    // a la parte que este test quiere probar.
+    const userDataDir = require('electron').app.getPath('userData');
+    const backupDir = path.join(userDataDir, 'backups');
     if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
     const testBackupPath = path.join(backupDir, 'test-backup.db');
     fs.writeFileSync(testBackupPath, 'fake backup content');
 
     // Configurar destino WhatsApp en app-settings.json
-    const settingsPath = path.join(tmpdir, 'app-settings.json');
+    const settingsPath = path.join(userDataDir, 'app-settings.json');
+    const settingsPrevios = fs.existsSync(settingsPath) ? fs.readFileSync(settingsPath, 'utf8') : null;
     const settings = {
       mode: 'standalone',
       backup: {
         whatsappDestino: '595991888888', // El destino configurado
       },
+    };
+    // .tmp/ es compartido con otros tests: se restaura en el `finally`, también
+    // si un assert falla en el medio.
+    restaurar = () => {
+      try { fs.unlinkSync(testBackupPath); } catch { /* ya no está */ }
+      if (settingsPrevios != null) fs.writeFileSync(settingsPath, settingsPrevios);
+      else { try { fs.unlinkSync(settingsPath); } catch { /* ya no está */ } }
     };
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 
@@ -244,9 +287,6 @@ async function main() {
       `Debería fallar en Evolution API (pasó validaciones de archivo y destino), got: ${sendRes.body.result.message}`,
     );
 
-    // Limpiar
-    fs.unlinkSync(testBackupPath);
-    fs.unlinkSync(settingsPath);
     console.log(' ✓');
 
     console.log('\n[test-backup-http-e2e] ✅ Todos los tests OK');
@@ -254,9 +294,9 @@ async function main() {
     console.error('\n[test-backup-http-e2e] ❌ Test falló:', err);
     throw err;
   } finally {
+    restaurar?.();
     await stopServer(fastify);
     await dataSource.destroy();
-    delete process.env.JWT_SECRET;
   }
 }
 

@@ -335,6 +335,9 @@ import { CajaUnicaAbiertaPorDispositivo1790617935368 } from './migrations/179061
 import { DisciplinaReconocimiento1792785488053 } from './migrations/1792785488053-DisciplinaReconocimiento';
 import { FuncionesTareas1793042064365 } from './migrations/1793042064365-FuncionesTareas';
 import { AcreditacionesPosReglas1793110000000 } from './migrations/1793110000000-AcreditacionesPosReglas';
+import { FichasCantina1793299117857 } from './migrations/1793299117857-FichasCantina';
+import { CajaMayorMontosAmplios1793302813170 } from './migrations/1793302813170-CajaMayorMontosAmplios';
+import { PdvTiposVenta1793381465964 } from './migrations/1793381465964-PdvTiposVenta';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -807,6 +810,12 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     // Funciones y Tareas (funciones por cargo/funcionario, tareas y checklists) — tablas ft_*
     FuncionesTareas1793042064365,
     AcreditacionesPosReglas1793110000000,
+    // Cantina de eventos: fichas de la venta directa (pdv_config, producto, ventas)
+    FichasCantina1793299117857,
+    // Caja Mayor: monto y saldo a numeric(18,2) (issue #340, sólo Postgres)
+    CajaMayorMontosAmplios1793302813170,
+    // PdV: tipos de venta habilitados (mesas, comandas, venta rápida), global
+    PdvTiposVenta1793381465964,
   ];
 }
 

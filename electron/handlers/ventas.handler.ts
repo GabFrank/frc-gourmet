@@ -20,7 +20,7 @@ import { getVariacionConfig, getVariacionConfigGlobal } from '../utils/variacion
 import { ensureObservacionNotaLibreId } from '../utils/observacion-libre.utils';
 import { resolveRequestDeviceId } from '../utils/current-device.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
-import { PdvConfig } from '../../src/app/database/entities/ventas/pdv-config.entity';
+import { PdvConfig, FichaModo } from '../../src/app/database/entities/ventas/pdv-config.entity';
 import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
 import { selectUsuarioPublico } from '../utils/select-usuario-publico.util';
 import {
@@ -43,7 +43,8 @@ import { Cliente } from '../../src/app/database/entities/personas/cliente.entity
 import { CuentaPorCobrarEstado, MovimientoClienteTipo } from '../../src/app/database/entities/financiero/cuentas-por-cobrar-enums';
 import { PdvMesa, PdvMesaEstado } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { Comanda, ComandaEstado } from '../../src/app/database/entities/ventas/comanda.entity';
-import { printComandaInternal, printVentaTicketInternal } from './documentos-tickets.handler';
+import { printComandaInternal, imprimirPostConclusion } from './documentos-tickets.handler';
+import { esVentaDirecta, RELACIONES_VENTA_DIRECTA } from '../utils/venta-directa.utils';
 import { Sector } from '../../src/app/database/entities/ventas/sector.entity';
 import { ComandaItem, ComandaItemEstado } from '../../src/app/database/entities/ventas/comanda-item.entity';
 import { ProductoSector } from '../../src/app/database/entities/productos/producto-sector.entity';
@@ -934,7 +935,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // vinculadas a la mesa se cierran/liberan desde su propio flujo.
       const ventasAbiertas = await repo.find({
         where: { mesa: { id: mesaId }, estado: VentaEstado.ABIERTA, comanda: IsNull() },
-        relations: ['caja'],
+        relations: ['caja', 'pago'],
       });
       
       // P0-2: Gatear CUALQUIER cierre (CONCLUIDA o CANCELADA) si hay >1 ABIERTA.
@@ -945,6 +946,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       if (ventasAbiertas.length > 1) {
         throw new Error('MESA_TIENE_OTRAS_VENTAS_ABIERTAS');
       }
+
       
       // Este handler pone CONCLUIDA con `repo.save` directo, sin pasar por
       // `updateVenta`: es un tercer camino de finalización y necesita el mismo
@@ -973,6 +975,13 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
               contexto: 'cerrarVentasAbiertasMesa',
               lock: 'read',
             });
+          }
+          // Concluir es cobrar, también por acá: sin `Pago` vinculado no se
+          // concluye (#329). Es el mismo camino por el que se cerró sin cobro la
+          // venta 3771. Cancelar sigue sin exigirlo. Va después del gate de
+          // terminal y del guard de caja cerrada para no tapar sus errores.
+          if (ventasAbiertas.some((v) => !(v as any).pago?.id)) {
+            throw new Error('VENTA_SIN_PAGO: la mesa tiene una cuenta abierta sin cobro registrado.');
           }
         }
         for (const v of ventasAbiertas) {
@@ -1110,7 +1119,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         });
 
         const repo = manager.getRepository(Venta);
-        const entity: any = repo.create(data);
+        // Las columnas de fichas las escribe sólo el backend, también al crear:
+        // una venta nacida con `fichasEmitidasAt` pasaba el gate de
+        // `print-fichas-venta` sin haber emitido nunca.
+        const {
+          fichasEmitidasAt: _fe, fichasCantidad: _fc, fichasReimpresiones: _fr,
+          ...dataVenta
+        } = data ?? {};
+        const entity: any = repo.create(dataVenta);
         await setEntityUserTracking(dataSource, entity, userId, false);
         if (deviceId != null) entity.dispositivo = { id: deviceId };
         const saved = await repo.save(entity);
@@ -1395,6 +1411,30 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     }
   });
 
+  // La venta rápida ABIERTA de esta terminal en esta caja, si quedó una. El PdV
+  // no la tiene en ningún contenedor del salón: si se recargaba la pantalla a
+  // mitad de una venta quedaba ABIERTA e invisible, y `update-caja` rechaza el
+  // cierre con ventas abiertas. Sólo la de ESTA terminal: en una caja
+  // compartida, la de otra terminal sigue siendo de su cajero.
+  ipcMain.handle('getVentaRapidaAbierta', async (_event: any, cajaId: number) => {
+    try {
+      await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+      const dispositivoId = resolveRequestDeviceId(_event);
+      if (!cajaId || !dispositivoId) return null;
+      const candidatas = await dataSource.getRepository(Venta).find({
+        where: { caja: { id: cajaId }, dispositivo: { id: dispositivoId }, estado: VentaEstado.ABIERTA, mesa: IsNull(), comanda: IsNull() },
+        relations: [...RELACIONES_VENTA_DIRECTA, 'caja'],
+        // `id` desempata: en SQLite `created_at` tiene resolución de segundos.
+        order: { createdAt: 'DESC', id: 'DESC' },
+        take: 10,
+      });
+      return candidatas.find((v) => esVentaDirecta(v)) ?? null;
+    } catch (error) {
+      console.error(`Error buscando venta rápida abierta de la caja ${cajaId}:`, error);
+      throw error;
+    }
+  });
+
   // Resumen completo de una caja (para diálogo de resumen)
   ipcMain.handle('getResumenCaja', async (_event: any, cajaId: number) => {
     try {
@@ -1491,6 +1531,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         && estadoAnterior === VentaEstado.ABIERTA
       ) {
         await assertCajaAbiertaSiVino(dataSource, cajaDeLaVenta, { contexto: 'updateVenta(CONCLUIDA)' });
+
       }
 
       // ─── D4 capa 2: la caja del Pago se deriva de la VENTA, server-side ────
@@ -1539,6 +1580,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             'No se puede cancelar una venta a crédito con cobros registrados. Anule primero los cobros de la cuenta por cobrar.',
           );
         }
+        // Fichas de cantina: si la venta ya las emitió, están en manos del
+        // cliente y pueden seguir canjeándose. Cancelar es devolver la plata
+        // por algo que sigue valiendo, así que pide un permiso aparte. Se lee
+        // de la ENTIDAD en BD, nunca del payload: el cliente no puede mandar
+        // `fichasCantidad: 0` para esquivarlo (además el merge lo descarta).
+        if (Number((entity as any).fichasCantidad) > 0) {
+          await ensurePermission(dataSource, getCurrentUser, 'VENTAS_CANCELAR_CON_FICHAS');
+        }
       }
 
       // P0-3: Guard ANTES del merge. Si la venta es de mesa (comanda IS NULL) y
@@ -1573,6 +1622,33 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         }
       }
 
+      // Va DESPUÉS de los guards más específicos (caja cerrada, hermanas
+      // abiertas en la mesa) para que sus errores sigan saliendo primero.
+      if (data?.estado === VentaEstado.CONCLUIDA && estadoAnterior === VentaEstado.ABIERTA) {
+        // Concluir es COBRAR: sin un `Pago` vinculado (en el payload o ya
+        // adoptado por la venta) no hay cobro. Antes bastaba `VENTAS_PDV` para
+        // pasar una venta a CONCLUIDA sin cobrarla vía /api/rpc (#329). No se
+        // exige el estado PAGADO porque el diálogo de cobro cierra la venta
+        // ANTES de marcar el pago (para no dejar un Pago PAGADO con la venta
+        // ABIERTA si el cierre falla). La venta a crédito no pasa por acá
+        // (`cobrar-venta-credito` crea su propio Pago).
+        // Si el payload trae `pago`, ése es el que va a quedar (el merge lo
+        // aplica): un `pago: null` explícito no puede apoyarse en el adoptado.
+        // Y tiene que existir: un id inventado no es un cobro.
+        let tienePago: boolean;
+        if (data && Object.prototype.hasOwnProperty.call(data, 'pago')) {
+          const pagoEnPayload = Number((data?.pago as any)?.id ?? data?.pago) || null;
+          tienePago = !!pagoEnPayload
+            && !!(await dataSource.getRepository(Pago).findOne({ where: { id: pagoEnPayload } }));
+        } else {
+          const conPago = await repo.findOne({ where: { id }, relations: ['pago'] });
+          tienePago = !!(conPago as any)?.pago?.id;
+        }
+        if (!tienePago) {
+          throw new Error('VENTA_SIN_PAGO: no se puede finalizar una venta sin registrar su cobro.');
+        }
+      }
+
       // La caja de una venta se fija al crearla y no cambia nunca. Aceptarla en
       // el merge permitía mover una venta CONCLUIDA —con todo su cobro— a otra
       // caja, sin gate y sin transición de estado: la palanca más directa para
@@ -1587,7 +1663,32 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // esa guarda en una sugerencia, con una llamada capaz de reescribir el
       // envío de una venta ya CONCLUIDA. Ningún llamador lo setea a propósito
       // (el PdV manda la venta entera, con su mismo envío).
-      const { caja: _cajaIgnorada, costoDelivery: _envioIgnorado, ...ventaData } = data ?? {};
+      // Las columnas de fichas las escribe SOLO el backend (claim de emisión y
+      // contadores). El PdV manda la venta entera: una copia vieja con
+      // `fichasEmitidasAt = null` reseteaba el claim y habilitaba una segunda
+      // emisión, y `fichasCantidad = 0` esquivaba el guard de cancelación.
+      const {
+        caja: _cajaIgnorada,
+        costoDelivery: _envioIgnorado,
+        fichasEmitidasAt: _fichasEmitidasIgnorado,
+        fichasCantidad: _fichasCantidadIgnorada,
+        fichasReimpresiones: _fichasReimpresionesIgnorado,
+        ...ventaData
+      } = data ?? {};
+      // Una venta que ya no está ABIERTA, o que se cierra en este mismo payload,
+      // no cambia de canal: mesa, comanda,
+      // delivery y canalOrigen deciden si fue a cocina y si emitió fichas
+      // (`esVentaDirecta`) y alimentan los reportes por canal. Mudarla después
+      // del cobro permitía, por ejemplo, convertir una venta de mesa en
+      // directa en el mismo payload que la concluye (#330). Los movimientos
+      // legítimos (transferir cuenta, convertir delivery ⇄ retiro) tienen
+      // canales propios y no pasan por acá.
+      const cierra = data?.estado === VentaEstado.CONCLUIDA || data?.estado === VentaEstado.CANCELADA;
+      if (estadoAnterior !== VentaEstado.ABIERTA || cierra) {
+        for (const k of ['mesa', 'comanda', 'delivery', 'canalOrigen', 'mesa_id', 'comanda_id', 'delivery_id']) {
+          delete (ventaData as any)[k];
+        }
+      }
       repo.merge(entity, ventaData);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
@@ -1665,12 +1766,19 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
             const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
             debeImprimir = !!pdvConfig?.autoImprimirTicketVenta;
           }
-          if (debeImprimir) {
-            setImmediate(() => {
-              printVentaTicketInternal(dataSource, id)
-                .catch(e => console.warn('[updateVenta] auto-print ticket falló:', e));
-            });
-          }
+          // Ticket de pago y fichas de cantina en la MISMA cadena: primero el
+          // ticket y después las fichas, para que no se intercalen en la
+          // térmica. Las fichas no dependen de `debeImprimir`: un cobro sin
+          // ticket (F10) igual las emite si la venta es directa.
+          setImmediate(() => {
+            imprimirPostConclusion(dataSource, id, {
+              imprimirTicket: debeImprimir,
+              // Sólo un cobro emite fichas; rehabilitar (CANCELADA →
+              // CONCLUIDA) no.
+              emitirFichas: estadoAnterior === VentaEstado.ABIERTA,
+            })
+              .catch(e => console.warn('[updateVenta] impresión post-conclusión falló:', e));
+          });
         } catch (e) {
           console.warn('[updateVenta] hook auto-imprimir ticket falló:', e);
         }
@@ -2536,7 +2644,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       }
       
       // Ensure activo is set to true for new config
-      const configData = { ...data, activo: true } as DeepPartial<PdvConfig>;
+      const configData = { ...normalizarFichasConfig(data), activo: true } as DeepPartial<PdvConfig>;
       const newConfig = repository.create(configData);
       return await repository.save(newConfig);
     } catch (error) {
@@ -2560,7 +2668,12 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       }
       
       // Apply updates
-      repository.merge(config, data as DeepPartial<PdvConfig>);
+      repository.merge(config, normalizarFichasConfig(data) as DeepPartial<PdvConfig>);
+      // Un PdV sin ningún tipo de venta no puede vender nada.
+      if (!config.pdvMesasHabilitadas && !config.pdvComandasHabilitadas
+        && !config.pdvVentaRapidaHabilitada && !config.deliveryHabilitado) {
+        throw new Error('PDV_SIN_TIPOS_DE_VENTA: habilitá al menos un tipo de venta (mesas, comandas, venta rápida o delivery).');
+      }
       const guardado = await repository.save(config);
       // La hora de la jornada se cachea 60s en los dashboards: sin esto, el
       // usuario cambia el corte, vuelve al resumen y sigue viendo el anterior.
@@ -5020,14 +5133,11 @@ async function autoPrintComandaIfNeeded(
     relations: ['mesa', 'comanda', 'delivery'],
   });
   if (!venta) return;
-  const tieneMesa = !!(venta as any).mesa?.id;
-  const tieneComanda = !!(venta as any).comanda?.id;
   // Un delivery o un pedido online no tienen mesa ni comanda y IGUAL van a
   // cocina. Lo que de verdad NO va a cocina es la venta rápida de mostrador, y
   // eso es lo que distingue este predicado.
-  const tieneDelivery = !!(venta as any).delivery?.id;
-  const vieneDeLaWeb = ((venta as any).canalOrigen ?? 'LOCAL') !== 'LOCAL';
-  if (!tieneMesa && !tieneComanda && !tieneDelivery && !vieneDeLaWeb) return; // Venta directa sin cocina
+  // El predicado vive en `esVentaDirecta`, compartido con fichas de cantina.
+  if (esVentaDirecta(venta)) return; // Venta directa sin cocina
 
   // 2. Verificar config global
   const pdvConfig = await dataSource.getRepository(PdvConfig).findOne({ where: {} });
@@ -5085,9 +5195,8 @@ export async function crearComandaItemsSiCorresponde(
   // cocina. Un delivery cargado por el cajero jamás generaba ComandaItem, así
   // que sus items nunca se ruteaban a la impresora del sector del producto: la
   // cocina sólo veía el ticket único del reparto, si estaba configurado.
-  const tieneDelivery = !!(venta as any).delivery?.id;
-  const vieneDeLaWeb = (venta.canalOrigen ?? 'LOCAL') !== 'LOCAL';
-  if (!venta.mesa?.id && !venta.comanda?.id && !tieneDelivery && !vieneDeLaWeb) return; // venta de mostrador
+  // El predicado vive en `esVentaDirecta`, compartido con fichas de cantina.
+  if (esVentaDirecta(venta)) return; // venta de mostrador
   if (!producto?.id || producto.requiereComanda === false) return;
 
   // Sectores destino (M2M producto_sectores, activos, por prioridad)
@@ -5232,4 +5341,27 @@ export function stopRetryComandaWorker(): void {
     clearInterval(_retryComandaInterval);
     _retryComandaInterval = null;
   }
+}
+
+/**
+ * Normaliza los campos de fichas de cantina antes de guardar la config del PdV:
+ * el nombre del evento va en UPPERCASE (regla de la casa: todo string en BD
+ * va en mayúsculas) y vacío pasa a null; un `fichasModo` desconocido se
+ * descarta en vez de persistirse.
+ */
+function normalizarFichasConfig(data: any): any {
+  if (!data) return data;
+  const out = { ...data };
+  if ('fichasNombreEvento' in out) {
+    // Recortado a 120: es el largo de la columna, y Postgres rechaza el exceso.
+    const v = out.fichasNombreEvento == null ? '' : String(out.fichasNombreEvento).trim().slice(0, 120);
+    out.fichasNombreEvento = v ? v.toUpperCase() : null;
+  }
+  for (const k of ['fichasHabilitadas', 'fichasMostrarPrecio']) {
+    if (k in out) out[k] = out[k] === true || out[k] === 'true' || out[k] === 1;
+  }
+  if ('fichasModo' in out && !Object.values(FichaModo).includes(out.fichasModo)) {
+    delete out.fichasModo;
+  }
+  return out;
 }
