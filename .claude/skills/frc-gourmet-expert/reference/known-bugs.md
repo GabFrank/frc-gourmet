@@ -793,15 +793,13 @@ default-allow** (regla #22), cualquier cliente con JWT válido puede emitir un c
 
 ### Pre-cuenta tras cobro parcial muestra el total, no el saldo
 
-**Pendiente, necesita decisión de producto** → issue
-[#241](https://github.com/GabFrank/frc-gourmet/issues/241).
-
-`buildVentaTicketLines` no resta `VentaItem.montoCubierto`, así que si una mesa pagó parte
-con cobro parcial por ítems y se reimprime la pre-cuenta, el papel muestra el total del
-pedido y no lo que falta. Los importes son correctos (una pre-cuenta es el detalle del
-pedido) y el PdV sí muestra el saldo en pantalla; la opción sugerida es imprimir un bloque
-`PAGADO`/`SALDO` **sólo** cuando hay rondas activas. El comprobante final no tiene el
-problema: `canFinalizar` exige saldo ≤ 0.
+**Resuelto (2026-10, issue [#241](https://github.com/GabFrank/frc-gourmet/issues/241), opción B).**
+La pre-cuenta (no delivery) imprime `PAGADO` y `SALDO` bajo el TOTAL cuando el `Pago` de la
+venta tiene dinero registrado (pagos − vueltos activos, vía `obtenerPagosRegistrados`); los
+totales en otras monedas pasan a `SALDO <MONEDA>`. El TOTAL y los ítems no cambian. Con pagos en
+otra moneda sin cotización imprime «VERIFICAR SALDO EN CAJA» en vez de un número. Se calcula en
+dinero, no desde `montoCubierto` (bruto), para que un descuento global aplicado después de una
+ronda dé el saldo correcto. Tests en `test:ticket-venta`.
 
 ### CajaMayorMovimiento huérfano
 

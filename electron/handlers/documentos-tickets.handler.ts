@@ -836,6 +836,10 @@ export interface VentaTicketBuild {
   totalPrincipal: number;
   /** Cantidad de ítems que entraron al ticket (excluye cancelados). */
   itemsImpresos: number;
+  /** Ya cobrado en rondas de cobro parcial (moneda principal). 0 si no hay. */
+  pagado: number;
+  /** Lo que falta cobrar (moneda principal). 0 si no hay cobro parcial. */
+  saldo: number;
 }
 
 /**
@@ -1039,15 +1043,62 @@ export async function buildVentaTicketLines(
   if (costoDelivery > 0) lines.push(ticketKv('ENVIO', `Gs. ${ticketFmtMonto(costoDelivery)}`));
   lines.push(ticketKv('TOTAL', `Gs. ${ticketFmtMonto(totalPrincipal)}`, true));
 
+  // Cobro parcial (#241): la pre-cuenta que se lleva a la mesa tiene que decir
+  // cuánto falta, no sólo el total del pedido. Se usa la misma cuenta de DINERO
+  // que habilita Finalizar en el cobro: PAGADO = pagos − vueltos ya registrados
+  // en el `Pago` de la venta (`obtenerPagosRegistrados`, el mismo que usa el
+  // ticket de delivery) y SALDO = TOTAL − PAGADO. No se deriva de
+  // `montoCubierto`: está en bruto y con un descuento global aplicado después
+  // de una ronda el saldo saldría mal (ventas-pdv.md, «cobertura EN BRUTO»).
+  // El TOTAL no cambia (conciliación con la factura) y sin pagos el ticket sale
+  // idéntico. Delivery no: ya imprime PAGOS REGISTRADOS y su propio saldo. El
+  // comprobante final tampoco: ahí el saldo es 0.
+  let pagado = 0;
+  let saldo = 0;
+  let conSaldo = false;
+  const esDeliveryTicket = !!(venta as any).delivery?.id;
+  if (opts.isPrecuenta && !esDeliveryTicket && pagoId) {
+    try {
+      const pagos = await obtenerPagosRegistrados(dataSource, ventaId, principalMoneda, cambios);
+      if (pagos.hayPagos && pagos.totalEnPrincipal > 0.5) {
+        if (pagos.sinCotizacion) {
+          // Sin tasa, una divisa cuenta 1 a 1 con el guaraní: un saldo impreso
+          // haría cobrar de nuevo. Mismo criterio que el ticket de delivery.
+          lines.push(ticketText('HAY PAGOS EN OTRA MONEDA', { align: 'C' }));
+          lines.push(ticketText('VERIFICAR SALDO EN CAJA', { align: 'C', bold: true }));
+        } else {
+          conSaldo = true;
+          pagado = Math.round(pagos.totalEnPrincipal);
+          saldo = Math.max(0, Math.round(totalPrincipal - pagos.totalEnPrincipal));
+          // Misma tolerancia que el cobro: un residuo menor a la unidad mínima de
+          // una divisa con la que se pagó (0,01 R$ ≈ 11 Gs) no se puede pagar.
+          let tolerancia = 0;
+          for (const l of pagos.lineas) {
+            const m: any = (monedasActivas || []).find((x: any) => x.id === l.monedaId);
+            if (!m || m.id === (principalMoneda as any)?.id) continue;
+            const rate = buscarCotizacion(cambios, principalMoneda, m);
+            if (rate > 0) tolerancia = Math.max(tolerancia, Math.pow(10, -(Number(m.decimales) || 0)) * rate);
+          }
+          if (saldo <= tolerancia) saldo = 0;
+          lines.push(ticketKv('PAGADO', `Gs. ${ticketFmtMonto(pagado)}`));
+          lines.push(ticketKv('SALDO', `Gs. ${ticketFmtMonto(saldo)}`, true));
+        }
+      }
+    } catch (e) {
+      console.warn('[buildVentaTicketLines] no se pudieron cargar los pagos registrados:', e);
+    }
+  }
+
   // Totales en las demás monedas configuradas (según cotización vigente).
   const otrasMonedas = (monedasActivas || []).filter((m: any) => m.id !== (principalMoneda as any)?.id);
   const totalesMonedaLines: TicketLine[] = [];
   for (const m of otrasMonedas) {
     const rate = buscarCotizacion(cambios, principalMoneda, m);
     if (!rate || rate <= 0) continue;
-    const val = totalPrincipal / rate;
+    // Con pagos registrados, quien paga lo que falta en divisa necesita el saldo.
+    const val = (conSaldo ? saldo : totalPrincipal) / rate;
     const label = String((m as any).denominacion || (m as any).simbolo || '').toUpperCase();
-    totalesMonedaLines.push(ticketKv(`TOTAL ${label}`, ticketFmtMonto(val, Number((m as any).decimales) || 0), true));
+    totalesMonedaLines.push(ticketKv(`${conSaldo ? 'SALDO' : 'TOTAL'} ${label}`, ticketFmtMonto(val, Number((m as any).decimales) || 0), true));
   }
   if (totalesMonedaLines.length) {
     lines.push(ticketSeparador('-'));
@@ -1097,6 +1148,8 @@ export async function buildVentaTicketLines(
     descuentoTotal,
     totalPrincipal,
     itemsImpresos: items.length,
+    pagado,
+    saldo,
   };
 }
 
