@@ -404,6 +404,18 @@ export function registerCuentasPorCobrarHandlers(
       await setEntityUserTracking(dataSource, cpc, cu?.id, true);
       await queryRunner.manager.save(CuentaPorCobrar, cpc);
 
+      // #322: las cuotas abiertas pasan a CANCELADO para que no sigan sumando
+      // en resúmenes y vencidas (no hay cobros: se validó montoCobrado = 0).
+      await queryRunner.manager.getRepository(CuentaPorCobrarCuota)
+        .createQueryBuilder()
+        .update(CuentaPorCobrarCuota)
+        .set({ estado: CuentaPorCobrarCuotaEstado.CANCELADO })
+        .where('cuenta_por_cobrar_id = :id AND estado IN (:...ests)', {
+          id,
+          ests: [CuentaPorCobrarCuotaEstado.PENDIENTE, CuentaPorCobrarCuotaEstado.PARCIAL],
+        })
+        .execute();
+
       // Revertir saldoActual del cliente
       const clienteId = cpc.cliente?.id;
       if (clienteId) {
@@ -490,6 +502,9 @@ export function registerCuentasPorCobrarHandlers(
       if (!cuota) throw new Error(`CuentaPorCobrarCuota ${cuotaId} no encontrada`);
       if (cuota.estado === CuentaPorCobrarCuotaEstado.COBRADO || cuota.estado === CuentaPorCobrarCuotaEstado.CANCELADO) {
         throw new Error('Cuota ya cobrada o cancelada');
+      }
+      if ((cuota.cuentaPorCobrar as any)?.estado === CuentaPorCobrarEstado.CANCELADO) {
+        throw new Error('La cuenta por cobrar está cancelada');
       }
 
       const restante = Number(cuota.monto) - Number(cuota.montoCobrado);

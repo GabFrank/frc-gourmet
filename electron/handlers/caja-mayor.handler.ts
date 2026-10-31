@@ -2912,6 +2912,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         .addSelect('cuota.monto', 'monto')
         .addSelect('cuota.montoCobrado', 'montoCobrado')
         .where("cuota.estado IN ('PENDIENTE', 'PARCIAL')")
+        // #322: CPC canceladas antes del arreglo conservan cuotas PENDIENTE.
+        .andWhere("cpc.estado = 'ACTIVO'")
         .getRawMany();
 
       const grupos = new Map<number, {
