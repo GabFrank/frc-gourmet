@@ -7,8 +7,8 @@ con 100.000 ya pagados → la pre-cuenta para los que faltan dice 200.000. El Pd
 `cobroPagado`/`cobroSaldo` (de `getEstadoCobroVentaInternal`).
 
 ## Decisión (opción B de la issue)
-Solo en la **pre-cuenta** y solo si hay cobertura activa (`Σ montoCubierto > 0.5`), agregar bajo el
-TOTAL (y antes de los totales en otras monedas):
+Solo en la **pre-cuenta** (no delivery) y solo si ya hay dinero registrado en el `Pago` de la venta
+(ver Cálculo), agregar bajo el TOTAL (y antes de los totales en otras monedas):
 
 ```
 PAGADO            Gs. X
@@ -36,12 +36,10 @@ con pagos sueltos sin ronda y con sobrepago. Versión final, en **dinero**, igua
 - Ronda anulada: `anularCobroParcial` hace soft-delete de sus líneas → el bloque desaparece.
 
 ## Tests
-`scripts/test-ticket-venta-e2e.ts` (`test:ticket-venta`):
-- venta sin cobros → sin PAGADO/SALDO (ya cubierto por asserts actuales: ticket idéntico).
-- con `montoCubierto` en un ítem → aparecen PAGADO/SALDO con montos correctos, TOTAL igual.
-- comprobante (isPrecuenta=false) con cobertura → sin bloque.
-- cobertura vuelta a 0 (ronda anulada) → sin bloque.
-- 32 columnas.
+`scripts/test-ticket-venta-e2e.ts` (`test:ticket-venta`, 84/84): sin pagos, Pago sin líneas, ronda con
+vuelto y línea anulada, descuento global posterior, 32 columnas, comprobante sin bloque, sobrepago,
+SALDO <MONEDA>, residuo de redondeo en divisa (tolerancia = unidad mínima, como el cobro), divisa sin
+cotización → VERIFICAR SALDO EN CAJA, ronda anulada → ticket idéntico al de sin pagos.
 
 ## Prueba real
 Copia de Don Franco (sandbox PG): abrir venta, registrar cobro parcial por ítems (`registrarCobroParcial`),

@@ -1070,6 +1070,16 @@ export async function buildVentaTicketLines(
           conSaldo = true;
           pagado = Math.round(pagos.totalEnPrincipal);
           saldo = Math.max(0, Math.round(totalPrincipal - pagos.totalEnPrincipal));
+          // Misma tolerancia que el cobro: un residuo menor a la unidad mínima de
+          // una divisa con la que se pagó (0,01 R$ ≈ 11 Gs) no se puede pagar.
+          let tolerancia = 0;
+          for (const l of pagos.lineas) {
+            const m: any = (monedasActivas || []).find((x: any) => x.id === l.monedaId);
+            if (!m || m.id === (principalMoneda as any)?.id) continue;
+            const rate = buscarCotizacion(cambios, principalMoneda, m);
+            if (rate > 0) tolerancia = Math.max(tolerancia, Math.pow(10, -(Number(m.decimales) || 0)) * rate);
+          }
+          if (saldo <= tolerancia) saldo = 0;
           lines.push(ticketKv('PAGADO', `Gs. ${ticketFmtMonto(pagado)}`));
           lines.push(ticketKv('SALDO', `Gs. ${ticketFmtMonto(saldo)}`, true));
         }

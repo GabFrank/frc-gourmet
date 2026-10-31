@@ -214,8 +214,36 @@ async function main() {
   const sobre = await buildVentaTicketLines(ds, venta.id, { width: WIDTH, isPrecuenta: true });
   ok(sobre!.saldo === 0 && sobre!.pagado === 53000, 'sobrepago: SALDO 0', { p: sobre!.pagado, s: sobre!.saldo });
 
+  // Divisas: con saldo, los totales en otra moneda pasan a SALDO <MONEDA>; sin
+  // cotización, no se imprime un número sino VERIFICAR SALDO EN CAJA.
+  {
+    const { MonedaCambio } = require('../src/app/database/entities/financiero/moneda-cambio.entity');
+    await ds.getRepository(PagoDetalle).update({ id: (l2 as any).id }, { activo: false } as any);
+    const usd = await ds.getRepository(Moneda).save(ds.getRepository(Moneda).create({
+      denominacion: 'DOLAR', simbolo: '$', principal: false, activo: true, decimales: 2,
+    } as any));
+    const cambio = await ds.getRepository(MonedaCambio).save(ds.getRepository(MonedaCambio).create({
+      monedaOrigen: { id: (monedaGs as any).id }, monedaDestino: { id: (usd as any).id },
+      compraOficial: 5000, ventaOficial: 5000, compraLocal: 5000, ventaLocal: 5000, activo: true,
+    } as any));
+    const conUsd = render((await buildVentaTicketLines(ds, venta.id, { width: WIDTH, isPrecuenta: true }))!.lines);
+    ok(/SALDO DOLAR\s+2,00/.test(conUsd) && !conUsd.includes('TOTAL DOLAR'), 'con saldo: SALDO DOLAR 2,00 (10.000 / 5.000) en vez de TOTAL DOLAR', conUsd.split('\n').filter(l => l.includes('DOLAR')));
+    // Pagan lo que falta en dólares con 1 Gs de residuo por redondeo → SALDO 0.
+    const lUsd = await ds.getRepository(PagoDetalle).save(ds.getRepository(PagoDetalle).create({
+      pago: { id: (pago as any).id }, moneda: { id: (usd as any).id }, formaPago: { id: (fpEf as any).id },
+      valor: 1.9998, tipo: 'PAGO', activo: true, descripcion: 'COBRO DE VENTA',
+    } as any));
+    const casi = await buildVentaTicketLines(ds, venta.id, { width: WIDTH, isPrecuenta: true });
+    ok(casi!.saldo === 0, 'residuo de redondeo menor a 0,01 USD: SALDO 0', casi!.saldo);
+    await ds.getRepository(MonedaCambio).update({ id: (cambio as any).id }, { activo: false } as any);
+    const sinTasa = render((await buildVentaTicketLines(ds, venta.id, { width: WIDTH, isPrecuenta: true }))!.lines);
+    ok(sinTasa.includes('VERIFICAR SALDO EN CAJA') && !/^SALDO\b/m.test(sinTasa), 'pago en divisa sin cotización: VERIFICAR SALDO EN CAJA, sin número');
+    await ds.getRepository(PagoDetalle).update({ id: (lUsd as any).id }, { activo: false } as any);
+    await ds.getRepository(Moneda).update({ id: (usd as any).id }, { activo: false } as any);
+  }
+
   // Ronda anulada (soft-delete de sus líneas) → el ticket vuelve al normal.
-  for (const l of [l1, v1, l2]) await ds.getRepository(PagoDetalle).update({ id: (l as any).id }, { activo: false } as any);
+  for (const l of [l1, v1]) await ds.getRepository(PagoDetalle).update({ id: (l as any).id }, { activo: false } as any);
   const anulada = await buildVentaTicketLines(ds, venta.id, { width: WIDTH, isPrecuenta: true });
   ok(!render(anulada!.lines).includes('SALDO') && anulada!.saldo === 0, 'ronda anulada: desaparece PAGADO/SALDO');
   const sinFecha = (t: string) => t.split('\n').filter(l => !/\d{2}\/\d{2}\/\d{4}/.test(l)).join('\n');
