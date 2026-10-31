@@ -1317,7 +1317,7 @@ de pago siguen siendo multi-moneda — el factor opera sólo en moneda principal
 
 **UI:** panel de ítems como **tab** dentro del panel izquierdo del `cobrar-venta-dialog` (Pagos | Items) para no ensanchar; footer fijo. En `pdv.component.ts`: chips PAGADO (verde)/PARCIAL (naranja); `bloqueadoPorCobro(item)` impide editar/cancelar/mover ítems con `montoCubierto > 0.5` ("Anulá el cobro parcial primero").
 
-> **El ticket impreso NO conoce el cobro parcial** — salvo en delivery. `buildVentaTicketLines` no resta `montoCubierto`, así que una pre-cuenta reimpresa después de una ronda muestra el total del pedido y no el saldo (el PdV sí lo muestra en pantalla). Decisión de producto pendiente en el issue [#241](https://github.com/GabFrank/frc-gourmet/issues/241). **En los tickets de delivery esto sí se resolvió** (2026-08): ver abajo.
+> **Pre-cuenta con cobro parcial (#241, 2026-10):** `buildVentaTicketLines` imprime `PAGADO`/`SALDO` bajo el TOTAL cuando el `Pago` de la venta ya tiene dinero (pagos − vueltos activos, `obtenerPagosRegistrados`), y los totales en otras monedas pasan a `SALDO <MONEDA>`. Es la cuenta de dinero del cobro, no la cobertura bruta: con descuento global aplicado después de una ronda el saldo sale bien. El TOTAL no cambia; sin pagos el ticket es el de siempre; el comprobante final no lleva el bloque. **Delivery** tiene su propio bloque (abajo).
 
 ## Pagos ya registrados en los tickets de delivery (2026-08)
 

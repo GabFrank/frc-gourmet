@@ -154,6 +154,74 @@ async function main() {
   const idxExtra = lineas.findIndex(l => l.includes('+ EXTRA QUESO'));
   ok(idxProducto >= 0 && idxExtra === idxProducto + 1, 'el extra va pegado debajo de su producto', { idxProducto, idxExtra });
 
+  // ── Cobro parcial (#241): PAGADO / SALDO en la pre-cuenta ───────────────
+  // Dinero ya registrado en el `Pago` de la venta (rondas de cobro parcial o
+  // líneas cargadas en el cobro): pagos − vueltos, como el saldo del cobro.
+  const { Pago } = require('../src/app/database/entities/compras/pago.entity');
+  const { PagoDetalle } = require('../src/app/database/entities/compras/pago-detalle.entity');
+  const { FormasPago } = require('../src/app/database/entities/compras/forma-pago.entity');
+  const monedaGs = await ds.getRepository(Moneda).findOne({ where: { principal: true } });
+  const fpEf = await ds.getRepository(FormasPago).save(ds.getRepository(FormasPago).create({ nombre: 'EFECTIVO', activo: true, movimentaCaja: true } as any));
+  const pago = await ds.getRepository(Pago).save(ds.getRepository(Pago).create({ estado: 'ABIERTO', activo: true } as any));
+  const linea = (valor: number, tipo = 'PAGO', activo = true) => ds.getRepository(PagoDetalle).save(ds.getRepository(PagoDetalle).create({
+    pago: { id: (pago as any).id }, moneda: { id: (monedaGs as any).id }, formaPago: { id: (fpEf as any).id },
+    valor, tipo, activo, descripcion: 'COBRO DE VENTA',
+  } as any));
+
+  ok(pre!.pagado === 0 && pre!.saldo === 0, 'sin pagos: pagado = saldo = 0', { p: pre!.pagado, s: pre!.saldo });
+  ok(!texto.includes('PAGADO') && !texto.includes('SALDO'), 'sin pagos no se imprime PAGADO/SALDO');
+
+  // Pago creado pero sin líneas → igual que sin pagos.
+  await ds.getRepository(Venta).update({ id: venta.id }, { pago: { id: (pago as any).id } } as any);
+  const pagoVacio = await buildVentaTicketLines(ds, venta.id, { width: WIDTH, isPrecuenta: true });
+  ok(!render(pagoVacio!.lines).includes('SALDO'), 'pago sin líneas: sin PAGADO/SALDO');
+
+  // Ronda: pagaron 40.000 en efectivo con 2.000 de vuelto → 38.000 netos.
+  const l1 = await linea(40000);
+  const v1 = await linea(2000, 'VUELTO');
+  await linea(10000, 'PAGO', false); // línea anulada: no cuenta
+  const parcial = await buildVentaTicketLines(ds, venta.id, { width: WIDTH, isPrecuenta: true });
+  const textoParcial = render(parcial!.lines);
+  ok(parcial!.totalPrincipal === 48000, 'cobro parcial: el TOTAL no cambia (48.000)', parcial!.totalPrincipal);
+  ok(parcial!.pagado === 38000, 'cobro parcial: PAGADO = 38.000 (pagos − vueltos, sin anuladas)', parcial!.pagado);
+  ok(parcial!.saldo === 10000, 'cobro parcial: SALDO = 10.000', parcial!.saldo);
+  const lp = textoParcial.split('\n');
+  const iTot = lp.findIndex(l => /^TOTAL\b/.test(l.trim()));
+  const iPag = lp.findIndex(l => l.trim().startsWith('PAGADO') && l.includes('38.000'));
+  const iSal = lp.findIndex(l => l.trim().startsWith('SALDO') && l.includes('10.000'));
+  ok(iTot >= 0 && iPag === iTot + 1 && iSal === iPag + 1, 'PAGADO y SALDO van debajo del TOTAL', { iTot, iPag, iSal });
+
+  // Descuento global aplicado DESPUÉS de la ronda (ventas-pdv.md): −8.000 →
+  // TOTAL 40.000, SALDO 2.000. Escalar el pendiente bruto daría otra cifra.
+  const desc = await linea(8000, 'DESCUENTO');
+  const parcialGlobal = await buildVentaTicketLines(ds, venta.id, { width: WIDTH, isPrecuenta: true });
+  ok(parcialGlobal!.totalPrincipal === 40000 && parcialGlobal!.pagado === 38000 && parcialGlobal!.saldo === 2000,
+    'descuento global después de la ronda: TOTAL 40.000, PAGADO 38.000, SALDO 2.000',
+    { t: parcialGlobal!.totalPrincipal, p: parcialGlobal!.pagado, s: parcialGlobal!.saldo });
+  await ds.getRepository(PagoDetalle).update({ id: (desc as any).id }, { activo: false } as any);
+
+  // 58mm: el bloque no desborda.
+  const parcialAngosto = await buildVentaTicketLines(ds, venta.id, { width: 32, isPrecuenta: true });
+  const lpa = render(parcialAngosto!.lines, 32).split('\n');
+  ok(lpa.some(l => l.includes('SALDO')) && lpa.every(l => l.length <= 32), 'cobro parcial a 32 columnas: SALDO sale y no desborda');
+
+  // El comprobante (no pre-cuenta) no lleva el bloque.
+  const compParcial = await buildVentaTicketLines(ds, venta.id, { width: WIDTH });
+  ok(!render(compParcial!.lines).includes('SALDO') && compParcial!.saldo === 0, 'comprobante: sin bloque PAGADO/SALDO');
+
+  // Sobrepago: SALDO 0, nunca negativo.
+  const l2 = await linea(15000);
+  const sobre = await buildVentaTicketLines(ds, venta.id, { width: WIDTH, isPrecuenta: true });
+  ok(sobre!.saldo === 0 && sobre!.pagado === 53000, 'sobrepago: SALDO 0', { p: sobre!.pagado, s: sobre!.saldo });
+
+  // Ronda anulada (soft-delete de sus líneas) → el ticket vuelve al normal.
+  for (const l of [l1, v1, l2]) await ds.getRepository(PagoDetalle).update({ id: (l as any).id }, { activo: false } as any);
+  const anulada = await buildVentaTicketLines(ds, venta.id, { width: WIDTH, isPrecuenta: true });
+  ok(!render(anulada!.lines).includes('SALDO') && anulada!.saldo === 0, 'ronda anulada: desaparece PAGADO/SALDO');
+  const sinFecha = (t: string) => t.split('\n').filter(l => !/\d{2}\/\d{2}\/\d{4}/.test(l)).join('\n');
+  ok(sinFecha(render(anulada!.lines)) === sinFecha(texto), 'ronda anulada: el ticket sale idéntico al de sin pagos');
+  await ds.getRepository(Venta).update({ id: venta.id }, { pago: null } as any);
+
   // ── Ítem activo con descuento propio → SUBTOTAL/DESCUENTO ───────────────
   await ds.getRepository(VentaItem).update({ id: itemSimple.id }, { descuentoUnitario: 2000 } as any);
   const conDesc = await buildVentaTicketLines(ds, venta.id, { width: WIDTH, isPrecuenta: true });
