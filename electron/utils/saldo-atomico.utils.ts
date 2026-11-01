@@ -72,10 +72,14 @@ async function ajustar(
     ? `ROUND(CAST(${col.columna} AS numeric) + CAST(${p(1)} AS numeric), 2)`
     : `ROUND(${col.columna} + ${p(1)}, 2)`;
   const nuevo = opts?.minCero ? (pg ? `GREATEST(0, ${suma})` : `MAX(0, ${suma})`) : suma;
-  const update = `UPDATE ${col.tabla} SET ${col.columna} = ${nuevo} WHERE id = ${p(2)}`;
+  // `updated_at` como lo dejaba el save() de antes. Postgres: un `Date` que el
+  // driver serializa en hora local (igual que TypeORM, ver #317). SQLite: el
+  // formato UTC de TypeORM.
+  const ahora = pg ? p(3) : `strftime('%Y-%m-%d %H:%M:%f', 'now')`;
+  const update = `UPDATE ${col.tabla} SET ${col.columna} = ${nuevo}, updated_at = ${ahora} WHERE id = ${p(2)}`;
   let filas: any[];
   if (pg) {
-    filas = filasDe(await manager.query(`${update} RETURNING ${col.columna} AS valor`, [d, Number(id)]));
+    filas = filasDe(await manager.query(`${update} RETURNING ${col.columna} AS valor`, [d, Number(id), new Date()]));
   } else {
     // El query runner de SQLite manda todo lo que empieza con «UPDATE » por
     // `run()`, que no devuelve filas: se relee en la misma conexión. Con un solo

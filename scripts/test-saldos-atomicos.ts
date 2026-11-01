@@ -81,8 +81,8 @@ function guardiaEstatica() {
 
 async function crearTablas(m: EntityManager, pg: boolean) {
   const dec = pg ? 'numeric(14,2)' : 'decimal(14,2)';
-  await m.query(`CREATE TABLE cuentas_bancarias (id integer PRIMARY KEY, saldo ${dec} NOT NULL DEFAULT 0, saldo_reservado ${dec} NOT NULL DEFAULT 0, nombre varchar NULL)`);
-  await m.query(`CREATE TABLE clientes (id integer PRIMARY KEY, saldo_actual ${pg ? 'numeric(18,2)' : 'decimal(18,2)'} NOT NULL DEFAULT 0)`);
+  await m.query(`CREATE TABLE cuentas_bancarias (id integer PRIMARY KEY, saldo ${dec} NOT NULL DEFAULT 0, saldo_reservado ${dec} NOT NULL DEFAULT 0, nombre varchar NULL, updated_at timestamp NULL)`);
+  await m.query(`CREATE TABLE clientes (id integer PRIMARY KEY, saldo_actual ${pg ? 'numeric(18,2)' : 'decimal(18,2)'} NOT NULL DEFAULT 0, updated_at ${pg ? 'timestamp' : 'datetime'} NULL)`);
 }
 
 async function parteSqlite() {
@@ -106,6 +106,8 @@ async function parteSqlite() {
     err = '';
     try { await ajustarSaldoCliente(m, 7, NaN); } catch (e: any) { err = e.message; }
     ok(/delta inválido/.test(err), 'SQLite: delta NaN lanza', err);
+    const [u] = await m.query('SELECT updated_at FROM cuentas_bancarias WHERE id = 1');
+    ok(!!u.updated_at, 'SQLite: actualiza updated_at', u);
     const [c] = await m.query('SELECT saldo_actual FROM clientes WHERE id = 7');
     ok(Number(c.saldo_actual) === 1234.57, 'SQLite: el NaN no tocó el saldo', c);
   } finally {
