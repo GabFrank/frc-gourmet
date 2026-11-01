@@ -39,6 +39,7 @@ import {
   MovimientoClienteTipo,
 } from '../../src/app/database/entities/financiero/cuentas-por-cobrar-enums';
 import { setEntityUserTracking } from './entity.utils';
+import { ajustarSaldoCliente } from './saldo-atomico.utils';
 
 export interface ReversaVentaResumen {
   itemsCancelados: number;
@@ -180,8 +181,7 @@ export async function cancelarVentaCompletaEnTx(
     if (clienteId) {
       const cliente = await manager.getRepository(Cliente).findOne({ where: { id: clienteId } });
       if (cliente) {
-        cliente.saldoActual = +(Number(cliente.saldoActual) - montoOriginal).toFixed(2);
-        await manager.save(Cliente, cliente);
+        cliente.saldoActual = await ajustarSaldoCliente(manager, cliente.id, -montoOriginal);
       }
       const mov = manager.getRepository(MovimientoCliente).create({
         cliente: { id: clienteId } as any,

@@ -53,6 +53,7 @@ import {
   ItemAPagar,
   LineaDePago,
 } from '../utils/pago-consolidado.util';
+import { ajustarSaldoCuentaBancaria } from '../utils/saldo-atomico.utils';
 
 interface LineaPayload {
   fuente?: 'CAJA_MAYOR' | 'CUENTA_BANCARIA' | 'DESCUENTO';
@@ -401,8 +402,7 @@ export function registerPagoConsolidadoHandlers(
             );
           }
           // Direccional: en un cobro la cuenta se acredita, no se debita.
-          cb.saldo = redondear(Number(cb.saldo) + (esIngresoEvento ? g.monto : -g.monto), 2);
-          await queryRunner.manager.save(CuentaBancaria, cb);
+          cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, (esIngresoEvento ? g.monto : -g.monto));
 
           // Descripción enriquecida con datos de cuenta destino
           let obsMovEnriquecida = obsMov;
@@ -681,8 +681,7 @@ export function registerPagoConsolidadoHandlers(
         if (!cb) continue;
         // Direccional, como el tramo de caja: anular un COBRO acreditado al banco
         // debita la cuenta, no la vuelve a acreditar.
-        cb.saldo = +(Number(cb.saldo) + (esIngresoEvento ? -monto : monto)).toFixed(2);
-        await queryRunner.manager.save(CuentaBancaria, cb);
+        cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, (esIngresoEvento ? -monto : monto));
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId: cuentaId,
           tipo: esIngresoEvento ? MovimientoBancarioTipo.AJUSTE_NEGATIVO : MovimientoBancarioTipo.AJUSTE_POSITIVO,

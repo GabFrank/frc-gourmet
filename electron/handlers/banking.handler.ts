@@ -18,6 +18,7 @@ import { dbQuery } from '../utils/db-query';
 import { getMovimientosBancariosUnificados } from '../utils/movimientos-bancarios';
 import { ensurePermission } from '../utils/auth.utils';
 import { calcularParaMaquina } from './acreditaciones-pos-reglas.handler';
+import { ajustarSaldoCuentaBancaria, ajustarSaldoReservadoCuentaBancaria } from '../utils/saldo-atomico.utils';
 
 // Incrementa el numero de cheque (soporta sufijos no numericos: extrae digitos finales)
 function siguienteNumeroCheque(actual: string): string {
@@ -61,8 +62,7 @@ export async function procesarAcreditacionesPendientes(dataSource: DataSource): 
     for (const acred of pendientes) {
       const cb = await cbRepo.findOne({ where: { id: acred.cuentaBancaria.id } });
       if (!cb) continue;
-      cb.saldo = Number(cb.saldo) + Number(acred.montoEsperado);
-      await queryRunner.manager.save(CuentaBancaria, cb);
+      cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, Number(acred.montoEsperado));
       await registrarMovimientoBancario(queryRunner.manager, dataSource, {
         cuentaBancariaId: cb.id,
         tipo: MovimientoBancarioTipo.ACREDITACION_POS,
@@ -449,8 +449,7 @@ export function registerBankingHandlers(
       if (yaAcreditadoAuto) {
         // Ya se sumo montoEsperado al saldo. Ajustar por la diferencia (puede ser + o -)
         if (diferencia !== 0) {
-          cb.saldo = Number(cb.saldo) + diferencia;
-          await queryRunner.manager.save(CuentaBancaria, cb);
+          cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, diferencia);
           await registrarMovimientoBancario(queryRunner.manager, dataSource, {
             cuentaBancariaId: cb.id,
             tipo: diferencia > 0 ? MovimientoBancarioTipo.AJUSTE_POSITIVO : MovimientoBancarioTipo.AJUSTE_NEGATIVO,
@@ -461,8 +460,7 @@ export function registerBankingHandlers(
         }
       } else {
         // Aun no acreditada: sumar el monto real al saldo
-        cb.saldo = Number(cb.saldo) + montoReal;
-        await queryRunner.manager.save(CuentaBancaria, cb);
+        cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, montoReal);
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId: cb.id,
           tipo: MovimientoBancarioTipo.ACREDITACION_POS,
@@ -525,8 +523,9 @@ export function registerBankingHandlers(
       if (monedaCuentaId != null && monedaPagoId != null && monedaCuentaId !== monedaPagoId) {
         throw new Error('MONEDA_NO_COINCIDE_CON_CUENTA');
       }
-      cb.saldo = Number(cb.saldo) + monto;
-      await repo.save(cb);
+      // Sin transacción: el UPDATE atómico ya guardó el saldo. Un `save(cb)` acá
+      // releería la fila y podría pisar un ajuste concurrente con este valor (#190).
+      cb.saldo = await ajustarSaldoCuentaBancaria(repo.manager, cb.id, monto);
       await registrarMovimientoBancario(dataSource.manager, dataSource, {
         cuentaBancariaId,
         tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
@@ -608,8 +607,7 @@ export function registerBankingHandlers(
       if (!cb) throw new Error(`CuentaBancaria ${cuentaBancariaId} no encontrada`);
 
       const esIngreso = tipo === MovimientoBancarioTipo.ENTRADA_MANUAL || tipo === MovimientoBancarioTipo.AJUSTE_POSITIVO;
-      cb.saldo = Number(cb.saldo) + (esIngreso ? monto : -monto);
-      await queryRunner.manager.save(CuentaBancaria, cb);
+      cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, (esIngreso ? monto : -monto));
 
       const currentUser = getCurrentUser();
       const mov = mbRepo.create({
@@ -843,11 +841,9 @@ export function registerBankingHandlers(
       await queryRunner.manager.save(Chequera, chequera);
 
       if (esDiferido) {
-        cb.saldoReservado = Number(cb.saldoReservado) + monto;
-        await queryRunner.manager.save(CuentaBancaria, cb);
+        cb.saldoReservado = await ajustarSaldoReservadoCuentaBancaria(queryRunner.manager, cb.id, monto);
       } else {
-        cb.saldo = Number(cb.saldo) - monto;
-        await queryRunner.manager.save(CuentaBancaria, cb);
+        cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, -monto);
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId: cb.id,
           tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
@@ -915,10 +911,9 @@ export function registerBankingHandlers(
       const monto = Number(cheque.monto);
 
       if (cheque.esDiferido) {
-        cb.saldoReservado = Math.max(0, Number(cb.saldoReservado) - monto);
+        cb.saldoReservado = await ajustarSaldoReservadoCuentaBancaria(queryRunner.manager, cb.id, -monto, { minCero: true });
       }
-      cb.saldo = Number(cb.saldo) - monto;
-      await queryRunner.manager.save(CuentaBancaria, cb);
+      cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, -monto);
       await registrarMovimientoBancario(queryRunner.manager, dataSource, {
         cuentaBancariaId: cb.id,
         tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
@@ -983,8 +978,7 @@ export function registerBankingHandlers(
       if (cheque.esDiferido) {
         const cb = await cbRepo.findOne({ where: { id: cheque.cuentaBancaria.id } });
         if (cb) {
-          cb.saldoReservado = Math.max(0, Number(cb.saldoReservado) - Number(cheque.monto));
-          await queryRunner.manager.save(CuentaBancaria, cb);
+          cb.saldoReservado = await ajustarSaldoReservadoCuentaBancaria(queryRunner.manager, cb.id, -(Number(cheque.monto)), { minCero: true });
         }
       }
 

@@ -21,6 +21,7 @@ import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { ensurePermission } from '../utils/auth.utils';
 import { bloquearSiPagoConsolidado } from './pago-consolidado-guard';
 import { PagoOrigenTipo } from '../../src/app/database/entities/financiero/pago-consolidado-enums';
+import { ajustarSaldoCuentaBancaria } from '../utils/saldo-atomico.utils';
 
 export function registerValesHandlers(
   dataSource: DataSource,
@@ -213,8 +214,7 @@ export function registerValesHandlers(
         await setEntityUserTracking(dataSource, vale, userId, false);
         const valeSaved = await queryRunner.manager.save(Vale, vale);
 
-        cb.saldo = Number(cb.saldo) - montoBanco;
-        await queryRunner.manager.save(CuentaBancaria, cb);
+        cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, -montoBanco);
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId: cb.id,
           tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
@@ -314,8 +314,7 @@ export function registerValesHandlers(
         const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: cuentaBancariaId } });
         if (!cb) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
         const montoBanco = Number(payload?.montoCuentaBancaria) > 0 ? Number(payload.montoCuentaBancaria) : Number(vale.monto);
-        cb.saldo = Number(cb.saldo) - montoBanco;
-        await queryRunner.manager.save(CuentaBancaria, cb);
+        cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, -montoBanco);
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId: cb.id,
           tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
@@ -406,8 +405,7 @@ export function registerValesHandlers(
         const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: vale.cuentaBancariaId } });
         if (cb) {
           const montoBanco = Number(vale.montoCuentaBancaria) > 0 ? Number(vale.montoCuentaBancaria) : Number(vale.monto);
-          cb.saldo = Number(cb.saldo) + montoBanco;
-          await queryRunner.manager.save(CuentaBancaria, cb);
+          cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, montoBanco);
           await registrarMovimientoBancario(queryRunner.manager, dataSource, {
             cuentaBancariaId: vale.cuentaBancariaId,
             tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,

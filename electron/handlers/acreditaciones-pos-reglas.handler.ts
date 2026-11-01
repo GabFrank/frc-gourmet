@@ -20,6 +20,7 @@ import { calcularAcreditacion, diaLocal, REGLAS_OBSERVADAS, ReglaAcreditacion } 
 import { registrarMovimientoBancario } from '../utils/movimiento-bancario.utils';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { ensurePermission } from '../utils/auth.utils';
+import { ajustarSaldoCuentaBancaria } from '../utils/saldo-atomico.utils';
 
 const MEDIOS = Object.values(MedioPos) as string[];
 
@@ -194,8 +195,7 @@ export async function conciliar(
     await setEntityUserTracking(dataSource, conc, usuario?.id, false);
     const guardada = await m.save(ConciliacionPos, conc);
 
-    cb.saldo = +(Number(cb.saldo) + monto).toFixed(2);
-    await m.save(CuentaBancaria, cb);
+    cb.saldo = await ajustarSaldoCuentaBancaria(m, cb.id, monto);
     const [y, mo, d] = p.fechaCredito.split('-').map(Number);
     await registrarMovimientoBancario(m, dataSource, {
       cuentaBancariaId: cb.id,
@@ -244,8 +244,7 @@ export async function deshacerConciliacion(dataSource: DataSource, id: number, u
     const cb = await m.getRepository(CuentaBancaria).findOne({ where: { id: conc.cuentaBancaria.id } });
     if (!cb) throw new Error('Cuenta bancaria no encontrada');
     const monto = Number(conc.montoCredito);
-    cb.saldo = +(Number(cb.saldo) - monto).toFixed(2);
-    await m.save(CuentaBancaria, cb);
+    cb.saldo = await ajustarSaldoCuentaBancaria(m, cb.id, -monto);
     await registrarMovimientoBancario(m, dataSource, {
       cuentaBancariaId: cb.id,
       tipo: MovimientoBancarioTipo.AJUSTE_NEGATIVO,

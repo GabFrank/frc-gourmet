@@ -44,6 +44,7 @@ import { getConfigNumber } from './configuracion-rrhh.handler';
 import { ensurePermission } from '../utils/auth.utils';
 import { bloquearSiPagoConsolidado } from './pago-consolidado-guard';
 import { PagoOrigenTipo } from '../../src/app/database/entities/financiero/pago-consolidado-enums';
+import { ajustarSaldoCliente, ajustarSaldoCuentaBancaria } from '../utils/saldo-atomico.utils';
 
 const SEED_CONCEPTOS: Array<{ codigo: string; descripcion: string; esHaber: boolean; esCalculadoAuto: boolean }> = [
   { codigo: 'SALARIO_BASE', descripcion: 'Salario base', esHaber: true, esCalculadoAuto: true },
@@ -207,8 +208,7 @@ export async function aplicarEstadoPagoLiquidacion(
       if (clienteId) {
         const cliente = await clienteRepoPago.findOne({ where: { id: clienteId } });
         if (cliente) {
-          cliente.saldoActual = +(Number(cliente.saldoActual) - montoCobrar).toFixed(2);
-          await clienteRepoPago.save(cliente);
+          cliente.saldoActual = await ajustarSaldoCliente(clienteRepoPago.manager, cliente.id, -montoCobrar);
         }
         const movCliente = movClienteRepo.create({
           cliente: { id: clienteId } as any,
@@ -375,8 +375,7 @@ export async function revertirEstadoPagoLiquidacion(
         if (clienteId) {
           const cliente = await clienteRepoAnular.findOne({ where: { id: clienteId } });
           if (cliente) {
-            cliente.saldoActual = +(Number(cliente.saldoActual) + montoRevertir).toFixed(2);
-            await clienteRepoAnular.save(cliente);
+            cliente.saldoActual = await ajustarSaldoCliente(clienteRepoAnular.manager, cliente.id, montoRevertir);
           }
         }
       }
@@ -988,8 +987,7 @@ export function registerLiquidacionSueldoHandlers(
         const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
         const cb = await cbRepo.findOne({ where: { id: cuentaBancariaId } });
         if (!cb) throw new Error('Cuenta bancaria no encontrada');
-        cb.saldo = Number(cb.saldo) - monto;
-        await queryRunner.manager.save(CuentaBancaria, cb);
+        cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, -monto);
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId,
           tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
@@ -1102,8 +1100,7 @@ export function registerLiquidacionSueldoHandlers(
           const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
           const cb = await cbRepo.findOne({ where: { id: liq.cuentaBancariaId } });
           if (cb) {
-            cb.saldo = Number(cb.saldo) + Number(liq.totalNeto);
-            await queryRunner.manager.save(CuentaBancaria, cb);
+            cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, Number(liq.totalNeto));
             await registrarMovimientoBancario(queryRunner.manager, dataSource, {
               cuentaBancariaId: liq.cuentaBancariaId,
               tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
