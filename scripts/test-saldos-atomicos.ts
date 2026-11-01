@@ -16,7 +16,8 @@
  *       correctos.
  *
  * QUÉ REVERTIR PARA QUE FALLE: cambiar `ajustar()` de saldo-atomico.utils.ts por
- * un SELECT + UPDATE con el valor calculado en memoria (cae B, C y E).
+ * un SELECT + UPDATE con el valor calculado en memoria (caen B, C y F). E solo
+ * documenta que con transferencias cruzadas la plata se conserva (deadlock = igual que antes).
  */
 import 'reflect-metadata';
 import * as fs from 'fs';
@@ -66,8 +67,22 @@ function guardiaEstatica() {
   const malos: string[] = [];
   const re = /\b(\w+)\.(saldo|saldoReservado|saldoActual)\s*=(?!=)\s*(.*)$/;
   for (const a of archivos) {
-    fs.readFileSync(a, 'utf8').split('\n').forEach((l, i) => {
-      if (/^\s*(\*|\/\/)/.test(l)) return; // comentarios
+    const lineas = fs.readFileSync(a, 'utf8').split('\n');
+    lineas.forEach((l, i) => {
+      if (/^\s*(\/\*|\*|\/\/)/.test(l)) return; // comentarios
+      // (`entry.saldo +=` es el Map en memoria de recalcular-saldos de caja mayor)
+      if (/\.(saldo|saldoReservado|saldoActual)\s*[+-]=/.test(l) && !/\bentry\.saldo \+= delta/.test(l)) {
+        malos.push(`${path.relative(raiz, a)}:${i + 1}: ${l.trim()}`);
+        return;
+      }
+      // Después del helper no va un save() de la misma entidad (test F).
+      const h = l.match(/\b(\w+)\.\w+ = await ajustarSaldo/);
+      if (h) {
+        const sig = lineas.slice(i + 1, i + 4).join('\n');
+        if (new RegExp(`\\.save\\(([\\w]+, )?${h[1]}\\)`).test(sig)) {
+          malos.push(`${path.relative(raiz, a)}:${i + 1}: save() de «${h[1]}» después del ajuste`);
+        }
+      }
       const m = l.match(re);
       if (!m) return;
       if (m[1] === 'saldo' && m[2] === 'saldo') return; // CajaMayorSaldo (lock propio, PR #185)
