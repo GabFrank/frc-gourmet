@@ -80,6 +80,7 @@ import { CobroParcialItem } from '../../src/app/database/entities/ventas/cobro-p
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
 import { Pago } from '../../src/app/database/entities/compras/pago.entity';
 import { invalidarCacheJornada } from './dashboard-ventas.handler';
+import { ajustarSaldoCliente } from '../utils/saldo-atomico.utils';
 
 /**
  * M-04: mutex por-venta para serializar procesarStockVenta. El chequeo de
@@ -1634,8 +1635,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           if (clienteId) {
             const cliente = await m.getRepository(Cliente).findOne({ where: { id: clienteId } });
             if (cliente) {
-              cliente.saldoActual = +(Number(cliente.saldoActual) - montoOriginal).toFixed(2);
-              await m.save(Cliente, cliente);
+              cliente.saldoActual = await ajustarSaldoCliente(m, cliente.id, -montoOriginal);
             }
             const mov = m.getRepository(MovimientoCliente).create({
               cliente: { id: clienteId } as any,

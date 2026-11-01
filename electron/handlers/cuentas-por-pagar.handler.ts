@@ -22,6 +22,7 @@ import { parseLocalDate } from '../utils/date.utils';
 import { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
+import { ajustarSaldoCuentaBancaria } from '../utils/saldo-atomico.utils';
 
 /**
  * Saldo de Caja Mayor: se delega en el helper canonico de `caja-mayor-utils`.
@@ -226,10 +227,7 @@ export async function aplicarPagoCpoCuota(
     const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
     const cb = await cbRepo.findOne({ where: { id: cuentaBancariaId } });
     if (!cb) throw new Error('Cuenta bancaria no encontrada');
-    cb.saldo = esPrestamoFuncionario
-      ? Number(cb.saldo) + monto
-      : Number(cb.saldo) - monto;
-    await queryRunner.manager.save(CuentaBancaria, cb);
+    cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, esPrestamoFuncionario ? monto : -monto);
 
     // Registrar el movimiento bancario (antes solo se ajustaba el saldo).
     await registrarMovimientoBancario(queryRunner.manager, dataSource, {
@@ -343,8 +341,7 @@ export async function aplicarPagoMixtoCuota(
     } else {
       const cb = await queryRunner.manager.getRepository(CuentaBancaria).findOne({ where: { id: Number(l.cuentaBancariaId) } });
       if (!cb) throw new Error('Cuenta bancaria no encontrada');
-      cb.saldo = +(Number(cb.saldo) - Number(l.monto)).toFixed(2);
-      await queryRunner.manager.save(CuentaBancaria, cb);
+      cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, -(Number(l.monto)));
       await registrarMovimientoBancario(queryRunner.manager, dataSource, {
         cuentaBancariaId: Number(l.cuentaBancariaId),
         tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
@@ -576,8 +573,7 @@ export function registerCuentasPorPagarHandlers(
         const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
         const cb = await cbRepo.findOne({ where: { id: cuentaBancariaId } });
         if (!cb) throw new Error('Cuenta bancaria no encontrada');
-        cb.saldo = Number(cb.saldo) - monto;
-        await queryRunner.manager.save(CuentaBancaria, cb);
+        cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, -monto);
 
         // Registrar el movimiento bancario (antes solo se ajustaba el saldo).
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
@@ -719,8 +715,7 @@ export function registerCuentasPorPagarHandlers(
           const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
           const cb = await cbRepo.findOne({ where: { id: Number(data.cuentaBancariaId) } });
           if (!cb) throw new Error('Cuenta bancaria no encontrada');
-          cb.saldo = Number(cb.saldo) - montoTotal;
-          await queryRunner.manager.save(CuentaBancaria, cb);
+          cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, -montoTotal);
 
           await registrarMovimientoBancario(queryRunner.manager, dataSource, {
             cuentaBancariaId: Number(data.cuentaBancariaId),
@@ -901,8 +896,7 @@ export function registerCuentasPorPagarHandlers(
         if (det.fuente === 'CUENTA_BANCARIA' && det.cuentaBancariaId) {
           const cb = await queryRunner.manager.getRepository(CuentaBancaria).findOne({ where: { id: det.cuentaBancariaId } });
           if (cb) {
-            cb.saldo = +(Number(cb.saldo) + Number(det.montoOrigen)).toFixed(2);
-            await queryRunner.manager.save(CuentaBancaria, cb);
+            cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, Number(det.montoOrigen));
             await registrarMovimientoBancario(queryRunner.manager, dataSource, {
               cuentaBancariaId: det.cuentaBancariaId,
               tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,

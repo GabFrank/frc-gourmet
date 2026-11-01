@@ -32,6 +32,7 @@ import { PagoOrigenTipo } from '../../src/app/database/entities/financiero/pago-
 import { bloquearSiPagoConsolidado } from './pago-consolidado-guard';
 import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
 import { assertCajaAbiertaSiVino } from '../utils/caja-abierta.utils';
+import { ajustarSaldoCliente, ajustarSaldoCuentaBancaria } from '../utils/saldo-atomico.utils';
 
 function calcularEstadoCuota(monto: number, montoCobrado: number): CuentaPorCobrarCuotaEstado {
   if (montoCobrado >= monto) return CuentaPorCobrarCuotaEstado.COBRADO;
@@ -97,8 +98,7 @@ export async function aplicarCobroConsolidadoCpc(
     const cliente = await queryRunner.manager.findOne(Cliente, { where: { id: clienteId } });
     if (cliente) {
       // La deuda baja por el total: lo cobrado Y lo condonado.
-      cliente.saldoActual = round2(Number(cliente.saldoActual) - monto);
-      await queryRunner.manager.save(Cliente, cliente);
+      cliente.saldoActual = await ajustarSaldoCliente(queryRunner.manager, cliente.id, -monto);
     }
 
     const efectivo = round2(monto - montoDescuento);
@@ -174,8 +174,7 @@ export async function revertirCobroConsolidadoCpc(
 
   const cliente = await queryRunner.manager.findOne(Cliente, { where: { id: clienteId } });
   if (cliente) {
-    cliente.saldoActual = round2(Number(cliente.saldoActual) + monto);
-    await queryRunner.manager.save(Cliente, cliente);
+    cliente.saldoActual = await ajustarSaldoCliente(queryRunner.manager, cliente.id, monto);
   }
 
   const originales = await queryRunner.manager.find(MovimientoCliente, {
@@ -344,8 +343,7 @@ export function registerCuentasPorCobrarHandlers(
       // Actualizar saldoActual del cliente (cargo = deuda con el restaurante)
       const cliente = await clienteRepo.findOne({ where: { id: data.clienteId } });
       if (cliente) {
-        cliente.saldoActual = +(Number(cliente.saldoActual) + montoTotal).toFixed(2);
-        await queryRunner.manager.save(Cliente, cliente);
+        cliente.saldoActual = await ajustarSaldoCliente(queryRunner.manager, cliente.id, montoTotal);
       }
 
       await queryRunner.commitTransaction();
@@ -421,8 +419,7 @@ export function registerCuentasPorCobrarHandlers(
       if (clienteId) {
         const cliente = await clienteRepo.findOne({ where: { id: clienteId } });
         if (cliente) {
-          cliente.saldoActual = +(Number(cliente.saldoActual) - montoOriginal).toFixed(2);
-          await queryRunner.manager.save(Cliente, cliente);
+          cliente.saldoActual = await ajustarSaldoCliente(queryRunner.manager, cliente.id, -montoOriginal);
         }
 
         // Crear MovimientoCliente AJUSTE_NEGATIVO
@@ -551,8 +548,7 @@ export function registerCuentasPorCobrarHandlers(
       if (esBanco) {
         const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: cuentaBancariaId } });
         if (!cb) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
-        cb.saldo = +(Number(cb.saldo) + montoBanco).toFixed(2);
-        await queryRunner.manager.save(CuentaBancaria, cb);
+        cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, montoBanco);
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId,
           tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
@@ -582,8 +578,7 @@ export function registerCuentasPorCobrarHandlers(
 
       // Actualizar saldoActual del cliente (cobro reduce la deuda)
       if (cliente) {
-        cliente.saldoActual = +(Number(cliente.saldoActual) - montoCobrar).toFixed(2);
-        await queryRunner.manager.save(Cliente, cliente);
+        cliente.saldoActual = await ajustarSaldoCliente(queryRunner.manager, cliente.id, -montoCobrar);
       }
 
       // Crear MovimientoCliente tipo PAGO
@@ -664,8 +659,7 @@ export function registerCuentasPorCobrarHandlers(
         const montoBancoRevertir = Number(ultimoPago.montoCuentaBancaria) > 0 ? Number(ultimoPago.montoCuentaBancaria) : montoAnuladoBanco;
         const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: ultimoPago.cuentaBancariaId } });
         if (cb) {
-          cb.saldo = +(Number(cb.saldo) - montoBancoRevertir).toFixed(2);
-          await queryRunner.manager.save(CuentaBancaria, cb);
+          cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, -montoBancoRevertir);
           await registrarMovimientoBancario(queryRunner.manager, dataSource, {
             cuentaBancariaId: ultimoPago.cuentaBancariaId,
             tipo: MovimientoBancarioTipo.AJUSTE_NEGATIVO,
@@ -692,8 +686,7 @@ export function registerCuentasPorCobrarHandlers(
           if (clienteIdB) {
             const clienteB = await clienteRepo.findOne({ where: { id: clienteIdB } });
             if (clienteB) {
-              clienteB.saldoActual = +(Number(clienteB.saldoActual) + montoAnuladoBanco).toFixed(2);
-              await queryRunner.manager.save(Cliente, clienteB);
+              clienteB.saldoActual = await ajustarSaldoCliente(queryRunner.manager, clienteB.id, montoAnuladoBanco);
             }
             const movAjusteB = movClienteRepo.create({
               cliente: { id: clienteIdB } as any,
@@ -770,8 +763,7 @@ export function registerCuentasPorCobrarHandlers(
         if (clienteId) {
           const cliente = await clienteRepo.findOne({ where: { id: clienteId } });
           if (cliente) {
-            cliente.saldoActual = +(Number(cliente.saldoActual) + montoAnulado).toFixed(2);
-            await queryRunner.manager.save(Cliente, cliente);
+            cliente.saldoActual = await ajustarSaldoCliente(queryRunner.manager, cliente.id, montoAnulado);
           }
 
           // Crear MovimientoCliente AJUSTE_NEGATIVO
@@ -1033,8 +1025,9 @@ export function registerCuentasPorCobrarHandlers(
       await setEntityUserTracking(dataSource, movCargo, cu?.id, false);
       await queryRunner.manager.save(MovimientoCliente, movCargo);
 
-      cliente.saldoActual = +(saldoAct + montoTotal).toFixed(2);
-      await queryRunner.manager.save(Cliente, cliente);
+      // El límite de crédito se validó con `saldoAct` (aviso confirmable); el
+      // saldo se ajusta atómico para no pisar un cobro concurrente (#190).
+      cliente.saldoActual = await ajustarSaldoCliente(queryRunner.manager, cliente.id, montoTotal);
 
       await queryRunner.commitTransaction();
 
