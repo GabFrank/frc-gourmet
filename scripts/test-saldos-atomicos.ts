@@ -14,6 +14,9 @@
  *   D · rollback: un ajuste en una transacción que falla no deja rastro.
  *   E · transferencias cruzadas A→B / B→A concurrentes terminan con saldos
  *       correctos.
+ *   H · #350: editar/desactivar un cliente con `saldoActual = undefined` antes
+ *       del `save()` no pisa un cobro que entró mientras tanto (con CONTROL: el
+ *       save con el saldo leído sí lo pisa).
  *
  * QUÉ REVERTIR PARA QUE FALLE: cambiar `ajustar()` de saldo-atomico.utils.ts por
  * un SELECT + UPDATE con el valor calculado en memoria (caen B, C y F). E solo
@@ -48,10 +51,18 @@ class CuentaT {
   @Column({ type: 'varchar', nullable: true }) nombre!: string | null;
 }
 
+/** Mínima, para el patrón de update-cliente / delete-cliente (#350). */
+@Entity('clientes')
+class ClienteT {
+  @PrimaryColumn() id!: number;
+  @Column({ type: 'decimal', precision: 18, scale: 2, default: 0, name: 'saldo_actual' }) saldoActual!: number;
+  @Column({ type: 'boolean', default: true }) activo!: boolean;
+}
+
 /**
  * G · guardia estática: ningún handler vuelve a calcular un saldo en memoria.
- * Las únicas asignaciones permitidas son las que salen del helper (y la
- * herramienta de reparación `recalcular-saldo-cliente`, que fija un absoluto).
+ * Las únicas asignaciones permitidas son las que salen del helper
+ * (`recalcular-saldo-cliente` fija su absoluto con un UPDATE de la columna, #350).
  */
 function guardiaEstatica() {
   const raiz = path.join(__dirname, '..', 'electron');
@@ -87,7 +98,6 @@ function guardiaEstatica() {
       if (!m) return;
       if (m[1] === 'saldo' && m[2] === 'saldo') return; // CajaMayorSaldo (lock propio, PR #185)
       if (/^await ajustarSaldo/.test(m[3])) return;
-      if (a.endsWith('cuentas-por-cobrar.handler.ts') && /^\+saldo\.toFixed\(2\);/.test(m[3])) return; // recalcular-saldo-cliente
       malos.push(`${path.relative(raiz, a)}:${i + 1}: ${l.trim()}`);
     });
   }
@@ -97,7 +107,7 @@ function guardiaEstatica() {
 async function crearTablas(m: EntityManager, pg: boolean) {
   const dec = pg ? 'numeric(14,2)' : 'decimal(14,2)';
   await m.query(`CREATE TABLE cuentas_bancarias (id integer PRIMARY KEY, saldo ${dec} NOT NULL DEFAULT 0, saldo_reservado ${dec} NOT NULL DEFAULT 0, nombre varchar NULL, updated_at timestamp NULL)`);
-  await m.query(`CREATE TABLE clientes (id integer PRIMARY KEY, saldo_actual ${pg ? 'numeric(18,2)' : 'decimal(18,2)'} NOT NULL DEFAULT 0, updated_at ${pg ? 'timestamp' : 'datetime'} NULL)`);
+  await m.query(`CREATE TABLE clientes (id integer PRIMARY KEY, saldo_actual ${pg ? 'numeric(18,2)' : 'decimal(18,2)'} NOT NULL DEFAULT 0, activo boolean NOT NULL DEFAULT true, updated_at ${pg ? 'timestamp' : 'datetime'} NULL)`);
 }
 
 async function parteSqlite() {
@@ -145,7 +155,7 @@ async function partePostgres() {
   }
   await admin.query(`CREATE DATABASE ${db}`);
   const N = 20;
-  const ds = new DataSource({ type: 'postgres', ...base, database: db, entities: [CuentaT], extra: { max: N } } as any);
+  const ds = new DataSource({ type: 'postgres', ...base, database: db, entities: [CuentaT, ClienteT], extra: { max: N } } as any);
   await ds.initialize();
   try {
     await crearTablas(ds.manager, true);
@@ -234,6 +244,23 @@ async function partePostgres() {
     await ds.query('UPDATE cuentas_bancarias SET saldo = 0, saldo_reservado = 0 WHERE id = 1');
     const fOk = await conSave(false);
     ok(Number(fOk.saldo) === 10 && Number(fOk.saldo_reservado) === 50, `F: helper sin save() conserva las dos columnas (${fOk.saldo} / ${fOk.saldo_reservado})`);
+
+    // H · #350: editar un cliente (save de la entidad entera) mientras entra un cobro
+    const editarCliente = async (sinSaldo: boolean) => {
+      await ds.query('UPDATE clientes SET saldo_actual = 100, activo = true WHERE id = 7');
+      const cli = await ds.manager.findOne(ClienteT, { where: { id: 7 } });
+      // otra PC cobra (−30) y commitea con el diálogo de edición abierto
+      await ds.transaction((m) => ajustarSaldoCliente(m, 7, -30));
+      cli!.activo = false;
+      if (sinSaldo) (cli as any).saldoActual = undefined;
+      await ds.manager.save(ClienteT, cli!);
+      const [r] = await ds.query('SELECT saldo_actual, activo FROM clientes WHERE id = 7');
+      return r;
+    };
+    const hCtl = await editarCliente(false);
+    ok(Number(hCtl.saldo_actual) === 100, `H: CONTROL — save() con el saldo leído pisa el cobro (${hCtl.saldo_actual})`);
+    const hOk = await editarCliente(true);
+    ok(Number(hOk.saldo_actual) === 70 && hOk.activo === false, `H: con saldoActual = undefined guarda la edición y conserva el cobro (${hOk.saldo_actual}, activo ${hOk.activo})`);
   } finally {
     await ds.destroy();
     await admin.query(`DROP DATABASE IF EXISTS ${db}`);
