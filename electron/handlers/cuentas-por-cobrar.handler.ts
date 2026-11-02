@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { DataSource, IsNull } from 'typeorm';
 import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
+import { cancelarCuotasAbiertasDeCpc } from '../utils/cpc-cuotas.utils';
 import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
 import { MovimientoCliente } from '../../src/app/database/entities/financiero/movimiento-cliente.entity';
 import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
@@ -404,15 +405,7 @@ export function registerCuentasPorCobrarHandlers(
 
       // #322: las cuotas abiertas pasan a CANCELADO para que no sigan sumando
       // en resúmenes y vencidas (no hay cobros: se validó montoCobrado = 0).
-      await queryRunner.manager.getRepository(CuentaPorCobrarCuota)
-        .createQueryBuilder()
-        .update(CuentaPorCobrarCuota)
-        .set({ estado: CuentaPorCobrarCuotaEstado.CANCELADO })
-        .where('cuenta_por_cobrar_id = :id AND estado IN (:...ests)', {
-          id,
-          ests: [CuentaPorCobrarCuotaEstado.PENDIENTE, CuentaPorCobrarCuotaEstado.PARCIAL],
-        })
-        .execute();
+      await cancelarCuotasAbiertasDeCpc(queryRunner.manager, id);
 
       // Revertir saldoActual del cliente
       const clienteId = cpc.cliente?.id;

@@ -38,6 +38,7 @@ import { SelectQueryBuilder } from 'typeorm';
 import { Reserva } from '../../src/app/database/entities/ventas/reserva.entity';
 import { ensurePermission } from '../utils/auth.utils';
 import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
+import { cancelarCuotasAbiertasDeCpc } from '../utils/cpc-cuotas.utils';
 import { MovimientoCliente } from '../../src/app/database/entities/financiero/movimiento-cliente.entity';
 import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
 import { CuentaPorCobrarEstado, MovimientoClienteTipo } from '../../src/app/database/entities/financiero/cuentas-por-cobrar-enums';
@@ -1626,11 +1627,18 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         await dataSource.transaction(async (m) => {
           const cpc = await m.getRepository(CuentaPorCobrar).findOne({ where: { id: cpcId } });
           if (!cpc || cpc.estado !== CuentaPorCobrarEstado.ACTIVO) return; // ya revertida
+          // #347: el pre-chequeo de cobros corrió fuera de esta transacción; si entró
+          // un cobro en el medio no se cancela (ni se tocan sus cuotas).
+          if (Number(cpc.montoCobrado) > 0) {
+            throw new Error('No se puede cancelar una venta a crédito con cobros registrados. Anule primero los cobros de la cuenta por cobrar.');
+          }
           cpc.estado = CuentaPorCobrarEstado.CANCELADO;
           cpc.fechaCancelacion = new Date();
           cpc.motivoCancelacion = 'CANCELACION DE VENTA';
           await setEntityUserTracking(dataSource, cpc, cu?.id, true);
           await m.save(CuentaPorCobrar, cpc);
+          // #347: sin cobros (pre-chequeo) → sus cuotas abiertas también se cancelan.
+          await cancelarCuotasAbiertasDeCpc(m, cpcId);
 
           if (clienteId) {
             const cliente = await m.getRepository(Cliente).findOne({ where: { id: clienteId } });
