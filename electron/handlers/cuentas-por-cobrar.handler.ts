@@ -790,25 +790,37 @@ export function registerCuentasPorCobrarHandlers(
   ipcMain.handle('recalcular-saldo-cliente', async (_event, clienteId: number) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'CPC_GESTIONAR');
-      const movRepo = dataSource.getRepository(MovimientoCliente);
-      const clienteRepo = dataSource.getRepository(Cliente);
+      // #350: lock del cliente ANTES de sumar los movimientos, y en la misma
+      // transacción que el UPDATE. Un cobro concurrente toma el mismo lock al
+      // ajustar el saldo (#190), así que o entra antes (y su movimiento se
+      // suma) o espera a que termine el recálculo (y su delta se aplica sobre
+      // el saldo nuevo). Antes se sumaba sin lock y un `save()` escribía un
+      // saldo que podía no incluir ese cobro.
+      const saldo = await dataSource.transaction(async (manager) => {
+        const pg = (manager.connection.options.type as string) === 'postgres';
+        // SQLite: no hay FOR UPDATE; las transacciones de los cobros se serializan
+        // en la única conexión (una escritura suelta podría colarse, como en el
+        // resto de la app).
+        const lock = pg
+          ? await manager.query('SELECT id FROM clientes WHERE id = $1 FOR UPDATE', [Number(clienteId)])
+          : await manager.query('SELECT id FROM clientes WHERE id = ?', [Number(clienteId)]);
+        if (!lock?.length) return null;
 
-      const movimientos = await movRepo.find({ where: { cliente: { id: clienteId } } });
-      let saldo = 0;
-      for (const m of movimientos) {
-        if (m.tipo === MovimientoClienteTipo.CARGO || m.tipo === MovimientoClienteTipo.AJUSTE_POSITIVO) {
-          saldo += Number(m.monto);
-        } else if (m.tipo === MovimientoClienteTipo.PAGO || m.tipo === MovimientoClienteTipo.AJUSTE_NEGATIVO) {
-          saldo -= Number(m.monto);
+        const movimientos = await manager.getRepository(MovimientoCliente).find({ where: { cliente: { id: clienteId } } });
+        let total = 0;
+        for (const m of movimientos) {
+          if (m.tipo === MovimientoClienteTipo.CARGO || m.tipo === MovimientoClienteTipo.AJUSTE_POSITIVO) {
+            total += Number(m.monto);
+          } else if (m.tipo === MovimientoClienteTipo.PAGO || m.tipo === MovimientoClienteTipo.AJUSTE_NEGATIVO) {
+            total -= Number(m.monto);
+          }
         }
-      }
-
-      const cliente = await clienteRepo.findOne({ where: { id: clienteId } });
-      if (cliente) {
-        cliente.saldoActual = +saldo.toFixed(2);
-        await clienteRepo.save(cliente);
-      }
-      return { success: true, saldoRecalculado: +saldo.toFixed(2) };
+        total = +total.toFixed(2);
+        // UPDATE de la columna sola (no `save()` del cliente entero).
+        await manager.update(Cliente, { id: clienteId }, { saldoActual: total });
+        return total;
+      });
+      return { success: true, saldoRecalculado: saldo ?? 0 };
     } catch (error) {
       console.error(`Error recalculando saldo cliente ${clienteId}:`, error);
       throw error;

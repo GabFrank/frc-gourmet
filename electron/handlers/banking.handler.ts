@@ -523,16 +523,20 @@ export function registerBankingHandlers(
       if (monedaCuentaId != null && monedaPagoId != null && monedaCuentaId !== monedaPagoId) {
         throw new Error('MONEDA_NO_COINCIDE_CON_CUENTA');
       }
-      // Sin transacción: el UPDATE atómico ya guardó el saldo. Un `save(cb)` acá
-      // releería la fila y podría pisar un ajuste concurrente con este valor (#190).
-      cb.saldo = await ajustarSaldoCuentaBancaria(repo.manager, cb.id, monto);
-      await registrarMovimientoBancario(dataSource.manager, dataSource, {
-        cuentaBancariaId,
-        tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
-        monto,
-        observacion: 'TRANSFERENCIA/PIX RECIBIDA',
-        numeroComprobante: payload.numeroComprobante,
-        responsable: getCurrentUser(),
+      // Saldo y movimiento en la misma transacción (#350): si falla el
+      // movimiento, el saldo no queda sumado sin su respaldo. Sin `save(cb)`
+      // después: el UPDATE atómico ya guardó el saldo y un save releería la fila
+      // y podría pisar un ajuste concurrente con este valor (#190).
+      await dataSource.transaction(async (manager) => {
+        cb.saldo = await ajustarSaldoCuentaBancaria(manager, cb.id, monto);
+        await registrarMovimientoBancario(manager, dataSource, {
+          cuentaBancariaId,
+          tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
+          monto,
+          observacion: 'TRANSFERENCIA/PIX RECIBIDA',
+          numeroComprobante: payload.numeroComprobante,
+          responsable: getCurrentUser(),
+        });
       });
       return { success: true, saldoActual: Number(cb.saldo) };
     } catch (error) {
