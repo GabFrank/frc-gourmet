@@ -798,7 +798,9 @@ export function registerCuentasPorCobrarHandlers(
       // saldo que podía no incluir ese cobro.
       const saldo = await dataSource.transaction(async (manager) => {
         const pg = (manager.connection.options.type as string) === 'postgres';
-        // SQLite: un solo escritor; la transacción ya serializa.
+        // SQLite: no hay FOR UPDATE; las transacciones de los cobros se serializan
+        // en la única conexión (una escritura suelta podría colarse, como en el
+        // resto de la app).
         const lock = pg
           ? await manager.query('SELECT id FROM clientes WHERE id = $1 FOR UPDATE', [Number(clienteId)])
           : await manager.query('SELECT id FROM clientes WHERE id = ?', [Number(clienteId)]);
