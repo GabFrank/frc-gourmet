@@ -147,6 +147,31 @@ async function main() {
   const cuotaLegado: any = await ds.getRepository(CuentaPorCobrarCuota).findOne({ where: { id: legado.cuotas[0].id } });
   ok(cuotaLegado.estado === 'PENDIENTE', 'el legado no se modifica (sin arreglos retroactivos)', cuotaLegado.estado);
 
+  console.log('\n[E] #347: helper de cuotas y los 3 caminos que cancelan una CPC');
+  const { cancelarCuotasAbiertasDeCpc } = require('../electron/utils/cpc-cuotas.utils');
+  const deVenta = await crearCpc([10_000, 15_000]);
+  await ds.getRepository(CuentaPorCobrarCuota).update({ id: deVenta.cuotas[1].id }, { estado: 'COBRADO' } as any);
+  const n = await ds.transaction((m) => cancelarCuotasAbiertasDeCpc(m, deVenta.cpc.id));
+  ok(n === 1, 'cancela solo la cuota abierta (1)', n);
+  const cs = await ds.getRepository(CuentaPorCobrarCuota).find({ where: { cuentaPorCobrar: { id: deVenta.cpc.id } } as any, order: { numero: 'ASC' } as any });
+  ok(cs[0].estado === 'CANCELADO' && cs[1].estado === 'COBRADO', 'PENDIENTE → CANCELADO, COBRADO intacta', cs.map((c: any) => c.estado));
+  const cuotaActiva2: any = await ds.getRepository(CuentaPorCobrarCuota).findOne({ where: { id: activa.cuotas[0].id } });
+  ok(cuotaActiva2.estado === 'PENDIENTE', 'no toca cuotas de otra CPC', cuotaActiva2.estado);
+  // Guardia estática: todo sitio que pasa una CPC a CANCELADO también cancela sus cuotas.
+  const listar = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? listar(path.join(d, e.name)) : (e.name.endsWith('.ts') ? [path.join(d, e.name)] : []));
+  const raiz = path.resolve(__dirname, '..');
+  const fuentes = listar(path.join(raiz, 'electron'))
+    .filter((f) => /\.estado = CuentaPorCobrarEstado\.CANCELADO|estado:\s*CuentaPorCobrarEstado\.CANCELADO/.test(fs.readFileSync(f, 'utf8')))
+    .map((f) => path.relative(raiz, f));
+  ok(fuentes.length >= 3, `encuentra los sitios que cancelan CPC (${fuentes.length})`, fuentes);
+  for (const f of fuentes) {
+    const src = fs.readFileSync(path.resolve(raiz, f), 'utf8');
+    const asignaciones = (src.match(/\.estado = CuentaPorCobrarEstado\.CANCELADO|estado:\s*CuentaPorCobrarEstado\.CANCELADO/g) || []).length;
+    const llamadas = (src.match(/await cancelarCuotasAbiertasDeCpc\(/g) || []).length;
+    ok(asignaciones > 0 && llamadas >= asignaciones, `${f}: ${asignaciones} cancelación(es) de CPC con su cancelación de cuotas`, { asignaciones, llamadas });
+  }
+
   await ds.destroy();
   console.log(`\n[cpc-cancelada] ${passed} OK, ${failed} fallas`);
   if (failed > 0) process.exit(1);
