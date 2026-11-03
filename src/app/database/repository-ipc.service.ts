@@ -496,6 +496,10 @@ interface ElectronAPI {
   getZonasDeliveryAdmin: () => Promise<any[]>;
   guardarZonaDelivery: (data: any) => Promise<any>;
   eliminarZonaDelivery: (zonaId: number) => Promise<any>;
+  getTiendaCategoriasAdmin: () => Promise<any[]>;
+  guardarTiendaCategoria: (data: any) => Promise<any>;
+  eliminarTiendaCategoria: (categoriaId: number) => Promise<any>;
+  reordenarTiendaCategorias: (ids: number[]) => Promise<any>;
   crearProduccion: (data: any) => Promise<any>;
   getProducciones: (filtros?: any) => Promise<any[]>;
   // Presentacion methods
@@ -2671,6 +2675,18 @@ export class RepositoryIpcService extends RepositoryService {
   }
   eliminarZonaDelivery(zonaId: number): Observable<any> {
     return from(this.api.eliminarZonaDelivery(zonaId));
+  }
+  getTiendaCategoriasAdmin(): Observable<any[]> {
+    return from(this.api.getTiendaCategoriasAdmin());
+  }
+  guardarTiendaCategoria(data: any): Observable<any> {
+    return from(this.api.guardarTiendaCategoria(data));
+  }
+  eliminarTiendaCategoria(categoriaId: number): Observable<any> {
+    return from(this.api.eliminarTiendaCategoria(categoriaId));
+  }
+  reordenarTiendaCategorias(ids: number[]): Observable<any> {
+    return from(this.api.reordenarTiendaCategorias(ids));
   }
 
   crearProduccion(data: any): Observable<any> {

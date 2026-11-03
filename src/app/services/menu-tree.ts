@@ -67,6 +67,7 @@ import { VentasDashboardComponent } from 'src/app/pages/ventas/dashboard/ventas-
 import { VentasReportesComponent } from 'src/app/pages/reportes/ventas-reportes/ventas-reportes.component';
 import { FinanzasReportesComponent } from 'src/app/pages/reportes/finanzas-reportes/finanzas-reportes.component';
 import { ZonasDeliveryComponent } from 'src/app/pages/ventas/pedidos-online/zonas-delivery.component';
+import { TiendaCategoriasComponent } from 'src/app/pages/ventas/pedidos-online/tienda-categorias.component';
 import { ListPreciosDeliveryComponent } from 'src/app/pages/ventas/precios-delivery/list-precios-delivery.component';
 
 // ── Destinos fuera del sidenav (sub-listados y acciones) ──
@@ -169,6 +170,9 @@ export const MENU_TREE: MenuNode[] = [
           { id: 'tienda-online-config', label: 'Config Tienda Online', icon: 'storefront', permiso: 'PEDIDOS_ONLINE_CONFIGURAR', esConfig: true,
             keywords: ['tienda', 'online', 'config'],
             action: { component: TiendaOnlineConfigComponent, title: 'Config Tienda Online', tabId: 'tienda-online-config-tab', data: NAV } },
+          { id: 'tienda-categorias', label: 'Categorías de la Tienda', icon: 'category', permiso: 'PEDIDOS_ONLINE_CONFIGURAR', esConfig: true,
+            keywords: ['tienda', 'online', 'categorias', 'carta', 'entradas', 'orden'],
+            action: { component: TiendaCategoriasComponent, title: 'Categorías de la Tienda', tabId: 'tienda-categorias-tab', data: NAV } },
           { id: 'zonas-delivery', label: 'Zonas de Delivery', icon: 'pin_drop', permiso: 'VENTAS_PDV', esConfig: true,
             keywords: ['zonas', 'delivery', 'reparto'],
             action: { component: ZonasDeliveryComponent, title: 'Zonas de Delivery', tabId: 'zonas-delivery-tab', data: NAV } },

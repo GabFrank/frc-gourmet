@@ -3,7 +3,7 @@
  * AUTO-GENERADO por scripts/generate-mobile-api-map.js — NO editar a mano.
  * Mapa método de window.api → canal IPC (extraído de preload.ts).
  * Regenerar tras tocar preload.ts: `node scripts/generate-mobile-api-map.js`.
- * Total: 878 métodos.
+ * Total: 882 métodos.
  */
 export const API_CHANNEL_MAP: Record<string, string> = {
   "abrirCajaDesdeConteo": "abrir-caja-desde-conteo",
@@ -320,6 +320,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "eliminarItemLiquidacionComision": "eliminar-item-liquidacion-comision",
   "eliminarMiembroEquipo": "eliminar-miembro-equipo",
   "eliminarRostro": "eliminar-rostro",
+  "eliminarTiendaCategoria": "eliminar-tienda-categoria",
   "eliminarZonaDelivery": "eliminar-zona-delivery",
   "emitirCheque": "emitir-cheque",
   "enrolarRostro": "enrolar-rostro",
@@ -640,6 +641,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getSubfamilias": "get-subfamilias",
   "getSubfamiliasByFamilia": "get-subfamilias-by-familia",
   "getSystemMacAddress": "get-system-mac-address",
+  "getTiendaCategoriasAdmin": "get-tienda-categorias-admin",
   "getTiendaOnlineConfig": "get-tienda-online-config",
   "getTipoCliente": "get-tipo-cliente",
   "getTipoClientes": "get-tipo-clientes",
@@ -675,6 +677,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getVentasByEstado": "getVentasByEstado",
   "getVentasTotalByCaja": "getVentasTotalByCaja",
   "getZonasDeliveryAdmin": "get-zonas-delivery-admin",
+  "guardarTiendaCategoria": "guardar-tienda-categoria",
   "guardarZonaDelivery": "guardar-zona-delivery",
   "iaConfigGet": "ia-config-get",
   "iaConfigSet": "ia-config-set",
@@ -734,6 +737,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "removeAtajoItemFromGrupo": "removeAtajoItemFromGrupo",
   "removeProductoFromAtajoItem": "removeProductoFromAtajoItem",
   "removeRoleFromUsuario": "remove-role-from-usuario",
+  "reordenarTiendaCategorias": "reordenar-tienda-categorias",
   "reorderAtajoItemsInGrupo": "reorderAtajoItemsInGrupo",
   "reorderPdvAtajoGrupos": "reorderPdvAtajoGrupos",
   "reorderProductosInAtajoItem": "reorderProductosInAtajoItem",

@@ -2625,6 +2625,19 @@ contextBridge.exposeInMainWorld('api', {
   eliminarZonaDelivery: async (zonaId: number): Promise<any> => {
     return await ipcRenderer.invoke('eliminar-zona-delivery', zonaId);
   },
+  // Tienda online F6: categorías propias de la carta
+  getTiendaCategoriasAdmin: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-tienda-categorias-admin');
+  },
+  guardarTiendaCategoria: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('guardar-tienda-categoria', data);
+  },
+  eliminarTiendaCategoria: async (categoriaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('eliminar-tienda-categoria', categoriaId);
+  },
+  reordenarTiendaCategorias: async (ids: number[]): Promise<any> => {
+    return await ipcRenderer.invoke('reordenar-tienda-categorias', ids);
+  },
 
   // Producción (buffet)
   crearProduccion: async (data: any): Promise<any> => {

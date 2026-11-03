@@ -1128,6 +1128,18 @@ export class RepositoryHttpService extends RepositoryService {
   eliminarZonaDelivery(zonaId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.eliminarZonaDelivery() no esta implementado todavia.`)) as any;
   }
+  getTiendaCategoriasAdmin(): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getTiendaCategoriasAdmin() no esta implementado todavia.`)) as any;
+  }
+  guardarTiendaCategoria(data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.guardarTiendaCategoria() no esta implementado todavia.`)) as any;
+  }
+  eliminarTiendaCategoria(categoriaId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.eliminarTiendaCategoria() no esta implementado todavia.`)) as any;
+  }
+  reordenarTiendaCategorias(ids: number[]): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.reordenarTiendaCategorias() no esta implementado todavia.`)) as any;
+  }
   crearProduccion(data: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.crearProduccion() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

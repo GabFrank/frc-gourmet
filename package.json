@@ -38,6 +38,7 @@
     "test:all": "node scripts/run-all-tests.js",
     "test:e2e": "npm run electron:serve-tsc && npx playwright test",
     "test:e2e:dev": "npm run electron:serve-tsc && npx playwright test",
+    "test:tienda-categorias": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-tienda-categorias.ts",
     "test:tienda-seguridad": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-tienda-seguridad.ts",
     "test:tienda-online-migracion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-tienda-online-migracion.ts",
     "test:pagos-online": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pagos-online.ts",
