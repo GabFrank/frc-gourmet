@@ -27,16 +27,31 @@
         </mat-form-field>
 
         <div class="checkbox-field">
-          <mat-checkbox formControlName="comandasHabilitadas" color="primary">
-            Comandas habilitadas
-          </mat-checkbox>
-        </div>
-
-        <div class="checkbox-field">
           <mat-checkbox formControlName="ocuparMesaAlVincularComanda" color="primary">
             Ocupar la mesa al vincular una comanda
           </mat-checkbox>
         </div>
+      </div>
+
+      <p class="config-nota"><strong>Tipos de venta habilitados</strong></p>
+      <div class="config-row">
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="pdvMesasHabilitadas" color="primary">Mesas</mat-checkbox>
+        </div>
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="pdvComandasHabilitadas" color="primary">Comandas</mat-checkbox>
+        </div>
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="pdvVentaRapidaHabilitada" color="primary">Venta rápida</mat-checkbox>
+        </div>
+      </div>
+      <div class="config-row config-hint-row">
+        <mat-icon class="hint-icon">info</mat-icon>
+        <span>
+          Lo que se apague deja de aparecer en el PdV de todas las cajas. Delivery
+          se habilita en su propia sección. Tiene que quedar al menos un tipo.
+          Con sólo venta rápida, el PdV entra directo en modo venta rápida.
+        </span>
       </div>
     </div>
 
@@ -279,6 +294,67 @@
           finaliza. El dinero se acredita siempre a la caja abierta, sin importar
           qué terminal cobró. <strong>Se aplica al volver a abrir el PdV o al
           próximo cobro.</strong></span>
+      </div>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <!-- Sección: Cantina de eventos (fichas) -->
+    <div class="config-section">
+      <div class="section-title">
+        <mat-icon>confirmation_number</mat-icon>
+        CANTINA DE EVENTOS (FICHAS)
+      </div>
+
+      <div class="config-row">
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="fichasHabilitadas" color="primary">
+            Imprimir fichas al cobrar una venta directa
+          </mat-checkbox>
+        </div>
+
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="fichasMostrarPrecio" color="primary">
+            Mostrar el precio en la ficha
+          </mat-checkbox>
+        </div>
+      </div>
+
+      <div class="config-row">
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="autoImprimirTicketVenta" color="primary">
+            Imprimir el ticket de pago en el cobro rápido (F2) y a crédito
+          </mat-checkbox>
+        </div>
+      </div>
+
+      <div class="config-row">
+        <mat-form-field appearance="outline" class="field-medium">
+          <mat-label>Modo por defecto</mat-label>
+          <mat-select formControlName="fichasModo">
+            <mat-option value="POR_UNIDAD">UNA FICHA POR UNIDAD</mat-option>
+            <mat-option value="POR_ITEM">UNA FICHA POR ITEM</mat-option>
+            <mat-option value="NO_IMPRIME">NO IMPRIMIR</mat-option>
+          </mat-select>
+          <mat-hint>Cada producto puede cambiarlo</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="field-medium">
+          <mat-label>Nombre del evento</mat-label>
+          <input matInput formControlName="fichasNombreEvento" maxlength="120">
+          <mat-hint>Encabezado de cada ficha (opcional)</mat-hint>
+        </mat-form-field>
+      </div>
+
+      <div class="config-row config-hint-row">
+        <mat-icon class="hint-icon">info</mat-icon>
+        <span>Las fichas salen sólo en la <strong>venta rápida</strong> (sin mesa,
+          comanda ni delivery), al finalizar el cobro, por la impresora de
+          tickets de la caja. Por unidad: 4 cervezas son 4 fichas. Por ítem: una
+          ficha que dice 4 x. El ticket de pago es independiente de las
+          fichas. En el diálogo de cobro lo decide el cajero: F10 finaliza sin
+          ticket y F11 con ticket, sin importar esta opción. Esta opción gobierna
+          el cobro rápido (F2) y el cobro a crédito.</span>
       </div>
     </div>
 

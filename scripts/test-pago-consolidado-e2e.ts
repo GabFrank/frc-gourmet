@@ -292,6 +292,26 @@ async function main() {
     ok(!!inversa?.invertida && Math.abs((inversa!.tasa) - 1 / 7500) < 1e-9,
       'E: Gs -> USD invierte la tasa en vez de fallar', inversa);
 
+    // Fila guardada en la dirección VIEJA (principal → extranjera). `compraLocal`
+    // sigue siendo Gs por 1 BRL: el resultado no depende de cómo esté guardada.
+    const brl: any = await save(Moneda, { denominacion: 'REAL', simbolo: 'R$', principal: false, decimales: 2, activo: true });
+    await save(MonedaCambio, { monedaOrigen: pyg, monedaDestino: brl, compraOficial: 1400, ventaOficial: 1450, compraLocal: 1500, ventaLocal: 1550, activo: true });
+    const brlPyg = await getCotizacionBidireccional(ds, brl.id, pyg.id);
+    ok(brlPyg?.tasa === 1500, 'E: BRL -> Gs multiplica aunque la fila esté guardada Gs -> BRL', brlPyg);
+    const pygBrl = await getCotizacionBidireccional(ds, pyg.id, brl.id);
+    ok(Math.abs((pygBrl?.tasa ?? 0) - 1 / 1500) < 1e-9, 'E: Gs -> BRL divide (fila en la dirección vieja)', pygBrl);
+    const usdBrl = await getCotizacionBidireccional(ds, usd.id, brl.id);
+    ok(Math.abs((usdBrl?.tasa ?? 0) - 5) < 1e-9, 'E: USD -> BRL cruza por la principal (7500 / 1500)', usdBrl);
+    const brlUsd = await getCotizacionBidireccional(ds, brl.id, usd.id);
+    ok(Math.abs((brlUsd?.tasa ?? 0) - 0.2) < 1e-9, 'E: BRL -> USD es la inversa del cruce (0,2)', brlUsd);
+    const misma = await getCotizacionBidireccional(ds, usd.id, usd.id);
+    ok(misma?.tasa === 1, 'E: misma moneda → tasa 1', misma);
+    // Una cotización en 0 no es una cotización: null, nunca una división por cero.
+    const ars: any = await save(Moneda, { denominacion: 'PESO', simbolo: 'ARS', principal: false, decimales: 2, activo: true });
+    await save(MonedaCambio, { monedaOrigen: ars, monedaDestino: pyg, compraOficial: 0, ventaOficial: 0, compraLocal: 0, ventaLocal: 0, activo: true });
+    ok(await getCotizacionBidireccional(ds, pyg.id, ars.id) === null, 'E: Gs -> ARS con compraLocal 0 → null');
+    ok(await getCotizacionBidireccional(ds, usd.id, ars.id) === null, 'E: cruce contra una cotización en 0 → null');
+
     // Deuda en USD pagada con guaraníes: antes esto era un error duro.
     const gUsd: any = await gasto(20, 'SERVICIO EN USD', usd);
     const res: any = await invokeHandler('registrar-pago-consolidado', {

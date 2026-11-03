@@ -638,6 +638,7 @@ interface ElectronAPI {
   procesarStockVenta: (ventaId: number) => Promise<any>;
   revertirStockVenta: (ventaId: number) => Promise<any>;
   getEstadoCobroVenta: (ventaId: number) => Promise<any>;
+  getVentaRapidaAbierta: (cajaId: number) => Promise<any>;
   registrarCobroParcial: (ventaId: number, payload: any) => Promise<any>;
   anularCobroParcial: (cobroParcialId: number) => Promise<any>;
   // Additional helper methods
@@ -3030,6 +3031,10 @@ export class RepositoryIpcService extends RepositoryService {
 
   revertirStockVenta(ventaId: number): Observable<any> {
     return from(this.api.revertirStockVenta(ventaId));
+  }
+
+  getVentaRapidaAbierta(cajaId: number): Observable<any> {
+    return from(this.api.getVentaRapidaAbierta(cajaId));
   }
 
   getEstadoCobroVenta(ventaId: number): Observable<any> {

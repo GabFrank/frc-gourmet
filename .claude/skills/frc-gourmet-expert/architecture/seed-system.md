@@ -110,3 +110,11 @@ Idempotente por `codigo`.
 
 - Setup nuevo cliente → [../workflows/setup-pc-nueva.md](../workflows/setup-pc-nueva.md)
 - TODO: forzar cambio de password admin en primer login (requiere columna `requiereCambioPassword` en Usuario).
+
+## TipoCliente CONVENIADO (2026-10, #339)
+
+`seedTipoCliente` crea CONSUMIDOR FINAL sólo con la tabla vacía, y **además asegura
+CONVENIADO por descripción** en cada arranque, también en instalaciones existentes.
+El alta de funcionario con "crear cliente conveniado" (default de la UI) lo exige, y
+sin él el primer funcionario de una base nueva fallaba. Patrón para un seed que se
+agrega después: asegurarlo por clave natural, no detrás de un corte por `count`.

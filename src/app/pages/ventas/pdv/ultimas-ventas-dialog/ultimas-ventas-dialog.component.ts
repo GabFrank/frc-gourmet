@@ -13,6 +13,7 @@ import { Venta, VentaEstado } from 'src/app/database/entities/ventas/venta.entit
 import { EstadoVentaItem } from 'src/app/database/entities/ventas/venta-item.entity';
 import { DetalleVentaDialogComponent } from 'src/app/shared/components/detalle-venta-dialog/detalle-venta-dialog.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
+import { mensajeDeError } from 'src/app/shared/utils/error-message.util';
 
 interface UltimaVentaRow {
   venta: Venta;
@@ -21,12 +22,14 @@ interface UltimaVentaRow {
   formaPago: string;
   estado: string;
   esCredito: boolean;
+  /** Fichas de cantina emitidas por la venta (0 = no emitió). */
+  fichasCantidad: number;
 }
 
 /**
  * Vista rápida de las últimas ventas de la caja actual (desde utilitarios del
  * PdV). Cada venta permite ver el detalle, reimprimir el ticket (y el pagaré
- * si es a crédito) y cancelarla.
+ * si es a crédito, y las fichas de cantina si las emitió) y cancelarla.
  */
 @Component({
   selector: 'app-ultimas-ventas-dialog',
@@ -69,6 +72,7 @@ export class UltimasVentasDialogComponent implements OnInit {
           formaPago: fp,
           estado: v.estado,
           esCredito: /CREDITO|CUENTA CORRIENTE/.test(fp.toUpperCase()),
+          fichasCantidad: Number((v as any).fichasCantidad) || 0,
         };
       });
     } catch (e) {
@@ -134,12 +138,38 @@ export class UltimasVentasDialogComponent implements OnInit {
     }
   }
 
+  /**
+   * Reimprime las fichas de cantina. Salen marcadas REIMPRESION y el backend
+   * pide `DOCUMENTOS_REIMPRIMIR_FICHAS`: cada ficha vale un producto.
+   */
+  async reimprimirFichas(row: UltimaVentaRow): Promise<void> {
+    try {
+      const api = (window as any).api;
+      const res = await api.callIpc('print-fichas-venta', { ventaId: row.venta.id });
+      if (res?.ok) {
+        this.snackBar.open(`Fichas de la venta #${row.venta.id} reenviadas a la impresora`, 'CERRAR', { duration: 3000 });
+      } else {
+        const msg = res?.errors?.[0]?.message || 'No se pudieron reimprimir las fichas';
+        this.snackBar.open(msg, 'CERRAR', { duration: 4000, panelClass: ['error-snackbar'] });
+      }
+    } catch (e) {
+      console.error('Error reimprimir fichas:', e);
+      this.snackBar.open(mensajeDeError(e, 'Error al reimprimir las fichas'), 'CERRAR', { duration: 4000, panelClass: ['error-snackbar'] });
+    }
+  }
+
   cancelarVenta(row: UltimaVentaRow): void {
+    // Si la venta emitió fichas, están en manos del cliente: hay que
+    // recuperarlas antes de devolver la plata. El backend además exige
+    // `VENTAS_CANCELAR_CON_FICHAS`.
+    const avisoFichas = row.fichasCantidad > 0
+      ? ` Esta venta emitió ${row.fichasCantidad} ficha${row.fichasCantidad === 1 ? '' : 's'}: recuperalas antes de cancelar.`
+      : '';
     const ref = this.dialog.open(ConfirmationDialogComponent, {
       width: '400px',
       data: {
         title: 'CANCELAR VENTA',
-        message: `¿Está seguro de cancelar la venta #${row.venta.id}? Esta acción requiere autorización de administrador.`,
+        message: `¿Está seguro de cancelar la venta #${row.venta.id}? Esta acción requiere autorización de administrador.${avisoFichas}`,
       },
     });
     ref.afterClosed().subscribe(async (ok) => {
@@ -157,7 +187,9 @@ export class UltimasVentasDialogComponent implements OnInit {
         await this.cargar();
       } catch (e) {
         console.error('Error cancelando venta:', e);
-        this.snackBar.open('Error al cancelar la venta', 'CERRAR', { duration: 4000, panelClass: ['error-snackbar'] });
+        // El mensaje del backend importa: si falta VENTAS_CANCELAR_CON_FICHAS
+        // tiene que decirlo, no un genérico.
+        this.snackBar.open(mensajeDeError(e, 'Error al cancelar la venta'), 'CERRAR', { duration: 5000, panelClass: ['error-snackbar'] });
       }
     });
   }

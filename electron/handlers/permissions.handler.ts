@@ -106,6 +106,7 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
 
   // Ventas
   { codigo: 'VENTAS_PDV', descripcion: 'Operar punto de venta (PdV/mesas/comandas)', modulo: 'VENTAS' },
+  { codigo: 'VENTAS_CANCELAR_CON_FICHAS', descripcion: 'Cancelar una venta que ya emitió fichas de cantina (las fichas siguen en manos del cliente)', modulo: 'VENTAS' },
   { codigo: 'VENTAS_PDV_CONFIGURAR', descripcion: 'Configurar el PdV (categorías, ítems, atajos, mesas, sectores, config)', modulo: 'VENTAS' },
   // Pedidos online. Hasta ahora todo el módulo usaba `VENTAS_PDV`, incluida la
   // configuración de la tienda y el borrado de zonas: cualquier cajero podía
@@ -174,6 +175,7 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   { codigo: 'DOCUMENTOS_IMPRIMIR_TICKET', descripcion: 'Imprimir tickets térmicos (venta, comanda, pre-cuenta)', modulo: 'DOCUMENTOS' },
   { codigo: 'DOCUMENTOS_REIMPRIMIR_COMANDA', descripcion: 'Reimprimir comanda (total o por sector) cuando falla impresora', modulo: 'DOCUMENTOS' },
   { codigo: 'DOCUMENTOS_REIMPRIMIR_TICKET_VENTA', descripcion: 'Reimprimir ticket de venta desde historial', modulo: 'DOCUMENTOS' },
+  { codigo: 'DOCUMENTOS_REIMPRIMIR_FICHAS', descripcion: 'Reimprimir las fichas de cantina de una venta directa (salen marcadas REIMPRESION)', modulo: 'DOCUMENTOS' },
   { codigo: 'DOCUMENTOS_ADJUNTAR', descripcion: 'Adjuntar archivos (escaneados firmados, comprobantes) a entidades', modulo: 'DOCUMENTOS' },
   { codigo: 'DOCUMENTOS_ADJUNTOS_ELIMINAR', descripcion: 'Eliminar adjuntos de entidades', modulo: 'DOCUMENTOS' },
 

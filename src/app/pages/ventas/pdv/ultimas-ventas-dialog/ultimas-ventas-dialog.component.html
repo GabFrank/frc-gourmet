@@ -34,6 +34,9 @@
         <button mat-menu-item *ngIf="r.esCredito" (click)="reimprimirPagare(r)">
           <mat-icon>description</mat-icon><span>Reimprimir pagaré</span>
         </button>
+        <button mat-menu-item *ngIf="r.fichasCantidad > 0 && r.estado === 'CONCLUIDA'" (click)="reimprimirFichas(r)">
+          <mat-icon>confirmation_number</mat-icon><span>Reimprimir fichas ({{ r.fichasCantidad }})</span>
+        </button>
         <button mat-menu-item *ngIf="r.estado !== 'CANCELADA'" (click)="cancelarVenta(r)">
           <mat-icon color="warn">cancel</mat-icon><span>Cancelar venta</span>
         </button>

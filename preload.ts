@@ -2876,6 +2876,9 @@ contextBridge.exposeInMainWorld('api', {
   revertirStockVenta: async (ventaId: number): Promise<any> => {
     return await ipcRenderer.invoke('revertirStockVenta', ventaId);
   },
+  getVentaRapidaAbierta: async (cajaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('getVentaRapidaAbierta', cajaId);
+  },
   getEstadoCobroVenta: async (ventaId: number): Promise<any> => {
     return await ipcRenderer.invoke('getEstadoCobroVenta', ventaId);
   },

@@ -18,7 +18,7 @@ import { parseLocalDate } from '../utils/date.utils';
 import { ensurePermission } from '../utils/auth.utils';
 import { errorCajaCerrada } from '../utils/caja-abierta.utils';
 import { aplicarEstadoPagoCuota, revertirEstadoPagoCuota } from './cuentas-por-pagar.handler';
-import { getCotizacionCompraLocal } from '../utils/moneda.utils';
+import { getCotizacionBidireccional } from '../utils/moneda.utils';
 import { crearCompraSimplificadaTx } from './compras.handler';
 import { selectUsuarioPublico } from '../utils/select-usuario-publico.util';
 
@@ -93,7 +93,8 @@ export function registerPdvEgresosHandlers(
       if (!(monto > 0)) throw new Error('Cada linea de pago debe tener un monto mayor a 0.');
       const fp = await validarFormaPagoEfectivo(qr, Number(l.formaPagoId));
       let cot: number | null = l.cotizacion != null ? Number(l.cotizacion) : null;
-      if (cot == null) cot = await getCotizacionCompraLocal(dataSource, Number(l.monedaId), p.cppMonedaId);
+      // Bidireccional: ver el mismo arreglo en cuentas-por-pagar (#332).
+      if (cot == null) cot = (await getCotizacionBidireccional(dataSource, Number(l.monedaId), p.cppMonedaId))?.tasa ?? null;
       if (cot == null || !(cot > 0)) throw new Error('Falta la cotizacion para convertir una linea a la moneda de la deuda.');
       const montoCpp = +(monto * cot).toFixed(2);
       totalCpp += montoCpp;

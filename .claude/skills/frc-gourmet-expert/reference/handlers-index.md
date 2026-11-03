@@ -145,6 +145,7 @@ Los handlers sensibles llaman `ensurePermission(dataSource, getCurrentUser, 'COD
 - `gastos-caja.handler.ts`, `pdv-egresos.handler.ts` — utilitarios del cajón (GastoCaja / EgresoCaja: vale, compra). → [domains/ventas-pdv.md](../domains/ventas-pdv.md).
 - `asistencia-facial.handler.ts`, `face-models.handler.ts`, `empresa.handler.ts` — fichaje facial + geocerca. → [domains/rrhh-asistencia-facial.md](../domains/rrhh-asistencia-facial.md).
 - Cobro parcial: `getEstadoCobroVenta`/`registrarCobroParcial`/`anularCobroParcial` (en `ventas.handler.ts`).
+- **`getVentaRapidaAbierta`** (`ventas.handler.ts`, `VENTAS_PDV`) — venta directa ABIERTA de la caja y de la terminal del request (más reciente). La usa el PdV para retomar una venta rápida tras recargar.
 - Cajas: `get-cajas-abiertas`, `generar-retiro-cierre-caja`, `puede-ajustar-caja`/`finalizar-ajuste-caja`.
 - Sabores: `get-all-sabores`, `reparar-recetas-compartidas` (en `recetas.handler.ts`).
 - Vínculo producto↔receta: `get-recetas-asignables`, `vincular-receta-a-producto`, `desvincular-receta-de-producto` (en `recetas.handler.ts`, perm `PRODUCTOS_GESTIONAR`). Únicos caminos válidos: **no** encadenar `update-producto` + `update-receta`. → [domains/recetas-sabores-variaciones.md](../domains/recetas-sabores-variaciones.md).
@@ -201,3 +202,20 @@ Registrados en `register-all-handlers.ts` (`registerFuncionesTareasHandlers`, `r
 | `funciones-tareas-lectura.handler.ts` | `ft-cumplimiento`, `ft-vencidas`, `ft-historico`, `ft-de-turno-hoy`, `ft-estado-motor` | REPORTES \| VER_TODO |
 
 Permisos abreviados: `RRHH_FT_<X>`.
+
+## Handlers nuevos 2026-10 — Fichas de cantina (venta directa)
+
+- **`print-fichas-venta`** (`documentos-tickets.handler.ts`) — **sólo reimpresión** de las
+  fichas de una venta CONCLUIDA que ya las emitió. Permiso `DOCUMENTOS_REIMPRIMIR_FICHAS`.
+  No acepta `printerId` (va a la impresora de tickets de la terminal). Sale con
+  `** REIMPRESION **`, código `-R<n>` y suma `ventas.fichas_reimpresiones` sólo si salió
+  alguna ficha. La emisión original no tiene canal: la hacen los hooks.
+- Funciones internas (sin IPC, sin permisos — las llaman hooks): `buildFichasVenta` (pura,
+  la que testea `test:fichas`), `printFichasVentaInternal`, `imprimirFichasSiCorresponde`
+  (gate + claim), `imprimirPostConclusion` (ticket → fichas, en orden).
+- Helper `electron/utils/venta-directa.utils.ts` → `esVentaDirecta(venta)`: predicado único
+  que comparten los tres gates de cocina y las fichas.
+- Cambios en canales existentes: `updateVenta` y `createVenta` descartan `fichas*` del
+  payload; `updateVenta` exige `VENTAS_CANCELAR_CON_FICHAS` para cancelar una venta con
+  fichas; `updatePdvConfig`/`createPdvConfig` normalizan los campos `fichas*`;
+  `createProducto`/`updateProducto` aceptan `fichaModo`.

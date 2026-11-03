@@ -197,6 +197,13 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
 - [ ] **Bug findPrecioCosto()**: retorna 0 hardcodeado en vez de buscar el precio de costo real.
 - [ ] **`DividirCuentaDialog` quedó de facto reemplazado por el cobro parcial por ítems** (que sí persiste quién pagó qué; el diálogo viejo es informativo). Decidir si se quita o se reusa como atajo de selección de ítems.
 - [ ] **`anularCobroParcial` no tiene llamador en el frontend** — el handler existe y es transaccional, pero desde la UI no hay forma de anular una ronda. Ver `domains/ventas-pdv.md`.
+- [ ] **Fichas de cantina — fase 2** (la fase 1, emisión en la venta directa, está hecha; ver `domains/ventas-pdv.md` §Fichas de cantina):
+  - [ ] **Canje por escaneo en la barra**: QR en la ficha + pantalla de canje que la marca usada. Es lo único que detecta una ficha fotocopiada o reimpresa de más.
+  - [ ] **Auditoría de reimpresiones**: hoy sólo hay un contador (`ventas.fichas_reimpresiones`); falta quién, cuándo y motivo, y quizás PIN de gerente a partir de la 2ª.
+  - [ ] **Impresora dedicada de fichas por caja** (`Dispositivo.printerFicha`).
+  - [ ] **Fichas en mesas** (flag aparte).
+  - [ ] **Entidad Evento** con reportes por evento (hoy el evento es un texto en `PdvConfig`).
+  - [ ] **UI de fichas en la PWA mobile** (el backend ya aplica; falta reimprimir desde mobile).
 - [ ] **Comprobante por ronda de cobro parcial**: fuera del alcance original, pero el modelo ya lo habilita (`PagoDetalle.cobroParcialId` identifica la plata de cada ronda).
 
 ## Compras

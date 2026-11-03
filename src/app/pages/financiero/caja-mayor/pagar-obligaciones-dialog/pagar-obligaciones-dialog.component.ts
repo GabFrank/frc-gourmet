@@ -21,6 +21,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
 import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
+import { cotizacionSugerida, tasaDesdeCotizacion } from 'src/app/shared/utils/conversion-moneda';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 import {
   PagoConcepto,
@@ -232,10 +233,14 @@ export class PagarObligacionesDialogComponent implements OnInit, OnDestroy {
   cuentasBancarias: any[] = [];
   monedas: any[] = [];
   formasPagoEfectivo: any[] = [];
+  cambios: any[] = [];
+  monedaPrincipalId: number | null = null;
 
   lineas: LineaRow[] = [];
   draft!: FormGroup;
   draftNecesitaCotizacion = false;
+  /** Cómo leer el campo de cotización del draft (ver `tasaDesdeCotizacion`). */
+  draftCotizacionHint = '';
   draftEsBanco = false;
   /** Moneda de la cuenta elegida: en banco no se elige, se hereda. */
   monedaCuentaTexto = '';
@@ -316,10 +321,13 @@ export class PagarObligacionesDialogComponent implements OnInit, OnDestroy {
         firstValueFrom(this.repo.getMonedas()),
         firstValueFrom(this.repo.getFormasPago()),
       ]);
+      // Sólo para precargar la cotización: sin ellas el cajero la tipea.
+      this.cambios = await firstValueFrom(this.repo.getMonedasCambio()).catch(() => []) as any[] || [];
 
       this.cajasMayor = ((cajas as any[]) || []).filter((c: any) => c.estado === 'ABIERTA');
       this.cuentasBancarias = ((cuentas as any[]) || []).filter((c: any) => c.activo !== false);
       this.monedas = (monedas as any[]) || [];
+      this.monedaPrincipalId = this.monedas.find((m: any) => m.principal)?.id ?? null;
       // Por Caja Mayor sólo sale efectivo: es la regla de negocio del dominio.
       this.formasPagoEfectivo = ((formas as any[]) || [])
         .filter((f: any) => f.movimentaCaja && (f.nombre || '').toUpperCase().includes('EFECTIVO'));
@@ -518,7 +526,23 @@ export class PagarObligacionesDialogComponent implements OnInit, OnDestroy {
   onDraftMonedaChange(): void {
     const monedaId = this.draft.get('monedaId')!.value;
     this.draftNecesitaCotizacion = !!monedaId && this.monedaDeudaId != null && monedaId !== this.monedaDeudaId;
-    if (!this.draftNecesitaCotizacion) this.draft.patchValue({ cotizacion: 1 }, { emitEvent: false });
+    if (!this.draftNecesitaCotizacion) {
+      this.draft.patchValue({ cotizacion: 1 }, { emitEvent: false });
+      this.draftCotizacionHint = '';
+      return;
+    }
+    // La cotización se tipea como se anota siempre —1 US$ = 6.000 Gs— y se
+    // precarga con la vigente. Siempre se reemplaza: un valor de la moneda
+    // anterior (p. ej. el 1 que deja "Completar") no puede quedar colgado (#332).
+    const principal = this.monedaPrincipalId;
+    this.draft.patchValue({
+      cotizacion: cotizacionSugerida(this.cambios, monedaId, this.monedaDeudaId, principal),
+    }, { emitEvent: false });
+    const simbolo = (id: number | null) => this.monedas.find((m) => m.id === id)?.simbolo || '';
+    const extranjera = monedaId === principal ? this.monedaDeudaId : monedaId;
+    this.draftCotizacionHint = monedaId === principal || this.monedaDeudaId === principal
+      ? `1 ${simbolo(extranjera)} = ? ${simbolo(principal)}`
+      : `1 ${simbolo(monedaId)} = ? ${simbolo(this.monedaDeudaId)}`;
   }
 
   onCuentaChange(): void {
@@ -556,7 +580,11 @@ export class PagarObligacionesDialogComponent implements OnInit, OnDestroy {
       this.snackBar.open('Elegí la caja y la forma de pago.', 'Cerrar', { duration: 3000 });
       return;
     }
-    const cotizacion = Number(v.cotizacion) || (this.draftNecesitaCotizacion ? 0 : 1);
+    // La línea guarda la TASA línea → deuda (lo que espera el backend); el campo
+    // tiene la cotización como la anota el cajero.
+    const cotizacion = this.draftNecesitaCotizacion
+      ? (tasaDesdeCotizacion(v.cotizacion, v.monedaId, this.monedaDeudaId, this.monedaPrincipalId) ?? 0)
+      : 1;
     if (this.draftNecesitaCotizacion && !(cotizacion > 0)) {
       this.snackBar.open('Falta la cotización para convertir a la moneda de la deuda.', 'Cerrar', { duration: 4000 });
       return;

@@ -51,6 +51,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | **Modo cliente/servidor** (F4 standalone/server/client, Fastify, HTTP routing, device_id) | [architecture/cliente-servidor.md](architecture/cliente-servidor.md) |
 | **Cliente Mobile (PWA)** (`projects/mobile`, shim HTTP→/api/rpc, shell mobile, cobertura admin) | [architecture/mobile-pwa.md](architecture/mobile-pwa.md) |
 | **Setup en PC nueva / Postgres** (la app crea la DB, configurar, modos, primer login) | [workflows/setup-pc-nueva.md](workflows/setup-pc-nueva.md) |
+| **Instalación + carga inicial por un agente** (entrevista, modo server, `/api/rpc` con JWT, orden de carga, payloads) | [`docs/runbooks/RUNBOOK-INSTALACION-Y-CARGA-INICIAL.md`](../../../docs/runbooks/RUNBOOK-INSTALACION-Y-CARGA-INICIAL.md) |
 | **Release y deploy** (semantic-release, canales, GitHub Actions, auto-update, deploy a un local real) | [workflows/release-y-deploy.md](workflows/release-y-deploy.md) |
 | `main.ts`, ciclo de vida Electron, custom protocols | [architecture/electron-bootstrap.md](architecture/electron-bootstrap.md) |
 | Tabs, sidenav, layout principal, ThemeService | [architecture/frontend-shell.md](architecture/frontend-shell.md) |
@@ -59,7 +60,7 @@ Soy el experto interno del sistema FRC Gourmet. Conozco la arquitectura, los dom
 | Login, sesiones, roles, permisos, `getCurrentUser` | [architecture/auth-permissions.md](architecture/auth-permissions.md) |
 | **Productos** (Familia/Subfamilia/Producto/Presentación/Precios) | [domains/productos.md](domains/productos.md) |
 | **Recetas, Sabores, Variaciones** (cada variación su propia receta desde 2026-07, multi-sabor pizza, Gestión de Sabores) | [domains/recetas-sabores-variaciones.md](domains/recetas-sabores-variaciones.md) |
-| **Ventas y PdV** (mesas, comandas, atajos, delivery/retiro **y su conversión**, cobro parcial por ítems, cajas compartidas, utilitarios del cajón) | [domains/ventas-pdv.md](domains/ventas-pdv.md) |
+| **Ventas y PdV** (mesas, comandas, atajos, delivery/retiro **y su conversión**, cobro parcial por ítems, cajas compartidas, utilitarios del cajón, **fichas de cantina**) | [domains/ventas-pdv.md](domains/ventas-pdv.md) |
 | **Compras** (proveedor, finalizar, pago unificado vía CPP, compra simplificada) | [domains/compras-cpp.md](domains/compras-cpp.md) |
 | **Facturación legal** (SET/SIFEN, timbrado+numeración, emisión desde el cobro del PdV, plantillas pdfmake) | [domains/facturacion.md](domains/facturacion.md) |
 | **Pedidos Online / Storefront** (webapp pública tipo iFood, `/pub/*`, auth de cliente, bandeja PdV, pizza online) | [domains/pedidos-online.md](domains/pedidos-online.md) |
@@ -139,6 +140,31 @@ Estas las debo respetar SIEMPRE, sin que el usuario las repita:
 ### Sesión 2026-10-24 — Disciplina y Reconocimiento, fase 1 (backend)
 
 - **Disciplina y Reconocimiento (DR) fase 1 MERGED (PR #313):** módulo RRHH nuevo, **solo backend** (sin pantallas; fase 2 desktop, fase 3 PWA). 19 tablas `dr_*` (migración aditiva `1792785488053-DisciplinaReconocimiento`, up/down probada en SQLite y Postgres), motor puro en `electron/services/disciplina/` y 5 handlers `disciplina*.handler.ts`. Faltas con advertencias previas, escala y reinicio, **apelación con plazo y renuncia**; la multa recién existe al **aprobar** y sale como `Penalizacion` `[DR]` (concepto `PENALIZACION`) al primer mes de liquidación abierto, con tope mensual opcional en cuotas (`DR_TOPE_DESCUENTO_MENSUAL`, 0 = apagado) y `dr_liquidacion_pendiente` que bloquea aprobar un borrador desactualizado. Errores con puntos, puntaje diario por criterios y **votación anónima** (sin voto individual: agregados cifrados AES-GCM mientras el período está abierto, participación separada, textos reescritos mezclados al cerrar, mínimo de votantes). Premios por VOTACION / CRITERIOS / SALDO_PUNTOS → `Bono` `[DR]` (`BONO_MANUAL`). 7 permisos `RRHH_DR_*` + roles plantilla `AUDITOR_DR` / `COLABORADOR_DR`; `get-penalizaciones` y `get-bonos` pasan a exigir permiso y los handlers viejos no tocan registros `[DR]`. Tests: `npm run test:disciplina-motor`, `test:disciplina-e2e`, `test:disciplina-migracion` (no están en `test:all`). Manual: `docs/testing/TESTING-CHECKLIST-DISCIPLINA-RECONOCIMIENTO.md`. ⚠️ Dos limitaciones abiertas (carrera en el primer voto, doble descuento si la falta DR se carga antes que la asistencia) → [reference/known-bugs.md](reference/known-bugs.md). Detalles → [domains/rrhh-disciplina.md](domains/rrhh-disciplina.md).
+
+### Sesión 2026-10-29 — Fichas de cantina para eventos (venta directa)
+
+Modo **cantina de eventos**: al cobrar una **venta rápida** se imprimen **fichas**
+(una por unidad o por ítem, override por producto) que el cliente canjea en la
+barra. Config en el PdV (sección *Cantina de eventos*), `Producto.fichaModo`,
+permisos `DOCUMENTOS_REIMPRIMIR_FICHAS` / `VENTAS_CANCELAR_CON_FICHAS`. Detalles →
+[domains/ventas-pdv.md](domains/ventas-pdv.md) §Fichas de cantina.
+
+Lo que conviene no volver a aprender por las malas:
+
+- **Un papel que vale mercadería cambia el peso de huecos viejos.** Concluir sin
+  cobrar (`updateVenta` sólo pide `VENTAS_PDV`) era un problema contable; con fichas
+  es entregar producto. Las fichas exigen `Pago`; el hueco de fondo sigue en
+  known-bugs.
+- **Columnas que escribe el backend se excluyen del payload en TODOS los caminos**
+  (`updateVenta` y también `createVenta`): el PdV manda la venta entera y una copia
+  vieja reseteaba el claim.
+- **"Concluir" no es "cobrar".** Rehabilitar desde el historial también pasa a
+  CONCLUIDA; un hook que reacciona a "pasó a CONCLUIDA" tiene que mirar desde qué
+  estado.
+- **El `cut` intermedio de un `TicketSpec` no avanza el papel**: rebana el final.
+  Varios papeles = varios trabajos.
+- **La hora de todos los tickets salía `p.?m.`** (U+00A0 de `toLocaleString('es-PY')`).
+  Nadie lo vio en el papel; lo vio un test que buscaba `?`.
 
 ### Sesión 2026-08-27 — Cobro consolidado de CPC (multi-cuota + descuento)
 

@@ -77,6 +77,7 @@ async function main() {
   const { Venta } = E('ventas/venta.entity');
   const { Cliente } = E('personas/cliente.entity');
   const { Persona } = E('personas/persona.entity');
+  const { Pago } = E('compras/pago.entity');
 
   const save = (ent: any, data: any) => ds.getRepository(ent).save(ds.getRepository(ent).create(data as any) as any);
 
@@ -151,10 +152,14 @@ async function main() {
       pago: { id: pagoId }, moneda: { id: gs.id }, formaPago: { id: fpEfectivo.id },
       activo: true, validarDispositivoCaja: true,
     });
-  const finalizarVenta = (deviceId: number | null, ventaId: number) =>
-    comoTerminal(deviceId, 'updateVenta', ventaId, {
-      estado: 'CONCLUIDA', fechaCierre: new Date(), __validarDispositivoCaja: true,
+  // Desde #329 concluir exige un `Pago` vinculado, como en cualquier cobro real.
+  const finalizarVenta = async (deviceId: number | null, ventaId: number) => {
+    const v: any = await ds.getRepository(Venta).findOne({ where: { id: ventaId }, relations: ['caja'] });
+    const pago: any = await save(Pago, { estado: 'ABIERTO', activo: true, caja: v?.caja ? { id: v.caja.id } : undefined });
+    return comoTerminal(deviceId, 'updateVenta', ventaId, {
+      estado: 'CONCLUIDA', fechaCierre: new Date(), pago: { id: pago.id }, __validarDispositivoCaja: true,
     });
+  };
 
   const D = terminalDuena.id;   // dueña
   const A = terminalAjena.id;   // ajena

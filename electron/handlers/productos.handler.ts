@@ -40,6 +40,7 @@ import { Sabor } from '../../src/app/database/entities/productos/sabor.entity';
 import { RecetaPresentacion } from '../../src/app/database/entities/productos/receta-presentacion.entity';
 import { getRangosPrecioVariacion } from '../utils/variacion-precio.utils';
 import { getVariacionConfig, getVariacionConfigGlobal } from '../utils/variacion-config.utils';
+import { FichaModo } from '../../src/app/database/entities/ventas/pdv-config.entity';
 
 /**
  * Config de variaciones por producto (ELABORADO_CON_VARIACION). `null` = el
@@ -53,6 +54,12 @@ function normalizarMaxVariaciones(valor: any): number | null {
 function normalizarEstrategiaVariacion(valor: any): string | null {
   const estrategia = String(valor || '').toUpperCase();
   return estrategia === 'PROMEDIO' || estrategia === 'MAYOR_PRECIO' ? estrategia : null;
+}
+
+/** Fichas de cantina: `FichaModo` válido o null (= heredar el global del PdV). */
+function normalizarFichaModo(valor: any): string | null {
+  const modo = String(valor || '').toUpperCase();
+  return (Object.values(FichaModo) as string[]).includes(modo) ? modo : null;
 }
 
 export function registerProductosHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
@@ -570,9 +577,14 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         taraGramos: productoData.taraGramos ?? null,
         pesoMinimoGramos: productoData.pesoMinimoGramos ?? null,
         descuentaPorReceta: productoData.descuentaPorReceta !== undefined ? productoData.descuentaPorReceta : false,
+        // Sin esto el toggle "Requiere comanda" de la UI no se guardaba nunca:
+        // la columna quedaba en su default (true) y el producto iba a cocina.
+        requiereComanda: productoData.requiereComanda !== false,
         // Variaciones (ELABORADO_CON_VARIACION): null = heredar la config global del PdV.
         maxVariacionesSimultaneas: normalizarMaxVariaciones(productoData.maxVariacionesSimultaneas),
         estrategiaPrecioVariacion: normalizarEstrategiaVariacion(productoData.estrategiaPrecioVariacion),
+        // Fichas de cantina: null = heredar `PdvConfig.fichasModo`.
+        fichaModo: normalizarFichaModo(productoData.fichaModo),
         registroCompleto: productoData.registroCompleto !== undefined ? productoData.registroCompleto : true,
         imageUrl: productoData.imageUrl || undefined,
       });
@@ -629,6 +641,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         (producto as any).pesoMinimoGramos = productoData.pesoMinimoGramos ?? null;
       if (productoData.descuentaPorReceta !== undefined)
         producto.descuentaPorReceta = productoData.descuentaPorReceta;
+      if (productoData.requiereComanda !== undefined)
+        (producto as any).requiereComanda = productoData.requiereComanda !== false;
 
       // Variaciones: null explícito = volver a heredar la config global del PdV
       // (TypeORM sólo genera el UPDATE con null, nunca con undefined).
@@ -636,6 +650,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         (producto as any).maxVariacionesSimultaneas = normalizarMaxVariaciones(productoData.maxVariacionesSimultaneas);
       if (productoData.estrategiaPrecioVariacion !== undefined)
         (producto as any).estrategiaPrecioVariacion = normalizarEstrategiaVariacion(productoData.estrategiaPrecioVariacion);
+      if (productoData.fichaModo !== undefined)
+        (producto as any).fichaModo = normalizarFichaModo(productoData.fichaModo);
 
       // IVA con validacion
       if (productoData.iva !== undefined) {

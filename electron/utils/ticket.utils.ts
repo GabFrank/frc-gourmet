@@ -92,6 +92,10 @@ const REEMPLAZOS_TICKET: Record<string, string> = {
   '→': '->', '←': '<-', '…': '...',
   '“': '"', '”': '"', '‘': "'", '’': "'", '«': '"', '»': '"',
   '€': 'EUR', '₲': 'Gs.', '✓': 'OK', '✗': 'X', '•': '*',
+  // Espacios "duros" que mete `toLocaleString('es-PY')`: la hora sale
+  // «06:50 p. m.» con U+00A0 entre la p. y la m., y según la versión de ICU
+  // también U+202F. Sin esto TODOS los tickets imprimían «p.?m.».
+  ' ': ' ', ' ': ' ', ' ': ' ', ' ': ' ',
 };
 
 /** Los no-ASCII que CP437 SÍ tiene y conviene conservar. */
@@ -593,10 +597,54 @@ export async function printTicketSpec(
   printer: any,
   spec: TicketSpec
 ): Promise<{ ok: boolean; error?: string }> {
+  return printTicketSpecs(printer, [spec]);
+}
+
+/**
+ * Agrega uno o varios specs al buffer del `ThermalPrinter`, cada uno con su
+ * avance arriba, su avance abajo y su corte: lo mismo que un trabajo por spec,
+ * pero en el MISMO trabajo.
+ */
+async function aplicarSpecs(tp: ThermalPrinter, specs: TicketSpec[], width: number): Promise<void> {
+  for (const spec of specs) {
+    feedTopSafeArea(tp);
+    for (const line of spec.lines) {
+      await applyLine(tp, line, width);
+    }
+    if (spec.cutAtEnd !== false) {
+      feedBottomSafeArea(tp);
+      tp.cut({ verticalTabAmount: 0 });
+    }
+    if (spec.beepAtEnd) tp.beep();
+  }
+}
+
+/**
+ * Buffer ESC/POS de varios specs en un solo trabajo. Exportado para tests.
+ */
+export async function armarBufferEscPos(printer: any, specs: TicketSpec[]): Promise<Buffer | undefined> {
+  const tp = buildThermalPrinter(printer);
+  await aplicarSpecs(tp, specs, printerWidthToChars(printer.width));
+  return (tp as any).getBuffer?.() as Buffer | undefined;
+}
+
+/**
+ * Imprime varios specs en UN SOLO trabajo de impresión (todo o nada).
+ *
+ * Existe por las fichas de cantina: mandadas como trabajos separados uno detrás
+ * de otro, la térmica perdía el principio del trabajo que llegaba mientras
+ * todavía cortaba el anterior (salían sin el encabezado del evento y con la
+ * línea `=` mocha). Verificado con papel en una térmica USB de 58 mm.
+ */
+export async function printTicketSpecs(
+  printer: any,
+  specs: TicketSpec[]
+): Promise<{ ok: boolean; error?: string }> {
   try {
+    if (!specs.length) return { ok: true };
     // CUPS fallback
     if (printer.connectionType === 'usb' && printer.address && printer.address.startsWith('ticket-')) {
-      const content = renderTicketToPlainText(spec);
+      const content = specs.map((sp) => renderTicketToPlainText(sp)).join('\n');
       const tempDir = app.getPath('temp');
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
       const tempFile = path.join(tempDir, `ticket-${Date.now()}.txt`);
@@ -620,15 +668,7 @@ export async function printTicketSpec(
     // cola compartida de un servidor LPD remoto (típicamente Windows con
     // "Servicios de impresión LPD" habilitado).
     if (printer.connectionType === 'lpr') {
-      feedTopSafeArea(tp);
-      for (const line of spec.lines) {
-        await applyLine(tp, line, width);
-      }
-      if (spec.cutAtEnd !== false) {
-        feedBottomSafeArea(tp);
-        tp.cut({ verticalTabAmount: 0 });
-      }
-      if (spec.beepAtEnd) tp.beep();
+      await aplicarSpecs(tp, specs, width);
       const buffer = (tp as any).getBuffer?.() as Buffer | undefined;
       if (!buffer || buffer.length === 0) {
         return { ok: false, error: 'No se pudo armar el buffer ESC/POS para LPR' };
@@ -656,16 +696,7 @@ export async function printTicketSpec(
       return { ok: false, error: `Impresora "${printer.name}" no responde (${printer.address})` };
     }
 
-    feedTopSafeArea(tp);
-    for (const line of spec.lines) {
-      await applyLine(tp, line, width);
-    }
-    if (spec.cutAtEnd !== false) {
-      feedBottomSafeArea(tp);
-      tp.cut({ verticalTabAmount: 0 });
-    }
-    if (spec.beepAtEnd) tp.beep();
-
+    await aplicarSpecs(tp, specs, width);
     await tp.execute();
     return { ok: true };
   } catch (e: any) {

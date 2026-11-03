@@ -127,9 +127,15 @@ async function main() {
     ok(!ventasAgostoBuggy.some(v => v.id === ventaA.id), 
        '❌ Con toISOString() (T), venta del día 1 se EXCLUYE (bug #249)', 
        ventasAgostoBuggy.map(v => v.id));
-    ok(ventasAgostoBuggy.length < 2,
-       `❌ Con toISOString() (T), cuenta ${ventasAgostoBuggy.length} < 2 ventas (falta día 1)`,
-       ventasAgostoBuggy.map(v => v.id));
+    // No se compara la CANTIDAD: depende del huso del proceso. En UTC el filtro
+    // con T devuelve sólo B; en UTC-3/-4 el `hasta` (31/08 23:59 local) cae el
+    // 1/09 en UTC y además se cuela C, así que devuelve [B, C] — las dos caras
+    // del bug #249. En cualquier huso, el resultado NO es el correcto {A, B}.
+    const idsBuggy = ventasAgostoBuggy.map(v => v.id).sort((a, b) => a - b);
+    const idsCorrectos = [ventaA.id, ventaB.id].sort((a, b) => a - b);
+    ok(JSON.stringify(idsBuggy) !== JSON.stringify(idsCorrectos),
+       `❌ Con toISOString() (T), el resultado no es el correcto {A, B}`,
+       idsBuggy);
     
     // Caso 1: FIX - Con fechaParamSql el filtro funciona correctamente
     console.log('\n✅ FIX: Filtro con fechaParamSql (normalizado)');

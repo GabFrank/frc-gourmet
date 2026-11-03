@@ -9,7 +9,7 @@ import { Cliente } from '../../src/app/database/entities/personas/cliente.entity
 import { Convenio } from '../../src/app/database/entities/personas/convenio.entity';
 import { setEntityUserTracking } from '../utils/entity.utils'; // Import the utility function
 import { hashPassword, verifyPassword } from '../utils/password.utils';
-import { ensurePermission } from '../utils/auth.utils';
+import { ensurePermission, getEffectiveUser } from '../utils/auth.utils';
 
 export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
 
@@ -326,7 +326,12 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
         return { success: false, message: 'LA NUEVA PASSWORD DEBE SER DISTINTA A LA ACTUAL' };
       }
 
-      const currentUser = getCurrentUser();
+      // Usuario EFECTIVO: el del JWT si la llamada vino por /api/rpc, el de la
+      // consola si es IPC local. Con `getCurrentUser()` directo, por HTTP se
+      // comparaba contra quien estuviera logueado en la consola del servidor:
+      // nadie podía cambiar su contraseña desde un cliente, la PWA o /admin, ni
+      // siquiera el cambio forzado del primer ingreso.
+      const currentUser = getEffectiveUser(getCurrentUser);
       if (!currentUser || currentUser.id !== payload.usuarioId) {
         return { success: false, message: 'NO AUTORIZADO' };
       }

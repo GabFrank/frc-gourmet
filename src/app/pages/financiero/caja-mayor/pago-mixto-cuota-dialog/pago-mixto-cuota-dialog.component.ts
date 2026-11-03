@@ -16,6 +16,7 @@ import { RepositoryService } from 'src/app/database/repository.service';
 import { CurrencyInputDirective } from 'src/app/shared/directives/currency-input.directive';
 import { preselectSingleOrPrincipal } from 'src/app/shared/utils/preselect';
 import { confirmarSaldosNegativos } from 'src/app/shared/utils/saldo-negativo-confirm';
+import { tasaEntreMonedas } from 'src/app/shared/utils/conversion-moneda';
 
 /** Cuota que se va a pagar de forma mixta (varias formas/monedas). */
 export interface CuotaParaPagoMixto {
@@ -132,15 +133,13 @@ export class PagoMixtoCuotaDialogComponent implements OnInit {
     return Number.isFinite(dec) ? dec : 0;
   }
 
-  /** Cotizacion (compraLocal) de `origenId` -> moneda del CPP. 1 si igual; null si falta. */
+  /**
+   * Tasa de `origenId` -> moneda del CPP. 1 si igual; null si falta. Gs -> USD
+   * divide (#332): `compraLocal` es siempre Gs por 1 extranjera.
+   */
   cotizacionA(origenId: number | null): number | null {
-    if (origenId == null) return null;
-    const destinoId = this.cuota.monedaId;
-    if (origenId === destinoId) return 1;
-    const cambio = this.cambios.find((c: any) =>
-      c?.monedaOrigen?.id === origenId && c?.monedaDestino?.id === destinoId && c?.activo !== false);
-    const tasa = cambio ? Number(cambio.compraLocal) : 0;
-    return tasa > 0 ? tasa : null;
+    const principalId = this.monedas.find((m: any) => m.principal)?.id ?? null;
+    return tasaEntreMonedas(this.cambios, origenId, this.cuota.monedaId, principalId);
   }
 
   /** Monto de la linea convertido a la moneda del CPP (null si falta cotizacion). */

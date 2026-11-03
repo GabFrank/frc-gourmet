@@ -285,7 +285,7 @@ async function main() {
   // desaparecer: con el fixture principal los cuatro tienen datos, así que un
   // `[...acc.keys()]` en lugar del recorrido por `CANAL_VENTA_ORDEN` habría
   // pasado igual.
-  const mixAnterior = await mixPorCanal(ds, ctx, filtroDeRango(periodo.anterior!));
+  const mixAnterior = await mixPorCanal(ds, ctx, filtroDeRango(ds, periodo.anterior!));
   ok(mixAnterior.length === 4, 'el mix devuelve los 4 canales aunque 3 estén vacíos', mixAnterior.length);
   const vacios = mixAnterior.filter((c) => c.tickets === 0);
   ok(vacios.length === 3, 'y los vacíos vienen en cero, no ausentes', vacios.map((c) => c.canal));

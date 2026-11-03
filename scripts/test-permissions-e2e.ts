@@ -538,9 +538,11 @@ async function main() {
   if (cajeroToken) {
     await asserRpcDenied(cajeroToken, 'pagar-liquidacion-sueldo', [999, {}], 'HTTP cajero ✗ pagar-liquidacion-sueldo');
     await asserRpcDenied(cajeroToken, 'anular-compra', [999, 'X'], 'HTTP cajero ✗ anular-compra');
-    // `backup-create` está en BLOCKED_CHANNELS: /api/rpc lo corta antes de
-    // llegar al handler, para cualquier usuario (ver rpc-router.ts).
-    await asserRpcCanalBloqueado(cajeroToken, 'backup-create', 'HTTP cajero ✗ backup-create (canal bloqueado)');
+    // `backup-create` se habilitó por HTTP con el backup remoto (#265, ver
+    // rpc-router.ts): ahora lo frena el permiso SISTEMA_BACKUP del handler.
+    // Los destructivos (`backup-restore`) siguen bloqueados para todos (#334).
+    await asserRpcDenied(cajeroToken, 'backup-create', [{}], 'HTTP cajero ✗ backup-create (SISTEMA_BACKUP)');
+    await asserRpcCanalBloqueado(cajeroToken, 'backup-restore', 'HTTP cajero ✗ backup-restore (canal bloqueado)');
     await asserRpcDenied(cajeroToken, 'create-gasto', [{}], 'HTTP cajero ✗ create-gasto');
     await asserRpcDenied(cajeroToken, 'anular-caja-mayor-movimiento', [999, 'X'], 'HTTP cajero ✗ anular-caja-mayor-movimiento');
     await asserRpcDenied(cajeroToken, 'create-cuenta-bancaria', [{}], 'HTTP cajero ✗ create-cuenta-bancaria');
@@ -555,7 +557,8 @@ async function main() {
 
   // Admin (JWT) → handlers protegidos deben pasar autorizacion
   if (adminToken) {
-    await asserRpcCanalBloqueado(adminToken, 'backup-create', 'HTTP admin ✗ backup-create (canal bloqueado, ni el admin pasa)');
+    await asserRpcOk(adminToken, 'backup-create', [{}], 'HTTP admin → backup-create (permitido por HTTP desde #265)');
+    await asserRpcCanalBloqueado(adminToken, 'backup-restore', 'HTTP admin ✗ backup-restore (canal bloqueado, ni el admin pasa)');
     await asserRpcOk(adminToken, 'create-producto', [{}], 'HTTP admin → create-producto');
     await asserRpcOk(adminToken, 'update-empresa', [{}], 'HTTP admin → update-empresa');
     await asserRpcOk(adminToken, 'create-gasto', [{}], 'HTTP admin → create-gasto');
