@@ -82,14 +82,20 @@
 
     <div class="items-head">
       <h3>Ítems</h3>
-      <mat-slide-toggle color="primary" [checked]="resumido" (change)="onResumidoChange($event.checked)">
+      <mat-slide-toggle color="primary" [checked]="resumido" (change)="onResumidoChange($event.checked)"
+                        [disabled]="cargandoPropuesta || !!errorPropuesta">
         Resumido
       </mat-slide-toggle>
     </div>
-    <p class="aviso-propuesta" *ngIf="cargandoPropuesta">Calculando la factura de la venta…</p>
-    <p class="aviso-propuesta error" *ngIf="errorPropuesta">{{ errorPropuesta }}</p>
+    <p class="aviso-propuesta" *ngIf="cargandoPropuesta">
+      <mat-spinner diameter="16"></mat-spinner> Calculando la factura de la venta…
+    </p>
+    <p class="aviso-propuesta error" role="alert" *ngIf="errorPropuesta">
+      {{ errorPropuesta }}
+      <button mat-button type="button" color="primary" (click)="reintentarPropuesta()">Reintentar</button>
+    </p>
     <p class="resumido-hint" *ngIf="vinculadaVenta && !resumido && !errorPropuesta">
-      Los renglones y montos son los de la venta (incluye adicionales, envío y ajustes del cobro). Solo se puede cambiar la descripción.
+      Los renglones y montos son los de la venta (incluye adicionales, envío y ajustes del cobro). Solo se puede cambiar la descripción de los productos.
     </p>
     <p class="resumido-hint" *ngIf="resumido">
       La factura se emite con un único ítem <strong>CONSUMISION</strong> (IVA 10) por el total.
@@ -110,7 +116,7 @@
         </mat-form-field>
         <mat-form-field appearance="outline" class="grow">
           <mat-label>Descripción</mat-label>
-          <input matInput formControlName="descripcion" required [readonly]="resumido" />
+          <input matInput formControlName="descripcion" required [readonly]="resumido || item.value.descripcionBloqueada" />
           <mat-error *ngIf="item.get('descripcion')?.hasError('required')">Requerido</mat-error>
         </mat-form-field>
         <mat-form-field appearance="outline" class="small">
@@ -133,12 +139,12 @@
             <mat-option [value]="0">Exenta</mat-option>
           </mat-select>
         </mat-form-field>
-        <button mat-icon-button color="warn" (click)="removeItem(i)" [disabled]="itemsArray.length === 1" *ngIf="!resumido && !vinculadaVenta">
+        <button mat-icon-button type="button" color="warn" (click)="removeItem(i)" [disabled]="itemsArray.length === 1" *ngIf="!resumido && !vinculadaVenta">
           <mat-icon>delete</mat-icon>
         </button>
       </div>
     </div>
-    <button mat-stroked-button (click)="addItem()" *ngIf="!resumido && !vinculadaVenta"><mat-icon>add</mat-icon> Agregar ítem</button>
+    <button mat-stroked-button type="button" (click)="addItem()" *ngIf="!resumido && !vinculadaVenta"><mat-icon>add</mat-icon> Agregar ítem</button>
 
     <div class="totales">
       <div class="row" *ngIf="!resumido">

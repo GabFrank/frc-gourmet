@@ -243,18 +243,69 @@ function gs(n: number): string {
   return `₲ ${Math.round(n).toLocaleString('es-PY')}`;
 }
 
+/** Renglón listo para guardar: sólo los campos que acepta `create-factura`. */
+export interface RenglonFactura {
+  descripcion: string;
+  cantidad: number;
+  precioUnitario: number;
+  ivaTipo: 10 | 5 | 0;
+  unidadMedida?: string;
+  producto?: { id: number };
+  ventaItem?: { id: number };
+}
+
+export interface FacturaValidada {
+  propuesta: FacturaPropuesta;
+  renglones: RenglonFactura[];
+  descuento: number;
+}
+
+/** Descripción del payload en MAYÚSCULA; si viene vacía, la de respaldo. */
+function descripcionDe(it: any, respaldo: string): string {
+  const d = String(it?.descripcion ?? '').trim().toUpperCase();
+  return d || respaldo;
+}
+
 /**
- * Verifica que lo que se quiere facturar sea la venta, y devuelve su propuesta.
+ * Renglones de una factura **sin venta** (manual), reducidos a los campos que se
+ * guardan. Un `id`, un `factura` o cualquier otro campo del payload se descarta:
+ * con `...it` un `id` ajeno hacía que `save()` pisara un renglón de otra factura.
+ */
+export function renglonesManuales(items: any[]): RenglonFactura[] {
+  return (Array.isArray(items) ? items : []).map((it) => {
+    if (idVentaItemDe(it) != null) {
+      throw new FacturaInvalidaError('Un renglón vinculado a un ítem de venta necesita la venta de la factura');
+    }
+    const r: RenglonFactura = {
+      descripcion: descripcionDe(it, ''),
+      cantidad: Number(it?.cantidad) || 0,
+      precioUnitario: Number(it?.precioUnitario) || 0,
+      ivaTipo: normalizarIvaTipo(it?.ivaTipo),
+    };
+    if (it?.unidadMedida) r.unidadMedida = String(it.unidadMedida);
+    const prodId = Number(it?.producto?.id);
+    if (Number.isFinite(prodId) && prodId > 0) r.producto = { id: prodId };
+    return r;
+  });
+}
+
+/**
+ * Verifica que lo que se quiere facturar sea la venta y devuelve los renglones
+ * a guardar, con los montos **de la propuesta** (no los del payload, aunque
+ * difieran dentro de la tolerancia).
  *
  * `/api/rpc` es default-allow: este es el único lugar donde se garantiza que un
  * comprobante legal dice lo mismo que la venta. Se aceptan dos formas:
  *
  * - **Detallado:** cada renglón con `ventaItem` es un ítem ACTIVO de esta venta,
  *   sin repetir, con la cantidad, el precio y el IVA de la propuesta; los
- *   renglones sin `ventaItem` son sólo los sintéticos de la propuesta (envío,
- *   recargo); y el descuento es el del cobro.
+ *   renglones sin `ventaItem` son los sintéticos de la propuesta (envío,
+ *   recargo), emparejados por monto e IVA —la descripción se toma de la
+ *   propuesta—; y el descuento es el del cobro.
  * - **Resumido:** un único renglón sin ítems de venta (la `CONSUMISION` del
- *   diálogo) por el total neto, sin descuento.
+ *   diálogo): cantidad 1, IVA 10 y descuento 0. Sin esas tres condiciones un
+ *   renglón «exento por el total» o un descuento inventado pasaban con sólo
+ *   cuadrar el total.
  *
  * En los dos, el total recalculado tiene que ser el de la propuesta.
  */
@@ -263,7 +314,7 @@ export async function validarFacturaContraVenta(
   ventaId: number,
   items: any[],
   descuento: number,
-): Promise<FacturaPropuesta> {
+): Promise<FacturaValidada> {
   const propuesta = await calcularFacturaDeVenta(manager, ventaId);
   if (!propuesta) throw new FacturaInvalidaError(`La venta ${ventaId} no existe`);
 
@@ -271,8 +322,16 @@ export async function validarFacturaContraVenta(
   const deVenta = lineas.filter((it) => idVentaItemDe(it) != null);
   const sinVinculo = lineas.filter((it) => idVentaItemDe(it) == null);
   const resumido = deVenta.length === 0 && sinVinculo.length === 1;
+  const desc = Number(descuento) || 0;
+  const renglones: RenglonFactura[] = [];
 
-  if (!resumido) {
+  if (resumido) {
+    const it = sinVinculo[0];
+    if (Math.abs((Number(it?.cantidad) || 0) - 1) > 0.0005 || normalizarIvaTipo(it?.ivaTipo) !== 10 || Math.abs(desc) > 0) {
+      throw new FacturaInvalidaError('La factura resumida es un único renglón por el total, cantidad 1, IVA 10 y sin descuento');
+    }
+    renglones.push({ descripcion: descripcionDe(it, 'CONSUMISION'), cantidad: 1, precioUnitario: Number(it?.precioUnitario) || 0, ivaTipo: 10 });
+  } else {
     const porId = new Map<number, LineaPropuesta>();
     for (const l of propuesta.lineas) if (l.ventaItemId) porId.set(l.ventaItemId, l);
 
@@ -299,33 +358,46 @@ export async function validarFacturaContraVenta(
           `«${esperada.descripcion}» no coincide con la venta: se cobró ${esperada.cantidad} × ${gs(esperada.precioUnitario)} (IVA ${esperada.ivaTipo || 'exenta'})`,
         );
       }
+      // La descripción es lo único editable; el resto sale de la venta.
+      const r: RenglonFactura = {
+        descripcion: descripcionDe(it, esperada.descripcion),
+        cantidad: esperada.cantidad,
+        precioUnitario: esperada.precioUnitario,
+        ivaTipo: esperada.ivaTipo,
+        ventaItem: { id },
+      };
+      if (esperada.productoId) r.producto = { id: esperada.productoId };
+      renglones.push(r);
     }
 
     const sinteticas = propuesta.lineas.filter((l) => !l.ventaItemId);
     for (const it of sinVinculo) {
-      const desc = String(it?.descripcion ?? '').trim().toUpperCase();
-      const idx = sinteticas.findIndex((l) => l.descripcion === desc
-        && Math.abs((Number(it?.cantidad) || 0) - l.cantidad) <= 0.0005
+      const idx = sinteticas.findIndex((l) =>
+        Math.abs((Number(it?.cantidad) || 0) - l.cantidad) <= 0.0005
         && Math.abs((Number(it?.precioUnitario) || 0) - l.precioUnitario) <= 0.01
         && normalizarIvaTipo(it?.ivaTipo) === l.ivaTipo);
-      if (idx < 0) throw new FacturaInvalidaError(`El renglón «${desc || '(sin descripción)'}» no corresponde a la venta`);
-      sinteticas.splice(idx, 1);
+      if (idx < 0) {
+        throw new FacturaInvalidaError(`El renglón «${descripcionDe(it, '(sin descripción)')}» no corresponde a la venta`);
+      }
+      const l = sinteticas.splice(idx, 1)[0];
+      renglones.push({ descripcion: l.descripcion, cantidad: l.cantidad, precioUnitario: l.precioUnitario, ivaTipo: l.ivaTipo });
     }
 
-    if (Math.abs((Number(descuento) || 0) - propuesta.descuento) > TOL_MONTO) {
+    if (Math.abs(desc - propuesta.descuento) > TOL_MONTO) {
       throw new FacturaInvalidaError(
-        `El descuento de la factura (${gs(Number(descuento) || 0)}) no es el del cobro (${gs(propuesta.descuento)})`,
+        `El descuento de la factura (${gs(desc)}) no es el del cobro (${gs(propuesta.descuento)})`,
       );
     }
   }
 
-  const totales = calcularTotalesFactura(lineas, descuento);
+  const descuentoFinal = resumido ? 0 : propuesta.descuento;
+  const totales = calcularTotalesFactura(renglones, descuentoFinal);
   if (Math.abs(totales.total - propuesta.total) > TOL_MONTO) {
     throw new FacturaInvalidaError(
       `La factura (${gs(totales.total)}) no coincide con la venta (${gs(propuesta.total)})`,
     );
   }
-  return propuesta;
+  return { propuesta, renglones, descuento: descuentoFinal };
 }
 
 /**

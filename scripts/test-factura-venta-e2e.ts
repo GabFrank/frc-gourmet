@@ -142,6 +142,8 @@ async function main() {
   const vA = await mkVenta(10000);
   const itPizza = await mkItem(vA, pPizza, { pvu: 70000, adic: 5000, cantidad: 2 });
   await save(VentaItemAdicional, { ventaItem: { id: itPizza.id }, adicional: { id: aBorde.id }, precioCobrado: 5000, cantidad: 1, activo: true });
+  const aCebolla = await save(Adicional, { nombre: 'CEBOLLA', precioBase: 3000, activo: true });
+  await save(VentaItemAdicional, { ventaItem: { id: itPizza.id }, adicional: { id: aCebolla.id }, precioCobrado: 3000, cantidad: 1, activo: false });
   await mkItem(vA, pGaseosa, { pvu: 12000, desc: 2000, cantidad: 3 });
   await mkItem(vA, pAgua, { pvu: 6000 });
   await mkItem(vA, pPan, { pvu: 4000, cantidad: 2 });
@@ -156,6 +158,7 @@ async function main() {
     const pizza = propA.lineas.find((l: any) => l.ventaItemId === itPizza.id);
     ok(pizza?.precioUnitario === 75000 && pizza?.total === 150000, 'A: el adicional entra, por unidad y × cantidad', pizza);
     ok(/BORDE CATUPIRI/.test(pizza?.descripcion || ''), 'A: la descripción lista el adicional', pizza?.descripcion);
+    ok(!/CEBOLLA/.test(pizza?.descripcion || ''), 'A: un adicional dado de baja no se nombra', pizza?.descripcion);
     const gaseosa = propA.lineas.find((l: any) => l.descripcion === 'GASEOSA');
     ok(gaseosa?.precioUnitario === 10000 && gaseosa?.total === 30000, 'A: el descuento del ítem resta por unidad × cantidad', gaseosa);
     ok(!propA.lineas.some((l: any) => l.ventaItemId === itCanceladoA.id), 'A: el ítem cancelado no se factura');
@@ -196,8 +199,12 @@ async function main() {
   let facturaA: any;
   {
     const antes = await numeroActual();
-    const payload = payloadDe(propA, { gravada10: 1, gravada5: 1, exenta: 1, iva10: 1, iva5: 1, total: 1 });
+    const payload = payloadDe(propA, { gravada10: 1, gravada5: 1, exenta: 1, iva10: 1, iva5: 1, total: 1, estado: 'ANULADA', fecha: '2001-01-01' });
     payload.items.forEach((it: any) => { it.total = 1; });
+    // Dentro de la tolerancia de precio: se guarda el de la venta, no el del payload.
+    payload.items[0].precioUnitario += 0.004;
+    // La descripción del envío editada: se reconoce por monto e IVA y se guarda la de la venta.
+    payload.items.find((it: any) => it.descripcion === 'SERVICIO DE DELIVERY').descripcion = 'ENVIO';
     facturaA = await emitir(payload);
     ok(!!facturaA?.numeroCompleto && (await numeroActual()) === antes + 1, 'D: se emite y numera', facturaA?.numeroCompleto);
     ok(Number(facturaA.total) === 196000, 'D: total = cobro, no el del payload', facturaA.total);
@@ -206,6 +213,12 @@ async function main() {
     const sumaItems = (facturaA.items || []).reduce((s: number, it: any) => s + Number(it.total), 0);
     ok(sumaItems === 205000, 'D: total de cada renglón recalculado', sumaItems);
     ok(facturaA.moneda?.id === pyg.id, 'D: la moneda queda en la principal', facturaA.moneda);
+    ok(Number(facturaA.gravada5) === 5737 && Number(facturaA.exenta) === 7649 && Number(facturaA.descuento) === 9000,
+      'D: gravada 5, exenta y descuento del servidor', { g5: facturaA.gravada5, ex: facturaA.exenta, d: facturaA.descuento });
+    ok(facturaA.estado === 'EMITIDA' && new Date(facturaA.fecha).getFullYear() > 2001, 'D: estado y fecha no salen del payload', { e: facturaA.estado, f: facturaA.fecha });
+    const renglonPizza = (facturaA.items || []).find((it: any) => Number(it.total) === 150000);
+    ok(Number(renglonPizza?.precioUnitario) === 75000, 'D: se guarda el precio de la venta, no el del payload', renglonPizza?.precioUnitario);
+    ok((facturaA.items || []).some((it: any) => it.descripcion === 'SERVICIO DE DELIVERY'), 'D: el envío se guarda con su descripción');
   }
 
   console.log('\n[E] Una sola factura EMITIDA por venta');
@@ -234,7 +247,8 @@ async function main() {
     const caso = async (nombre: string, mutar: (p: any) => void, patron: RegExp) => {
       const p = payloadDe(propB);
       mutar(p);
-      ok(await rechaza(emitir(p), patron) === 'OK', `F: ${nombre}`, await rechaza(emitir(p), patron));
+      const r = await rechaza(emitir(p), patron);
+      ok(r === 'OK', `F: ${nombre}`, r);
     };
     await caso('ítem de otra venta', (p) => { p.items[0].ventaItem = { id: itPizza.id }; }, /no pertenece a la venta/);
     await caso('ítem cancelado', (p) => {
@@ -243,6 +257,10 @@ async function main() {
     await caso('ítem repetido', (p) => { p.items.push({ ...p.items[0] }); }, /dos veces/);
     await caso('precio cambiado (sin adicional, como antes de #325)', (p) => { p.items[0].precioUnitario = 70000; }, /no coincide con la venta/);
     await caso('IVA cambiado', (p) => { p.items[1].ivaTipo = 0; }, /no coincide con la venta/);
+    await caso('precio un guaraní distinto', (p) => { p.items[0].precioUnitario += 1; }, /no coincide con la venta/);
+    await caso('cantidad × precio iguales pero repartidos distinto', (p) => { p.items[0].cantidad = 1; p.items[0].precioUnitario *= 2; }, /no coincide con la venta/);
+    await caso('descuento un poco mayor', (p) => { p.factura.descuento += 2; }, /descuento/);
+    await caso('sin renglones', (p) => { p.items = []; }, /no coincide con la venta|no tiene renglones/);
     await caso('renglón inventado que cuadra el total', (p) => {
       const quitado = p.items.splice(1, 1)[0];
       p.items.push({ descripcion: 'VARIOS', cantidad: 1, precioUnitario: quitado.cantidad * quitado.precioUnitario, ivaTipo: 10 });
@@ -253,6 +271,58 @@ async function main() {
     await caso('venta inexistente', (p) => { p.factura.venta = { id: 999999 }; }, /no existe/);
     ok((await numeroActual()) === n && (await contarFacturas()) === c, 'F: ningún rechazo consumió número ni guardó');
     ok(itB1.id > 0, 'F: fixture B');
+  }
+
+  console.log('\n[F2] Renglones de envío y recargo');
+  {
+    const vS = await mkVenta(8000);
+    await mkItem(vS, pGaseosa, { pvu: 12000, cantidad: 2 });
+    await mkAjustes(vS, [{ tipo: 'AUMENTO', valor: 2000 }]);
+    const propS: any = await calcularFacturaDeVenta(ds, vS.id);
+    const iEnvio = propS.lineas.findIndex((l: any) => l.tipo === 'DELIVERY');
+    const iRecargo = propS.lineas.findIndex((l: any) => l.tipo === 'RECARGO');
+    const caso = async (nombre: string, mutar: (p: any) => void) => {
+      const p = payloadDe(propS);
+      mutar(p);
+      const r = await rechaza(emitir(p), /no corresponde a la venta|no coincide con la venta/);
+      ok(r === 'OK', `F2: ${nombre}`, r);
+    };
+    await caso('envío con IVA exento', (p) => { p.items[iEnvio].ivaTipo = 0; });
+    await caso('envío por otro monto', (p) => { p.items[iEnvio].precioUnitario = 7000; p.items[0].precioUnitario += 500; });
+    await caso('recargo con IVA 5', (p) => { p.items[iRecargo].ivaTipo = 5; });
+    await caso('recargo duplicado en lugar del envío', (p) => { p.items[iEnvio] = { ...p.items[iRecargo] }; });
+    const f: any = await emitir(payloadDe(propS));
+    ok(Number(f?.total) === 34000, 'F2: con envío y recargo correctos, se emite', f?.total);
+  }
+
+  console.log('\n[F3] Payload que intenta pisar otra factura');
+  {
+    const previa: any = await R(Factura).findOne({ where: { id: facturaA.id }, relations: ['items'] });
+    const vX = await mkVenta(0);
+    await mkItem(vX, pAgua, { pvu: 6000 });
+    const propX: any = await calcularFacturaDeVenta(ds, vX.id);
+    const p: any = payloadDe(propX, { id: facturaA.id, numeroFactura: 1, numeroCompleto: '999-999-9999999' });
+    p.items[0].id = previa.items[0].id;
+    p.items[0].factura = { id: facturaA.id };
+    const nueva: any = await emitir(p);
+    const despues: any = await R(Factura).findOne({ where: { id: facturaA.id }, relations: ['items'] });
+    ok(nueva?.id !== facturaA.id, 'F3: un id en el payload no pisa una factura existente', nueva?.id);
+    ok(despues.items.length === previa.items.length && Number(despues.total) === Number(previa.total) && despues.estado === previa.estado,
+      'F3: la factura y los renglones previos quedan intactos');
+    ok(nueva.numeroCompleto !== '999-999-9999999', 'F3: el número no sale del payload', nueva.numeroCompleto);
+  }
+
+  console.log('\n[F4] Número manual del pre-impreso');
+  {
+    const vM = await mkVenta(0);
+    await mkItem(vM, pAgua, { pvu: 6000 });
+    const propM: any = await calcularFacturaDeVenta(ds, vM.id);
+    const n = await numeroActual();
+    ok(await rechaza(emitir(payloadDe(propM, { numeroManual: 1.5 })), /no es válido/) === 'OK', 'F4: número no entero, rechazado');
+    ok(await rechaza(emitir(payloadDe(propM, { numeroManual: 1 })), /ya fue usado/) === 'OK', 'F4: número ya usado, rechazado');
+    ok((await numeroActual()) === n, 'F4: los rechazos no movieron el contador');
+    const f: any = await emitir(payloadDe(propM, { numeroManual: n + 5 }));
+    ok(f?.numeroFactura === n + 5 && (await numeroActual()) === n + 6, 'F4: número libre, aceptado y el contador avanza', f?.numeroFactura);
   }
 
   console.log('\n[G] Modo Resumido');
@@ -267,6 +337,12 @@ async function main() {
       items: [{ descripcion: 'CONSUMISION', cantidad: 1, precioUnitario: total, ivaTipo: 10 }],
     });
     ok(await rechaza(emitir(resumido(propC.total - 5000)), /no coincide con la venta/) === 'OK', 'G: Resumido por menos, rechazado');
+    const exento: any = resumido(propC.total); exento.items[0].ivaTipo = 0;
+    ok(await rechaza(emitir(exento), /resumida/) === 'OK', 'G: Resumido exento por el total, rechazado');
+    const conDesc: any = resumido(propC.total + 7000); conDesc.factura.descuento = 7000;
+    ok(await rechaza(emitir(conDesc), /resumida/) === 'OK', 'G: Resumido con descuento inventado, rechazado');
+    const dos: any = resumido(propC.total / 2); dos.items[0].cantidad = 2;
+    ok(await rechaza(emitir(dos), /resumida/) === 'OK', 'G: Resumido con cantidad 2, rechazado');
     const f: any = await emitir(resumido(propC.total));
     ok(Number(f?.total) === 170000 && propC.total === 170000, 'G: Resumido con envío y descuento, aceptado', { f: f?.total, p: propC.total });
   }
@@ -282,6 +358,15 @@ async function main() {
     });
     ok(Number(f?.total) === 9900 && Number(f?.gravada10) === 9900 && Number(f?.iva10) === 900,
       'H: se recalcula (total del payload ignorado, IVA sobre la base neta)', { t: f?.total, g: f?.gravada10, i: f?.iva10 });
+  }
+
+  console.log('\n[H2] Factura vacía');
+  {
+    ok(await rechaza(emitir({ factura: { timbradoDetalleId: detalle.id, nombreCliente: 'X', ruc: '1' }, items: [] }), /no tiene renglones/) === 'OK',
+      'H2: factura manual sin renglones, rechazada');
+    const vV = await mkVenta(0);
+    ok(await rechaza(emitir({ factura: { timbradoDetalleId: detalle.id, venta: { id: vV.id }, nombreCliente: 'X', ruc: '1' }, items: [] }), /no tiene renglones/) === 'OK',
+      'H2: venta sin ítems, rechazada');
   }
 
   console.log('\n[I] Emisiones simultáneas');
@@ -335,6 +420,14 @@ async function main() {
     const iva = calcularTotalesFactura([{ cantidad: 1, precioUnitario: 16, ivaTipo: 10 }], 0);
     ok(iva.iva10 === 1, 'K: IVA redondea, no trunca (16/11 = 1,45 → 1; 17/11 = 1,55 → 2)', iva.iva10);
     ok(calcularTotalesFactura([{ cantidad: 1, precioUnitario: 17, ivaTipo: 10 }], 0).iva10 === 2, 'K: 17/11 → 2');
+    // Bases 10 = 100, 5 = 300, exenta = 100; descuento 3 → total 497. Redondeado:
+    // 99 + 298 + 99 = 496; el residuo (+1) va a la base mayor, que es la de 5.
+    const res = calcularTotalesFactura([
+      { cantidad: 1, precioUnitario: 100, ivaTipo: 10 }, { cantidad: 1, precioUnitario: 300, ivaTipo: 5 }, { cantidad: 1, precioUnitario: 100, ivaTipo: 0 },
+    ], 3);
+    ok(res.gravada5 === 299 && res.gravada10 === 99 && res.exenta === 99 && res.total === 497, 'K: el residuo va a la base mayor (5)', res);
+    const neg = calcularTotalesFactura([{ cantidad: 1, precioUnitario: 1000, ivaTipo: 10 }], -500);
+    ok(neg.total === 1000 && neg.descuento === 0, 'K: un descuento negativo no suma', neg);
   }
 
   await ds.destroy();

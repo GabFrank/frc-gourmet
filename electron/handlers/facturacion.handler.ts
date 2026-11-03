@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { Timbrado } from '../../src/app/database/entities/facturacion/timbrado.entity';
 import { TimbradoDetalle } from '../../src/app/database/entities/facturacion/timbrado-detalle.entity';
 import { FacturaPlantilla } from '../../src/app/database/entities/facturacion/factura-plantilla.entity';
@@ -13,6 +13,7 @@ import { buscarClientePorRuc, resolverOCrearClientePorRuc } from '../utils/clien
 import {
   calcularFacturaDeVenta,
   FacturaInvalidaError,
+  renglonesManuales,
   validarFacturaContraVenta,
   withFacturaLock,
 } from '../utils/factura-venta.utils';
@@ -344,36 +345,25 @@ export function registerFacturacionHandlers(
       }
 
       const ventaId = Number(factura?.venta?.id ?? factura?.ventaId) || null;
-      const lineas: any[] = Array.isArray(items) ? items : [];
       const esPostgres = dataSource.options.type === 'postgres';
+      const detalleId = Number(factura?.timbradoDetalleId ?? factura?.timbradoDetalle?.id) || null;
 
-      return await withFacturaLock(async () => await dataSource.transaction(async (manager) => {
-        const facturaRepo = manager.getRepository(Factura);
-        const itemRepo = manager.getRepository(FacturaItem);
-        const detalleRepo = manager.getRepository(TimbradoDetalle);
-        const detalleId = factura?.timbradoDetalleId ?? factura?.timbradoDetalle?.id;
-
-        // Locks primero (sólo Postgres; en SQLite ordena `withFacturaLock`).
-        // Sin el de la venta, dos emisiones simultáneas ven las dos que no hay
-        // factura; sin el del timbrado, las dos leen el mismo `numeroActual`.
-        // Van sin relaciones: Postgres no acepta FOR UPDATE sobre el lado
-        // nulable de un LEFT JOIN.
-        if (esPostgres) {
-          if (ventaId) {
-            await manager.getRepository(Venta).createQueryBuilder('v')
-              .setLock('pessimistic_write').where('v.id = :id', { id: ventaId }).getOne();
-          }
-          if (detalleId) {
-            await detalleRepo.createQueryBuilder('td')
-              .setLock('pessimistic_write').where('td.id = :id', { id: detalleId }).getOne();
-          }
-        }
-
-        // Validación, ANTES de tocar la numeración: una factura rechazada no
-        // consume número.
-        const descuento = Number(factura?.descuento) || 0;
+      /**
+       * Todo lo que puede rechazar la factura, sin escribir nada.
+       *
+       * En Postgres corre DENTRO de la transacción, después de los FOR UPDATE.
+       * En SQLite corre ANTES de abrirla: ahí hay una sola conexión y una
+       * transacción que se intercala con la de otro handler comparte la misma
+       * transacción física (`tx.utils.ts`), así que un rollback por un rechazo
+       * de negocio podía llevarse puestas escrituras ajenas. Adentro sólo
+       * quedan las escrituras.
+       */
+      const validar = async (m: EntityManager) => {
+        const descuentoPedido = Number(factura?.descuento) || 0;
+        let renglones;
+        let descuento = descuentoPedido;
         if (ventaId) {
-          const otra = await facturaRepo.findOne({
+          const otra = await m.getRepository(Factura).findOne({
             where: { venta: { id: ventaId }, estado: EstadoFactura.EMITIDA } as any,
           });
           if (otra) {
@@ -381,69 +371,124 @@ export function registerFacturacionHandlers(
               `La venta ya tiene la factura ${otra.numeroCompleto || otra.id}; anulala para emitir otra`,
             );
           }
-          await validarFacturaContraVenta(manager, ventaId, lineas, descuento);
-        } else if (lineas.some((it) => it?.ventaItem?.id || it?.ventaItemId)) {
-          throw new FacturaInvalidaError('Un renglón vinculado a un ítem de venta necesita la venta de la factura');
+          const v = await validarFacturaContraVenta(m, ventaId, items, descuentoPedido);
+          renglones = v.renglones;
+          descuento = v.descuento;
+        } else {
+          renglones = renglonesManuales(items);
         }
+        if (!renglones.length) throw new FacturaInvalidaError('La factura no tiene renglones');
 
-        // Los montos los calcula el servidor; los del payload se ignoran.
-        const totales = calcularTotalesFactura(lineas, descuento);
-
-        const entity = facturaRepo.create(factura);
-        const f: any = entity;
-        f.gravada10 = totales.gravada10;
-        f.gravada5 = totales.gravada5;
-        f.exenta = totales.exenta;
-        f.iva10 = totales.iva10;
-        f.iva5 = totales.iva5;
-        f.descuento = totales.descuento;
-        f.total = totales.total;
-        if (ventaId && !f.moneda) {
-          const principal = await manager.getRepository(Moneda).findOne({ where: { principal: true } as any });
-          if (principal) f.moneda = principal;
-        }
-
-        // Asignacion de numeracion si hay timbrado detalle
+        let numero: number | null = null;
         if (detalleId) {
-          const detalle = await detalleRepo.findOne({
-            where: { id: detalleId },
-            relations: ['timbrado'],
-          });
+          const detalle = await m.getRepository(TimbradoDetalle).findOne({ where: { id: detalleId } });
           if (!detalle) throw new Error('TimbradoDetalle no encontrado para asignar numeracion');
-
           // numeroManual: en pre-impreso la hoja fisica ya trae su numero; se
           // registra ese valor y la numeracion avanza a partir de el.
-          const manual = factura?.numeroManual != null ? Number(factura.numeroManual) : null;
-          const numero = manual != null && !isNaN(manual) ? manual : detalle.numeroActual;
-
+          const manual = factura?.numeroManual != null && factura.numeroManual !== '' ? Number(factura.numeroManual) : null;
+          if (manual != null && !Number.isInteger(manual)) {
+            throw new FacturaInvalidaError(`El número de factura ${factura.numeroManual} no es válido`);
+          }
+          numero = manual != null ? manual : detalle.numeroActual;
           if (numero > detalle.rangoHasta || numero < detalle.rangoDesde) {
             throw new Error(`El numero ${numero} esta fuera del rango del timbrado (${detalle.rangoDesde}-${detalle.rangoHasta})`);
           }
-          f.timbradoDetalle = detalle;
-          f.numeroFactura = numero;
-          f.numeroCompleto = `${detalle.establecimiento}-${detalle.puntoExpedicion}-${String(numero).padStart(7, '0')}`;
-          // Avanza el contador (sin retroceder si el manual es menor al actual).
-          detalle.numeroActual = Math.max(detalle.numeroActual, numero + 1);
-          await detalleRepo.save(detalle);
+          const repetida = await m.getRepository(Factura).findOne({
+            where: { timbradoDetalle: { id: detalleId }, numeroFactura: numero } as any,
+          });
+          if (repetida) {
+            throw new FacturaInvalidaError(`El número ${repetida.numeroCompleto || numero} ya fue usado`);
+          }
         }
+        return { renglones, descuento, numero };
+      };
 
-        if (!f.fecha) f.fecha = new Date();
-        await setEntityUserTracking(dataSource, entity, uid(), false);
-        const saved: any = await facturaRepo.save(entity);
+      return await withFacturaLock(async () => {
+        const previa = esPostgres ? null : await validar(dataSource.manager);
 
-        // Items
-        for (let i = 0; i < lineas.length; i++) {
-          const it = lineas[i];
-          const item = itemRepo.create({ ...it, total: totales.totalesLinea[i], factura: saved });
-          await setEntityUserTracking(dataSource, item, uid(), false);
-          await itemRepo.save(item);
-        }
+        return await dataSource.transaction(async (manager) => {
+          const facturaRepo = manager.getRepository(Factura);
+          const itemRepo = manager.getRepository(FacturaItem);
+          const detalleRepo = manager.getRepository(TimbradoDetalle);
 
-        return await facturaRepo.findOne({
-          where: { id: saved.id },
-          relations: ['items', 'cliente', 'moneda', 'timbradoDetalle', 'timbradoDetalle.timbrado', 'plantilla'],
+          // Locks (sólo Postgres; en SQLite ordena `withFacturaLock`). Sin el de
+          // la venta, dos emisiones simultáneas ven las dos que no hay factura;
+          // sin el del timbrado, las dos leen el mismo `numeroActual`. Van sin
+          // relaciones: Postgres no acepta FOR UPDATE sobre el lado nulable de
+          // un LEFT JOIN (#258).
+          if (esPostgres) {
+            if (ventaId) {
+              await manager.getRepository(Venta).createQueryBuilder('v')
+                .setLock('pessimistic_write').where('v.id = :id', { id: ventaId }).getOne();
+            }
+            if (detalleId) {
+              await detalleRepo.createQueryBuilder('td')
+                .setLock('pessimistic_write').where('td.id = :id', { id: detalleId }).getOne();
+            }
+          }
+          const { renglones, descuento, numero } = previa ?? await validar(manager);
+
+          // Los montos los calcula el servidor; los del payload se ignoran.
+          const totales = calcularTotalesFactura(renglones, descuento);
+
+          // Lista blanca: sólo lo que el emisor puede elegir. Un `id` en el
+          // payload hacía que `save()` pisara una factura existente, y un
+          // `estado: 'ANULADA'` anulaba sin `FACTURACION_ANULAR`.
+          const ref = (x: any) => { const id = Number(x?.id); return Number.isFinite(id) && id > 0 ? { id } : undefined; };
+          const texto = (x: any) => (x == null || x === '' ? undefined : String(x));
+          const f: any = facturaRepo.create({
+            venta: ventaId ? { id: ventaId } : undefined,
+            cliente: ref(factura?.cliente),
+            plantilla: ref(factura?.plantilla),
+            moneda: ref(factura?.moneda),
+            tipoFacturacion: factura?.tipoFacturacion,
+            condicionVenta: factura?.condicionVenta,
+            nombreCliente: texto(factura?.nombreCliente),
+            ruc: texto(factura?.ruc),
+            direccion: texto(factura?.direccion),
+            email: texto(factura?.email),
+          } as any);
+          f.gravada10 = totales.gravada10;
+          f.gravada5 = totales.gravada5;
+          f.exenta = totales.exenta;
+          f.iva10 = totales.iva10;
+          f.iva5 = totales.iva5;
+          f.descuento = totales.descuento;
+          f.total = totales.total;
+          f.estado = EstadoFactura.EMITIDA;
+          f.fecha = new Date();
+          if (ventaId && !f.moneda) {
+            const principal = await manager.getRepository(Moneda).findOne({ where: { principal: true } as any });
+            if (principal) f.moneda = principal;
+          }
+
+          // Numeración.
+          if (detalleId && numero != null) {
+            const detalle = await detalleRepo.findOne({ where: { id: detalleId }, relations: ['timbrado'] });
+            if (!detalle) throw new Error('TimbradoDetalle no encontrado para asignar numeracion');
+            f.timbradoDetalle = detalle;
+            f.numeroFactura = numero;
+            f.numeroCompleto = `${detalle.establecimiento}-${detalle.puntoExpedicion}-${String(numero).padStart(7, '0')}`;
+            // Avanza el contador (sin retroceder si el manual es menor al actual).
+            detalle.numeroActual = Math.max(detalle.numeroActual, numero + 1);
+            await detalleRepo.save(detalle);
+          }
+
+          await setEntityUserTracking(dataSource, f, uid(), false);
+          const saved: any = await facturaRepo.save(f);
+
+          for (let i = 0; i < renglones.length; i++) {
+            const item = itemRepo.create({ ...renglones[i], total: totales.totalesLinea[i], factura: saved } as any);
+            await setEntityUserTracking(dataSource, item, uid(), false);
+            await itemRepo.save(item);
+          }
+
+          return await facturaRepo.findOne({
+            where: { id: saved.id },
+            relations: ['items', 'cliente', 'moneda', 'timbradoDetalle', 'timbradoDetalle.timbrado', 'plantilla'],
+          });
         });
-      }));
+      });
     } catch (error) {
       console.error('Error creating factura:', error);
       throw error;

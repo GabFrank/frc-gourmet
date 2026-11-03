@@ -71,7 +71,8 @@ async function main() {
       timbradoDetalleId: detalle.id, moneda: { id: pyg.id }, total: 100000,
       condicionVenta: 'CONTADO', ...receptor, ...extra,
     },
-    items: [],
+    // Un renglón: desde #240 una factura sin renglones se rechaza.
+    items: [{ descripcion: 'CONSUMISION', cantidad: 1, precioUnitario: 100000, ivaTipo: 10 }],
   });
   const contarClientes = async () => Number((await ds.query('SELECT COUNT(*) c FROM clientes'))[0].c);
 

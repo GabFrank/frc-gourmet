@@ -149,6 +149,10 @@ export class FacturarDialogComponent implements OnInit {
    * del cobro. Antes se precargaba sólo `precioVentaUnitario` y la factura salía
    * por menos que lo cobrado (#325).
    */
+  reintentarPropuesta(): void {
+    if (this.prefillVentaId) this.cargarPropuesta(this.prefillVentaId);
+  }
+
   private async cargarPropuesta(ventaId: number): Promise<void> {
     this.cargandoPropuesta = true;
     this.errorPropuesta = '';
@@ -164,6 +168,9 @@ export class FacturarDialogComponent implements OnInit {
           productoId: l.productoId ?? null,
           productoNombre: l.productoNombre ?? '',
           ventaItemId: l.ventaItemId ?? null,
+          // Envío y recargo: el servidor los reconoce por monto e IVA y guarda
+          // su descripción, así que editarla no tendría efecto.
+          descripcionBloqueada: !l.ventaItemId,
         });
       }
       if (!this.itemsArray.length) this.errorPropuesta = 'La venta no tiene ítems para facturar';
@@ -351,6 +358,7 @@ export class FacturarDialogComponent implements OnInit {
       productoId: [init?.productoId ?? null],
       productoNombre: [init?.productoNombre ?? ''],
       ventaItemId: [init?.ventaItemId ?? null],
+      descripcionBloqueada: [!!init?.descripcionBloqueada],
     }));
   }
 
