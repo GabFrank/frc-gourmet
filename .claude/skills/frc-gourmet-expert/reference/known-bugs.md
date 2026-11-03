@@ -776,20 +776,25 @@ cargada** (resumen financiero del funcionario, nómina del dashboard RRHH).
 sin importar cómo quedó la fila — así lo interpretan el ticket y el PWA mobile,
 que ya buscaban en ambas direcciones. Ahora el util también.
 
-### `create-factura` no revalida que los ítems facturados sean ACTIVO de la venta
+### ✅ RESUELTO — La factura desde el cobro salía por menos que la venta (#325) y `create-factura` confiaba en el payload (#240) (2026-11)
 
-**Descubierto** auditando el ticket de venta (2026-08-17). **Pendiente** → issue
-[#240](https://github.com/GabFrank/frc-gourmet/issues/240).
+**Síntoma (#325):** la factura precargaba `precioVentaUnitario` y dejaba afuera adicionales,
+descuento del ítem, envío y ajustes del cobro. Venta 8191 cobrada ₲ 112.000, factura
+001-001-0008479 por ₲ 102.000. Pasaba con cualquier venta del PdV con adicionales.
 
-**Síntoma:** ninguno hoy. El único emisor (`cobrar-venta-dialog` → `FacturarDialogComponent`)
-manda `items: activeItems`, ya filtrados.
+**Riesgo (#240):** `create-factura` guardaba ítems, subtotales y total tal como llegaban, y
+`/api/rpc` es default-allow. La auditoría del arreglo encontró además (preexistentes): un `id`
+en el payload hacía que `save()` pisara una factura o renglón existente; `estado: 'ANULADA'`
+anulaba sin `FACTURACION_ANULAR`; dos emisiones simultáneas sacaban el **mismo número** (sin
+lock del timbrado); se podía emitir una factura vacía o con `numeroManual` repetido o no entero.
 
-**Riesgo:** `create-factura` (`facturacion.handler.ts`) persiste los `FacturaItem` tal como
-vienen en el payload — no valida que el ítem exista, que pertenezca a esa venta, que su
-estado sea `ACTIVO`, ni que el total cuadre con la suma de los ítems. Como **`/api/rpc` es
-default-allow** (regla #22), cualquier cliente con JWT válido puede emitir un comprobante
-**legal** con un ítem cancelado o un total arbitrario. Revisar también que tenga
-`ensurePermission` — la facturación quedó sin permisos dedicados.
+**Arreglo:** la propuesta de factura se calcula en el servidor desde la venta y el servidor
+valida, recalcula y guarda con lista blanca. Detalle y reglas en
+[domains/facturacion.md](../domains/facturacion.md) «La factura de una venta». Tests:
+`test:factura-venta`, `test:locks-pg` [G].
+
+**No cubierto:** las facturas ya emitidas por menos no se revisan (decisión de Gabriel). El
+cliente por RUC se crea aunque la factura después se rechace.
 
 ### Pre-cuenta tras cobro parcial muestra el total, no el saldo
 

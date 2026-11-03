@@ -48,26 +48,65 @@ los `get-*`). Test: `npm run test:factura-cliente`.
 
 ## Handler (`electron/handlers/facturacion.handler.ts`)
 
-`registerFacturacionHandlers(dataSource, getCurrentUser)`, registrado en `register-all-handlers.ts`. El frontend llama por **`window.api.callIpc(canal, ...)`** genérico (no hay wrappers dedicados en preload). Canales: CRUD de `timbrado` / `timbrado-detalle` / `factura-plantilla`; `get-facturas` (filtros estado/tipo/fecha/ruc/limit); `create-factura`; `anular-factura` (id, motivo); `get/save-facturacion-config`.
+`registerFacturacionHandlers(dataSource, getCurrentUser)`, registrado en `register-all-handlers.ts`. El frontend llama por **`window.api.callIpc(canal, ...)`** genérico (no hay wrappers dedicados en preload). Canales: CRUD de `timbrado` / `timbrado-detalle` / `factura-plantilla`; `get-facturas` (filtros estado/tipo/fecha/ruc/limit); `get-factura-propuesta-venta` (ventaId); `create-factura`; `anular-factura` (id, motivo); `get/save-facturacion-config`.
 
 - **`delete-timbrado` bloquea** si el timbrado ya tiene facturas emitidas.
 - Al marcar una plantilla `predeterminada` se desmarcan las otras del mismo tipo.
 
-**Numeración atómica** (`create-factura`): dentro de una **transacción** lee el `TimbradoDetalle`, acepta `numeroManual` (en pre-impreso la hoja física ya trae número), valida `rangoDesde ≤ n ≤ rangoHasta`, arma `numeroCompleto = establecimiento-puntoExpedicion-padStart(n,7)`, y avanza el contador con `Math.max(numeroActual, numero+1)` (nunca retrocede).
+## La factura de una venta (#325, #240 — 2026-11)
 
-> Permiso: `create-factura` exige **`FACTURACION_EMITIR`** (en `SEED_PERMISOS`).
+**La factura sale por lo mismo que cobra la caja, y el servidor lo verifica.** Antes el
+diálogo precargaba `precioVentaUnitario` y dejaba afuera adicionales, descuento del ítem,
+envío y ajustes del cobro (caso real: cobro ₲ 112.000, factura ₲ 102.000), y
+`create-factura` guardaba lo que le mandaran.
 
-> ⚠️ **`create-factura` confía en los ítems del payload.** Persiste los `FacturaItem` tal como vienen: no valida que el ítem pertenezca a la venta, que su `estado` sea `ACTIVO`, ni que el total cuadre con la suma de los ítems. Hoy no se manifiesta porque el único emisor manda `activeItems` ya filtrados, pero `/api/rpc` es default-allow → cualquier JWT válido podría emitir un comprobante legal con un ítem cancelado. Issue [#240](https://github.com/GabFrank/frc-gourmet/issues/240).
+**Fuente única.** `electron/utils/factura-venta.utils.ts` arma la **propuesta** desde la
+venta (`calcularFacturaDeVenta`); el canal `get-factura-propuesta-venta` (pide
+`FACTURACION_EMITIR`, devuelve sólo montos, descripciones e ids) la entrega al diálogo, y
+`create-factura` la usa para validar. Los totales de cualquier factura salen de
+`calcularTotalesFactura` (`src/app/shared/utils/factura-totales.util.ts`), la misma función
+en el diálogo y en el servidor. El precio por unidad de un ítem es `precioUnitarioNetoItem` /
+`computeNetoBrutoItem` de `venta-total.utils.ts` (la misma del cobro).
+
+**Reglas (decididas por Gabriel, 2026-11-02):**
+
+| Concepto | En la factura |
+|---|---|
+| Ítem ACTIVO | Un renglón: `base + precioAdicionales − descuentoUnitario` por unidad; descripción con presentación, `ensambladoDescripcion` (sabores) y nombres de los adicionales activos |
+| Envío (`ventas.costo_delivery`) | Renglón `SERVICIO DE DELIVERY`, IVA 10 |
+| Aumento del cobro (`PagoDetalle` AUMENTO) | Renglón `RECARGO`, IVA 10 |
+| Descuento del cobro (`PagoDetalle` DESCUENTO) | Campo `descuento`, **repartido entre gravada 10, gravada 5 y exenta** proporcional a cada base; el residuo de redondeo va a la base mayor |
+| Bases e IVA | `gravada10/gravada5/exenta` se guardan **netas** del descuento; `iva10 = round(g10/11)`, `iva5 = round(g5/21)`; todo a entero |
+| Facturas por venta | **Una sola EMITIDA**; para rehacerla, anular. Se mantiene aunque existan dividir cuenta y cobro parcial |
+| Cuándo | En cualquier momento del cobro: se valida contra lo cargado en ese instante. Si después se carga un descuento, se anula y se rehace |
+
+Invariante (test): `propuesta.total == getEstadoCobroVentaInternal.deudaBruta − descuentoGlobal + aumentoGlobal`.
+
+**`create-factura`, en orden:**
+1. `ensurePermission('FACTURACION_EMITIR')`.
+2. Cliente por RUC, **antes** de la transacción (no se pierde una factura por un cliente que no se pudo guardar). Corre aun si después la factura se rechaza.
+3. **Validación sin escribir nada.** En Postgres, dentro de la transacción después de `FOR UPDATE` de la venta y del `TimbradoDetalle` (query builder **sin joins**, #258). En SQLite, **antes** de abrir la transacción y bajo `withFacturaLock` (candado de proceso): con una sola conexión, un rollback por rechazo de negocio dentro de una transacción intercalada se llevaba escrituras de otro handler.
+   - Con venta: no hay otra EMITIDA; renglones de la venta ACTIVOS, sin repetir, con cantidad/precio/IVA de la propuesta (la descripción es editable); envío y recargo reconocidos por monto e IVA; descuento = el del cobro; total = propuesta (±₲1). O **Resumido**: un único renglón, cantidad 1, IVA 10, descuento 0, por el total.
+   - Sin venta (manual): ningún renglón con `ventaItem`.
+   - Siempre: al menos un renglón; `numeroManual` entero, dentro del rango y no usado en ese punto de expedición.
+4. **Escrituras con lista blanca.** La factura se arma sólo con venta/cliente/plantilla/moneda/tipo/condición/receptor; `estado = EMITIDA` y `fecha` los fija el servidor. Un `id` en el payload pisaba una factura o un renglón existente y `estado: 'ANULADA'` anulaba sin `FACTURACION_ANULAR`. Con venta se guardan los montos de la propuesta. Totales, IVA y `total` de cada renglón: `calcularTotalesFactura`. Moneda principal si hay venta.
+5. Numeración: `numeroCompleto = establecimiento-puntoExpedicion-padStart(n,7)` y `numeroActual = max(numeroActual, n+1)`.
+
+**Por qué los dos candados.** En SQLite `withFacturaLock` es lo único que serializa: sin él, dos emisiones simultáneas sacaban el mismo número (pasaba en develop). En Postgres el candado de proceso no alcanza entre dos nodos: lo hacen los `FOR UPDATE`. Con el mismo punto de expedición, el lock del timbrado ya serializa; el de la venta importa cuando se factura sin timbrado. Los dos se prueban desde **dos procesos** en `test:locks-pg` [G] (en un mismo proceso el candado tapa la falta de cualquiera).
+
+> Permiso: `create-factura` y `get-factura-propuesta-venta` exigen **`FACTURACION_EMITIR`** (en `SEED_PERMISOS`).
+
+> El modo cliente factura igual que el servidor: `RepositoryIpcService` en todos los modos y el preload enruta `callIpc` por `/api/rpc`. `RepositoryHttpService` es un esqueleto histórico que no se usa.
 
 ## Flujo de emisión desde el PdV
 
-1. `cobrar-venta-dialog` → botón **"Factura"** abre `FacturarDialogComponent` (`facturas/facturar-dialog/`) con `{venta, items, cliente, total}`.
-2. `prefillFromData()` mapea cada `VentaItem` → ítem de factura (descripción en MAYÚSCULA, `ivaTipo = producto.iva ?? 10`, guarda `productoId`/`ventaItemId`).
+1. `cobrar-venta-dialog` → botón **"Factura"** (siempre habilitado) abre `FacturarDialogComponent` (`facturas/facturar-dialog/`) con `{venta, items, cliente, total}`.
+2. `prefillFromData()`: con venta pide `get-factura-propuesta-venta` y precarga sus renglones y el descuento (`vinculadaVenta = true`). Mientras carga o si falla (con «Reintentar») no se puede emitir ni usar Resumido. Con venta, cantidad, precio, IVA, descuento y renglones **no se editan**; la descripción sí, salvo en envío y recargo. Sin venta (factura manual desde *Facturas*) el diálogo es libre como antes.
 3. `loadRefs()` carga en paralelo timbrado-detalles, plantillas, **Empresa** (emisor) y config; filtra plantillas al `tipoFacturacion` del sistema; preselecciona plantilla y punto de expedición.
-4. **Vínculo de producto por ítem**: autocomplete `searchProductosByNombre` completa descripción/precio/IVA.
-5. `recalc()` — **IVA incluido**: `iva10 = round(gravada10/11)`, `iva5 = round(gravada5/21)`.
+4. **Vínculo de producto por ítem** (sólo factura manual): autocomplete `searchProductosByNombre` completa descripción/precio/IVA.
+5. `recalc()` usa `calcularTotalesFactura` (la misma cuenta que el servidor; IVA incluido, sobre la base neta).
 6. Toggle **Resumido**: colapsa todo en un único ítem `'CONSUMISION'` (IVA 10, cant 1) por el total; al desactivar restaura ítems (backup en memoria). (`b4f43ae`)
-7. `facturar()` valida, llama `create-factura`, muestra `Factura {numeroCompleto} emitida`, imprime si la plantilla tiene `config`, y cierra devolviendo `{factura}`.
+7. `facturar()` valida, llama `create-factura`, muestra `Factura {numeroCompleto} emitida`, imprime si la plantilla tiene `config` (**con los totales que devolvió el servidor**), y cierra devolviendo `{factura}`. Los rechazos del servidor se muestran con `mensajeDeError`.
 
 **Validaciones antes de emitir:** `timbradoDetalleId`, `nombreCliente` (razón social) y `ruc` son `required` (`49e08e3`); el rango del número se valida en el handler.
 

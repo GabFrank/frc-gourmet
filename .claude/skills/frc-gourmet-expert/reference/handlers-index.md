@@ -139,7 +139,7 @@ Los handlers sensibles llaman `ensurePermission(dataSource, getCurrentUser, 'COD
 
 ## Handlers nuevos 2026-07
 
-- `facturacion.handler.ts` — timbrado/plantillas/facturas, numeración atómica. → [domains/facturacion.md](../domains/facturacion.md).
+- `facturacion.handler.ts` — timbrado/plantillas/facturas, numeración atómica; `get-factura-propuesta-venta` (la factura calculada desde la venta) y `create-factura` validado contra la venta (#325/#240). → [domains/facturacion.md](../domains/facturacion.md).
 - `pedidos-online-auth.handler.ts`, `pedidos-online-pedidos.handler.ts`, `pedidos-online-admin.handler.ts` (+ `config`/`menu`) — storefront público (`/pub/*`) + bandeja PdV. → [domains/pedidos-online.md](../domains/pedidos-online.md).
 - `kds.handler.ts` — feed KDS, bump/recall/estado, broadcast de eventos. → [domains/cocina-impresion.md](../domains/cocina-impresion.md).
 - `gastos-caja.handler.ts`, `pdv-egresos.handler.ts` — utilitarios del cajón (GastoCaja / EgresoCaja: vale, compra). → [domains/ventas-pdv.md](../domains/ventas-pdv.md).
