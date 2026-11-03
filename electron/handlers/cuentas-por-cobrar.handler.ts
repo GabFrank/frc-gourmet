@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { DataSource, IsNull } from 'typeorm';
 import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
+import { cancelarCuotasAbiertasDeCpc } from '../utils/cpc-cuotas.utils';
 import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
 import { MovimientoCliente } from '../../src/app/database/entities/financiero/movimiento-cliente.entity';
 import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
@@ -32,6 +33,7 @@ import { PagoOrigenTipo } from '../../src/app/database/entities/financiero/pago-
 import { bloquearSiPagoConsolidado } from './pago-consolidado-guard';
 import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
 import { assertCajaAbiertaSiVino } from '../utils/caja-abierta.utils';
+import { ajustarSaldoCliente, ajustarSaldoCuentaBancaria } from '../utils/saldo-atomico.utils';
 
 function calcularEstadoCuota(monto: number, montoCobrado: number): CuentaPorCobrarCuotaEstado {
   if (montoCobrado >= monto) return CuentaPorCobrarCuotaEstado.COBRADO;
@@ -97,8 +99,7 @@ export async function aplicarCobroConsolidadoCpc(
     const cliente = await queryRunner.manager.findOne(Cliente, { where: { id: clienteId } });
     if (cliente) {
       // La deuda baja por el total: lo cobrado Y lo condonado.
-      cliente.saldoActual = round2(Number(cliente.saldoActual) - monto);
-      await queryRunner.manager.save(Cliente, cliente);
+      cliente.saldoActual = await ajustarSaldoCliente(queryRunner.manager, cliente.id, -monto);
     }
 
     const efectivo = round2(monto - montoDescuento);
@@ -174,8 +175,7 @@ export async function revertirCobroConsolidadoCpc(
 
   const cliente = await queryRunner.manager.findOne(Cliente, { where: { id: clienteId } });
   if (cliente) {
-    cliente.saldoActual = round2(Number(cliente.saldoActual) + monto);
-    await queryRunner.manager.save(Cliente, cliente);
+    cliente.saldoActual = await ajustarSaldoCliente(queryRunner.manager, cliente.id, monto);
   }
 
   const originales = await queryRunner.manager.find(MovimientoCliente, {
@@ -344,8 +344,7 @@ export function registerCuentasPorCobrarHandlers(
       // Actualizar saldoActual del cliente (cargo = deuda con el restaurante)
       const cliente = await clienteRepo.findOne({ where: { id: data.clienteId } });
       if (cliente) {
-        cliente.saldoActual = +(Number(cliente.saldoActual) + montoTotal).toFixed(2);
-        await queryRunner.manager.save(Cliente, cliente);
+        cliente.saldoActual = await ajustarSaldoCliente(queryRunner.manager, cliente.id, montoTotal);
       }
 
       await queryRunner.commitTransaction();
@@ -404,13 +403,16 @@ export function registerCuentasPorCobrarHandlers(
       await setEntityUserTracking(dataSource, cpc, cu?.id, true);
       await queryRunner.manager.save(CuentaPorCobrar, cpc);
 
+      // #322: las cuotas abiertas pasan a CANCELADO para que no sigan sumando
+      // en resúmenes y vencidas (no hay cobros: se validó montoCobrado = 0).
+      await cancelarCuotasAbiertasDeCpc(queryRunner.manager, id);
+
       // Revertir saldoActual del cliente
       const clienteId = cpc.cliente?.id;
       if (clienteId) {
         const cliente = await clienteRepo.findOne({ where: { id: clienteId } });
         if (cliente) {
-          cliente.saldoActual = +(Number(cliente.saldoActual) - montoOriginal).toFixed(2);
-          await queryRunner.manager.save(Cliente, cliente);
+          cliente.saldoActual = await ajustarSaldoCliente(queryRunner.manager, cliente.id, -montoOriginal);
         }
 
         // Crear MovimientoCliente AJUSTE_NEGATIVO
@@ -491,6 +493,9 @@ export function registerCuentasPorCobrarHandlers(
       if (cuota.estado === CuentaPorCobrarCuotaEstado.COBRADO || cuota.estado === CuentaPorCobrarCuotaEstado.CANCELADO) {
         throw new Error('Cuota ya cobrada o cancelada');
       }
+      if ((cuota.cuentaPorCobrar as any)?.estado === CuentaPorCobrarEstado.CANCELADO) {
+        throw new Error('La cuenta por cobrar está cancelada');
+      }
 
       const restante = Number(cuota.monto) - Number(cuota.montoCobrado);
       if (montoCobrar <= 0 || montoCobrar > restante + 0.005) {
@@ -536,8 +541,7 @@ export function registerCuentasPorCobrarHandlers(
       if (esBanco) {
         const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: cuentaBancariaId } });
         if (!cb) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
-        cb.saldo = +(Number(cb.saldo) + montoBanco).toFixed(2);
-        await queryRunner.manager.save(CuentaBancaria, cb);
+        cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, montoBanco);
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId,
           tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
@@ -567,8 +571,7 @@ export function registerCuentasPorCobrarHandlers(
 
       // Actualizar saldoActual del cliente (cobro reduce la deuda)
       if (cliente) {
-        cliente.saldoActual = +(Number(cliente.saldoActual) - montoCobrar).toFixed(2);
-        await queryRunner.manager.save(Cliente, cliente);
+        cliente.saldoActual = await ajustarSaldoCliente(queryRunner.manager, cliente.id, -montoCobrar);
       }
 
       // Crear MovimientoCliente tipo PAGO
@@ -649,8 +652,7 @@ export function registerCuentasPorCobrarHandlers(
         const montoBancoRevertir = Number(ultimoPago.montoCuentaBancaria) > 0 ? Number(ultimoPago.montoCuentaBancaria) : montoAnuladoBanco;
         const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: ultimoPago.cuentaBancariaId } });
         if (cb) {
-          cb.saldo = +(Number(cb.saldo) - montoBancoRevertir).toFixed(2);
-          await queryRunner.manager.save(CuentaBancaria, cb);
+          cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, -montoBancoRevertir);
           await registrarMovimientoBancario(queryRunner.manager, dataSource, {
             cuentaBancariaId: ultimoPago.cuentaBancariaId,
             tipo: MovimientoBancarioTipo.AJUSTE_NEGATIVO,
@@ -677,8 +679,7 @@ export function registerCuentasPorCobrarHandlers(
           if (clienteIdB) {
             const clienteB = await clienteRepo.findOne({ where: { id: clienteIdB } });
             if (clienteB) {
-              clienteB.saldoActual = +(Number(clienteB.saldoActual) + montoAnuladoBanco).toFixed(2);
-              await queryRunner.manager.save(Cliente, clienteB);
+              clienteB.saldoActual = await ajustarSaldoCliente(queryRunner.manager, clienteB.id, montoAnuladoBanco);
             }
             const movAjusteB = movClienteRepo.create({
               cliente: { id: clienteIdB } as any,
@@ -755,8 +756,7 @@ export function registerCuentasPorCobrarHandlers(
         if (clienteId) {
           const cliente = await clienteRepo.findOne({ where: { id: clienteId } });
           if (cliente) {
-            cliente.saldoActual = +(Number(cliente.saldoActual) + montoAnulado).toFixed(2);
-            await queryRunner.manager.save(Cliente, cliente);
+            cliente.saldoActual = await ajustarSaldoCliente(queryRunner.manager, cliente.id, montoAnulado);
           }
 
           // Crear MovimientoCliente AJUSTE_NEGATIVO
@@ -790,25 +790,37 @@ export function registerCuentasPorCobrarHandlers(
   ipcMain.handle('recalcular-saldo-cliente', async (_event, clienteId: number) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'CPC_GESTIONAR');
-      const movRepo = dataSource.getRepository(MovimientoCliente);
-      const clienteRepo = dataSource.getRepository(Cliente);
+      // #350: lock del cliente ANTES de sumar los movimientos, y en la misma
+      // transacción que el UPDATE. Un cobro concurrente toma el mismo lock al
+      // ajustar el saldo (#190), así que o entra antes (y su movimiento se
+      // suma) o espera a que termine el recálculo (y su delta se aplica sobre
+      // el saldo nuevo). Antes se sumaba sin lock y un `save()` escribía un
+      // saldo que podía no incluir ese cobro.
+      const saldo = await dataSource.transaction(async (manager) => {
+        const pg = (manager.connection.options.type as string) === 'postgres';
+        // SQLite: no hay FOR UPDATE; las transacciones de los cobros se serializan
+        // en la única conexión (una escritura suelta podría colarse, como en el
+        // resto de la app).
+        const lock = pg
+          ? await manager.query('SELECT id FROM clientes WHERE id = $1 FOR UPDATE', [Number(clienteId)])
+          : await manager.query('SELECT id FROM clientes WHERE id = ?', [Number(clienteId)]);
+        if (!lock?.length) return null;
 
-      const movimientos = await movRepo.find({ where: { cliente: { id: clienteId } } });
-      let saldo = 0;
-      for (const m of movimientos) {
-        if (m.tipo === MovimientoClienteTipo.CARGO || m.tipo === MovimientoClienteTipo.AJUSTE_POSITIVO) {
-          saldo += Number(m.monto);
-        } else if (m.tipo === MovimientoClienteTipo.PAGO || m.tipo === MovimientoClienteTipo.AJUSTE_NEGATIVO) {
-          saldo -= Number(m.monto);
+        const movimientos = await manager.getRepository(MovimientoCliente).find({ where: { cliente: { id: clienteId } } });
+        let total = 0;
+        for (const m of movimientos) {
+          if (m.tipo === MovimientoClienteTipo.CARGO || m.tipo === MovimientoClienteTipo.AJUSTE_POSITIVO) {
+            total += Number(m.monto);
+          } else if (m.tipo === MovimientoClienteTipo.PAGO || m.tipo === MovimientoClienteTipo.AJUSTE_NEGATIVO) {
+            total -= Number(m.monto);
+          }
         }
-      }
-
-      const cliente = await clienteRepo.findOne({ where: { id: clienteId } });
-      if (cliente) {
-        cliente.saldoActual = +saldo.toFixed(2);
-        await clienteRepo.save(cliente);
-      }
-      return { success: true, saldoRecalculado: +saldo.toFixed(2) };
+        total = +total.toFixed(2);
+        // UPDATE de la columna sola (no `save()` del cliente entero).
+        await manager.update(Cliente, { id: clienteId }, { saldoActual: total });
+        return total;
+      });
+      return { success: true, saldoRecalculado: saldo ?? 0 };
     } catch (error) {
       console.error(`Error recalculando saldo cliente ${clienteId}:`, error);
       throw error;
@@ -1018,8 +1030,9 @@ export function registerCuentasPorCobrarHandlers(
       await setEntityUserTracking(dataSource, movCargo, cu?.id, false);
       await queryRunner.manager.save(MovimientoCliente, movCargo);
 
-      cliente.saldoActual = +(saldoAct + montoTotal).toFixed(2);
-      await queryRunner.manager.save(Cliente, cliente);
+      // El límite de crédito se validó con `saldoAct` (aviso confirmable); el
+      // saldo se ajusta atómico para no pisar un cobro concurrente (#190).
+      cliente.saldoActual = await ajustarSaldoCliente(queryRunner.manager, cliente.id, montoTotal);
 
       await queryRunner.commitTransaction();
 

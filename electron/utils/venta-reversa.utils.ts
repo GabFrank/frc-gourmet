@@ -39,6 +39,8 @@ import {
   MovimientoClienteTipo,
 } from '../../src/app/database/entities/financiero/cuentas-por-cobrar-enums';
 import { setEntityUserTracking } from './entity.utils';
+import { ajustarSaldoCliente } from './saldo-atomico.utils';
+import { cancelarCuotasAbiertasDeCpc } from './cpc-cuotas.utils';
 
 export interface ReversaVentaResumen {
   itemsCancelados: number;
@@ -175,13 +177,14 @@ export async function cancelarVentaCompletaEnTx(
     cpc.motivoCancelacion = (opts.motivo || 'CANCELACION DE VENTA').toUpperCase();
     await setEntityUserTracking(dataSource, cpc, opts.usuarioId, true);
     await manager.save(CuentaPorCobrar, cpc);
+    // #347: sin cobros (validado arriba) → sus cuotas abiertas también se cancelan.
+    await cancelarCuotasAbiertasDeCpc(manager, cpc.id);
     resumen.cpcRevertidaId = cpc.id;
 
     if (clienteId) {
       const cliente = await manager.getRepository(Cliente).findOne({ where: { id: clienteId } });
       if (cliente) {
-        cliente.saldoActual = +(Number(cliente.saldoActual) - montoOriginal).toFixed(2);
-        await manager.save(Cliente, cliente);
+        cliente.saldoActual = await ajustarSaldoCliente(manager, cliente.id, -montoOriginal);
       }
       const mov = manager.getRepository(MovimientoCliente).create({
         cliente: { id: clienteId } as any,

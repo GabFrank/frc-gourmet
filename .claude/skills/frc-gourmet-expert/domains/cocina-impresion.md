@@ -206,7 +206,7 @@ contra SQLite y lo asserta sobre `renderTicketToPlainText`. Pruebas manuales:
 
 ## Estructura de un ticket de venta (ilustrativo)
 
-> Layout de referencia. La salida real la arma `buildVentaTicketLines` con `ticketHeaderEmpresa` (datos de empresa/timbrado desde BD) y columnas CANT/DESCRIPCION/TOTAL via `ticketColumns`. El título real es "COMPROBANTE DE VENTA" (la pre-cuenta no lleva título; cierra con `*** NO ES COMPROBANTE FISCAL ***`).
+> Layout de referencia. La salida real la arma `buildVentaTicketLines` con `ticketHeaderEmpresa` (datos de empresa/timbrado desde BD) y columnas CANT/DESCRIPCION/TOTAL via `ticketColumns`. El título real es "COMPROBANTE DE VENTA" (la pre-cuenta no lleva título; cierra con `*** NO ES COMPROBANTE FISCAL ***`). Si la venta (no delivery) ya tiene pagos registrados —cobro parcial—, la pre-cuenta agrega `PAGADO` y `SALDO` bajo el TOTAL y los totales en otras monedas salen como `SALDO <MONEDA>` (#241).
 
 ```
 ==============================

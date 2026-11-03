@@ -54,6 +54,7 @@ import { dispatchEvento } from '../services/notificacion.service';
 import { selectUsuarioPublico } from '../utils/select-usuario-publico.util';
 import { dispararEventoFt } from '../services/funciones-tareas/eventos';
 import { FtEvento, FtEventoCaja } from '../../src/app/database/entities/rrhh/funciones-tareas/ft.enums';
+import { ajustarSaldoCuentaBancaria } from '../utils/saldo-atomico.utils';
 
 // Alias local para mantener firma legacy de actualizarSaldo
 const actualizarSaldo = actualizarSaldoCajaMayor;
@@ -175,8 +176,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     if (op.tipoOperacion === TipoOperacionFinanciera.DEPOSITO_BANCARIO && op.cuentaBancariaDestino) {
       const cb = await cbRepo.findOne({ where: { id: op.cuentaBancariaDestino.id } });
       if (cb) {
-        cb.saldo = Number(cb.saldo) - Number(op.montoDestino || 0);
-        await queryRunner.manager.save(CuentaBancaria, cb);
+        cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, -(Number(op.montoDestino || 0)));
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId: cb.id,
           tipo: MovimientoBancarioTipo.AJUSTE_NEGATIVO,
@@ -188,8 +188,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     } else if (op.tipoOperacion === TipoOperacionFinanciera.RETIRO_BANCARIO && op.cuentaBancariaOrigen) {
       const cb = await cbRepo.findOne({ where: { id: op.cuentaBancariaOrigen.id } });
       if (cb) {
-        cb.saldo = Number(cb.saldo) + Number(op.montoOrigen || 0);
-        await queryRunner.manager.save(CuentaBancaria, cb);
+        cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, Number(op.montoOrigen || 0));
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId: cb.id,
           tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
@@ -203,8 +202,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       if (op.cuentaBancariaOrigen) {
         const cbO = await cbRepo.findOne({ where: { id: op.cuentaBancariaOrigen.id } });
         if (cbO) {
-          cbO.saldo = Number(cbO.saldo) + Number(op.montoOrigen || 0);
-          await queryRunner.manager.save(CuentaBancaria, cbO);
+          cbO.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cbO.id, Number(op.montoOrigen || 0));
           await registrarMovimientoBancario(queryRunner.manager, dataSource, {
             cuentaBancariaId: cbO.id,
             tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
@@ -217,8 +215,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       if (op.cuentaBancariaDestino) {
         const cbD = await cbRepo.findOne({ where: { id: op.cuentaBancariaDestino.id } });
         if (cbD) {
-          cbD.saldo = Number(cbD.saldo) - Number(op.montoDestino || 0);
-          await queryRunner.manager.save(CuentaBancaria, cbD);
+          cbD.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cbD.id, -(Number(op.montoDestino || 0)));
           await registrarMovimientoBancario(queryRunner.manager, dataSource, {
             cuentaBancariaId: cbD.id,
             tipo: MovimientoBancarioTipo.AJUSTE_NEGATIVO,
@@ -1290,8 +1287,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
         const cb = await cbRepo.findOne({ where: { id: cuentaBancariaId } });
         if (!cb) throw new Error(`CuentaBancaria ${cuentaBancariaId} no encontrada`);
-        cb.saldo = Number(cb.saldo) - monto;
-        await queryRunner.manager.save(CuentaBancaria, cb);
+        cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, -monto);
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId,
           tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
@@ -1371,8 +1367,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       if (esBanco) {
         const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: Number(cuentaBancariaId) } });
         if (!cb) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
-        cb.saldo = Number(cb.saldo) - montoBanco;
-        await queryRunner.manager.save(CuentaBancaria, cb);
+        cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, -montoBanco);
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId: Number(cuentaBancariaId),
           tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
@@ -1422,8 +1417,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           const cb = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: cbId } });
           if (cb) {
             const montoBanco = Number(gasto.montoCuentaBancaria) > 0 ? Number(gasto.montoCuentaBancaria) : Number(gasto.monto);
-            cb.saldo = Number(cb.saldo) + montoBanco;
-            await queryRunner.manager.save(CuentaBancaria, cb);
+            cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, montoBanco);
             await registrarMovimientoBancario(queryRunner.manager, dataSource, {
               cuentaBancariaId: cb.id,
               tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
@@ -1522,8 +1516,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         const cbOld = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: gasto.cuentaBancariaId } });
         if (cbOld) {
           const montoBancoOld = Number(gasto.montoCuentaBancaria) > 0 ? Number(gasto.montoCuentaBancaria) : Number(gasto.monto);
-          cbOld.saldo = Number(cbOld.saldo) + montoBancoOld;
-          await queryRunner.manager.save(CuentaBancaria, cbOld);
+          cbOld.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cbOld.id, montoBancoOld);
           await registrarMovimientoBancario(queryRunner.manager, dataSource, {
             cuentaBancariaId: gasto.cuentaBancariaId,
             tipo: MovimientoBancarioTipo.AJUSTE_POSITIVO,
@@ -1599,8 +1592,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       if (esBanco) {
         const cbNew = await queryRunner.manager.findOne(CuentaBancaria, { where: { id: Number(cuentaBancariaId) } });
         if (!cbNew) throw new Error(`Cuenta bancaria ${cuentaBancariaId} no encontrada`);
-        cbNew.saldo = Number(cbNew.saldo) - montoBancoNew;
-        await queryRunner.manager.save(CuentaBancaria, cbNew);
+        cbNew.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cbNew.id, -montoBancoNew);
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId: Number(cuentaBancariaId),
           tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
@@ -2219,8 +2211,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
         const cb = await cbRepo.findOne({ where: { id: cuentaBancariaId } });
         if (!cb) throw new Error(`CuentaBancaria ${cuentaBancariaId} no encontrada`);
-        cb.saldo = Number(cb.saldo) + monto;
-        await queryRunner.manager.save(CuentaBancaria, cb);
+        cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, monto);
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId,
           tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
@@ -2298,8 +2289,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
         const cb = await cbRepo.findOne({ where: { id: entrada.cuentaBancaria.id } });
         if (cb) {
-          cb.saldo = Number(cb.saldo) - Number(entrada.monto);
-          await queryRunner.manager.save(CuentaBancaria, cb);
+          cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, -(Number(entrada.monto)));
           await registrarMovimientoBancario(queryRunner.manager, dataSource, {
             cuentaBancariaId: entrada.cuentaBancaria.id,
             tipo: MovimientoBancarioTipo.AJUSTE_NEGATIVO,
@@ -2545,8 +2535,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
           const cb = await cbRepo.findOne({ where: { id: data.cuentaBancariaDestinoId } });
           if (!cb) throw new Error(`Cuenta bancaria destino ${data.cuentaBancariaDestinoId} no encontrada`);
-          cb.saldo = Number(cb.saldo) + Number(data.montoDestino);
-          await queryRunner.manager.save(CuentaBancaria, cb);
+          cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, Number(data.montoDestino));
           await registrarMovimientoBancario(queryRunner.manager, dataSource, {
             cuentaBancariaId: data.cuentaBancariaDestinoId,
             tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
@@ -2562,8 +2551,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           const cbRepo = queryRunner.manager.getRepository(CuentaBancaria);
           const cb = await cbRepo.findOne({ where: { id: data.cuentaBancariaOrigenId } });
           if (!cb) throw new Error(`Cuenta bancaria origen ${data.cuentaBancariaOrigenId} no encontrada`);
-          cb.saldo = Number(cb.saldo) - Number(data.montoOrigen);
-          await queryRunner.manager.save(CuentaBancaria, cb);
+          cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, -(Number(data.montoOrigen)));
           await registrarMovimientoBancario(queryRunner.manager, dataSource, {
             cuentaBancariaId: data.cuentaBancariaOrigenId,
             tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
@@ -2639,8 +2627,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           if (!cbDestino) throw new Error(`Cuenta bancaria destino ${data.cuentaBancariaDestinoId} no encontrada`);
 
           // Débito en origen
-          cbOrigen.saldo = Number(cbOrigen.saldo) - Number(data.montoOrigen);
-          await queryRunner.manager.save(CuentaBancaria, cbOrigen);
+          cbOrigen.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cbOrigen.id, -(Number(data.montoOrigen)));
           await registrarMovimientoBancario(queryRunner.manager, dataSource, {
             cuentaBancariaId: data.cuentaBancariaOrigenId,
             tipo: MovimientoBancarioTipo.SALIDA_MANUAL,
@@ -2650,8 +2637,7 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
           });
 
           // Crédito en destino
-          cbDestino.saldo = Number(cbDestino.saldo) + Number(data.montoDestino);
-          await queryRunner.manager.save(CuentaBancaria, cbDestino);
+          cbDestino.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cbDestino.id, Number(data.montoDestino));
           await registrarMovimientoBancario(queryRunner.manager, dataSource, {
             cuentaBancariaId: data.cuentaBancariaDestinoId,
             tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,
@@ -2912,6 +2898,8 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
         .addSelect('cuota.monto', 'monto')
         .addSelect('cuota.montoCobrado', 'montoCobrado')
         .where("cuota.estado IN ('PENDIENTE', 'PARCIAL')")
+        // #322: CPC canceladas antes del arreglo conservan cuotas PENDIENTE.
+        .andWhere("cpc.estado = 'ACTIVO'")
         .getRawMany();
 
       const grupos = new Map<number, {

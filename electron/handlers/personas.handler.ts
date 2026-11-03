@@ -825,8 +825,13 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
       }
 
       await setEntityUserTracking(dataSource, cliente, currentUser?.id, true);
+      // El saldo se mueve sólo con ajustes atómicos (#190): un `save()` con el
+      // `saldoActual` leído arriba pisaría un cobro que entre en el medio
+      // (#350). TypeORM no escribe las columnas en `undefined`.
+      (cliente as any).saldoActual = undefined;
       const updatedCliente = await clienteRepository.save(cliente);
-      return { success: true, cliente: updatedCliente };
+      const saldo = await clienteRepository.findOne({ where: { id: clienteId }, select: ['id', 'saldoActual'] });
+      return { success: true, cliente: { ...updatedCliente, saldoActual: saldo?.saldoActual } };
     } catch (error) {
       console.error('Error updating cliente:', error);
       throw error;
@@ -846,6 +851,8 @@ export function registerPersonasHandlers(dataSource: DataSource, getCurrentUser:
 
       cliente.activo = false;
       await setEntityUserTracking(dataSource, cliente, currentUser?.id, true);
+      // Sin el saldo leído: no pisa un cobro concurrente (#350, ver update-cliente).
+      (cliente as any).saldoActual = undefined;
       await clienteRepository.save(cliente);
       return { success: true };
     } catch (error) {

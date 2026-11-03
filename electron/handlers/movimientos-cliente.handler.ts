@@ -59,6 +59,7 @@ export function registerMovimientosClienteHandlers(
         .innerJoin('cuota.cuentaPorCobrar', 'cpc')
         .where('cpc.cliente_id = :clienteId', { clienteId })
         .andWhere('cuota.estado IN (:...estados)', { estados: [CuentaPorCobrarCuotaEstado.PENDIENTE, CuentaPorCobrarCuotaEstado.PARCIAL] })
+        .andWhere('cpc.estado = :cpcAct', { cpcAct: CuentaPorCobrarEstado.ACTIVO })
         .andWhere('cuota.fecha_vencimiento < :hoy', { hoy })
         .getCount();
 
@@ -98,6 +99,7 @@ export function registerMovimientosClienteHandlers(
         .andWhere('cuota.estado IN (:...estados)', {
           estados: [CuentaPorCobrarCuotaEstado.PENDIENTE, CuentaPorCobrarCuotaEstado.PARCIAL],
         })
+        .andWhere('cpc.estado = :cpcAct', { cpcAct: CuentaPorCobrarEstado.ACTIVO })
         .andWhere('cuota.fecha_vencimiento < :hoy', { hoy: hoyStr })
         .getCount();
 

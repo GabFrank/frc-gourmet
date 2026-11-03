@@ -33,6 +33,7 @@ import {
   pdfFooterPaginado,
 } from '../utils/pdf.utils';
 import { Empresa } from '../../src/app/database/entities/sistema/empresa.entity';
+import { ajustarSaldoCliente, ajustarSaldoCuentaBancaria } from '../utils/saldo-atomico.utils';
 
 /** Linea de corte punteada (para separar/recortar recibos en una hoja). */
 function lineaCorte(): any {
@@ -455,8 +456,7 @@ export function registerConveniosHandlers(
 
         // Reducir saldo del cliente
         if (clienteEntity) {
-          clienteEntity.saldoActual = +(Number(clienteEntity.saldoActual) - montoCliente).toFixed(2);
-          await queryRunner.manager.save(Cliente, clienteEntity);
+          clienteEntity.saldoActual = await ajustarSaldoCliente(queryRunner.manager, clienteEntity.id, -montoCliente);
         }
 
         // MovimientoCliente PAGO (agregado por cliente)
@@ -494,8 +494,7 @@ export function registerConveniosHandlers(
       if (fuente === CobroConsolidadoFuente.CUENTA_BANCARIA) {
         const cb = await queryRunner.manager.getRepository(CuentaBancaria).findOne({ where: { id: cuentaBancariaId } });
         if (!cb) throw new Error('Cuenta bancaria no encontrada');
-        cb.saldo = +(Number(cb.saldo) + totalGeneral).toFixed(2);
-        await queryRunner.manager.save(CuentaBancaria, cb);
+        cb.saldo = await ajustarSaldoCuentaBancaria(queryRunner.manager, cb.id, totalGeneral);
         await registrarMovimientoBancario(queryRunner.manager, dataSource, {
           cuentaBancariaId,
           tipo: MovimientoBancarioTipo.ENTRADA_MANUAL,

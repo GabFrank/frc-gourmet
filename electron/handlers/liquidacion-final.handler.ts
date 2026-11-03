@@ -26,6 +26,7 @@ import { setEntityUserTracking } from '../utils/entity.utils';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { getConfigNumber } from './configuracion-rrhh.handler';
 import { ensurePermission } from '../utils/auth.utils';
+import { ajustarSaldoCliente } from '../utils/saldo-atomico.utils';
 
 function diffDias(d1: Date, d2: Date): number {
   return Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
@@ -407,8 +408,7 @@ export function registerLiquidacionFinalHandlers(
         if (clienteId) {
           const cliente = await clienteRepo.findOne({ where: { id: clienteId } });
           if (cliente) {
-            cliente.saldoActual = +(Number(cliente.saldoActual) - cobrar).toFixed(2);
-            await clienteRepo.save(cliente);
+            cliente.saldoActual = await ajustarSaldoCliente(clienteRepo.manager, cliente.id, -cobrar);
           }
           const movCliente = movClienteRepo.create({
             cliente: { id: clienteId } as any,
