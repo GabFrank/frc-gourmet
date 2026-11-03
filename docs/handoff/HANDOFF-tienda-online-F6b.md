@@ -71,6 +71,29 @@ Los PR en borrador de F6 (#353, base `…-f5`) y F6b (#354, base `…-f6`) ya es
 4. Rebasar F1→F6b sobre develop **ya con #327 y #325 + #240 adentro**, volver a correr `test:all` y comparar contra develop.
 5. Bloqueos externos de la tienda (los gestiona el propietario): credenciales de prueba de uPay, Client ID de Google, Phone Number ID de WhatsApp Business y la prueba de `puente.frcsuite.com`. Lo medio y bajo pendiente está en la issue #343.
 
+### Cómo trabajar sin perder tiempo (reglas del propietario)
+- **Mientras programás, corré solo las suites de lo que tocaste** (por ejemplo `npm run test:factura-venta`, `test:pedidos-online`). Nada de `test:all` en cada paso.
+- **`test:all` va una sola vez**, con el cambio terminado y antes de la auditoría del diff. Corrélo **en paralelo, 3 suites a la vez, en primer plano y con timeout**: nunca en segundo plano esperando con `sleep`. `npm run test:all` es secuencial y tarda mucho; usá este runner (guardalo fuera del repo, por ejemplo `/tmp/par-tests.js`, y corrélo desde la raíz del repo con `node /tmp/par-tests.js "" 3`):
+  ```js
+  const { spawn } = require('child_process');
+  const pkg = require(process.cwd()+'/package.json');
+  const EX = new Set(['test','test:mobile','test:e2e','test:e2e:dev']);
+  const desde = process.argv[2]||''; const N = +process.argv[3]||3;
+  const s = Object.keys(pkg.scripts).filter(k=>k.startsWith('test:')&&!EX.has(k)&&pkg.scripts[k].includes('ts-node')).sort().filter(k=>k>desde);
+  console.log('suites',s.length); const fall=[]; let i=0, act=0;
+  function next(){ if(i>=s.length){ if(act===0) console.log('FALLARON',fall.length,fall.join(', ')); return; }
+    const k=s[i++]; act++; const t=Date.now();
+    const p=spawn('npm',['run','-s',k],{stdio:'ignore'}); const to=setTimeout(()=>p.kill('SIGKILL'),400000);
+    p.on('exit',c=>{ clearTimeout(to); act--; console.log(k,c===0?'ok':'FALLA',((Date.now()-t)/1000).toFixed(0)+'s'); if(c!==0) fall.push(k); next(); }); }
+  for(let j=0;j<N;j++) next();
+  ```
+  El segundo argumento sirve para retomar desde una suite (`node /tmp/par-tests.js test:m 3`). Si una suite falla, re-corréla sola antes de darla por nueva: algunas fallan por correr en paralelo.
+- **La línea base se mide una vez**, con el mismo runner sobre develop, y se compara contra esa lista. En la estación del CEO, develop + #327 da 3 fallas de entorno (pago-consolidado, permisos y pg-backup: sin binario de Electron y sin chown); en otra máquina puede dar otras. Lo único que importa es no sumar fallas.
+- **No recompiles las 3 apps en cada cambio:** para iterar usá `npm start` (recarga en caliente) o compilá solo la app que tocaste. El build completo y `npm run check` van una vez, al final.
+- **Auditoría del plan:** si aprueba con observaciones menores, no rehagas el plan para otra auditoría. Aplicalas al implementar y nombralas al pedir el OK. Se vuelve a auditar solo si cambia el qué o el cómo.
+- **Antes de la auditoría del diff, repasá que hiciste todas las pruebas que pide el plan** (en especial cobrar y facturar de verdad). Si falta una, la auditoría la objeta y es otra vuelta.
+- Para el ítem 1 (#325 + #240) el plan y sus auditorías ya existen: **no los rehagas**. Solo revisá los hallazgos abiertos.
+
 ### Qué tenés que lanzar para probar
 Entorno de prueba con escritorio, PWA y tienda sobre una **SQLite nueva en cada arranque**. Nunca contra una base real.
 
