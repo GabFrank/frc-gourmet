@@ -53,7 +53,8 @@
             <span class="pres muted" *ngIf="it.nombrePresentacion">({{ it.nombrePresentacion }})</span>
           </span>
           <span class="precio">₲ {{ it.subtotal | number:'1.0-0' }}</span>
-          <div class="perso muted" *ngIf="detalleItem(it) as d">{{ d }}</div>
+          <div class="perso muted" *ngIf="it.detalle">{{ it.detalle }}</div>
+          <div class="perso sabor" *ngFor="let ds of it.detalleSabores">{{ ds }}</div>
         </div>
       </div>
 

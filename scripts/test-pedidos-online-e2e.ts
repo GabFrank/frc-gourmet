@@ -873,6 +873,26 @@ async function main() {
       // Igual que el PdV (pdv.component: precioAdicionales = Σ precioAdicionalTotal × proporción, base = mayor precio).
       const pdvAdic = 10000 * 0.5;
       ok(Number(vi.precioAdicionales) === pdvAdic && Number(vi.precioVentaUnitario) === 70000, 'F6b: mismo desglose que la misma pizza cargada en el PdV', [vi.precioVentaUnitario, vi.precioAdicionales]);
+
+      // Stock (objeción de la auditoría): el descargo es el mismo `procesarStockVenta` del PdV.
+      // Mitad CALABRESA sin cebolla y aceituna → morrón; mitad BACON sin tocar (su cebolla sí baja).
+      const { registerVentasHandlers, stopRetryComandaWorker } = require('../electron/handlers/ventas.handler');
+      registerVentasHandlers(dataSource, getCurrentUser);
+      stopRetryComandaWorker();
+      // El descargo corre al concluir la venta (después del cobro), como en el PdV.
+      await R('Venta').update({ id: mat.ventaId }, { estado: 'CONCLUIDA' });
+      let stockErr: any = null;
+      try {
+        const r: any = await invokeHandlerWithContext('procesarStockVenta', undefined, mat.ventaId);
+        if (!r?.success) stockErr = r?.message;
+      } catch (e: any) { stockErr = e?.message; }
+      const movs: any[] = await R('StockMovimiento').find({ where: { referencia: mat.ventaId, tipoReferencia: 'VENTA', activo: true }, relations: ['producto'] });
+      const baja = (prod: any) => movs.filter((m) => m.producto?.id === prod.id).reduce((s, m) => s + Number(m.cantidad), 0);
+      const stock = { cebolla: baja(cebolla), aceituna: baja(aceituna), morron: baja(morron), queso: baja(queso) };
+      ok(!stockErr && movs.length > 0, 'F6b: el stock de la venta se procesa', stockErr ?? movs.length);
+      ok(stock.aceituna === 0 && stock.morron === 0.5, 'F6b stock: el reemplazo baja (½ morrón) y el reemplazado no (aceituna 0)', stock);
+      ok(stock.cebolla === 0.5, 'F6b stock: la cebolla sacada en CALABRESA no baja; la de BACON sí (½)', stock);
+      ok(stock.queso === 0.5, 'F6b stock: el resto de la receta baja por la proporción del sabor (½ queso)', stock);
     } else {
       ok(false, 'F6b: materializar pedido personalizado', mat);
     }
