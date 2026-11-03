@@ -22,12 +22,12 @@ Sos el desarrollador que sigue con la **tienda online de FRC Gourmet** (repo `Ga
 | F3 claves WhatsApp/Google desde la app | `…-f3` | #326 | borrador |
 | F4 pago con tarjeta (uPay) | `…-f4` | #342 | borrador |
 | F5 correcciones de auditoría | `…-f5` | #344 | borrador (falta el visto bueno final del auditor) |
-| **F6** UX de la carta | `bot/ceo-frc-gourmet/feat-tienda-online-f6` | **sin PR** | hecho, sin push hasta este handoff |
-| **F6b** personalizar cada sabor | `bot/ceo-frc-gourmet/feat-tienda-online-f6b` | **sin PR** | hecho, sin push hasta este handoff |
+| **F6** UX de la carta | `bot/ceo-frc-gourmet/feat-tienda-online-f6` | **#353** | borrador |
+| **F6b** personalizar cada sabor | `bot/ceo-frc-gourmet/feat-tienda-online-f6b` | **#354** | borrador |
 
 Todas parten de una base vieja (`5979ae50`, antes de #317, #322, #190, #347 y #350). **Hay que rebasar la cadena sobre el develop actual** y volver a correr las pruebas.
 
-**Primera tarea:** abrí los PR en borrador de F6 (base `…-f5`) y de F6b (base `…-f6`), con título `feat(tienda): …`.
+Los PR en borrador de F6 (#353, base `…-f5`) y F6b (#354, base `…-f6`) ya están abiertos.
 
 ### Qué hace F6 (carta), plan `docs/planes/PLAN-tienda-online-F6-ux-carta.md`
 - La tienda se ve siempre en tema claro, aunque el celular esté en oscuro.
@@ -44,8 +44,12 @@ Todas parten de una base vieja (`5979ae50`, antes de #317, #322, #190, #347 y #3
 - **Pruebas:** `npm run test:pedidos-online` da 168/168. Incluye que la caja (`getEstadoCobroVentaInternal`) y los reportes (`getTotalesPorVenta`) cobren lo mismo que el pedido, y el mismo desglose que en el PdV. También pasan `test:tienda-seguridad`, `test:tienda-categorias` y `test:tienda-online-migracion`. La batería completa da 81 suites: 72 OK y 9 rojas, todas preexistentes (backup-http, mesa-ocupacion, mesa-una-venta-abierta, pago-consolidado, pago-consolidado-e2e, permisos, pg-backup, rate-limit-e2e y reporte-delivery).
 
 ### Lo que falta (en este orden)
-1. **Decisión pendiente del propietario sobre #325.** `src/app/pages/facturacion/facturas/facturar-dialog/facturar-dialog.component.ts` (~L136) precarga cada línea de la factura con `precioVentaUnitario` y deja afuera `precioAdicionales`. Una pizza de ₲ 75.000 (70.000 + borde 5.000) se cobra bien, pero se factura por ₲ 70.000. Ya pasa en el PdV, y la tienda lo haría más frecuente. La recomendación es arreglar **#325 + #240** (que el servidor valide los ítems facturados) antes de prender la personalización. Preguntale al propietario si no lo decidió todavía.
-2. **E2E por pantalla en el entorno de prueba:** aceptar un pedido personalizado → venta → cobro → factura, y comprobar que el total de la factura sea igual al del pedido. Requiere #325 resuelta. Mandale capturas al propietario.
+1. **Arreglar #325 + #240 (es tuyo; el propietario decidió que entra en este traspaso).**
+   - **#325, la factura sale por menos que la venta:** `src/app/pages/facturacion/facturas/facturar-dialog/facturar-dialog.component.ts` (~L136) precarga cada línea con `precioVentaUnitario` y deja afuera `precioAdicionales` (y el descuento del ítem). Una pizza de ₲ 75.000 (70.000 + borde 5.000) se cobra bien, pero se factura por ₲ 70.000. Ya pasa hoy en el PdV de Don Franco, y la personalización por sabor de la tienda lo haría más frecuente. Cada línea tiene que salir con el mismo total que cobra la caja (`getEstadoCobroVentaInternal`): precio base + adicionales (incluidos los de cada `VentaItemSabor`) − descuento, con el IVA bien repartido.
+   - **#240, el servidor no valida lo que se factura:** hoy acepta los ítems y montos que manda la pantalla. El handler que crea la factura tiene que recalcular desde la venta y rechazar (o corregir) una factura cuyo total no coincida con el de la venta.
+   - **Cómo:** va en una rama propia `fix/` **desde develop** (no en la cadena de la tienda), con su plan en `docs/planes/PLAN-factura-adicionales-325-240.md`, auditoría, OK del propietario y PR propio. Toca cobro y factura: antes del merge hay que **cobrar y facturar de verdad** en el entorno de prueba (venta del PdV con adicional y con descuento, y un pedido online personalizado) y mandarle capturas al propietario. Después rebasá la cadena de la tienda encima.
+   - Recién con #325 + #240 mergeadas se puede encender `personalizar_sabores` en Don Franco.
+2. **E2E por pantalla en el entorno de prueba:** aceptar un pedido personalizado → venta → cobro → factura, y comprobar que el total de la factura sea igual al del pedido. Requiere #325 + #240 resueltas. Mandale capturas al propietario.
 3. Objeciones medias de la auditoría:
    - La bandeja de pedidos del escritorio no muestra el detalle por sabor.
    - Falta una prueba de stock: lo que se saca no baja del stock y el reemplazo sí.
