@@ -1,5 +1,7 @@
 import { ipcMain } from 'electron';
+import { otpWhatsappDisponible } from '../utils/whatsapp-sender';
 import { DataSource } from 'typeorm';
+import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zona-delivery.entity';
 import { TiendaOnlineConfig } from '../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
 import { getVariacionConfig } from '../utils/variacion-config.utils';
@@ -75,6 +77,8 @@ function mapConfigPublic(cfg: TiendaOnlineConfig): any {
     montoMinimoPedido: Number(cfg.montoMinimoPedido),
     // Client ID de Google OAuth (env). Si está, el storefront muestra el botón.
     googleClientId: process.env['GOOGLE_CLIENT_ID'] || null,
+    // Login por código de WhatsApp: solo si hay un canal real de envío.
+    otpWhatsappDisponible: otpWhatsappDisponible(),
   };
 }
 
@@ -84,7 +88,14 @@ export function registerPedidosOnlineConfigHandlers(
 ): void {
   // Público: el storefront lee la config.
   ipcMain.handle('get-tienda-online-config-public', async () => {
-    return mapConfigPublic(await getTiendaConfig(dataSource));
+    const pub = mapConfigPublic(await getTiendaConfig(dataSource));
+    // Delivery solo si hay alguna zona activa dibujada: sin zona no se puede
+    // cobrar el envío (PLAN-tienda-online A3).
+    if (pub.permiteDelivery) {
+      const zonas = await dataSource.getRepository(ZonaDelivery).find({ where: { activa: true } });
+      pub.permiteDelivery = zonas.some((z) => !!z.poligono);
+    }
+    return pub;
   });
 
   // Admin: leer la config completa (para la pantalla).

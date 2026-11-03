@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { DataSource, In } from 'typeorm';
+import { DataSource, In, IsNull } from 'typeorm';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
 import { PrecioVenta } from '../../src/app/database/entities/productos/precio-venta.entity';
 import { Receta } from '../../src/app/database/entities/productos/receta.entity';
@@ -20,7 +20,7 @@ import { registerPublicOperation } from '../server/public-routes';
 import { getTiendaConfig, estaAbierta, getPizzaConfig } from './pedidos-online-config.handler';
 import { resolverZonaPorPunto } from '../utils/geo.utils';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
-import { ipEnRangosLan } from '../utils/ip-lan.util';
+import { ipPermitidaMesa } from '../utils/ip-lan.util';
 
 /**
  * Pedidos online — Fase 3: creación de pedido + zonas de delivery (superficie pública).
@@ -235,11 +235,56 @@ export function registerPedidosOnlinePedidosHandlers(
   });
 
   // ============== CREAR PEDIDO (público, requiere cliente) ==============
+  const MAX_ITEMS_PEDIDO = 40;
+  const MAX_CANTIDAD_ITEM = 50;
+  const recortar = (v: any, max: number): string | undefined => {
+    const t = v == null ? '' : String(v).trim();
+    return t ? t.slice(0, max) : undefined;
+  };
+
+  // Idempotencia (PLAN-tienda-online A2.4): el storefront manda un uuid por intento.
+  // La clave es única POR DUEÑO (cuenta o, si es invitado, mesa): una clave igual de
+  // otro dueño nunca devuelve datos ajenos, se trata como clave nueva.
+  const normalizarIdemKey = (v: any): string | null => {
+    const t = v == null ? '' : String(v).trim();
+    return /^[A-Za-z0-9-]{8,64}$/.test(t) ? t : null;
+  };
+  const buscarPorIdemKey = async (
+    key: string, cuenta: CuentaCliente | null, mesa: PdvMesa | null,
+  ): Promise<PedidoOnline | null> => {
+    if (cuenta) {
+      return pedidoRepo().findOne({ where: { idempotencyKey: key, cuentaCliente: { id: cuenta.id } } });
+    }
+    if (mesa) {
+      return pedidoRepo().findOne({ where: { idempotencyKey: key, mesaId: mesa.id, cuentaCliente: IsNull() } });
+    }
+    return null;
+  };
+  const respuestaExistente = (p: PedidoOnline) => ({
+    success: true,
+    numero: p.numero,
+    pedidoId: p.id,
+    estado: p.estado,
+    subtotal: Number(p.subtotal),
+    costoEnvio: Number(p.costoEnvio),
+    total: Number(p.total),
+    ventaId: p.ventaId ?? null,
+    repetido: true,
+  });
+
   ipcMain.handle('crear-pedido-online', async (event: any, data: any) => {
     const customerId = event?._customerId;
+    const idemKey = normalizarIdemKey(data?.idempotencyKey);
     const tipoPedido: TipoPedidoOnline = data?.tipoPedido || TipoPedidoOnline.PICKUP;
+    if (!Object.values(TipoPedidoOnline).includes(tipoPedido)) return { success: false, error: 'tipo_pedido_invalido' };
     const itemsIn: any[] = Array.isArray(data?.items) ? data.items : [];
     if (!itemsIn.length) return { success: false, error: 'pedido_sin_items' };
+    // Topes de entrada (PLAN-tienda-online A2).
+    if (itemsIn.length > MAX_ITEMS_PEDIDO) return { success: false, error: 'demasiados_items' };
+    if (itemsIn.some((it) => Number(it?.cantidad) > MAX_CANTIDAD_ITEM)) return { success: false, error: 'cantidad_excedida' };
+    const metodoPagoIn = data?.metodoPago || MetodoPagoOnline.EFECTIVO;
+    // Solo efectivo hasta que exista el cobro online (F4): un pago "UPAY" sin cobrar no puede entrar.
+    if (metodoPagoIn !== MetodoPagoOnline.EFECTIVO) return { success: false, error: 'metodo_pago_no_disponible' };
 
     // Config de tienda: apertura.
     const cfg = await getTiendaConfig(dataSource);
@@ -264,7 +309,7 @@ export function registerPedidosOnlinePedidosHandlers(
       // local). Requiere trustProxy si el server está detrás de reverse proxy.
       if (cfg.requiereLanMesa) {
         const clientIp = String(event?._clientIp || '');
-        if (!ipEnRangosLan(clientIp, cfg.rangoLanMesa)) {
+        if (!ipPermitidaMesa(clientIp, !!event?._viaTunel, cfg.rangoLanMesa)) {
           return { success: false, error: 'fuera_de_red_local' };
         }
       }
@@ -285,6 +330,11 @@ export function registerPedidosOnlinePedidosHandlers(
       if (tipoPedido === TipoPedidoOnline.DELIVERY && !cfg.permiteDelivery) {
         return { success: false, error: 'delivery_no_disponible' };
       }
+    }
+
+    if (idemKey) {
+      const previo = await buscarPorIdemKey(idemKey, cuenta, mesa);
+      if (previo) return respuestaExistente(previo);
     }
 
     const productoRepo = dataSource.getRepository(Producto);
@@ -389,6 +439,10 @@ export function registerPedidosOnlinePedidosHandlers(
         // Compat: instalaciones que todavía no dibujaron sus zonas.
         zona = zonas.find((z) => z.id === Number(data.zonaDeliveryId)) || null;
         if (!zona) return { success: false, error: 'zona_delivery_invalida' };
+      } else {
+        // Sin zonas cargadas no hay forma de cobrar el envío: antes salía gratis
+        // a cualquier dirección (PLAN-tienda-online A3).
+        return { success: false, error: 'delivery_no_disponible' };
       }
 
       if (zona) {
@@ -423,6 +477,8 @@ export function registerPedidosOnlinePedidosHandlers(
     pedido.telefonoCliente = (cuenta?.telefono ?? null) as any;
     pedido.tipoPedido = tipoPedido;
     if (mesa) pedido.mesaId = mesa.id;
+    // Sin dueño (no debería pasar) no se guarda la clave: no habría índice que la cubra.
+    if (idemKey && (cuenta || mesa)) pedido.idempotencyKey = idemKey;
     // Aceptación automática: entra ACEPTADO directo; si no, RECIBIDO (revisión en PdV).
     if (cfg.aceptacionAutomatica) {
       pedido.estado = EstadoPedidoOnline.ACEPTADO;
@@ -430,26 +486,27 @@ export function registerPedidosOnlinePedidosHandlers(
     } else {
       pedido.estado = EstadoPedidoOnline.RECIBIDO;
     }
+    // El canal lo decide el servidor, no el cliente.
     pedido.canalOrigen = tipoPedido === TipoPedidoOnline.MESA_QR
       ? CanalPedidoOnline.QR_MESA
-      : (data?.canalOrigen || CanalPedidoOnline.WEB);
+      : CanalPedidoOnline.WEB;
     // MESA_QR: el pago es SIEMPRE en la caja física; el método queda EFECTIVO.
     pedido.metodoPago = tipoPedido === TipoPedidoOnline.MESA_QR
       ? MetodoPagoOnline.EFECTIVO
-      : (data?.metodoPago || MetodoPagoOnline.EFECTIVO);
-    pedido.fechaProgramada = data?.fechaProgramada ? new Date(data.fechaProgramada) : undefined;
+      : metodoPagoIn;
+    // fechaProgramada no tiene UI ni flujo: se ignora (antes se guardaba sin validar).
     pedido.subtotal = subtotal;
     pedido.costoEnvio = costoEnvio;
     pedido.total = total;
     if (monedaId != null) pedido.moneda = { id: monedaId } as any;
     if (zona) pedido.zonaDelivery = zona;
-    pedido.direccionEntrega = data?.direccionEntrega || undefined;
-    pedido.referenciaDireccion = data?.referenciaDireccion || undefined;
+    pedido.direccionEntrega = recortar(data?.direccionEntrega, 500);
+    pedido.referenciaDireccion = recortar(data?.referenciaDireccion, 255);
     if (tipoPedido === TipoPedidoOnline.DELIVERY) {
       if (typeof data?.latitud === 'number') pedido.latitud = data.latitud;
       if (typeof data?.longitud === 'number') pedido.longitud = data.longitud;
     }
-    pedido.notas = data?.notas || undefined;
+    pedido.notas = recortar(data?.notas, 500);
     pedido.items = itemsToSave;
 
     // El número (`count()+1`) puede colisionar con pedidos concurrentes (ej. un
@@ -461,6 +518,12 @@ export function registerPedidosOnlinePedidosHandlers(
         saved = await pedidoRepo().save(pedido);
         break;
       } catch (e) {
+        // Reintento concurrente con la misma clave: el índice único lo frena; se
+        // devuelve el pedido que ganó la carrera en vez de duplicarlo.
+        if (pedido.idempotencyKey) {
+          const previo = await buscarPorIdemKey(pedido.idempotencyKey, cuenta, mesa);
+          if (previo) return respuestaExistente(previo);
+        }
         if (intento >= 6) throw e;
         pedido.numero = await siguienteNumero(pedidoRepo());
       }
@@ -498,9 +561,14 @@ export function registerPedidosOnlinePedidosHandlers(
   });
 
   // ============== MIS PEDIDOS (público, requiere cliente) ==============
+  // Cuenta dada de baja: no sigue viendo pedidos con un token vigente (PLAN-tienda-online A1).
+  const cuentaActiva = async (id: number): Promise<boolean> =>
+    !!(await dataSource.getRepository(CuentaCliente).findOne({ where: { id, activo: true }, select: ['id'] }));
+
   ipcMain.handle('get-mis-pedidos-online', async (event: any) => {
     const customerId = event?._customerId;
     if (!customerId) return { success: false, error: 'no_autenticado' };
+    if (!(await cuentaActiva(customerId))) return { success: false, error: 'cuenta_invalida' };
     const pedidos = await pedidoRepo().find({
       where: { cuentaCliente: { id: customerId } },
       relations: ['items'],
@@ -514,6 +582,7 @@ export function registerPedidosOnlinePedidosHandlers(
   ipcMain.handle('get-pedido-online-estado', async (event: any, numero: string) => {
     const customerId = event?._customerId;
     if (!customerId) return { success: false, error: 'no_autenticado' };
+    if (!(await cuentaActiva(customerId))) return { success: false, error: 'cuenta_invalida' };
     const pedido = await pedidoRepo().findOne({
       where: { numero, cuentaCliente: { id: customerId } },
       relations: ['items'],
@@ -554,9 +623,9 @@ export function registerPedidosOnlinePedidosHandlers(
     });
     const conPoligono = zonas.filter((z) => !!z.poligono);
     if (!conPoligono.length) {
-      // Todavía nadie dibujó las zonas: no se puede cotizar, pero tampoco se
-      // bloquea el pedido (el handler de creación mantiene el camino de compat).
-      return { success: true, cubierto: true, sinZonasDefinidas: true, costoEnvio: 0, zona: null };
+      // Todavía nadie dibujó las zonas: no se puede cotizar ni cobrar el envío,
+      // así que no hay delivery por la tienda (PLAN-tienda-online A3).
+      return { success: true, cubierto: false, sinZonasDefinidas: true, costoEnvio: 0, zona: null };
     }
     const zona = resolverZonaPorPunto(lat, lng, conPoligono as any) as ZonaDelivery | null;
     if (!zona) return { success: true, cubierto: false, costoEnvio: 0, zona: null };
