@@ -861,6 +861,18 @@ async function main() {
       ok(mods.length === 2 && mods.every((m) => !!m.ventaItemSabor) && mods.some((m) => m.tipoModificacion === 'REMOVIDO' && m.recetaIngrediente?.id === riCebolla.id)
         && mods.some((m) => m.tipoModificacion === 'INTERCAMBIADO' && m.ingredienteReemplazo?.id === morron.id), 'F6b: modificaciones con su sabor (como el PdV)', mods.map((m) => m.tipoModificacion));
       ok(ads.length === 1 && !!ads[0].ventaItemSabor && Number(ads[0].precioCobrado) === 10000, 'F6b: adicional con su sabor, precioCobrado de lista (como el PdV)', ads);
+      // Lo que la caja cobra (mismas funciones que el panel de cobro y los reportes) = total del pedido.
+      const { getEstadoCobroVentaInternal } = require('../electron/handlers/ventas.handler');
+      const { getTotalesPorVenta } = require('../electron/utils/venta-total.utils');
+      const est: any = await getEstadoCobroVentaInternal(dataSource, mat.ventaId);
+      const tot = (await getTotalesPorVenta(dataSource, [mat.ventaId])).get(mat.ventaId);
+      const pedTotal = Number((await R('PedidoOnline').findOne({ where: { id: ped.id } }) as any)?.total);
+      ok(Math.abs(Number(est.deudaBruta) - pedTotal) < 0.5 && Math.abs(Number(est.pendienteBruto) - pedTotal) < 0.5,
+        'F6b: la caja cobra lo mismo que el pedido (deuda = total del pedido)', [est.deudaBruta, est.pendienteBruto, pedTotal]);
+      ok(Math.abs(Number(tot) - pedTotal) < 0.5, 'F6b: el total de la venta en reportes = total del pedido', [tot, pedTotal]);
+      // Igual que el PdV (pdv.component: precioAdicionales = Σ precioAdicionalTotal × proporción, base = mayor precio).
+      const pdvAdic = 10000 * 0.5;
+      ok(Number(vi.precioAdicionales) === pdvAdic && Number(vi.precioVentaUnitario) === 70000, 'F6b: mismo desglose que la misma pizza cargada en el PdV', [vi.precioVentaUnitario, vi.precioAdicionales]);
     } else {
       ok(false, 'F6b: materializar pedido personalizado', mat);
     }
