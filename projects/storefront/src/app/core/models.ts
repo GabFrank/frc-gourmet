@@ -82,6 +82,11 @@ export interface MenuProducto {
 export interface MenuCategoria {
   id: number | string;
   nombre: string;
+  /**
+   * Categoría de la tienda armada a mano en «Config Tienda Online»: sus productos, en orden.
+   * Un producto puede estar en varias. Sin esto, la categoría agrupa por `MenuProducto.categoriaId`.
+   */
+  productoIds?: number[];
 }
 
 export interface MenuSnapshot {

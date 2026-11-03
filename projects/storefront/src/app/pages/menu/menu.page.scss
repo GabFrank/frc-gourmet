@@ -35,17 +35,17 @@
 .menu-body { padding-top: 8px; padding-bottom: 96px; }
 .empty { text-align: center; padding: 40px 0; }
 
-.cat-section { scroll-margin-top: 110px; margin-bottom: 8px; }
 .cat-title { font-size: 18px; font-weight: 700; margin: 18px 0 10px; }
 
 .prod-card {
   width: 100%; text-align: left;
-  display: flex; align-items: stretch; gap: 12px;
+  display: flex; align-items: center; gap: 12px;
   background: var(--sf-surface);
   border: none; border-bottom: 1px solid var(--sf-divider);
   padding: 14px 0; position: relative;
 }
 .prod-info { flex: 1; min-width: 0; }
+/* Fila: foto a la izquierda, nombre/descripción/precio y el «+» a la derecha (nunca encima de la foto). */
 .prod-nombre { font-size: 16px; font-weight: 600; color: var(--sf-text); }
 .prod-desc {
   font-size: 13px; color: var(--sf-text-muted); margin-top: 4px; line-height: 1.4;
@@ -59,7 +59,7 @@
   background-color: var(--sf-surface-alt); flex-shrink: 0;
 }
 .prod-add {
-  position: absolute; right: 8px; bottom: 20px;
+  flex-shrink: 0; margin-right: 4px;
   width: 30px; height: 30px; border-radius: 50%;
   background: var(--sf-surface); border: 1.5px solid var(--sf-primary); color: var(--sf-primary);
   font-size: 20px; line-height: 26px; text-align: center; font-weight: 700;
