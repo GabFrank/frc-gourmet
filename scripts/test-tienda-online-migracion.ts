@@ -38,6 +38,17 @@ async function main() {
     await ds.runMigrations({ transaction: 'each' });
     for (let i = 0; i < posteriores; i++) await ds.undoLastMigration({ transaction: 'each' });
   };
+  // Sube todo y baja las migraciones de la tienda posteriores a F4 (F6 en adelante), para
+  // que los bloques F2-F4 de abajo sigan encontrando a F4 como la última.
+  const POSTERIORES_A_F4 = /TiendaCategorias/;
+  const subirSinPosteriores = async () => {
+    await ds.runMigrations({ transaction: 'each' });
+    for (;;) {
+      const u = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
+      if (!POSTERIORES_A_F4.test(String(u))) break;
+      await ds.undoLastMigration({ transaction: 'each' });
+    }
+  };
   const columnas = async (): Promise<string[]> => pgDb
     ? (await ds.query(`SELECT column_name AS c FROM information_schema.columns WHERE table_schema='public' AND table_name='pedidos_online'`)).map((r: any) => r.c)
     : (await ds.query(`PRAGMA table_info('pedidos_online')`)).map((r: any) => r.name);
@@ -85,7 +96,7 @@ async function main() {
 
   // F2: TiendaSeguimientoMesa (columna del hash de seguimiento + índice), up / down / up.
   // Se sube todo y se bajan F4 y F3 para que F2 quede última.
-  await ds.runMigrations({ transaction: 'each' });
+  await subirSinPosteriores();
   await ds.undoLastMigration({ transaction: 'each' });
   await ds.undoLastMigration({ transaction: 'each' });
   const ultima = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
@@ -97,7 +108,7 @@ async function main() {
   await ds.undoLastMigration({ transaction: 'each' });
   ok(!(await columnas()).includes('seguimiento_token_hash'), 'F2 down quita la columna');
   ok(!(await indices()).some((n) => /IDX_pedidos_online_seguimiento/.test(n)), 'F2 down quita el índice');
-  await ds.runMigrations({ transaction: 'each' });
+  await subirSinPosteriores();
   ok((await columnas()).includes('seguimiento_token_hash'), 'F2 up de nuevo la vuelve a crear');
 
   // F3: TiendaIngresoClientes (4 columnas nullable en tienda_online_config), up / down / up.
@@ -119,7 +130,7 @@ async function main() {
   ok(!F3_COLS.some((c) => sinF3.includes(c)), 'F3 down quita las 4 columnas', sinF3);
   const fila = await ds.query(`SELECT nombre_comercio FROM tienda_online_config`);
   ok(fila.length === 1 && fila[0].nombre_comercio === 'ZT-CFG', 'F3 down conserva la fila de config', fila);
-  await ds.runMigrations({ transaction: 'each' });
+  await subirSinPosteriores();
   ok((await colsCfg()).includes('google_client_id'), 'F3 up de nuevo las vuelve a crear');
   await ds.query(`DELETE FROM tienda_online_config WHERE nombre_comercio = 'ZT-CFG'`);
 
