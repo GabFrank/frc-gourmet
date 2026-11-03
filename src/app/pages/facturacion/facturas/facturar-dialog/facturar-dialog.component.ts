@@ -19,6 +19,8 @@ import { FacturaPlantilla } from '../../../../database/entities/facturacion/fact
 import { TipoFacturacion } from '../../../../database/entities/facturacion/factura.entity';
 import { buildDocDefinition, loadPdfMake, FacturaRenderContext } from '../../plantillas/plantilla-render.util';
 import { montoEnLetras } from '../../../../shared/utils/monto-letras.util';
+import { calcularTotalesFactura } from '../../../../shared/utils/factura-totales.util';
+import { mensajeDeError } from '../../../../shared/utils/error-message.util';
 
 @Component({
   selector: 'app-facturar-dialog',
@@ -70,6 +72,16 @@ export class FacturarDialogComponent implements OnInit {
 
   /** Venta de origen (si se factura desde el cobro del PdV). */
   prefillVentaId?: number;
+  /**
+   * Con venta, los renglones salen de la propuesta del servidor y no se editan
+   * montos, IVA ni renglones: `create-factura` rechaza todo lo que no sea la
+   * venta (#240), así que dejarlos editables sólo serviría para chocar ahí.
+   * Se puede cambiar la descripción y usar Resumido.
+   */
+  vinculadaVenta = false;
+  cargandoPropuesta = false;
+  /** Si no se pudo calcular la factura de la venta, no se deja emitir. */
+  errorPropuesta = '';
   /** Cliente vinculado (desde el cobro o desde el buscador de clientes). */
   clienteId?: number;
   /** Etiqueta del cliente seleccionado (para mostrar en el dialogo). */
@@ -123,25 +135,45 @@ export class FacturarDialogComponent implements OnInit {
     this.prefillVentaId = d.venta?.id;
     const cliente = d.cliente || d.venta?.cliente;
     if (cliente) this.aplicarCliente(cliente);
-    const items: any[] = d.items || [];
-    if (items.length) {
-      this.itemsArray.clear();
-      for (const it of items) {
-        const prod = it.producto;
-        const pres = it.presentacion;
-        const desc = `${prod?.nombre || it.descripcion || ''}${pres?.nombre ? ' (' + pres.nombre + ')' : ''}`.trim();
-        this.addItem({
-          descripcion: desc.toUpperCase(),
-          cantidad: Number(it.cantidad) || 1,
-          precioUnitario: Number(it.precioVentaUnitario ?? it.precioUnitario) || 0,
-          ivaTipo: prod?.iva ?? 10,
-          productoId: prod?.id ?? null,
-          productoNombre: prod?.nombre ?? '',
-          ventaItemId: it.id ?? null,
-        });
-      }
+    if (this.prefillVentaId) {
+      this.vinculadaVenta = true;
+      this.cargarPropuesta(this.prefillVentaId);
     } else {
       this.addItem();
+    }
+  }
+
+  /**
+   * Precarga la factura que calcula el servidor desde la venta: un renglón por
+   * ítem con sus adicionales y su descuento, el envío, el recargo y el descuento
+   * del cobro. Antes se precargaba sólo `precioVentaUnitario` y la factura salía
+   * por menos que lo cobrado (#325).
+   */
+  private async cargarPropuesta(ventaId: number): Promise<void> {
+    this.cargandoPropuesta = true;
+    this.errorPropuesta = '';
+    try {
+      const propuesta: any = await firstValueFrom(this.repositoryService.getFacturaPropuestaVenta(ventaId));
+      this.itemsArray.clear();
+      for (const l of propuesta?.lineas || []) {
+        this.addItem({
+          descripcion: l.descripcion,
+          cantidad: Number(l.cantidad) || 0,
+          precioUnitario: Number(l.precioUnitario) || 0,
+          ivaTipo: Number(l.ivaTipo),
+          productoId: l.productoId ?? null,
+          productoNombre: l.productoNombre ?? '',
+          ventaItemId: l.ventaItemId ?? null,
+        });
+      }
+      if (!this.itemsArray.length) this.errorPropuesta = 'La venta no tiene ítems para facturar';
+      this.form.patchValue({ descuento: Number(propuesta?.descuento) || 0 });
+    } catch (error) {
+      console.error('Error calculando la factura de la venta:', error);
+      this.errorPropuesta = mensajeDeError(error, 'No se pudo calcular la factura de la venta');
+    } finally {
+      this.cargandoPropuesta = false;
+      this.recalc();
     }
   }
 
@@ -315,10 +347,16 @@ export class FacturarDialogComponent implements OnInit {
       cantidad: [init?.cantidad ?? 1, [Validators.required, Validators.min(0.001)]],
       precioUnitario: [init?.precioUnitario ?? 0, [Validators.required, Validators.min(0)]],
       ivaTipo: [init?.ivaTipo ?? 10],
+      ivaLabel: [this.ivaLabel(init?.ivaTipo ?? 10)],
       productoId: [init?.productoId ?? null],
       productoNombre: [init?.productoNombre ?? ''],
       ventaItemId: [init?.ventaItemId ?? null],
     }));
+  }
+
+  private ivaLabel(ivaTipo: any): string {
+    const n = Number(ivaTipo);
+    return n === 10 ? '10%' : n === 5 ? '5%' : 'Exenta';
   }
 
   removeItem(i: number): void {
@@ -383,23 +421,19 @@ export class FacturarDialogComponent implements OnInit {
     this.recalc();
   }
 
+  /** Misma cuenta que hace el servidor al guardar (`calcularTotalesFactura`). */
   recalc(): void {
-    let g10 = 0, g5 = 0, ex = 0;
-    for (const ctrl of this.itemsArray.controls) {
-      const v = ctrl.value;
-      const lineTotal = (Number(v.cantidad) || 0) * (Number(v.precioUnitario) || 0);
-      if (Number(v.ivaTipo) === 10) g10 += lineTotal;
-      else if (Number(v.ivaTipo) === 5) g5 += lineTotal;
-      else ex += lineTotal;
-    }
-    const descuento = Number(this.form.get('descuento')?.value) || 0;
-    this.gravada10 = g10;
-    this.gravada5 = g5;
-    this.exenta = ex;
-    this.iva10 = Math.round(g10 / 11);
-    this.iva5 = Math.round(g5 / 21);
-    this.totalIva = this.iva10 + this.iva5;
-    this.total = g10 + g5 + ex - descuento;
+    const t = calcularTotalesFactura(
+      this.itemsArray.controls.map((c) => c.value),
+      this.form.get('descuento')?.value,
+    );
+    this.gravada10 = t.gravada10;
+    this.gravada5 = t.gravada5;
+    this.exenta = t.exenta;
+    this.iva10 = t.iva10;
+    this.iva5 = t.iva5;
+    this.totalIva = t.totalIva;
+    this.total = t.total;
   }
 
   private buildContext(factura: any): FacturaRenderContext {
@@ -416,11 +450,18 @@ export class FacturarDialogComponent implements OnInit {
         numero: factura?.timbradoDetalle?.timbrado?.numero || '',
         vigencia: '',
       },
+      // Los totales que guardó el servidor, no los locales: el PDF tiene que
+      // decir lo mismo que la base.
       totales: {
-        gravada10: this.gravada10, gravada5: this.gravada5, exenta: this.exenta,
-        iva10: this.iva10, iva5: this.iva5, totalIva: this.totalIva,
-        descuento: Number(v.descuento) || 0, total: this.total,
-        totalEnLetras: montoEnLetras(this.total, 'PYG'),
+        gravada10: Number(factura?.gravada10) || 0,
+        gravada5: Number(factura?.gravada5) || 0,
+        exenta: Number(factura?.exenta) || 0,
+        iva10: Number(factura?.iva10) || 0,
+        iva5: Number(factura?.iva5) || 0,
+        totalIva: (Number(factura?.iva10) || 0) + (Number(factura?.iva5) || 0),
+        descuento: Number(factura?.descuento) || 0,
+        total: Number(factura?.total) || 0,
+        totalEnLetras: montoEnLetras(Number(factura?.total) || 0, 'PYG'),
       },
       empresa: {
         nombre: up(this.empresa?.nombre || this.empresa?.razonSocial || ''),
@@ -449,6 +490,7 @@ export class FacturarDialogComponent implements OnInit {
   }
 
   async facturar(): Promise<void> {
+    if (this.cargandoPropuesta || this.errorPropuesta) return;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       this.snackBar.open('Complete los campos requeridos', 'Cerrar', { duration: 3000 });
@@ -508,7 +550,7 @@ export class FacturarDialogComponent implements OnInit {
       this.dialogRef.close({ factura });
     } catch (error: any) {
       console.error('Error facturando:', error);
-      this.snackBar.open(error?.message || 'Error al emitir la factura', 'Cerrar', { duration: 5000 });
+      this.snackBar.open(mensajeDeError(error, 'Error al emitir la factura'), 'Cerrar', { duration: 6000 });
     } finally {
       this.isSaving = false;
     }

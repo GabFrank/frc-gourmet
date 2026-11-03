@@ -226,13 +226,13 @@ export async function calcularFacturaDeVenta(
 /** Tolerancia de montos en guaraníes: el redondeo a entero de la factura. */
 const TOL_MONTO = 1;
 
-/** Error de negocio de la factura: el mensaje es para el cajero. */
-export class FacturaInvalidaError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'FacturaInvalidaError';
-  }
-}
+/**
+ * Error de negocio de la factura: el mensaje es para el cajero.
+ *
+ * Sin `name` propio a propósito: IPC lo serializa como `<name>: <mensaje>` y
+ * `mensajeDeError` sólo desenvuelve el `Error: ` estándar.
+ */
+export class FacturaInvalidaError extends Error {}
 
 function idVentaItemDe(it: any): number | null {
   const id = Number(it?.ventaItem?.id ?? it?.ventaItemId);

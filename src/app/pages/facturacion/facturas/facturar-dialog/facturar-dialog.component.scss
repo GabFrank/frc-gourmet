@@ -84,3 +84,11 @@ h3 {
   font-size: 0.85rem;
   color: var(--text-secondary);
 }
+
+.aviso-propuesta {
+  margin: 4px 0 8px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+
+  &.error { color: var(--error-color); font-weight: 500; }
+}
