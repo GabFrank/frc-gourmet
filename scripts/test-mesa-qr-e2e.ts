@@ -279,6 +279,46 @@ async function main() {
   const mctx = await invokeHandlerWithContext('get-mesa-online-por-token', { clientIp: '127.0.0.1' }, 'tok-C');
   ok(mctx?.success && mctx?.numero === 3 && mctx?.habilitada === true, 'get-mesa-online-por-token devuelve contexto', mctx);
 
+  // ───── Parte D2: seguimiento del invitado de mesa (PLAN-tienda-online F2/M6) ─────
+  console.log('\n[D2] seguimiento del invitado de mesa');
+  const seg = (tok: any) => invokeHandlerWithContext('get-pedido-online-seguimiento', { clientIp: '127.0.0.1' }, tok);
+  const rS = await call({ tipoPedido: 'MESA_QR', mesaToken: 'tok-C', nombreCliente: 'LUZ', idempotencyKey: 'seg-0001-aaaa', items: baseItems, notas: 'SIN SAL' });
+  ok(rS?.success === true && typeof rS?.seguimientoToken === 'string' && rS.seguimientoToken.length >= 40,
+    'pedido de invitado devuelve un token de seguimiento', rS);
+  const pS: any = await R(PedidoOnline).createQueryBuilder('p').addSelect('p.seguimientoTokenHash').where('p.numero = :n', { n: rS?.numero }).getOne();
+  ok(!!pS?.seguimientoTokenHash && pS.seguimientoTokenHash !== rS?.seguimientoToken && pS.seguimientoTokenHash.length === 64,
+    'en la base queda solo el SHA-256, no el token', pS?.seguimientoTokenHash);
+  const sOk = await seg(rS?.seguimientoToken);
+  ok(sOk?.success === true && sOk?.pedido?.numero === rS?.numero && sOk?.pedido?.direccionEntrega === null,
+    'con su token ve su pedido (sin dirección)', sOk);
+  ok(sOk?.pedido?.telefonoCliente === undefined, 'el seguimiento no expone el teléfono', sOk?.pedido);
+  const sMal = await seg('X'.repeat(43));
+  ok(sMal?.success !== true && sMal?.error === 'pedido_no_encontrado', 'token inventado → pedido_no_encontrado', sMal);
+  const sBasura = await seg("' OR 1=1 --");
+  ok(sBasura?.success !== true, 'token con basura → rechazado', sBasura);
+  // Otro invitado en otra mesa: su token no ve el pedido del primero.
+  const mesaD = await save(PdvMesa, { numero: 4, activo: true, estado: 'DISPONIBLE', autoservicioActivo: true, qrToken: 'tok-D' });
+  const rS2 = await call({ tipoPedido: 'MESA_QR', mesaToken: 'tok-D', nombreCliente: 'EVA', items: baseItems });
+  const sOtro = await seg(rS2?.seguimientoToken);
+  ok(sOtro?.success === true && sOtro?.pedido?.numero === rS2?.numero && sOtro?.pedido?.numero !== rS?.numero,
+    'el token de otra mesa solo ve su propio pedido', [mesaD.id, sOtro?.pedido?.numero]);
+  // Reintento del mismo invitado (misma clave): mismo pedido y token rotado; el viejo deja de servir.
+  const rRep = await call({ tipoPedido: 'MESA_QR', mesaToken: 'tok-C', nombreCliente: 'LUZ', idempotencyKey: 'seg-0001-aaaa', items: baseItems });
+  ok(rRep?.repetido === true && rRep?.numero === rS?.numero && rRep?.seguimientoToken && rRep.seguimientoToken !== rS?.seguimientoToken,
+    'reintento: mismo pedido y token nuevo', rRep);
+  const sViejo = await seg(rS?.seguimientoToken);
+  ok(sViejo?.success !== true, 'reintento: el token viejo ya no sirve', sViejo);
+  ok((await seg(rRep?.seguimientoToken))?.success === true, 'reintento: el token nuevo sí', null);
+  // Vence 24 h después de llegar a un estado final.
+  await R(PedidoOnline).update({ numero: rS2?.numero }, { estado: 'ENTREGADO', fechaEntregado: new Date(Date.now() - 25 * 3600 * 1000) } as any);
+  const sVencido = await seg(rS2?.seguimientoToken);
+  ok(sVencido?.success !== true && sVencido?.error === 'seguimiento_vencido', 'pedido entregado hace más de 24 h → seguimiento_vencido', sVencido);
+  await R(PedidoOnline).update({ numero: rS2?.numero }, { fechaEntregado: new Date(Date.now() - 2 * 3600 * 1000) } as any);
+  ok((await seg(rS2?.seguimientoToken))?.success === true, 'entregado hace 2 h → todavía se ve', null);
+  // El hash no viaja en las lecturas normales (bandeja, mis pedidos).
+  ok(rS?.seguimientoToken && !(await R(PedidoOnline).findOne({ where: { numero: rS?.numero } }) as any)?.seguimientoTokenHash,
+    'la columna del hash no se lee por defecto (select:false)', null);
+
   // ───────────── Parte E: materialización de pizza (sabores + costo) ──────────
   console.log('\n[E] materialización pizza (sabores + costo)');
   const mesaP = await save(PdvMesa, { numero: 10, activo: true, estado: 'DISPONIBLE', autoservicioActivo: true, qrToken: 'tok-P' });
@@ -351,7 +391,12 @@ async function main() {
   // Un pedido sin mesa YA NO es un error: desde que PICKUP/DELIVERY se
   // materializan, abre su propia venta sin mesa marcada canalOrigen=WEB. Lo que
   // acá importa es que ese camino no toque ninguna mesa.
-  const pedidoSinMesa = await save(PedidoOnline, { numero: `T-${String(++numeroSeq).padStart(6, '0')}`, tipoPedido: 'PICKUP', estado: 'RECIBIDO', canalOrigen: 'WEB', metodoPago: 'EFECTIVO', subtotal: 0, costoEnvio: 0, total: 0 });
+  // F5 (C1): un PICKUP RECIBIDO sin aceptar ya no va a cocina; aceptado, sí.
+  const pedidoSinAceptar = await save(PedidoOnline, { numero: `T-${String(++numeroSeq).padStart(6, '0')}`, tipoPedido: 'PICKUP', estado: 'RECIBIDO', canalOrigen: 'WEB', metodoPago: 'EFECTIVO', subtotal: 0, costoEnvio: 0, total: 0 });
+  let errSinAceptar = '';
+  try { await materializarPedidoOnlineEnVenta(ds, pedidoSinAceptar.id); } catch (e: any) { errSinAceptar = e?.message || String(e); }
+  ok(errSinAceptar === 'pedido_no_aceptado', 'F5: PICKUP sin aceptar no se materializa', errSinAceptar);
+  const pedidoSinMesa = await save(PedidoOnline, { numero: `T-${String(++numeroSeq).padStart(6, '0')}`, tipoPedido: 'PICKUP', estado: 'ACEPTADO', canalOrigen: 'WEB', metodoPago: 'EFECTIVO', subtotal: 0, costoEnvio: 0, total: 0 });
   const resSinMesa = await materializarPedidoOnlineEnVenta(ds, pedidoSinMesa.id);
   ok(!!resSinMesa.ventaId, 'pedido sin mesaId → abre su propia venta');
   const ventaSinMesa = await R(Venta).findOne({ where: { id: resSinMesa.ventaId }, relations: ['mesa'] });

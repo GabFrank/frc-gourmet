@@ -201,12 +201,13 @@ async function main() {
       comanda: null
     });
 
-    // Pedido online de mesa (QR_MESA)
+    // Pedido online de mesa (QR_MESA), recién llegado: el de mesa se materializa sin
+    // esperar la aceptación (F5, `motivoNoMaterializable`).
     const pedido: any = await save(PedidoOnline, {
       numero: 1,
-      tipoPedido: 'MESA',
+      tipoPedido: 'MESA_QR',
       mesaId: mesa.id,
-      estado: 'PENDIENTE',
+      estado: 'RECIBIDO',
       total: 10000
     });
 

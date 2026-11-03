@@ -22,9 +22,15 @@
       <div class="pedido-top">
         <div>
           <span class="numero">{{ p.numero }}</span>
-          <span class="tipo">{{ p.tipoPedido }}</span>
+          <span class="tipo">{{ tipoLabel(p.tipoPedido) }}</span>
+          <span class="tipo" *ngIf="p.metodoPago">· {{ pagoLabel(p.metodoPago) }}</span>
         </div>
         <span class="estado" [attr.data-estado]="p.estado">{{ estadoLabel(p.estado) }}</span>
+      </div>
+
+      <div class="pago-online" *ngIf="pagoInsignia(p) as ins">
+        <span class="pago-chip" [attr.data-tipo]="ins.clase"><mat-icon>credit_card</mat-icon> {{ ins.texto }}</span>
+        <span class="muted ref" *ngIf="p.pagoId">Ref. uPay {{ p.pagoId }}</span>
       </div>
 
       <div class="cliente">
@@ -34,7 +40,10 @@
 
       <div class="direccion" *ngIf="p.tipoPedido === 'DELIVERY'">
         <mat-icon>place</mat-icon>
-        <span>{{ p.direccionEntrega }}<span *ngIf="p.zonaDelivery"> · {{ p.zonaDelivery.nombre }}</span></span>
+        <span>{{ p.direccionEntrega }}<span *ngIf="p.zonaDelivery"> · {{ p.zonaDelivery.nombre }}</span>
+          <span class="muted" *ngIf="p.referenciaDireccion"><br />Ref.: {{ p.referenciaDireccion }}</span>
+          <a *ngIf="mapaUrl(p) as url" [href]="url" target="_blank" rel="noopener"> · Ver en el mapa</a>
+        </span>
       </div>
 
       <div class="items">
@@ -43,7 +52,8 @@
           <span class="nombre">{{ it.nombreProducto }}
             <span class="pres muted" *ngIf="it.nombrePresentacion">({{ it.nombrePresentacion }})</span>
           </span>
-          <span class="precio">{{ it.subtotal | number:'1.0-2' }}</span>
+          <span class="precio">₲ {{ it.subtotal | number:'1.0-0' }}</span>
+          <div class="perso muted" *ngIf="detalleItem(it) as d">{{ d }}</div>
         </div>
       </div>
 
@@ -52,8 +62,8 @@
       </div>
 
       <div class="totales">
-        <span class="muted" *ngIf="p.costoEnvio > 0">Envío {{ p.costoEnvio | number:'1.0-2' }}</span>
-        <span class="total">Total {{ p.total | number:'1.0-2' }}</span>
+        <span class="muted" *ngIf="p.costoEnvio > 0">Envío ₲ {{ p.costoEnvio | number:'1.0-0' }}</span>
+        <span class="total">Total ₲ {{ p.total | number:'1.0-0' }}</span>
       </div>
 
       <!-- Acciones -->
@@ -66,7 +76,9 @@
             <button mat-stroked-button color="warn" (click)="confirmarRechazo(p)">Rechazar</button>
           </ng-container>
           <ng-container *ngIf="confirmandoRechazoId === p.id">
-            <span class="confirm-text">¿Rechazar {{ p.numero }}?</span>
+            <span class="confirm-text">¿Rechazar {{ p.numero }}?
+              <span *ngIf="p.estadoPago === 'PAGADO'"> Está pagado: hay que devolver ₲ {{ p.pagoMonto | number:'1.0-0' }} desde uPay.</span>
+            </span>
             <button mat-flat-button color="warn" (click)="rechazar(p)">Sí, rechazar</button>
             <button mat-button (click)="cancelarRechazo()">Cancelar</button>
           </ng-container>
@@ -81,12 +93,16 @@
           {{ sig.label }}
         </button>
 
-        <!-- Recovery: pedido de mesa que no se materializó (ej. sin caja abierta
-             al crearse). El cajero lo empuja a la cuenta de la mesa + cocina. -->
+        <button mat-flat-button color="warn" *ngIf="p.estadoPago === 'REEMBOLSO_PENDIENTE'" (click)="marcarDevuelto(p)">
+          <mat-icon>undo</mat-icon> Marcar devuelto
+        </button>
+
+        <!-- Recovery (F5): pedido aceptado (o de mesa) que no llegó a crear su venta
+             (ej. sin caja abierta). Se manda a cocina con la caja de quien lo empuja. -->
         <button
           mat-stroked-button
           color="primary"
-          *ngIf="p.tipoPedido === 'MESA_QR' && !p.ventaId"
+          *ngIf="!p.ventaId && (p.estado === 'ACEPTADO' || (p.tipoPedido === 'MESA_QR' && p.estado === 'RECIBIDO'))"
           (click)="enviarACocina(p)"
         >
           <mat-icon>restaurant</mat-icon> Enviar a cocina
