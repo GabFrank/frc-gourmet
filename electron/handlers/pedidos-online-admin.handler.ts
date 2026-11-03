@@ -1,3 +1,4 @@
+import { marcarReembolsoSiPagado, marcarDevuelto } from '../services/pagos-online/pagos-online.service';
 import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { In } from 'typeorm';
@@ -66,6 +67,12 @@ function mapPedidoAdmin(p: PedidoOnline): any {
     fechaAceptado: p.fechaAceptado ?? null,
     fechaListo: p.fechaListo ?? null,
     fechaEntregado: p.fechaEntregado ?? null,
+    // F4: pago con tarjeta (uPay).
+    estadoPago: p.estadoPago ?? null,
+    pagoId: p.pagoId ?? null,
+    pagoMonto: p.pagoMonto != null ? Number(p.pagoMonto) : null,
+    pagoDetalle: p.pagoDetalle ?? null,
+    pagadoEn: p.pagadoEn ?? null,
     createdAt: p.createdAt,
     items: (p.items || []).map((it) => ({
       id: it.id,
@@ -246,8 +253,18 @@ export function registerPedidosOnlineAdminHandlers(
       await manager.getRepository(PedidoOnline).save(pedido);
     });
 
+    // Pagado con tarjeta: queda para devolver en uPay (F4 §6) y se avisa al personal.
+    const montoDevolver = await marcarReembolsoSiPagado(dataSource, pedidoId);
+
     const saved = await repo().findOne({ where: { id: pedidoId } });
-    return { success: true, pedido: mapPedidoAdmin(saved || pedido), reversa };
+    return { success: true, pedido: mapPedidoAdmin(saved || pedido), reversa, montoDevolver };
+  });
+
+  // ============== PAGO DEVUELTO (F4): el personal ya hizo la devolución en uPay ==============
+  ipcMain.handle('marcar-pago-devuelto-pedido-online', async (_event: any, pedidoId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
+    const okDev = await marcarDevuelto(dataSource, Number(pedidoId));
+    return okDev ? { success: true } : { success: false, error: 'no_hay_devolucion_pendiente' };
   });
 
   // ============== ZONAS DE DELIVERY (CRUD admin) ==============

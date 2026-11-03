@@ -395,6 +395,28 @@ async function main() {
   ok(await R(Venta).count() === ventasAntes,
      'la venta a medio crear se descarta entera con el rollback');
 
+  // ── F4 · pedido pagado con tarjeta (uPay): la venta nace con el cobro anticipado ──
+  console.log('\n[F4] pedido pagado con uPay → venta con cobro UPAY ONLINE');
+  const pPagado = await nuevoPedido('PICKUP');
+  await R(PedidoOnline).update({ id: pPagado.id }, {
+    metodoPago: 'UPAY', estadoPago: 'PAGADO', pagoProveedor: 'UPAY', pagoId: 'pay-mat-1', pagoMonto: 45000, pagadoEn: new Date(),
+  } as any);
+  const matPagado = await materializarPedidoOnlineEnVenta(ds, pPagado.id, undefined, admin.id);
+  const ventaPagada: any = await R(Venta).findOne({
+    where: { id: matPagado.ventaId }, relations: ['pago', 'pago.detalles', 'pago.detalles.formaPago', 'delivery'],
+  });
+  const det = ventaPagada?.pago?.detalles || [];
+  ok(det.length === 1 && Number(det[0].valor) === 45000 && det[0].tipo === 'PAGO', 'un detalle PAGO por el monto pagado', det);
+  ok(det[0]?.formaPago?.nombre === 'UPAY ONLINE' && det[0]?.formaPago?.activo === false && det[0]?.formaPago?.movimentaCaja === false,
+     'forma UPAY ONLINE, inactiva para el PdV y sin mover la caja física', det[0]?.formaPago);
+  ok(/pay-mat-1/.test(det[0]?.descripcion || ''), 'el detalle lleva la referencia de uPay', det[0]?.descripcion);
+  ok(ventaPagada?.delivery?.cobroAnticipado === true, 'el retiro queda como cobro anticipado');
+  ok(ventaPagada?.estado === 'ABIERTA', 'la venta sigue abierta para entregarla y facturarla en el PdV', ventaPagada?.estado);
+  const pEfectivo = await nuevoPedido('PICKUP');
+  const matEf = await materializarPedidoOnlineEnVenta(ds, pEfectivo.id, undefined, admin.id);
+  const vEf: any = await R(Venta).findOne({ where: { id: matEf.ventaId }, relations: ['pago', 'delivery'] });
+  ok(!vEf?.pago && vEf?.delivery?.cobroAnticipado === false, 'un pedido en efectivo sigue sin pago previo');
+
   await ds.destroy();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);

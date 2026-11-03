@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { BehaviorSubject } from 'rxjs';
 import { PublicApiService } from './public-api.service';
 
 export interface TiendaConfig {
@@ -12,6 +13,10 @@ export interface TiendaConfig {
   prepTimeMinutos: number;
   montoMinimoPedido: number;
   googleClientId?: string | null;
+  /** Login por código de WhatsApp disponible (hay canal real de envío). */
+  otpWhatsappDisponible?: boolean;
+  /** F4: el local ofrece pagar con tarjeta (uPay) en retiro y delivery. */
+  pagoOnline?: boolean;
 }
 
 /** Carga la config pública de la tienda y aplica el branding (nombre/color). */
@@ -23,6 +28,8 @@ export class ConfigService {
     prepTimeMinutos: 30, montoMinimoPedido: 0,
   };
   loaded = false;
+  /** Emite la config actual y cada vez que llega del server (para lo que depende de ella, como Google). */
+  readonly cambios$ = new BehaviorSubject<TiendaConfig>(this.config);
 
   constructor(private api: PublicApiService) {}
 
@@ -36,6 +43,7 @@ export class ConfigService {
           }
         }
         this.loaded = true;
+        this.cambios$.next(this.config);
       },
       error: () => (this.loaded = true),
     });

@@ -2607,6 +2607,15 @@ contextBridge.exposeInMainWorld('api', {
   updateTiendaOnlineConfig: async (data: any): Promise<any> => {
     return await ipcRenderer.invoke('update-tienda-online-config', data);
   },
+  probarTiendaWhatsapp: async (data: { telefono: string }): Promise<any> => {
+    return await ipcRenderer.invoke('probar-tienda-whatsapp', data);
+  },
+  probarTiendaUpay: async (): Promise<any> => {
+    return await ipcRenderer.invoke('probar-tienda-upay');
+  },
+  marcarPagoDevueltoPedidoOnline: async (pedidoId: number): Promise<any> => {
+    return await ipcRenderer.invoke('marcar-pago-devuelto-pedido-online', pedidoId);
+  },
   getZonasDeliveryAdmin: async (): Promise<any[]> => {
     return await ipcRenderer.invoke('get-zonas-delivery-admin');
   },

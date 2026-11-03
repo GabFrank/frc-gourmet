@@ -33,6 +33,7 @@ const PORT = 7099;
 const BASE = `http://localhost:${PORT}`;
 
 // --- mini framework de asserts ---
+let dsM5: DataSource | null = null;
 let passed = 0;
 let failed = 0;
 function ok(cond: boolean, name: string, extra?: any) {
@@ -222,6 +223,7 @@ async function seed(dataSource: DataSource): Promise<any> {
 }
 
 async function main() {
+  const cuentasRepoM5 = () => dsM5!.getRepository('CuentaCliente');
   const tmpDir = path.resolve(__dirname, '../.tmp');
   if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
   const dbFile = path.join(tmpDir, 'test-pedidos-online.db');
@@ -230,6 +232,7 @@ async function main() {
   const baseOptions = getDataSourceOptions(tmpDir);
   const dataSource = new DataSource({ ...(baseOptions as any), database: dbFile, synchronize: false, migrationsRun: false });
   await dataSource.initialize();
+  dsM5 = dataSource;
   await dataSource.runMigrations({ transaction: 'each' });
   console.log('[e2e] Migraciones OK.');
 
@@ -289,12 +292,48 @@ async function main() {
   ok(pPizza?.precioDesde === 45000, 'PIZZA: precioDesde global = 45000', pPizza?.precioDesde);
   ok(pPizza?.pizzaConfig?.maxSabores === 2 && pPizza?.pizzaConfig?.estrategia === 'MAYOR_PRECIO', 'PIZZA: pizzaConfig (max 2, MAYOR_PRECIO)', pPizza?.pizzaConfig);
 
-  // 2. OTP request
+  // A3: sin zonas dibujadas no hay delivery (antes salía con envío gratis).
+  const cfgZonas = await pub('tienda.config', []);
+  ok(cfgZonas.result?.permiteDelivery === false, 'A3: sin zonas con polígono tienda.config.permiteDelivery=false', cfgZonas.result?.permiteDelivery);
+  const cotSin = await pub('envio.cotizar', [-25.3, -57.6]);
+  ok(cotSin.result?.cubierto === false && cotSin.result?.sinZonasDefinidas === true, 'A3: envio.cotizar sin zonas → no cubierto', cotSin.result);
+
+  // 2a. Sin WhatsApp configurado y sin FRC_OTP_DEV: no hay login por código ni fuga del código
+  //     (PLAN-tienda-online C1: antes devolvía devCodigo a cualquiera).
   const tel = '0981123456';
+  delete process.env['FRC_OTP_DEV'];
+  const cfgSinOtp = await pub('tienda.config', []);
+  ok(cfgSinOtp.result?.otpWhatsappDisponible === false, 'C1: tienda.config otpWhatsappDisponible=false sin canal', cfgSinOtp.result?.otpWhatsappDisponible);
+  const otpSin = await pub('auth.otp.request', [tel]);
+  ok(otpSin.result?.success === false && otpSin.result?.error === 'otp_no_disponible', 'C1: otp.request sin canal → otp_no_disponible', otpSin.result);
+  ok(!JSON.stringify(otpSin).includes('devCodigo') && !otpCapturado, 'C1: no devuelve ni loguea código sin canal');
+
+  // 2. OTP request (fallback de desarrollo explícito)
+  process.env['FRC_OTP_DEV'] = '1';
+  const cfgDev = await pub('tienda.config', []);
+  ok(cfgDev.result?.otpWhatsappDisponible === true, 'tienda.config otpWhatsappDisponible=true con FRC_OTP_DEV=1');
   const otpReq = await pub('auth.otp.request', [tel]);
   ok(otpReq.result?.success === true, 'auth.otp.request success');
   ok(otpReq.result?.provider === 'dev-log', 'OTP en modo dev-log (sin credenciales)');
   ok(!!otpCapturado, 'código OTP capturado del log', otpCapturado);
+
+  // Tope global diario de OTP (anti gasto en plantillas de WhatsApp).
+  const notifMod = require('../electron/services/notificacion.service');
+  const dispatchOrig = notifMod.dispatchEvento;
+  const avisos: any[] = [];
+  notifMod.dispatchEvento = async (codigo: string, payload: any) => { avisos.push({ codigo, ...payload }); return []; };
+  process.env['FRC_OTP_MAX_GLOBAL_DIA'] = '1';
+  const otpTope = await pub('auth.otp.request', ['0981999888']);
+  ok(otpTope.result?.error === 'otp_no_disponible', 'tope global diario de OTP corta el envío', otpTope.result);
+  ok(avisos.some((a) => a.codigo === 'TIENDA_OTP_TOPE' && /^tope-/.test(a.dedupeKey)), 'tope global: avisa al staff (TIENDA_OTP_TOPE)', avisos);
+  // Tope 2 con 1 código ya pedido: el siguiente llega al 80 %. Se pide para el mismo
+  // teléfono, así el código capturado sigue sirviendo para el verify de abajo.
+  process.env['FRC_OTP_MAX_GLOBAL_DIA'] = '2';
+  avisos.length = 0;
+  await pub('auth.otp.request', [tel]);
+  ok(avisos.some((a) => a.codigo === 'TIENDA_OTP_TOPE' && /^80-/.test(a.dedupeKey)), 'al pasar el 80 % del tope avisa una vez por día', avisos);
+  notifMod.dispatchEvento = dispatchOrig;
+  delete process.env['FRC_OTP_MAX_GLOBAL_DIA'];
 
   // 3. OTP verify
   const otpVer = await pub('auth.otp.verify', [tel, otpCapturado]);
@@ -310,6 +349,11 @@ async function main() {
   // 4. me
   const me = await pub('auth.me', [], token);
   ok(me.result?.success === true && me.result?.cuenta?.telefono === '0981123456', 'auth.me devuelve la cuenta');
+
+  // 4b. F2 (M5): cuenta sin nombre → el pedido exige nombre (antes quedaba sin nombre en la bandeja).
+  const sinNombre = await pub('pedido.crear', [{ tipoPedido: 'PICKUP', items: [{ productoId: 1, cantidad: 1 }] }], token);
+  ok(sinNombre.result?.error === 'falta_nombre', 'M5: cuenta sin nombre → falta_nombre', sinNombre.result);
+  await pub('auth.perfil.update', [{ nombre: 'Cliente Otp' }], token);
 
   // 5. pedido.crear sin token → rechazado
   //
@@ -344,6 +388,24 @@ async function main() {
     items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }],
   }], token);
   ok(delivBajo.result?.error === 'monto_minimo_no_alcanzado', 'DELIVERY bajo mínimo → error', delivBajo.result?.error);
+
+  // A3: DELIVERY sin zona dibujada ni zona elegida → rechazado (antes envío 0).
+  const delivSinZona = await pub('pedido.crear', [{
+    tipoPedido: 'DELIVERY', direccionEntrega: 'Calle 1', latitud: -24.06, longitud: -54.31,
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 3 }],
+  }], token);
+  ok(delivSinZona.result?.error === 'delivery_no_disponible', 'A3: DELIVERY sin zonas → delivery_no_disponible', delivSinZona.result);
+
+  // A2: validaciones de entrada.
+  const base = { tipoPedido: 'PICKUP', items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }] };
+  const upay = await pub('pedido.crear', [{ ...base, metodoPago: 'UPAY' }], token);
+  ok(upay.result?.error === 'metodo_pago_no_disponible', 'A2: metodoPago UPAY sin cobro online → rechazado', upay.result);
+  const tipoMal = await pub('pedido.crear', [{ ...base, tipoPedido: 'XX' }], token);
+  ok(tipoMal.result?.error === 'tipo_pedido_invalido', 'A2: tipoPedido inválido → rechazado', tipoMal.result);
+  const cantMal = await pub('pedido.crear', [{ ...base, items: [{ ...base.items[0], cantidad: 51 }] }], token);
+  ok(cantMal.result?.error === 'cantidad_excedida', 'A2: cantidad > 50 → rechazado', cantMal.result);
+  const muchos = await pub('pedido.crear', [{ ...base, items: Array.from({ length: 41 }, () => base.items[0]) }], token);
+  ok(muchos.result?.error === 'demasiados_items', 'A2: más de 40 ítems → rechazado', muchos.result);
 
   // 8. DELIVERY válido (3×25000=75000 ≥ 50000) + envío 15000
   const deliv = await pub('pedido.crear', [{
@@ -393,6 +455,36 @@ async function main() {
   ok(rech?.success === true && rech?.pedido?.estado === 'RECHAZADO', 'rechazar → RECHAZADO');
   await invokeHandlerWithContext('rechazar-pedido-online', undefined, lista[2].id, 'sin stock');
 
+  // 14b. F2 (M7): sin caja abierta el aceptar NO crea venta y devuelve el motivo para el operador.
+  ok(!acep?.ventaId && /no_hay_caja_abierta|caja/.test(String(acep?.errorMaterializacion || '')),
+    'aceptar sin caja abierta: no crea venta y devuelve errorMaterializacion', { ventaId: acep?.ventaId, err: acep?.errorMaterializacion });
+  // 14c. F2 (M6): el cliente ve el motivo del rechazo y la personalización en «Mis pedidos».
+  const misRech = await pub('pedido.mis', [], token);
+  const pRech = (misRech.result?.pedidos || []).find((p: any) => p.numero === segundo.numero);
+  ok(pRech?.estado === 'RECHAZADO' && !!pRech?.motivoRechazo, 'mis pedidos: el rechazado trae motivoRechazo', pRech?.motivoRechazo);
+  ok((misRech.result?.pedidos || []).every((p: any) => (p.items || []).every((it: any) => 'personalizacion' in it)),
+    'mis pedidos: cada línea trae su personalización', null);
+  ok((misRech.result?.pedidos || []).every((p: any) => p.seguimientoTokenHash === undefined),
+    'mis pedidos: nunca expone el hash de seguimiento', null);
+  // 14d. F2: el server ignora el precio que manda el cliente y cobra el de la carta.
+  const falso = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP', idempotencyKey: 'f2-precio-falso-0001',
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1, precioUnitario: 1, precio: 1, subtotal: 1 }],
+    subtotal: 1, total: 1,
+  }], token);
+  ok(falso.result?.success === true && Number(falso.result?.total) > 1, 'precio falso del cliente se ignora: total = precio de la carta', falso.result);
+  await invokeHandlerWithContext('rechazar-pedido-online', undefined, falso.result?.pedidoId, 'prueba');
+  // 14e. F2 (M5): el nombre que manda el checkout queda en la cuenta y en el pedido.
+  const sinNom: any = await cuentasRepoM5().save(cuentasRepoM5().create({ telefono: '0981777666', telefonoVerificado: true, activo: true }));
+  const conNom: any = await invokeHandlerWithContext('crear-pedido-online', { customerId: sinNom.id }, {
+    tipoPedido: 'PICKUP', nombreCliente: 'Rosa Paz', items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }],
+  });
+  const cuentaM5: any = await cuentasRepoM5().findOne({ where: { id: sinNom.id } });
+  const pedM5: any = await dataSource.getRepository('PedidoOnline').findOne({ where: { numero: conNom?.numero } });
+  ok(conNom?.success === true && cuentaM5?.nombre === 'ROSA PAZ' && pedM5?.nombreCliente === 'ROSA PAZ',
+    'M5: el nombre del checkout queda en la cuenta y en el pedido', [conNom, cuentaM5?.nombre, pedM5?.nombreCliente]);
+  await invokeHandlerWithContext('rechazar-pedido-online', undefined, conNom?.pedidoId, 'prueba');
+
   // 15. pendientes (primero=LISTO ya no cuenta, segundo/tercero rechazados) = 0
   const pend = await invokeHandlerWithContext('contar-pedidos-online-pendientes', undefined);
   ok(pend?.pendientes === 0, 'contar pendientes = 0 (ya no hay RECIBIDO/ACEPTADO)', pend?.pendientes);
@@ -401,7 +493,7 @@ async function main() {
   // 16. config pública (default: abierta, ambos tipos)
   const cfgPub = await pub('tienda.config');
   ok(cfgPub.result?.abiertaAhora === true, 'tienda.config: abierta por default');
-  ok(cfgPub.result?.permitePickup === true && cfgPub.result?.permiteDelivery === true, 'ambos tipos habilitados por default');
+  ok(cfgPub.result?.permitePickup === true && cfgPub.result?.permiteDelivery === false, 'pickup por default; delivery apagado mientras no haya zona dibujada (A3)', cfgPub.result);
 
   // 17. refresh token: rota y emite nuevo access
   const ref1 = await pub('auth.refresh', [refreshTok]);
@@ -458,6 +550,95 @@ async function main() {
   // 25. Google sin credenciales
   const g = await pub('auth.google', ['fake-token']);
   ok(g.result?.error === 'google_no_configurado', 'auth.google sin GOOGLE_CLIENT_ID → no_configurado');
+
+  console.log('\n[e2e] === F3: CREDENCIALES DE INGRESO DESDE LA APP ===');
+  // Validaciones: no se guardan valores con formato inválido.
+  const vPhone: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { whatsappPhoneNumberId: '12ab' });
+  ok(vPhone?.error === 'whatsapp_phone_id_invalido', 'F3: Phone Number ID con letras → rechazado', vPhone);
+  const vGoogle: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { googleClientId: 'cualquier-cosa' });
+  ok(vGoogle?.error === 'google_client_id_invalido', 'F3: Client ID de Google inválido → rechazado', vGoogle);
+  const vPlant: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { whatsappPlantilla: 'Código Ingreso' });
+  ok(vPlant?.error === 'whatsapp_plantilla_invalida', 'F3: plantilla con espacios → rechazada', vPlant);
+
+  // Google desde la pantalla: tienda.config lo publica y auth.google deja de dar no_configurado.
+  const GID = '1234-abc.apps.googleusercontent.com';
+  const gSave: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, {
+    googleClientId: GID, whatsappPhoneNumberId: '109876543210', whatsappPlantilla: 'codigo_ingreso', whatsappIdioma: 'es',
+  });
+  ok(gSave?.success === true && gSave?.config?.ingreso?.googleConfigurado === true, 'F3: Client ID de Google guardado', gSave?.config?.ingreso);
+  const cfgG = await pub('tienda.config', []);
+  ok(cfgG.result?.googleClientId === GID, 'F3: tienda.config publica el Client ID de la pantalla', cfgG.result?.googleClientId);
+  const fetchOrig = (globalThis as any).fetch;
+  const llamadas: Array<{ url: string; body: any }> = [];
+  (globalThis as any).fetch = async (url: any, init?: any) => {
+    // Solo se simulan Google y Meta; el RPC local de la tienda pasa al fetch real.
+    if (!/googleapis\.com|graph\.facebook\.com/.test(String(url))) return fetchOrig(url, init);
+    llamadas.push({ url: String(url), body: init?.body ? JSON.parse(init.body) : null });
+    if (String(url).includes('graph.facebook.com')) return { ok: true, status: 200, text: async () => '{}', json: async () => ({}) };
+    return { ok: false, status: 400, text: async () => '{}', json: async () => ({}) };
+  };
+  try {
+    const g2 = await pub('auth.google', ['fake-token']);
+    ok(g2.result?.error === 'google_token_invalido', 'F3: auth.google usa el Client ID de la pantalla (ya no no_configurado)', g2.result);
+
+    // WhatsApp: Phone Number ID cargado pero sin token → sin configurar, y la prueba no manda nada.
+    const tokenEnv = process.env['WHATSAPP_CLOUD_TOKEN'];
+    delete process.env['WHATSAPP_CLOUD_TOKEN'];
+    const est: any = await invokeHandlerWithContext('get-tienda-online-config', undefined);
+    const tieneTokenGuardado = !!est?.ingreso?.whatsappTokenGuardado;
+    if (!tieneTokenGuardado) {
+      ok(est?.ingreso?.whatsappConfigurado === false, 'F3: sin token, WhatsApp figura sin configurar', est?.ingreso);
+      const pSin: any = await invokeHandlerWithContext('probar-tienda-whatsapp', undefined, { telefono: '595981123456' });
+      ok(pSin?.error === 'whatsapp_no_configurado' && !llamadas.some((l) => l.url.includes('graph.facebook.com')), 'F3: probar envío sin token → no manda nada', pSin);
+    }
+    // Token por pantalla: nunca vuelve en la respuesta; sin almacén seguro se rechaza (no texto plano).
+    const SECRETO = 'EAAG-token-secreto-de-prueba';
+    const tSave: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { whatsappToken: SECRETO });
+    ok(!JSON.stringify(tSave).includes(SECRETO), 'F3: el token no vuelve en la respuesta de guardar');
+    ok(
+      tSave?.success === true || tSave?.error === 'almacen_seguro_no_disponible' || tSave?.error === 'token_no_guardado',
+      'F3: token guardado en almacén seguro o rechazado (nunca en la BD)', tSave?.error,
+    );
+    const filaCfg: any[] = await dataSource.query(`SELECT * FROM tienda_online_config`);
+    ok(!JSON.stringify(filaCfg).includes(SECRETO), 'F3: el token no está en la tabla tienda_online_config');
+    const estT: any = await invokeHandlerWithContext('get-tienda-online-config', undefined);
+    ok(!JSON.stringify(estT).includes(SECRETO), 'F3: get-tienda-online-config no devuelve el token');
+
+    // Con token (entorno) + datos de la pantalla: el envío usa el Phone Number ID y la plantilla cargados.
+    process.env['WHATSAPP_CLOUD_TOKEN'] = 'token-entorno';
+    await invokeHandlerWithContext('update-tienda-online-config', undefined, {});
+    const pTelMal: any = await invokeHandlerWithContext('probar-tienda-whatsapp', undefined, { telefono: '12' });
+    ok(pTelMal?.error === 'telefono_invalido', 'F3: probar envío con teléfono inválido → rechazado', pTelMal);
+    llamadas.length = 0;
+    const pOk: any = await invokeHandlerWithContext('probar-tienda-whatsapp', undefined, { telefono: '+595 981 123456' });
+    const envio = llamadas.find((l) => l.url.includes('graph.facebook.com'));
+    ok(pOk?.success === true, 'F3: probar envío con credenciales → ok', pOk);
+    ok(!!envio && envio.url.includes('/109876543210/messages'), 'F3: el envío usa el Phone Number ID de la pantalla', envio?.url);
+    ok(envio?.body?.template?.name === 'codigo_ingreso' && envio?.body?.to === '595981123456', 'F3: plantilla y teléfono normalizado', envio?.body?.template?.name);
+    ok(envio?.body?.template?.components?.some((c: any) => c.type === 'button' && c.sub_type === 'url'), 'F3: lleva el botón «Copiar código» (plantilla de autenticación)');
+    const pRep: any = await invokeHandlerWithContext('probar-tienda-whatsapp', undefined, { telefono: '595981123456' });
+    ok(pRep?.error === 'demasiadas_pruebas', 'F3: segunda prueba al mismo teléfono en menos de 1 minuto → frenada', pRep);
+
+    // Solo variables de entorno (sin plantilla en pantalla): el envío real no lleva el botón,
+    // así las plantillas existentes sin botón siguen funcionando.
+    await invokeHandlerWithContext('update-tienda-online-config', undefined, { whatsappPlantilla: '' });
+    llamadas.length = 0;
+    const pEnv: any = await invokeHandlerWithContext('probar-tienda-whatsapp', undefined, { telefono: '595982000111' });
+    const envioEnv = llamadas.find((l) => l.url.includes('graph.facebook.com'));
+    ok(pEnv?.success === true && !envioEnv?.body?.template?.components?.some((c: any) => c.type === 'button'), 'F3: sin plantilla en pantalla no se manda el botón', envioEnv?.body?.template);
+
+    // Vaciar los campos vuelve a las variables de entorno.
+    await invokeHandlerWithContext('update-tienda-online-config', undefined, {
+      googleClientId: '', whatsappPhoneNumberId: '', whatsappPlantilla: '', whatsappIdioma: '', whatsappTokenBorrar: true,
+    });
+    const cfgVacio = await pub('tienda.config', []);
+    ok(cfgVacio.result?.googleClientId === (process.env['GOOGLE_CLIENT_ID'] || null), 'F3: sin valores de pantalla rige el entorno', cfgVacio.result?.googleClientId);
+    if (tokenEnv === undefined) delete process.env['WHATSAPP_CLOUD_TOKEN'];
+    else process.env['WHATSAPP_CLOUD_TOKEN'] = tokenEnv;
+    await invokeHandlerWithContext('update-tienda-online-config', undefined, {});
+  } finally {
+    (globalThis as any).fetch = fetchOrig;
+  }
 
   console.log('\n[e2e] === ZONAS DELIVERY (ADMIN CRUD) + UBICACIÓN ===');
   // 26. listar zonas (ya hay 1 del seed)
@@ -552,6 +733,96 @@ async function main() {
   const itMitad = pedMitad?.items?.[0];
   ok(itMitad?.personalizacion?.sabores?.length === 2 && Math.abs(itMitad.personalizacion.sabores[0].proporcion - 0.5) < 1e-6,
     'PIZZA mitad: snapshot con 2 sabores y proporción 0.5', itMitad?.personalizacion?.sabores);
+
+  // 39. idempotencia (PLAN-tienda-online A2.4): mismo uuid del mismo dueño → mismo pedido.
+  const idemBody = (key: string) => [{
+    tipoPedido: 'PICKUP', idempotencyKey: key,
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }],
+  }];
+  const idemKey = 'a1b2c3d4-0000-4000-8000-00000000abcd';
+  const idem1 = await pub('pedido.crear', idemBody(idemKey), token2);
+  const idem2 = await pub('pedido.crear', idemBody(idemKey), token2);
+  ok(idem1.result?.success === true && idem2.result?.numero === idem1.result?.numero && idem2.result?.repetido === true,
+    'idempotencia: reintento con la misma clave devuelve el mismo pedido', [idem1.result?.numero, idem2.result]);
+  const idem3 = await pub('pedido.crear', idemBody('a1b2c3d4-0000-4000-8000-00000000abce'), token2);
+  ok(idem3.result?.success === true && idem3.result?.numero !== idem1.result?.numero, 'idempotencia: clave nueva crea otro pedido', idem3.result);
+  const cuentasRepo = dataSource.getRepository('CuentaCliente');
+  const otra: any = await cuentasRepo.save(cuentasRepo.create({ telefono: '0981999888', telefonoVerificado: true, nombre: 'OTRA CUENTA', activo: true }));
+  const idemOtra: any = await invokeHandlerWithContext('crear-pedido-online', { customerId: otra.id }, idemBody(idemKey)[0]);
+  ok(idemOtra?.success === true && idemOtra?.numero !== idem1.result?.numero && !idemOtra?.repetido,
+    'idempotencia: la misma clave de otra cuenta no devuelve el pedido ajeno', idemOtra);
+  const nIdem = await dataSource.getRepository('PedidoOnline').count({ where: { idempotencyKey: idemKey } });
+  ok(nIdem === 2, 'idempotencia: un pedido por dueño con esa clave (2 dueños → 2)', nIdem);
+  const idemBasura = await pub('pedido.crear', idemBody("x'; drop"), token2);
+  ok(idemBasura.result?.success === true && !idemBasura.result?.repetido, 'idempotencia: clave inválida se ignora (pedido normal)', idemBasura.result);
+
+  // 40. A1: fuerza bruta en login (5 fallos cuenta+IP → bloqueada aunque la clave sea buena).
+  for (let i = 0; i < 5; i++) await pub('auth.login', ['cliente@mail.com', 'mala-clave']);
+  const logBloq = await pub('auth.login', ['cliente@mail.com', 'secreto123']);
+  ok(logBloq.result?.error === 'demasiados_intentos', 'login: 5 fallos seguidos → demasiados_intentos', logBloq.result);
+  const { reiniciarLimitesTienda } = await import('../electron/utils/tienda-limites');
+  reiniciarLimitesTienda();
+  // 41. A1: cambio de contraseña revoca las demás sesiones (refresh tokens).
+  const s1 = await pub('auth.login', ['cliente@mail.com', 'secreto123']);
+  const s2 = await pub('auth.login', ['cliente@mail.com', 'secreto123']);
+  const cambio = await pub('auth.perfil.update', [{ password: 'nueva-clave-9', passwordActual: 'secreto123' }], s2.result?.accessToken);
+  ok(cambio.result?.success === true, 'cambio de contraseña OK', cambio.result);
+  const ref1Viejo = await pub('auth.refresh', [s1.result?.refreshToken]);
+  ok(ref1Viejo.result?.success !== true, 'cambio de contraseña: la otra sesión ya no refresca', ref1Viejo.result);
+  // 42. A1: cuenta dada de baja no ve pedidos con token vigente.
+  const sBaja = await pub('auth.login', ['cliente@mail.com', 'nueva-clave-9']);
+  await dataSource.getRepository('CuentaCliente').update({ email: 'cliente@mail.com' }, { activo: false });
+  const misBaja = await pub('pedido.mis', [], sBaja.result?.accessToken);
+  ok(misBaja.result?.success !== true && misBaja.result?.error === 'cuenta_invalida', 'cuenta inactiva: pedido.mis rechazado', misBaja.result);
+  await dataSource.getRepository('CuentaCliente').update({ email: 'cliente@mail.com' }, { activo: true });
+
+  // 43. F4: pago con tarjeta (uPay simulado). Apagado → rechazado; activo → PENDIENTE_PAGO + checkoutUrl;
+  // pagado → RECIBIDO; MESA_QR nunca paga online; otro cliente no consulta el pago ajeno.
+  const { setPagosOnlineDeps } = await import('../electron/services/pagos-online/pagos-online.service');
+  const { cargarCredencialesTienda } = await import('../electron/utils/tienda-ingreso.utils');
+  const sesF4 = new Map<string, any>();
+  setPagosOnlineDeps({
+    apiKey: async () => 'k-e2e', avisar: async () => undefined,
+    fetch: (async (url: string, init: any) => {
+      const r = (st: number, b: any) => ({ status: st, text: async () => JSON.stringify(b) });
+      const u = new URL(url);
+      if (init.method === 'POST') {
+        const b = JSON.parse(init.body); const id = 'e2e-' + (sesF4.size + 1);
+        sesF4.set(id, { status: 'open', amount: b.amount, ref: b.merchant.seller.operationReferenceId });
+        return r(201, { sessionId: id, checkoutUrl: 'https://checkout.online-payments.upay.com/' + id, expiresAt: new Date(Date.now() + 7200_000).toISOString() });
+      }
+      const m = u.pathname.match(/checkout-sessions\/(.+)$/);
+      if (m) { const s = sesF4.get(m[1]); return r(200, { status: s.status, paymentId: s.paymentId, amount: s.amount, merchant: { referenceId: s.ref } }); }
+      return r(200, { status: 'SUCCEEDED', subStatus: 'APPROVED', amount: [...sesF4.values()][0].amount });
+    }) as any,
+  });
+  const sF4 = await pub('auth.login', ['cliente@mail.com', 'nueva-clave-9']);
+  const tF4 = sF4.result?.accessToken;
+  const bodyF4 = { tipoPedido: 'PICKUP', metodoPago: 'UPAY', items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }] };
+  const f4Apagado = await pub('pedido.crear', [bodyF4], tF4);
+  ok(f4Apagado.result?.error === 'metodo_pago_no_disponible', 'F4: con el pago online apagado, UPAY se rechaza', f4Apagado.result);
+  await dataSource.getRepository('TiendaOnlineConfig').update({}, { pagoOnlineActivo: true, upayMerchantId: 'M-E2E', aceptacionAutomatica: false });
+  await cargarCredencialesTienda(dataSource);
+  const cfgF4 = await pub('tienda.config', []);
+  ok(cfgF4.result?.pagoOnline === true, 'F4: tienda.config ofrece pago online', cfgF4.result);
+  const f4 = await pub('pedido.crear', [bodyF4], tF4);
+  ok(f4.result?.success === true && f4.result?.estado === 'PENDIENTE_PAGO' && /^https:\/\/checkout\.online-payments\.upay\.com\//.test(f4.result?.checkoutUrl), 'F4: pedido UPAY → PENDIENTE_PAGO + checkoutUrl', f4.result);
+  const pendF4 = await invokeHandlerWithContext('get-pedidos-online-admin', { userId: 1 } as any, { estado: 'RECIBIDO' }).catch(() => null);
+  ok(!Array.isArray(pendF4) || !pendF4.some((p: any) => p.numero === f4.result?.numero), 'F4: no aparece para aceptar mientras espera el pago');
+  const otraF4: any = await invokeHandlerWithContext('verificar-pago-pedido-online', { customerId: otra.id }, f4.result?.numero);
+  ok(otraF4?.success === false, 'F4: otro cliente no puede consultar el pago ajeno', otraF4);
+  const v1F4 = await pub('pedido.pago.verificar', [f4.result?.numero], tF4);
+  ok(v1F4.result?.pedido?.estado === 'PENDIENTE_PAGO' && v1F4.result?.pedido?.estadoPago === 'PENDIENTE', 'F4: sin pagar sigue esperando', v1F4.result);
+  const sid = [...sesF4.keys()][0]; sesF4.get(sid).status = 'complete'; sesF4.get(sid).paymentId = 'pay-e2e';
+  const v2F4 = await pub('pedido.pago.verificar', [f4.result?.numero], tF4);
+  ok(v2F4.result?.pedido?.estadoPago === 'PENDIENTE', 'F4: tope de 10 s entre consultas desde la tienda', v2F4.result?.pedido);
+  await dataSource.getRepository('PedidoOnline').update({ numero: f4.result?.numero }, { pagoUltimaConsulta: null });
+  const v3F4 = await pub('pedido.pago.verificar', [f4.result?.numero], tF4);
+  ok(v3F4.result?.pedido?.estado === 'RECIBIDO' && v3F4.result?.pedido?.estadoPago === 'PAGADO', 'F4: pagado → RECIBIDO para aceptar', v3F4.result?.pedido);
+  const f4Rep = await pub('pedido.crear', [{ ...bodyF4, tipoPedido: 'MESA_QR', mesaToken: 'x' }], tF4);
+  ok(f4Rep.result?.success !== true, 'F4: MESA_QR no admite pago online', f4Rep.result);
+  await dataSource.getRepository('TiendaOnlineConfig').update({}, { pagoOnlineActivo: false });
+  await cargarCredencialesTienda(dataSource);
 
   console.log = origLog;
   await fastify.close();

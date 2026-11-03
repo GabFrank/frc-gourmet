@@ -123,3 +123,15 @@
 
   .confirm-text { font-size: 13px; color: var(--text-secondary); }
 }
+
+.item .perso { flex-basis: 100%; font-size: 12px; margin-left: 28px; line-height: 1.35; }
+.items .item { flex-wrap: wrap; }
+
+.pago-online { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
+.pago-online .ref { font-size: 12px; }
+.pago-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 20px; border: 1px solid currentColor; white-space: nowrap; }
+.pago-chip mat-icon { font-size: 16px; width: 16px; height: 16px; }
+.pago-chip[data-tipo='ok'] { color: var(--success-color); }
+.pago-chip[data-tipo='espera'] { color: var(--warning-color, #f0ad4e); }
+.pago-chip[data-tipo='mal'] { color: var(--error-color); }
+.pago-chip[data-tipo='neutro'] { color: var(--text-secondary); }

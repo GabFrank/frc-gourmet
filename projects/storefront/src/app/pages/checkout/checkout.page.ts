@@ -3,19 +3,24 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { PublicApiService } from '../../core/public-api.service';
-import { CartService } from '../../core/cart.service';
+import { CartService, avisosRevalidacion } from '../../core/cart.service';
+import { MenuService } from '../../core/menu.service';
+import { guardarSeguimiento } from '../../core/seguimiento';
 import { AuthService } from '../../core/auth.service';
 import { ConfigService } from '../../core/config.service';
 import { MesaService } from '../../core/mesa.service';
 import { IconComponent } from '../../core/icon.component';
 import { TipoPedido } from '../../core/models';
+import { GuaraniPipe, guarani } from '../../core/guarani.pipe';
+import { mensajeError } from '../../core/errores';
+import { esUrlCheckoutUpay } from '../../core/pago-online';
 
 declare const L: any;
 
 @Component({
   selector: 'sf-checkout',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent],
+  imports: [GuaraniPipe, CommonModule, FormsModule, IconComponent],
   templateUrl: './checkout.page.html',
   styleUrls: ['./checkout.page.scss'],
 })
@@ -27,8 +32,21 @@ export class CheckoutPage implements OnInit, OnDestroy {
   auth = inject(AuthService);
   config = inject(ConfigService);
   mesa = inject(MesaService);
+  private menuSvc = inject(MenuService);
+  /** Cambios de precio o productos quitados al revalidar contra la carta. */
+  avisos: string[] = [];
+  /** M5: la cuenta entró por código y nunca cargó su nombre; se pide acá. */
+  nombreCuenta = '';
+  get faltaNombreCuenta(): boolean {
+    return !this.mesa.enMesa && this.auth.isAuthenticated && !String(this.auth.cuenta?.nombre || '').trim();
+  }
 
   tipo: TipoPedido = 'PICKUP';
+  /** F4: efectivo o tarjeta (uPay), solo si el local la ofrece. */
+  metodoPago: 'EFECTIVO' | 'UPAY' = 'EFECTIVO';
+  get pagoOnline(): boolean {
+    return !this.mesa.enMesa && !!this.config.config?.pagoOnline;
+  }
   direccion = '';
   referencia = '';
   notas = '';
@@ -55,6 +73,14 @@ export class CheckoutPage implements OnInit, OnDestroy {
   private cotizarT: any = null;
 
   ngOnInit(): void {
+    this.menuSvc.cargar(true).subscribe({
+      next: (m) => {
+        this.avisos = avisosRevalidacion(this.cart.revalidar(m));
+        if (!this.cart.items.length) { this.router.navigate(['/carrito']); return; }
+        this.recomputar();
+      },
+      error: () => {}, // sin carta: el server valida igual al confirmar
+    });
     if (this.mesa.enMesa) {
       // Modo mesa: no hay pickup/delivery ni mapa; se paga en la caja.
       this.tipo = 'MESA_QR';
@@ -175,20 +201,23 @@ export class CheckoutPage implements OnInit, OnDestroy {
         tipoPedido: 'MESA_QR',
         mesaToken: this.mesa.token,
         nombreCliente: nombre,
+        idempotencyKey: this.claveIntento(),
         items: this.cart.toPedidoItems(),
         notas: this.notas.trim() || null,
       };
       this.api.call<any>('pedido.crear', [payloadMesa]).subscribe({
         next: (res) => {
           this.enviando = false;
+          this.idemKey = null;
           if (res?.success) {
             this.cart.limpiar();
+            if (res.seguimientoToken) guardarSeguimiento(res.seguimientoToken);
             this.router.navigate(['/mis-pedidos'], { queryParams: { nuevo: res.numero } });
           } else {
             this.error = this.mensajeError(res);
           }
         },
-        error: (e) => { this.enviando = false; this.error = 'No se pudo enviar el pedido. ' + (e?.message || ''); },
+        error: (e) => { this.enviando = false; this.error = mensajeError(e, 'No se pudo enviar el pedido. Probá de nuevo.'); },
       });
       return;
     }
@@ -209,50 +238,88 @@ export class CheckoutPage implements OnInit, OnDestroy {
         return;
       }
       if (this.montoMinimoZona > 0 && this.cart.subtotal < this.montoMinimoZona) {
-        this.error = `El mínimo para tu zona es ${this.montoMinimoZona}. Tu pedido suma ${this.cart.subtotal}.`;
+        this.error = `El mínimo para tu zona es ${guarani(this.montoMinimoZona)}. Tu pedido suma ${guarani(this.cart.subtotal)}.`;
         return;
       }
     }
     this.enviando = true;
     const payload: any = {
       tipoPedido: this.tipo,
+      idempotencyKey: this.claveIntento(),
       items: this.cart.toPedidoItems(),
       direccionEntrega: this.tipo === 'DELIVERY' ? direccionFinal : null,
       referenciaDireccion: this.referencia.trim() || null,
       notas: this.notas.trim() || null,
-      metodoPago: 'EFECTIVO',
+      metodoPago: this.pagoOnline ? this.metodoPago : 'EFECTIVO',
     };
+    if (this.faltaNombreCuenta) {
+      const nombre = this.nombreCuenta.trim();
+      if (!nombre) { this.enviando = false; this.error = 'Ingresá tu nombre para el pedido.'; return; }
+      payload.nombreCliente = nombre;
+    }
     if (this.tipo === 'DELIVERY' && coords) {
       payload.latitud = this.lat; payload.longitud = this.lng;
     }
     this.api.call<any>('pedido.crear', [payload]).subscribe({
       next: (res) => {
         this.enviando = false;
-        if (res?.success) { this.cart.limpiar(); this.router.navigate(['/mis-pedidos'], { queryParams: { nuevo: res.numero } }); }
+        this.idemKey = null;
+        if (res?.success) {
+          if (this.faltaNombreCuenta && this.auth.cuenta) this.auth.cuenta.nombre = this.nombreCuenta.trim().toUpperCase();
+          this.cart.limpiar();
+          // Tarjeta: a la página de pago de uPay (solo si la dirección es de uPay).
+          if (res.checkoutUrl) {
+            if (esUrlCheckoutUpay(res.checkoutUrl)) { window.location.href = res.checkoutUrl; return; }
+            this.router.navigate(['/pago', res.numero]);
+            return;
+          }
+          this.router.navigate(['/mis-pedidos'], { queryParams: { nuevo: res.numero } });
+        }
         else this.error = this.mensajeError(res);
       },
-      error: (e) => { this.enviando = false; this.error = 'No se pudo enviar el pedido. ' + (e?.message || ''); },
+      error: (e) => { this.enviando = false; this.error = mensajeError(e, 'No se pudo enviar el pedido. Probá de nuevo.'); },
     });
+  }
+
+  /**
+   * Clave de idempotencia del intento: se mantiene mientras el envío falle por red (el
+   * server pudo haberlo guardado y el reintento devuelve ese mismo pedido) y se descarta
+   * cuando el server contesta, con éxito o con un error de negocio (no se guardó nada).
+   */
+  private idemKey: string | null = null;
+  private claveIntento(): string {
+    if (!this.idemKey) {
+      const c: any = (globalThis as any).crypto;
+      this.idemKey = typeof c?.randomUUID === 'function'
+        ? c.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+          const r = (Math.random() * 16) | 0;
+          return (ch === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+        });
+    }
+    return this.idemKey!;
   }
 
   private mensajeError(res: any): string {
     switch (res?.error) {
-      case 'monto_minimo_no_alcanzado': return `El mínimo para esta zona es ${res.montoMinimo}. Tu subtotal es ${res.subtotal}.`;
+      case 'monto_minimo_no_alcanzado': return `El mínimo para esta zona es ${guarani(res.montoMinimo)}. Tu subtotal es ${guarani(res.subtotal)}.`;
       case 'falta_ubicacion': return 'Indicá dónde entregamos: marcá el mapa o escribí tu dirección.';
       case 'falta_zona_delivery': return 'Elegí una zona de entrega.';
       case 'falta_direccion': return 'Ingresá la dirección.';
       case 'falta_ubicacion_mapa': return 'Marcá en el mapa dónde entregamos.';
       case 'fuera_de_cobertura': return 'Todavía no llegamos a esa zona. Podés elegir Retiro, o escribirnos.';
-      case 'monto_minimo_global': return `El pedido mínimo es ${res.montoMinimo}. Tu subtotal es ${res.subtotal}.`;
+      case 'delivery_no_disponible': return 'Por ahora no hacemos delivery por la tienda. Podés elegir Retiro.';
+      case 'monto_minimo_global': return `El pedido mínimo es ${guarani(res.montoMinimo)}. Tu subtotal es ${guarani(res.subtotal)}.`;
       case 'tienda_cerrada': return 'La tienda está cerrada en este momento.';
       case 'pickup_no_disponible': return 'El retiro no está disponible.';
-      case 'delivery_no_disponible': return 'El delivery no está disponible.';
       case 'mesa_no_disponible': return 'Los pedidos en mesa no están habilitados.';
       case 'mesa_invalida': return 'El código de la mesa no es válido. Escaneá de nuevo el QR.';
       case 'mesa_no_habilitada': return 'La mesa no está habilitada. Pedile al mozo que active el autoservicio.';
       case 'fuera_de_red_local': return 'Para pedir en la mesa tenés que estar conectado al WiFi del local.';
       case 'falta_nombre': return 'Ingresá tu nombre para el pedido.';
-      default: return res?.error || 'No se pudo crear el pedido.';
+      case 'metodo_pago_no_disponible': return 'El pago con tarjeta no está disponible ahora. Elegí efectivo.';
+      case 'pago_no_iniciado': return 'No pudimos abrir el pago con tarjeta. Probá de nuevo o elegí efectivo.';
+      default: return mensajeError(res?.error, 'No se pudo crear el pedido. Probá de nuevo.');
     }
   }
 }
