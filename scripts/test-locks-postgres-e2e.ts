@@ -624,6 +624,118 @@ async function main() {
     await ds.query(`DELETE FROM cajas WHERE dispositivo_id = $1`, [disp.id]);
   }
 
+  // ═══════ [G] create-factura sobre Postgres real (#240) ═══════
+  // G1 corre el handler en Postgres: los `FOR UPDATE` de venta y timbrado no
+  // pueden llevar joins (#258) y los `decimal` llegan como string.
+  // G2/G3 son el único gate real de la concurrencia: en un mismo proceso
+  // `withFacturaLock` ya serializa, así que se emite desde DOS procesos con su
+  // propia conexión (`_factura-pg-worker.ts`), como dos nodos contra la misma base.
+  //
+  // ── QUE REVERTIR PARA QUE [G] FALLE ──
+  //  G2 · el `setLock` de la venta en `create-factura` (salen dos EMITIDAS). G2
+  //       emite SIN timbrado a propósito: con el mismo punto de expedición, el
+  //       lock del timbrado ya serializa y taparía la falta del de la venta
+  //  G3 · el `setLock` del `TimbradoDetalle` (sale el mismo número dos veces)
+  console.log('\n[G] create-factura: una sola factura por venta y numeración, entre procesos');
+  {
+    const { spawn } = require('child_process') as typeof import('child_process');
+    const pathG = require('path') as typeof import('path');
+    const { invokeHandler } = require('../electron/utils/handler-registry');
+    const { registerFacturacionHandlers } = require('../electron/handlers/facturacion.handler');
+    const { calcularFacturaDeVenta } = require('../electron/utils/factura-venta.utils');
+    const R = (e: any) => ds.getRepository(e);
+    const save = (e: any, d: any): Promise<any> => R(e).save(R(e).create(d)) as any;
+    const { Usuario } = E('personas/usuario.entity');
+    const { Permission } = E('personas/permission.entity');
+    const { Role } = E('personas/role.entity');
+    const { RolePermission } = E('personas/role-permission.entity');
+    const { UsuarioRole } = E('personas/usuario-role.entity');
+    const { Moneda } = E('financiero/moneda.entity');
+    const { Producto } = E('productos/producto.entity');
+    const { Timbrado } = E('facturacion/timbrado.entity');
+    const { TimbradoDetalle } = E('facturacion/timbrado-detalle.entity');
+
+    // La base persiste entre corridas: todo lo de [G] lleva sello propio.
+    const sello = Date.now();
+    const usuario = await save(Usuario, { nickname: `FACT${sello}`, password: 'x', activo: true });
+    const rol = await save(Role, { descripcion: `FACT${sello}`, activo: true });
+    let perm = await R(Permission).findOneBy({ codigo: 'FACTURACION_EMITIR' });
+    if (!perm) perm = await save(Permission, { codigo: 'FACTURACION_EMITIR', descripcion: 'EMITIR', activo: true });
+    await save(RolePermission, { role: rol, permission: perm });
+    await save(UsuarioRole, { usuario, role: rol });
+    if (!(await R(Moneda).findOneBy({ principal: true }))) {
+      await save(Moneda, { denominacion: 'GUARANI', simbolo: 'Gs', principal: true, decimales: 0, activo: true });
+    }
+    const timbrado = await save(Timbrado, {
+      numero: String(sello).slice(-8), fechaInicio: new Date(), fechaFin: new Date(Date.now() + 9e10), activo: true,
+    });
+    const detalle = await save(TimbradoDetalle, {
+      timbrado, establecimiento: '009', puntoExpedicion: String(sello % 1000).padStart(3, '0'),
+      rangoDesde: 1, rangoHasta: 9999, numeroActual: 1, activo: true,
+    });
+    const prod = await save(Producto, { nombre: `PIZZA ${sello}`, tipo: 'RETAIL', activo: true, iva: 10 });
+    const mkVenta = async () => {
+      const v = await save(Venta, { estado: 'ABIERTA', costoDelivery: 10000 });
+      await save(VentaItem, {
+        venta: { id: v.id }, producto: { id: prod.id }, precioCostoUnitario: 0,
+        precioVentaUnitario: 70000, precioAdicionales: 5000, descuentoUnitario: 0, cantidad: 2, estado: 'ACTIVO',
+      });
+      return v;
+    };
+    const payloadDe = (prop: any) => ({
+      factura: { timbradoDetalleId: detalle.id, venta: { id: prop.ventaId }, nombreCliente: 'X', ruc: '1', descuento: prop.descuento },
+      items: prop.lineas.map((l: any) => ({
+        descripcion: l.descripcion, cantidad: l.cantidad, precioUnitario: l.precioUnitario, ivaTipo: l.ivaTipo,
+        ...(l.ventaItemId ? { ventaItem: { id: l.ventaItemId } } : {}),
+      })),
+    });
+
+    // G1 — en este proceso.
+    registerFacturacionHandlers(ds, () => usuario);
+    const v1 = await mkVenta();
+    const p1 = await calcularFacturaDeVenta(ds, v1.id);
+    ok(p1?.total === 160000, 'G1: la propuesta en Postgres (decimales como string) da 150.000 + envío', p1?.total);
+    let f1: any = null;
+    try { f1 = await invokeHandler('create-factura', payloadDe(p1)); } catch (e: any) { f1 = { error: e.message }; }
+    ok(Number(f1?.total) === 160000 && !!f1?.numeroCompleto, 'G1: create-factura emite en Postgres (locks sin joins)', f1?.error || f1?.total);
+
+    // G2/G3 — dos procesos, arrancados juntos.
+    const worker = pathG.resolve(__dirname, '_factura-pg-worker.ts');
+    const tsnode = pathG.resolve(__dirname, '../node_modules/.bin/ts-node');
+    const correrJuntos = async (payloads: any[]): Promise<any[]> => {
+      const hijos = payloads.map((payload) => {
+        const h = spawn(tsnode, ['--transpile-only', '--prefer-ts-exts', '--project', 'tsconfig.typeorm.json', worker,
+          JSON.stringify({ usuarioId: usuario.id, payload })], { cwd: pathG.resolve(__dirname, '..'), env: process.env });
+        let out = '';
+        const listo = new Promise<void>((res) => h.stdout.on('data', (d: Buffer) => { out += d.toString(); if (out.includes('READY')) res(); }));
+        const fin = new Promise<any>((res) => h.on('exit', () => {
+          const m = out.match(/RESULT (.*)/);
+          res(m ? JSON.parse(m[1]) : { ok: false, error: `sin resultado: ${out.slice(-300)}` });
+        }));
+        return { h, listo, fin };
+      });
+      await Promise.all(hijos.map((x) => x.listo));
+      for (const x of hijos) x.h.stdin.write('GO\n');
+      return await Promise.all(hijos.map((x) => x.fin));
+    };
+
+    const v2 = await mkVenta();
+    const p2 = await calcularFacturaDeVenta(ds, v2.id);
+    const sinTimbrado = () => { const x: any = payloadDe(p2); delete x.factura.timbradoDetalleId; return x; };
+    const r2 = await correrJuntos([sinTimbrado(), sinTimbrado()]);
+    const emitidas2 = Number((await ds.query(
+      `SELECT COUNT(*) AS n FROM facturas WHERE venta_id = $1 AND estado = 'EMITIDA'`, [v2.id],
+    ))[0].n);
+    ok(r2.filter((r) => r.ok).length === 1 && emitidas2 === 1, 'G2: misma venta desde dos procesos → una sola EMITIDA', { r2, emitidas2 });
+    ok(r2.some((r) => !r.ok && /ya tiene la factura/.test(r.error)), 'G2: el perdedor recibe el mensaje de negocio', r2);
+
+    const [v3, v4] = [await mkVenta(), await mkVenta()];
+    const r3 = await correrJuntos([payloadDe(await calcularFacturaDeVenta(ds, v3.id)), payloadDe(await calcularFacturaDeVenta(ds, v4.id))]);
+    ok(r3.every((r) => r.ok) && r3[0].numero !== r3[1].numero, 'G3: dos ventas desde dos procesos → números distintos', r3);
+    const nums: any[] = await ds.query(`SELECT numero_factura AS n FROM facturas WHERE timbrado_detalle_id = $1`, [detalle.id]);
+    ok(new Set(nums.map((x) => Number(x.n))).size === nums.length, 'G3: ningún número repetido en el punto de expedición', nums);
+  }
+
   await ds.destroy();
 
   // ═══════ [E] Barrido del codigo: ningun lock convive con relations ═══════
