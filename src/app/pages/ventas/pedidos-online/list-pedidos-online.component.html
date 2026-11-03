@@ -22,7 +22,8 @@
       <div class="pedido-top">
         <div>
           <span class="numero">{{ p.numero }}</span>
-          <span class="tipo">{{ p.tipoPedido }}</span>
+          <span class="tipo">{{ tipoLabel(p.tipoPedido) }}</span>
+          <span class="tipo" *ngIf="p.metodoPago">· {{ pagoLabel(p.metodoPago) }}</span>
         </div>
         <span class="estado" [attr.data-estado]="p.estado">{{ estadoLabel(p.estado) }}</span>
       </div>
@@ -34,7 +35,10 @@
 
       <div class="direccion" *ngIf="p.tipoPedido === 'DELIVERY'">
         <mat-icon>place</mat-icon>
-        <span>{{ p.direccionEntrega }}<span *ngIf="p.zonaDelivery"> · {{ p.zonaDelivery.nombre }}</span></span>
+        <span>{{ p.direccionEntrega }}<span *ngIf="p.zonaDelivery"> · {{ p.zonaDelivery.nombre }}</span>
+          <span class="muted" *ngIf="p.referenciaDireccion"><br />Ref.: {{ p.referenciaDireccion }}</span>
+          <a *ngIf="mapaUrl(p) as url" [href]="url" target="_blank" rel="noopener"> · Ver en el mapa</a>
+        </span>
       </div>
 
       <div class="items">
@@ -43,7 +47,8 @@
           <span class="nombre">{{ it.nombreProducto }}
             <span class="pres muted" *ngIf="it.nombrePresentacion">({{ it.nombrePresentacion }})</span>
           </span>
-          <span class="precio">{{ it.subtotal | number:'1.0-2' }}</span>
+          <span class="precio">₲ {{ it.subtotal | number:'1.0-0' }}</span>
+          <div class="perso muted" *ngIf="detalleItem(it) as d">{{ d }}</div>
         </div>
       </div>
 
@@ -52,8 +57,8 @@
       </div>
 
       <div class="totales">
-        <span class="muted" *ngIf="p.costoEnvio > 0">Envío {{ p.costoEnvio | number:'1.0-2' }}</span>
-        <span class="total">Total {{ p.total | number:'1.0-2' }}</span>
+        <span class="muted" *ngIf="p.costoEnvio > 0">Envío ₲ {{ p.costoEnvio | number:'1.0-0' }}</span>
+        <span class="total">Total ₲ {{ p.total | number:'1.0-0' }}</span>
       </div>
 
       <!-- Acciones -->

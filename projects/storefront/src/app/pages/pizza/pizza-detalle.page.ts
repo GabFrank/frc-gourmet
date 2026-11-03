@@ -7,6 +7,8 @@ import { MenuService } from '../../core/menu.service';
 import { ConfigService } from '../../core/config.service';
 import { AppImgPipe } from '../../core/app-img.pipe';
 import { MenuProducto, MenuSaborPizza, MenuTamano, MenuAdicional, MenuObservacion } from '../../core/models';
+import { GuaraniPipe } from '../../core/guarani.pipe';
+import { IconComponent } from '../../core/icon.component';
 
 /**
  * Detalle de una pizza — entrada POR SABOR (tipo iFood).
@@ -18,7 +20,7 @@ import { MenuProducto, MenuSaborPizza, MenuTamano, MenuAdicional, MenuObservacio
 @Component({
   selector: 'sf-pizza-detalle',
   standalone: true,
-  imports: [CommonModule, FormsModule, AppImgPipe],
+  imports: [IconComponent, GuaraniPipe, CommonModule, FormsModule, AppImgPipe],
   templateUrl: './pizza-detalle.page.html',
   styleUrls: ['./pizza-detalle.page.scss'],
 })

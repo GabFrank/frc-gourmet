@@ -31,6 +31,7 @@ import { registerFileRoutes } from './file-routes';
 import { registerKdsSseRoutes } from './kds-sse-routes';
 import { registerMusicaSseRoutes } from './musica-sse-routes';
 import { registerMesaSseRoutes } from './mesa-sse-routes';
+import { clientIpDe } from '../utils/client-ip.util';
 import { registerPublicRoutes } from './public-routes';
 import { registerQrUploadRoutes } from './qr-upload-routes';
 import { registerAuthPlugin } from './auth-middleware';
@@ -144,6 +145,9 @@ async function buildInstance(
       return false;
     },
     keyGenerator: (request) => {
+      // /pub: IP real detrás del túnel (cf-connecting-ip), si no todos los
+      // clientes de internet comparten el bucket de 127.0.0.1 (PLAN-tienda-online C3).
+      if (request.url.startsWith('/pub/')) return `pub:${clientIpDe(request).ip}`;
       const authHeader = request.headers['authorization'];
       if (!authHeader || !authHeader.startsWith('Bearer ')) return request.ip;
 
