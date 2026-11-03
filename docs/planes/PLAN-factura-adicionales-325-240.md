@@ -117,6 +117,15 @@ Orden dentro del handler, **todo antes de tocar `numeroActual`**:
 - Factura manual: igual que hoy, con la misma función de totales.
 
 ### Modo cliente (D7)
+
+> **Corrección 2026-11-02, durante la fase 1 (D7 queda sin efecto):** la premisa era falsa. En
+> todos los modos se usa `RepositoryIpcService` (`app.module.ts:84-92`); en `mode=client` el
+> preload monkey-patchea `ipcRenderer.invoke` y `callIpc` viaja por `/api/rpc`. `RepositoryHttpService`
+> es un esqueleto histórico que no se usa, así que facturar en modo cliente ya funciona. No se
+> implementa nada de lo que sigue; el método nuevo se agrega al esqueleto como stub, igual que
+> sus vecinos. Se le avisó a Gabriel.
+
+Texto original:
 `repository-http.service.ts`: implementar vía `/api/rpc` los métodos que usa el diálogo
 (`createFactura`, `getFacturaPropuestaVenta`, `getTimbradoDetalles`, `getFacturaPlantillas`,
 `getFacturacionConfig`, `getClientePorRuc`) siguiendo el patrón de los métodos HTTP vecinos.

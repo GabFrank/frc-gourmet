@@ -4447,6 +4447,9 @@ export class RepositoryIpcService extends RepositoryService {
   getClientePorRuc(ruc: string): Observable<any> {
     return from(this.api.callIpc('get-cliente-por-ruc', ruc));
   }
+  getFacturaPropuestaVenta(ventaId: number): Observable<any> {
+    return from(this.api.callIpc('get-factura-propuesta-venta', ventaId));
+  }
   anularFactura(id: number, motivo: string): Observable<any> {
     return from(this.api.callIpc('anular-factura', id, motivo));
   }

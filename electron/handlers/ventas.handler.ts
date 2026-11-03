@@ -70,6 +70,7 @@ import { TipoModificacionIngrediente } from '../../src/app/database/entities/ven
 import { EstadoVentaItem } from '../../src/app/database/entities/ventas/venta-item.entity';
 import { VentaItemSabor } from '../../src/app/database/entities/ventas/venta-item-sabor.entity';
 import { dbQuery } from '../utils/db-query';
+import { computeNetoBrutoItem } from '../utils/venta-total.utils';
 import { computeResumenCaja } from '../utils/resumen-caja.utils';
 import { condicionCanal, esCanalValido } from '../utils/canal-venta.utils';
 import { limiteFechaSqlite } from '../utils/db-query';
@@ -4935,14 +4936,6 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       await queryRunner.release();
     }
   });
-}
-
-/** Neto bruto de un ítem (con descuento propio, SIN descuento global). */
-function computeNetoBrutoItem(item: any): number {
-  const unit = Number(item.precioVentaUnitario || 0)
-    + Number(item.precioAdicionales || 0)
-    - Number(item.descuentoUnitario || 0);
-  return unit * Number(item.cantidad || 0);
 }
 
 /**

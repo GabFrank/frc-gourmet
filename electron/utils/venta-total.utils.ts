@@ -35,6 +35,25 @@ export function sqlTotalLineaItem(alias = 'vi'): string {
 }
 
 /**
+ * Neto bruto de un ítem: `sqlTotalLineaItem` en TypeScript, para cuando el ítem
+ * ya está leído. Con descuento propio, SIN descuento global. `Number()` en cada
+ * término porque los `decimal` llegan como string en Postgres.
+ *
+ * La usan el cobro (`getEstadoCobroVentaInternal`) y la factura
+ * (`factura-venta.utils.ts`): una sola copia para que no diverjan.
+ */
+export function computeNetoBrutoItem(item: any): number {
+  return precioUnitarioNetoItem(item) * Number(item?.cantidad || 0);
+}
+
+/** Precio por unidad de un ítem: base + adicionales − descuento propio. */
+export function precioUnitarioNetoItem(item: any): number {
+  return Number(item?.precioVentaUnitario || 0)
+    + Number(item?.precioAdicionales || 0)
+    - Number(item?.descuentoUnitario || 0);
+}
+
+/**
  * Total por venta para un conjunto de ventas: ítems ACTIVOS menos los
  * descuentos y más los aumentos cargados en el cobro (`PagoDetalle`),
  * convertidos a la moneda principal.
