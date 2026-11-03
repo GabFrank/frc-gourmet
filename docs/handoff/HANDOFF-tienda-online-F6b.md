@@ -1,5 +1,7 @@
 # Handoff: tienda online F6 + F6b (personalizar cada sabor). Prompt para continuar
 
+> Actualizado el 03/11/2026: #325 + #240 ya están programadas en `fix/factura-adicionales-325-240` (falta PR y prueba real) y #327 entra a develop el 03/11.
+
 > Copiá todo este archivo como primer mensaje al agente que siga. Está escrito para un agente que no vio la conversación.
 
 ---
@@ -27,6 +29,14 @@ Sos el desarrollador que sigue con la **tienda online de FRC Gourmet** (repo `Ga
 
 Todas parten de una base vieja (`5979ae50`, antes de #317, #322, #190, #347 y #350). **Hay que rebasar la cadena sobre el develop actual** y volver a correr las pruebas.
 
+Fuera de la cadena, pero la cadena depende de ellas:
+| Rama | PR | Estado (03/11) |
+|---|---|---|
+| `claude/kind-albattani-m2aqyy` (fichas de cantina + #329–#340 + #332) | **#327** | listo, merge a develop programado el 03/11 15:00 |
+| `fix/factura-adicionales-325-240` (#325 + #240) | **sin PR** | código, plan, 2 auditorías de plan y 5 de diff hechas el 02/11; faltan PR y prueba real |
+
+Desde #327, concluir una venta exige el cobro (o una CPC) y una venta concluida ya no se modifica: la materialización del pedido online y sus pruebas tienen que respetarlo al rebasar.
+
 Los PR en borrador de F6 (#353, base `…-f5`) y F6b (#354, base `…-f6`) ya están abiertos.
 
 ### Qué hace F6 (carta), plan `docs/planes/PLAN-tienda-online-F6-ux-carta.md`
@@ -44,17 +54,21 @@ Los PR en borrador de F6 (#353, base `…-f5`) y F6b (#354, base `…-f6`) ya es
 - **Pruebas:** `npm run test:pedidos-online` da 168/168. Incluye que la caja (`getEstadoCobroVentaInternal`) y los reportes (`getTotalesPorVenta`) cobren lo mismo que el pedido, y el mismo desglose que en el PdV. También pasan `test:tienda-seguridad`, `test:tienda-categorias` y `test:tienda-online-migracion`. La batería completa da 81 suites: 72 OK y 9 rojas, todas preexistentes (backup-http, mesa-ocupacion, mesa-una-venta-abierta, pago-consolidado, pago-consolidado-e2e, permisos, pg-backup, rate-limit-e2e y reporte-delivery).
 
 ### Lo que falta (en este orden)
-1. **Arreglar #325 + #240 (es tuyo; el propietario decidió que entra en este traspaso).**
-   - **#325, la factura sale por menos que la venta:** `src/app/pages/facturacion/facturas/facturar-dialog/facturar-dialog.component.ts` (~L136) precarga cada línea con `precioVentaUnitario` y deja afuera `precioAdicionales` (y el descuento del ítem). Una pizza de ₲ 75.000 (70.000 + borde 5.000) se cobra bien, pero se factura por ₲ 70.000. Ya pasa hoy en el PdV de Don Franco, y la personalización por sabor de la tienda lo haría más frecuente. Cada línea tiene que salir con el mismo total que cobra la caja (`getEstadoCobroVentaInternal`): precio base + adicionales (incluidos los de cada `VentaItemSabor`) − descuento, con el IVA bien repartido.
-   - **#240, el servidor no valida lo que se factura:** hoy acepta los ítems y montos que manda la pantalla. El handler que crea la factura tiene que recalcular desde la venta y rechazar (o corregir) una factura cuyo total no coincida con el de la venta.
-   - **Cómo:** va en una rama propia `fix/` **desde develop** (no en la cadena de la tienda), con su plan en `docs/planes/PLAN-factura-adicionales-325-240.md`, auditoría, OK del propietario y PR propio. Toca cobro y factura: antes del merge hay que **cobrar y facturar de verdad** en el entorno de prueba (venta del PdV con adicional y con descuento, y un pedido online personalizado) y mandarle capturas al propietario. Después rebasá la cadena de la tienda encima.
+1. **Cerrar #325 + #240: el código ya está, falta llevarlo al merge.** Rama `fix/factura-adicionales-325-240` (desde develop `d3ea0dc9`, 6 commits del 02/11).
+   - **Ya hecho:** plan `docs/planes/PLAN-factura-adicionales-325-240.md` con las decisiones D1–D7 de Gabriel (envío como línea `SERVICIO DE DELIVERY` IVA 10, descuento global repartido entre tasas, recargo como línea `RECARGO` IVA 10, una sola factura EMITIDA por venta, se factura en cualquier momento, nada retroactivo, modo cliente incluido). Regla única de totales en `src/app/shared/utils/factura-totales.util.ts` que usan el diálogo y el servidor; `electron/utils/factura-venta.utils.ts` arma la propuesta (canal nuevo `get-factura-propuesta-venta`) y valida; `create-factura` recalcula contra la venta, usa lista blanca de campos, bloquea el `TimbradoDetalle` al numerar y rechaza la factura que no coincide. Auditorías en `docs/planes/AUDIT-PLAN-factura-325-240-{A,B}.md` y `AUDIT-DIFF-factura-325-240-{DRIVERS,MOTOR,PERMISOS,TESTS,UI}.md`; sus hallazgos se aplicaron en `f5fe09c3`. Pruebas nuevas: `npm run test:factura-venta` (79 asserts) y `test:locks-pg` (Postgres). Manual: `docs/testing/TESTING-CHECKLIST-FACTURA-DESDE-VENTA.md`.
+   - **Falta:**
+     1. Revisar contra las auditorías de diff que no quede ningún hallazgo sin aplicar ni descartar con motivo (por ejemplo: tope de renglones y `lock_timeout` en Postgres, precio neto negativo, propuesta con error en la UI).
+     2. Rebasar sobre develop **después del merge de #327**. Hoy choca solo en `package.json` (los scripts `test:*` nuevos de ambos lados): conservá los dos.
+     3. `npm run build`, `check`, las suites de factura y `test:all`: no puede sumar fallas respecto de develop.
+     4. **Cobrar y facturar de verdad** en el entorno de prueba siguiendo el checklist (venta del PdV con adicional, con descuento del ítem, con delivery y con descuento/recargo del cobro) y mandarle capturas al propietario. Con la factura ya emitida, una segunda emisión tiene que rechazarse.
+     5. Abrir el PR `fix(facturacion): …` a develop, CI verde y **pedirle el OK al propietario** para el squash-merge. Avisale que las facturas con adicionales o envío pasan a salir por más (es lo correcto) y que conviene avisar al contador.
    - Recién con #325 + #240 mergeadas se puede encender `personalizar_sabores` en Don Franco.
-2. **E2E por pantalla en el entorno de prueba:** aceptar un pedido personalizado → venta → cobro → factura, y comprobar que el total de la factura sea igual al del pedido. Requiere #325 + #240 resueltas. Mandale capturas al propietario.
+2. **E2E por pantalla en el entorno de prueba, sobre la cadena rebasada con #325 + #240:** aceptar un pedido online con un sabor personalizado → venta → cobro → factura, y comprobar que la factura propuesta sale con el mismo total que el pedido (los adicionales del sabor van en `precioAdicionales` del ítem). Mandale capturas al propietario.
 3. Objeciones medias de la auditoría:
    - La bandeja de pedidos del escritorio no muestra el detalle por sabor.
    - Falta una prueba de stock: lo que se saca no baja del stock y el reemplazo sí.
    - El plan decía «encendido por defecto» y quedó apagado. Está declarado como desvío y es lo correcto mientras siga #325.
-4. Rebasar F1→F6b sobre develop, volver a correr `test:all` y comparar contra develop.
+4. Rebasar F1→F6b sobre develop **ya con #327 y #325 + #240 adentro**, volver a correr `test:all` y comparar contra develop.
 5. Bloqueos externos de la tienda (los gestiona el propietario): credenciales de prueba de uPay, Client ID de Google, Phone Number ID de WhatsApp Business y la prueba de `puente.frcsuite.com`. Lo medio y bajo pendiente está en la issue #343.
 
 ### Qué tenés que lanzar para probar
@@ -85,4 +99,4 @@ npx ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json sc
 7. **Abrir una caja** en el punto de venta antes de aceptar pedidos: sin caja abierta, el pedido no se acepta.
 
 ### Pruebas útiles
-`npm run test:pedidos-online`, `test:tienda-seguridad`, `test:tienda-categorias`, `test:tienda-online-migracion` y `test:all`. Las e2e usan SQLite temporal; las migraciones se prueban también contra Postgres local (`test:tienda-online-migracion`).
+`npm run test:pedidos-online`, `test:tienda-seguridad`, `test:tienda-categorias`, `test:tienda-online-migracion`, `test:factura-venta` y `test:locks-pg` (estas dos, en la rama de #325 + #240) y `test:all`. Las e2e usan SQLite temporal; las migraciones se prueban también contra Postgres local (`test:tienda-online-migracion`).
