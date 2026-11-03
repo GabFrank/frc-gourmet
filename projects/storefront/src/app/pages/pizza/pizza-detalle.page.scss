@@ -43,3 +43,21 @@
 .pd-cta { display: flex; align-items: center; gap: 14px; }
 .pd-add { flex: 1; }
 .pd-radio.sel .pd-radio-l, .pd-check.sel .pd-check-l { font-weight: 600; color: var(--sf-primary); }
+
+/* F6b: personalizar cada sabor */
+.pd-sabor-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--sf-border); }
+.pd-sabor-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pd-sabor-nombre { font-weight: 600; }
+.pd-sabor-resumen { font-size: 13px; color: var(--sf-text-muted); }
+.pd-pers-btn { padding: 6px 14px; font-size: 14px; white-space: nowrap; }
+.pd-pers-nada { font-size: 13px; }
+.pd-pers-aviso { font-size: 13px; color: #b45309; margin: 0 0 6px; }
+.pd-hoja-fondo { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 1000; display: flex; align-items: flex-end; justify-content: center; }
+.pd-hoja { background: #fff; color: #222; width: 100%; max-width: 640px; max-height: 85vh; border-radius: 18px 18px 0 0; display: flex; flex-direction: column; padding: 8px 16px calc(16px + env(safe-area-inset-bottom)); animation: pd-sube .2s ease-out; }
+.pd-hoja-asa { width: 40px; height: 4px; border-radius: 2px; background: #ccc; margin: 4px auto 10px; }
+.pd-hoja-titulo { font-size: 18px; margin: 0 0 8px; }
+.pd-hoja-cuerpo { overflow-y: auto; flex: 1; }
+.pd-hoja-listo { width: 100%; margin-top: 12px; }
+.pd-cambio { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }
+.pd-cambio-sel { max-width: 55%; }
+@keyframes pd-sube { from { transform: translateY(100%); } to { transform: none; } }

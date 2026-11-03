@@ -6,7 +6,7 @@ import { CartService } from '../../core/cart.service';
 import { MenuService } from '../../core/menu.service';
 import { ConfigService } from '../../core/config.service';
 import { AppImgPipe } from '../../core/app-img.pipe';
-import { MenuProducto, MenuSaborPizza, MenuTamano, MenuAdicional, MenuObservacion } from '../../core/models';
+import { MenuProducto, MenuSaborPizza, MenuTamano, MenuAdicional, MenuObservacion, PersonalizacionReceta, PersonalizacionSabor } from '../../core/models';
 import { GuaraniPipe } from '../../core/guarani.pipe';
 import { IconComponent } from '../../core/icon.component';
 
@@ -44,6 +44,11 @@ export class PizzaDetallePage implements OnInit {
   observacionesSel = new Set<number>();
   notaLibre = '';
   cantidad = 1;
+
+  /** F6b: personalización de cada sabor (como el PdV), y el sabor abierto en la hoja. */
+  persSabores = new Map<number, PersonalizacionSabor>();
+  hojaSabor: MenuSaborPizza | null = null;
+  avisoPers = '';
 
   ngOnInit(): void {
     // El detalle abre siempre desde arriba (la foto entera), venga de donde venga en la carta.
@@ -103,6 +108,11 @@ export class PizzaDetallePage implements OnInit {
   }
 
   setTamano(t: MenuTamano): void {
+    // La personalización es de la receta sabor × tamaño: otro tamaño, otra receta.
+    if (this.presSel !== t.presentacionId && this.hayPersonalizacion) {
+      this.persSabores.clear();
+      this.avisoPers = 'Cambiaste el tamaño: volvé a personalizar los sabores.';
+    }
     this.presSel = t.presentacionId;
     // Quitar sabores extra que no tengan precio en el nuevo tamaño (el de entrada se conserva).
     this.saboresSel = this.saboresSel.filter(
@@ -114,6 +124,7 @@ export class PizzaDetallePage implements OnInit {
     const idx = this.saboresSel.findIndex((x) => x.saborId === s.saborId);
     if (idx > 0) {
       this.saboresSel.splice(idx, 1); // quitar (nunca el de entrada, índice 0)
+      this.persSabores.delete(s.saborId);
     } else if (idx < 0 && this.saboresSel.length < this.maxSabores) {
       this.saboresSel.push(s);
     }
@@ -157,8 +168,99 @@ export class PizzaDetallePage implements OnInit {
       .reduce((s, a) => s + a.precio, 0);
   }
 
+  // ── F6b: personalizar cada sabor ──────────────────────────────────────────
+  /** Con el interruptor de la tienda prendido, el menú trae qué se puede tocar de cada receta. */
+  get personalizaPorSabor(): boolean {
+    return !!this.menuSvc.actual?.personalizacionPorReceta;
+  }
+
+  opcionesDe(s: MenuSaborPizza): PersonalizacionReceta | null {
+    const recetaId = s.precios.find((x) => x.presentacionId === this.presSel)?.recetaId;
+    const mapa = this.menuSvc.actual?.personalizacionPorReceta;
+    return recetaId && mapa ? mapa[String(recetaId)] || null : null;
+  }
+
+  persDe(s: MenuSaborPizza): PersonalizacionSabor {
+    let ps = this.persSabores.get(s.saborId);
+    if (!ps) {
+      ps = { saborId: s.saborId, nombreSabor: s.nombre, quitar: [], cambios: [], adicionales: [] };
+      this.persSabores.set(s.saborId, ps);
+    }
+    return ps;
+  }
+
+  resumenPers(s: MenuSaborPizza): string {
+    const ps = this.persSabores.get(s.saborId);
+    if (!ps) return '';
+    return [
+      ...ps.quitar.map((q) => `Sin ${q.nombre.toLowerCase()}`),
+      ...ps.cambios.map((c) => `${c.nombre.toLowerCase()} → ${c.reemplazoNombre.toLowerCase()}`),
+      ...ps.adicionales.map((a) => `+ ${a.nombre.toLowerCase()}`),
+    ].join(' · ');
+  }
+
+  abrirHoja(s: MenuSaborPizza): void {
+    this.avisoPers = '';
+    this.hojaSabor = s;
+  }
+
+  cerrarHoja(): void {
+    this.hojaSabor = null;
+  }
+
+  estaQuitado(s: MenuSaborPizza, id: number): boolean {
+    return this.persDe(s).quitar.some((q) => q.id === id);
+  }
+
+  toggleQuitar(s: MenuSaborPizza, q: { id: number; nombre: string }): void {
+    const ps = this.persDe(s);
+    const i = ps.quitar.findIndex((x) => x.id === q.id);
+    if (i >= 0) ps.quitar.splice(i, 1);
+    else ps.quitar.push({ id: q.id, nombre: q.nombre });
+  }
+
+  cambioDe(s: MenuSaborPizza, recetaIngredienteId: number): number | null {
+    return this.persDe(s).cambios.find((c) => c.recetaIngredienteId === recetaIngredienteId)?.productoId ?? null;
+  }
+
+  setCambio(s: MenuSaborPizza, c: PersonalizacionReceta['cambiables'][number], productoId: number | null): void {
+    const ps = this.persDe(s);
+    ps.cambios = ps.cambios.filter((x) => x.recetaIngredienteId !== c.id);
+    const op = c.opciones.find((o) => o.productoId === Number(productoId));
+    if (op) ps.cambios.push({ recetaIngredienteId: c.id, nombre: c.nombre, productoId: op.productoId, reemplazoNombre: op.nombre });
+  }
+
+  tieneAdicionalSabor(s: MenuSaborPizza, id: number): boolean {
+    return this.persDe(s).adicionales.some((a) => a.id === id);
+  }
+
+  toggleAdicionalSabor(s: MenuSaborPizza, a: MenuAdicional): void {
+    const ps = this.persDe(s);
+    const i = ps.adicionales.findIndex((x) => x.id === a.id);
+    if (i >= 0) ps.adicionales.splice(i, 1);
+    else ps.adicionales.push({ ...a });
+  }
+
+  /** Lo que suma un adicional en este sabor: precio × proporción (mitad → 50 %), como el PdV. */
+  precioEnSabor(a: MenuAdicional): number {
+    return Math.round(a.precio / Math.max(1, this.saboresSel.length));
+  }
+
+  get hayPersonalizacion(): boolean {
+    return [...this.persSabores.values()].some((ps) => ps.quitar.length || ps.cambios.length || ps.adicionales.length);
+  }
+
+  get precioPersonalizacion(): number {
+    const n = Math.max(1, this.saboresSel.length);
+    let total = 0;
+    for (const s of this.saboresSel) {
+      for (const a of this.persSabores.get(s.saborId)?.adicionales || []) total += a.precio / n;
+    }
+    return Math.round(total);
+  }
+
   get precioUnitario(): number {
-    return this.precioBase + this.precioAdicionales;
+    return this.precioBase + this.precioAdicionales + this.precioPersonalizacion;
   }
 
   get total(): number {
@@ -195,6 +297,9 @@ export class PizzaDetallePage implements OnInit {
         label,
         presentacionId: this.presSel,
         saborIds: this.saboresSel.map((s) => s.saborId),
+        personalizacionSabores: this.saboresSel
+          .map((s) => this.persSabores.get(s.saborId))
+          .filter((ps): ps is PersonalizacionSabor => !!ps && !!(ps.quitar.length || ps.cambios.length || ps.adicionales.length)),
       },
       adicionales,
       observaciones,
