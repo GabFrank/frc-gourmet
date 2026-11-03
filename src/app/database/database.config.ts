@@ -342,6 +342,7 @@ import { TiendaOnlineSeguridad1793727680955 } from './migrations/1793727680955-T
 import { TiendaSeguimientoMesa1793727681955 } from './migrations/1793727681955-TiendaSeguimientoMesa';
 import { TiendaIngresoClientes1793727682955 } from './migrations/1793727682955-TiendaIngresoClientes';
 import { TiendaPagoOnline1793727683955 } from './migrations/1793727683955-TiendaPagoOnline';
+import { TiendaCategorias1793727684955 } from './migrations/1793727684955-TiendaCategorias';
 import { PagoOnlineEvento } from './entities/pedidos-online/pago-online-evento.entity';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
@@ -350,6 +351,7 @@ import { PedidoOnline } from './entities/pedidos-online/pedido-online.entity';
 import { PedidoOnlineItem } from './entities/pedidos-online/pedido-online-item.entity';
 import { CustomerRefreshToken } from './entities/pedidos-online/customer-refresh-token.entity';
 import { TiendaOnlineConfig } from './entities/pedidos-online/tienda-online-config.entity';
+import { TiendaCategoria, TiendaCategoriaProducto } from './entities/pedidos-online/tienda-categoria.entity';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -462,6 +464,8 @@ function getEntitiesList(): any[] {
       PedidoOnlineItem,
       CustomerRefreshToken,
       TiendaOnlineConfig,
+      TiendaCategoria,
+      TiendaCategoriaProducto,
       // Shared
       Adjunto,
       // Notificaciones (Email + WhatsApp)
@@ -826,6 +830,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     TiendaSeguimientoMesa1793727681955,
     TiendaIngresoClientes1793727682955,
     TiendaPagoOnline1793727683955,
+    TiendaCategorias1793727684955,
   ];
 }
 

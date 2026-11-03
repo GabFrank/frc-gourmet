@@ -20,7 +20,7 @@
   <div class="tabs" *ngIf="!cargando">
     <button *ngFor="let cv of categoriasView"
             class="sf-chip" [class.active]="categoriaActiva === cv.cat.id"
-            (click)="irACategoria(cv.cat)">{{ cv.cat.nombre }}</button>
+            (click)="elegirCategoria(cv.cat)">{{ cv.cat.nombre }}</button>
   </div>
 </div>
 
@@ -30,36 +30,32 @@
   <!-- Skeletons -->
   <ng-container *ngIf="cargando">
     <div class="prod-card skel-card" *ngFor="let s of skeletons">
+      <div class="sf-skel skel-photo"></div>
       <div class="prod-info">
         <div class="sf-skel skel-line w60"></div>
         <div class="sf-skel skel-line w90"></div>
         <div class="sf-skel skel-line w30"></div>
       </div>
-      <div class="sf-skel skel-photo"></div>
     </div>
   </ng-container>
 
-  <!-- Secciones por categoría -->
+  <!-- Una categoría por vez (o los resultados de la búsqueda en toda la carta) -->
   <ng-container *ngIf="!cargando && menu">
-    <p class="sf-muted empty" *ngIf="!categoriasView.length">No encontramos productos.</p>
+    <h2 class="cat-title">{{ buscando ? 'Resultados' : categoriaActivaNombre }}</h2>
+    <p class="sf-muted empty" *ngIf="!tarjetasVisibles.length">No encontramos productos.</p>
 
-    <section *ngFor="let cv of categoriasView" class="cat-section"
-             [id]="'cat-' + cv.cat.id" [attr.data-cat]="cv.cat.id" #seccion>
-      <h2 class="cat-title">{{ cv.cat.nombre }}</h2>
-
-      <button class="prod-card" *ngFor="let c of cv.cards" (click)="abrir(c)">
-        <div class="prod-info">
-          <div class="prod-nombre">{{ c.titulo }}</div>
-          <div class="prod-desc" *ngIf="c.descripcion">{{ c.descripcion }}</div>
-          <div class="prod-precio">
-            <span class="desde" *ngIf="c.desde">desde </span>
-            {{ c.precioDesde | guarani }}
-          </div>
+    <button class="prod-card" *ngFor="let c of tarjetasVisibles" (click)="abrir(c)">
+      <div class="prod-photo" *ngIf="c.imageUrl | appImg as img" [style.background-image]="'url(' + img + ')'"></div>
+      <div class="prod-info">
+        <div class="prod-nombre">{{ c.titulo }}</div>
+        <div class="prod-desc" *ngIf="c.descripcion">{{ c.descripcion }}</div>
+        <div class="prod-precio">
+          <span class="desde" *ngIf="c.desde">desde </span>
+          {{ c.precioDesde | guarani }}
         </div>
-        <div class="prod-photo" *ngIf="c.imageUrl | appImg as img" [style.background-image]="'url(' + img + ')'"></div>
-        <div class="prod-add">+</div>
-      </button>
-    </section>
+      </div>
+      <div class="prod-add" aria-hidden="true">+</div>
+    </button>
   </ng-container>
 </div>
 

@@ -8,6 +8,8 @@ import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/ped
 import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zona-delivery.entity';
+import { TiendaCategoria, TiendaCategoriaProducto } from '../../src/app/database/entities/pedidos-online/tienda-categoria.entity';
+import { Producto } from '../../src/app/database/entities/productos/producto.entity';
 import { Delivery } from '../../src/app/database/entities/ventas/delivery.entity';
 import { EstadoPedidoOnline, EstadoPagoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { ensurePermission } from '../utils/auth.utils';
@@ -371,6 +373,88 @@ export function registerPedidosOnlineAdminHandlers(
   ipcMain.handle('eliminar-zona-delivery', async (_event: any, zonaId: number) => {
     await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
     await dataSource.getRepository(ZonaDelivery).delete({ id: zonaId });
+    return { success: true };
+  });
+
+  // ============== CATEGORÍAS DE LA TIENDA (F6) ==============
+  const mapCategoriaTienda = (c: any) => ({
+    id: c.id,
+    nombre: c.nombre,
+    orden: c.orden,
+    activo: c.activo,
+    productos: (c.productos || [])
+      .filter((cp: any) => cp.producto)
+      .sort((a: any, b: any) => a.orden - b.orden)
+      .map((cp: any) => ({ productoId: cp.producto.id, nombre: cp.producto.nombre, orden: cp.orden })),
+  });
+  const cargarCategoriaTienda = (id: number) =>
+    dataSource.getRepository(TiendaCategoria).findOne({ where: { id }, relations: ['productos', 'productos.producto'] });
+
+  ipcMain.handle('get-tienda-categorias-admin', async () => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    const cats = await dataSource.getRepository(TiendaCategoria).find({
+      relations: ['productos', 'productos.producto'],
+      order: { orden: 'ASC', id: 'ASC' },
+    });
+    return cats.map(mapCategoriaTienda);
+  });
+
+  /** Alta o edición: nombre, activo y la lista completa de productos en su orden (reemplaza la anterior). */
+  ipcMain.handle('guardar-tienda-categoria', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    const nombre = String(data?.nombre || '').trim().toUpperCase().slice(0, 80);
+    if (!nombre) return { success: false, error: 'nombre_requerido' };
+    const productoIds: number[] = Array.isArray(data?.productoIds)
+      ? Array.from(new Set<number>(data.productoIds.map((x: any) => Number(x)).filter((x: number) => Number.isInteger(x) && x > 0)))
+      : [];
+    if (productoIds.length) {
+      const existen = await dataSource.getRepository(Producto).count({ where: { id: In(productoIds) } as any });
+      if (existen !== productoIds.length) return { success: false, error: 'producto_inexistente' };
+    }
+    const id = await dataSource.transaction(async (em) => {
+      const repoC = em.getRepository(TiendaCategoria);
+      let cat: TiendaCategoria | null;
+      if (data?.id) {
+        cat = await repoC.findOne({ where: { id: Number(data.id) } });
+        if (!cat) return null;
+      } else {
+        const ultima = await repoC.findOne({ where: {}, order: { orden: 'DESC' } });
+        cat = repoC.create({ orden: (ultima?.orden ?? -1) + 1 });
+      }
+      cat.nombre = nombre;
+      cat.activo = data?.activo !== false;
+      const saved = await repoC.save(cat);
+      if (Array.isArray(data?.productoIds)) {
+        const repoCP = em.getRepository(TiendaCategoriaProducto);
+        await repoCP.delete({ categoria: { id: saved.id } } as any);
+        if (productoIds.length) {
+          await repoCP.save(productoIds.map((pid, i) => repoCP.create({ categoria: { id: saved.id } as any, producto: { id: pid } as any, orden: i })));
+        }
+      }
+      return saved.id;
+    });
+    if (id == null) return { success: false, error: 'categoria_no_encontrada' };
+    return { success: true, categoria: mapCategoriaTienda(await cargarCategoriaTienda(id)) };
+  });
+
+  ipcMain.handle('eliminar-tienda-categoria', async (_event: any, categoriaId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    // Las asignaciones se borran a mano además del ON DELETE CASCADE (SQLite puede tener las FK apagadas).
+    await dataSource.transaction(async (em) => {
+      await em.getRepository(TiendaCategoriaProducto).delete({ categoria: { id: Number(categoriaId) } } as any);
+      await em.getRepository(TiendaCategoria).delete({ id: Number(categoriaId) });
+    });
+    return { success: true };
+  });
+
+  /** Orden de las pestañas: la lista de ids en el orden nuevo. */
+  ipcMain.handle('reordenar-tienda-categorias', async (_event: any, ids: number[]) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    if (!Array.isArray(ids)) return { success: false, error: 'ids_invalidos' };
+    await dataSource.transaction(async (em) => {
+      const repoC = em.getRepository(TiendaCategoria);
+      for (let i = 0; i < ids.length; i++) await repoC.update({ id: Number(ids[i]) }, { orden: i });
+    });
     return { success: true };
   });
 
