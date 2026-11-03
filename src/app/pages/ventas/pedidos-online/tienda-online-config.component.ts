@@ -66,6 +66,13 @@ import { RepositoryService } from '../../../database/repository.service';
           </mat-slide-toggle>
         </div>
 
+        <h3 class="sub">Pizzas</h3>
+        <div class="toggles">
+          <mat-slide-toggle [(ngModel)]="cfg.personalizarSabores" color="primary">
+            Personalizar cada sabor (sacar, cambiar ingredientes y adicionales por sabor)
+          </mat-slide-toggle>
+        </div>
+
         <h3 class="sub">Pedidos en mesa (QR autoservicio)</h3>
         <div class="toggles">
           <mat-slide-toggle [(ngModel)]="cfg.permiteMesa" color="primary">Permite pedidos en mesa (QR)</mat-slide-toggle>

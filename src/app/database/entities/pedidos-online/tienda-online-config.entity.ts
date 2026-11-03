@@ -61,6 +61,14 @@ export class TiendaOnlineConfig extends BaseModel {
   aceptacionAutomatica!: boolean;
 
   /**
+   * F6b: el cliente personaliza cada sabor de la pizza (sacar / cambiar ingredientes y
+   * adicionales por sabor), como en el PdV. Nace apagado: prenderlo después de revisar que las
+   * recetas tengan marcados los ingredientes opcionales y cambiables.
+   */
+  @Column({ name: 'personalizar_sabores', type: 'boolean', default: false })
+  personalizarSabores!: boolean;
+
+  /**
    * Horarios de atención como JSON:
    * `[{ dia: 0-6 (0=Dom), abre: 'HH:mm', cierra: 'HH:mm', activo: bool }]`.
    * null/[] = siempre abierta (mientras `activa`).
