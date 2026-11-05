@@ -12,7 +12,13 @@ import { TiendaCategoria, TiendaCategoriaProducto } from '../../src/app/database
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
 import { Delivery } from '../../src/app/database/entities/ventas/delivery.entity';
 import { EstadoPedidoOnline, EstadoPagoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
-import { ensurePermission } from '../utils/auth.utils';
+import { checkPermission, ensurePermission } from '../utils/auth.utils';
+import { PrecioDelivery } from '../../src/app/database/entities/ventas/precio-delivery.entity';
+import { enviosPorZonaYCanal, filtroDeRango } from './reportes-delivery.helper';
+import { getCotizacionMap, getInicioJornada, getMonedaPrincipalId } from './dashboard-ventas.handler';
+import { rangoToFechas } from '../utils/dashboard-rangos.util';
+import { dbQuery } from '../utils/db-query';
+import { asignarEnviosAZonas, redondearCoordenada } from '../utils/zonas-dashboard.utils';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
 import { cancelarVentaCompletaEnTx } from '../utils/venta-reversa.utils';
 import { invokeHandler } from '../utils/handler-registry';
@@ -363,11 +369,72 @@ export function registerPedidosOnlineAdminHandlers(
       }
     }
     if (data?.precioDeliveryId !== undefined) {
-      zona.precioDelivery = data.precioDeliveryId ? ({ id: Number(data.precioDeliveryId) } as any) : null;
+      const tarifaId = data.precioDeliveryId ? Number(data.precioDeliveryId) : null;
+      // Una tarifa del PdV por zona (decisión del propietario, F7): es lo que le
+      // dice al dashboard a qué zona fue un delivery cargado por teléfono. Con dos
+      // zonas en la misma tarifa, ese delivery no tendría una sola zona.
+      if (tarifaId) {
+        const otra = await repoZ.findOne({ where: { precioDelivery: { id: tarifaId } }, relations: ['precioDelivery'] });
+        if (otra && otra.id !== zona.id) return { success: false, error: 'tarifa_en_uso', zona: otra.nombre };
+      }
+      zona.precioDelivery = tarifaId ? ({ id: tarifaId } as any) : null;
     }
     if (!zona.nombre) return { success: false, error: 'nombre_requerido' };
     const saved = await repoZ.save(zona);
     return { success: true, zona: mapZona(saved) };
+  });
+
+  // ============== DASHBOARD DE ZONAS (F7) ==============
+  // Lectura con VENTAS_PDV (decisión del propietario): la ve quien ve la entrada del
+  // menú. Crear, editar, dibujar y eliminar siguen pidiendo PEDIDOS_ONLINE_CONFIGURAR.
+  const RANGOS_DASHBOARD = ['today', 'week', 'month'] as const;
+  const TOPE_PUNTOS = 1000;
+  ipcMain.handle('get-dashboard-zonas-delivery', async (_event: any, params?: { rango?: string }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+    const rango = (RANGOS_DASHBOARD as readonly string[]).includes(String(params?.rango))
+      ? (params!.rango as typeof RANGOS_DASHBOARD[number]) : 'week';
+    const inicioJornada = await getInicioJornada(dataSource);
+    const ventana = rangoToFechas(rango, new Date(), inicioJornada);
+    const filtro = filtroDeRango(dataSource, ventana);
+    const monPrincipal = await getMonedaPrincipalId(dataSource);
+    const ctx = { monPrincipal, cotMap: await getCotizacionMap(dataSource, monPrincipal), isPg: dataSource.options.type === 'postgres' };
+
+    const zonasEnt = await dataSource.getRepository(ZonaDelivery).find({
+      order: { orden: 'ASC', nombre: 'ASC' }, relations: ['precioDelivery'],
+    });
+    const zonas = zonasEnt.map(mapZona);
+    const tarifas = (await dataSource.getRepository(PrecioDelivery).find({ order: { descripcion: 'ASC' } }))
+      .map((t: any) => ({ id: t.id, descripcion: t.descripcion, valor: Number(t.valor), activo: t.activo !== false }));
+    const { filas, kpis } = asignarEnviosAZonas(zonas, tarifas, await enviosPorZonaYCanal(dataSource, ctx, filtro));
+
+    // Puntos del mapa: el MISMO conjunto que cuenta la tabla para la tienda (venta
+    // concluida del período, reparto y no retiro), con coordenadas redondeadas y
+    // sin nada que identifique al cliente.
+    const filasPuntos: any[] = await dbQuery(dataSource, `
+      SELECT po.latitud AS lat, po.longitud AS lng, po.zona_delivery_id AS zona_id
+      FROM ventas v
+      -- Un pedido por venta: venta_id no es único en pedidos_online.
+      JOIN (SELECT venta_id, MIN(id) AS pid FROM pedidos_online WHERE venta_id IS NOT NULL GROUP BY venta_id) u ON u.venta_id = v.id
+      JOIN pedidos_online po ON po.id = u.pid
+      LEFT JOIN deliveries dcanal ON dcanal.id = v.delivery_id
+      WHERE v.estado = ? AND ${filtro.sql}
+        AND v.canal_origen = 'WEB'
+        AND v.delivery_id IS NOT NULL AND (dcanal.modo IS NULL OR dcanal.modo <> 'RETIRO')
+        AND po.latitud IS NOT NULL AND po.longitud IS NOT NULL
+      ORDER BY v.created_at DESC
+      LIMIT ${TOPE_PUNTOS + 1}
+    `, [VentaEstado.CONCLUIDA, ...filtro.params]);
+    const puntos = filasPuntos.slice(0, TOPE_PUNTOS)
+      .map((f) => ({ lat: redondearCoordenada(f.lat), lng: redondearCoordenada(f.lng), zonaId: f.zona_id != null ? Number(f.zona_id) : null }))
+      .filter((p) => p.lat != null && p.lng != null);
+
+    const puedeConfigurar = (await checkPermission(dataSource, getCurrentUser, PERM_CONFIGURAR)).ok;
+    return {
+      rango, desde: ventana.desde, hasta: ventana.hasta,
+      zonas, tarifas, filas, kpis, puntos,
+      puntosTruncados: filasPuntos.length > TOPE_PUNTOS,
+      puedeConfigurar,
+    };
   });
 
   ipcMain.handle('eliminar-zona-delivery', async (_event: any, zonaId: number) => {

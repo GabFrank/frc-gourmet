@@ -494,6 +494,7 @@ interface ElectronAPI {
   probarTiendaUpay: () => Promise<any>;
   marcarPagoDevueltoPedidoOnline: (pedidoId: number) => Promise<any>;
   getZonasDeliveryAdmin: () => Promise<any[]>;
+  getDashboardZonasDelivery: (params?: { rango?: string }) => Promise<any>;
   guardarZonaDelivery: (data: any) => Promise<any>;
   eliminarZonaDelivery: (zonaId: number) => Promise<any>;
   getTiendaCategoriasAdmin: () => Promise<any[]>;
@@ -2669,6 +2670,9 @@ export class RepositoryIpcService extends RepositoryService {
   }
   getZonasDeliveryAdmin(): Observable<any[]> {
     return from(this.api.getZonasDeliveryAdmin());
+  }
+  getDashboardZonasDelivery(params?: { rango?: string }): Observable<any> {
+    return from(this.api.getDashboardZonasDelivery(params));
   }
   guardarZonaDelivery(data: any): Observable<any> {
     return from(this.api.guardarZonaDelivery(data));

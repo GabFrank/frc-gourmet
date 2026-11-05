@@ -548,6 +548,7 @@ export abstract class RepositoryService {
   abstract probarTiendaUpay(): Observable<any>;
   abstract marcarPagoDevueltoPedidoOnline(pedidoId: number): Observable<any>;
   abstract getZonasDeliveryAdmin(): Observable<any[]>;
+  abstract getDashboardZonasDelivery(params?: { rango?: string }): Observable<any>;
   abstract guardarZonaDelivery(data: any): Observable<any>;
   abstract eliminarZonaDelivery(zonaId: number): Observable<any>;
   abstract getTiendaCategoriasAdmin(): Observable<any[]>;

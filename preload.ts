@@ -2619,6 +2619,9 @@ contextBridge.exposeInMainWorld('api', {
   getZonasDeliveryAdmin: async (): Promise<any[]> => {
     return await ipcRenderer.invoke('get-zonas-delivery-admin');
   },
+  getDashboardZonasDelivery: async (params?: { rango?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-zonas-delivery', params);
+  },
   guardarZonaDelivery: async (data: any): Promise<any> => {
     return await ipcRenderer.invoke('guardar-zona-delivery', data);
   },

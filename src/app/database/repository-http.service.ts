@@ -1122,6 +1122,9 @@ export class RepositoryHttpService extends RepositoryService {
   getZonasDeliveryAdmin(): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getZonasDeliveryAdmin() no esta implementado todavia.`)) as any;
   }
+  getDashboardZonasDelivery(_params?: { rango?: string }): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getDashboardZonasDelivery() no esta implementado todavia.`)) as any;
+  }
   guardarZonaDelivery(data: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.guardarZonaDelivery() no esta implementado todavia.`)) as any;
   }
