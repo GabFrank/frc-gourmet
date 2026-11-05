@@ -165,6 +165,7 @@ export class CartService {
         : null;
       quedan.push({
         ...it,
+        nombreProducto: p.nombre,
         precioUnitario: nuevo,
         adicionales: adicionales as MenuAdicional[],
         imageUrl: saborImg || p.imageUrl || it.imageUrl,
