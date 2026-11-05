@@ -1,0 +1,10 @@
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; padding-top: 4px; }
+.ancho { grid-column: 1 / -1; }
+// Misma altura que la caja de un campo (40 px en este tema), para centrar el interruptor con «Orden».
+.toggle { align-self: start; display: flex; align-items: center; height: 40px; }
+.error { color: var(--error-color); }
+.general { margin: 8px 0 0; font-size: 13px; }
+.nota { margin: 8px 0 0; font-size: 12px; color: var(--text-secondary); }
+@media (max-width: 560px) {
+  .form { grid-template-columns: 1fr; }
+}

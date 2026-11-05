@@ -29,41 +29,6 @@
     <div class="alerta" *ngFor="let a of alertas"><mat-icon>warning_amber</mat-icon><span>{{ a }}</span></div>
   </div>
 
-  <mat-card class="form-card" *ngIf="editando">
-    <h3>{{ editando.id ? 'Editar zona' : 'Nueva zona' }}</h3>
-    <div class="grid">
-      <mat-form-field appearance="outline">
-        <mat-label>Nombre</mat-label>
-        <input matInput [(ngModel)]="editando.nombre" maxlength="150">
-      </mat-form-field>
-      <mat-form-field appearance="outline">
-        <mat-label>Tarifa del PdV</mat-label>
-        <mat-select [(ngModel)]="editando.precioDeliveryId" placeholder="Sin tarifa">
-          <mat-option *ngFor="let t of tarifasOpciones" [value]="t.id" [disabled]="t.disabled">{{ t.label }}</mat-option>
-        </mat-select>
-        <mat-hint>Es la que usa el cajero al cargar por teléfono un delivery de esta zona. Una tarifa por zona.</mat-hint>
-      </mat-form-field>
-      <mat-form-field appearance="outline">
-        <mat-label>Envío si no tiene tarifa</mat-label>
-        <input matInput type="number" min="0" [(ngModel)]="editando.tarifa">
-      </mat-form-field>
-      <mat-form-field appearance="outline">
-        <mat-label>Monto mínimo</mat-label>
-        <input matInput type="number" min="0" [(ngModel)]="editando.montoMinimo">
-      </mat-form-field>
-      <mat-form-field appearance="outline">
-        <mat-label>Orden</mat-label>
-        <input matInput type="number" [(ngModel)]="editando.orden">
-        <mat-hint>Si dos zonas se superponen, gana la de menor orden.</mat-hint>
-      </mat-form-field>
-    </div>
-    <mat-slide-toggle [(ngModel)]="editando.activa" color="primary">Activa</mat-slide-toggle>
-    <div class="form-acciones">
-      <button mat-button (click)="editando = null">Cancelar</button>
-      <button mat-flat-button color="primary" [disabled]="guardando" (click)="guardar()">Guardar</button>
-    </div>
-  </mat-card>
-
   <div class="cuerpo">
     <mat-card class="mapa-card">
       <div #mapEl class="mapa" aria-label="Mapa de las zonas de delivery"></div>
@@ -90,11 +55,13 @@
                 (click)="f.esZona ? seleccionar(f.clave) : null"
                 (keydown.enter)="f.esZona ? seleccionar(f.clave) : null"
                 (keydown.space)="f.esZona ? seleccionar(f.clave) : null; $event.preventDefault()">
-              <td class="zona">
-                <span class="dot" *ngIf="f.colorCss" [style.background]="f.colorCss"></span>
-                <span class="dot vacio" *ngIf="!f.colorCss"></span>
-                <span>{{ f.nombre }}</span>
-                <span class="chip off" *ngIf="f.esZona && !f.activa">Inactiva</span>
+              <td>
+                <div class="zona">
+                  <span class="dot" *ngIf="f.colorCss" [style.background]="f.colorCss"></span>
+                  <span class="dot vacio" *ngIf="!f.colorCss"></span>
+                  <span>{{ f.nombre }}</span>
+                  <span class="chip off" *ngIf="f.esZona && !f.activa">Inactiva</span>
+                </div>
               </td>
               <td><span [class.warn]="f.sinTarifa">{{ f.tarifaNombre }}</span></td>
               <td class="n"><span *ngIf="f.esZona">{{ f.envioPrecio | number:'1.0-2' }}</span></td>

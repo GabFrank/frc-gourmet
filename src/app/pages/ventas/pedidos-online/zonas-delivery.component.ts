@@ -2,10 +2,6 @@ import { AfterViewInit, Component, ElementRef, NgZone, OnDestroy, OnInit, ViewCh
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
-import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
@@ -18,6 +14,7 @@ import { RepositoryService } from '../../../database/repository.service';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 import { DashStatChipComponent, DashStatChipColor } from '../../../shared/components/dashboard/stat-chip/dash-stat-chip.component';
 import { MapaZonasDialogComponent } from './mapa-zonas-dialog/mapa-zonas-dialog.component';
+import { CreateEditZonaDeliveryDialogComponent } from './create-edit-zona-delivery-dialog/create-edit-zona-delivery-dialog.component';
 
 type RangoZonas = 'today' | 'week' | 'month';
 
@@ -40,8 +37,7 @@ interface Kpi { icon: string; label: string; value: string; color: DashStatChipC
   selector: 'app-zonas-delivery',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, MatCardModule, MatFormFieldModule, MatInputModule, MatSelectModule,
-    MatSlideToggleModule, MatButtonModule, MatButtonToggleModule, MatIconModule, MatTooltipModule,
+    CommonModule, FormsModule, MatCardModule, MatButtonModule, MatButtonToggleModule, MatIconModule, MatTooltipModule,
     MatSnackBarModule, MatDialogModule, MatMenuModule, DashStatChipComponent,
   ],
   providers: [DecimalPipe],
@@ -76,9 +72,6 @@ export class ZonasDeliveryComponent implements OnInit, AfterViewInit, OnDestroy 
   mapaSinMosaicos = false;
   seleccionada: string | null = null;
 
-  guardando = false;
-  editando: any = null;
-  tarifasOpciones: { id: number | null; label: string; disabled: boolean }[] = [];
 
   private map: L.Map | null = null;
   private capaZonas = L.layerGroup();
@@ -285,37 +278,19 @@ export class ZonasDeliveryComponent implements OnInit, AfterViewInit, OnDestroy 
 
   // ─── ABM ───────────────────────────────────────────────────────────────
 
-  nueva(): void { this.abrirForm({ nombre: '', tarifa: 0, montoMinimo: 0, activa: true, orden: this.zonas.length, poligono: null, precioDeliveryId: null }); }
-  editar(z: any): void { this.abrirForm({ ...z }); }
+  nueva(): void { this.abrirForm(null); }
+  editar(z: any): void { this.abrirForm(z); }
 
-  private abrirForm(z: any): void {
-    this.editando = z;
-    // Una tarifa del PdV por zona: las que ya usa otra zona se muestran pero no se pueden elegir.
-    const usadaPor = new Map<number, string>();
-    for (const o of this.zonas) if (o.precioDeliveryId != null && o.id !== z.id) usadaPor.set(o.precioDeliveryId, o.nombre);
-    this.tarifasOpciones = [
-      { id: null, label: 'Sin tarifa', disabled: false },
-      ...this.tarifas
-        .filter((t: any) => t.activo || t.id === z.precioDeliveryId)
-        .map((t: any) => ({
-          id: t.id,
-          label: `${t.descripcion} · ₲ ${this.num(t.valor)}${usadaPor.has(t.id) ? ` (usada por ${usadaPor.get(t.id)})` : ''}`,
-          disabled: usadaPor.has(t.id),
-        })),
-    ];
-  }
-
-  guardar(): void {
-    if (!this.editando?.nombre?.trim()) { this.snack.open('Ingresá un nombre', 'OK', { duration: 2500 }); return; }
-    this.guardando = true;
-    this.repo.guardarZonaDelivery(this.editando).subscribe({
-      next: (res) => {
-        this.guardando = false;
-        if (res?.success) { this.editando = null; this.cargar(); this.snack.open('Zona guardada', 'OK', { duration: 2000 }); }
-        else if (res?.error === 'tarifa_en_uso') this.snack.open(`Esa tarifa ya la usa la zona ${res.zona}. Cada tarifa va en una sola zona.`, 'OK', { duration: 5000 });
-        else this.snack.open('No se pudo guardar: ' + (res?.error || ''), 'OK', { duration: 3000 });
-      },
-      error: (e) => { this.guardando = false; this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3000 }); },
+  /** Alta y edición van en un diálogo: la pantalla (mapa y tabla) no se mueve. */
+  private abrirForm(z: any | null): void {
+    const ref = this.dialog.open(CreateEditZonaDeliveryDialogComponent, {
+      width: '560px', maxWidth: '95vw',
+      data: { zona: z, zonas: this.zonas, tarifas: this.tarifas },
+    });
+    ref.afterClosed().subscribe((guardada: boolean) => {
+      if (!guardada) return;
+      this.cargar();
+      this.snack.open(z ? 'Zona guardada' : 'Zona creada', 'OK', { duration: 2000 });
     });
   }
 
