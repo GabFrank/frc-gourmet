@@ -116,8 +116,8 @@ export class CheckoutPage implements OnInit, OnDestroy {
     // Centro por defecto: Asunción, PY.
     const centro = [-25.2822, -57.6351];
     this.map = L.map(el, { zoomControl: true }).setView(centro, 14);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19, attribution: '© OpenStreetMap · © CARTO',
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
     }).addTo(this.map);
     this.map.on('moveend', () => this.zone.run(() => this.onMapMove()));
     this.onMapMove();
