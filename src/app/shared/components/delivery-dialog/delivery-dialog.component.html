@@ -221,6 +221,12 @@
           <span>OBSERVACIÓN</span>
           <div>{{ selectedDelivery.observacion }}</div>
         </div>
+        <!-- F8: cómo dijo el cliente de la tienda que va a pagar (el cobro lo trae precargado). -->
+        <div class="recibo-dir pago-previsto" *ngIf="selectedDelivery.pagoPrevisto">
+          <span>PAGO DEL CLIENTE</span>
+          <div>{{ selectedDelivery.pagoPrevisto.resumen }}</div>
+          <div *ngIf="selectedDelivery.pagoPrevisto.observacion">{{ selectedDelivery.pagoPrevisto.observacion }}</div>
+        </div>
         <div class="recibo-kv" *ngIf="selectedDelivery.entregadoPorFuncionario">
           <span>REPARTIDOR</span>
           <span>{{ selectedDelivery.entregadoPorFuncionario.persona?.nombre }}</span>

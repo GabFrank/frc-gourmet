@@ -65,7 +65,22 @@ export interface CobrarVentaDialogData {
   puedeFinalizar?: boolean;
   /** Nombre de la terminal dueña de la caja, para explicar el bloqueo. */
   terminalDeLaCaja?: string;
+  /**
+   * F8: cómo dijo el cliente de la tienda que va a pagar. Sólo PRECARGA los campos (forma de
+   * pago, moneda y «paga con»); nada se guarda hasta que el cajero agrega la línea y finaliza.
+   */
+  pagoPrevisto?: { metodoPago: string; pagoMonedaId: number | null; vueltoPara: number | null; resumen: string; observacion?: string | null };
 }
+
+/** F8: método de la tienda → formas de pago del PdV, en orden de preferencia (por nombre). */
+const FORMA_PAGO_POR_METODO: Record<string, string[]> = {
+  EFECTIVO: ['EFECTIVO'],
+  TARJETA_POS: ['TARJETA DEBITO', 'TARJETA CREDITO'],
+  QR: ['QR', 'TRANSFERENCIA'],
+  PIX: ['PIX'],
+  TRANSFERENCIA: ['TRANSFERENCIA'],
+  UPAY: ['UPAY ONLINE'],
+};
 
 interface DetalleRow {
   id: number;
@@ -283,6 +298,30 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       this.selectedMoneda = this.data.principalMoneda || this.data.monedas[0];
       this.autoFillValor();
     }
+    this.precargarPagoPrevisto();
+  }
+
+  /** Texto «Pago del cliente: …» que muestra el diálogo (precalculado). */
+  pagoPrevistoTexto = '';
+
+  /**
+   * F8: deja puestos forma de pago, moneda y monto según lo que eligió el cliente en la tienda.
+   * Sólo en la primera ronda (sin líneas cargadas): si el cajero ya empezó a cobrar, no se toca.
+   */
+  private precargarPagoPrevisto(): void {
+    const pp = this.data.pagoPrevisto;
+    if (!pp) return;
+    this.pagoPrevistoTexto = [pp.resumen, pp.observacion].filter(Boolean).join(' · ');
+    if (this.detalleRows.length > 0) return;
+    const nombres = FORMA_PAGO_POR_METODO[pp.metodoPago] || [];
+    const forma = nombres.map((n) => this.formasPago.find((fp: any) => String(fp.nombre).toUpperCase() === n)).find(Boolean);
+    if (forma) { this.selectedFormaPago = forma; this.onFormaPagoChange(); }
+    if (pp.metodoPago === 'EFECTIVO' && pp.pagoMonedaId != null) {
+      const m = this.data.monedas.find((x) => x.id === pp.pagoMonedaId);
+      if (m) { this.selectedMoneda = m; this.autoFillValor(); }
+    }
+    // «Paga con»: el billete que entrega; el diálogo calcula el vuelto como siempre.
+    if (pp.metodoPago === 'EFECTIVO' && pp.vueltoPara != null && pp.vueltoPara > 0) this.valorInput = pp.vueltoPara;
   }
 
   private async loadClientes(): Promise<void> {

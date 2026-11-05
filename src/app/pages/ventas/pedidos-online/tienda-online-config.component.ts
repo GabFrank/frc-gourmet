@@ -66,6 +66,12 @@ import { RepositoryService } from '../../../database/repository.service';
           </mat-slide-toggle>
         </div>
 
+        <h3 class="sub">Cómo puede pagar el cliente al recibir o retirar</h3>
+        <p class="hint">Lo que elige se muestra en la bandeja, en el ticket del delivery y viene precargado en el cobro del PdV. El pago con tarjeta online (uPay) se configura más abajo.</p>
+        <div class="toggles">
+          <mat-slide-toggle *ngFor="let m of metodosOpciones" [(ngModel)]="m.activo" color="primary">{{ m.label }}</mat-slide-toggle>
+        </div>
+
         <h3 class="sub">Pizzas</h3>
         <div class="toggles">
           <mat-slide-toggle [(ngModel)]="cfg.personalizarSabores" color="primary">
@@ -217,6 +223,7 @@ import { RepositoryService } from '../../../database/repository.service';
     .grid .full { grid-column: 1 / -1; }
     .toggles { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 18px; }
     .sub { color: var(--text-primary); margin: 8px 0 4px; font-size: 15px; }
+    .hint { color: var(--text-secondary); font-size: 12px; margin: 0 0 6px; }
     .lan-field { width: 100%; margin-bottom: 8px; }
     .actions { display: flex; justify-content: flex-end; }
     .ayuda { color: var(--text-secondary); font-size: 13px; margin: 0 0 10px; }
@@ -275,9 +282,23 @@ export class TiendaOnlineConfigComponent implements OnInit {
     return res?.detalle ? `${base}: ${res.detalle}` : base;
   }
 
+  /** F8: métodos para pagar al recibir (interruptores). Precalculado: el template no calcula. */
+  metodosOpciones: { valor: string; label: string; activo: boolean }[] = [];
+  private readonly METODOS = [
+    { valor: 'EFECTIVO', label: 'Efectivo (con vuelto y moneda)' },
+    { valor: 'TARJETA_POS', label: 'Tarjeta en el POS' },
+    { valor: 'QR', label: 'QR' },
+    { valor: 'PIX', label: 'PIX' },
+    { valor: 'TRANSFERENCIA', label: 'Transferencia' },
+  ];
+  private armarMetodos(): void {
+    const activos: string[] = Array.isArray(this.cfg?.metodosPago) ? this.cfg.metodosPago : ['EFECTIVO'];
+    this.metodosOpciones = this.METODOS.map((m) => ({ ...m, activo: activos.includes(m.valor) }));
+  }
+
   ngOnInit(): void {
     this.repo.getTiendaOnlineConfig().subscribe({
-      next: (c) => { this.cfg = c || this.cfg; this.ingreso = c?.ingreso || {}; this.cargando = false; },
+      next: (c) => { this.cfg = c || this.cfg; this.ingreso = c?.ingreso || {}; this.armarMetodos(); this.cargando = false; },
       error: () => { this.cargando = false; },
     });
   }
@@ -286,6 +307,8 @@ export class TiendaOnlineConfigComponent implements OnInit {
     this.guardando = true;
     const { ingreso, abiertaAhora, ...datos } = this.cfg;
     const payload = { ...datos, ...extra };
+    // Ninguno marcado = sólo efectivo (el servidor nunca deja la tienda sin forma de pago).
+    payload.metodosPago = this.metodosOpciones.filter((m) => m.activo).map((m) => m.valor);
     if (this.tokenNuevo.trim() && !extra.whatsappTokenBorrar) payload.whatsappToken = this.tokenNuevo.trim();
     if (this.upayKeyNueva.trim() && !extra.upayApiKeyBorrar) payload.upayApiKey = this.upayKeyNueva.trim();
     this.repo.updateTiendaOnlineConfig(payload).subscribe({
@@ -294,6 +317,7 @@ export class TiendaOnlineConfigComponent implements OnInit {
         if (res?.success) {
           this.cfg = res.config;
           this.ingreso = res.config?.ingreso || {};
+          this.armarMetodos();
           this.tokenNuevo = '';
           this.upayKeyNueva = '';
           this.snack.open('Configuración guardada', 'OK', { duration: 2500 });

@@ -904,6 +904,8 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       puedeAgregarPagos: this.data.puedeAgregarPagos,
       puedeFinalizar: this.data.puedeFinalizar,
       terminalDeLaCaja: this.data.terminalDeLaCaja,
+      // F8: el pago que eligió el cliente en la tienda, para precargarlo (no se guarda solo).
+      pagoPrevisto: (this.selectedDelivery as any).pagoPrevisto || undefined,
     };
 
     const dialogRef = this.dialog.open(CobrarVentaDialogComponent, {

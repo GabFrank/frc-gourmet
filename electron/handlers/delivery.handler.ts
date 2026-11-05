@@ -22,7 +22,7 @@
  */
 
 import { ipcMain } from 'electron';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, In } from 'typeorm';
 
 import { Delivery, DeliveryEstado, DeliveryModo } from '../../src/app/database/entities/ventas/delivery.entity';
 import { PrecioDelivery } from '../../src/app/database/entities/ventas/precio-delivery.entity';
@@ -44,6 +44,7 @@ import { printDeliveryTicketInternal } from './documentos-tickets.handler';
 import { getEstadoCobroVentaInternal } from './ventas.handler';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { PEDIDO_POR_ESTADO_DELIVERY, sincronizarPedidosOnline } from '../utils/pedido-online-sync.utils';
+import { monedasTienda, resumenPago } from '../utils/pago-pedido.utils';
 import { TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 /**
  * Columnas de la `Persona` del **`Funcionario`** repartidor que este canal publica.
@@ -249,6 +250,21 @@ export function registerDeliveryHandlers(
 
     const [ventas, total] = await qb.getManyAndCount();
 
+    // F8: cómo dijo el cliente de la tienda que va a pagar, para mostrarlo y precargar el
+    // cobro (sin cobrar nada). Una consulta para toda la página; un delivery del PdV no tiene.
+    const ids = ventas.map((v) => (v.delivery as any)?.id).filter((x) => x != null);
+    const pedidosWeb = ids.length
+      ? await dataSource.getRepository(PedidoOnline).find({ where: { deliveryId: In(ids) } as any })
+      : [];
+    const monedasPago = pedidosWeb.length ? await monedasTienda(dataSource) : [];
+    const pagoPorDelivery = new Map(pedidosWeb.map((p: any) => [p.deliveryId, {
+      metodoPago: p.metodoPago,
+      pagoMonedaId: p.pagoMonedaId ?? null,
+      vueltoPara: p.vueltoPara != null ? Number(p.vueltoPara) : null,
+      resumen: resumenPago(p, monedasPago),
+      observacion: p.pagoObservacion ?? null,
+    }]));
+
     const data = ventas.map((venta) => ({
       ...(venta.delivery as any),
       // Marca para la UI: este delivery viene de un turno anterior.
@@ -270,6 +286,7 @@ export function registerDeliveryHandlers(
         // cajero del que entró por la tienda online.
         canalOrigen: (venta as any).canalOrigen ?? 'LOCAL',
       },
+      pagoPrevisto: pagoPorDelivery.get((venta.delivery as any)?.id) || null,
     }));
 
     return { data, total };

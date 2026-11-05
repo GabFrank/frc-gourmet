@@ -135,3 +135,16 @@
 .pago-chip[data-tipo='espera'] { color: var(--warning-color, #f0ad4e); }
 .pago-chip[data-tipo='mal'] { color: var(--error-color); }
 .pago-chip[data-tipo='neutro'] { color: var(--text-secondary); }
+
+// F8: cómo dijo el cliente que va a pagar.
+.pago-cliente {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 4px 0;
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; color: var(--info-color); }
+}

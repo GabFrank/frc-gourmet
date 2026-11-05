@@ -814,3 +814,7 @@ mat-dialog-actions {
     flex-shrink: 0;
   }
 }
+
+// F8: pago que eligió el cliente en la tienda (precargado, sin guardar).
+.aviso-pago-cliente { display: flex; align-items: center; gap: 8px; padding: 8px 16px; font-size: 13px; color: var(--text-primary); border-left: 3px solid var(--info-color); background: var(--hover-bg); }
+.aviso-pago-cliente mat-icon { color: var(--info-color); }

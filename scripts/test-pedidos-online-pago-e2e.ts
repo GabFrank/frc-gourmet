@@ -198,7 +198,7 @@ async function main() {
   ok(res(qr.numero) === 'QR · AL RECIBIR', 'G: bandeja, QR al recibir', res(qr.numero));
   const viejo = await save(PedidoOnline, { numero: 'PO-VIEJO', tipoPedido: 'PICKUP', canalOrigen: 'WEB', metodoPago: 'EFECTIVO', estado: 'RECIBIDO', subtotal: 1000, costoEnvio: 0, total: 1000 });
   const lista2: any[] = await invokeHandler('get-pedidos-online-admin', {}) as any;
-  ok(lista2.find((p) => p.numero === 'PO-VIEJO')?.pagoResumen === 'EFECTIVO · SIN VUELTO', 'G: un pedido anterior a F8 (columnas en null) se muestra sin romper');
+  ok(lista2.find((p) => p.numero === 'PO-VIEJO')?.pagoResumen === 'EFECTIVO', 'G: un pedido anterior a F8 (columnas en null) muestra sólo el método, sin inventar «sin vuelto»', lista2.find((p) => p.numero === 'PO-VIEJO')?.pagoResumen);
 
   const { buildDeliveryTicketLines } = require('../electron/handlers/documentos-tickets.handler');
   const texto = (b: any) => (b?.lines || []).filter((l: any) => l.type === 'text').map((l: any) => l.text).join('\n');

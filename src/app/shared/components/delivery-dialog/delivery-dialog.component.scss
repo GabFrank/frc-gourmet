@@ -608,3 +608,6 @@ tr.mat-mdc-row {
   text-align: center;
   color: #777;
 }
+
+// F8: el pago que eligió el cliente, destacado para el cajero.
+.pago-previsto { border-left: 3px solid var(--info-color); padding-left: 8px; }

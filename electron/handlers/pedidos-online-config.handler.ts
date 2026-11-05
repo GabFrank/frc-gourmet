@@ -276,7 +276,7 @@ export function registerPedidosOnlineConfigHandlers(
     else if (upayKeyNueva) tokenOk = (await setUpayApiKey(upayKeyNueva)) && tokenOk;
     await cargarCredencialesTienda(dataSource);
     if (!tokenOk) return { success: false, error: 'token_no_guardado' };
-    return { success: true, config: { ...saved, abiertaAhora: estaAbierta(saved), ingreso: await estadoIngreso() } };
+    return { success: true, config: { ...saved, metodosPago: metodosAlRecibir(saved), abiertaAhora: estaAbierta(saved), ingreso: await estadoIngreso() } };
   });
 
   // Admin: prueba la conexión con uPay (F4) consultando una sesión que no existe: 404 = la

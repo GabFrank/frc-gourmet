@@ -156,6 +156,8 @@ export function resumenPago(p: {
 }, monedas: Pick<MonedaTienda, 'id' | 'simbolo' | 'decimales' | 'principal'>[]): string {
   const metodo = NOMBRE_METODO[String(p.metodoPago || 'EFECTIVO')] || String(p.metodoPago || 'EFECTIVO').toUpperCase();
   if (p.metodoPago === 'UPAY') return metodo;
+  // Pedido anterior a F8 (sin modalidad): no se sabe si necesitaba vuelto; sólo el método.
+  if (!p.pagoModalidad) return metodo;
   const partes = [metodo];
   const principal = monedas.find((m) => m.principal);
   const moneda = p.pagoMonedaId != null ? monedas.find((m) => m.id === Number(p.pagoMonedaId)) : principal;
@@ -174,7 +176,7 @@ export function resumenPago(p: {
     } else {
       partes.push('SIN VUELTO');
     }
-  } else if (p.pagoModalidad === 'AL_RECIBIR' || !p.pagoModalidad) {
+  } else if (p.pagoModalidad === 'AL_RECIBIR') {
     partes.push('AL RECIBIR');
   }
   return partes.join(' · ');

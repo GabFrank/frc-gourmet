@@ -23,7 +23,7 @@
         <div>
           <span class="numero">{{ p.numero }}</span>
           <span class="tipo">{{ tipoLabel(p.tipoPedido) }}</span>
-          <span class="tipo" *ngIf="p.metodoPago">· {{ pagoLabel(p.metodoPago) }}</span>
+          <span class="tipo" *ngIf="p.metodoPago && !p.pagoResumen">· {{ pagoLabel(p.metodoPago) }}</span>
         </div>
         <span class="estado" [attr.data-estado]="p.estado">{{ estadoLabel(p.estado) }}</span>
       </div>
@@ -60,6 +60,11 @@
 
       <div class="notas" *ngIf="p.notas">
         <mat-icon>sticky_note_2</mat-icon> {{ p.notas }}
+      </div>
+      <!-- F8: cómo dijo que va a pagar (el cobro del delivery lo trae precargado). -->
+      <div class="pago-cliente" *ngIf="p.pagoResumen">
+        <mat-icon>payments</mat-icon>
+        <span>{{ p.pagoResumen }}<span *ngIf="p.pagoObservacion"> · {{ p.pagoObservacion }}</span></span>
       </div>
 
       <div class="totales">
