@@ -29,6 +29,7 @@
 .tabla th { color: var(--text-secondary); font-size: 12px; font-weight: 600; }
 .tabla .n { text-align: right; font-variant-numeric: tabular-nums; }
 .tabla tbody tr { cursor: pointer; }
+.tabla tbody tr:focus-visible { outline: 2px solid var(--info-color); outline-offset: -2px; }
 .tabla tbody tr:hover { background: var(--hover-bg); }
 .tabla tbody tr.sel { background: var(--hover-bg-light); }
 .tabla tbody tr.especial { cursor: default; color: var(--text-secondary); }

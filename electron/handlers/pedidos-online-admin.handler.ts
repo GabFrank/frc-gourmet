@@ -3,7 +3,7 @@ import { avisarReembolso, marcarDevuelto } from '../services/pagos-online/pagos-
 class PedidoCambioError extends Error { constructor() { super('pedido_cambio_reintentar'); } }
 import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
-import { In } from 'typeorm';
+import { In, Not } from 'typeorm';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
@@ -342,7 +342,7 @@ export function registerPedidosOnlineAdminHandlers(
   ipcMain.handle('guardar-zona-delivery', async (_event: any, data: any) => {
     await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
     const repoZ = dataSource.getRepository(ZonaDelivery);
-    const zona = data?.id ? await repoZ.findOne({ where: { id: data.id } }) : repoZ.create();
+    const zona = data?.id ? await repoZ.findOne({ where: { id: data.id }, relations: ['precioDelivery'] }) : repoZ.create();
     if (!zona) return { success: false, error: 'zona_no_encontrada' };
     zona.nombre = String(data?.nombre || '').trim().toUpperCase();
     zona.tarifa = Number(data?.tarifa) || 0;
@@ -373,9 +373,16 @@ export function registerPedidosOnlineAdminHandlers(
       // Una tarifa del PdV por zona (decisión del propietario, F7): es lo que le
       // dice al dashboard a qué zona fue un delivery cargado por teléfono. Con dos
       // zonas en la misma tarifa, ese delivery no tendría una sola zona.
-      if (tarifaId) {
-        const otra = await repoZ.findOne({ where: { precioDelivery: { id: tarifaId } }, relations: ['precioDelivery'] });
-        if (otra && otra.id !== zona.id) return { success: false, error: 'tarifa_en_uso', zona: otra.nombre };
+      // Sólo se controla si la tarifa CAMBIA: dos zonas viejas que ya la comparten
+      // (dato previo a la regla) tienen que poder seguir editándose —renombrarse,
+      // redibujarse— sin quedar trabadas; el dashboard las marca como alerta.
+      const actualId = (zona as any).precioDelivery?.id ?? null;
+      if (tarifaId && tarifaId !== actualId) {
+        const otra = await repoZ.findOne({
+          where: { precioDelivery: { id: tarifaId }, ...(zona.id ? { id: Not(zona.id) } : {}) },
+          relations: ['precioDelivery'],
+        });
+        if (otra) return { success: false, error: 'tarifa_en_uso', zona: otra.nombre };
       }
       zona.precioDelivery = tarifaId ? ({ id: tarifaId } as any) : null;
     }
@@ -411,17 +418,19 @@ export function registerPedidosOnlineAdminHandlers(
     // concluida del período, reparto y no retiro), con coordenadas redondeadas y
     // sin nada que identifique al cliente.
     const filasPuntos: any[] = await dbQuery(dataSource, `
-      SELECT po.latitud AS lat, po.longitud AS lng, po.zona_delivery_id AS zona_id
+      SELECT po.latitud AS lat, po.longitud AS lng, u.zid AS zona_id
       FROM ventas v
-      -- Un pedido por venta: venta_id no es único en pedidos_online.
-      JOIN (SELECT venta_id, MIN(id) AS pid FROM pedidos_online WHERE venta_id IS NOT NULL GROUP BY venta_id) u ON u.venta_id = v.id
+      -- Un pedido por venta (venta_id no es único en pedidos_online): las
+      -- coordenadas del primero y la zona con el MISMO criterio que la tabla
+      -- (MIN(zona_delivery_id) en enviosPorZonaYCanal), para que punto y fila coincidan.
+      JOIN (SELECT venta_id, MIN(id) AS pid, MIN(zona_delivery_id) AS zid FROM pedidos_online WHERE venta_id IS NOT NULL GROUP BY venta_id) u ON u.venta_id = v.id
       JOIN pedidos_online po ON po.id = u.pid
       LEFT JOIN deliveries dcanal ON dcanal.id = v.delivery_id
       WHERE v.estado = ? AND ${filtro.sql}
         AND v.canal_origen = 'WEB'
         AND v.delivery_id IS NOT NULL AND (dcanal.modo IS NULL OR dcanal.modo <> 'RETIRO')
         AND po.latitud IS NOT NULL AND po.longitud IS NOT NULL
-      ORDER BY v.created_at DESC
+      ORDER BY v.created_at DESC, v.id DESC
       LIMIT ${TOPE_PUNTOS + 1}
     `, [VentaEstado.CONCLUIDA, ...filtro.params]);
     const puntos = filasPuntos.slice(0, TOPE_PUNTOS)

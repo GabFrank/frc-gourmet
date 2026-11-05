@@ -38,7 +38,7 @@
       </mat-form-field>
       <mat-form-field appearance="outline">
         <mat-label>Tarifa del PdV</mat-label>
-        <mat-select [(ngModel)]="editando.precioDeliveryId">
+        <mat-select [(ngModel)]="editando.precioDeliveryId" placeholder="Sin tarifa">
           <mat-option *ngFor="let t of tarifasOpciones" [value]="t.id" [disabled]="t.disabled">{{ t.label }}</mat-option>
         </mat-select>
         <mat-hint>Es la que usa el cajero al cargar por teléfono un delivery de esta zona. Una tarifa por zona.</mat-hint>
@@ -86,7 +86,10 @@
           </thead>
           <tbody>
             <tr *ngFor="let f of filas" [class.sel]="f.seleccionada" [class.especial]="!f.esZona"
-                (click)="f.esZona && seleccionar(f.clave)">
+                [attr.tabindex]="f.esZona ? 0 : null" [attr.aria-selected]="f.esZona ? f.seleccionada : null"
+                (click)="f.esZona ? seleccionar(f.clave) : null"
+                (keydown.enter)="f.esZona ? seleccionar(f.clave) : null"
+                (keydown.space)="f.esZona ? seleccionar(f.clave) : null; $event.preventDefault()">
               <td class="zona">
                 <span class="dot" *ngIf="f.colorCss" [style.background]="f.colorCss"></span>
                 <span class="dot vacio" *ngIf="!f.colorCss"></span>

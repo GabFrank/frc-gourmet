@@ -1,5 +1,5 @@
 import { AfterViewInit, Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -44,6 +44,7 @@ interface Kpi { icon: string; label: string; value: string; color: DashStatChipC
     MatSlideToggleModule, MatButtonModule, MatButtonToggleModule, MatIconModule, MatTooltipModule,
     MatSnackBarModule, MatDialogModule, MatMenuModule, DashStatChipComponent,
   ],
+  providers: [DecimalPipe],
   templateUrl: './zonas-delivery.component.html',
   styleUrls: ['./zonas-delivery.component.scss'],
 })
@@ -53,6 +54,8 @@ export class ZonasDeliveryComponent implements OnInit, AfterViewInit, OnDestroy 
   private snack = inject(MatSnackBar);
   private dialog = inject(MatDialog);
   private zone = inject(NgZone);
+  /** Mismo formateador que el `| number` de la tabla: KPIs y filas con los mismos separadores. */
+  private decimal = inject(DecimalPipe);
 
   readonly rangos: { valor: RangoZonas; label: string }[] = [
     { valor: 'today', label: 'Hoy' }, { valor: 'week', label: '7 días' }, { valor: 'month', label: 'Este mes' },
@@ -82,6 +85,9 @@ export class ZonasDeliveryComponent implements OnInit, AfterViewInit, OnDestroy 
   private capaPuntos = L.layerGroup();
   private poligonos = new Map<string, L.GeoJSON>();
   private datos: any = null;
+  /** La pestaña puede crearse oculta o cambiar de ancho (una o dos columnas): el mapa se reacomoda. */
+  private observador: ResizeObserver | null = null;
+  private encuadrePendiente = true;
 
   ngOnInit(): void { this.cargar(); }
 
@@ -98,11 +104,22 @@ export class ZonasDeliveryComponent implements OnInit, AfterViewInit, OnDestroy 
       tiles.addTo(this.map);
       this.capaZonas.addTo(this.map);
       this.capaPuntos.addTo(this.map);
+      if (typeof ResizeObserver !== 'undefined') {
+        this.observador = new ResizeObserver(() => {
+          const el = this.mapEl.nativeElement;
+          if (!this.map || !el.clientWidth || !el.clientHeight) return;
+          this.map.invalidateSize();
+          // El primer encuadre con tamaño real: con la pestaña oculta, fitBounds calcula sobre 0×0.
+          if (this.encuadrePendiente && this.datos) this.encuadrar();
+        });
+        this.observador.observe(this.mapEl.nativeElement);
+      }
     });
     if (this.datos) this.dibujarMapa();
   }
 
   ngOnDestroy(): void {
+    this.observador?.disconnect();
     this.map?.remove();
     this.map = null;
   }
@@ -185,7 +202,7 @@ export class ZonasDeliveryComponent implements OnInit, AfterViewInit, OnDestroy 
   }
 
   private num(v: any): string {
-    return Number(v || 0).toLocaleString('es-PY', { maximumFractionDigits: 2 });
+    return this.decimal.transform(Number(v || 0), '1.0-2') || '0';
   }
 
   // ─── Mapa ───────────────────────────────────────────────────────────────
@@ -226,12 +243,23 @@ export class ZonasDeliveryComponent implements OnInit, AfterViewInit, OnDestroy 
           .addTo(this.capaPuntos);
         limites.extend([p.lat, p.lng]);
       }
-      if (limites.isValid()) this.map!.fitBounds(limites, { padding: [24, 24], maxZoom: 15 });
-      else this.map!.setView(CENTRO_DEFAULT, 13);
-      // El contenedor puede haber cambiado de tamaño mientras cargaba.
-      setTimeout(() => this.map?.invalidateSize(), 0);
+      this.limites = limites;
+      this.encuadrePendiente = true;
+      this.encuadrar();
       this.resaltarPoligono();
     });
+  }
+
+  private limites: L.LatLngBounds | null = null;
+
+  /** Encuadra zonas y puntos; si el mapa todavía no tiene tamaño, queda pendiente para el observador. */
+  private encuadrar(): void {
+    const el = this.mapEl.nativeElement;
+    if (!this.map || !el.clientWidth || !el.clientHeight) return;
+    this.map.invalidateSize();
+    if (this.limites?.isValid()) this.map.fitBounds(this.limites, { padding: [24, 24], maxZoom: 15 });
+    else this.map.setView(CENTRO_DEFAULT, 13);
+    this.encuadrePendiente = false;
   }
 
   seleccionar(clave: string): void {
