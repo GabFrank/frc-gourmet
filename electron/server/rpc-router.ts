@@ -34,6 +34,9 @@ const BLOCKED_CHANNELS = new Set<string>([
   'set-current-user',  // current user es session local del Electron, no del cliente HTTP
   // #357: tocan la sesión global de la consola del servidor (setCurrentUser).
   // La PWA / modo cliente cierra sesión por /api/auth/logout.
+  // `login` además reemplaza la consola con el usuario que se loguea y evita el
+  // límite de pedidos de /api/auth/login (la PWA lo desvía allá).
+  'login',
   'logout',
   'restoreSession',
   'reset-database',
