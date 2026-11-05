@@ -1,5 +1,6 @@
 import { iniciarPagoPedido, verificarPagoPedido, VERIFICAR_MIN_MS } from '../services/pagos-online/pagos-online.service';
 import { metodosAlRecibir, monedasTienda, validarPagoPedido, ResultadoPago } from '../utils/pago-pedido.utils';
+import { accionesPedido, ESTADOS_CANCELABLES_CLIENTE, limpiarMotivo } from '../utils/pedido-acciones.utils';
 import { pagoOnlineOfrecido } from '../utils/tienda-ingreso.utils';
 import { ipcMain } from 'electron';
 import { createHash, randomBytes } from 'crypto';
@@ -18,13 +19,14 @@ import {
   EstadoPedidoOnline,
   CanalPedidoOnline,
   MetodoPagoOnline,
+  EstadoPagoOnline,
 } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { PdvMesa } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { registerPublicOperation } from '../server/public-routes';
 import { getTiendaConfig, estaAbierta, getPizzaConfig } from './pedidos-online-config.handler';
 import { resolverZonaPorPunto } from '../utils/geo.utils';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
-import { pedidoMesaPermitido } from '../utils/tienda-limites';
+import { accionClientePermitida, pedidoMesaPermitido } from '../utils/tienda-limites';
 import { ipPermitidaMesa } from '../utils/ip-lan.util';
 import { resolvePersonalizacionSabores, PersonalizacionInvalidaError } from '../utils/tienda-personalizacion-sabor.utils';
 
@@ -470,7 +472,8 @@ export function registerPedidosOnlinePedidosHandlers(
       subtotal += itemSubtotal;
 
       const personalizacion = {
-        opcion: { label: opcion.label, tipo: it.opcion?.tipo ?? 'PRESENTACION' },
+        // F9: `recetaId` para «Repetir pedido» (identifica la variación/receta elegida).
+        opcion: { label: opcion.label, tipo: it.opcion?.tipo ?? 'PRESENTACION', recetaId: it.opcion?.tipo === 'PIZZA' ? null : (opcion.recetaId ?? null) },
         // Desglose de sabores (pizza mitad y mitad) para la bandeja del PdV.
         sabores: opcion.sabores
           ? opcion.sabores.map((s) => (persSabores?.porSabor.get(s.saborId)
@@ -741,7 +744,8 @@ export function registerPedidosOnlinePedidosHandlers(
       if (Date.now() - fin > SEGUIMIENTO_VIGENCIA_MS) return { success: false, error: 'seguimiento_vencido' };
     }
     const p = mapPedido(pedido);
-    return { success: true, pedido: { ...p, direccionEntrega: null } };
+    // El invitado de mesa no tiene cuenta: no puede pedir cancelaciones ni rearmar (lo hace el mozo).
+    return { success: true, pedido: { ...p, direccionEntrega: null, acciones: { solicitarCancelacion: false, modificar: false, repetir: false, compartir: false } } };
   });
 
   // ====== CONTEXTO DE MESA POR TOKEN (público, sin auth) — canal MESA_QR ======
@@ -803,6 +807,49 @@ export function registerPedidosOnlinePedidosHandlers(
     if (!/^[A-Za-z0-9-]{1,20}$/.test(n)) return null;
     return pedidoRepo().findOne({ where: { numero: n, cuentaCliente: { id: customerId } } });
   };
+  // ====== F9: SOLICITAR CANCELACIÓN (el local la aprueba o rechaza desde la bandeja) ======
+  ipcMain.handle('solicitar-cancelacion-pedido-online', async (event: any, numero: string, motivo?: string) => {
+    const customerId = event?._customerId;
+    const p = await pedidoDelCliente(customerId, numero);
+    if (!p) return { success: false, error: 'pedido_no_encontrado' };
+    if (!accionClientePermitida(customerId, String(event?._clientIp || ''))) return { success: false, error: 'demasiadas_solicitudes' };
+    if (!accionesPedido(p as any).solicitarCancelacion) return { success: false, error: 'cancelacion_no_disponible', estado: p.estado };
+    // Condicionado: dos toques seguidos (o una carrera con la bandeja) dejan una sola solicitud.
+    const r = await pedidoRepo().createQueryBuilder().update(PedidoOnline)
+      .set({ cancelacionSolicitadaEn: new Date(), cancelacionMotivo: limpiarMotivo(motivo) } as any)
+      .where('id = :id AND cancelacion_solicitada_en IS NULL AND cancelacion_respuesta IS NULL AND estado IN (:...ok)',
+        { id: p.id, ok: ESTADOS_CANCELABLES_CLIENTE })
+      .execute();
+    if (!r.affected) return { success: false, error: 'cancelacion_no_disponible' };
+    const fresco = await pedidoRepo().findOne({ where: { id: p.id }, relations: ['items'] });
+    return { success: true, pedido: mapPedido(fresco!) };
+  });
+
+  // ====== F9: MODIFICAR (cancela al instante y la tienda devuelve los productos al carrito) ======
+  // Sólo mientras espera confirmación y sin nada armado detrás: sin venta, sin cobro online, sin
+  // solicitud en manos del local. La condición va en el UPDATE: si en el medio el local lo
+  // aceptó, la materialización (también condicionada) y esto no pueden ganar los dos.
+  ipcMain.handle('modificar-pedido-online', async (event: any, numero: string) => {
+    const customerId = event?._customerId;
+    const p = await pedidoDelCliente(customerId, numero);
+    if (!p) return { success: false, error: 'pedido_no_encontrado' };
+    if (!accionClientePermitida(customerId, String(event?._clientIp || ''))) return { success: false, error: 'demasiadas_solicitudes' };
+    if (!accionesPedido(p as any).modificar) return { success: false, error: 'modificar_no_disponible', estado: p.estado };
+    const r = await pedidoRepo().createQueryBuilder().update(PedidoOnline)
+      .set({ estado: EstadoPedidoOnline.CANCELADO, motivoRechazo: 'MODIFICADO POR EL CLIENTE' } as any)
+      .where(`id = :id AND estado = :recibido AND venta_id IS NULL AND cancelacion_solicitada_en IS NULL
+              AND cancelacion_respuesta IS NULL AND tipo_pedido <> :mesa
+              AND (estado_pago IS NULL OR estado_pago NOT IN (:...pagos))`, {
+        mesa: TipoPedidoOnline.MESA_QR,
+        id: p.id, recibido: EstadoPedidoOnline.RECIBIDO,
+        pagos: [EstadoPagoOnline.PAGADO, EstadoPagoOnline.PENDIENTE],
+      })
+      .execute();
+    if (!r.affected) return { success: false, error: 'modificar_no_disponible' };
+    const fresco = await pedidoRepo().findOne({ where: { id: p.id }, relations: ['items'] });
+    return { success: true, pedido: mapPedido(fresco!) };
+  });
+
   ipcMain.handle('iniciar-pago-pedido-online', async (event: any, numero: string, opciones?: any) => {
     const p = await pedidoDelCliente(event?._customerId, numero);
     if (!p) return { success: false, error: 'pedido_no_encontrado' };
@@ -831,6 +878,8 @@ export function registerPedidosOnlinePedidosHandlers(
   registerPublicOperation('pedido.pago.iniciar', { channel: 'iniciar-pago-pedido-online', requiresAuth: true, description: 'Iniciar o reintentar el pago con tarjeta de un pedido propio.' });
   registerPublicOperation('pedido.pago.verificar', { channel: 'verificar-pago-pedido-online', requiresAuth: true, description: 'Consultar a uPay el pago de un pedido propio.' });
   registerPublicOperation('pedido.estado', { channel: 'get-pedido-online-estado', requiresAuth: true, description: 'Estado de un pedido por número.' });
+  registerPublicOperation('pedido.cancelacion.solicitar', { channel: 'solicitar-cancelacion-pedido-online', requiresAuth: true, description: 'Pedir al local que cancele un pedido propio (F9).' });
+  registerPublicOperation('pedido.modificar', { channel: 'modificar-pedido-online', requiresAuth: true, description: 'Cancelar un pedido propio sin confirmar para volver a armarlo (F9).' });
 }
 
 /**
@@ -876,6 +925,11 @@ function mapPedido(p: PedidoOnline): any {
     // El cliente ve por qué el local no tomó su pedido (PLAN-tienda-online M6).
     motivoRechazo: p.motivoRechazo ?? null,
     metodoPago: p.metodoPago,
+    // F9: solicitud de cancelación y lo que puede hacer el cliente (lo decide el servidor).
+    cancelacionSolicitadaEn: p.cancelacionSolicitadaEn ?? null,
+    cancelacionMotivo: p.cancelacionMotivo ?? null,
+    cancelacionRespuesta: p.cancelacionRespuesta ?? null,
+    acciones: accionesPedido(p as any),
     // F8: lo que el cliente eligió (para «Mis pedidos»); sin datos internos.
     pagoModalidad: p.pagoModalidad ?? null,
     pagoMonedaId: p.pagoMonedaId ?? null,
@@ -889,6 +943,9 @@ function mapPedido(p: PedidoOnline): any {
     fechaListo: p.fechaListo ?? null,
     fechaEntregado: p.fechaEntregado ?? null,
     items: (p.items || []).map((it) => ({
+      // F9: para «Repetir pedido» (la tienda rearma la línea contra la carta vigente).
+      productoId: it.productoId,
+      presentacionId: it.presentacionId ?? null,
       nombreProducto: it.nombreProducto,
       nombrePresentacion: it.nombrePresentacion ?? null,
       cantidad: Number(it.cantidad),

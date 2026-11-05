@@ -283,9 +283,16 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
    */
   async cargarPedidosOnline(): Promise<void> {
     try {
-      const pedidos = this.tiendaActiva
+      const recibidos = this.tiendaActiva
         ? await firstValueFrom(this.repositoryService.getPedidosOnlineAdmin({ estado: 'RECIBIDO' }))
         : [];
+      // F9: las solicitudes de cancelación del cliente también esperan respuesta acá (un pedido ya
+      // aceptado se ve como un reparto más y la solicitud quedaría invisible). Se piden aunque la
+      // tienda esté apagada: son de pedidos que ya están en curso.
+      const piden = await firstValueFrom(this.repositoryService.getPedidosOnlineAdmin({ cancelacionPendiente: true }))
+        .catch(() => [] as any[]);
+      const vistos = new Set((recibidos || []).map((p: any) => p.id));
+      const pedidos = [...(recibidos || []), ...(piden || []).filter((p: any) => !vistos.has(p.id))];
       // El handler devuelve DESC (más nuevo arriba), que sirve para la pantalla
       // de historial pero no para una cola de atención: acá el que espera hace
       // más tiempo va primero, y el orden se mantiene estable aunque entren
@@ -352,7 +359,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   private armarColaWeb(): void {
     this.colaWeb = [...this.pedidosOnline]
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    this.hayColaWeb = this.tiendaActiva && this.colaWeb.length > 0;
+    this.hayColaWeb = (this.tiendaActiva || this.colaWeb.some((p) => p.pideCancelar)) && this.colaWeb.length > 0;
     this.actualizarPanel();
     this.avisoTooltip = this.colaWeb.length
       ? `${this.colaWeb.length} pedido(s) de la web esperando confirmación`
@@ -391,6 +398,9 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       tipoLabel: p.tipoPedido === 'PICKUP' ? 'RETIRO' : 'DELIVERY',
       // Por defecto pendiente de aceptación; los retiros en curso lo pisan.
       pendiente: true,
+      // F9: el cliente pidió cancelar (y el pedido todavía se puede cancelar).
+      pideCancelar: !!p.cancelacionSolicitadaEn && ['RECIBIDO', 'ACEPTADO', 'EN_PREPARACION', 'LISTO'].includes(p.estado),
+      esRecibido: p.estado === 'RECIBIDO',
     };
   }
 
@@ -453,6 +463,44 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       }
     } catch (e: any) {
       this.mostrarError(e, 'No se pudo rechazar el pedido');
+    } finally {
+      this.procesandoPedidoId = null;
+    }
+  }
+
+  /** F9: responder la solicitud de cancelación del cliente (aprobar = mismo camino que rechazar). */
+  async resolverCancelacionOnline(p: any, aprobar: boolean): Promise<void> {
+    const ref = this.dialog.open(ConfirmationDialogComponent, {
+      data: aprobar
+        ? { title: `Cancelar ${p.numero}`, message: 'El cliente pidió cancelar. Si tiene venta, se cancela también.', confirmText: 'Cancelar pedido', cancelText: 'Volver' }
+        : { title: `No cancelar ${p.numero}`, message: 'El cliente va a ver este motivo y el pedido sigue.', confirmText: 'Responder', cancelText: 'Volver', showInput: true, inputLabel: 'Motivo' },
+    });
+    const r = await firstValueFrom(ref.afterClosed());
+    if (!r) return;
+    this.procesandoPedidoId = p.id;
+    try {
+      const res: any = await firstValueFrom(
+        this.repositoryService.resolverCancelacionPedidoOnline(p.id, aprobar, typeof r === 'string' ? r : undefined),
+      );
+      if (res?.success) {
+        const dev = Number(res.montoDevolver || 0);
+        this.snackBar.open(
+          !aprobar ? `Se le respondió al cliente: ${p.numero} sigue`
+            : dev > 0 ? `Pedido ${p.numero} cancelado. Estaba pagado: devolvé ${dev.toLocaleString('es-PY')} desde uPay.`
+            : `Pedido ${p.numero} cancelado`,
+          'OK', { duration: dev > 0 ? 10000 : 3000 });
+        await this.cargarPedidosOnline();
+        await this.loadDeliveries();
+      } else {
+        const msg = res?.error === 'mesa_ya_materializada' ? 'el pedido ya está en la cuenta de la mesa; quitá los ítems desde el PdV.'
+          : res?.error === 'sin_solicitud' ? 'la solicitud ya fue respondida.'
+          : res?.error === 'estado_no_rechazable' ? 'el pedido ya no se puede cancelar.'
+          : (res?.detalle || res?.error || '');
+        this.snackBar.open(`No se pudo: ${msg}`, 'OK', { duration: 5000 });
+        await this.cargarPedidosOnline();
+      }
+    } catch (e: any) {
+      this.mostrarError(e, 'No se pudo responder la solicitud');
     } finally {
       this.procesandoPedidoId = null;
     }

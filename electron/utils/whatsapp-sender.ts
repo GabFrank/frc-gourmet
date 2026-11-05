@@ -23,7 +23,7 @@
 
 export interface OtpSendResult {
   ok: boolean;
-  provider: 'whatsapp-cloud' | 'dev-log' | 'ninguno';
+  provider: 'whatsapp-cloud' | 'evolution' | 'dev-log' | 'ninguno';
   detail?: string;
 }
 
@@ -32,7 +32,20 @@ export interface WhatsappOverrides {
   phoneNumberId?: string | null;
   plantilla?: string | null;
   idioma?: string | null;
+  // F9: proveedor elegido y Evolution API (el número de FRC). Los datos de Evolution son los de
+  // «Configuración de Notificaciones» (los carga `tienda-ingreso.utils`); no se duplican.
+  proveedor?: 'META' | 'EVOLUTION' | null;
+  evolutionUrl?: string | null;
+  evolutionInstancia?: string | null;
+  evolutionApiKey?: string | null;
+  /** Nombre del comercio, para el texto del código por Evolution. */
+  nombreComercio?: string | null;
 }
+
+/** `fetch` inyectable (tests sin red). */
+type FetchLike = (url: string, init?: any) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>;
+let fetchImpl: FetchLike = (url, init) => fetch(url, init) as any;
+export function setWhatsappFetch(f: FetchLike | null): void { fetchImpl = f || ((url, init) => fetch(url, init) as any); }
 
 let overrides: WhatsappOverrides = {};
 
@@ -54,13 +67,49 @@ function credenciales(): { token: string; phoneId: string; template: string; lan
   };
 }
 
-function isConfigured(): boolean {
+function metaConfigurado(): boolean {
   const c = credenciales();
   return !!(c.token && c.phoneId);
 }
 
-/** Hay credenciales reales de WhatsApp Cloud (sin contar el fallback de desarrollo). */
+function evolution(): { url: string; instancia: string; apiKey: string } {
+  return {
+    url: String(overrides.evolutionUrl || process.env['EVOLUTION_URL'] || '').replace(/\/+$/, ''),
+    instancia: overrides.evolutionInstancia || process.env['EVOLUTION_INSTANCIA'] || '',
+    apiKey: overrides.evolutionApiKey || process.env['EVOLUTION_API_KEY'] || '',
+  };
+}
+
+export function evolutionConfigurado(): boolean {
+  const e = evolution();
+  return !!(e.url && e.instancia && e.apiKey);
+}
+
+/**
+ * Proveedor con el que sale el código: el elegido si está cargado; si no, el otro (F9).
+ * null = ninguno configurado.
+ */
+export function proveedorWhatsappActivo(): 'META' | 'EVOLUTION' | null {
+  const elegido = (overrides.proveedor || process.env['WHATSAPP_PROVEEDOR'] || 'META').toUpperCase();
+  const orden = elegido === 'EVOLUTION' ? ['EVOLUTION', 'META'] : ['META', 'EVOLUTION'];
+  for (const p of orden) {
+    if (p === 'META' && metaConfigurado()) return 'META';
+    if (p === 'EVOLUTION' && evolutionConfigurado()) return 'EVOLUTION';
+  }
+  return null;
+}
+
+function isConfigured(): boolean {
+  return proveedorWhatsappActivo() !== null;
+}
+
+/** Hay credenciales reales de WhatsApp Cloud (Meta), sin contar el fallback de desarrollo. */
 export function whatsappCloudConfigurado(): boolean {
+  return metaConfigurado();
+}
+
+/** Hay algún proveedor real (Meta o Evolution) para mandar el código. */
+export function whatsappConfigurado(): boolean {
   return isConfigured();
 }
 
@@ -98,10 +147,12 @@ export async function sendWhatsappOtp(telefono: string, codigo: string): Promise
     return { ok: true, provider: 'dev-log', detail: 'sin credenciales; código logueado' };
   }
 
+  if (proveedorWhatsappActivo() === 'EVOLUTION') return enviarPorEvolution(telefono, codigo);
+
   const { token, phoneId, template, lang, boton } = credenciales();
 
   try {
-    const res = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+    const res = await fetchImpl(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -146,4 +197,53 @@ export async function sendWhatsappOtp(telefono: string, codigo: string): Promise
     console.error('[whatsapp-otp] error de red:', e?.message || e);
     return { ok: false, provider: 'whatsapp-cloud', detail: String(e?.message || e).slice(0, 200) };
   }
+}
+
+/**
+ * F9: envío por Evolution API (el número de WhatsApp de FRC). Texto plano, sin plantilla:
+ * `POST {url}/message/sendText/{instancia}` con la API key en el header `apikey`. Se mandan los
+ * dos formatos del cuerpo (v2: `text`; v1: `textMessage.text`): cada versión ignora el otro.
+ * La API key nunca va en el detalle del error.
+ */
+async function enviarPorEvolution(telefono: string, codigo: string): Promise<OtpSendResult> {
+  const { url, instancia, apiKey } = evolution();
+  const comercio = String(overrides.nombreComercio || '').trim();
+  const texto = `Tu código para ingresar${comercio ? ` a ${comercio}` : ''} es ${codigo}. Vence en 10 minutos. No lo compartas con nadie.`;
+  try {
+    const res = await fetchImpl(`${url}/message/sendText/${encodeURIComponent(instancia)}`, {
+      method: 'POST',
+      headers: { apikey: apiKey, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10000),
+      // Sin seguir redirecciones: la URL la carga un admin y no se va a otro destino.
+      redirect: 'manual',
+      body: JSON.stringify({ number: numeroWhatsapp(telefono), text: texto, textMessage: { text: texto } }),
+    });
+    if (!res.ok) {
+      const body = (await res.text().catch(() => '')).split(apiKey).join('***');
+      console.error(`[whatsapp-otp] Evolution falló (${res.status}): ${body.slice(0, 300)}`);
+      let motivo = '';
+      try {
+        const j = JSON.parse(body);
+        motivo = String(j?.response?.message || j?.message || j?.error || '').slice(0, 200);
+      } catch { motivo = ''; }
+      return { ok: false, provider: 'evolution', detail: `HTTP ${res.status}${motivo ? ': ' + motivo : ''}` };
+    }
+    return { ok: true, provider: 'evolution' };
+  } catch (e: any) {
+    const msg = String(e?.message || e).split(apiKey).join('***');
+    console.error('[whatsapp-otp] Evolution, error de red:', msg);
+    return { ok: false, provider: 'evolution', detail: msg.slice(0, 200) };
+  }
+}
+
+/**
+ * Destino en el formato que pide WhatsApp: dígitos con código de país, sin «+». Un número de
+ * Paraguay escrito local (0981…, 981…) se completa con 595. Sólo para el envío: la cuenta se
+ * guarda como la escribió el cliente (cambiarla duplicaría cuentas).
+ */
+export function numeroWhatsapp(telefono: string): string {
+  const d = String(telefono || '').replace(/\D/g, '');
+  if (/^09\d{8}$/.test(d)) return '595' + d.slice(1);
+  if (/^9\d{8}$/.test(d)) return '595' + d;
+  return d;
 }

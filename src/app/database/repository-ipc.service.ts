@@ -485,6 +485,7 @@ interface ElectronAPI {
   contarPedidosOnlinePendientes: () => Promise<any>;
   aceptarPedidoOnline: (pedidoId: number, data?: any) => Promise<any>;
   rechazarPedidoOnline: (pedidoId: number, motivo: string) => Promise<any>;
+  resolverCancelacionPedidoOnline: (pedidoId: number, aprobar: boolean, respuesta?: string) => Promise<any>;
   avanzarEstadoPedidoOnline: (pedidoId: number, nuevoEstado: string) => Promise<any>;
   vincularVentaPedidoOnline: (pedidoId: number, ventaId: number) => Promise<any>;
   getDetalleVariacionItems: (itemIds: number[]) => Promise<any>;
@@ -2643,6 +2644,10 @@ export class RepositoryIpcService extends RepositoryService {
   }
   rechazarPedidoOnline(pedidoId: number, motivo: string): Observable<any> {
     return from(this.api.rechazarPedidoOnline(pedidoId, motivo));
+  }
+
+  resolverCancelacionPedidoOnline(pedidoId: number, aprobar: boolean, respuesta?: string): Observable<any> {
+    return from(this.api.resolverCancelacionPedidoOnline(pedidoId, aprobar, respuesta));
   }
   avanzarEstadoPedidoOnline(pedidoId: number, nuevoEstado: string): Observable<any> {
     return from(this.api.avanzarEstadoPedidoOnline(pedidoId, nuevoEstado));

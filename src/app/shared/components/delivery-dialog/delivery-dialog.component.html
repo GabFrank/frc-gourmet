@@ -155,6 +155,10 @@
           <span class="cola-tipo" [class.retiro]="p.esRetiro">{{ p.tipoLabel }}</span>
           <span class="cola-espera" [class]="p.esperaColor">{{ p.espera }}</span>
         </div>
+        <div class="cola-cancelar" *ngIf="p.pideCancelar">
+          <mat-icon>cancel</mat-icon>
+          <span>PIDIÓ CANCELAR<span *ngIf="p.cancelacionMotivo">: {{ p.cancelacionMotivo }}</span></span>
+        </div>
         <div class="cola-cliente">{{ p.nombreCliente || 'SIN NOMBRE' }}</div>
         <div class="cola-dir" *ngIf="p.direccionEntrega">{{ p.direccionEntrega }}</div>
         <div class="cola-items">{{ p.resumenItems }}</div>
@@ -162,7 +166,7 @@
           <span>{{ p.total | number:'1.0-2' }}</span>
           <span class="cola-envio" *ngIf="p.costoEnvio > 0">envío {{ p.costoEnvio | number:'1.0-2' }}</span>
         </div>
-        <div class="cola-acciones">
+        <div class="cola-acciones" *ngIf="!p.pideCancelar">
           <button mat-flat-button color="primary" [disabled]="procesandoPedidoId === p.id"
                   (click)="aceptarPedidoOnline(p)">
             <mat-icon>check</mat-icon> ACEPTAR
@@ -170,6 +174,17 @@
           <button mat-stroked-button color="warn" [disabled]="procesandoPedidoId === p.id"
                   (click)="rechazarPedidoOnline(p)">
             <mat-icon>close</mat-icon> RECHAZAR
+          </button>
+        </div>
+        <!-- F9: el cliente pidió cancelar: primero se responde eso. -->
+        <div class="cola-acciones" *ngIf="p.pideCancelar">
+          <button mat-flat-button color="warn" [disabled]="procesandoPedidoId === p.id"
+                  (click)="resolverCancelacionOnline(p, true)">
+            <mat-icon>check</mat-icon> CANCELAR PEDIDO
+          </button>
+          <button mat-stroked-button [disabled]="procesandoPedidoId === p.id"
+                  (click)="resolverCancelacionOnline(p, false)">
+            NO SE PUEDE
           </button>
         </div>
       </div>

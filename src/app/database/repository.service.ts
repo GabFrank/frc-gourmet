@@ -539,6 +539,7 @@ export abstract class RepositoryService {
   abstract contarPedidosOnlinePendientes(): Observable<any>;
   abstract aceptarPedidoOnline(pedidoId: number, data?: any): Observable<any>;
   abstract rechazarPedidoOnline(pedidoId: number, motivo: string): Observable<any>;
+  abstract resolverCancelacionPedidoOnline(pedidoId: number, aprobar: boolean, respuesta?: string): Observable<any>;
   abstract avanzarEstadoPedidoOnline(pedidoId: number, nuevoEstado: string): Observable<any>;
   abstract vincularVentaPedidoOnline(pedidoId: number, ventaId: number): Observable<any>;
   abstract getDetalleVariacionItems(itemIds: number[]): Observable<any>;

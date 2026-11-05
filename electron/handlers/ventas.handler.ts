@@ -667,7 +667,16 @@ export async function materializarPedidoOnlineEnVenta(
 
     pedido.ventaId = ventaId;
     pedido.estado = EstadoPedidoOnline.EN_PREPARACION;
-    await qr.manager.getRepository(PedidoOnline).save(pedido);
+    // F9 (auditoría A1): update CONDICIONADO, no `save`. Entre la lectura de arriba y acá el
+    // cliente pudo «modificar» (cancelar) el pedido: en Postgres (READ COMMITTED) un `save`
+    // incondicional lo resucitaba EN_PREPARACION con los productos ya devueltos a su carrito.
+    const r = await qr.manager.createQueryBuilder().update(PedidoOnline)
+      .set({ ventaId, estado: EstadoPedidoOnline.EN_PREPARACION, deliveryId: pedido.deliveryId ?? null } as any)
+      .where('id = :id AND venta_id IS NULL AND estado NOT IN (:...fin)', {
+        id: pedido.id, fin: [EstadoPedidoOnline.RECHAZADO, EstadoPedidoOnline.CANCELADO],
+      })
+      .execute();
+    if (!r.affected) throw new Error('pedido_rechazado_durante_materializacion');
 
     await qr.commitTransaction();
   } catch (e) {

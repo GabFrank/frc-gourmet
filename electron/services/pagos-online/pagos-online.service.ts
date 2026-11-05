@@ -388,10 +388,12 @@ export async function marcarReembolsoSiPagado(ds: DataSource, pedidoId: number):
  * F5 (M-pay4): el rechazo ya dejó el pago en REEMBOLSO_PENDIENTE dentro de su transacción; acá
  * solo se registra el evento y se avisa al personal. Devuelve el monto a devolver.
  */
-export async function avisarReembolso(ds: DataSource, p: PedidoOnline): Promise<number> {
+export async function avisarReembolso(ds: DataSource, p: PedidoOnline, motivo: 'RECHAZADO' | 'CANCELADO' = 'RECHAZADO'): Promise<number> {
   const monto = Number(p.pagoMonto ?? p.total);
-  await registrar(ds, p, 'REEMBOLSO', 'rechazado por el local', null);
-  await avisarPersonal(`Pedido ${p.numero} rechazado con pago con tarjeta: hay que devolver ${gs(monto)} en uPay.`, `rechazo-${p.id}`);
+  // F9: aprobar la cancelación que pidió el cliente también devuelve; el texto lo dice.
+  const que = motivo === 'CANCELADO' ? 'cancelado a pedido del cliente' : 'rechazado por el local';
+  await registrar(ds, p, 'REEMBOLSO', que, null);
+  await avisarPersonal(`Pedido ${p.numero} ${motivo === 'CANCELADO' ? 'cancelado a pedido del cliente' : 'rechazado'} con pago con tarjeta: hay que devolver ${gs(monto)} en uPay.`, `rechazo-${p.id}`);
   return monto;
 }
 

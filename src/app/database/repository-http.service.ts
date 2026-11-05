@@ -1095,6 +1095,10 @@ export class RepositoryHttpService extends RepositoryService {
   rechazarPedidoOnline(pedidoId: number, motivo: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.rechazarPedidoOnline() no esta implementado todavia.`)) as any;
   }
+
+  resolverCancelacionPedidoOnline(pedidoId: number, aprobar: boolean, respuesta?: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.resolverCancelacionPedidoOnline() no esta implementado todavia.`)) as any;
+  }
   avanzarEstadoPedidoOnline(pedidoId: number, nuevoEstado: string): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.avanzarEstadoPedidoOnline() no esta implementado todavia.`)) as any;
   }

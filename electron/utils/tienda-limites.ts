@@ -144,7 +144,24 @@ export function pedidoMesaPermitido(mesaId: number, ip: string, ahora = Date.now
   return true;
 }
 
+// F9: acciones del cliente sobre su pedido (solicitar cancelación, modificar). Son mutaciones
+// públicas: tope por cuenta y por IP para que no se usen para inundar la bandeja.
+export const ACCIONES_POR_CUENTA_HORA = 20;
+export const ACCIONES_POR_IP_HORA = 60;
+const accionesCuenta = new Ventana(60 * MIN);
+const accionesIp = new Ventana(60 * MIN);
+
+export function accionClientePermitida(cuentaId: number, ip: string, ahora = Date.now()): boolean {
+  const kc = String(cuentaId), ki = claveIp(ip);
+  if (accionesCuenta.contar(kc, ahora) >= ACCIONES_POR_CUENTA_HORA) return false;
+  if (accionesIp.contar(ki, ahora) >= ACCIONES_POR_IP_HORA) return false;
+  accionesCuenta.sumar(kc, ahora);
+  accionesIp.sumar(ki, ahora);
+  return true;
+}
+
 /** Solo para tests. */
 export function reiniciarLimitesTienda(): void {
   fallosIp.limpiar(); otpIp.limpiar(); otpIpDia.limpiar(); registrosIp.limpiar(); pedidosMesa.limpiar(); pedidosMesaIp.limpiar(); fallosCuenta.limpiar(); fallosCuentaIp.clear();
+  accionesCuenta.limpiar(); accionesIp.limpiar();
 }

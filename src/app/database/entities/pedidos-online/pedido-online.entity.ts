@@ -186,6 +186,20 @@ export class PedidoOnline extends BaseModel {
   @Column({ name: 'pago_observacion', type: 'varchar', length: 200, nullable: true })
   pagoObservacion?: string | null;
 
+  // ── F9: el cliente pidió cancelar (el local aprueba o rechaza desde la bandeja) ──
+  /** Cuándo la pidió. Null = no hay solicitud pendiente. */
+  // Sin `type` y tipado `Date` (no `Date | null`), como `fecha_aceptado`: TypeORM elige el tipo
+  // por driver; un `| null` sin tipo explícito rompe la validación en Postgres (PR #234).
+  @Column({ name: 'cancelacion_solicitada_en', nullable: true })
+  cancelacionSolicitadaEn?: Date;
+
+  @Column({ name: 'cancelacion_motivo', type: 'varchar', length: 200, nullable: true })
+  cancelacionMotivo?: string | null;
+
+  /** El local la rechazó: por qué (el cliente lo ve). Con esto ya no puede volver a pedirla. */
+  @Column({ name: 'cancelacion_respuesta', type: 'varchar', length: 200, nullable: true })
+  cancelacionRespuesta?: string | null;
+
   @OneToMany('PedidoOnlineItem', 'pedido', { cascade: true })
   items?: PedidoOnlineItem[];
 }

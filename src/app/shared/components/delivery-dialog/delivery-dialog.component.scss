@@ -611,3 +611,12 @@ tr.mat-mdc-row {
 
 // F8: el pago que eligió el cliente, destacado para el cajero.
 .pago-previsto { border-left: 3px solid var(--info-color); padding-left: 8px; }
+
+// F9: solicitud de cancelación del cliente.
+.cola-cancelar {
+  display: flex; align-items: center; gap: 4px;
+  margin: 4px 0; padding: 4px 6px; border-radius: 4px;
+  border: 1px solid var(--error-color); color: var(--error-color);
+  font-size: 12px; font-weight: 600;
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
+}

@@ -1096,7 +1096,8 @@ export class PdvComponent implements OnInit, OnDestroy {
     if (this.tiendaOnlineActiva) {
       try {
         const res: any = await firstValueFrom(this.repositoryService.contarPedidosOnlinePendientes());
-        const nuevos = Number(res?.total ?? res ?? 0) || 0;
+        // El handler devuelve { pendientes, cancelaciones } (antes se leía `total`, que no existe: el badge quedaba en 0).
+        const nuevos = Number(res?.pendientes ?? res?.total ?? 0) || 0;
         if (nuevos > this.ultimoConteoPedidosOnline) this.sonarAvisoPedido();
         this.ultimoConteoPedidosOnline = nuevos;
         this.pedidosOnlinePendientesCount = nuevos;

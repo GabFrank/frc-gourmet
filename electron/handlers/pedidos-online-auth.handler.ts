@@ -5,6 +5,7 @@ import { CuentaCliente } from '../../src/app/database/entities/pedidos-online/cu
 import { CodigoOtp } from '../../src/app/database/entities/pedidos-online/codigo-otp.entity';
 import { hashPassword, verifyPassword } from '../utils/password.utils';
 import { sendWhatsappOtp, otpWhatsappDisponible } from '../utils/whatsapp-sender';
+import { refrescarCredencialesWhatsapp } from '../utils/tienda-ingreso.utils';
 import { getGoogleClientId } from '../utils/tienda-ingreso.utils';
 import { signCustomerToken } from '../utils/customer-jwt.utils';
 import {
@@ -100,6 +101,8 @@ export function registerPedidosOnlineAuthHandlers(
     if (telefono.length < 6) {
       return { success: false, error: 'telefono_invalido' };
     }
+    // F9: Evolution se configura en Notificaciones; se relee antes de decidir.
+    await refrescarCredencialesWhatsapp(dataSource);
     if (!otpWhatsappDisponible()) {
       return { success: false, error: 'otp_no_disponible' };
     }

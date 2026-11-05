@@ -28,6 +28,19 @@
         <span class="estado" [attr.data-estado]="p.estado">{{ estadoLabel(p.estado) }}</span>
       </div>
 
+      <!-- F9: el cliente pidió cancelar desde la tienda. -->
+      <div class="pide-cancelar" *ngIf="p.pideCancelar">
+        <mat-icon>cancel</mat-icon>
+        <div class="pide-cancelar-texto">
+          <strong>El cliente pidió cancelar</strong>
+          <span *ngIf="p.cancelacionMotivo">«{{ p.cancelacionMotivo }}»</span>
+          <span class="muted">{{ p.cancelacionSolicitadaEn | date:'HH:mm' }}</span>
+        </div>
+      </div>
+      <div class="muted respuesta-cancelacion" *ngIf="!p.pideCancelar && p.cancelacionRespuesta && p.estado !== 'CANCELADO'">
+        Pidió cancelar; se le respondió: {{ p.cancelacionRespuesta }}
+      </div>
+
       <div class="pago-online" *ngIf="pagoInsignia(p) as ins">
         <span class="pago-chip" [attr.data-tipo]="ins.clase"><mat-icon>credit_card</mat-icon> {{ ins.texto }}</span>
         <span class="muted ref" *ngIf="p.pagoId">Ref. uPay {{ p.pagoId }}</span>
@@ -73,6 +86,32 @@
       </div>
 
       <!-- Acciones -->
+      <!-- Sin el permiso no se muestran (el servidor igual lo exige). -->
+      <ng-container *appHasPermission="'PEDIDOS_ONLINE_GESTIONAR'">
+      <div class="acciones resolver" *ngIf="p.pideCancelar">
+        <ng-container *ngIf="resolviendoId !== p.id">
+          <button mat-flat-button color="warn" (click)="empezarResolucion(p, true)">
+            <mat-icon>check</mat-icon> Aprobar cancelación
+          </button>
+          <button mat-stroked-button (click)="empezarResolucion(p, false)">No se puede cancelar</button>
+        </ng-container>
+        <ng-container *ngIf="resolviendoId === p.id">
+          <mat-form-field appearance="outline" class="respuesta-field">
+            <mat-label>{{ resolviendoAprobar ? 'Nota para el cliente (opcional)' : 'Motivo para el cliente' }}</mat-label>
+            <input matInput maxlength="200" [(ngModel)]="respuestaCancelacion"
+                   [placeholder]="resolviendoAprobar ? '' : 'Ej.: ya salió con el repartidor'" />
+          </mat-form-field>
+          <span class="confirm-text" *ngIf="resolviendoAprobar && p.estadoPago === 'PAGADO'">
+            Está pagado: hay que devolver ₲ {{ p.pagoMonto | number:'1.0-2' }} desde uPay.
+          </span>
+          <button mat-flat-button [color]="resolviendoAprobar ? 'warn' : 'primary'" [disabled]="resolviendo" (click)="resolverCancelacion(p)">
+            {{ resolviendoAprobar ? 'Sí, cancelar' : 'Responder' }}
+          </button>
+          <button mat-button (click)="cancelarResolucion()">Volver</button>
+        </ng-container>
+      </div>
+      </ng-container>
+
       <div class="acciones" *appHasPermission="'VENTAS_PDV'">
         <ng-container *ngIf="p.estado === 'RECIBIDO'">
           <ng-container *ngIf="confirmandoRechazoId !== p.id">

@@ -2592,6 +2592,9 @@ contextBridge.exposeInMainWorld('api', {
   rechazarPedidoOnline: async (pedidoId: number, motivo: string): Promise<any> => {
     return await ipcRenderer.invoke('rechazar-pedido-online', pedidoId, motivo);
   },
+  resolverCancelacionPedidoOnline: async (pedidoId: number, aprobar: boolean, respuesta?: string): Promise<any> => {
+    return await ipcRenderer.invoke('resolver-cancelacion-pedido-online', pedidoId, aprobar, respuesta);
+  },
   avanzarEstadoPedidoOnline: async (pedidoId: number, nuevoEstado: string): Promise<any> => {
     return await ipcRenderer.invoke('avanzar-estado-pedido-online', pedidoId, nuevoEstado);
   },

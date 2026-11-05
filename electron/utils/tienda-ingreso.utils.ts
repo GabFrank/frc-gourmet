@@ -2,6 +2,8 @@ import { DataSource } from 'typeorm';
 import { TiendaOnlineConfig } from '../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import { setWhatsappOverrides } from './whatsapp-sender';
 import { getWhatsappToken } from './tienda-secrets.util';
+import { getEvolutionApiKey } from './notificaciones-secrets.util';
+import { ConfiguracionNotificacion } from '../../src/app/database/entities/notificaciones/configuracion-notificacion.entity';
 
 /**
  * Credenciales de ingreso de clientes de la tienda (PLAN-tienda-online F3).
@@ -51,8 +53,53 @@ async function leerYAplicar(dataSource: DataSource): Promise<void> {
     phoneNumberId: cfg?.whatsappPhoneNumberId || null,
     plantilla: cfg?.whatsappPlantilla || null,
     idioma: cfg?.whatsappIdioma || null,
+    // F9: proveedor elegido; Evolution sale de «Configuración de Notificaciones» (la misma
+    // instancia y API key que ya usa FRC para los avisos): no hay una segunda credencial.
+    proveedor: (cfg as any)?.whatsappProveedor || null,
+    ...(await evolutionDeNotificaciones(dataSource)),
+    nombreComercio: cfg?.nombreComercio || null,
   });
   googleClientIdOverride = cfg?.googleClientId || null;
   const { apiKey: upayApiKey } = await import('../services/pagos-online/pagos-online.service');
   upayCredencialesListas = !!cfg?.upayMerchantId && !!(await upayApiKey());
+}
+
+/** Claves de Evolution en `configuracion_notificaciones` (las mismas que usa `notificacion.service`). */
+const CLAVE_EVOLUTION_URL = 'NOTIF_EVOLUTION_URL';
+const CLAVE_EVOLUTION_INSTANCIA = 'NOTIF_EVOLUTION_INSTANCE';
+
+async function evolutionDeNotificaciones(dataSource: DataSource): Promise<{ evolutionUrl: string | null; evolutionInstancia: string | null; evolutionApiKey: string | null }> {
+  try {
+    const filas = await dataSource.getRepository(ConfiguracionNotificacion).find();
+    const valor = (k: string) => { const f: any = filas.find((x: any) => x.clave === k && x.activo); return f ? String(f.valor || '').trim() || null : null; };
+    return {
+      evolutionUrl: valor(CLAVE_EVOLUTION_URL),
+      evolutionInstancia: valor(CLAVE_EVOLUTION_INSTANCIA),
+      evolutionApiKey: (await getEvolutionApiKey()) || null,
+    };
+  } catch {
+    return { evolutionUrl: null, evolutionInstancia: null, evolutionApiKey: null };
+  }
+}
+
+/**
+ * F9: la config de Evolution se edita en otra pantalla (Notificaciones); antes de mandar un
+ * código o de decir si hay login por WhatsApp se vuelve a leer, para no quedar con la vieja.
+ */
+// Auditoría F9: las llamadas públicas (tienda.config, pedir código) no pueden releer la base y el
+// keychain en cada request; se refresca a lo sumo cada 30 s, compartiendo la lectura en vuelo.
+// Las pantallas de admin y «Probar envío» fuerzan la lectura.
+const REFRESCO_MS = 30_000;
+let ultimoRefresco = 0;
+let refrescoEnVuelo: Promise<void> | null = null;
+export async function refrescarCredencialesWhatsapp(dataSource: DataSource, forzar = false): Promise<void> {
+  if (!forzar && Date.now() - ultimoRefresco < REFRESCO_MS) return;
+  if (refrescoEnVuelo) return refrescoEnVuelo;
+  // Un error transitorio (base, keychain) no puede tumbar la carta ni el pedido de código:
+  // se sigue con las credenciales que había.
+  refrescoEnVuelo = cargarCredencialesTienda(dataSource)
+    .then(() => { ultimoRefresco = Date.now(); })
+    .catch((e) => { console.error('[tienda-ingreso] no se pudieron releer las credenciales:', (e as Error)?.message); })
+    .finally(() => { refrescoEnVuelo = null; });
+  return refrescoEnVuelo;
 }

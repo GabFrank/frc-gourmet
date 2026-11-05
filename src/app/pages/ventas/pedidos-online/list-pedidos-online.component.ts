@@ -6,6 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
+import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { RepositoryService } from '../../../database/repository.service';
 import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
@@ -31,6 +32,7 @@ import { AuthService } from '../../../services/auth.service';
     MatIconModule,
     MatFormFieldModule,
     MatSelectModule,
+    MatInputModule,
     MatSnackBarModule,
     HasPermissionDirective,
   ],
@@ -42,11 +44,17 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
   cargando = false;
   filtroEstado = 'ACTIVOS';
   confirmandoRechazoId: number | null = null;
+  /** F9: pedido cuya solicitud de cancelación se está respondiendo (y con qué). */
+  resolviendoId: number | null = null;
+  resolviendoAprobar = false;
+  respuestaCancelacion = '';
+  resolviendo = false;
 
   private timer: any = null;
 
   readonly estados = [
     { value: 'ACTIVOS', label: 'Activos' },
+    { value: 'SOLICITUD_CANCELACION', label: 'Piden cancelar' },
     { value: 'PENDIENTE_PAGO', label: 'Esperando pago' },
     { value: 'RECIBIDO', label: 'Recibidos' },
     { value: 'ACEPTADO', label: 'Aceptados' },
@@ -128,6 +136,8 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
     const filtros: any = {};
     if (this.filtroEstado === 'ACTIVOS') {
       filtros.estados = ['RECIBIDO', 'ACEPTADO', 'EN_PREPARACION', 'LISTO', 'EN_CAMINO'];
+    } else if (this.filtroEstado === 'SOLICITUD_CANCELACION') {
+      filtros.cancelacionPendiente = true;
     } else {
       filtros.estado = this.filtroEstado;
     }
@@ -137,6 +147,8 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
         this.pedidos = (res || []).map((p: any) => ({
           ...p,
           siguiente: this.siguienteEstado(p),
+          // F9: el cliente pidió cancelar y espera respuesta.
+          pideCancelar: !!p.cancelacionSolicitadaEn && ['RECIBIDO', 'ACEPTADO', 'EN_PREPARACION', 'LISTO'].includes(p.estado),
           items: (p.items || []).map((it: any) => ({ ...it, ...this.detalleItem(it) })),
         }));
         this.cargando = false;
@@ -286,6 +298,51 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
       },
       error: (e) => this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 }),
     });
+  }
+
+  // ====== F9: solicitud de cancelación del cliente ======
+  empezarResolucion(p: any, aprobar: boolean): void {
+    this.resolviendoId = p.id;
+    this.resolviendoAprobar = aprobar;
+    this.respuestaCancelacion = '';
+  }
+
+  cancelarResolucion(): void {
+    this.resolviendoId = null;
+  }
+
+  resolverCancelacion(p: any): void {
+    if (this.resolviendo) return;
+    this.resolviendo = true;
+    const aprobar = this.resolviendoAprobar;
+    this.repo.resolverCancelacionPedidoOnline(p.id, aprobar, this.respuestaCancelacion || undefined).subscribe({
+      next: (res) => {
+        this.resolviendo = false;
+        if (res?.success) {
+          this.resolviendoId = null;
+          const dev = Number(res.montoDevolver || 0);
+          this.snack.open(
+            !aprobar ? `Se le avisó al cliente que ${p.numero} sigue en curso`
+              : dev > 0 ? `Pedido ${p.numero} cancelado. Estaba pagado: devolvé ₲ ${dev.toLocaleString('es-PY')} desde uPay y marcalo como devuelto.`
+              : `Pedido ${p.numero} cancelado`,
+            'OK', { duration: dev > 0 ? 10000 : 3000 });
+          this.cargar(true);
+        } else {
+          this.snack.open('No se pudo: ' + this.motivoResolucion(res), 'OK', { duration: 6000 });
+        }
+      },
+      error: (e) => { this.resolviendo = false; this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 5000 }); },
+    });
+  }
+
+  private motivoResolucion(res: any): string {
+    switch (res?.error) {
+      case 'mesa_ya_materializada': return 'el pedido ya está en la cuenta de la mesa. Quitá los ítems desde el PdV y después rechazá la solicitud.';
+      case 'sin_solicitud': return 'la solicitud ya fue respondida.';
+      case 'estado_no_rechazable': return 'el pedido ya no se puede cancelar (ya salió o terminó).';
+      case 'pedido_cambio_reintentar': return 'el pedido cambió mientras tanto. Volvé a intentarlo.';
+      default: return res?.detalle || res?.error || '';
+    }
   }
 
   avanzar(p: any, nuevoEstado: string): void {

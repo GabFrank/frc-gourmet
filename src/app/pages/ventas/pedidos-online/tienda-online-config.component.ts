@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -20,7 +21,7 @@ import { RepositoryService } from '../../../database/repository.service';
   standalone: true,
   imports: [
     CommonModule, FormsModule, MatCardModule, MatFormFieldModule, MatInputModule,
-    MatSlideToggleModule, MatButtonModule, MatIconModule, MatSnackBarModule,
+    MatSlideToggleModule, MatSelectModule, MatButtonModule, MatIconModule, MatSnackBarModule,
   ],
   template: `
     <div class="config-container">
@@ -39,6 +40,11 @@ import { RepositoryService } from '../../../database/repository.service';
           <mat-form-field appearance="outline">
             <mat-label>Nombre del comercio</mat-label>
             <input matInput [(ngModel)]="cfg.nombreComercio" maxlength="150">
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Teléfono del local</mat-label>
+            <input matInput [(ngModel)]="cfg.telefonoContacto" maxlength="30" inputmode="tel" placeholder="0981 123 456">
+            <mat-hint>El cliente lo ve en el detalle de su pedido para llamar o escribir.</mat-hint>
           </mat-form-field>
           <mat-form-field appearance="outline">
             <mat-label>Color de marca (hex)</mat-label>
@@ -99,11 +105,30 @@ import { RepositoryService } from '../../../database/repository.service';
         <div class="proveedor">
           <div class="proveedor-head">
             <span class="prov-nombre">WhatsApp (código de ingreso)</span>
-            <span class="estado-chip" [class.abierta]="ingreso.whatsappConfigurado">
-              {{ ingreso.whatsappConfigurado ? 'Configurado' : 'Sin configurar' }}
+            <span class="estado-chip" [class.abierta]="ingreso.whatsappListo">
+              {{ ingreso.whatsappListo ? 'Configurado' : 'Sin configurar' }}
             </span>
           </div>
+          <!-- F9: dos formas de mandar el código. Si la elegida no está configurada se usa la otra. -->
           <div class="grid">
+            <mat-form-field appearance="outline">
+              <mat-label>Enviar el código por</mat-label>
+              <mat-select [(ngModel)]="cfg.whatsappProveedor">
+                <mat-option value="META">WhatsApp Business oficial (Meta)</mat-option>
+                <mat-option value="EVOLUTION">Número del local (Evolution API)</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+          <p class="ayuda" *ngIf="cfg.whatsappProveedor === 'EVOLUTION'">
+            Usa la misma conexión que las notificaciones (Configuración › Notificaciones):
+            <b>{{ ingreso.evolutionConfigurado ? 'conectada' : 'todavía sin configurar' }}</b>.
+            El mensaje sale desde el número del local; no necesita plantilla aprobada.
+          </p>
+          <p class="ayuda" *ngIf="ingreso.whatsappListo && ingreso.whatsappProveedorActivo && ingreso.whatsappProveedorActivo !== cfg.whatsappProveedor">
+            La opción elegida no está configurada: los códigos salen por
+            {{ ingreso.whatsappProveedorActivo === 'EVOLUTION' ? 'el número del local (Evolution)' : 'Meta' }}.
+          </p>
+          <div class="grid" *ngIf="cfg.whatsappProveedor !== 'EVOLUTION'">
             <mat-form-field appearance="outline">
               <mat-label>Phone Number ID</mat-label>
               <input matInput [(ngModel)]="cfg.whatsappPhoneNumberId" maxlength="30" inputmode="numeric"
@@ -135,7 +160,7 @@ import { RepositoryService } from '../../../database/repository.service';
               <mat-label>Teléfono de prueba</mat-label>
               <input matInput [(ngModel)]="telefonoPrueba" placeholder="595981123456" maxlength="20" inputmode="tel">
             </mat-form-field>
-            <button mat-stroked-button (click)="probarWhatsapp()" [disabled]="probando || !ingreso.whatsappConfigurado">
+            <button mat-stroked-button (click)="probarWhatsapp()" [disabled]="probando || !ingreso.whatsappListo">
               <mat-icon>send</mat-icon> Probar envío
             </button>
           </div>
@@ -260,6 +285,8 @@ export class TiendaOnlineConfigComponent implements OnInit {
     whatsapp_phone_id_invalido: 'El Phone Number ID son solo números',
     whatsapp_plantilla_invalida: 'La plantilla va en minúsculas, números y _',
     whatsapp_idioma_invalido: 'Idioma inválido (ej.: es, es_AR)',
+    whatsapp_proveedor_invalido: 'Proveedor de WhatsApp inválido',
+    telefono_contacto_invalido: 'El teléfono del local solo lleva números, espacios, + o guiones',
     google_client_id_invalido: 'El Client ID tiene que terminar en .apps.googleusercontent.com',
     almacen_seguro_no_disponible: 'Este servidor no puede guardar el token cifrado',
     token_no_guardado: 'No se pudo guardar el token',
@@ -298,7 +325,13 @@ export class TiendaOnlineConfigComponent implements OnInit {
 
   ngOnInit(): void {
     this.repo.getTiendaOnlineConfig().subscribe({
-      next: (c) => { this.cfg = c || this.cfg; this.ingreso = c?.ingreso || {}; this.armarMetodos(); this.cargando = false; },
+      next: (c) => {
+        this.cfg = c || this.cfg;
+        if (!this.cfg.whatsappProveedor) this.cfg.whatsappProveedor = 'META';
+        this.ingreso = c?.ingreso || {};
+        this.armarMetodos();
+        this.cargando = false;
+      },
       error: () => { this.cargando = false; },
     });
   }

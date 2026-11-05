@@ -1,5 +1,6 @@
 import { EntityManager } from 'typeorm';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
+import { cierreSolicitudAlSalir } from './pedido-acciones.utils';
 import {
   EstadoPagoOnline,
   EstadoPedidoOnline,
@@ -69,7 +70,7 @@ export async function sincronizarPedidosOnline(
     const cancela = destino === EstadoPedidoOnline.CANCELADO;
     if (!cancela && (ORDEN[destino] ?? -1) <= (ORDEN[p.estado] ?? 99)) continue;
 
-    const cambios: any = { estado: destino };
+    const cambios: any = { estado: destino, ...cierreSolicitudAlSalir(p, destino) };
     const ahora = new Date();
     if (destino === EstadoPedidoOnline.LISTO) cambios.fechaListo = ahora;
     if (destino === EstadoPedidoOnline.ENTREGADO) {

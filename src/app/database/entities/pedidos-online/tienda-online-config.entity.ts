@@ -76,6 +76,18 @@ export class TiendaOnlineConfig extends BaseModel {
   metodosPago?: string | null;
 
   /**
+   * F9: con qué se mandan los códigos de ingreso por WhatsApp: META (Cloud API) o EVOLUTION (la
+   * instancia de «Configuración de Notificaciones»). Null = META. Si el elegido no está cargado se
+   * usa el otro.
+   */
+  @Column({ name: 'whatsapp_proveedor', type: 'varchar', length: 20, nullable: true })
+  whatsappProveedor?: string | null;
+
+  /** F9: teléfono del local que ve el cliente (llamar / escribir desde el detalle del pedido). */
+  @Column({ name: 'telefono_contacto', type: 'varchar', length: 30, nullable: true })
+  telefonoContacto?: string | null;
+
+  /**
    * Horarios de atención como JSON:
    * `[{ dia: 0-6 (0=Dom), abre: 'HH:mm', cierra: 'HH:mm', activo: bool }]`.
    * null/[] = siempre abierta (mientras `activa`).

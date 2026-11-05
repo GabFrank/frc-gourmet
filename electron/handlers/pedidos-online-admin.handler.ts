@@ -1,4 +1,5 @@
 import { avisarReembolso, marcarDevuelto } from '../services/pagos-online/pagos-online.service';
+import { cierreSolicitudAlSalir, ESTADOS_CANCELABLES_CLIENTE, limpiarMotivo } from '../utils/pedido-acciones.utils';
 
 class PedidoCambioError extends Error { constructor() { super('pedido_cambio_reintentar'); } }
 import { ipcMain } from 'electron';
@@ -93,6 +94,10 @@ function mapPedidoAdmin(p: PedidoOnline, monedas: Pick<MonedaTienda, 'id' | 'sim
     pagoCotizacion: p.pagoCotizacion != null ? Number(p.pagoCotizacion) : null,
     pagoObservacion: p.pagoObservacion ?? null,
     pagoResumen: resumenPago(p as any, monedas),
+    // F9: solicitud de cancelación del cliente.
+    cancelacionSolicitadaEn: p.cancelacionSolicitadaEn ?? null,
+    cancelacionMotivo: p.cancelacionMotivo ?? null,
+    cancelacionRespuesta: p.cancelacionRespuesta ?? null,
     createdAt: p.createdAt,
     items: (p.items || []).map((it) => ({
       id: it.id,
@@ -124,7 +129,10 @@ export function registerPedidosOnlineAdminHandlers(
       .orderBy('p.createdAt', 'DESC')
       .take(filtros?.take || 100);
 
-    if (filtros?.estado) {
+    if (filtros?.cancelacionPendiente) {
+      // F9: solicitudes de cancelación del cliente que esperan respuesta.
+      qb.andWhere('p.cancelacion_solicitada_en IS NOT NULL AND p.estado IN (:...canc)', { canc: ESTADOS_CANCELABLES_CLIENTE });
+    } else if (filtros?.estado) {
       qb.andWhere('p.estado = :estado', { estado: filtros.estado });
     } else if (filtros?.estados?.length) {
       qb.andWhere('p.estado IN (:...estados)', { estados: filtros.estados });
@@ -147,10 +155,17 @@ export function registerPedidosOnlineAdminHandlers(
    */
   ipcMain.handle('contar-pedidos-online-pendientes', async () => {
     await ensurePermission(dataSource, getCurrentUser, PERM_VER);
-    const count = await repo().count({
-      where: { estado: In([EstadoPedidoOnline.RECIBIDO, EstadoPedidoOnline.ACEPTADO]) },
-    });
-    return { pendientes: count };
+    // F9: una solicitud de cancelación también espera a alguien (badge y sonido). Una sola cuenta:
+    // un pedido RECIBIDO que además pide cancelar suma uno, no dos.
+    const pendientes = await repo().createQueryBuilder('p')
+      .where('p.estado IN (:...nuevos) OR (p.cancelacion_solicitada_en IS NOT NULL AND p.estado IN (:...canc))', {
+        nuevos: [EstadoPedidoOnline.RECIBIDO, EstadoPedidoOnline.ACEPTADO], canc: ESTADOS_CANCELABLES_CLIENTE,
+      })
+      .getCount();
+    const cancelaciones = await repo().createQueryBuilder('p')
+      .where('p.cancelacion_solicitada_en IS NOT NULL AND p.estado IN (:...e)', { e: ESTADOS_CANCELABLES_CLIENTE })
+      .getCount();
+    return { pendientes, cancelaciones };
   });
 
   // ============== ACEPTAR ==============
@@ -242,6 +257,20 @@ export function registerPedidosOnlineAdminHandlers(
 
   ipcMain.handle('rechazar-pedido-online', async (_event: any, pedidoId: number, motivo: string) => {
     await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
+    return cancelarPedido(pedidoId, motivo, EstadoPedidoOnline.RECHAZADO);
+  });
+
+  /**
+   * Rechazo del local (RECHAZADO) o aprobación de la solicitud del cliente (F9: CANCELADO). Es el
+   * mismo camino —reversa de la venta, permiso de cobrado, devolución de uPay— para que aprobar
+   * una solicitud no pueda saltarse ninguna regla del rechazo.
+   */
+  const cancelarPedido = async (
+    pedidoId: number, motivo: string,
+    estadoFinal: EstadoPedidoOnline.RECHAZADO | EstadoPedidoOnline.CANCELADO,
+    extra: Partial<PedidoOnline> = {},
+    condicion?: string,
+  ): Promise<any> => {
     const pedido = await repo().findOne({ where: { id: pedidoId } });
     if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
     if (!ESTADOS_CANCELABLES.includes(pedido.estado)) {
@@ -295,7 +324,8 @@ export function registerPedidosOnlineAdminHandlers(
       // con tarjeta en la MISMA transacción.
       const qb = manager.getRepository(PedidoOnline).createQueryBuilder().update(PedidoOnline)
         .set({
-          estado: EstadoPedidoOnline.RECHAZADO,
+          ...extra,
+          estado: estadoFinal,
           motivoRechazo: motivoNormalizado,
           ...(pedido.estadoPago === EstadoPagoOnline.PAGADO ? { estadoPago: EstadoPagoOnline.REEMBOLSO_PENDIENTE } : {}),
         } as any)
@@ -304,6 +334,7 @@ export function registerPedidosOnlineAdminHandlers(
       else qb.andWhere('venta_id IS NULL');
       if (pedido.estadoPago) qb.andWhere('estado_pago = :ep', { ep: pedido.estadoPago });
       else qb.andWhere('estado_pago IS NULL');
+      if (condicion) qb.andWhere(condicion);
       const r = await qb.execute();
       if (!r.affected) throw new PedidoCambioError();
     });
@@ -314,11 +345,35 @@ export function registerPedidosOnlineAdminHandlers(
 
     // Pagado con tarjeta: ya quedó para devolver en uPay (F4 §6); se registra y se avisa al personal.
     const montoDevolver = pedido.estadoPago === EstadoPagoOnline.PAGADO
-      ? await avisarReembolso(dataSource, pedido)
+      ? await avisarReembolso(dataSource, pedido, estadoFinal === EstadoPedidoOnline.CANCELADO ? 'CANCELADO' : 'RECHAZADO')
       : null;
 
     const saved = await repo().findOne({ where: { id: pedidoId } });
     return { success: true, pedido: mapPedidoAdmin(saved || pedido), reversa, montoDevolver };
+  };
+
+  // ============== F9: RESOLVER LA SOLICITUD DE CANCELACIÓN DEL CLIENTE ==============
+  // Aprobar = cancelar por el mismo camino que el rechazo (estado CANCELADO: lo pidió el
+  // cliente). Rechazar = el pedido sigue; se guarda la respuesta y el cliente no puede volver a
+  // pedirlo (para eso está el teléfono del local).
+  ipcMain.handle('resolver-cancelacion-pedido-online', async (_event: any, pedidoId: number, aprobar: boolean, respuesta?: string) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
+    const pedido = await repo().findOne({ where: { id: Number(pedidoId) } });
+    if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
+    if (!pedido.cancelacionSolicitadaEn) return { success: false, error: 'sin_solicitud' };
+    const texto = limpiarMotivo(respuesta);
+    if (aprobar) {
+      return cancelarPedido(pedido.id, pedido.cancelacionMotivo || 'CANCELADO A PEDIDO DEL CLIENTE',
+        EstadoPedidoOnline.CANCELADO, { cancelacionRespuesta: texto || 'APROBADA' } as any,
+        'cancelacion_solicitada_en IS NOT NULL');
+    }
+    const r = await repo().createQueryBuilder().update(PedidoOnline)
+      .set({ cancelacionSolicitadaEn: null, cancelacionRespuesta: texto || 'NO SE PUEDE CANCELAR' } as any)
+      .where('id = :id AND cancelacion_solicitada_en IS NOT NULL AND estado IN (:...e)', { id: pedido.id, e: ESTADOS_CANCELABLES_CLIENTE })
+      .execute();
+    if (!r.affected) return { success: false, error: 'sin_solicitud' };
+    const saved = await repo().findOne({ where: { id: pedido.id } });
+    return { success: true, pedido: mapPedidoAdmin(saved!) };
   });
 
   // ============== PAGO DEVUELTO (F4): el personal ya hizo la devolución en uPay ==============
@@ -615,6 +670,9 @@ export function registerPedidosOnlineAdminHandlers(
     }
 
     pedido.estado = nuevoEstado as EstadoPedidoOnline;
+    // F9: si salió con una solicitud de cancelación sin responder, la solicitud se cierra sola
+    // (ya no se puede cancelar) y el cliente ve por qué, en vez de quedar «esperando respuesta».
+    Object.assign(pedido, cierreSolicitudAlSalir(pedido, nuevoEstado));
     if (nuevoEstado === EstadoPedidoOnline.LISTO) pedido.fechaListo = new Date();
     if (nuevoEstado === EstadoPedidoOnline.ENTREGADO) pedido.fechaEntregado = new Date();
     try {
