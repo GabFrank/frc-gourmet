@@ -158,7 +158,7 @@ async function main() {
   consola = admin;
   const cajaDelCajero = await nuevaCaja(cajero.id);
   const r5a = await withRequestUser(cajero, () => cerrar(cajaDelCajero));
-  if (!/Solo el usuario que abrió/.test(r5a)) pass(`cajero cierra por HTTP su caja con la consola en admin (${r5a.slice(0, 40)})`);
+  if (r5a === 'ok') pass('cajero cierra por HTTP su caja con la consola en admin');
   else fail('cajero cierra por HTTP su caja con la consola en admin', r5a);
   const cajaDelCajero2 = await nuevaCaja(cajero.id);
   consola = cajero;
