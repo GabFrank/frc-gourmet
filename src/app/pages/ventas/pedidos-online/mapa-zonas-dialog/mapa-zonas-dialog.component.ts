@@ -61,7 +61,8 @@ export interface MapaZonasDialogData {
     </mat-dialog-actions>
   `,
   styles: [`
-    .cont { display: flex; flex-direction: column; gap: 10px; min-width: 60vw; }
+    /* El ancho lo fija quien abre el diálogo (90vw, tope 1100px): un min-width en vw lo desbordaba en pantallas anchas. */
+    .cont { display: flex; flex-direction: column; gap: 10px; }
     .ayuda { margin: 0; color: var(--text-secondary); font-size: 13px; }
     .mapa { height: 55vh; min-height: 320px; border-radius: 6px; border: 1px solid var(--border-color); }
     .barra { display: flex; align-items: center; gap: 10px; }
@@ -91,8 +92,8 @@ export class MapaZonasDialogComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     const centro = this.data.centro ?? { lat: -24.0561, lng: -54.3061 }; // Salto del Guairá
     this.map = L.map(this.mapEl.nativeElement).setView([centro.lat, centro.lng], 14);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19, attribution: '© OpenStreetMap · © CARTO',
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
     }).addTo(this.map);
 
     // Las otras zonas van de fondo, para ver dónde pega la nueva.
