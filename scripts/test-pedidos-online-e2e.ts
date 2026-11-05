@@ -679,20 +679,30 @@ async function main() {
   const zonasIni: any = await invokeHandlerWithContext('get-zonas-delivery-admin', undefined);
   ok(Array.isArray(zonasIni) && zonasIni.length === 1, 'admin ve 1 zona inicial', zonasIni?.length);
 
-  // 27. crear una zona nueva
-  const nuevaZona: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, {
+  // 27. crear una zona nueva: la tarifa del PdV es obligatoria (F7) y es su precio de envío.
+  const sinTarifa: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, {
     nombre: 'villa morra', tarifa: 20000, montoMinimo: 60000, activa: true, orden: 2,
+  });
+  ok(sinTarifa?.success === false && sinTarifa?.error === 'tarifa_requerida', 'zona nueva sin tarifa del PdV → tarifa_requerida', sinTarifa);
+  const tarifaVilla: any = await dataSource.getRepository('PrecioDelivery').save({ descripcion: 'VILLA MORRA', valor: 20000, activo: true } as any);
+  const nuevaZona: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, {
+    nombre: 'villa morra', precioDeliveryId: tarifaVilla.id, montoMinimo: 60000, activa: true, orden: 2,
   });
   ok(nuevaZona?.success === true && !!nuevaZona?.zona?.id, 'guardar-zona-delivery crea zona');
   ok(nuevaZona?.zona?.nombre === 'VILLA MORRA', 'nombre de zona en UPPERCASE', nuevaZona?.zona?.nombre);
-  ok(nuevaZona?.zona?.tarifa === 20000, 'tarifa persistida', nuevaZona?.zona?.tarifa);
+  ok(nuevaZona?.zona?.precioDeliveryId === tarifaVilla.id, 'tarifa del PdV persistida', nuevaZona?.zona);
 
   // 28. editar la zona creada
   const editZona: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, {
-    id: nuevaZona.zona.id, nombre: 'villa morra norte', tarifa: 22000, montoMinimo: 60000, activa: false, orden: 2,
+    id: nuevaZona.zona.id, nombre: 'villa morra norte', montoMinimo: 60000, activa: false, orden: 2,
   });
-  ok(editZona?.success === true && editZona?.zona?.nombre === 'VILLA MORRA NORTE' && editZona?.zona?.activa === false,
-    'guardar-zona-delivery edita zona existente');
+  ok(editZona?.success === true && editZona?.zona?.nombre === 'VILLA MORRA NORTE' && editZona?.zona?.activa === false
+    && editZona?.zona?.precioDeliveryId === tarifaVilla.id,
+    'guardar-zona-delivery edita zona existente (sin mandar la tarifa, la conserva)');
+  const soltar: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, { id: nuevaZona.zona.id, nombre: 'villa morra norte', precioDeliveryId: null });
+  ok(soltar?.success === false && soltar?.error === 'tarifa_requerida', 'no se le puede sacar la tarifa a una zona', soltar);
+  const inexistente: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, { id: nuevaZona.zona.id, nombre: 'villa morra norte', precioDeliveryId: 999999 });
+  ok(inexistente?.success === false && inexistente?.error === 'tarifa_invalida', 'una tarifa que no existe → tarifa_invalida', inexistente);
 
   // 29. nombre requerido
   const zonaSinNombre: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, { nombre: '   ', tarifa: 1000 });

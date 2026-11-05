@@ -239,11 +239,14 @@ export function registerPedidosOnlinePedidosHandlers(
     const zonas = await dataSource.getRepository(ZonaDelivery).find({
       where: { activa: true },
       order: { orden: 'ASC', nombre: 'ASC' },
+      relations: ['precioDelivery'],
     });
+    // El precio que se cobra (el mismo cálculo que crear-pedido-online): la tarifa
+    // del PdV vinculada, y sólo sin vínculo el precio propio de la zona.
     return zonas.map((z) => ({
       id: z.id,
       nombre: z.nombre,
-      tarifa: Number(z.tarifa),
+      tarifa: z.precioDelivery ? Number((z.precioDelivery as any).valor) : Number(z.tarifa),
       montoMinimo: Number(z.montoMinimo),
     }));
   });

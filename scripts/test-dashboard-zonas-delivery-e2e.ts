@@ -151,7 +151,7 @@ async function main() {
   const D = await zona('KM 5', 4, T4);
   const Ez = await zona('KM 7', 5, T4);
   // Inactiva, sin dibujar y sin tarifa: aparece en la tabla pero no suma a las alertas.
-  await save(ZonaDelivery, { nombre: 'OESTE', tarifa: 0, montoMinimo: 0, activa: false, orden: 6, poligono: null, precioDelivery: null });
+  const zLegacy = await save(ZonaDelivery, { nombre: 'OESTE', tarifa: 0, montoMinimo: 0, activa: false, orden: 6, poligono: null, precioDelivery: null });
 
   const { registerPedidosOnlineAdminHandlers } = require('../electron/handlers/pedidos-online-admin.handler');
   registerPedidosOnlineAdminHandlers(ds, () => actual);
@@ -348,8 +348,26 @@ async function main() {
   ok(tras.filas.find((x: any) => x.nombre === 'SUR').telefono.envios === 1 && !tras.filas.some((x: any) => x.nombre === 'LARGA DISTANCIA · sin zona'),
     'H: al vincular la tarifa, sus deliverys por teléfono pasan a la zona', tras.filas.map((x: any) => `${x.nombre}:${x.envios}`));
   const suelta = await g({ id: C.id, nombre: 'SUR', precioDeliveryId: null });
+  ok(suelta?.success === false && suelta?.error === 'tarifa_requerida', 'H: la tarifa es obligatoria: no se le puede sacar a una zona', suelta);
+  const nueva = await g({ nombre: 'ESTE', orden: 7 });
+  ok(nueva?.success === false && nueva?.error === 'tarifa_requerida', 'H: una zona nueva sin tarifa se rechaza', nueva);
+  const T5 = await tarifa('EXTRA DISTANCIA', 30000);
+  const mover = await g({ id: C.id, nombre: 'SUR', precioDeliveryId: T5.id });
   const tomada = await g({ id: Ez.id, nombre: 'KM 7', precioDeliveryId: T3.id });
-  ok(suelta?.zona?.precioDeliveryId === null && tomada?.success === true, 'H: con null se suelta y otra zona la puede tomar', [suelta?.zona, tomada]);
+  ok(mover?.success === true && tomada?.success === true, 'H: al pasar SUR a otra tarifa, la que dejó la puede tomar otra zona', [mover, tomada]);
+  const redibujar = await g({ id: zLegacy.id, nombre: 'OESTE', precioDeliveryId: null, poligono: poli });
+  ok(redibujar?.success === true, 'H: una zona vieja sin tarifa se puede seguir redibujando (no se le exige al tocarla)', redibujar);
+  ok(redibujar?.zona?.activa === false && redibujar?.zona?.orden === 6,
+    'H: un guardado parcial no reactiva la zona ni le pisa el orden', redibujar?.zona);
+
+  // ═══════ [H2] El precio público es el que se cobra ═══════
+  console.log('\n[H2] zonas.get devuelve el precio que se cobra');
+  const { registerPedidosOnlinePedidosHandlers } = require('../electron/handlers/pedidos-online-pedidos.handler');
+  registerPedidosOnlinePedidosHandlers(ds, () => actual);
+  await ds.getRepository(ZonaDelivery).update({ id: A.id }, { tarifa: 99999 } as any); // respaldo viejo, distinto
+  const publicas: any[] = await invokeHandler('get-zonas-delivery-online') as any;
+  ok(publicas.find((z: any) => z.nombre === 'CENTRO')?.tarifa === 7000, 'H2: CENTRO muestra su tarifa del PdV (7.000), no el respaldo viejo', publicas);
+  ok(!publicas.some((z: any) => z.nombre === 'OESTE'), 'H2: las zonas inactivas no se publican');
 
   // ═══════ [I] Jornada configurable ═══════
   console.log('\n[I] La jornada sale de la configuración del PdV');

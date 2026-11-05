@@ -1,5 +1,9 @@
-.form { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; padding-top: 4px; }
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; padding-top: 4px; align-items: start; }
 .ancho { grid-column: 1 / -1; }
+.fila-tarifa { display: flex; gap: 12px; align-items: flex-start; }
+.crece { flex: 1; min-width: 0; }
+// Alto de la caja de un campo (40 px en este tema): el botón queda centrado con el select.
+.btn-tarifa { height: 40px; flex-shrink: 0; }
 // Misma altura que la caja de un campo (40 px en este tema), para centrar el interruptor con «Orden».
 .toggle { align-self: start; display: flex; align-items: center; height: 40px; }
 .error { color: var(--error-color); }

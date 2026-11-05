@@ -152,8 +152,9 @@ async function main() {
   });
   ok(noArea?.success === false, 'una geometría que no es de área se rechaza', noArea);
 
+  const tarifaNueva = await save(PrecioDelivery, { descripcion: 'NUEVA ZONA', valor: 5000, activo: true });
   const bien: any = await invokeHandler('guardar-zona-delivery', {
-    nombre: 'nueva zona', tarifa: 5000, montoMinimo: 0, orden: 3,
+    nombre: 'nueva zona', precioDeliveryId: tarifaNueva.id, montoMinimo: 0, orden: 3,
     poligono: cuadrado(-54.40, -24.20, -54.38, -24.18),
   });
   ok(bien?.success === true, 'un polígono válido se guarda', bien?.error);

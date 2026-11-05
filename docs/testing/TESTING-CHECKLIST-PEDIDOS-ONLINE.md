@@ -102,9 +102,13 @@ Ventas → Configuración → Zonas de Delivery. Necesita ventas de delivery **c
 1. **Sin datos:** abrir la pantalla en una base sin envíos del período → KPIs en 0, todas las zonas
    en la tabla con 0, el mapa centrado en el local. Sin internet, debajo del mapa aparece «No se pudo
    cargar el mapa de fondo».
-2. **Vincular tarifas:** editar cada zona y elegir su «Tarifa del PdV». La tarifa que ya usa otra
-   zona aparece deshabilitada con «(usada por X)». Sin tarifa, el campo muestra «Sin tarifa» y la
-   alerta «zona(s) sin tarifa del PdV» se ve arriba.
+2. **La tarifa es el precio de envío:** «Nueva zona» abre un diálogo (la pantalla no se mueve).
+   «Tarifa de envío (del PdV)» es obligatoria: sin elegirla no se puede guardar. La que ya usa otra
+   zona aparece deshabilitada con «(usada por X)». «Nueva tarifa» crea una en Precios de Delivery y
+   la deja elegida. No hay otro campo de precio. Una zona vieja sin tarifa se sigue pudiendo
+   dibujar y renombrar, y muestra la alerta «zona(s) sin tarifa del PdV».
+   - Lo que cobra la tienda al cliente es el valor de esa tarifa (columna «Envío» de la tabla).
+   - Editar sólo el nombre de una zona inactiva no la reactiva ni le cambia el orden.
 3. **Los dos tipos de delivery:** hacer un pedido delivery por la tienda dentro de CENTRO y cargar
    en el PdV un delivery por teléfono con la tarifa de CENTRO. Cobrar los dos y entregarlos. Elegir
    «Hoy» → **Aplicar**: CENTRO muestra Tienda 1 y Teléfono 1, y el mapa un punto dentro de CENTRO.

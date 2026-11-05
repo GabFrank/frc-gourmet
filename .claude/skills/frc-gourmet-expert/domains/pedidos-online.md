@@ -235,9 +235,14 @@ y tabla por zona con **los dos tipos de delivery**. Handler `get-dashboard-zonas
   de Reportes con el mismo filtro (ventas CONCLUIDAS, sin retiros, `SOLO_ENVIOS`).
 
 **Decisiones del propietario (05/11):**
-1. **Una tarifa del PdV por zona**: `guardar-zona-delivery` devuelve `tarifa_en_uso` si se vincula
-   una tarifa que ya tiene otra zona. Sólo se controla cuando la tarifa **cambia**: dos zonas viejas
-   que la compartían se pueden seguir editando (bug que encontró la auditoría).
+1. **La tarifa del PdV es EL precio de envío de la zona, obligatoria y una por zona.**
+   `guardar-zona-delivery`: `tarifa_requerida` al crear o al sacársela, `tarifa_invalida` si no
+   existe, `tarifa_en_uso` si ya la tiene otra zona. Sólo se controla cuando la tarifa **cambia**:
+   dos zonas viejas que la compartían, o una vieja sin tarifa, se siguen pudiendo editar. La columna
+   `tarifa` de la zona queda como respaldo de datos viejos (no se pide ni se muestra; aditivo, no
+   se borra); `zonas.get` publica el precio que se cobra, no el crudo.
+   Un guardado parcial conserva los campos que no vienen (antes reactivaba la zona y ponía orden y
+   mínimo en 0).
 2. **Lectura con `VENTAS_PDV`** (el permiso del menú); crear, editar, dibujar y eliminar siguen con
    `PEDIDOS_ONLINE_CONFIGURAR`, y la pantalla oculta esas acciones (`puedeConfigurar`).
 3. **Puntos = pedidos web cobrados** (el mismo conjunto que la tabla), coordenadas redondeadas a 3

@@ -6,19 +6,20 @@
       <input matInput formControlName="nombre" maxlength="150" cdkFocusInitial>
     </mat-form-field>
 
-    <mat-form-field appearance="outline" class="ancho" floatLabel="always">
-      <mat-label>Tarifa del PdV</mat-label>
-      <mat-select formControlName="precioDeliveryId" placeholder="Sin tarifa">
-        <mat-option *ngFor="let t of tarifasOpciones" [value]="t.id" [disabled]="t.disabled">{{ t.label }}</mat-option>
-      </mat-select>
-      <mat-hint *ngIf="!errorTarifa">La que usa el cajero al cargar por teléfono un delivery de esta zona. Una tarifa por zona.</mat-hint>
-      <mat-hint *ngIf="errorTarifa" class="error">{{ errorTarifa }}</mat-hint>
-    </mat-form-field>
+    <div class="ancho fila-tarifa">
+      <mat-form-field appearance="outline" class="crece">
+        <mat-label>Tarifa de envío (del PdV)</mat-label>
+        <mat-select formControlName="precioDeliveryId" required>
+          <mat-option *ngFor="let t of tarifasOpciones" [value]="t.id" [disabled]="t.disabled">{{ t.label }}</mat-option>
+        </mat-select>
+        <mat-hint *ngIf="!errorTarifa">Es el precio de envío de la zona y la que usa el cajero por teléfono. Una tarifa por zona.</mat-hint>
+        <mat-hint *ngIf="errorTarifa" class="error">{{ errorTarifa }}</mat-hint>
+      </mat-form-field>
+      <button mat-stroked-button type="button" class="btn-tarifa" (click)="nuevaTarifa()" [disabled]="creandoTarifa">
+        <mat-icon>add</mat-icon> Nueva tarifa
+      </button>
+    </div>
 
-    <mat-form-field appearance="outline">
-      <mat-label>Envío si no tiene tarifa</mat-label>
-      <input matInput type="number" min="0" formControlName="tarifa">
-    </mat-form-field>
     <mat-form-field appearance="outline">
       <mat-label>Monto mínimo del pedido</mat-label>
       <input matInput type="number" min="0" formControlName="montoMinimo">

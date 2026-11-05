@@ -344,11 +344,17 @@ export function registerPedidosOnlineAdminHandlers(
     const repoZ = dataSource.getRepository(ZonaDelivery);
     const zona = data?.id ? await repoZ.findOne({ where: { id: data.id }, relations: ['precioDelivery'] }) : repoZ.create();
     if (!zona) return { success: false, error: 'zona_no_encontrada' };
-    zona.nombre = String(data?.nombre || '').trim().toUpperCase();
-    zona.tarifa = Number(data?.tarifa) || 0;
-    zona.montoMinimo = Number(data?.montoMinimo) || 0;
-    zona.activa = data?.activa !== false;
-    zona.orden = Number(data?.orden) || 0;
+    // En una zona existente, un campo que no viene conserva su valor: antes un
+    // guardado parcial (p. ej. por /api/rpc) la reactivaba y le ponía orden y
+    // mínimo en 0. En una nueva, los defaults de siempre.
+    const nueva = !zona.id;
+    const viene = (k: string) => data?.[k] !== undefined;
+    if (nueva || viene('nombre')) zona.nombre = String(data?.nombre || '').trim().toUpperCase();
+    if (!zona.nombre) return { success: false, error: 'nombre_requerido' };
+    if (nueva || viene('tarifa')) zona.tarifa = Number(data?.tarifa) || 0;
+    if (nueva || viene('montoMinimo')) zona.montoMinimo = Number(data?.montoMinimo) || 0;
+    if (nueva || viene('activa')) zona.activa = data?.activa !== false;
+    if (nueva || viene('orden')) zona.orden = Number(data?.orden) || 0;
     // Polígono dibujado en el mapa (GeoJSON en texto). Se valida que parsee y que
     // sea una geometría de área: guardar un GeoJSON roto dejaría la zona muda —
     // no resolvería nunca y el pedido caería en "fuera de cobertura" sin que
@@ -368,25 +374,32 @@ export function registerPedidosOnlineAdminHandlers(
         zona.poligono = texto;
       }
     }
-    if (data?.precioDeliveryId !== undefined) {
-      const tarifaId = data.precioDeliveryId ? Number(data.precioDeliveryId) : null;
-      // Una tarifa del PdV por zona (decisión del propietario, F7): es lo que le
-      // dice al dashboard a qué zona fue un delivery cargado por teléfono. Con dos
-      // zonas en la misma tarifa, ese delivery no tendría una sola zona.
-      // Sólo se controla si la tarifa CAMBIA: dos zonas viejas que ya la comparten
-      // (dato previo a la regla) tienen que poder seguir editándose —renombrarse,
-      // redibujarse— sin quedar trabadas; el dashboard las marca como alerta.
-      const actualId = (zona as any).precioDelivery?.id ?? null;
-      if (tarifaId && tarifaId !== actualId) {
-        const otra = await repoZ.findOne({
-          where: { precioDelivery: { id: tarifaId }, ...(zona.id ? { id: Not(zona.id) } : {}) },
-          relations: ['precioDelivery'],
-        });
-        if (otra) return { success: false, error: 'tarifa_en_uso', zona: otra.nombre };
-      }
-      zona.precioDelivery = tarifaId ? ({ id: tarifaId } as any) : null;
+    // La tarifa del PdV es EL precio de envío de la zona (F7: obligatoria). Es la
+    // misma que usa el cajero por teléfono, así el envío es uno solo en los dos
+    // canales, y es lo que le dice al dashboard a qué zona fue un delivery por
+    // teléfono. `tarifa` (precio propio de la zona) queda sólo como respaldo de
+    // zonas viejas sin vínculo: no se pide ni se muestra.
+    const esNueva = nueva;
+    const actualId = (zona as any).precioDelivery?.id ?? null;
+    const tarifaId = data?.precioDeliveryId !== undefined
+      ? (data.precioDeliveryId ? Number(data.precioDeliveryId) : null)
+      : actualId;
+    // Requerida al crear y al cambiarla; una zona vieja sin tarifa se puede seguir
+    // redibujando o renombrando (el dashboard la marca como alerta).
+    if (tarifaId == null && (esNueva || actualId != null)) return { success: false, error: 'tarifa_requerida' };
+    if (tarifaId != null && tarifaId !== actualId) {
+      if (!Number.isInteger(tarifaId) || tarifaId <= 0) return { success: false, error: 'tarifa_invalida' };
+      const existe = await dataSource.getRepository(PrecioDelivery).findOne({ where: { id: tarifaId } });
+      if (!existe) return { success: false, error: 'tarifa_invalida' };
+      // Una tarifa por zona. Sólo se controla si CAMBIA: dos zonas viejas que ya
+      // la compartían tienen que poder seguir editándose sin quedar trabadas.
+      const otra = await repoZ.findOne({
+        where: { precioDelivery: { id: tarifaId }, ...(zona.id ? { id: Not(zona.id) } : {}) },
+        relations: ['precioDelivery'],
+      });
+      if (otra) return { success: false, error: 'tarifa_en_uso', zona: otra.nombre };
     }
-    if (!zona.nombre) return { success: false, error: 'nombre_requerido' };
+    zona.precioDelivery = tarifaId != null ? ({ id: tarifaId } as any) : null;
     const saved = await repoZ.save(zona);
     return { success: true, zona: mapZona(saved) };
   });
