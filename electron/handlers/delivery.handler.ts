@@ -43,6 +43,7 @@ import {
 import { printDeliveryTicketInternal } from './documentos-tickets.handler';
 import { getEstadoCobroVentaInternal } from './ventas.handler';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
+import { PEDIDO_POR_ESTADO_DELIVERY, sincronizarPedidosOnline } from '../utils/pedido-online-sync.utils';
 import { TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 /**
  * Columnas de la `Persona` del **`Funcionario`** repartidor que este canal publica.
@@ -578,6 +579,11 @@ export function registerDeliveryHandlers(
       await setEntityUserTracking(dataSource, delivery, usuarioId, true);
       const guardado = await manager.save(Delivery, delivery);
 
+      // El pedido online de la tienda sigue al delivery en la misma transacción:
+      // el cajero opera desde este panel, no desde la bandeja.
+      const destinoPedido = PEDIDO_POR_ESTADO_DELIVERY[nuevoEstado];
+      if (destinoPedido) await sincronizarPedidosOnline(manager, { deliveryId: id }, destinoPedido);
+
       if (nuevoEstado === DeliveryEstado.EN_CAMINO && config?.deliveryAutoImprimirAlEnviar) {
         // Fuera de la transacción en la práctica: `setImmediate` corre después
         // del commit, y si la impresora falla no revierte el cambio de estado.
@@ -925,6 +931,9 @@ export function registerDeliveryHandlers(
       delivery.motivoCancelacion = motivoNormalizado;
       await setEntityUserTracking(dataSource, delivery, usuarioId, true);
       const guardado = await manager.save(Delivery, delivery);
+
+      // El pedido online de la tienda (si lo hay) queda cancelado con el mismo motivo.
+      await sincronizarPedidosOnline(manager, { deliveryId: id }, PEDIDO_POR_ESTADO_DELIVERY.CANCELADO!, { motivo: motivoNormalizado });
 
       // ─── SSE: emitir evento si tiene mesa ─────────────────────────────────────
       const ventaMesaId = (venta as any)?.mesa?.id ?? null;

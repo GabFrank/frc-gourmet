@@ -343,6 +343,7 @@ import { TiendaSeguimientoMesa1793727681955 } from './migrations/1793727681955-T
 import { TiendaIngresoClientes1793727682955 } from './migrations/1793727682955-TiendaIngresoClientes';
 import { TiendaPagoOnline1793727683955 } from './migrations/1793727683955-TiendaPagoOnline';
 import { TiendaCategorias1793727684955 } from './migrations/1793727684955-TiendaCategorias';
+import { TiendaPersonalizarSabores1793727685955 } from './migrations/1793727685955-TiendaPersonalizarSabores';
 import { PagoOnlineEvento } from './entities/pedidos-online/pago-online-evento.entity';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
@@ -831,6 +832,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     TiendaIngresoClientes1793727682955,
     TiendaPagoOnline1793727683955,
     TiendaCategorias1793727684955,
+    TiendaPersonalizarSabores1793727685955,
   ];
 }
 

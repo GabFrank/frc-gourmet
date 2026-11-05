@@ -54,7 +54,11 @@ export class MenuPage implements OnInit, OnDestroy {
         this.cargando = false;
         // Volver a la altura donde estaba el cliente en esta categoría.
         const y = existe ? this.estado.scrollDe(String(existe.cat.id)) : 0;
-        setTimeout(() => window.scrollTo({ top: y }), 0);
+        setTimeout(() => {
+          window.scrollTo({ top: y });
+          // La barra de categorías deja a la vista la elegida (al volver de un producto).
+          document.querySelector('.sf-chip.active')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+        }, 0);
       },
       error: (e) => {
         this.error = mensajeError(e, 'No se pudo cargar la carta. Probá de nuevo.');

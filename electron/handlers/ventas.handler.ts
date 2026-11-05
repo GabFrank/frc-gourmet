@@ -76,6 +76,7 @@ import { condicionCanal, esCanalValido } from '../utils/canal-venta.utils';
 import { limiteFechaSqlite } from '../utils/db-query';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
+import { reapuntarPedidosDeVenta, sincronizarPedidosPorCierreDeVenta } from '../utils/pedido-online-sync.utils';
 import { EstadoPedidoOnline, TipoPedidoOnline, EstadoPagoOnline, FORMA_PAGO_UPAY } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { TiendaOnlineConfig } from '../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import { motivoNoMaterializable } from '../utils/pedido-online-materializable';
@@ -331,6 +332,7 @@ export async function materializarPedidoOnlineEnVenta(
     const itemRepo = qr.manager.getRepository(VentaItem);
     const saborRepo = qr.manager.getRepository(VentaItemSabor);
     const adicionalRepo = qr.manager.getRepository(VentaItemAdicional);
+    const modIngRepo = qr.manager.getRepository(VentaItemIngredienteModificacion);
     const obsCatRepo = qr.manager.getRepository(Observacion);
     const obsItemRepo = qr.manager.getRepository(VentaItemObservacion);
 
@@ -469,7 +471,12 @@ export async function materializarPedidoOnlineEnVenta(
 
       // El pedido congela precioUnitario = opcion.valor + Σ adicionales.
       // Se separa igual que el PdV: precioVentaUnitario base + precioAdicionales.
-      const adicTotal = adicionales.reduce((s, a) => s + (Number(a?.precio) || 0), 0);
+      // F6b: los adicionales de cada sabor suman precio × proporción (regla del PdV, mismo
+      // redondeo que el alta del pedido).
+      const adicSabores = Math.round(sabores.reduce((acc, s) => acc + (Array.isArray(s?.personalizacion?.adicionales)
+        ? s.personalizacion.adicionales.reduce((t: number, a: any) => t + (Number(a?.precio) || 0) * (Number(s.proporcion) || 1 / sabores.length), 0)
+        : 0), 0));
+      const adicTotal = adicionales.reduce((s, a) => s + (Number(a?.precio) || 0), 0) + adicSabores;
       const precioVentaUnitario = Math.max(0, Number(pItem.precioUnitario || 0) - adicTotal);
 
       const esPizza = sabores.length > 0;
@@ -533,7 +540,49 @@ export async function materializarPedidoOnlineEnVenta(
           costoReferencia: rpCostos.get(Number(s.recetaPresentacionId) || 0) || 0,
         });
         await setEntityUserTracking(dataSource, vs, userId, false);
-        await saborRepo.save(vs);
+        const savedSabor = await saborRepo.save(vs);
+
+        // F6b: personalización de este sabor, colgada de su VentaItemSabor como hace
+        // `persistirPersonalizacionConSabor` del PdV (stock, KDS y tickets ya la leen).
+        const ps = s.personalizacion;
+        if (ps) {
+          for (const q of Array.isArray(ps.quitados) ? ps.quitados : []) {
+            if (!q?.id) continue;
+            const m = modIngRepo.create({
+              ventaItem: { id: savedItem.id } as any,
+              recetaIngrediente: { id: q.id } as any,
+              tipoModificacion: TipoModificacionIngrediente.REMOVIDO,
+              ventaItemSabor: { id: savedSabor.id } as any,
+            });
+            await setEntityUserTracking(dataSource, m, userId, false);
+            await modIngRepo.save(m);
+          }
+          for (const c of Array.isArray(ps.cambios) ? ps.cambios : []) {
+            if (!c?.id || !c?.reemplazoId) continue;
+            const m = modIngRepo.create({
+              ventaItem: { id: savedItem.id } as any,
+              recetaIngrediente: { id: c.id } as any,
+              tipoModificacion: TipoModificacionIngrediente.INTERCAMBIADO,
+              ingredienteReemplazo: { id: c.reemplazoId } as any,
+              ventaItemSabor: { id: savedSabor.id } as any,
+            });
+            await setEntityUserTracking(dataSource, m, userId, false);
+            await modIngRepo.save(m);
+          }
+          for (const a of Array.isArray(ps.adicionales) ? ps.adicionales : []) {
+            if (!a?.id) continue;
+            // Igual que el PdV: precioCobrado = precio de lista; el ítem suma × proporción.
+            const va = adicionalRepo.create({
+              ventaItem: { id: savedItem.id } as any,
+              adicional: { id: a.id } as any,
+              precioCobrado: Number(a.precio) || 0,
+              cantidad: 1,
+              ventaItemSabor: { id: savedSabor.id } as any,
+            });
+            await setEntityUserTracking(dataSource, va, userId, false);
+            await adicionalRepo.save(va);
+          }
+        }
       }
 
       // Adicionales — ids presentes en el snapshot.
@@ -1033,6 +1082,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         for (const v of ventasAbiertas) {
           v.estado = estado as VentaEstado;
           await manager.getRepository(Venta).save(v);
+          await sincronizarPedidosPorCierreDeVenta(manager, v.id, v.estado);
         }
       });
       // Cerrar las cuentas de la mesa cambia su ocupacion: el cache la sigue.
@@ -1738,6 +1788,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       repo.merge(entity, ventaData);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
+
+      // Pedidos online de la tienda sobre esta venta: la mesa cobrada queda
+      // entregada y la venta cancelada los cancela. Sólo al salir de ABIERTA.
+      if (estadoAnterior === VentaEstado.ABIERTA && saved.estado !== VentaEstado.ABIERTA) {
+        try {
+          await sincronizarPedidosPorCierreDeVenta(dataSource.manager, id, saved.estado);
+        } catch (e) {
+          console.warn('[updateVenta] sincronizar pedidos online falló:', e);
+        }
+      }
 
       // ─── SSE: emitir evento de cambio ─────────────────────────────────────
       try {
@@ -3459,6 +3519,9 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           await setEntityUserTracking(dataSource, ventaOrigen as any, userId, true);
           await manager.save(Venta, ventaOrigen);
           origenCerrado = true;
+          // Los pedidos online de la cuenta origen siguen a sus ítems: la que se
+          // va a cobrar es la destino.
+          await reapuntarPedidosDeVenta(manager, ventaOrigen.id, ventaDestinoId);
         }
       } else {
         origenCerrado = true;

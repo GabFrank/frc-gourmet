@@ -230,6 +230,7 @@ export function registerPedidosOnlineConfigHandlers(
     if (data.prepTimeMinutos !== undefined) cfg.prepTimeMinutos = Number(data.prepTimeMinutos) || 0;
     if (data.montoMinimoPedido !== undefined) cfg.montoMinimoPedido = Number(data.montoMinimoPedido) || 0;
     if (data.aceptacionAutomatica !== undefined) cfg.aceptacionAutomatica = !!data.aceptacionAutomatica;
+    if (data.personalizarSabores !== undefined) cfg.personalizarSabores = !!data.personalizarSabores;
     if (data.horariosJson !== undefined) cfg.horariosJson = data.horariosJson || undefined;
     // Canal MESA_QR (pedidos en mesa por QR)
     if (data.permiteMesa !== undefined) cfg.permiteMesa = !!data.permiteMesa;

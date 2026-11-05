@@ -40,7 +40,7 @@ async function main() {
   };
   // Sube todo y baja las migraciones de la tienda posteriores a F4 (F6 en adelante), para
   // que los bloques F2-F4 de abajo sigan encontrando a F4 como la última.
-  const POSTERIORES_A_F4 = /TiendaCategorias/;
+  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores/;
   const subirSinPosteriores = async () => {
     await ds.runMigrations({ transaction: 'each' });
     for (;;) {
@@ -64,6 +64,8 @@ async function main() {
   // Columnas que agregan migraciones posteriores (F2) no están todavía en este punto.
   const F4_PEDIDO = ['estado_pago', 'pago_proveedor', 'pago_intento', 'pago_idem_key', 'pago_sesion_id', 'pago_checkout_url',
     'pago_id', 'pago_monto', 'pago_expira_en', 'pago_ultima_consulta', 'pago_detalle', 'pagado_en', 'pago_aviso_sin_aceptar'];
+  // Columnas de config de migraciones posteriores a F4 (F6b), que estos bloques bajan antes.
+  const POST_F4_CFG = ['personalizar_sabores'];
   const F4_CFG = ['pago_online_activo', 'upay_base_url', 'upay_merchant_id', 'upay_merchant_nombre', 'minutos_aviso_pagado_sin_aceptar'];
   const POSTERIORES = ['seguimiento_token_hash', ...F4_PEDIDO];
   const entTodas = meta.columns.map((c) => c.databaseName).sort();
@@ -122,7 +124,7 @@ async function main() {
   const cfgCols = await colsCfg();
   ok(F3_COLS.every((c) => cfgCols.includes(c)), 'F3 up agrega las 4 columnas', cfgCols);
   const metaCfg = ds.entityMetadatas.find((m) => m.tableName === 'tienda_online_config')!;
-  ok(JSON.stringify(metaCfg.columns.map((c) => c.databaseName).filter((c) => !F4_CFG.includes(c)).sort()) === JSON.stringify([...cfgCols].sort()), 'F3: las columnas coinciden con la entidad (sin F4)');
+  ok(JSON.stringify(metaCfg.columns.map((c) => c.databaseName).filter((c) => !F4_CFG.includes(c) && !POST_F4_CFG.includes(c)).sort()) === JSON.stringify([...cfgCols].sort()), 'F3: las columnas coinciden con la entidad (sin F4)');
   await ds.query(`DELETE FROM tienda_online_config`);
   await ds.query(`INSERT INTO tienda_online_config (nombre_comercio, google_client_id) VALUES ('ZT-CFG', 'x.apps.googleusercontent.com')`);
   await ds.undoLastMigration({ transaction: 'each' });
@@ -140,7 +142,7 @@ async function main() {
   const colsF4 = await columnas();
   ok(F4_PEDIDO.every((c) => colsF4.includes(c)), 'F4 up agrega las columnas de pago al pedido');
   ok(JSON.stringify(entTodas) === JSON.stringify([...colsF4].sort()), 'F4: las columnas del pedido coinciden con la entidad completa');
-  ok(JSON.stringify(metaCfg.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...(await colsCfg())].sort()), 'F4: las columnas de config coinciden con la entidad');
+  ok(JSON.stringify(metaCfg.columns.map((c) => c.databaseName).filter((c) => !POST_F4_CFG.includes(c)).sort()) === JSON.stringify([...(await colsCfg())].sort()), 'F4: las columnas de config coinciden con la entidad');
   ok((await indices()).includes('UQ_pedidos_online_pago_id'), 'F4 crea el índice único de pago_id');
   const actCfg = await ds.query(`SELECT pago_online_activo AS a FROM tienda_online_config`);
   ok(actCfg.every((r: any) => !r.a || r.a === '0'), 'F4: pago online queda apagado en las configs existentes', actCfg);

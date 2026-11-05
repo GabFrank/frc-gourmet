@@ -40,6 +40,34 @@ export function precioBaseLinea(p: MenuProducto, it: CartItem): number | null {
   return op ? op.precio : null;
 }
 
+/**
+ * F6b: precio de la personalización por sabor según la carta vigente (adicional × proporción,
+ * la regla del PdV y del server), o null si algo elegido ya no se ofrece.
+ */
+export function precioSaboresLinea(menu: MenuSnapshot, p: MenuProducto, it: CartItem): number | null {
+  const pers = it.opcion.personalizacionSabores || [];
+  if (!pers.length) return 0;
+  const ids = [...new Set(it.opcion.saborIds || [])];
+  const porReceta = menu.personalizacionPorReceta;
+  if (!porReceta || !ids.length) return null;
+  let total = 0;
+  for (const ps of pers) {
+    const recetaId = p.sabores?.find((s) => s.saborId === ps.saborId)?.precios
+      .find((x) => x.presentacionId === it.opcion.presentacionId)?.recetaId;
+    const opc = recetaId ? porReceta[String(recetaId)] : null;
+    if (!opc) return null;
+    if (ps.quitar.some((q) => !opc.quitables.some((x) => x.id === q.id))) return null;
+    if (ps.cambios.some((c) => !opc.cambiables.some((x) => x.id === c.recetaIngredienteId
+      && x.opciones.some((o) => o.productoId === c.productoId)))) return null;
+    for (const a of ps.adicionales) {
+      const vig = opc.adicionales.find((x) => x.id === a.id);
+      if (!vig) return null;
+      total += vig.precio / ids.length;
+    }
+  }
+  return Math.round(total);
+}
+
 /** Estado del carrito (memoria + localStorage). Angular 15: sin signals. */
 @Injectable({ providedIn: 'root' })
 export class CartService {
@@ -95,6 +123,14 @@ export class CartService {
         presentacionId: i.opcion.presentacionId,
         recetaId: i.opcion.recetaId,
         saborIds: i.opcion.saborIds,
+        personalizacionSabores: i.opcion.personalizacionSabores?.length
+          ? i.opcion.personalizacionSabores.map((ps) => ({
+              saborId: ps.saborId,
+              quitarIds: ps.quitar.map((q) => q.id),
+              cambios: ps.cambios.map((c) => ({ recetaIngredienteId: c.recetaIngredienteId, productoId: c.productoId })),
+              adicionalIds: ps.adicionales.map((a) => a.id),
+            }))
+          : undefined,
       },
       cantidad: i.cantidad,
       adicionalIds: i.adicionales.map((a) => a.id),
@@ -115,11 +151,12 @@ export class CartService {
       const p = menu.productos.find((x) => x.id === it.productoId);
       const base = p ? precioBaseLinea(p, it) : null;
       const adicionales = p ? it.adicionales.map((a) => p.adicionales.find((x) => x.id === a.id) || null) : [];
-      if (!p || base == null || adicionales.some((a) => !a)) {
+      const sabores = p ? precioSaboresLinea(menu, p, it) : null;
+      if (!p || base == null || sabores == null || adicionales.some((a) => !a)) {
         res.quitados.push(it.nombreProducto);
         continue;
       }
-      const nuevo = base + (adicionales as MenuAdicional[]).reduce((s, a) => s + a.precio, 0);
+      const nuevo = base + (adicionales as MenuAdicional[]).reduce((s, a) => s + a.precio, 0) + sabores;
       if (Math.abs(nuevo - it.precioUnitario) > 0.001) {
         res.cambiados.push({ nombre: it.nombreProducto, antes: it.precioUnitario, ahora: nuevo });
       }
@@ -128,6 +165,7 @@ export class CartService {
         : null;
       quedan.push({
         ...it,
+        nombreProducto: p.nombre,
         precioUnitario: nuevo,
         adicionales: adicionales as MenuAdicional[],
         imageUrl: saborImg || p.imageUrl || it.imageUrl,
@@ -144,6 +182,15 @@ export class CartService {
     if (it.opcion.label && it.opcion.tipo !== 'PRESENTACION') parts.push(it.opcion.label);
     else if (it.opcion.label && it.opcion.label !== 'Estándar') parts.push(it.opcion.label);
     for (const a of it.adicionales) parts.push(a.nombre);
+    for (const ps of it.opcion.personalizacionSabores || []) {
+      const det = [
+        ...ps.quitar.map((q) => `sin ${q.nombre}`),
+        ...ps.cambios.map((c) => `${c.nombre} → ${c.reemplazoNombre}`),
+        ...ps.adicionales.map((a) => `+ ${a.nombre}`),
+      ];
+      const nombre = ps.nombreSabor || '';
+      if (det.length) parts.push(nombre ? `${nombre}: ${det.join(', ')}` : det.join(', '));
+    }
     for (const o of it.observaciones) parts.push(o.descripcion);
     if (it.notaLibre) parts.push(`"${it.notaLibre}"`);
     return parts.join(' · ');
