@@ -15,6 +15,7 @@ import { ConfirmationDialogComponent } from '../../../shared/components/confirma
 import { DashStatChipComponent, DashStatChipColor } from '../../../shared/components/dashboard/stat-chip/dash-stat-chip.component';
 import { MapaZonasDialogComponent } from './mapa-zonas-dialog/mapa-zonas-dialog.component';
 import { CreateEditZonaDeliveryDialogComponent } from './create-edit-zona-delivery-dialog/create-edit-zona-delivery-dialog.component';
+import { parsearAreas } from './zona-geometria';
 
 type RangoZonas = 'today' | 'week' | 'month';
 
@@ -76,7 +77,8 @@ export class ZonasDeliveryComponent implements OnInit, AfterViewInit, OnDestroy 
   private map: L.Map | null = null;
   private capaZonas = L.layerGroup();
   private capaPuntos = L.layerGroup();
-  private poligonos = new Map<string, L.GeoJSON>();
+  /** Cada zona es un grupo con una forma por área (una zona puede valer en varias áreas). */
+  private poligonos = new Map<string, L.FeatureGroup>();
   private datos: any = null;
   /** La pestaña puede crearse oculta o cambiar de ancho (una o dos columnas): el mapa se reacomoda. */
   private observador: ResizeObserver | null = null;
@@ -216,12 +218,13 @@ export class ZonasDeliveryComponent implements OnInit, AfterViewInit, OnDestroy 
       const indice = new Map<number, number>(this.zonas.map((z: any, i: number) => [z.id, (i % COLORES_ZONA) + 1]));
       const limites = L.latLngBounds([]);
       for (const z of this.zonas) {
-        if (!z.poligono) continue;
-        let geo: any;
-        try { geo = JSON.parse(z.poligono); } catch { continue; }
+        const areas = parsearAreas(z.poligono);
+        if (!areas.length) continue;
         const color = this.colorMapa(indice.get(z.id)!);
-        const capa = L.geoJSON(geo, { style: { color, weight: 2, fillColor: color, fillOpacity: z.activa ? 0.18 : 0.06, dashArray: z.activa ? undefined : '4 4' } });
-        capa.bindTooltip(z.nombre, { permanent: true, direction: 'center', className: 'zona-etiqueta' });
+        const estilo = { color, weight: 2, fillColor: color, fillOpacity: z.activa ? 0.18 : 0.06, dashArray: z.activa ? undefined : '4 4' };
+        // El nombre va en cada área: la identidad nunca es sólo el color.
+        const capa = L.featureGroup(areas.map((a) => L.polygon(a, estilo)
+          .bindTooltip(z.nombre, { permanent: true, direction: 'center', className: 'zona-etiqueta' })));
         capa.on('click', () => this.zone.run(() => this.seleccionar(`Z${z.id}`)));
         capa.addTo(this.capaZonas);
         this.poligonos.set(`Z${z.id}`, capa);
@@ -268,7 +271,7 @@ export class ZonasDeliveryComponent implements OnInit, AfterViewInit, OnDestroy 
   private resaltarPoligono(acercar = false): void {
     this.poligonos.forEach((capa, clave) => {
       const sel = clave === this.seleccionada;
-      capa.setStyle({ weight: sel ? 4 : 2, fillOpacity: sel ? 0.35 : 0.18 });
+      capa.setStyle({ weight: sel ? 4 : 2, fillOpacity: sel ? 0.35 : 0.18 } as any);
       if (sel) {
         capa.bringToFront();
         if (acercar) this.map?.fitBounds(capa.getBounds(), { padding: [40, 40], maxZoom: 16 });

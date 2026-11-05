@@ -128,7 +128,15 @@ Ventas → Configuración → Zonas de Delivery. Necesita ventas de delivery **c
    **cambiarle** la tarifa a una que ya usa otra zona.
 9. **Tamaño:** achicar la ventana por debajo de ~1100 px → mapa arriba y tabla abajo, el mapa se
    redibuja sin quedar gris. Cambiar de pestaña y volver: el mapa sigue encuadrado.
-10. **Tema oscuro:** los nombres de las zonas sobre el mapa se leen (el mapa es claro en los dos
+10. **Varias áreas en una zona** (menú ⋮ → «Dibujar en el mapa»):
+    - Los vértices se ven; al pasar el mouse se agrandan y aparece «×». Arrastrar uno lo mueve;
+      «×» lo borra; clic sobre un borde agrega un punto en ese lado.
+    - «Agregar área» crea «Área 2»: tres clics en otro barrio y «Guardar zona». En el dashboard la
+      zona se ve en los dos lugares, con su nombre en cada uno.
+    - Un pedido de la tienda con el pin en el área 2 cotiza el envío de esa zona.
+    - Volver a abrir el diseñador: están las dos áreas (antes se perdía la segunda al guardar).
+    - Un área con 1 o 2 puntos deja «Guardar zona» deshabilitado y su chip punteado.
+11. **Tema oscuro:** los nombres de las zonas sobre el mapa se leen (el mapa es claro en los dos
     temas) y los puntos de color de la tabla se distinguen.
 
 ## Qué NO se probó automáticamente

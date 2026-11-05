@@ -3,8 +3,10 @@ import { CommonModule } from '@angular/common';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import * as L from 'leaflet';
+import { indiceParaInsertar, parsearAreas, serializarAreas } from '../zona-geometria';
 
 export interface MapaZonasDialogData {
   /** Zona que se está dibujando. */
@@ -15,74 +17,52 @@ export interface MapaZonasDialogData {
   centro?: { lat: number; lng: number };
 }
 
+interface ChipArea { indice: number; label: string; activa: boolean; incompleta: boolean; }
+
 /**
  * Diseñador de la zona de reparto sobre un mapa.
  *
- * El cliente nunca elige su zona —es un dato interno del local— así que alguien
- * tiene que dibujar dónde llega el delivery. Acá se hace: se marcan los vértices
- * con click, se arrastran para corregir y se guarda como GeoJSON. El servidor
- * después resuelve con eso en qué zona cae el pin del cliente.
+ * Una zona es UN precio (su tarifa del PdV) y puede valer en **varias áreas**: dos
+ * barrios separados que pagan lo mismo son una zona con dos áreas, sin duplicar la
+ * tarifa en el PdV. Se guarda como `Polygon` (un área) o `MultiPolygon` (varias).
  *
- * Sin plugin de dibujo a propósito: marcar vértices y cerrar el anillo son unas
- * pocas decenas de líneas con Leaflet pelado, y el desktop es Electron
+ * Edición del área activa:
+ * - clic en el mapa agrega un vértice al final;
+ * - clic sobre un borde inserta un vértice en ese lado;
+ * - los vértices se arrastran; al pasar el mouse se destacan y muestran «×» para borrarlos.
+ * Clic sobre otra área la vuelve la activa.
+ *
+ * Sin plugin de dibujo a propósito: es Leaflet pelado, y el desktop es Electron
  * empaquetado, donde cada dependencia nueva hay que bundlearla.
  */
 @Component({
   selector: 'app-mapa-zonas-dialog',
   standalone: true,
-  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule, MatSnackBarModule],
-  template: `
-    <h2 mat-dialog-title>Dibujar zona · {{ data.zona.nombre || 'Nueva zona' }}</h2>
-
-    <mat-dialog-content class="cont">
-      <p class="ayuda">
-        Tocá el mapa para marcar los vértices de la zona. Arrastrá un punto para corregirlo.
-        Con 3 puntos o más ya se puede guardar.
-      </p>
-      <div #mapEl class="mapa"></div>
-      <div class="barra">
-        <span class="contador">{{ puntos.length }} punto{{ puntos.length === 1 ? '' : 's' }}</span>
-        <span class="aviso" *ngIf="superpone">Se superpone con otra zona: gana la de menor orden.</span>
-        <span class="spacer"></span>
-        <button mat-stroked-button (click)="deshacer()" [disabled]="!puntos.length">
-          <mat-icon>undo</mat-icon> Deshacer
-        </button>
-        <button mat-stroked-button color="warn" (click)="limpiar()" [disabled]="!puntos.length">
-          <mat-icon>delete_outline</mat-icon> Borrar todo
-        </button>
-      </div>
-    </mat-dialog-content>
-
-    <mat-dialog-actions align="end">
-      <button mat-button (click)="ref.close()">Cancelar</button>
-      <button mat-flat-button color="primary" [disabled]="puntos.length < 3" (click)="aceptar()">
-        Guardar zona
-      </button>
-    </mat-dialog-actions>
-  `,
-  styles: [`
-    /* El ancho lo fija quien abre el diálogo (90vw, tope 1100px): un min-width en vw lo desbordaba en pantallas anchas. */
-    .cont { display: flex; flex-direction: column; gap: 10px; }
-    .ayuda { margin: 0; color: var(--text-secondary); font-size: 13px; }
-    .mapa { height: 55vh; min-height: 320px; border-radius: 6px; border: 1px solid var(--border-color); }
-    .barra { display: flex; align-items: center; gap: 10px; }
-    .spacer { flex: 1; }
-    .contador { color: var(--text-secondary); font-size: 13px; }
-    .aviso { color: var(--warning-color); font-size: 13px; }
-  `],
+  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule, MatTooltipModule, MatSnackBarModule],
+  templateUrl: './mapa-zonas-dialog.component.html',
+  styleUrls: ['./mapa-zonas-dialog.component.scss'],
 })
 export class MapaZonasDialogComponent implements OnInit, OnDestroy {
   @ViewChild('mapEl', { static: true }) mapEl!: ElementRef<HTMLDivElement>;
-
   private zone = inject(NgZone);
   private snack = inject(MatSnackBar);
 
-  puntos: L.LatLng[] = [];
+  /** Áreas de la zona, cada una un anillo abierto de vértices. */
+  areas: L.LatLng[][] = [];
+  activa = 0;
+
+  // Precalculado para el template (no se llaman funciones en el template).
+  chips: ChipArea[] = [];
+  puntosActiva = 0;
+  hayAreas = false;
+  puedeGuardar = false;
   superpone = false;
+  resumen = '';
 
   private map!: L.Map;
-  private poligono: L.Polygon | null = null;
-  private marcadores: L.Marker[] = [];
+  private capa = L.layerGroup();
+  private colorActiva = '';
+  private colorOtras = '';
 
   constructor(
     public ref: MatDialogRef<MapaZonasDialogComponent>,
@@ -90,36 +70,37 @@ export class MapaZonasDialogComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    this.colorActiva = this.varTema('--zona-mapa-1');
+    this.colorOtras = this.varTema('--zona-mapa-sin-zona');
     const centro = this.data.centro ?? { lat: -24.0561, lng: -54.3061 }; // Salto del Guairá
     this.map = L.map(this.mapEl.nativeElement).setView([centro.lat, centro.lng], 14);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
     }).addTo(this.map);
 
-    // Las otras zonas van de fondo, para ver dónde pega la nueva.
+    // Las otras zonas van de fondo (todas sus áreas), para ver dónde pega esta.
     for (const otra of this.data.otras || []) {
-      const anillo = this.aLatLngs(otra.poligono);
-      if (!anillo.length) continue;
-      L.polygon(anillo, { color: '#888', weight: 1, fillOpacity: 0.08, interactive: false })
-        .bindTooltip(otra.nombre, { permanent: false })
-        .addTo(this.map);
+      for (const area of parsearAreas(otra.poligono)) {
+        L.polygon(area, { color: this.colorOtras, weight: 1, fillOpacity: 0.08, interactive: false })
+          .bindTooltip(otra.nombre)
+          .addTo(this.map);
+      }
     }
+    this.capa.addTo(this.map);
 
-    const propios = this.aLatLngs(this.data.zona.poligono);
-    if (propios.length) {
-      this.puntos = propios.map((p) => L.latLng(p[0], p[1]));
+    this.areas = parsearAreas(this.data.zona.poligono).map((a) => a.map(([lat, lng]) => L.latLng(lat, lng)));
+    if (!this.areas.length) this.areas = [[]];
+    this.activa = 0;
+    const todos = this.areas.flat();
+    if (todos.length) this.map.fitBounds(L.latLngBounds(todos), { padding: [30, 30] });
+
+    // Clic en el mapa (fuera de un área o un borde): vértice nuevo al final del área activa.
+    this.map.on('click', (e: L.LeafletMouseEvent) => this.zone.run(() => {
+      this.areas[this.activa].push(e.latlng);
       this.redibujar();
-      const b = L.latLngBounds(this.puntos);
-      this.map.fitBounds(b, { padding: [30, 30] });
-    }
+    }));
 
-    this.map.on('click', (e: L.LeafletMouseEvent) => {
-      this.zone.run(() => {
-        this.puntos.push(e.latlng);
-        this.redibujar();
-      });
-    });
-
+    this.redibujar();
     // El diálogo se abre con el contenedor todavía sin tamaño final.
     setTimeout(() => this.map.invalidateSize(), 120);
   }
@@ -128,84 +109,163 @@ export class MapaZonasDialogComponent implements OnInit, OnDestroy {
     if (this.map) this.map.remove();
   }
 
-  deshacer(): void {
-    this.puntos.pop();
+  private varTema(nombre: string): string {
+    return getComputedStyle(document.documentElement).getPropertyValue(nombre).trim();
+  }
+
+  // ─── Acciones de la barra ───────────────────────────────────────────────
+
+  seleccionarArea(i: number): void {
+    this.activa = i;
     this.redibujar();
   }
 
-  limpiar(): void {
-    this.puntos = [];
+  agregarArea(): void {
+    // Un área vacía al final ya es «la nueva»: no se apilan áreas vacías.
+    const ultima = this.areas[this.areas.length - 1];
+    if (ultima && !ultima.length) { this.activa = this.areas.length - 1; this.redibujar(); return; }
+    this.areas.push([]);
+    this.activa = this.areas.length - 1;
+    this.redibujar();
+    this.snack.open('Área nueva: tocá el mapa para marcar sus vértices.', 'OK', { duration: 2500 });
+  }
+
+  borrarArea(): void {
+    this.areas.splice(this.activa, 1);
+    if (!this.areas.length) this.areas = [[]];
+    this.activa = Math.min(this.activa, this.areas.length - 1);
+    this.redibujar();
+  }
+
+  deshacer(): void {
+    this.areas[this.activa].pop();
     this.redibujar();
   }
 
   aceptar(): void {
-    if (this.puntos.length < 3) {
-      this.snack.open('Una zona necesita al menos 3 puntos', 'OK', { duration: 2500 });
+    const incompleta = this.areas.findIndex((a) => a.length > 0 && a.length < 3);
+    if (incompleta >= 0) {
+      this.seleccionarArea(incompleta);
+      this.snack.open(`El área ${incompleta + 1} tiene menos de 3 puntos: completala o borrala.`, 'OK', { duration: 3500 });
       return;
     }
-    // GeoJSON va en [lng, lat] y el anillo tiene que cerrar repitiendo el primero.
-    const anillo = this.puntos.map((p) => [p.lng, p.lat]);
-    anillo.push([this.puntos[0].lng, this.puntos[0].lat]);
-    this.ref.close(JSON.stringify({ type: 'Polygon', coordinates: [anillo] }));
+    const geo = serializarAreas(this.areas.map((a) => a.map((p) => [p.lat, p.lng] as [number, number])));
+    if (!geo) {
+      this.snack.open('Una zona necesita al menos un área de 3 puntos', 'OK', { duration: 2500 });
+      return;
+    }
+    this.ref.close(geo);
   }
 
-  /** GeoJSON (texto, [lng,lat]) → pares [lat,lng] para Leaflet. */
-  private aLatLngs(geojson?: string | null): Array<[number, number]> {
-    if (!geojson) return [];
-    try {
-      const g = JSON.parse(geojson);
-      const geo = g?.type === 'Feature' ? g.geometry : g;
-      const anillo = geo?.type === 'Polygon' ? geo.coordinates?.[0]
-        : geo?.type === 'MultiPolygon' ? geo.coordinates?.[0]?.[0]
-        : null;
-      if (!Array.isArray(anillo)) return [];
-      return anillo.map((c: number[]) => [c[1], c[0]] as [number, number]);
-    } catch {
-      return [];
-    }
-  }
+  // ─── Dibujo ────────────────────────────────────────────────────────────
 
   private redibujar(): void {
-    if (this.poligono) { this.poligono.remove(); this.poligono = null; }
-    this.marcadores.forEach((m) => m.remove());
-    this.marcadores = [];
-
-    this.puntos.forEach((p, i) => {
-      const m = L.marker(p, { draggable: true }).addTo(this.map);
-      m.on('drag', () => {
-        this.puntos[i] = m.getLatLng();
-        this.actualizarPoligono();
-      });
-      m.on('dragend', () => this.zone.run(() => this.chequearSuperposicion()));
-      this.marcadores.push(m);
+    this.capa.clearLayers();
+    this.areas.forEach((area, i) => {
+      if (i === this.activa) return;
+      if (area.length >= 3) {
+        L.polygon(area, { color: this.colorActiva, weight: 2, dashArray: '6 4', fillOpacity: 0.16 })
+          .bindTooltip(`Área ${i + 1} · clic para editarla`)
+          .on('click', (e: L.LeafletMouseEvent) => { L.DomEvent.stopPropagation(e); this.zone.run(() => this.seleccionarArea(i)); })
+          .addTo(this.capa);
+      }
     });
-
-    this.actualizarPoligono();
-    this.chequearSuperposicion();
+    this.dibujarActiva();
+    this.actualizarEstado();
   }
 
-  private actualizarPoligono(): void {
-    if (this.poligono) { this.poligono.remove(); this.poligono = null; }
-    if (this.puntos.length < 3) return;
-    this.poligono = L.polygon(this.puntos, { color: '#d32f2f', weight: 2, fillOpacity: 0.18 })
-      .addTo(this.map);
+  private dibujarActiva(): void {
+    const area = this.areas[this.activa] || [];
+    if (area.length >= 3) {
+      L.polygon(area, { color: this.colorActiva, weight: 0, fillOpacity: 0.2, interactive: false }).addTo(this.capa);
+    }
+    // El borde va como línea aparte e interactiva: clic sobre un lado inserta un vértice ahí.
+    if (area.length >= 2) {
+      const borde = area.length >= 3 ? [...area, area[0]] : area;
+      L.polyline(borde, { color: this.colorActiva, weight: 3, className: 'zona-borde' })
+        .bindTooltip('Clic para agregar un punto acá', { sticky: true })
+        .on('click', (e: L.LeafletMouseEvent) => {
+          L.DomEvent.stopPropagation(e);
+          this.zone.run(() => this.insertarEnBorde(e.latlng));
+        })
+        .addTo(this.capa);
+    }
+    area.forEach((p, idx) => this.dibujarVertice(p, idx));
+  }
+
+  private dibujarVertice(p: L.LatLng, idx: number): void {
+    const icono = L.divIcon({
+      className: 'zona-vertice-icono',
+      html: '<span class="vertice"></span><span class="borrar" title="Borrar punto">×</span>',
+      iconSize: [16, 16],
+      iconAnchor: [8, 8],
+    });
+    const m = L.marker(p, { draggable: true, icon: icono, keyboard: false, riseOnHover: true }).addTo(this.capa);
+    m.on('drag', () => {
+      this.areas[this.activa][idx] = m.getLatLng();
+      this.redibujarSoloForma();
+    });
+    m.on('dragend', () => this.zone.run(() => this.redibujar()));
+    // Leaflet no dispara `click` después de un arrastre: el «×» sólo borra con un clic real.
+    m.on('click', (e: L.LeafletMouseEvent) => {
+      L.DomEvent.stopPropagation(e);
+      const destino = e.originalEvent?.target as HTMLElement | null;
+      if (destino?.classList?.contains('borrar')) this.zone.run(() => this.borrarVertice(idx));
+    });
+  }
+
+  /** Mientras se arrastra: sólo la forma, sin recrear los marcadores (cortaría el arrastre). */
+  private redibujarSoloForma(): void {
+    this.capa.eachLayer((l: any) => {
+      if (l instanceof L.Polygon && !l.options.interactive) l.setLatLngs(this.areas[this.activa]);
+      else if (l instanceof L.Polyline && !(l instanceof L.Polygon) && l.options.className === 'zona-borde') {
+        const a = this.areas[this.activa];
+        l.setLatLngs(a.length >= 3 ? [...a, a[0]] : a);
+      }
+    });
+  }
+
+  private insertarEnBorde(latlng: L.LatLng): void {
+    const area = this.areas[this.activa];
+    const plano = area.map((q) => this.map.latLngToLayerPoint(q));
+    const p = this.map.latLngToLayerPoint(latlng);
+    area.splice(indiceParaInsertar(plano, p), 0, latlng);
+    this.redibujar();
+  }
+
+  private borrarVertice(idx: number): void {
+    this.areas[this.activa].splice(idx, 1);
+    this.redibujar();
+  }
+
+  private actualizarEstado(): void {
+    const area = this.areas[this.activa] || [];
+    this.puntosActiva = area.length;
+    this.hayAreas = this.areas.some((a) => a.length > 0);
+    const completas = this.areas.filter((a) => a.length >= 3).length;
+    this.puedeGuardar = completas > 0 && !this.areas.some((a) => a.length > 0 && a.length < 3);
+    this.chips = this.areas.map((a, i) => ({
+      indice: i,
+      label: `Área ${i + 1}${a.length ? ` · ${a.length} pts` : ' · vacía'}`,
+      activa: i === this.activa,
+      incompleta: a.length > 0 && a.length < 3,
+    }));
+    this.resumen = `${completas} área${completas === 1 ? '' : 's'} · editando el área ${this.activa + 1} (${this.puntosActiva} punto${this.puntosActiva === 1 ? '' : 's'})`;
+    this.chequearSuperposicion();
   }
 
   /**
    * Aviso, no bloqueo: superponer zonas es legítimo (una chica dentro de una
    * grande) y el servidor desempata por `orden`. Sólo hace falta que quien
-   * dibuja lo sepa.
+   * dibuja lo sepa. Mira todas las áreas de esta zona contra todas las de las otras.
    */
   private chequearSuperposicion(): void {
-    if (this.puntos.length < 3) { this.superpone = false; return; }
-    const propio = this.puntos.map((p) => [p.lng, p.lat] as [number, number]);
-    this.superpone = (this.data.otras || []).some((otra) => {
-      const anillo = this.aLatLngs(otra.poligono);
-      if (anillo.length < 3) return false;
-      const otroLngLat = anillo.map(([lat, lng]) => [lng, lat] as [number, number]);
-      return propio.some(([lng, lat]) => this.dentro(lng, lat, otroLngLat))
-        || otroLngLat.some(([lng, lat]) => this.dentro(lng, lat, propio));
-    });
+    const propias = this.areas.filter((a) => a.length >= 3).map((a) => a.map((p) => [p.lng, p.lat] as [number, number]));
+    const ajenas = (this.data.otras || []).flatMap((o) => parsearAreas(o.poligono))
+      .filter((a) => a.length >= 3)
+      .map((a) => a.map(([lat, lng]) => [lng, lat] as [number, number]));
+    this.superpone = propias.some((pr) => ajenas.some((aj) =>
+      pr.some(([lng, lat]) => this.dentro(lng, lat, aj)) || aj.some(([lng, lat]) => this.dentro(lng, lat, pr))));
   }
 
   /** Mismo ray casting que usa el backend, para que el aviso coincida. */

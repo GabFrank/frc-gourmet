@@ -44,6 +44,7 @@
     "test:pagos-online": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pagos-online.ts",
     "test:pedidos-online": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-e2e.ts",
     "test:dashboard-zonas": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-dashboard-zonas-delivery-e2e.ts",
+    "test:zonas-geometria": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-zonas-geometria.ts",
     "test:dashboard-zonas-pg": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-dashboard-zonas-delivery-e2e.ts --pg",
     "test:pedidos-online-sync": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-sync-e2e.ts",
     "test:storefront-carrito": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-storefront-carrito.ts",

@@ -296,10 +296,15 @@ temporal que se crea y se borra; se saltea sin Postgres).
   seis veces** (`pedidos-online-pedidos.handler.ts`), no sólo la colisión del
   índice único. El índice único evita el número duplicado; el retry ciego puede
   esconder otra falla.
-- **Diseñador de zonas:** no se puede borrar un vértice suelto (sólo deshacer el
-  último o borrar todo), y **un polígono que se cruza a sí mismo no se detecta ni
-  se avisa** — con la regla par-impar queda una zona muerta que el dueño no ve en
-  el mapa.
+- **Diseñador de zonas (F7, 2026-11):** una zona puede tener **varias áreas** con
+  el mismo precio (se guarda `Polygon` con una, `MultiPolygon` con varias; el
+  servidor ya resolvía los dos). Vértices visibles, arrastrables, se destacan al
+  pasar el mouse y muestran «×» para borrarlos; clic sobre un borde inserta un
+  punto en ese lado. Antes el diseñador leía sólo la primera área y al guardar
+  borraba las demás. Geometría pura y testeada en
+  `pages/ventas/pedidos-online/zona-geometria.ts` (`test:zonas-geometria`).
+  Pendiente: **un polígono que se cruza a sí mismo no se detecta ni se avisa** —
+  con la regla par-impar queda una zona muerta que el dueño no ve en el mapa.
 - **Accesibilidad del storefront:** prácticamente cero `alt` en imágenes y dos
   `aria-label` en todo el proyecto.
 - **Nominatim se llama sin identificar** desde `checkout.page.ts`. Su política es

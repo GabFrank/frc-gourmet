@@ -1,0 +1,31 @@
+/* El ancho lo fija quien abre el diálogo (90vw, tope 1100px): un min-width en vw lo desbordaba en pantallas anchas. */
+.cont { display: flex; flex-direction: column; gap: 10px; }
+.ayuda { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
+.areas { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.chip-area { border-radius: 20px; }
+.chip-area.activa { border-color: var(--info-color); color: var(--info-color); font-weight: 700; }
+.chip-area.incompleta { border-style: dashed; border-color: var(--warning-color); }
+.mapa { height: 52vh; min-height: 320px; border-radius: 6px; border: 1px solid var(--border-color); }
+.barra { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.spacer { flex: 1; }
+.contador { color: var(--text-secondary); font-size: 13px; }
+.aviso { color: var(--warning-color); font-size: 13px; }
+
+// Vértices: círculo que se agranda al pasar el mouse, con «×» para borrarlo.
+// Los colores salen del tema; sobre el mapa (siempre claro) se usan los --zona-mapa-*.
+:host ::ng-deep .zona-vertice-icono { background: transparent; border: none; }
+:host ::ng-deep .zona-vertice-icono .vertice {
+  position: absolute; inset: 2px; border-radius: 50%;
+  background: var(--zona-mapa-anillo); border: 2px solid var(--zona-mapa-1);
+  box-sizing: border-box; cursor: grab; transition: transform .12s ease;
+}
+:host ::ng-deep .zona-vertice-icono:hover .vertice { transform: scale(1.45); background: var(--zona-mapa-1); }
+:host ::ng-deep .zona-vertice-icono .borrar {
+  display: none; position: absolute; top: -13px; left: 12px;
+  width: 16px; height: 16px; line-height: 15px; text-align: center; border-radius: 50%;
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  background: var(--error-color); color: var(--error-text);
+  box-shadow: 0 0 0 2px var(--zona-mapa-anillo);
+}
+:host ::ng-deep .zona-vertice-icono:hover .borrar { display: block; }
+:host ::ng-deep .zona-borde { cursor: copy; }
