@@ -1,0 +1,122 @@
+<div class="zonas-container">
+  <div class="header">
+    <div class="titulo">
+      <h2>Zonas de Delivery</h2>
+      <span class="sub" *ngIf="periodoTexto">Envíos cobrados · {{ periodoTexto }}</span>
+    </div>
+    <div class="acciones">
+      <mat-button-toggle-group [(ngModel)]="rangoSel" aria-label="Período" class="periodo">
+        <mat-button-toggle *ngFor="let r of rangos" [value]="r.valor">{{ r.label }}</mat-button-toggle>
+      </mat-button-toggle-group>
+      <button mat-stroked-button (click)="aplicarRango()" [disabled]="cargando">
+        <mat-icon>filter_alt</mat-icon> Aplicar
+      </button>
+      <button mat-icon-button (click)="cargar()" [disabled]="cargando" matTooltip="Actualizar">
+        <mat-icon>refresh</mat-icon>
+      </button>
+      <button mat-flat-button color="primary" *ngIf="puedeConfigurar" (click)="nueva()">
+        <mat-icon>add</mat-icon> Nueva zona
+      </button>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <app-dash-stat-chip *ngFor="let k of kpis" [icon]="k.icon" [value]="k.value" [label]="k.label"
+                        [color]="k.color" [loading]="cargando"></app-dash-stat-chip>
+  </div>
+
+  <div class="alertas" *ngIf="alertas.length" role="status">
+    <div class="alerta" *ngFor="let a of alertas"><mat-icon>warning_amber</mat-icon><span>{{ a }}</span></div>
+  </div>
+
+  <mat-card class="form-card" *ngIf="editando">
+    <h3>{{ editando.id ? 'Editar zona' : 'Nueva zona' }}</h3>
+    <div class="grid">
+      <mat-form-field appearance="outline">
+        <mat-label>Nombre</mat-label>
+        <input matInput [(ngModel)]="editando.nombre" maxlength="150">
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Tarifa del PdV</mat-label>
+        <mat-select [(ngModel)]="editando.precioDeliveryId">
+          <mat-option *ngFor="let t of tarifasOpciones" [value]="t.id" [disabled]="t.disabled">{{ t.label }}</mat-option>
+        </mat-select>
+        <mat-hint>Es la que usa el cajero al cargar por teléfono un delivery de esta zona. Una tarifa por zona.</mat-hint>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Envío si no tiene tarifa</mat-label>
+        <input matInput type="number" min="0" [(ngModel)]="editando.tarifa">
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Monto mínimo</mat-label>
+        <input matInput type="number" min="0" [(ngModel)]="editando.montoMinimo">
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Orden</mat-label>
+        <input matInput type="number" [(ngModel)]="editando.orden">
+        <mat-hint>Si dos zonas se superponen, gana la de menor orden.</mat-hint>
+      </mat-form-field>
+    </div>
+    <mat-slide-toggle [(ngModel)]="editando.activa" color="primary">Activa</mat-slide-toggle>
+    <div class="form-acciones">
+      <button mat-button (click)="editando = null">Cancelar</button>
+      <button mat-flat-button color="primary" [disabled]="guardando" (click)="guardar()">Guardar</button>
+    </div>
+  </mat-card>
+
+  <div class="cuerpo">
+    <mat-card class="mapa-card">
+      <div #mapEl class="mapa" aria-label="Mapa de las zonas de delivery"></div>
+      <div class="mapa-pie">
+        <span>{{ puntosTexto }}</span>
+        <span class="aviso" *ngIf="mapaSinMosaicos">No se pudo cargar el mapa de fondo (¿sin internet?). Las zonas se ven igual.</span>
+      </div>
+    </mat-card>
+
+    <mat-card class="tabla-card">
+      <p class="muted" *ngIf="!cargando && !zonas.length">No hay zonas cargadas. El delivery de la tienda necesita al menos una.</p>
+      <div class="tabla-scroll" *ngIf="filas.length">
+        <table class="tabla">
+          <thead>
+            <tr>
+              <th>Zona</th><th>Tarifa PdV</th><th class="n">Envío</th>
+              <th class="n">Tienda</th><th class="n">Teléfono</th><th class="n">Ventas</th><th class="n">%</th>
+              <th>Cobertura</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let f of filas" [class.sel]="f.seleccionada" [class.especial]="!f.esZona"
+                (click)="f.esZona && seleccionar(f.clave)">
+              <td class="zona">
+                <span class="dot" *ngIf="f.colorCss" [style.background]="f.colorCss"></span>
+                <span class="dot vacio" *ngIf="!f.colorCss"></span>
+                <span>{{ f.nombre }}</span>
+                <span class="chip off" *ngIf="f.esZona && !f.activa">Inactiva</span>
+              </td>
+              <td><span [class.warn]="f.sinTarifa">{{ f.tarifaNombre }}</span></td>
+              <td class="n"><span *ngIf="f.esZona">{{ f.envioPrecio | number:'1.0-2' }}</span></td>
+              <td class="n">{{ f.tienda.envios | number:'1.0-2' }}</td>
+              <td class="n">{{ f.telefono.envios | number:'1.0-2' }}</td>
+              <td class="n">{{ f.facturacion | number:'1.0-2' }}</td>
+              <td class="n">{{ f.pct | number:'1.0-2' }}</td>
+              <td>
+                <span class="chip" *ngIf="f.esZona" [class.on]="f.dibujada" [class.warn]="!f.dibujada">{{ f.coberturaTexto }}</span>
+              </td>
+              <td class="acc" (click)="$event.stopPropagation()">
+                <ng-container *ngIf="f.esZona && puedeConfigurar">
+                  <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Acciones de la zona"><mat-icon>more_vert</mat-icon></button>
+                  <mat-menu #menu="matMenu">
+                    <button mat-menu-item (click)="dibujar(f.zona)"><mat-icon>map</mat-icon><span>Dibujar en el mapa</span></button>
+                    <button mat-menu-item (click)="editar(f.zona)"><mat-icon>edit</mat-icon><span>Editar datos</span></button>
+                    <button mat-menu-item (click)="eliminar(f.zona)"><mat-icon color="warn">delete</mat-icon><span>Eliminar</span></button>
+                  </mat-menu>
+                </ng-container>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="nota">Tienda y Teléfono son cantidades de envíos cobrados; Ventas, en moneda principal. Los retiros no cuentan.</p>
+    </mat-card>
+  </div>
+</div>
