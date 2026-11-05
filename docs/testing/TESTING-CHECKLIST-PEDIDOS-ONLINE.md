@@ -139,6 +139,33 @@ Ventas → Configuración → Zonas de Delivery. Necesita ventas de delivery **c
 11. **Tema oscuro:** los nombres de las zonas sobre el mapa se leen (el mapa es claro en los dos
     temas) y los puntos de color de la tabla se distinguen.
 
+## 9 · Pago del pedido y moneda del menú (F8)
+
+1. **Métodos:** en «Config Tienda Online», sección «Cómo puede pagar el cliente», prender efectivo,
+   tarjeta en el POS, QR, PIX y transferencia. Guardar y recargar: siguen prendidos. Apagar todos:
+   la tienda ofrece sólo efectivo.
+2. **Moneda del menú:** en la tienda, el selector de la barra (₲ ▾). Elegir $: la carta, la ficha,
+   el carrito y el checkout muestran «$ …», con el aviso «Precios aproximados en $ · se cobra en ₲»;
+   el checkout muestra también «Se cobra en ₲ …». Con teclado: Tab hasta el selector, Enter, flechas
+   / Tab y Enter; Escape o un clic afuera lo cierran. «Mis pedidos» sigue en ₲.
+3. **Efectivo con vuelto:** «¿Cómo pagás?» → Efectivo → «Pagás en $» → «¿Necesitás vuelto?». Los
+   chips son siempre mayores al total. Escribir «10,50» funciona (coma decimal). Un monto igual o
+   menor al total no deja confirmar. Debajo: «Te damos de vuelto ₲ …» (en guaraníes).
+4. **Otros métodos:** QR / PIX / transferencia / tarjeta: texto de ayuda «al recibir»; sin moneda
+   ni vuelto. Observación del pago opcional (se guarda en MAYÚSCULAS).
+5. **Lo que ve el local:**
+   - Bandeja: la línea de pago, p. ej. «EFECTIVO · EN $ · PAGA CON $ 5,00 (≈ ₲ 30.000) · VUELTO ₲ 10.000».
+   - Aceptar → PdV → DELIVERY → seleccionar el reparto: «PAGO DEL CLIENTE» en el recibo.
+   - «PAGO» → el cobro se abre con el aviso «Pago del cliente: …», moneda y forma de pago elegidas y
+     el monto «paga con» en el campo. **No hay ninguna línea agregada**: cerrar con Cancelar no
+     guarda nada. Agregar la línea y finalizar cobra como siempre.
+   - Imprimir el ticket del delivery: bloque «PAGO:» con el vuelto a llevar.
+6. **Casos borde (los encontró la auditoría):**
+   - Escribir en la observación o en las notas caracteres raros (copiados de otro lado): el pedido
+     se crea y el ticket no imprime basura (antes, en Postgres, un NUL hacía fallar el pedido).
+   - Desactivar el dólar después de un pedido en $: la bandeja y el ticket siguen diciendo «paga con $».
+   - Un pedido viejo (de antes de F8) muestra sólo «EFECTIVO».
+
 ## Qué NO se probó automáticamente
 
 - **SQLite es lo que corren los tests** (`.tmp/*.db` con todas las migraciones).

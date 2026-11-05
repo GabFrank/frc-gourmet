@@ -141,6 +141,7 @@ Los handlers sensibles llaman `ensurePermission(dataSource, getCurrentUser, 'COD
 
 - `facturacion.handler.ts` — timbrado/plantillas/facturas, numeración atómica. → [domains/facturacion.md](../domains/facturacion.md).
 - `pedidos-online-auth.handler.ts`, `pedidos-online-pedidos.handler.ts`, `pedidos-online-admin.handler.ts` (+ `config`/`menu`) — storefront público (`/pub/*`) + bandeja PdV. → [domains/pedidos-online.md](../domains/pedidos-online.md).
+  - `get-monedas-tienda` = op pública `monedas.get` (F8): monedas activas con cotización (compraLocal, resuelta en el servidor), decimales y billetes. Utilidades del pago en `electron/utils/pago-pedido.utils.ts` (`validarPagoPedido`, `resumenPago`, `metodosAlRecibir`).
   - `get-dashboard-zonas-delivery` (F7, `VENTAS_PDV`): KPIs, filas por zona (tienda y teléfono), puntos del mapa y `puedeConfigurar`. Motor: `enviosPorZonaYCanal` en `reportes-delivery.helper.ts` + `asignarEnviosAZonas` en `electron/utils/zonas-dashboard.utils.ts`. `guardar-zona-delivery` rechaza `tarifa_en_uso`.
 - `kds.handler.ts` — feed KDS, bump/recall/estado, broadcast de eventos. → [domains/cocina-impresion.md](../domains/cocina-impresion.md).
 - `gastos-caja.handler.ts`, `pdv-egresos.handler.ts` — utilitarios del cajón (GastoCaja / EgresoCaja: vale, compra). → [domains/ventas-pdv.md](../domains/ventas-pdv.md).

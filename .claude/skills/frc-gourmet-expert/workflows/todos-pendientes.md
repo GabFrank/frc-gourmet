@@ -376,7 +376,7 @@ Reorganizado **2026-06-08** tras auditar el código (espejo de la memoria `proje
 - **`AuditLog`**: entidad + log de acciones críticas. No existe; hoy la trazabilidad es `createdBy`/`updatedBy` de `BaseModel` y los movimientos de caja.
 - ~~**KDS** + impresión ESC/POS avanzada~~ — ✅ **HECHO** (KDS completo + impresión real). Ver sección "Reauditado 2026-07-26".
 - **Reservas** UI completa.
-- **Pedidos Online / Storefront**: en operación desde 2026-08 (PICKUP + DELIVERY materializan en `Venta`, zonas por polígono resueltas server-side). Pendiente: pasarelas de pago reales — Bancard/UPay/PagoPar siguen siendo enums, y el pago efectivo contra entrega es decisión cerrada. Ver `domains/pedidos-online.md`.
+- **Pedidos Online / Storefront**: en operación desde 2026-08 (PICKUP + DELIVERY materializan en `Venta`, zonas por polígono resueltas server-side). F4: tarjeta online por uPay. F8 (2026-11): el pedido registra cómo paga el cliente (métodos al recibir configurables, efectivo con moneda y vuelto) y el cobro del delivery viene precargado. Pendiente: **F8b crédito + vinculación cuenta web ↔ Cliente**; «Mis pedidos» muestre el pago elegido; Bancard/PagoPar siguen siendo enums. Ver `domains/pedidos-online.md`.
 
 ### Continuo (transversal)
 - Testing E2E (Producto→Receta→PdV→Venta→Stock; Compras contado/crédito; multi-moneda).

@@ -265,15 +265,56 @@ y tabla por zona con **los dos tipos de delivery**. Handler `get-dashboard-zonas
 Tests: `test:dashboard-zonas` y `test:dashboard-zonas-pg` (misma suite contra una base Postgres
 temporal que se crea y se borra; se saltea sin Postgres).
 
+### Pago del pedido y moneda del menú (F8, 2026-11)
+
+El pedido **registra cómo va a pagar el cliente; no cobra** (salvo uPay, que ya cobraba). El
+cajero cobra en el PdV como siempre, con el cobro del delivery **precargado**.
+
+- **Métodos al recibir / retirar** (`METODOS_AL_RECIBIR`: EFECTIVO, TARJETA_POS, QR, PIX,
+  TRANSFERENCIA), con interruptores en «Config Tienda Online» (`tienda_online_config.metodos_pago`,
+  JSON). Sin configurar o vacío = sólo efectivo, como antes. Online = uPay (`PagoModalidad.ONLINE`).
+- **Efectivo**: moneda (cualquiera activa con cotización), «paga con» (`vuelto_para`, en esa moneda)
+  que tiene que superar el total del servidor y no pasar de 100 veces el total, la cotización usada
+  (`pago_cotizacion`, 4 decimales) y una observación (MAYÚSCULAS, 200). **Por detrás todo es
+  guaraní; el vuelto va siempre en la principal.**
+- **Conversión**: extranjera → principal = × `compraLocal` (la tasa a la que el local recibe esa
+  moneda; buscada en los dos sentidos, `moneda.utils.ts`). La resuelve el servidor (`monedas.get`);
+  la tienda no la reimplementa. El total en otra moneda se redondea hacia arriba a sus decimales,
+  igual en tienda (`moneda-tienda.ts`) y servidor (`pago-pedido.utils.ts`).
+- **Moneda del menú**: sólo visual (selector en la barra, aviso «precios aproximados»; el pipe
+  `precio` recibe la moneda como argumento). Lo registrado (mis pedidos, pago) sigue en ₲.
+- **Sugerencias de vuelto**: con los billetes de la moneda (`monedas_billetes`) que valen al menos
+  el 10 % del total, el primer múltiplo que pasa el total; siempre mayores al total.
+- **Lo que ve el local**: `resumenPago` («EFECTIVO · EN US$ · PAGA CON US$ 10,00 (≈ ₲ 60.000) ·
+  VUELTO ₲ 15.000») en la bandeja, el recibo del panel de delivery y el ticket de delivery. Usa
+  todas las monedas (`monedasParaResumen`): si se desactiva una, el pedido sigue diciendo con qué
+  paga. Un pedido anterior a F8 muestra sólo el método.
+- **Precarga del cobro**: agregar una línea en el cobro ya la guarda (`createPagoDetalle`), así que
+  la precarga es de los **campos** (forma de pago, moneda, monto) y nunca guarda nada sola; sólo en
+  la primera ronda. QR no tiene forma de pago propia en el PdV: se precarga TRANSFERENCIA si no
+  existe una «QR».
+- **Texto libre del cliente sin caracteres de control** (`recortar`, observación y
+  `sanitizarParaTicket`): Postgres rechaza el NUL (el alta fallaba con 500) y la térmica toma
+  ESC/GS como comandos.
+- Pendientes: «Mis pedidos» todavía no muestra el pago elegido (el servidor ya lo manda); crédito
+  y vinculación cuenta ↔ Cliente en F8b.
+
+Tests: `test:pedidos-online-pago` (+ `-pg`), `test:storefront-vuelto`, F8 en
+`test:tienda-online-migracion`.
+
 ### Lo que sigue pendiente
 
 - El cliente **no puede cancelar** su pedido (`EstadoPedidoOnline.CANCELADO`
   sigue sin usarse).
 - **No hay aviso al cliente por WhatsApp**; el seguimiento es por poll.
 - `CuentaCliente` **nunca se vincula** al `Cliente` interno: sin crédito, sin CPC,
-  sin dashboard. Y el storefront no pide RUC en ningún lado.
-- `BANCARD`/`UPAY`/`PAGOPAR` y `CanalPedidoOnline.WHATSAPP` siguen declarados sin
-  implementación — el pago es efectivo contra entrega y es una decisión cerrada.
+  sin dashboard. Y el storefront no pide RUC en ningún lado. **El crédito en la tienda
+  y esa vinculación quedaron para F8b** (decisión del propietario, 05/11): manual, con
+  permiso de clientes y registro de quién vinculó; nunca automática (riesgo de fraude).
+- `BANCARD`/`PAGOPAR` y `CanalPedidoOnline.WHATSAPP` siguen declarados sin
+  implementación. ~~«El pago es efectivo contra entrega y es una decisión cerrada.»~~
+  **Reabierta y cambiada en F8 (05/11):** tarjeta online por uPay (F4) y, al recibir o
+  retirar, los métodos que habilita el local (ver «Pago del pedido (F8)»).
 - Falta **pantalla de curación de la carta**, y no es sólo una pantalla que falta:
   la carta online es **un espejo del inventario con un filtro de visibilidad**.
   `menu.page.ts` toma `categoriaId` directo del producto, así que las categorías
