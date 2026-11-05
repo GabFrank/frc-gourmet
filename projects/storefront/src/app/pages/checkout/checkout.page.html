@@ -129,8 +129,10 @@
             <button type="button" class="chip" *ngFor="let m of monedas.monedas" [class.active]="m.id === monedaPago?.id"
                     [attr.aria-pressed]="m.id === monedaPago?.id" (click)="elegirMonedaPago(m)">{{ m.simbolo }}</button>
           </div>
-          <div class="row total-moneda" *ngIf="monedaPago && !monedaPago.principal">
-            <span class="sf-muted">Total en {{ monedaPago.simbolo }}</span><strong>{{ totalEnMonedaPagoTexto }}</strong>
+          <!-- El total a pagar en la moneda elegida, siempre (antes sólo con moneda extranjera y,
+               con ₲, el cliente se quedaba sin ver cuánto pagaba). -->
+          <div class="row total-moneda" *ngIf="monedaPago">
+            <span class="sf-muted">Total a pagar en {{ monedaPago.simbolo }}</span><strong>{{ totalEnMonedaPagoTexto }}</strong>
           </div>
           <label class="check">
             <input type="checkbox" [(ngModel)]="necesitaVuelto" (ngModelChange)="calcularVueltoEstimado()"> ¿Necesitás vuelto?
