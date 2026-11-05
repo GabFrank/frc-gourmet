@@ -19,6 +19,8 @@ export interface TiendaConfig {
   pagoOnline?: boolean;
   /** F8: métodos para pagar al recibir / retirar (sin configurar = sólo efectivo). */
   metodosPago?: string[];
+  /** F9: teléfono del local (llamar / escribir desde el detalle del pedido). */
+  telefonoContacto?: string | null;
 }
 
 /** Carga la config pública de la tienda y aplica el branding (nombre/color). */

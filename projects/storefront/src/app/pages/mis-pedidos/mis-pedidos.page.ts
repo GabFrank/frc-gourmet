@@ -11,6 +11,8 @@ import { catchError } from 'rxjs/operators';
 import { tokensSeguimiento, quitarSeguimiento } from '../../core/seguimiento';
 import { textoEstadoPago } from '../../core/pago-online';
 import { vistaEstadoPedido } from '../../core/estado-pedido';
+import { textoPagoCliente } from '../pedido/pedido-detalle.utils';
+import { MonedasService } from '../../core/monedas.service';
 
 /** Estados en los que ya no hay nada más que esperar. */
 const TERMINALES = ['ENTREGADO', 'RECHAZADO', 'CANCELADO'];
@@ -41,10 +43,20 @@ const TERMINALES = ['ENTREGADO', 'RECHAZADO', 'CANCELADO'];
       </p>
 
       <div class="sf-card sf-pedido" *ngFor="let p of pedidos">
-        <div class="sf-pedido-head">
+        <!-- F9: la cabecera abre el detalle (acciones, compartir, contacto). El invitado de mesa no tiene cuenta. -->
+        <a class="sf-pedido-head sf-pedido-link" *ngIf="!invitado" [routerLink]="['/pedido', p.numero]"
+           [attr.aria-label]="'Ver el pedido ' + p.numero">
+          <strong>{{ p.numero }}</strong>
+          <span class="sf-head-der">
+            <span class="sf-estado" [attr.data-tono]="p.vista.tono">{{ p.vista.chip }}</span>
+            <span class="sf-ver">Ver ›</span>
+          </span>
+        </a>
+        <div class="sf-pedido-head" *ngIf="invitado">
           <strong>{{ p.numero }}</strong>
           <span class="sf-estado" [attr.data-tono]="p.vista.tono">{{ p.vista.chip }}</span>
         </div>
+        <div class="sf-cancelacion" *ngIf="p.pideCancelar">Pediste cancelarlo · esperando respuesta del local</div>
         <div class="sf-muted sf-pedido-sub">{{ tipoLabel(p.tipoPedido) }} · {{ p.createdAt | date:'dd/MM HH:mm' }}</div>
         <div class="sf-ayuda" *ngIf="p.vista.ayuda">{{ p.vista.ayuda }}</div>
         <ol class="sf-pasos" *ngIf="p.vista.pasos as pasos" [attr.aria-label]="'Estado: ' + p.vista.chip">
@@ -64,6 +76,7 @@ const TERMINALES = ['ENTREGADO', 'RECHAZADO', 'CANCELADO'];
           {{ tp }}
           <a *ngIf="p.estado === 'PENDIENTE_PAGO'" [routerLink]="['/pago', p.numero]">Ver pago</a>
         </div>
+        <div class="sf-muted sf-pago" *ngIf="p.pagoTexto">{{ p.pagoTexto }}</div>
         <div class="sf-pedido-total">Total: {{ p.total | guarani }}</div>
       </div>
     </div>
@@ -73,6 +86,11 @@ const TERMINALES = ['ENTREGADO', 'RECHAZADO', 'CANCELADO'];
     .sf-ok { background: var(--sf-success-bg); color: var(--sf-success); padding: 12px; border-radius: var(--sf-radius); margin-bottom: 14px; }
     .sf-pedido { margin-bottom: 12px; }
     .sf-pedido-head { display: flex; justify-content: space-between; align-items: center; }
+    .sf-pedido-link { color: inherit; text-decoration: none; }
+    .sf-head-der { display: inline-flex; align-items: center; gap: 8px; }
+    .sf-ver { font-size: 13px; font-weight: 600; color: var(--sf-primary); white-space: nowrap; }
+    .sf-cancelacion { font-size: 12px; margin: 6px 0 0; padding: 6px 10px; border-radius: var(--sf-radius-sm); background: var(--sf-warning-bg); color: var(--sf-text); }
+    .sf-pago { font-size: 13px; margin-top: 6px; }
     .sf-estado { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; background: var(--sf-border); }
     .sf-estado { white-space: nowrap; }
     .sf-estado[data-tono="espera"] { background: var(--sf-warning-bg); color: var(--sf-warning); }
@@ -106,9 +124,10 @@ const TERMINALES = ['ENTREGADO', 'RECHAZADO', 'CANCELADO'];
 export class MisPedidosPage implements OnInit, OnDestroy {
   private api = inject(PublicApiService);
   private route = inject(ActivatedRoute);
+  private monedas = inject(MonedasService);
   auth = inject(AuthService);
 
-  pedidos: (PedidoResumen & { vista: ReturnType<typeof vistaEstadoPedido> })[] = [];
+  pedidos: (PedidoResumen & { vista: ReturnType<typeof vistaEstadoPedido>; pideCancelar: boolean; pagoTexto: string | null })[] = [];
   invitado = false;
   cargando = false;
   nuevo: string | null = null;
@@ -121,6 +140,7 @@ export class MisPedidosPage implements OnInit, OnDestroy {
     // Invitado de mesa sin cuenta: sigue sus pedidos con el token de esta visita.
     this.invitado = !this.auth.isAuthenticated && tokensSeguimiento().length > 0;
     if (!this.auth.isAuthenticated && !this.invitado) return;
+    if (!this.monedas.monedas.length) this.monedas.cargar();
     this.cargar(true);
     // Sin esto la página era una carga única: el cliente tenía que recargar el
     // navegador para ver si su pedido avanzó, y en la práctica termina llamando
@@ -140,7 +160,7 @@ export class MisPedidosPage implements OnInit, OnDestroy {
       next: (res) => {
         this.cargando = false;
         if (res?.success) {
-          this.pedidos = conVista(res.pedidos || []);
+          this.pedidos = conVista(res.pedidos || [], this.monedas.monedas);
           this.actualizado = new Date();
           // Cuando ya no queda nada en curso no hay nada que mirar: se corta el
           // poll para no golpear el server desde una pestaña abierta y olvidada.
@@ -161,7 +181,7 @@ export class MisPedidosPage implements OnInit, OnDestroy {
         if (r?.success) pedidos.push(r.pedido);
         else if (r && (r.error === 'pedido_no_encontrado' || r.error === 'seguimiento_vencido')) quitarSeguimiento(tokens[i]);
       });
-      this.pedidos = conVista(pedidos);
+      this.pedidos = conVista(pedidos, this.monedas.monedas);
       this.actualizado = new Date();
       const enCurso = pedidos.some((p: any) => !TERMINALES.includes(p.estado));
       if (!enCurso && this.poll) { clearInterval(this.poll); this.poll = null; }
@@ -191,6 +211,12 @@ export class MisPedidosPage implements OnInit, OnDestroy {
 }
 
 /** El estado que ve el cliente se calcula al cargar: el template no llama funciones. */
-function conVista(pedidos: PedidoResumen[]) {
-  return pedidos.map((p: any) => ({ ...p, vista: vistaEstadoPedido(p.estado, p.tipoPedido) }));
+function conVista(pedidos: PedidoResumen[], monedas: Parameters<typeof textoPagoCliente>[1] = []) {
+  return pedidos.map((p: any) => ({
+    ...p,
+    vista: vistaEstadoPedido(p.estado, p.tipoPedido),
+    pideCancelar: !!p.cancelacionSolicitadaEn && !TERMINALES.includes(p.estado),
+    // F8/F9: cómo dijo que va a pagar (el de tarjeta online sale aparte, con su estado).
+    pagoTexto: p.metodoPago === 'UPAY' ? null : textoPagoCliente(p, monedas),
+  }));
 }

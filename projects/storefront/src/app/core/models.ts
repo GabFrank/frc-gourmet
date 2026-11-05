@@ -182,7 +182,22 @@ export interface PedidoResumen {
   estadoPago?: string | null;
   pagoMonto?: number | null;
   createdAt: string;
+  /** F9: solicitud de cancelación y acciones disponibles (las decide el servidor). */
+  cancelacionSolicitadaEn?: string | null;
+  cancelacionMotivo?: string | null;
+  cancelacionRespuesta?: string | null;
+  acciones?: { solicitarCancelacion: boolean; modificar: boolean; repetir: boolean; compartir: boolean };
+  /** F8: cómo dijo que iba a pagar. */
+  pagoModalidad?: string | null;
+  pagoMonedaId?: number | null;
+  vueltoPara?: number | null;
+  pagoObservacion?: string | null;
+  fechaAceptado?: string | null;
+  fechaListo?: string | null;
+  fechaEntregado?: string | null;
   items: {
+    productoId?: number;
+    presentacionId?: number | null;
     nombreProducto: string;
     nombrePresentacion: string | null;
     cantidad: number;

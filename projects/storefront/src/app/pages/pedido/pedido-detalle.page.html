@@ -1,0 +1,159 @@
+<div class="sf-container det">
+  <a routerLink="/mis-pedidos" class="volver"><sf-icon name="back" [size]="18"></sf-icon> Mis pedidos</a>
+
+  <p class="sf-muted" *ngIf="!auth.isAuthenticated">
+    Ingresá para ver tu pedido.
+    <a routerLink="/login" [queryParams]="{ volver: '/pedido/' + numero }">Ingresar</a>.
+  </p>
+  <p class="sf-muted" *ngIf="auth.isAuthenticated && cargando">Cargando…</p>
+  <div class="sf-card vacio" *ngIf="noEncontrado">
+    <p>No encontramos el pedido {{ numero }} en tu cuenta.</p>
+    <a routerLink="/mis-pedidos" class="sf-btn sf-btn--ghost">Ver mis pedidos</a>
+  </div>
+  <div class="msg msg--error" *ngIf="errorCarga" role="alert">{{ errorCarga }}</div>
+
+  <ng-container *ngIf="pedido && vista">
+    <!-- Cabecera: número (copiable) y estado -->
+    <section class="sf-card cab">
+      <div class="cab-top">
+        <div class="num">
+          <span class="sf-muted num-label">Pedido</span>
+          <strong>{{ pedido.numero }}</strong>
+          <button type="button" class="icon-btn" (click)="copiarNumero()" [attr.aria-label]="'Copiar número ' + pedido.numero">
+            <sf-icon [name]="copiado ? 'check' : 'copy'" [size]="16"></sf-icon>
+          </button>
+        </div>
+        <span class="sf-estado" [attr.data-tono]="vista.tono">{{ vista.chip }}</span>
+      </div>
+      <div class="sf-muted sub">{{ tipoLabel }} · {{ pedido.createdAt | date:'dd/MM/yyyy HH:mm' }}</div>
+      <p class="ayuda" *ngIf="vista.ayuda">{{ vista.ayuda }}</p>
+      <ol class="sf-pasos" *ngIf="vista.pasos as pasos" [attr.aria-label]="'Estado: ' + vista.chip">
+        <li *ngFor="let paso of pasos" [class.hecho]="paso.hecho" [class.actual]="paso.actual"
+            [attr.aria-current]="paso.actual ? 'step' : null">
+          <span class="dot"></span><span class="txt">{{ paso.label }}</span>
+        </li>
+      </ol>
+
+      <div class="aviso aviso--espera" *ngIf="cancelacionPendiente" role="status">
+        <sf-icon name="clock" [size]="18"></sf-icon>
+        <div>
+          <strong>Pediste cancelar este pedido.</strong>
+          <span>El local te va a responder acá en unos minutos.</span>
+        </div>
+      </div>
+      <div class="aviso aviso--info" *ngIf="respuestaLocal" role="status">
+        <sf-icon name="chat" [size]="18"></sf-icon>
+        <div>
+          <strong>El local no pudo cancelarlo.</strong>
+          <span>{{ respuestaLocal }}</span>
+        </div>
+      </div>
+      <div class="aviso aviso--error" *ngIf="(pedido.estado === 'RECHAZADO' || pedido.estado === 'CANCELADO') && pedido.motivoRechazo">
+        <div><strong>Motivo:</strong> {{ pedido.motivoRechazo }}</div>
+      </div>
+    </section>
+
+    <!-- Resultado de la última acción, junto a los botones (no arriba, fuera de la vista). -->
+    <div class="msg msg--error" *ngIf="error" role="alert">{{ error }}</div>
+    <div class="msg msg--ok" *ngIf="ok" role="status">{{ ok }}</div>
+
+    <!-- Acciones (las que el servidor habilita para este estado) -->
+    <section class="acciones" id="acciones-pedido" tabindex="-1" aria-label="Acciones del pedido" *ngIf="!confirmando">
+      <button type="button" class="sf-btn" *ngIf="acciones.modificar" (click)="pedirConfirmacion('modificar')" [disabled]="trabajando">
+        <sf-icon name="pencil" [size]="18"></sf-icon> Modificar pedido
+      </button>
+      <button type="button" class="sf-btn sf-btn--ghost" *ngIf="acciones.repetir" (click)="repetir()" [disabled]="trabajando">
+        <sf-icon name="repeat" [size]="18"></sf-icon> Repetir pedido
+      </button>
+      <ng-container *ngIf="acciones.compartir">
+        <button type="button" class="sf-btn sf-btn--ghost" *ngIf="puedeCompartirNativo" (click)="compartirNativo()">
+          <sf-icon name="share" [size]="18"></sf-icon> Compartir
+        </button>
+        <a class="sf-btn sf-btn--ghost" *ngIf="!puedeCompartirNativo && waCompartir" [href]="waCompartir" target="_blank" rel="noopener">
+          <sf-icon name="share" [size]="18"></sf-icon> Compartir por WhatsApp
+        </a>
+      </ng-container>
+      <button type="button" class="link-peligro" *ngIf="acciones.solicitarCancelacion" (click)="pedirConfirmacion('cancelar')" [disabled]="trabajando">
+        Pedir que lo cancelen
+      </button>
+    </section>
+
+    <!-- Confirmar «Modificar» -->
+    <section class="sf-card confirmar" role="group" aria-labelledby="titulo-modificar" *ngIf="confirmando === 'modificar'">
+      <h2 id="titulo-modificar" tabindex="-1">¿Modificar el pedido?</h2>
+      <p>Lo cancelamos y sus productos vuelven a tu carrito para que lo cambies y lo envíes de nuevo.
+        Lo que tengas ahora en el carrito se reemplaza.</p>
+      <div class="confirmar-botones">
+        <button type="button" class="sf-btn" (click)="modificar()" [disabled]="trabajando">
+          {{ trabajando ? 'Un momento…' : 'Sí, modificar' }}
+        </button>
+        <button type="button" class="sf-btn sf-btn--ghost" (click)="pedirConfirmacion(null)" [disabled]="trabajando">Volver</button>
+      </div>
+    </section>
+
+    <!-- Confirmar «Pedir que lo cancelen» -->
+    <section class="sf-card confirmar" role="group" aria-labelledby="titulo-cancelar" *ngIf="confirmando === 'cancelar'">
+      <h2 id="titulo-cancelar">¿Pedir que cancelen el pedido?</h2>
+      <p>El local lo revisa: si ya está en camino o terminado puede que no se pueda.
+        <span *ngIf="pedido.estadoPago === 'PAGADO'"> Si se cancela, te devolvemos el pago a tu tarjeta.</span></p>
+      <label class="lbl" for="motivo">Motivo (opcional)</label>
+      <textarea id="motivo" class="sf-input" rows="2" maxlength="200" [(ngModel)]="motivo"
+                placeholder="Ej.: me equivoqué de dirección"></textarea>
+      <div class="confirmar-botones">
+        <button type="button" class="sf-btn sf-btn--peligro" (click)="solicitarCancelacion()" [disabled]="trabajando">
+          {{ trabajando ? 'Enviando…' : 'Enviar solicitud' }}
+        </button>
+        <button type="button" class="sf-btn sf-btn--ghost" (click)="pedirConfirmacion(null)" [disabled]="trabajando">Volver</button>
+      </div>
+    </section>
+
+    <!-- Productos y totales -->
+    <section class="sf-card">
+      <h2 class="h">Tu pedido</h2>
+      <div class="item" *ngFor="let it of pedido.items">
+        <span class="cant">{{ it.cantidad }}×</span>
+        <div class="nombre">
+          {{ it.nombreProducto }}
+          <span class="sf-muted" *ngIf="it.nombrePresentacion && it.nombrePresentacion !== 'Estándar'">({{ it.nombrePresentacion }})</span>
+          <div class="sf-muted perso" *ngIf="it.detalle">{{ it.detalle }}</div>
+        </div>
+        <span class="precio">{{ it.subtotal | guarani }}</span>
+      </div>
+      <div class="fila sf-muted" *ngIf="pedido.costoEnvio > 0"><span>Envío</span><span>{{ pedido.costoEnvio | guarani }}</span></div>
+      <div class="fila total"><span>Total</span><span>{{ pedido.total | guarani }}</span></div>
+    </section>
+
+    <!-- Entrega y pago -->
+    <section class="sf-card datos">
+      <div class="dato" *ngIf="pedido.tipoPedido === 'DELIVERY' && pedido.direccionEntrega">
+        <sf-icon name="pin" [size]="18"></sf-icon>
+        <div><span class="sf-muted">Entrega en</span><br>{{ pedido.direccionEntrega }}</div>
+      </div>
+      <div class="dato" *ngIf="pedido.tipoPedido === 'PICKUP'">
+        <sf-icon name="bag" [size]="18"></sf-icon>
+        <div><span class="sf-muted">Retiro</span><br>Pasás a buscarlo por el local</div>
+      </div>
+      <div class="dato" *ngIf="pagoTexto">
+        <sf-icon name="cash" [size]="18"></sf-icon>
+        <div><span class="sf-muted">Pago</span><br>{{ pagoTexto }}
+          <span class="sf-muted" *ngIf="pedido.pagoObservacion"><br>{{ pedido.pagoObservacion }}</span>
+          <span *ngIf="pagoTarjeta"><br>{{ pagoTarjeta }}</span>
+          <a *ngIf="pedido.estado === 'PENDIENTE_PAGO'" [routerLink]="['/pago', pedido.numero]"><br>Ver pago</a>
+        </div>
+      </div>
+      <div class="dato" *ngIf="pedido.notas">
+        <sf-icon name="receipt" [size]="18"></sf-icon>
+        <div><span class="sf-muted">Nota</span><br>{{ pedido.notas }}</div>
+      </div>
+    </section>
+
+    <!-- Contacto con el local -->
+    <section class="contacto" *ngIf="telLocal || waLocal">
+      <span class="sf-muted">¿Alguna duda con tu pedido?</span>
+      <div class="contacto-botones">
+        <a class="sf-btn sf-btn--ghost" *ngIf="telLocal" [href]="telLocal"><sf-icon name="call" [size]="18"></sf-icon> Llamar al local</a>
+        <a class="sf-btn sf-btn--ghost" *ngIf="waLocal" [href]="waLocal" target="_blank" rel="noopener"><sf-icon name="chat" [size]="18"></sf-icon> Escribir al local</a>
+      </div>
+    </section>
+  </ng-container>
+</div>

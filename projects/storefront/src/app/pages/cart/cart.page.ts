@@ -93,10 +93,13 @@ export class CartPage implements OnInit {
   revalidando = false;
 
   ngOnInit(): void {
+    // F9: «Repetir» / «Modificar» avisan qué productos ya no se pudieron volver a poner.
+    const previos: string[] = Array.isArray(history.state?.avisosRepetir) ? history.state.avisosRepetir.map(String) : [];
+    this.avisos = previos;
     if (!this.cart.items.length) return;
     this.revalidando = true;
     this.menu.cargar(true).subscribe({
-      next: (m) => { this.avisos = avisosRevalidacion(this.cart.revalidar(m)); this.revalidando = false; },
+      next: (m) => { this.avisos = [...previos, ...avisosRevalidacion(this.cart.revalidar(m))]; this.revalidando = false; },
       error: () => (this.revalidando = false), // sin carta: el server igual valida al confirmar
     });
   }
