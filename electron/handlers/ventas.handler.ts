@@ -76,6 +76,7 @@ import { condicionCanal, esCanalValido } from '../utils/canal-venta.utils';
 import { limiteFechaSqlite } from '../utils/db-query';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
+import { reapuntarPedidosDeVenta, sincronizarPedidosPorCierreDeVenta } from '../utils/pedido-online-sync.utils';
 import { EstadoPedidoOnline, TipoPedidoOnline, EstadoPagoOnline, FORMA_PAGO_UPAY } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { TiendaOnlineConfig } from '../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import { motivoNoMaterializable } from '../utils/pedido-online-materializable';
@@ -1081,6 +1082,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         for (const v of ventasAbiertas) {
           v.estado = estado as VentaEstado;
           await manager.getRepository(Venta).save(v);
+          await sincronizarPedidosPorCierreDeVenta(manager, v.id, v.estado);
         }
       });
       // Cerrar las cuentas de la mesa cambia su ocupacion: el cache la sigue.
@@ -1786,6 +1788,16 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       repo.merge(entity, ventaData);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
+
+      // Pedidos online de la tienda sobre esta venta: la mesa cobrada queda
+      // entregada y la venta cancelada los cancela. Sólo al salir de ABIERTA.
+      if (estadoAnterior === VentaEstado.ABIERTA && saved.estado !== VentaEstado.ABIERTA) {
+        try {
+          await sincronizarPedidosPorCierreDeVenta(dataSource.manager, id, saved.estado);
+        } catch (e) {
+          console.warn('[updateVenta] sincronizar pedidos online falló:', e);
+        }
+      }
 
       // ─── SSE: emitir evento de cambio ─────────────────────────────────────
       try {
@@ -3507,6 +3519,9 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           await setEntityUserTracking(dataSource, ventaOrigen as any, userId, true);
           await manager.save(Venta, ventaOrigen);
           origenCerrado = true;
+          // Los pedidos online de la cuenta origen siguen a sus ítems: la que se
+          // va a cobrar es la destino.
+          await reapuntarPedidosDeVenta(manager, ventaOrigen.id, ventaDestinoId);
         }
       } else {
         origenCerrado = true;

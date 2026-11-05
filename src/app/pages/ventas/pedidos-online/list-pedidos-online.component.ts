@@ -136,6 +136,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
         // El detalle de cada ítem se calcula acá: el template no llama funciones.
         this.pedidos = (res || []).map((p: any) => ({
           ...p,
+          siguiente: this.siguienteEstado(p),
           items: (p.items || []).map((it: any) => ({ ...it, ...this.detalleItem(it) })),
         }));
         this.cargando = false;
@@ -304,7 +305,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
   }
 
   /** Próximo estado sugerido según el estado actual y el tipo de pedido. */
-  siguienteEstado(p: any): { estado: string; label: string } | null {
+  private siguienteEstado(p: any): { estado: string; label: string } | null {
     switch (p.estado) {
       case 'ACEPTADO':
         // F5 (C2): sin venta, el camino es «Enviar a cocina» (que crea la venta).
