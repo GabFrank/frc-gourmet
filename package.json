@@ -45,6 +45,7 @@
     "test:pedidos-online": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-e2e.ts",
     "test:pedidos-online-sync": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-sync-e2e.ts",
     "test:storefront-carrito": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-storefront-carrito.ts",
+    "test:storefront-estados": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-storefront-estados.ts",
     "test:variacion-precios": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-variacion-precios-e2e.ts",
     "test:gestion-sabores": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-gestion-sabores-e2e.ts",
     "test:receta-por-variacion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-receta-por-variacion-e2e.ts",
