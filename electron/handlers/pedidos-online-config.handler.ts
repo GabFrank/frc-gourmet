@@ -1,5 +1,7 @@
 import { ipcMain } from 'electron';
 import { pagoOnlineOfrecido } from '../utils/tienda-ingreso.utils';
+import { metodosAlRecibir } from '../utils/pago-pedido.utils';
+import { METODOS_AL_RECIBIR, MetodoPagoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { upayConfigDe, apiKey as upayApiKeyActual } from '../services/pagos-online/pagos-online.service';
 import { UpayCheckoutProvider } from '../services/pagos-online/upay-checkout.provider';
 import { otpWhatsappDisponible, sendWhatsappOtp, whatsappCloudConfigurado } from '../utils/whatsapp-sender';
@@ -87,6 +89,8 @@ function mapConfigPublic(cfg: TiendaOnlineConfig): any {
     otpWhatsappDisponible: otpWhatsappDisponible(),
     // F4: «Pagar con tarjeta» (uPay) solo con el interruptor y las credenciales cargadas.
     pagoOnline: pagoOnlineOfrecido(cfg),
+    // F8: métodos para pagar al recibir / retirar (sin configurar = sólo efectivo).
+    metodosPago: metodosAlRecibir(cfg),
   };
 }
 
@@ -207,7 +211,8 @@ export function registerPedidosOnlineConfigHandlers(
     await ensurePermission(dataSource, getCurrentUser, PERM);
     await credencialesTiendaListas();
     const cfg = await getTiendaConfig(dataSource);
-    return { ...cfg, abiertaAhora: estaAbierta(cfg), ingreso: await estadoIngreso() };
+    // metodosPago va como lista (en la base es JSON en texto).
+    return { ...cfg, metodosPago: metodosAlRecibir(cfg), abiertaAhora: estaAbierta(cfg), ingreso: await estadoIngreso() };
   });
 
   // Admin: actualizar.
@@ -231,6 +236,12 @@ export function registerPedidosOnlineConfigHandlers(
     if (data.montoMinimoPedido !== undefined) cfg.montoMinimoPedido = Number(data.montoMinimoPedido) || 0;
     if (data.aceptacionAutomatica !== undefined) cfg.aceptacionAutomatica = !!data.aceptacionAutomatica;
     if (data.personalizarSabores !== undefined) cfg.personalizarSabores = !!data.personalizarSabores;
+    // F8: métodos al recibir. Sólo los conocidos; vacío = sólo efectivo (nunca una tienda sin forma de pago).
+    if (data.metodosPago !== undefined) {
+      const lista = Array.isArray(data.metodosPago) ? data.metodosPago.map((m: any) => String(m).toUpperCase()) : [];
+      const validos = METODOS_AL_RECIBIR.filter((m) => lista.includes(m));
+      cfg.metodosPago = JSON.stringify(validos.length ? validos : [MetodoPagoOnline.EFECTIVO]);
+    }
     if (data.horariosJson !== undefined) cfg.horariosJson = data.horariosJson || undefined;
     // Canal MESA_QR (pedidos en mesa por QR)
     if (data.permiteMesa !== undefined) cfg.permiteMesa = !!data.permiteMesa;

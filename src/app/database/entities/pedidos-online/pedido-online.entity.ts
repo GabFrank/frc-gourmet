@@ -167,6 +167,25 @@ export class PedidoOnline extends BaseModel {
   @Column({ name: 'pago_aviso_sin_aceptar', type: 'boolean', default: false })
   pagoAvisoSinAceptar!: boolean;
 
+  // ── F8: cómo dijo el cliente que va a pagar (no es un cobro: el cajero cobra en el PdV) ──
+  @Column({ name: 'pago_modalidad', type: 'varchar', length: 20, nullable: true })
+  pagoModalidad?: string | null;
+
+  /** Moneda con la que paga en efectivo (puede no ser la principal). Sin FK: se resuelve por id. */
+  @Column({ name: 'pago_moneda_id', type: 'int', nullable: true })
+  pagoMonedaId?: number | null;
+
+  /** «Paga con»: el billete que entrega, en `pagoMonedaId`. Null = no necesita vuelto. */
+  @Column({ name: 'vuelto_para', type: 'decimal', precision: 18, scale: 2, nullable: true })
+  vueltoPara?: number | null;
+
+  /** Cotización (compraLocal, a la principal) vigente al pedir, para el ticket y la auditoría. */
+  @Column({ name: 'pago_cotizacion', type: 'decimal', precision: 18, scale: 4, nullable: true })
+  pagoCotizacion?: number | null;
+
+  @Column({ name: 'pago_observacion', type: 'varchar', length: 200, nullable: true })
+  pagoObservacion?: string | null;
+
   @OneToMany('PedidoOnlineItem', 'pedido', { cascade: true })
   items?: PedidoOnlineItem[];
 }

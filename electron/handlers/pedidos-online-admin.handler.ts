@@ -19,6 +19,7 @@ import { getCotizacionMap, getInicioJornada, getMonedaPrincipalId } from './dash
 import { rangoToFechas } from '../utils/dashboard-rangos.util';
 import { dbQuery } from '../utils/db-query';
 import { asignarEnviosAZonas, redondearCoordenada } from '../utils/zonas-dashboard.utils';
+import { MonedaTienda, monedasTienda, resumenPago } from '../utils/pago-pedido.utils';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
 import { cancelarVentaCompletaEnTx } from '../utils/venta-reversa.utils';
 import { invokeHandler } from '../utils/handler-registry';
@@ -52,7 +53,8 @@ const TRANSICIONES: Record<string, EstadoPedidoOnline[]> = {
   [EstadoPedidoOnline.EN_CAMINO]: [EstadoPedidoOnline.ENTREGADO],
 };
 
-function mapPedidoAdmin(p: PedidoOnline): any {
+/** `monedas` hace falta para el resumen del pago (símbolos); sin ellas, el resumen sale sin moneda. */
+function mapPedidoAdmin(p: PedidoOnline, monedas: MonedaTienda[] = []): any {
   return {
     id: p.id,
     numero: p.numero,
@@ -84,6 +86,13 @@ function mapPedidoAdmin(p: PedidoOnline): any {
     pagoMonto: p.pagoMonto != null ? Number(p.pagoMonto) : null,
     pagoDetalle: p.pagoDetalle ?? null,
     pagadoEn: p.pagadoEn ?? null,
+    // F8: cómo dijo que va a pagar (no es un cobro).
+    pagoModalidad: p.pagoModalidad ?? null,
+    pagoMonedaId: p.pagoMonedaId ?? null,
+    vueltoPara: p.vueltoPara != null ? Number(p.vueltoPara) : null,
+    pagoCotizacion: p.pagoCotizacion != null ? Number(p.pagoCotizacion) : null,
+    pagoObservacion: p.pagoObservacion ?? null,
+    pagoResumen: resumenPago(p as any, monedas),
     createdAt: p.createdAt,
     items: (p.items || []).map((it) => ({
       id: it.id,
@@ -121,7 +130,8 @@ export function registerPedidosOnlineAdminHandlers(
       qb.andWhere('p.estado IN (:...estados)', { estados: filtros.estados });
     }
     const pedidos = await qb.getMany();
-    return pedidos.map(mapPedidoAdmin);
+    const monedas = await monedasTienda(dataSource);
+    return pedidos.map((p) => mapPedidoAdmin(p, monedas));
   });
 
   // ============== CONTADOR DE PENDIENTES (badge/sonido) ==============

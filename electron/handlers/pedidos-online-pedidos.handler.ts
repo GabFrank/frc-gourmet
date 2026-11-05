@@ -1,4 +1,5 @@
 import { iniciarPagoPedido, verificarPagoPedido, VERIFICAR_MIN_MS } from '../services/pagos-online/pagos-online.service';
+import { metodosAlRecibir, monedasTienda, validarPagoPedido, ResultadoPago } from '../utils/pago-pedido.utils';
 import { pagoOnlineOfrecido } from '../utils/tienda-ingreso.utils';
 import { ipcMain } from 'electron';
 import { createHash, randomBytes } from 'crypto';
@@ -235,6 +236,13 @@ export function registerPedidosOnlinePedidosHandlers(
   const pedidoRepo = () => dataSource.getRepository(PedidoOnline);
 
   // ============== ZONAS DE DELIVERY (público, lectura) ==============
+  // F8: monedas de la tienda (visual + efectivo). Sólo lo público: símbolo, decimales,
+  // cotización resuelta en el servidor y billetes para sugerir el vuelto.
+  ipcMain.handle('get-monedas-tienda', async () => {
+    const lista = await monedasTienda(dataSource);
+    return lista.map((m) => ({ id: m.id, denominacion: m.denominacion, simbolo: m.simbolo, decimales: m.decimales, principal: m.principal, cotizacion: m.cotizacion, billetes: m.billetes }));
+  });
+
   ipcMain.handle('get-zonas-delivery-online', async () => {
     const zonas = await dataSource.getRepository(ZonaDelivery).find({
       where: { activa: true },
@@ -324,10 +332,13 @@ export function registerPedidosOnlinePedidosHandlers(
     // Config de tienda: apertura.
     const cfg = await getTiendaConfig(dataSource);
     if (!estaAbierta(cfg)) return { success: false, error: 'tienda_cerrada' };
-    // Efectivo, o tarjeta por uPay (F4) si el local la ofrece. MESA_QR paga siempre en caja.
+    // Tarjeta por uPay (F4) si el local la ofrece, o un método al recibir de los que habilitó la
+    // tienda (F8; sin configurar = sólo efectivo). MESA_QR paga siempre en caja.
     const pagaOnline = metodoPagoIn === MetodoPagoOnline.UPAY;
-    if (metodoPagoIn !== MetodoPagoOnline.EFECTIVO && !pagaOnline) return { success: false, error: 'metodo_pago_no_disponible' };
     if (pagaOnline && (tipoPedido === TipoPedidoOnline.MESA_QR || !pagoOnlineOfrecido(cfg))) {
+      return { success: false, error: 'metodo_pago_no_disponible' };
+    }
+    if (!pagaOnline && tipoPedido !== TipoPedidoOnline.MESA_QR && !metodosAlRecibir(cfg).includes(metodoPagoIn)) {
       return { success: false, error: 'metodo_pago_no_disponible' };
     }
 
@@ -548,6 +559,18 @@ export function registerPedidosOnlinePedidosHandlers(
 
     const total = subtotal + costoEnvio;
 
+    // F8: cómo va a pagar (moneda, «paga con», observación), validado contra el total del
+    // servidor. MESA_QR no: paga en la caja, como siempre.
+    let pago: Extract<ResultadoPago, { ok: true }>['campos'] | null = null;
+    if (tipoPedido !== TipoPedidoOnline.MESA_QR) {
+      const r = validarPagoPedido({
+        data, total, metodoPago: metodoPagoIn as MetodoPagoOnline,
+        habilitados: metodosAlRecibir(cfg), monedas: await monedasTienda(dataSource),
+      });
+      if (r.ok === false) return { success: false, error: (r as { error: string }).error };
+      pago = (r as Extract<ResultadoPago, { ok: true }>).campos;
+    }
+
     // Persistencia (con reintento de número por colisión de índice único).
     const pedido = new PedidoOnline();
     pedido.numero = await siguienteNumero(pedidoRepo());
@@ -591,6 +614,13 @@ export function registerPedidosOnlinePedidosHandlers(
       if (typeof data?.longitud === 'number') pedido.longitud = data.longitud;
     }
     pedido.notas = recortar(data?.notas, 500);
+    if (pago) {
+      pedido.pagoModalidad = pago.pagoModalidad;
+      pedido.pagoMonedaId = pago.pagoMonedaId;
+      pedido.vueltoPara = pago.vueltoPara;
+      pedido.pagoCotizacion = pago.pagoCotizacion;
+      pedido.pagoObservacion = pago.pagoObservacion;
+    }
     pedido.items = itemsToSave;
 
     // El número (`count()+1`) puede colisionar con pedidos concurrentes (ej. un
@@ -788,6 +818,7 @@ export function registerPedidosOnlinePedidosHandlers(
 
   // ---- Operaciones públicas ----
   registerPublicOperation('zonas.get', { channel: 'get-zonas-delivery-online', requiresAuth: false, description: 'Zonas de delivery activas.' });
+  registerPublicOperation('monedas.get', { channel: 'get-monedas-tienda', requiresAuth: false, description: 'Monedas para ver la carta y pagar en efectivo (F8).' });
   registerPublicOperation('envio.cotizar', { channel: 'cotizar-envio-online', requiresAuth: false, description: 'Costo de envío para una ubicación del mapa.' });
   registerPublicOperation('mesa.get', { channel: 'get-mesa-online-por-token', requiresAuth: false, description: 'Contexto de una mesa por su token QR.' });
   // pedido.crear usa optionalAuth: MESA_QR admite invitado; PICKUP/DELIVERY exige
@@ -843,6 +874,11 @@ function mapPedido(p: PedidoOnline): any {
     // El cliente ve por qué el local no tomó su pedido (PLAN-tienda-online M6).
     motivoRechazo: p.motivoRechazo ?? null,
     metodoPago: p.metodoPago,
+    // F8: lo que el cliente eligió (para «Mis pedidos»); sin datos internos.
+    pagoModalidad: p.pagoModalidad ?? null,
+    pagoMonedaId: p.pagoMonedaId ?? null,
+    vueltoPara: p.vueltoPara != null ? Number(p.vueltoPara) : null,
+    pagoObservacion: p.pagoObservacion ?? null,
     // F4: estado del pago con tarjeta (null en efectivo). El detalle interno no se expone.
     estadoPago: p.estadoPago ?? null,
     pagoMonto: p.pagoMonto != null ? Number(p.pagoMonto) : null,

@@ -40,7 +40,7 @@ async function main() {
   };
   // Sube todo y baja las migraciones de la tienda posteriores a F4 (F6 en adelante), para
   // que los bloques F2-F4 de abajo sigan encontrando a F4 como la última.
-  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores/;
+  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda/;
   const subirSinPosteriores = async () => {
     await ds.runMigrations({ transaction: 'each' });
     for (;;) {
@@ -65,9 +65,11 @@ async function main() {
   const F4_PEDIDO = ['estado_pago', 'pago_proveedor', 'pago_intento', 'pago_idem_key', 'pago_sesion_id', 'pago_checkout_url',
     'pago_id', 'pago_monto', 'pago_expira_en', 'pago_ultima_consulta', 'pago_detalle', 'pagado_en', 'pago_aviso_sin_aceptar'];
   // Columnas de config de migraciones posteriores a F4 (F6b), que estos bloques bajan antes.
-  const POST_F4_CFG = ['personalizar_sabores'];
+  const POST_F4_CFG = ['personalizar_sabores', 'metodos_pago'];
+  // Columnas de pedido de F8 (TiendaPagoMoneda), posteriores a F4.
+  const F8_PEDIDO = ['pago_modalidad', 'pago_moneda_id', 'vuelto_para', 'pago_cotizacion', 'pago_observacion'];
   const F4_CFG = ['pago_online_activo', 'upay_base_url', 'upay_merchant_id', 'upay_merchant_nombre', 'minutos_aviso_pagado_sin_aceptar'];
-  const POSTERIORES = ['seguimiento_token_hash', ...F4_PEDIDO];
+  const POSTERIORES = ['seguimiento_token_hash', ...F4_PEDIDO, ...F8_PEDIDO];
   const entTodas = meta.columns.map((c) => c.databaseName).sort();
   const ent = entTodas.filter((c) => !POSTERIORES.includes(c));
   ok(JSON.stringify(ent) === JSON.stringify([...cols].sort()), 'las columnas coinciden con la entidad', [ent, cols]);
@@ -106,7 +108,7 @@ async function main() {
   ok((await columnas()).includes('seguimiento_token_hash'), 'F2 up agrega pedidos_online.seguimiento_token_hash');
   ok((await indices()).some((n) => /IDX_pedidos_online_seguimiento/.test(n)), 'F2 up crea el índice de seguimiento');
   ok((await columnas()).includes('idempotency_key'), 'F2 no toca idempotency_key');
-  ok(JSON.stringify(entTodas.filter((c) => !F4_PEDIDO.includes(c))) === JSON.stringify([...(await columnas())].sort()), 'F2: las columnas coinciden con la entidad (sin F4)');
+  ok(JSON.stringify(entTodas.filter((c) => !F4_PEDIDO.includes(c) && !F8_PEDIDO.includes(c))) === JSON.stringify([...(await columnas())].sort()), 'F2: las columnas coinciden con la entidad (sin F4 ni F8)');
   await ds.undoLastMigration({ transaction: 'each' });
   ok(!(await columnas()).includes('seguimiento_token_hash'), 'F2 down quita la columna');
   ok(!(await indices()).some((n) => /IDX_pedidos_online_seguimiento/.test(n)), 'F2 down quita el índice');
@@ -141,7 +143,7 @@ async function main() {
   ok(/TiendaPagoOnline/.test(String(ultimaF4)), 'F4: TiendaPagoOnline es la última migración', ultimaF4);
   const colsF4 = await columnas();
   ok(F4_PEDIDO.every((c) => colsF4.includes(c)), 'F4 up agrega las columnas de pago al pedido');
-  ok(JSON.stringify(entTodas) === JSON.stringify([...colsF4].sort()), 'F4: las columnas del pedido coinciden con la entidad completa');
+  ok(JSON.stringify(entTodas.filter((c) => !F8_PEDIDO.includes(c))) === JSON.stringify([...colsF4].sort()), 'F4: las columnas del pedido coinciden con la entidad (sin F8)');
   ok(JSON.stringify(metaCfg.columns.map((c) => c.databaseName).filter((c) => !POST_F4_CFG.includes(c)).sort()) === JSON.stringify([...(await colsCfg())].sort()), 'F4: las columnas de config coinciden con la entidad');
   ok((await indices()).includes('UQ_pedidos_online_pago_id'), 'F4 crea el índice único de pago_id');
   const actCfg = await ds.query(`SELECT pago_online_activo AS a FROM tienda_online_config`);
@@ -161,6 +163,19 @@ async function main() {
   ok(!tablas.includes('pagos_online_eventos'), 'F4 down quita la tabla de eventos');
   await ds.runMigrations({ transaction: 'each' });
   ok((await columnas()).includes('pago_id'), 'F4 up de nuevo las vuelve a crear');
+
+  // F8: TiendaPagoMoneda (cómo paga el cliente + métodos de la tienda), up / down / up.
+  const ultimaF8 = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
+  ok(/TiendaPagoMoneda/.test(String(ultimaF8)), 'F8: TiendaPagoMoneda es la última migración', ultimaF8);
+  const colsF8 = await columnas();
+  ok(JSON.stringify(entTodas) === JSON.stringify([...colsF8].sort()), 'F8: las columnas del pedido coinciden con la entidad completa');
+  ok((await colsCfg()).includes('metodos_pago'), 'F8 up agrega metodos_pago a la config');
+  await ds.undoLastMigration({ transaction: 'each' });
+  const sinF8 = await columnas();
+  ok(!F8_PEDIDO.some((c) => sinF8.includes(c)) && !(await colsCfg()).includes('metodos_pago'), 'F8 down las quita');
+  await ds.runMigrations({ transaction: 'each' });
+  const conF8 = await columnas();
+  ok(F8_PEDIDO.every((c) => conF8.includes(c)), 'F8 up de nuevo las vuelve a crear');
 
   await ds.destroy();
   console.log(`\n[tienda-migracion] ${passed} OK, ${failed} fallas`);

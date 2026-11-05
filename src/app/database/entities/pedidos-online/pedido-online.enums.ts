@@ -34,7 +34,24 @@ export enum MetodoPagoOnline {
   BANCARD = 'BANCARD',
   UPAY = 'UPAY',
   PAGOPAR = 'PAGOPAR',
+  // F8: se pagan al recibir / retirar (el repartidor o la caja los cobran).
+  TARJETA_POS = 'TARJETA_POS',
+  QR = 'QR',
+  PIX = 'PIX',
+  TRANSFERENCIA = 'TRANSFERENCIA',
 }
+
+/** F8: cuándo paga el cliente. Online = antes (uPay); al recibir = en la entrega o el retiro. */
+export enum PagoModalidad {
+  AL_RECIBIR = 'AL_RECIBIR',
+  ONLINE = 'ONLINE',
+}
+
+/** F8: métodos que el local puede ofrecer para pagar al recibir (interruptores en la config). */
+export const METODOS_AL_RECIBIR: MetodoPagoOnline[] = [
+  MetodoPagoOnline.EFECTIVO, MetodoPagoOnline.TARJETA_POS, MetodoPagoOnline.QR,
+  MetodoPagoOnline.PIX, MetodoPagoOnline.TRANSFERENCIA,
+];
 
 /**
  * Estado del pago online (PLAN-tienda-online F4). `null` en pedidos en efectivo.

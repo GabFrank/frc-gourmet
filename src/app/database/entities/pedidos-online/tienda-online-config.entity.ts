@@ -69,6 +69,13 @@ export class TiendaOnlineConfig extends BaseModel {
   personalizarSabores!: boolean;
 
   /**
+   * F8: métodos de pago al recibir que ofrece la tienda (JSON: ["EFECTIVO","QR",…]).
+   * Null = sólo efectivo, como antes de F8.
+   */
+  @Column({ name: 'metodos_pago', type: 'text', nullable: true })
+  metodosPago?: string | null;
+
+  /**
    * Horarios de atención como JSON:
    * `[{ dia: 0-6 (0=Dom), abre: 'HH:mm', cierra: 'HH:mm', activo: bool }]`.
    * null/[] = siempre abierta (mientras `activa`).
