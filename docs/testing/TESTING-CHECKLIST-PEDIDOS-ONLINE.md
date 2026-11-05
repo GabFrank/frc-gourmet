@@ -95,6 +95,38 @@ Esto es lo que estaba roto desde antes y hay que verificar aparte.
 
 ---
 
+## 8 · Dashboard de Zonas de Delivery (F7)
+
+Ventas → Configuración → Zonas de Delivery. Necesita ventas de delivery **cobradas** en el período.
+
+1. **Sin datos:** abrir la pantalla en una base sin envíos del período → KPIs en 0, todas las zonas
+   en la tabla con 0, el mapa centrado en el local. Sin internet, debajo del mapa aparece «No se pudo
+   cargar el mapa de fondo».
+2. **Vincular tarifas:** editar cada zona y elegir su «Tarifa del PdV». La tarifa que ya usa otra
+   zona aparece deshabilitada con «(usada por X)». Sin tarifa, el campo muestra «Sin tarifa» y la
+   alerta «zona(s) sin tarifa del PdV» se ve arriba.
+3. **Los dos tipos de delivery:** hacer un pedido delivery por la tienda dentro de CENTRO y cargar
+   en el PdV un delivery por teléfono con la tarifa de CENTRO. Cobrar los dos y entregarlos. Elegir
+   «Hoy» → **Aplicar**: CENTRO muestra Tienda 1 y Teléfono 1, y el mapa un punto dentro de CENTRO.
+4. **Sin zona:** un delivery por teléfono **sin** tarifa → fila «Sin zona» al final de la tabla y la
+   alerta «envío(s) del período no tienen zona». La suma de la columna Ventas da el KPI «Ventas de
+   delivery», y ese número coincide con el de delivery en Reportes para el mismo período.
+5. **Retiro y no cobrados no cuentan:** un retiro y un delivery sin cobrar no aparecen ni en la
+   tabla ni en el mapa.
+6. **Clic:** clic en una zona del mapa resalta su fila; clic (o Tab + Enter) en la fila acerca el
+   mapa a la zona. Volver a hacer clic la deselecciona.
+7. **Permisos:** con un usuario que sólo tiene `VENTAS_PDV` la pantalla se ve, sin «Nueva zona» ni
+   el menú ⋮ de cada fila. Con `PEDIDOS_ONLINE_CONFIGURAR` aparecen.
+8. **Zonas viejas con la misma tarifa** (caso que encontró la auditoría): si dos zonas ya tenían la
+   misma tarifa de antes de la regla, la alerta «tarifa(s) vinculada(s) a más de una zona» aparece y
+   sus deliverys por teléfono van a «TARIFA · varias zonas». Igual se tiene que poder **renombrar o
+   redibujar** cualquiera de las dos sin que diga «Esa tarifa ya la usa…»; el aviso sólo sale al
+   **cambiarle** la tarifa a una que ya usa otra zona.
+9. **Tamaño:** achicar la ventana por debajo de ~1100 px → mapa arriba y tabla abajo, el mapa se
+   redibuja sin quedar gris. Cambiar de pestaña y volver: el mapa sigue encuadrado.
+10. **Tema oscuro:** los nombres de las zonas sobre el mapa se leen (el mapa es claro en los dos
+    temas) y los puntos de color de la tabla se distinguen.
+
 ## Qué NO se probó automáticamente
 
 - **SQLite es lo que corren los tests** (`.tmp/*.db` con todas las migraciones).
@@ -104,5 +136,6 @@ Esto es lo que estaba roto desde antes y hay que verificar aparte.
 - **Impresión y KDS reales**: los tests verifican que se genere el `ComandaItem`,
   que es la condición necesaria. Que la impresora física escupa el papel hay que
   verlo en el local (pasos 1.5 y 3.2).
-- **El mapa** (dibujo de zonas y pin del checkout) necesita internet: los tiles
-  vienen de CARTO y la dirección en texto de Nominatim.
+- **El mapa** (dibujo de zonas, dashboard de zonas y pin del checkout) necesita
+  internet: los mosaicos vienen de OpenStreetMap (CARTO dejó de servirlos sin
+  clave en 2026-11) y la dirección en texto de Nominatim.

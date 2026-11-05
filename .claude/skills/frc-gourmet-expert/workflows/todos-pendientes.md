@@ -191,7 +191,7 @@ Detalles → [../domains/pedidos-online.md](../domains/pedidos-online.md) secci�
 - [ ] **Reservas UI completa**: entity `Reserva` existe, falta UI para crear/gestionar reservas, calendario, notificaciones de reservas próximas.
 - [ ] **Categorías click → agregar al carrito**: items de categoría se muestran pero no agregan productos al carrito.
 - [ ] **Retirar el árbol viejo de categorías del PdV**: `PdvGrupoCategoria` → `PdvCategoria` → `PdvCategoriaItem` → `PdvItemProducto` quedó reemplazado por los **atajos** (`PdvAtajoGrupo`/`PdvAtajoItem`/`PdvAtajoItemProducto`). Sigue con entidades, handlers y una FK en `PdvConfig`. Baja con estrategia de 2 versiones (no hay `DROP` directo).
-- [ ] **UI Precios de Delivery**: ABM visual (actualmente se gestionan desde crear-delivery dialog).
+- [x] ~~**UI Precios de Delivery**~~: ya existe (`ListPreciosDeliveryComponent`, Ventas → Configuración → Precios de Delivery). Ítem obsoleto, cerrado al hacer F7 (2026-11).
 - [ ] **UI Configuración PdV**: dialogo para editar umbrales y parámetros de `PdvConfig` (parcialmente hecho via `pdv-config-dialog`, falta refinamiento).
 - [ ] **Cancelar Caja**: cancela caja con ventas, cobros y movimientos de stock. UI parcial.
 - [ ] **Bug findPrecioCosto()**: retorna 0 hardcodeado en vez de buscar el precio de costo real.
@@ -506,10 +506,16 @@ El módulo se cerró para poder usarse en producción
   preexistente, compartida por el mix de forma de pago y el mix por canal, así
   que hay que re-paletizar **todas las pantallas de Reportes a la vez** — cambiar
   sólo una deja dos donas con paletas distintas en la misma pantalla.
-- **Mapa de zonas con polígonos.** Descartado por ahora (sólo cubriría las zonas
-  de la tienda online, que son las únicas con polígono dibujado, y el canvas del
-  mapa no se captura bien en el export a PDF). Si se retoma, va junto con exigir
-  polígono también a las zonas del PdV.
+- **Mapa de zonas con polígonos.** Sigue descartado **en Reportes** (el canvas
+  del mapa no se captura bien en el export a PDF). Se hizo en la pantalla de
+  Zonas de Delivery (F7, 2026-11): mapa con las zonas de la tienda y los pedidos
+  web como puntos. Las tarifas del PdV siguen sin polígono: el delivery por
+  teléfono se atribuye a una zona por su tarifa (una por zona) y no tiene punto.
+- **Unicidad de la tarifa por zona en la base.** La regla vive en
+  `guardar-zona-delivery` (control y después guardado, sin índice único): dos
+  guardados simultáneos la podrían romper. El dashboard lo tolera («varias
+  zonas» + alerta). Un índice único parcial necesita migración y limpiar datos
+  previos.
 - **Rentabilidad por envío.** Requiere modelar lo que se le paga al repartidor;
   hoy no hay entidad para eso.
 

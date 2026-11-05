@@ -37,7 +37,7 @@ Todas con `createForeignKeyConstraints: false` (desacoplan borrado):
 | `PedidoOnline` | `pedidos_online` | "Envelope" inbound **antes** de convertirse en `Venta`. `numero` único (`PO-000001`), `estado` (def RECIBIDO, indexado), snapshots de cliente, `tipoPedido`, `metodoPago`, `fechaProgramada` (null=ASAP), montos, `latitud`/`longitud` (Fase D), `direccionEntrega`, vínculos sueltos `ventaId`/`deliveryId`/`mesaId`, `motivoRechazo`, `zonaDelivery`, `referenciaDireccion`, `notas`, `moneda`, timestamps de estado |
 | `PedidoOnlineItem` | `pedido_online_items` | `productoId`/`presentacionId?`, snapshots de nombre, `precioUnitario`/`subtotal` **congelados**, `personalizacion` como **texto JSON** `{opcion, sabores, adicionales, observaciones, notaLibre}` |
 | `CuentaCliente` | `cuentas_cliente` | Cuenta de cliente final **separada de `Usuario`**. `telefono` (único, nullable), `email`, `passwordHash?` (bcrypt), `cliente` FK opcional al `Cliente` interno |
-| `ZonaDelivery` | `zonas_delivery` | `nombre`, `tarifa`, `montoMinimo`, `orden` (tarifa plana; polígonos = Fase 6). ⚠️ **El storefront no las usa** — ver «Huecos conocidos» |
+| `ZonaDelivery` | `zonas_delivery` | `nombre`, `poligono` (GeoJSON en texto; el servidor resuelve el pin del cliente), `precioDelivery` (**tarifa del PdV, una por zona**: el envío y la atribución del delivery por teléfono), `tarifa` (fallback sin tarifa), `montoMinimo`, `orden` (gana la menor si se superponen), `activa` |
 | `TiendaOnlineConfig` | `tienda_online_config` | Fila única. `activa` (master switch), branding, `permitePickup/Delivery`, `prepTimeMinutos`, `montoMinimoPedido`, `aceptacionAutomatica`, `horariosJson` |
 | `CustomerRefreshToken` | `customer_refresh_tokens` | Refresh de cliente (`tokenHash` sha256, revocación) |
 | `CodigoOtp` | `codigos_otp` | OTP de login (`codigoHash` bcrypt, TTL, intentos) |
@@ -218,6 +218,47 @@ reescribir el módulo de delivery, así que la operación se hizo **reintentable
 si el delivery ya está en el estado destino no se le vuelve a pedir la
 transición (la rechazaría por inválida) y el handler sigue para poner el pedido
 al día. El operador destraba un desfasaje repitiendo la acción.
+
+### Dashboard de Zonas de Delivery (F7, 2026-11)
+
+La pantalla de zonas dejó de ser una tabla: KPIs del período (hoy / 7 días / este mes, con
+**Aplicar** y jornada comercial), alertas, mapa con todas las zonas y los pedidos web como puntos,
+y tabla por zona con **los dos tipos de delivery**. Handler `get-dashboard-zonas-delivery`.
+
+**A qué zona va cada envío** (`asignarEnviosAZonas`, `electron/utils/zonas-dashboard.utils.ts`):
+- Web con zona → la del pedido (la que resolvió el pin), aunque la tarifa del delivery sea de otra.
+  Zona que ya no existe (la FK no tiene constraint) → «Zona eliminada».
+- Teléfono, o web sin zona (un retiro web convertido a delivery en el PdV) → la zona que tiene esa
+  **tarifa del PdV**. Sin zona con esa tarifa → «Tarifa X · sin zona»; con varias (dato previo a la
+  regla) → «Tarifa X · varias zonas», sin adivinar ni repartir. Sin tarifa → «Sin zona».
+- Invariante testeada: cada envío cae en una sola fila, Σ filas = KPIs, y los KPIs = `kpisDelivery`
+  de Reportes con el mismo filtro (ventas CONCLUIDAS, sin retiros, `SOLO_ENVIOS`).
+
+**Decisiones del propietario (05/11):**
+1. **Una tarifa del PdV por zona**: `guardar-zona-delivery` devuelve `tarifa_en_uso` si se vincula
+   una tarifa que ya tiene otra zona. Sólo se controla cuando la tarifa **cambia**: dos zonas viejas
+   que la compartían se pueden seguir editando (bug que encontró la auditoría).
+2. **Lectura con `VENTAS_PDV`** (el permiso del menú); crear, editar, dibujar y eliminar siguen con
+   `PEDIDOS_ONLINE_CONFIGURAR`, y la pantalla oculta esas acciones (`puedeConfigurar`).
+3. **Puntos = pedidos web cobrados** (el mismo conjunto que la tabla), coordenadas redondeadas a 3
+   decimales (~110 m), sin datos del cliente, tope 1000 con aviso. La zona del punto es la misma
+   que cuenta la tabla.
+4. **Colores**: variables del tema `--zona-1…8` (puntos de la tabla, claro y oscuro) y
+   `--zona-mapa-*` (sobre los mosaicos, que son claros en los dos temas). Paleta categórica
+   validada con la guía `dataviz`; contraste < 3:1 en algunos pasos, por eso la zona siempre lleva
+   su nombre visible. Con más de 8 zonas el color se repite.
+
+**Gotchas del motor (`reportes-delivery.helper.ts`):**
+- `agrupar` deduplica sólo la cantidad de tickets (`COUNT(DISTINCT v.id)`); la plata y el envío
+  suman filas. Por eso el pedido web se une por una **subconsulta deduplicada por venta**
+  (`pedidos_online.venta_id` no es único: en la mesa varios pedidos comparten la venta).
+- `agrupar`/`envioRecaudado` aceptan varias columnas de agrupación; la clave se arma en JS
+  (`a|b|c`, '' para NULL) para no concatenar en SQL (`||` con un entero falla en Postgres).
+- Mosaicos de **OpenStreetMap** (CARTO exige clave desde 2026-11): diálogo de zonas, dashboard y
+  checkout de la tienda. Atribución visible; sin internet la pantalla avisa.
+
+Tests: `test:dashboard-zonas` y `test:dashboard-zonas-pg` (misma suite contra una base Postgres
+temporal que se crea y se borra; se saltea sin Postgres).
 
 ### Lo que sigue pendiente
 

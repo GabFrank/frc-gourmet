@@ -141,6 +141,7 @@ Los handlers sensibles llaman `ensurePermission(dataSource, getCurrentUser, 'COD
 
 - `facturacion.handler.ts` — timbrado/plantillas/facturas, numeración atómica. → [domains/facturacion.md](../domains/facturacion.md).
 - `pedidos-online-auth.handler.ts`, `pedidos-online-pedidos.handler.ts`, `pedidos-online-admin.handler.ts` (+ `config`/`menu`) — storefront público (`/pub/*`) + bandeja PdV. → [domains/pedidos-online.md](../domains/pedidos-online.md).
+  - `get-dashboard-zonas-delivery` (F7, `VENTAS_PDV`): KPIs, filas por zona (tienda y teléfono), puntos del mapa y `puedeConfigurar`. Motor: `enviosPorZonaYCanal` en `reportes-delivery.helper.ts` + `asignarEnviosAZonas` en `electron/utils/zonas-dashboard.utils.ts`. `guardar-zona-delivery` rechaza `tarifa_en_uso`.
 - `kds.handler.ts` — feed KDS, bump/recall/estado, broadcast de eventos. → [domains/cocina-impresion.md](../domains/cocina-impresion.md).
 - `gastos-caja.handler.ts`, `pdv-egresos.handler.ts` — utilitarios del cajón (GastoCaja / EgresoCaja: vale, compra). → [domains/ventas-pdv.md](../domains/ventas-pdv.md).
 - `asistencia-facial.handler.ts`, `face-models.handler.ts`, `empresa.handler.ts` — fichaje facial + geocerca. → [domains/rrhh-asistencia-facial.md](../domains/rrhh-asistencia-facial.md).
