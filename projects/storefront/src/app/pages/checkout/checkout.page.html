@@ -36,11 +36,11 @@
     </div>
 
     <div class="sf-card totales">
-      <div class="row grand"><strong>Total</strong><strong>{{ cart.subtotal | precio }}</strong></div>
+      <div class="row grand"><strong>Total</strong><strong>{{ cart.subtotal | precio: monedas.seleccionada }}</strong></div>
     </div>
 
     <p class="sf-muted pago"><sf-icon name="cash" [size]="15"></sf-icon>El pago se realiza en la caja del local.</p>
-    <p class="sf-error" *ngIf="error">{{ error }}</p>
+    <p class="sf-error" role="alert" *ngIf="error">{{ error }}</p>
   </ng-container>
 
   <ng-container *ngIf="!mesa.enMesa && auth.isAuthenticated && config.config.abiertaAhora">
@@ -91,15 +91,15 @@
 
     <!-- Totales -->
     <div class="sf-card totales">
-      <div class="row"><span>Subtotal</span><span>{{ cart.subtotal | precio }}</span></div>
+      <div class="row"><span>Subtotal</span><span>{{ cart.subtotal | precio: monedas.seleccionada }}</span></div>
       <div class="row" *ngIf="tipo === 'DELIVERY'">
         <span>Envío<span class="sf-muted zona" *ngIf="zonaNombre"> · {{ zonaNombre }}</span></span>
         <span *ngIf="cotizando" class="acoordinar">Calculando…</span>
         <span *ngIf="!cotizando && cubierto === false" class="acoordinar">Fuera de cobertura</span>
         <span *ngIf="!cotizando && cubierto === null" class="acoordinar">Marcá el mapa</span>
-        <span *ngIf="!cotizando && cubierto">{{ costoEnvio | precio }}</span>
+        <span *ngIf="!cotizando && cubierto">{{ costoEnvio | precio: monedas.seleccionada }}</span>
       </div>
-      <div class="row grand"><strong>Total</strong><strong>{{ total | precio }}</strong></div>
+      <div class="row grand"><strong>Total</strong><strong>{{ total | precio: monedas.seleccionada }}</strong></div>
       <div class="row nota-moneda" *ngIf="monedas.esOtra"><span>Se cobra en {{ monedas.principal?.simbolo }}</span><span>{{ total | guarani }}</span></div>
     </div>
 
@@ -126,7 +126,8 @@
         <div class="efectivo" *ngIf="metodoPago === 'EFECTIVO'">
           <div class="monedas" *ngIf="monedas.hayOtras">
             <span class="sf-muted lbl">Pagás en</span>
-            <button type="button" class="chip" *ngFor="let m of monedas.monedas" [class.active]="m.id === monedaPago?.id" (click)="elegirMonedaPago(m)">{{ m.simbolo }}</button>
+            <button type="button" class="chip" *ngFor="let m of monedas.monedas" [class.active]="m.id === monedaPago?.id"
+                    [attr.aria-pressed]="m.id === monedaPago?.id" (click)="elegirMonedaPago(m)">{{ m.simbolo }}</button>
           </div>
           <div class="row total-moneda" *ngIf="monedaPago && !monedaPago.principal">
             <span class="sf-muted">Total en {{ monedaPago.simbolo }}</span><strong>{{ totalEnMonedaPagoTexto }}</strong>
@@ -138,13 +139,16 @@
             <label class="sf-label" for="vuelto">Vuelto para</label>
             <div class="vuelto-input">
               <span class="pre">{{ monedaPago?.simbolo }}</span>
-              <input id="vuelto" class="sf-input" type="number" inputmode="decimal" [min]="totalEnMonedaPago"
-                     [(ngModel)]="vueltoPara" (ngModelChange)="calcularVueltoEstimado()" placeholder="¿Con cuánto pagás?">
+              <input id="vuelto" class="sf-input" type="text" autocomplete="off"
+                     [attr.inputmode]="monedaPago?.decimales ? 'decimal' : 'numeric'"
+                     [(ngModel)]="vueltoTexto" (ngModelChange)="onVueltoTexto()" placeholder="¿Con cuánto pagás?"
+                     aria-describedby="vuelto-estimado">
             </div>
             <div class="sugerencias" *ngIf="sugerencias.length">
-              <button type="button" class="chip" *ngFor="let s of sugerencias" [class.active]="vueltoPara === s.valor" (click)="elegirSugerencia(s.valor)">{{ s.texto }}</button>
+              <button type="button" class="chip" *ngFor="let s of sugerencias" [class.active]="vueltoPara === s.valor"
+                      [attr.aria-pressed]="vueltoPara === s.valor" (click)="elegirSugerencia(s.valor)">{{ s.texto }}</button>
             </div>
-            <p class="sf-muted ayuda" *ngIf="vueltoEstimadoTexto">{{ vueltoEstimadoTexto }}</p>
+            <p class="sf-muted ayuda" id="vuelto-estimado" aria-live="polite">{{ vueltoEstimadoTexto }}</p>
           </div>
         </div>
       </ng-container>
@@ -154,12 +158,12 @@
       <label class="sf-label" for="pago-obs">Observación del pago <span class="sf-muted">(opcional)</span></label>
       <textarea id="pago-obs" class="sf-input" rows="2" maxlength="200" [(ngModel)]="pagoObservacion" placeholder="Ej.: tengo un billete de 100.000"></textarea>
     </div>
-    <p class="sf-error" *ngIf="error">{{ error }}</p>
+    <p class="sf-error" role="alert" *ngIf="error">{{ error }}</p>
   </ng-container>
 </div>
 
 <div class="sf-sticky-bar" *ngIf="config.config.abiertaAhora && (mesa.enMesa || auth.isAuthenticated)">
   <button class="sf-btn sf-btn--block" [disabled]="enviando || cart.items.length === 0" (click)="confirmar()">
-    {{ enviando ? 'Enviando…' : ((pagoOnline && metodoPago === 'UPAY' ? 'Pagar con tarjeta · ' : 'Confirmar pedido · ') + ((mesa.enMesa ? cart.subtotal : total) | precio)) }}
+    {{ enviando ? 'Enviando…' : ((pagoOnline && metodoPago === 'UPAY' ? 'Pagar con tarjeta · ' : 'Confirmar pedido · ') + ((mesa.enMesa ? cart.subtotal : total) | precio: monedas.seleccionada)) }}
   </button>
 </div>

@@ -318,10 +318,13 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
     if (forma) { this.selectedFormaPago = forma; this.onFormaPagoChange(); }
     if (pp.metodoPago === 'EFECTIVO' && pp.pagoMonedaId != null) {
       const m = this.data.monedas.find((x) => x.id === pp.pagoMonedaId);
-      if (m) { this.selectedMoneda = m; this.autoFillValor(); }
+      // Sin la moneda (p. ej. se desactivó) no se precarga el monto: quedaría en otra moneda.
+      if (!m) return;
+      this.selectedMoneda = m;
+      this.autoFillValor();
+      // «Paga con»: el billete que entrega; el diálogo calcula el vuelto como siempre.
+      if (pp.vueltoPara != null && pp.vueltoPara > 0) this.valorInput = pp.vueltoPara;
     }
-    // «Paga con»: el billete que entrega; el diálogo calcula el vuelto como siempre.
-    if (pp.metodoPago === 'EFECTIVO' && pp.vueltoPara != null && pp.vueltoPara > 0) this.valorInput = pp.vueltoPara;
   }
 
   private async loadClientes(): Promise<void> {

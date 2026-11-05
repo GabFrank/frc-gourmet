@@ -7,6 +7,7 @@ import { AppImgPipe } from '../../core/app-img.pipe';
 import { IconComponent } from '../../core/icon.component';
 import { GuaraniPipe } from '../../core/guarani.pipe';
 import { PrecioPipe } from '../../core/precio.pipe';
+import { MonedasService } from '../../core/monedas.service';
 
 @Component({
   selector: 'sf-cart',
@@ -42,7 +43,7 @@ import { PrecioPipe } from '../../core/precio.pipe';
               <span class="qty">{{ it.cantidad }}</span>
               <button (click)="cart.cambiarCantidad(it.uid, 1)">+</button>
             </div>
-            <span class="line-total">{{ it.precioUnitario * it.cantidad | precio }}</span>
+            <span class="line-total">{{ it.precioUnitario * it.cantidad | precio: monedas.seleccionada }}</span>
           </div>
         </div>
       </div>
@@ -52,12 +53,12 @@ import { PrecioPipe } from '../../core/precio.pipe';
       </a>
 
       <div class="resumen sf-card" *ngIf="cart.items.length > 0">
-        <div class="row"><span>Subtotal</span><strong>{{ cart.subtotal | precio }}</strong></div>
+        <div class="row"><span>Subtotal</span><strong>{{ cart.subtotal | precio: monedas.seleccionada }}</strong></div>
       </div>
     </div>
 
     <div class="sf-sticky-bar" *ngIf="cart.items.length > 0">
-      <button class="sf-btn sf-btn--block" [disabled]="revalidando" (click)="continuar()">Continuar · {{ cart.subtotal | precio }}</button>
+      <button class="sf-btn sf-btn--block" [disabled]="revalidando" (click)="continuar()">Continuar · {{ cart.subtotal | precio: monedas.seleccionada }}</button>
     </div>
   `,
   styles: [`
@@ -83,6 +84,8 @@ import { PrecioPipe } from '../../core/precio.pipe';
   `],
 })
 export class CartPage implements OnInit {
+  /** F8: moneda en que se ven los precios (argumento del pipe `precio`). */
+  monedas = inject(MonedasService);
   cart = inject(CartService);
   private menu = inject(MenuService);
   private router = inject(Router);

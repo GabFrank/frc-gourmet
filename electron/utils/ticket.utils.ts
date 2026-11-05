@@ -105,7 +105,11 @@ export function sanitizarParaTicket(texto: string): string {
   if (!texto) return texto;
   let out = '';
   for (const ch of texto) {
-    if (ch.charCodeAt(0) < 128) { out += ch; continue; }
+    const code = ch.charCodeAt(0);
+    // Caracteres de control (ESC, GS, saltos…) fuera: un texto libre del cliente (notas,
+    // observación del pago, dirección) podía llevar comandos ESC/POS a la impresora.
+    if (code < 32 || code === 127) { out += ' '; continue; }
+    if (code < 128) { out += ch; continue; }
     if (REEMPLAZOS_TICKET[ch] !== undefined) { out += REEMPLAZOS_TICKET[ch]; continue; }
     if (SEGUROS_CP437.includes(ch)) { out += ch; continue; }
     // Última chance: sacarle el acento. `Á` → `A`, que se lee.

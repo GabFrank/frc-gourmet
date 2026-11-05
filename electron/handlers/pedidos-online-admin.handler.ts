@@ -19,7 +19,7 @@ import { getCotizacionMap, getInicioJornada, getMonedaPrincipalId } from './dash
 import { rangoToFechas } from '../utils/dashboard-rangos.util';
 import { dbQuery } from '../utils/db-query';
 import { asignarEnviosAZonas, redondearCoordenada } from '../utils/zonas-dashboard.utils';
-import { MonedaTienda, monedasTienda, resumenPago } from '../utils/pago-pedido.utils';
+import { MonedaTienda, monedasParaResumen, resumenPago } from '../utils/pago-pedido.utils';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
 import { cancelarVentaCompletaEnTx } from '../utils/venta-reversa.utils';
 import { invokeHandler } from '../utils/handler-registry';
@@ -54,7 +54,7 @@ const TRANSICIONES: Record<string, EstadoPedidoOnline[]> = {
 };
 
 /** `monedas` hace falta para el resumen del pago (símbolos); sin ellas, el resumen sale sin moneda. */
-function mapPedidoAdmin(p: PedidoOnline, monedas: MonedaTienda[] = []): any {
+function mapPedidoAdmin(p: PedidoOnline, monedas: Pick<MonedaTienda, 'id' | 'simbolo' | 'decimales' | 'principal'>[] = []): any {
   return {
     id: p.id,
     numero: p.numero,
@@ -130,7 +130,7 @@ export function registerPedidosOnlineAdminHandlers(
       qb.andWhere('p.estado IN (:...estados)', { estados: filtros.estados });
     }
     const pedidos = await qb.getMany();
-    const monedas = await monedasTienda(dataSource);
+    const monedas = await monedasParaResumen(dataSource);
     return pedidos.map((p) => mapPedidoAdmin(p, monedas));
   });
 

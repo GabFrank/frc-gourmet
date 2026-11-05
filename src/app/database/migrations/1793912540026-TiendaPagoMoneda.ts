@@ -21,7 +21,7 @@ export class TiendaPagoMoneda1793912540026 implements MigrationInterface {
       }
     };
     await agregar('pedidos_online', 'pago_modalidad', 'varchar(20)');
-    await agregar('pedidos_online', 'pago_moneda_id', isPg ? 'integer' : 'integer');
+    await agregar('pedidos_online', 'pago_moneda_id', 'integer');
     await agregar('pedidos_online', 'vuelto_para', dec(18, 2));
     await agregar('pedidos_online', 'pago_cotizacion', dec(18, 4));
     await agregar('pedidos_online', 'pago_observacion', 'varchar(200)');

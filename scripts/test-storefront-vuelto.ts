@@ -4,7 +4,7 @@
  *
  * Uso: npm run test:storefront-vuelto
  */
-import { convertir, formatear, sugerenciasVuelto } from '../projects/storefront/src/app/core/moneda-tienda';
+import { convertir, formatear, parsearMonto, sugerenciasVuelto } from '../projects/storefront/src/app/core/moneda-tienda';
 import { totalEnMoneda } from '../electron/utils/pago-pedido.utils';
 
 let passed = 0, failed = 0;
@@ -35,6 +35,12 @@ ok(JSON.stringify(sugerenciasVuelto(7.5, [1, 5, 10, 20, 50, 100])) === '[8,10,20
 const s250 = sugerenciasVuelto(250000, billGs);
 ok(s250.length > 0 && s250.every((v) => v > 250000), 'total mayor al billete más grande → sumas redondas', s250);
 ok(sugerenciasVuelto(45000, []).length === 0, 'sin billetes cargados → sin sugerencias');
+
+console.log('\n[3] Lo que escribe el cliente');
+for (const [txt, esperado] of [['10,50', 10.5], ['10.50', 10.5], ['7.5', 7.5], ['100.000', 100000], ['100.000,50', 100000.5], ['1.000.000', 1000000], ['  50000 ', 50000], ['', null], ['abc', null]] as const) {
+  ok(parsearMonto(txt) === esperado, `«${txt}» → ${esperado}`, parsearMonto(txt));
+}
+ok(formatear(1234.5, usd) === formatear(1234.5, usd) && formatear(1234.5, usd) === 'US$ 1.234,50', 'el formateador en caché da lo mismo', formatear(1234.5, usd));
 
 console.log(`\n[storefront-vuelto] RESULTADO: ${passed} passed, ${failed} failed.`);
 process.exit(failed === 0 ? 0 : 1);

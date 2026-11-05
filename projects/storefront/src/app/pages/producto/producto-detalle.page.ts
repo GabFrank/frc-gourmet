@@ -10,6 +10,7 @@ import { IconComponent } from '../../core/icon.component';
 import { MenuProducto, MenuOpcion, MenuAdicional, MenuObservacion } from '../../core/models';
 import { GuaraniPipe } from '../../core/guarani.pipe';
 import { PrecioPipe } from '../../core/precio.pipe';
+import { MonedasService } from '../../core/monedas.service';
 
 @Component({
   selector: 'sf-producto-detalle',
@@ -19,6 +20,8 @@ import { PrecioPipe } from '../../core/precio.pipe';
   styleUrls: ['./producto-detalle.page.scss'],
 })
 export class ProductoDetallePage implements OnInit {
+  /** F8: moneda en que se ven los precios (argumento del pipe `precio`). */
+  monedas = inject(MonedasService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private menuSvc = inject(MenuService);

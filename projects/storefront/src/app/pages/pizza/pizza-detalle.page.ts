@@ -9,6 +9,7 @@ import { AppImgPipe } from '../../core/app-img.pipe';
 import { MenuProducto, MenuSaborPizza, MenuTamano, MenuAdicional, MenuObservacion, PersonalizacionReceta, PersonalizacionSabor } from '../../core/models';
 import { GuaraniPipe } from '../../core/guarani.pipe';
 import { PrecioPipe } from '../../core/precio.pipe';
+import { MonedasService } from '../../core/monedas.service';
 import { IconComponent } from '../../core/icon.component';
 
 /**
@@ -26,6 +27,8 @@ import { IconComponent } from '../../core/icon.component';
   styleUrls: ['./pizza-detalle.page.scss'],
 })
 export class PizzaDetallePage implements OnInit {
+  /** F8: moneda en que se ven los precios (argumento del pipe `precio`). */
+  monedas = inject(MonedasService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private menuSvc = inject(MenuService);

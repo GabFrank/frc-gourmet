@@ -150,6 +150,13 @@ async function main() {
   const con50 = await pedir({ metodoPago: 'EFECTIVO', vueltoPara: 50000 });
   ok(Number((await leer(con50) as any)?.vueltoPara) === 50000, 'B: paga con ₲ 50.000 se guarda');
   ok((await pedir({ metodoPago: 'EFECTIVO', vueltoPara: 'abc' }))?.error === 'vuelto_invalido', 'B: «paga con» no numérico se rechaza');
+  ok((await pedir({ metodoPago: 'EFECTIVO', vueltoPara: 45000 * 101 }))?.error === 'vuelto_invalido', 'B: «paga con» de más de 100 veces el total se rechaza (tipeo o basura)');
+  for (const [vac, nombre] of [['', 'vacíos'], [null, 'nulos']] as const) {
+    const r = await pedir({ metodoPago: 'EFECTIVO', pagoMonedaId: vac, vueltoPara: vac, pagoObservacion: vac });
+    const pr: any = await leer(r);
+    ok(r?.success && pr.pagoMonedaId === gs.id && pr.vueltoPara == null && pr.pagoObservacion == null, `B: moneda, vuelto y observación ${nombre} → ₲ sin vuelto, sin observación`, pr && [pr.pagoMonedaId, pr.vueltoPara, pr.pagoObservacion]);
+  }
+  ok((await leer(await pedir({ metodoPago: 'EFECTIVO', pagoObservacion: '   ' })) as any).pagoObservacion == null, 'B: observación de puros espacios → sin observación');
 
   // ═══════ [C] Efectivo en US$ ═══════
   console.log('\n[C] Efectivo en dólares (cotización cargada al revés)');
@@ -161,6 +168,8 @@ async function main() {
   const pu: any = await leer(usd10);
   ok(usd10?.success && pu.pagoMonedaId === usd.id && Number(pu.vueltoPara) === 10 && Number(pu.pagoCotizacion) === 6000,
     'C: paga con US$ 10: se guarda la moneda y la cotización usada (6.000)', pu && [pu.pagoMonedaId, pu.vueltoPara, pu.pagoCotizacion]);
+  const usdRed = await pedir({ metodoPago: 'EFECTIVO', pagoMonedaId: usd.id, vueltoPara: 10.004 });
+  ok(Number((await leer(usdRed) as any).vueltoPara) === 10, 'C: «paga con» se redondea a los decimales de la moneda (10,004 → 10)');
   const usdSin = await pedir({ metodoPago: 'EFECTIVO', pagoMonedaId: usd.id });
   ok(usdSin?.success && Number((await leer(usdSin) as any).pagoCotizacion) === 6000, 'C: en US$ sin vuelto también guarda la cotización');
 
@@ -212,11 +221,51 @@ async function main() {
   ok(!/PAGO:/.test(tPdv) && !/ERROR/.test(tPdv), 'G: un delivery cargado en el PdV (sin pedido web) sale como siempre', tPdv.slice(0, 200));
   ok(viejo.id > 0, 'G: (fixture) pedido viejo creado');
 
+  // Observación con caracteres de control (ESC/POS) → el ticket no los imprime.
+  const ctrl = await pedir({ metodoPago: 'QR', pagoObservacion: 'hola\x1bp\x00\x1dVfin', notas: 'timbre\x00\x1bp' });
+  const pc: any = await leer(ctrl);
+  ok(ctrl?.success === true && !/[\x00-\x1f]/.test(pc.pagoObservacion + pc.notas), 'G: observación y notas con caracteres de control se guardan limpias (antes fallaba en Postgres)', ctrl);
+  const dCtrl = await save(Delivery, { estado: 'ABIERTO', modo: 'DELIVERY', fechaAbierto: new Date(), direccion: 'CALLE 3' });
+  await ds.getRepository(PedidoOnline).update({ id: pc.id }, { deliveryId: dCtrl.id } as any);
+  const lineasCtrl = ((await buildDeliveryTicketLines(ds, dCtrl.id, { width: 32 }))?.lines || []).filter((l: any) => l.type === 'text').map((l: any) => l.text);
+  ok(lineasCtrl.some((t: string) => /HOLA/.test(t) && /FIN/.test(t)) && !lineasCtrl.some((t: string) => /[\x00-\x1f\x7f]/.test(t)),
+    'G: el ticket imprime la observación sin caracteres de control (comandos de la impresora)', lineasCtrl.filter((t: string) => /HOLA/.test(t)));
+
+  // Lista de deliverys del PdV: el pago previsto viaja con el reparto web; el del PdV no tiene.
+  const { Caja } = E('financiero/caja.entity');
+  const { Dispositivo } = E('financiero/dispositivo.entity');
+  const { Conteo } = E('financiero/conteo.entity');
+  const { Venta } = E('ventas/venta.entity');
+  const caja = await save(Caja, { estado: 'ABIERTO', fechaApertura: new Date(), activo: true, dispositivo: await save(Dispositivo, { nombre: 'CAJA-PAGO', activo: true }), conteoApertura: await save(Conteo, {}) });
+  await save(Venta, { estado: 'ABIERTA', caja, delivery: dWeb, canalOrigen: 'WEB' });
+  await save(Venta, { estado: 'ABIERTA', caja, delivery: dPdv, canalOrigen: 'LOCAL' });
+  require('../electron/handlers/delivery.handler').registerDeliveryHandlers(ds, getUser);
+  const listaD: any = await invokeHandler('delivery-listar-pdv', caja.id, {});
+  const filaWeb = (listaD?.data || []).find((d: any) => d.id === dWeb.id);
+  const filaPdv = (listaD?.data || []).find((d: any) => d.id === dPdv.id);
+  ok(filaWeb?.pagoPrevisto?.metodoPago === 'EFECTIVO' && filaWeb.pagoPrevisto.pagoMonedaId === usd.id && filaWeb.pagoPrevisto.vueltoPara === 10
+    && /PAGA CON US\$ 10,00/.test(filaWeb.pagoPrevisto.resumen), 'G: el delivery web trae el pago previsto (para precargar el cobro)', filaWeb?.pagoPrevisto);
+  ok(filaPdv && filaPdv.pagoPrevisto === null, 'G: el delivery del PdV no trae pago previsto', filaPdv?.pagoPrevisto);
+
+  // Moneda desactivada DESPUÉS del pedido: el resumen sigue diciendo con qué paga.
+  await ds.getRepository(Moneda).update({ id: usd.id }, { activo: false } as any);
+  const lista3: any[] = await invokeHandler('get-pedidos-online-admin', {}) as any;
+  ok(/PAGA CON US\$ 10,00/.test(lista3.find((p) => p.numero === usd10.numero)?.pagoResumen || ''), 'G: si se desactiva la moneda, el pedido sigue diciendo «paga con US$ 10»', lista3.find((p) => p.numero === usd10.numero)?.pagoResumen);
+  await ds.getRepository(Moneda).update({ id: usd.id }, { activo: true } as any);
+
+  // La pantalla de config recibe la lista (no el JSON en texto): si no, al guardar se perdían métodos.
+  const cfgAdmin: any = await invokeHandler('get-tienda-online-config');
+  const upd: any = await invokeHandler('update-tienda-online-config', { metodosPago: ['EFECTIVO', 'PIX'] });
+  ok(Array.isArray(cfgAdmin?.metodosPago) && Array.isArray(upd?.config?.metodosPago) && upd.config.metodosPago.join() === 'EFECTIVO,PIX',
+    'G: la config admin (leer y guardar) devuelve los métodos como lista', [cfgAdmin?.metodosPago, upd?.config?.metodosPago]);
+
   // ═══════ [H] uPay ═══════
   console.log('\n[H] uPay');
   const { validarPagoPedido, totalEnMoneda } = require('../electron/utils/pago-pedido.utils');
   const up = validarPagoPedido({ data: { pagoMonedaId: usd.id, vueltoPara: 50 }, total: 45000, metodoPago: 'UPAY', habilitados: ['EFECTIVO'], monedas: [] });
   ok(up.ok && up.campos.pagoModalidad === 'ONLINE' && up.campos.pagoMonedaId === null && up.campos.vueltoPara === null, 'H: uPay es online y descarta moneda y vuelto', up);
+  const sinPrincipal = validarPagoPedido({ data: { vueltoPara: 50000 }, total: 45000, metodoPago: 'EFECTIVO', habilitados: ['EFECTIVO'], monedas: [] });
+  ok(sinPrincipal.ok && sinPrincipal.campos.pagoMonedaId === null && sinPrincipal.campos.vueltoPara === null, 'H: sin moneda principal configurada, el efectivo se acepta como antes de F8', sinPrincipal);
   ok(totalEnMoneda(45000, 6000, 2) === 7.5 && totalEnMoneda(45001, 6000, 2) === 7.51 && totalEnMoneda(45000, 1, 0) === 45000,
     'H: el total en otra moneda se redondea hacia arriba a sus decimales');
 

@@ -262,8 +262,10 @@ export function registerPedidosOnlinePedidosHandlers(
   // ============== CREAR PEDIDO (público, requiere cliente) ==============
   const MAX_ITEMS_PEDIDO = 40;
   const MAX_CANTIDAD_ITEM = 50;
+  // Texto libre del cliente: sin caracteres de control. Postgres rechaza el NUL (el pedido
+  // fallaba con un error 500) y la térmica interpreta ESC/GS como comandos.
   const recortar = (v: any, max: number): string | undefined => {
-    const t = v == null ? '' : String(v).trim();
+    const t = v == null ? '' : String(v).replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
     return t ? t.slice(0, max) : undefined;
   };
 

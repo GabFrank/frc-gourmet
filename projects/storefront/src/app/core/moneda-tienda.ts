@@ -25,9 +25,23 @@ export function convertir(valorPrincipal: number, m: Pick<MonedaTienda, 'cotizac
   return Math.ceil((v / m.cotizacion) * f - 1e-9) / f;
 }
 
+const FORMATOS = new Map<number, Intl.NumberFormat>();
+
 export function formatear(valor: number, m: Pick<MonedaTienda, 'simbolo' | 'decimales'>): string {
   const d = Math.max(0, m.decimales);
-  return `${m.simbolo} ${new Intl.NumberFormat('es-PY', { minimumFractionDigits: d, maximumFractionDigits: d }).format(Number(valor) || 0)}`;
+  // Un formateador por cantidad de decimales: crearlo en cada precio era caro en una carta larga.
+  if (!FORMATOS.has(d)) FORMATOS.set(d, new Intl.NumberFormat('es-PY', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  return `${m.simbolo} ${FORMATOS.get(d)!.format(Number(valor) || 0)}`;
+}
+
+/** «10,50» o «10.50» → 10.5 (el teclado en español pone coma). Vacío o basura → null. */
+export function parsearMonto(texto: any): number | null {
+  if (texto == null || texto === '') return null;
+  if (typeof texto === 'number') return Number.isFinite(texto) ? texto : null;
+  const s = String(texto).trim().replace(/\s/g, '');
+  // Con coma decimal, los puntos son de miles: «100.000,50» → 100000.50.
+  const n = s.includes(',') ? Number(s.replace(/\./g, '').replace(',', '.')) : Number(s.replace(/\.(?=\d{3}(\D|$))/g, ''));
+  return Number.isFinite(n) ? n : null;
 }
 
 /**

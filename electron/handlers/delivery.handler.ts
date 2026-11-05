@@ -44,7 +44,7 @@ import { printDeliveryTicketInternal } from './documentos-tickets.handler';
 import { getEstadoCobroVentaInternal } from './ventas.handler';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { PEDIDO_POR_ESTADO_DELIVERY, sincronizarPedidosOnline } from '../utils/pedido-online-sync.utils';
-import { monedasTienda, resumenPago } from '../utils/pago-pedido.utils';
+import { monedasParaResumen, resumenPago } from '../utils/pago-pedido.utils';
 import { TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 /**
  * Columnas de la `Persona` del **`Funcionario`** repartidor que este canal publica.
@@ -256,7 +256,7 @@ export function registerDeliveryHandlers(
     const pedidosWeb = ids.length
       ? await dataSource.getRepository(PedidoOnline).find({ where: { deliveryId: In(ids) } as any })
       : [];
-    const monedasPago = pedidosWeb.length ? await monedasTienda(dataSource) : [];
+    const monedasPago = pedidosWeb.length ? await monedasParaResumen(dataSource) : [];
     const pagoPorDelivery = new Map(pedidosWeb.map((p: any) => [p.deliveryId, {
       metodoPago: p.metodoPago,
       pagoMonedaId: p.pagoMonedaId ?? null,

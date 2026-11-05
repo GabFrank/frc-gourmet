@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, HostListener, inject, OnInit } from '@angular/core';
 import { filter } from 'rxjs/operators';
 import { CommonModule } from '@angular/common';
 import { NavigationEnd, Router, RouterOutlet, RouterLink } from '@angular/router';
@@ -20,16 +20,17 @@ import { MonedasService } from './core/monedas.service';
       <a routerLink="/" class="brand">{{ config.config.nombreComercio || 'Pedí Online' }}</a>
       <nav class="nav">
         <div class="moneda" *ngIf="monedas.hayOtras">
-          <button type="button" class="nav-link nav-moneda" (click)="menuMoneda = !menuMoneda"
-                  [attr.aria-expanded]="menuMoneda" aria-haspopup="listbox" aria-label="Moneda de los precios">
+          <button type="button" class="nav-link nav-moneda" (click)="menuMoneda = !menuMoneda; $event.stopPropagation()"
+                  [attr.aria-expanded]="menuMoneda" aria-haspopup="menu" aria-controls="menu-moneda"
+                  [attr.aria-label]="'Ver precios en ' + (monedas.seleccionada?.denominacion || '')">
             {{ monedas.seleccionada?.simbolo }} <sf-icon name="chevron-down" [size]="14"></sf-icon>
           </button>
-          <ul class="moneda-menu" *ngIf="menuMoneda" role="listbox" aria-label="Ver precios en">
-            <li *ngFor="let m of monedas.monedas" role="option" [attr.aria-selected]="m.id === monedas.seleccionada?.id"
-                [class.activa]="m.id === monedas.seleccionada?.id" (click)="elegirMoneda(m)">
+          <div class="moneda-menu" id="menu-moneda" *ngIf="menuMoneda" role="menu" aria-label="Ver precios en">
+            <button type="button" *ngFor="let m of monedas.monedas" role="menuitemradio" [attr.aria-checked]="m.id === monedas.seleccionada?.id"
+                    [class.activa]="m.id === monedas.seleccionada?.id" (click)="elegirMoneda(m)">
               <span class="sim">{{ m.simbolo }}</span> {{ m.denominacion }}
-            </li>
-          </ul>
+            </button>
+          </div>
         </div>
         <a routerLink="/mis-pedidos" class="nav-link" *ngIf="auth.isAuthenticated" aria-label="Mis pedidos">
           <sf-icon name="receipt" [size]="21"></sf-icon>
@@ -69,12 +70,13 @@ import { MonedasService } from './core/monedas.service';
     .moneda { position: relative; }
     .nav-moneda { gap: 2px; padding: 0 10px; width: auto; border: none; background: none; font: inherit; font-weight: 700; cursor: pointer; border-radius: var(--sf-pill); }
     .moneda-menu {
-      position: absolute; right: 0; top: 44px; z-index: 40; min-width: 170px; margin: 0; padding: 6px 0; list-style: none;
+      position: absolute; right: 0; top: 44px; z-index: 40; min-width: 170px; padding: 6px 0;
+      display: flex; flex-direction: column;
       background: var(--sf-surface); border-radius: var(--sf-radius); box-shadow: var(--sf-shadow-raised);
     }
-    .moneda-menu li { padding: 10px 14px; cursor: pointer; font-size: 14px; color: var(--sf-text); }
-    .moneda-menu li:hover { background: var(--sf-surface-alt); }
-    .moneda-menu li.activa { color: var(--sf-primary); font-weight: 700; }
+    .moneda-menu button { text-align: left; min-height: 44px; padding: 0 14px; border: none; background: none; font: inherit; cursor: pointer; font-size: 14px; color: var(--sf-text); }
+    .moneda-menu button:hover, .moneda-menu button:focus-visible { background: var(--sf-surface-alt); outline: none; }
+    .moneda-menu button.activa { color: var(--sf-primary); font-weight: 700; }
     .moneda-menu .sim { display: inline-block; min-width: 34px; font-weight: 700; }
     .moneda-aviso { padding: 6px 16px; font-size: 12px; text-align: center; color: var(--sf-text); background: var(--sf-warning-bg); }
     .nav-login { color: var(--sf-primary); font-weight: 600; width: auto; padding: 0 12px; border-radius: var(--sf-pill); }
@@ -101,6 +103,10 @@ export class AppComponent implements OnInit {
     this.monedas.elegir(m);
     this.menuMoneda = false;
   }
+
+  /** El menú de moneda se cierra con Escape, con un clic afuera y al navegar. */
+  @HostListener('document:keydown.escape') cerrarMenuMonedaEsc(): void { this.menuMoneda = false; }
+  @HostListener('document:click') cerrarMenuMonedaFuera(): void { this.menuMoneda = false; }
   /** Adónde vuelve la flecha de la barra; null en la carta y en las fichas (tienen la suya sobre la foto). */
   atras: string | null = null;
 
@@ -109,7 +115,7 @@ export class AppComponent implements OnInit {
     this.monedas.cargar();
     this.mesa.capturar();
     this.router.events.pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
-      .subscribe((e) => (this.atras = destinoAtras(e.urlAfterRedirects)));
+      .subscribe((e) => { this.atras = destinoAtras(e.urlAfterRedirects); this.menuMoneda = false; });
   }
 }
 

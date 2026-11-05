@@ -138,7 +138,7 @@
 .monedas { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .monedas .lbl { font-size: 13px; margin-right: 4px; }
 .chip {
-  min-height: 34px; padding: 0 12px; border: 1px solid var(--sf-border); border-radius: var(--sf-pill);
+  min-height: 40px; padding: 0 14px; border: 1px solid var(--sf-border); border-radius: var(--sf-pill);
   background: var(--sf-surface); color: var(--sf-text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
 }
 .chip.active { border-color: var(--sf-primary); color: var(--sf-on-primary); background: var(--sf-primary); }

@@ -308,7 +308,9 @@ export class TiendaOnlineConfigComponent implements OnInit {
     const { ingreso, abiertaAhora, ...datos } = this.cfg;
     const payload = { ...datos, ...extra };
     // Ninguno marcado = sólo efectivo (el servidor nunca deja la tienda sin forma de pago).
-    payload.metodosPago = this.metodosOpciones.filter((m) => m.activo).map((m) => m.valor);
+    // Si la config no llegó a cargarse, no se mandan: si no, se resetearía a sólo efectivo.
+    if (this.metodosOpciones.length) payload.metodosPago = this.metodosOpciones.filter((m) => m.activo).map((m) => m.valor);
+    else delete payload.metodosPago;
     if (this.tokenNuevo.trim() && !extra.whatsappTokenBorrar) payload.whatsappToken = this.tokenNuevo.trim();
     if (this.upayKeyNueva.trim() && !extra.upayApiKeyBorrar) payload.upayApiKey = this.upayKeyNueva.trim();
     this.repo.updateTiendaOnlineConfig(payload).subscribe({

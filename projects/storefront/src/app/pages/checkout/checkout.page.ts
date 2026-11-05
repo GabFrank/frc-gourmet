@@ -16,7 +16,7 @@ import { PrecioPipe } from '../../core/precio.pipe';
 import { mensajeError } from '../../core/errores';
 import { esUrlCheckoutUpay } from '../../core/pago-online';
 import { MonedasService } from '../../core/monedas.service';
-import { MonedaTienda, convertir, formatear, sugerenciasVuelto } from '../../core/moneda-tienda';
+import { MonedaTienda, convertir, formatear, parsearMonto, sugerenciasVuelto } from '../../core/moneda-tienda';
 
 /** F8: métodos para pagar al recibir / retirar (el local elige cuáles ofrece). */
 const METODOS: Record<string, { label: string; icono: string; ayuda: string }> = {
@@ -66,6 +66,8 @@ export class CheckoutPage implements OnInit, OnDestroy {
   monedaPago: MonedaTienda | null = null;
   necesitaVuelto = false;
   vueltoPara: number | null = null;
+  /** Lo que escribe el cliente («10,50»); `vueltoPara` es su valor numérico. */
+  vueltoTexto = '';
   sugerencias: { valor: number; texto: string }[] = [];
   totalEnMonedaPago = 0;
   totalEnMonedaPagoTexto = '';
@@ -215,8 +217,13 @@ export class CheckoutPage implements OnInit, OnDestroy {
 
   elegirModalidad(mod: 'AL_RECIBIR' | 'ONLINE'): void { this.modalidad = mod; this.recalcularPago(); }
   elegirMetodo(valor: string): void { this.metodoPago = valor; this.recalcularPago(); }
-  elegirMonedaPago(m: MonedaTienda): void { this.monedaPago = m; this.vueltoPara = null; this.recalcularPago(); }
-  elegirSugerencia(v: number): void { this.vueltoPara = v; this.calcularVueltoEstimado(); }
+  elegirMonedaPago(m: MonedaTienda): void { this.monedaPago = m; this.vueltoPara = null; this.vueltoTexto = ''; this.recalcularPago(); }
+  elegirSugerencia(v: number): void {
+    this.vueltoPara = v;
+    this.vueltoTexto = this.monedaPago ? formatear(v, this.monedaPago).replace(`${this.monedaPago.simbolo} `, '') : String(v);
+    this.calcularVueltoEstimado();
+  }
+  onVueltoTexto(): void { this.vueltoPara = parsearMonto(this.vueltoTexto); this.calcularVueltoEstimado(); }
 
   /** «Te damos de vuelto ₲ 75.000»: el vuelto va siempre en la principal. */
   calcularVueltoEstimado(): void {
@@ -328,7 +335,9 @@ export class CheckoutPage implements OnInit, OnDestroy {
     if (this.metodoPago === 'EFECTIVO' && this.monedaPago) {
       payload.pagoMonedaId = this.monedaPago.id;
       if (this.necesitaVuelto) {
-        const v = Number(this.vueltoPara);
+        // Redondeado a los decimales de la moneda, como lo guarda el servidor.
+        const f = Math.pow(10, Math.max(0, this.monedaPago.decimales));
+        const v = Math.round(Number(this.vueltoPara) * f) / f;
         if (!(v > this.totalEnMonedaPago)) {
           this.enviando = false;
           this.error = `«Vuelto para» tiene que ser mayor que el total (${this.totalEnMonedaPagoTexto}).`;

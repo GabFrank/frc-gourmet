@@ -11,6 +11,7 @@ import { IconComponent } from '../../core/icon.component';
 import { MenuSnapshot, MenuProducto, MenuCategoria } from '../../core/models';
 import { GuaraniPipe } from '../../core/guarani.pipe';
 import { PrecioPipe } from '../../core/precio.pipe';
+import { MonedasService } from '../../core/monedas.service';
 import { mensajeError } from '../../core/errores';
 import { MenuCard, CatView, agruparPorCategoria } from '../../core/menu-agrupar';
 
@@ -22,6 +23,8 @@ import { MenuCard, CatView, agruparPorCategoria } from '../../core/menu-agrupar'
   styleUrls: ['./menu.page.scss'],
 })
 export class MenuPage implements OnInit, OnDestroy {
+  /** F8: moneda en que se ven los precios (argumento del pipe `precio`). */
+  monedas = inject(MonedasService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private menuSvc = inject(MenuService);

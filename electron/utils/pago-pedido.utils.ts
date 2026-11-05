@@ -47,8 +47,11 @@ export async function monedasTienda(ds: DataSource): Promise<MonedaTienda[]> {
   const billetes = await ds.getRepository(MonedaBillete).find({ where: { activo: true } as any, relations: ['moneda'] });
   const out: MonedaTienda[] = [];
   for (const m of monedas as any[]) {
-    const cot = m.principal ? 1 : await getCotizacionCompraLocal(ds, m.id, principal.id);
-    if (!cot) continue;
+    const cotCruda = m.principal ? 1 : await getCotizacionCompraLocal(ds, m.id, principal.id);
+    if (!cotCruda) continue;
+    // A 4 decimales, la precisión con que se guarda en el pedido (`pago_cotizacion`): lo que se
+    // valida, lo que se guarda y lo que muestra el ticket usan el mismo número.
+    const cot = Math.round(Number(cotCruda) * 10000) / 10000;
     out.push({
       id: m.id,
       denominacion: m.denominacion,
@@ -65,6 +68,19 @@ export async function monedasTienda(ds: DataSource): Promise<MonedaTienda[]> {
   }
   // La principal primero.
   return out.sort((a, b) => Number(b.principal) - Number(a.principal) || a.id - b.id);
+}
+
+/**
+ * Todas las monedas (activas o no), sólo con lo que hace falta para MOSTRAR un pago ya
+ * registrado: un pedido en US$ tiene que seguir diciendo «paga con US$ 20» aunque después se
+ * desactive el dólar (la cotización usada está guardada en el pedido).
+ */
+export async function monedasParaResumen(ds: DataSource): Promise<Pick<MonedaTienda, 'id' | 'simbolo' | 'decimales' | 'principal'>[]> {
+  const todas = await ds.getRepository(Moneda).find({ order: { id: 'ASC' } as any });
+  return (todas as any[]).map((m) => ({
+    id: m.id, simbolo: m.simbolo, principal: !!m.principal,
+    decimales: Number(m.decimales ?? (m.principal ? 0 : 2)) || 0,
+  }));
 }
 
 /** Total (en la principal) expresado en otra moneda, redondeado HACIA ARRIBA a sus decimales. */
@@ -94,7 +110,10 @@ export function validarPagoPedido(params: {
   monedas: MonedaTienda[];
 }): ResultadoPago {
   const { data, total, metodoPago, habilitados, monedas } = params;
-  const obs = data?.pagoObservacion != null ? String(data.pagoObservacion).trim().toUpperCase().slice(0, 200) : '';
+  // Sin caracteres de control: Postgres rechaza el NUL y la térmica toma ESC/GS como comandos.
+  const obs = data?.pagoObservacion != null
+    ? String(data.pagoObservacion).replace(/[\u0000-\u001f\u007f]/g, ' ').trim().toUpperCase().slice(0, 200)
+    : '';
   const pagoObservacion = obs || null;
 
   if (metodoPago === MetodoPagoOnline.UPAY) {
@@ -108,6 +127,11 @@ export function validarPagoPedido(params: {
 
   // Efectivo: moneda (default la principal) y, si necesita vuelto, con cuánto paga.
   const principal = monedas.find((m) => m.principal);
+  // Sin moneda principal configurada (instalación a medio armar): el efectivo se acepta como
+  // antes de F8, sin moneda ni «paga con» — nunca se bloquea un pedido en efectivo por esto.
+  if (!principal) {
+    return { ok: true, campos: { metodoPago, pagoModalidad: PagoModalidad.AL_RECIBIR, pagoMonedaId: null, vueltoPara: null, pagoCotizacion: null, pagoObservacion } };
+  }
   const monedaId = data?.pagoMonedaId != null && data.pagoMonedaId !== '' ? Number(data.pagoMonedaId) : principal?.id;
   const moneda = monedas.find((m) => m.id === monedaId);
   if (!moneda) return { ok: false, error: 'moneda_no_disponible' };
@@ -122,6 +146,8 @@ export function validarPagoPedido(params: {
     if (vRed + 1e-9 < totalEnMoneda(total, moneda.cotizacion, moneda.decimales) || vRed * moneda.cotizacion <= total) {
       return { ok: false, error: 'vuelto_insuficiente' };
     }
+    // Tope: nadie paga con 100 veces el total; un valor así es un error de tipeo o basura.
+    if (vRed * moneda.cotizacion > Math.max(total, 1) * 100) return { ok: false, error: 'vuelto_invalido' };
     vueltoPara = vRed;
   }
   return {
