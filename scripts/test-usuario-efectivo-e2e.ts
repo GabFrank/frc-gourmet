@@ -27,6 +27,9 @@ import { clearPermissionCache, withRequestUser } from '../electron/utils/auth.ut
 import { registerAllAppHandlers } from '../electron/utils/register-all-handlers';
 import { seedPermissions } from '../electron/handlers/permissions.handler';
 import { seedSystemData } from '../electron/utils/seed-system';
+import Fastify, { FastifyInstance } from 'fastify';
+import { registerAuthPlugin } from '../electron/server/auth-middleware';
+import { registerRpcRoute } from '../electron/server/rpc-router';
 
 const results: { name: string; ok: boolean; detail?: string }[] = [];
 
@@ -171,6 +174,52 @@ async function main() {
   const src = fs.readFileSync(path.resolve(__dirname, '../electron/utils/register-all-handlers.ts'), 'utf8');
   if (/getEffectiveUser\(\s*rawGetCurrentUser\s*\)/.test(src)) pass('register-all-handlers envuelve getCurrentUser con getEffectiveUser');
   else fail('guardia estática', 'register-all-handlers no envuelve getCurrentUser con getEffectiveUser(rawGetCurrentUser)');
+
+  // 7. #357: /api/rpc real (Fastify) es fail-closed y no deja tocar la sesión de la consola.
+  console.log('\n=== #357 /api/rpc fail-closed ===\n');
+  const fastify: FastifyInstance = Fastify({ logger: false });
+  await registerAuthPlugin(fastify);
+  registerRpcRoute(fastify, dataSource);
+  await fastify.ready();
+  const firmar = (payload: any) => (fastify as any).jwt.sign(payload);
+  async function rpc(token: string, method: string, params: any[] = []) {
+    const res = await fastify.inject({
+      method: 'POST', url: '/api/rpc',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      payload: { method, params },
+    });
+    let body: any;
+    try { body = JSON.parse(res.body); } catch { body = res.body; }
+    return { status: res.statusCode, body };
+  }
+  async function esperarStatus(token: string, method: string, params: any[], status: number, name: string) {
+    const r = await rpc(token, method, params);
+    if (r.status === status) pass(name);
+    else fail(name, `Esperado ${status}, recibido ${r.status} ${JSON.stringify(r.body).slice(0, 200)}`);
+    return r;
+  }
+
+  consola = admin;
+  const tokCajero = firmar({ id: cajero.id, nickname: cajero.nickname, device_id: null });
+  const r7a = await esperarStatus(tokCajero, 'getCurrentUser', [], 200, 'HTTP token cajero activo → 200 (control)');
+  if (r7a.body?.result?.id === cajero.id) pass('HTTP getCurrentUser = cajero del token, no la consola');
+  else fail('HTTP getCurrentUser = cajero del token', `recibido ${JSON.stringify(r7a.body).slice(0, 200)}`);
+
+  const r7b = await esperarStatus(firmar({ id: 987654, nickname: 'BORRADO', device_id: null }), 'getCurrentUser', [], 401,
+    'HTTP token de usuario inexistente → 401 (no cae a la consola)');
+  if (r7b.body?.result?.id === admin.id) fail('usuario inexistente no ve a la consola', 'el handler corrió con la consola');
+
+  await userRepo.update({ id: cajero.id }, { activo: false } as any);
+  await esperarStatus(tokCajero, 'getCurrentUser', [], 401, 'HTTP token de usuario inactivo → 401');
+  await userRepo.update({ id: cajero.id }, { activo: true } as any);
+
+  await esperarStatus(firmar({ nickname: 'SIN_ID' }), 'getCurrentUser', [], 401, 'HTTP token sin id → 401');
+
+  await esperarStatus(tokCajero, 'logout', [1], 403, 'HTTP logout por /api/rpc → 403');
+  await esperarStatus(tokCajero, 'restoreSession', [{ sessionId: 1, token: 'x' }], 403, 'HTTP restoreSession por /api/rpc → 403');
+  if (consola && (consola as Usuario).id === admin.id) pass('la sesión de la consola sigue intacta tras logout por HTTP');
+  else fail('sesión de la consola intacta', `consola=${JSON.stringify(consola)?.slice(0, 80)}`);
+  await fastify.close();
 
   await dataSource.destroy();
   const fallas = results.filter((r) => !r.ok);
