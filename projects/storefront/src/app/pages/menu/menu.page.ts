@@ -10,13 +10,14 @@ import { AppImgPipe } from '../../core/app-img.pipe';
 import { IconComponent } from '../../core/icon.component';
 import { MenuSnapshot, MenuProducto, MenuCategoria } from '../../core/models';
 import { GuaraniPipe } from '../../core/guarani.pipe';
+import { PrecioPipe } from '../../core/precio.pipe';
 import { mensajeError } from '../../core/errores';
 import { MenuCard, CatView, agruparPorCategoria } from '../../core/menu-agrupar';
 
 @Component({
   selector: 'sf-menu',
   standalone: true,
-  imports: [GuaraniPipe, CommonModule, FormsModule, AppImgPipe, IconComponent],
+  imports: [GuaraniPipe, PrecioPipe, CommonModule, FormsModule, AppImgPipe, IconComponent],
   templateUrl: './menu.page.html',
   styleUrls: ['./menu.page.scss'],
 })

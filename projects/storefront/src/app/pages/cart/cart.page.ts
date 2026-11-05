@@ -6,11 +6,12 @@ import { MenuService } from '../../core/menu.service';
 import { AppImgPipe } from '../../core/app-img.pipe';
 import { IconComponent } from '../../core/icon.component';
 import { GuaraniPipe } from '../../core/guarani.pipe';
+import { PrecioPipe } from '../../core/precio.pipe';
 
 @Component({
   selector: 'sf-cart',
   standalone: true,
-  imports: [GuaraniPipe, CommonModule, RouterLink, AppImgPipe, IconComponent],
+  imports: [GuaraniPipe, PrecioPipe, CommonModule, RouterLink, AppImgPipe, IconComponent],
   template: `
     <div class="sf-container cart-body">
       <h1 class="title">Tu pedido</h1>
@@ -41,7 +42,7 @@ import { GuaraniPipe } from '../../core/guarani.pipe';
               <span class="qty">{{ it.cantidad }}</span>
               <button (click)="cart.cambiarCantidad(it.uid, 1)">+</button>
             </div>
-            <span class="line-total">{{ it.precioUnitario * it.cantidad | guarani }}</span>
+            <span class="line-total">{{ it.precioUnitario * it.cantidad | precio }}</span>
           </div>
         </div>
       </div>
@@ -51,12 +52,12 @@ import { GuaraniPipe } from '../../core/guarani.pipe';
       </a>
 
       <div class="resumen sf-card" *ngIf="cart.items.length > 0">
-        <div class="row"><span>Subtotal</span><strong>{{ cart.subtotal | guarani }}</strong></div>
+        <div class="row"><span>Subtotal</span><strong>{{ cart.subtotal | precio }}</strong></div>
       </div>
     </div>
 
     <div class="sf-sticky-bar" *ngIf="cart.items.length > 0">
-      <button class="sf-btn sf-btn--block" [disabled]="revalidando" (click)="continuar()">Continuar · {{ cart.subtotal | guarani }}</button>
+      <button class="sf-btn sf-btn--block" [disabled]="revalidando" (click)="continuar()">Continuar · {{ cart.subtotal | precio }}</button>
     </div>
   `,
   styles: [`

@@ -8,6 +8,7 @@ import { ConfigService } from '../../core/config.service';
 import { AppImgPipe } from '../../core/app-img.pipe';
 import { MenuProducto, MenuSaborPizza, MenuTamano, MenuAdicional, MenuObservacion, PersonalizacionReceta, PersonalizacionSabor } from '../../core/models';
 import { GuaraniPipe } from '../../core/guarani.pipe';
+import { PrecioPipe } from '../../core/precio.pipe';
 import { IconComponent } from '../../core/icon.component';
 
 /**
@@ -20,7 +21,7 @@ import { IconComponent } from '../../core/icon.component';
 @Component({
   selector: 'sf-pizza-detalle',
   standalone: true,
-  imports: [IconComponent, GuaraniPipe, CommonModule, FormsModule, AppImgPipe],
+  imports: [IconComponent, GuaraniPipe, PrecioPipe, CommonModule, FormsModule, AppImgPipe],
   templateUrl: './pizza-detalle.page.html',
   styleUrls: ['./pizza-detalle.page.scss'],
 })

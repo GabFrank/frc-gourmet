@@ -12,8 +12,20 @@ import { MesaService } from '../../core/mesa.service';
 import { IconComponent } from '../../core/icon.component';
 import { TipoPedido } from '../../core/models';
 import { GuaraniPipe, guarani } from '../../core/guarani.pipe';
+import { PrecioPipe } from '../../core/precio.pipe';
 import { mensajeError } from '../../core/errores';
 import { esUrlCheckoutUpay } from '../../core/pago-online';
+import { MonedasService } from '../../core/monedas.service';
+import { MonedaTienda, convertir, formatear, sugerenciasVuelto } from '../../core/moneda-tienda';
+
+/** F8: métodos para pagar al recibir / retirar (el local elige cuáles ofrece). */
+const METODOS: Record<string, { label: string; icono: string; ayuda: string }> = {
+  EFECTIVO: { label: 'Efectivo', icono: 'cash', ayuda: '' },
+  TARJETA_POS: { label: 'Tarjeta', icono: 'card', ayuda: 'Pagás con tarjeta (débito o crédito) en el POS al recibir o retirar.' },
+  QR: { label: 'QR', icono: 'qr', ayuda: 'Te mostramos el QR al recibir o retirar el pedido.' },
+  PIX: { label: 'PIX', icono: 'qr', ayuda: 'Pagás por PIX al recibir o retirar el pedido.' },
+  TRANSFERENCIA: { label: 'Transferencia', icono: 'transfer', ayuda: 'Transferís al recibir o retirar; te pasamos los datos en ese momento.' },
+};
 
 declare const L: any;
 
@@ -22,7 +34,7 @@ const IDEM_STORAGE = 'sf-pedido-idem';
 @Component({
   selector: 'sf-checkout',
   standalone: true,
-  imports: [GuaraniPipe, CommonModule, FormsModule, IconComponent],
+  imports: [GuaraniPipe, PrecioPipe, CommonModule, FormsModule, IconComponent],
   templateUrl: './checkout.page.html',
   styleUrls: ['./checkout.page.scss'],
 })
@@ -44,8 +56,21 @@ export class CheckoutPage implements OnInit, OnDestroy {
   }
 
   tipo: TipoPedido = 'PICKUP';
-  /** F4: efectivo o tarjeta (uPay), solo si el local la ofrece. */
-  metodoPago: 'EFECTIVO' | 'UPAY' = 'EFECTIVO';
+  /** F4/F8: el método (UPAY = tarjeta online; el resto se paga al recibir o retirar). */
+  metodoPago: string = 'EFECTIVO';
+  monedas = inject(MonedasService);
+  // ── F8: paso de pago. Todo precalculado: el template no calcula. ──
+  modalidad: 'AL_RECIBIR' | 'ONLINE' = 'AL_RECIBIR';
+  metodosDisponibles: { valor: string; label: string; icono: string; ayuda: string }[] = [];
+  ayudaMetodo = '';
+  monedaPago: MonedaTienda | null = null;
+  necesitaVuelto = false;
+  vueltoPara: number | null = null;
+  sugerencias: { valor: number; texto: string }[] = [];
+  totalEnMonedaPago = 0;
+  totalEnMonedaPagoTexto = '';
+  vueltoEstimadoTexto = '';
+  pagoObservacion = '';
   get pagoOnline(): boolean {
     return !this.mesa.enMesa && !!this.config.config?.pagoOnline;
   }
@@ -74,7 +99,12 @@ export class CheckoutPage implements OnInit, OnDestroy {
   montoMinimoZona = 0;
   private cotizarT: any = null;
 
+  /** Config y monedas llegan en paralelo: cuando llegan (o cambia la moneda), el pago se recalcula. */
+  private subsPago: { unsubscribe(): void }[] = [];
+
   ngOnInit(): void {
+    this.subsPago.push(this.config.cambios$.subscribe(() => this.recalcularPago()));
+    this.subsPago.push(this.monedas.cambios.subscribe(() => { this.monedaPago = null; this.recalcularPago(); }));
     this.menuSvc.cargar(true).subscribe({
       next: (m) => {
         this.avisos = avisosRevalidacion(this.cart.revalidar(m));
@@ -96,6 +126,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     if (this.map) { this.map.remove(); this.map = null; }
+    this.subsPago.forEach((x) => x.unsubscribe());
   }
 
   setTipo(t: TipoPedido): void {
@@ -155,6 +186,45 @@ export class CheckoutPage implements OnInit, OnDestroy {
   recomputar(): void {
     if (this.tipo !== 'DELIVERY') this.costoEnvio = 0;
     this.total = this.cart.subtotal + this.costoEnvio;
+    this.recalcularPago();
+  }
+
+  // ─── F8: pago ──────────────────────────────────────────────────────────
+
+  /** Métodos que ofrece la tienda (config) y estado derivado del paso de pago. */
+  recalcularPago(): void {
+    const ofrecidos: string[] = this.config.config?.metodosPago || ['EFECTIVO'];
+    this.metodosDisponibles = ofrecidos.filter((m) => METODOS[m]).map((m) => ({ valor: m, ...METODOS[m] }));
+    if (this.modalidad === 'ONLINE' && !this.pagoOnline) this.modalidad = 'AL_RECIBIR';
+    if (this.modalidad === 'AL_RECIBIR' && !this.metodosDisponibles.some((m) => m.valor === this.metodoPago)) {
+      this.metodoPago = this.metodosDisponibles[0]?.valor || 'EFECTIVO';
+    }
+    if (this.modalidad === 'ONLINE') this.metodoPago = 'UPAY';
+    this.ayudaMetodo = METODOS[this.metodoPago]?.ayuda || '';
+    // Moneda del efectivo: por defecto, la que eligió para ver la carta.
+    if (!this.monedaPago || !this.monedas.monedas.some((m) => m.id === this.monedaPago!.id)) {
+      this.monedaPago = this.monedas.seleccionada || this.monedas.principal;
+    }
+    const m = this.monedaPago;
+    if (!m) { this.sugerencias = []; this.totalEnMonedaPagoTexto = ''; this.vueltoEstimadoTexto = ''; return; }
+    this.totalEnMonedaPago = convertir(this.total, m);
+    this.totalEnMonedaPagoTexto = formatear(this.totalEnMonedaPago, m);
+    this.sugerencias = sugerenciasVuelto(this.totalEnMonedaPago, m.billetes).map((v) => ({ valor: v, texto: formatear(v, m) }));
+    this.calcularVueltoEstimado();
+  }
+
+  elegirModalidad(mod: 'AL_RECIBIR' | 'ONLINE'): void { this.modalidad = mod; this.recalcularPago(); }
+  elegirMetodo(valor: string): void { this.metodoPago = valor; this.recalcularPago(); }
+  elegirMonedaPago(m: MonedaTienda): void { this.monedaPago = m; this.vueltoPara = null; this.recalcularPago(); }
+  elegirSugerencia(v: number): void { this.vueltoPara = v; this.calcularVueltoEstimado(); }
+
+  /** «Te damos de vuelto ₲ 75.000»: el vuelto va siempre en la principal. */
+  calcularVueltoEstimado(): void {
+    const m = this.monedaPago, p = this.monedas.principal;
+    const v = Number(this.vueltoPara);
+    if (!this.necesitaVuelto || !m || !p || !(v > this.totalEnMonedaPago)) { this.vueltoEstimadoTexto = ''; return; }
+    const vuelto = Math.max(0, Math.round(v * (m.principal ? 1 : m.cotizacion) - this.total));
+    this.vueltoEstimadoTexto = `Te damos de vuelto ${formatear(vuelto, p)} (aprox.)`;
   }
 
   /**
@@ -252,8 +322,21 @@ export class CheckoutPage implements OnInit, OnDestroy {
       direccionEntrega: this.tipo === 'DELIVERY' ? direccionFinal : null,
       referenciaDireccion: this.referencia.trim() || null,
       notas: this.notas.trim() || null,
-      metodoPago: this.pagoOnline ? this.metodoPago : 'EFECTIVO',
+      metodoPago: this.metodoPago,
+      pagoObservacion: this.pagoObservacion.trim() || null,
     };
+    if (this.metodoPago === 'EFECTIVO' && this.monedaPago) {
+      payload.pagoMonedaId = this.monedaPago.id;
+      if (this.necesitaVuelto) {
+        const v = Number(this.vueltoPara);
+        if (!(v > this.totalEnMonedaPago)) {
+          this.enviando = false;
+          this.error = `«Vuelto para» tiene que ser mayor que el total (${this.totalEnMonedaPagoTexto}).`;
+          return;
+        }
+        payload.vueltoPara = v;
+      }
+    }
     if (this.faltaNombreCuenta) {
       const nombre = this.nombreCuenta.trim();
       if (!nombre) { this.enviando = false; this.error = 'Ingresá tu nombre para el pedido.'; return; }
@@ -337,7 +420,10 @@ export class CheckoutPage implements OnInit, OnDestroy {
       case 'mesa_no_habilitada': return 'La mesa no está habilitada. Pedile al mozo que active el autoservicio.';
       case 'fuera_de_red_local': return 'Para pedir en la mesa tenés que estar conectado al WiFi del local.';
       case 'falta_nombre': return 'Ingresá tu nombre para el pedido.';
-      case 'metodo_pago_no_disponible': return 'El pago con tarjeta no está disponible ahora. Elegí efectivo.';
+      case 'metodo_pago_no_disponible': return 'Ese medio de pago no está disponible ahora. Elegí otro.';
+      case 'vuelto_insuficiente': return 'El monto para el vuelto tiene que ser mayor que el total.';
+      case 'vuelto_invalido': return 'Revisá el monto para el vuelto.';
+      case 'moneda_no_disponible': return 'Esa moneda ya no se acepta. Elegí otra.';
       case 'pago_no_iniciado': return 'No pudimos abrir el pago con tarjeta. Probá de nuevo o elegí efectivo.';
       default: return mensajeError(res?.error, 'No se pudo crear el pedido. Probá de nuevo.');
     }

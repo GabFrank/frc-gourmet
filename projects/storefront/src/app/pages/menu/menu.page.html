@@ -51,7 +51,7 @@
         <div class="prod-desc" *ngIf="c.descripcion">{{ c.descripcion }}</div>
         <div class="prod-precio">
           <span class="desde" *ngIf="c.desde">desde </span>
-          {{ c.precioDesde | guarani }}
+          {{ c.precioDesde | precio }}
         </div>
       </div>
       <div class="prod-add" aria-hidden="true">+</div>
@@ -63,5 +63,5 @@
 <div class="cart-bar" *ngIf="cart.count > 0" (click)="verCarrito()">
   <span class="cart-count">{{ cart.count }}</span>
   <span class="cart-label">Ver carrito</span>
-  <span class="cart-total">{{ cart.subtotal | guarani }}</span>
+  <span class="cart-total">{{ cart.subtotal | precio }}</span>
 </div>

@@ -123,3 +123,33 @@
 .pago { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; margin: 0 0 8px; }
 .sf-error { color: var(--sf-error); text-align: center; font-weight: 600; margin: 8px 0 0; }
 .co-aviso { background: var(--sf-primary-surface); font-size: 14px; line-height: 1.4; margin-bottom: 12px; }
+
+// ── F8: paso de pago ──────────────────────────────────────────────
+.pago-card h3 { margin-bottom: 10px; }
+.metodos { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+.metodo {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px;
+  border: 1px solid var(--sf-border); border-radius: var(--sf-pill); background: var(--sf-surface);
+  color: var(--sf-text); font: inherit; font-size: 14px; cursor: pointer;
+}
+.metodo.active { border-color: var(--sf-primary); color: var(--sf-primary); background: var(--sf-primary-surface); font-weight: 700; }
+.ayuda { font-size: 13px; margin: 6px 0 0; }
+.efectivo { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.monedas { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.monedas .lbl { font-size: 13px; margin-right: 4px; }
+.chip {
+  min-height: 34px; padding: 0 12px; border: 1px solid var(--sf-border); border-radius: var(--sf-pill);
+  background: var(--sf-surface); color: var(--sf-text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.chip.active { border-color: var(--sf-primary); color: var(--sf-on-primary); background: var(--sf-primary); }
+.total-moneda { display: flex; justify-content: space-between; font-size: 14px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 15px; cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: var(--sf-primary); }
+.vuelto { display: flex; flex-direction: column; gap: 8px; }
+.vuelto-input { display: flex; align-items: center; gap: 8px; }
+.vuelto-input .pre { font-weight: 700; min-width: 32px; }
+.vuelto-input .sf-input { flex: 1; }
+.sugerencias { display: flex; flex-wrap: wrap; gap: 6px; }
+.pago-card textarea { margin-top: 4px; resize: vertical; font: inherit; }
+.pago-card .sf-label { margin-top: 12px; display: block; }
+.nota-moneda { font-size: 12px; color: var(--sf-text-muted); }
