@@ -166,6 +166,37 @@ Ventas → Configuración → Zonas de Delivery. Necesita ventas de delivery **c
    - Desactivar el dólar después de un pedido en $: la bandeja y el ticket siguen diciendo «paga con $».
    - Un pedido viejo (de antes de F8) muestra sólo «EFECTIVO».
 
+## 10 · Detalle del pedido, cancelación y WhatsApp (F9)
+
+1. **Detalle:** en «Mis pedidos», tocar la cabecera de una tarjeta («Ver ›»). Se ve estado con
+   pasos, productos con su personalización, entrega, pago elegido y total. El botón junto al número
+   lo copia. Con el pedido en curso, avanzarlo desde la bandeja: la página cambia sola (≤ 12 s).
+2. **Modificar** (pedido recién hecho, el local todavía no lo aceptó): «Modificar pedido» → «Sí,
+   modificar». El pedido queda cancelado («MODIFICADO POR EL CLIENTE») y el carrito tiene sus
+   productos (lo que había antes en el carrito se reemplaza). Cambiar algo y confirmar: sale un
+   pedido nuevo. Aceptarlo en la bandeja: el botón «Modificar» ya no aparece.
+3. **Pedir que lo cancelen** (pedido aceptado o en preparación): «Pedir que lo cancelen» → motivo
+   → «Enviar solicitud». La tienda dice que el local responde; el botón desaparece.
+   - En la bandeja suena/sube el contador; la tarjeta muestra «El cliente pidió cancelar» con el
+     motivo. El filtro «Piden cancelar» la lista sola.
+   - **Aprobar cancelación** → «Sí, cancelar»: el pedido queda CANCELADO; si tenía venta, la venta
+     se cancela (como el rechazo). Si estaba pagado con tarjeta, el aviso de devolver en uPay.
+   - En otro pedido, **No se puede cancelar** con motivo: el cliente ve «El local no pudo
+     cancelarlo» con ese motivo y ya no puede volver a pedirlo.
+   - Pedido de mesa ya en la cuenta: la tienda no ofrece cancelar (se le pide al mozo).
+4. **Repetir pedido** (cualquier pedido, también entregado): el carrito se llena con los mismos
+   productos al precio de hoy. Pausar uno en la carta antes: el carrito avisa que no se pudo poner.
+5. **Compartir:** en el teléfono abre el menú de compartir; en la compu, WhatsApp con el texto
+   (número, comercio, estado, productos, total; sin dirección ni teléfono).
+6. **Contacto:** cargar «Teléfono del local» en Config Tienda Online → en el detalle aparecen
+   «Llamar al local» y «Escribir al local» (WhatsApp con «te escribo por mi pedido …»).
+7. **WhatsApp por el número del local:** en Config Tienda Online, «Enviar el código por» →
+   «Número del local (Evolution API)». Tiene que decir «conectada» (si no, cargar la conexión en
+   Configuración › Notificaciones). «Probar envío» a un teléfono propio: llega «Tu código para
+   ingresar a … es 123456». Luego ingresar a la tienda con ese teléfono: el código llega por
+   WhatsApp desde el número del local. Con Meta elegido y sin token, sale igual por Evolution
+   (aviso en pantalla).
+
 ## Qué NO se probó automáticamente
 
 - **SQLite es lo que corren los tests** (`.tmp/*.db` con todas las migraciones).

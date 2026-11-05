@@ -296,16 +296,72 @@ cajero cobra en el PdV como siempre, con el cobro del delivery **precargado**.
 - **Texto libre del cliente sin caracteres de control** (`recortar`, observación y
   `sanitizarParaTicket`): Postgres rechaza el NUL (el alta fallaba con 500) y la térmica toma
   ESC/GS como comandos.
-- Pendientes: «Mis pedidos» todavía no muestra el pago elegido (el servidor ya lo manda); crédito
-  y vinculación cuenta ↔ Cliente en F8b.
+- Pendientes: crédito y vinculación cuenta ↔ Cliente en F8b. («Mis pedidos» ya muestra el pago
+  elegido desde F9.)
 
 Tests: `test:pedidos-online-pago` (+ `-pg`), `test:storefront-vuelto`, F8 en
 `test:tienda-online-migracion`.
 
+### Detalle del pedido, cancelación y WhatsApp elegible (F9, 2026-11)
+
+**Detalle** (`/pedido/:numero`, desde cada tarjeta de «Mis pedidos»): estado con pasos, ítems con
+su personalización, entrega, pago elegido (F8), totales, número copiable; se refresca cada 12 s
+mientras está en curso. **Qué botones hay lo decide el servidor** (`acciones` en `mapPedido`,
+`electron/utils/pedido-acciones.utils.ts`); la tienda sólo los muestra y cada operación vuelve a
+validar con un UPDATE condicionado.
+
+- **Cancelar = siempre una solicitud** (`pedido.cancelacion.solicitar`, motivo opcional en
+  MAYÚSCULAS sin caracteres de control): RECIBIDO/ACEPTADO/EN_PREPARACION/LISTO, sin otra
+  pendiente, sin una ya rechazada, y no en una mesa con el pedido en la cuenta (eso se pide al
+  mozo). Columnas `cancelacion_solicitada_en`, `cancelacion_motivo`, `cancelacion_respuesta`.
+- **El local responde en la bandeja** (`resolver-cancelacion-pedido-online`, GESTIONAR; filtro
+  «Piden cancelar»; suma al contador del badge). **Aprobar** pasa por `cancelarPedido`, el MISMO
+  camino que el rechazo (reversa de la venta, permiso de cobrado, devolución uPay) y termina en
+  **CANCELADO** (lo pidió el cliente; RECHAZADO = lo decidió el local). **No se puede cancelar**:
+  se guarda la respuesta, el cliente la ve y no puede volver a pedirlo (para eso, el teléfono).
+- **Modificar** (excepción decidida por el propietario): cancela **al instante** sólo si está
+  RECIBIDO, sin venta, sin cobro online PAGADO/PENDIENTE y sin solicitud pendiente; no en mesa.
+  Motivo «MODIFICADO POR EL CLIENTE». La tienda rearma el carrito con esos productos.
+- **Repetir**: `core/repetir-pedido.ts` rearma las líneas del snapshot de cada ítem (que ahora
+  guarda también `opcion.recetaId`; `mapPedido` manda `productoId`/`presentacionId`) contra la
+  carta **vigente**: lo que ya no se vende no vuelve y se avisa en el carrito; el precio es el de
+  hoy. Un pedido viejo sin receta con dos variaciones posibles no se adivina: se avisa.
+- **Compartir** (`navigator.share` o `wa.me/?text=`): número, comercio, estado, productos y
+  total; sin dirección ni teléfono. **Llamar / escribir al local** con
+  `tienda_online_config.telefono_contacto` (validado: dígitos, espacios, + y guiones).
+- **Carrera con la materialización** (auditoría A1): `materializarPedidoOnlineEnVenta` ahora fija
+  `venta_id` con un UPDATE condicionado (`venta_id IS NULL AND estado NOT IN (RECHAZADO,
+  CANCELADO)`); si el cliente canceló en el medio, la transacción se deshace y no queda una venta
+  suelta.
+- **Topes**: 20 acciones por cuenta y 60 por IP por hora (`accionClientePermitida`).
+- **Dónde lo ve el personal**: la bandeja y también la cola «Pedidos de la web» del diálogo de
+  delivery (con «PIDIÓ CANCELAR» y los botones CANCELAR PEDIDO / NO SE PUEDE en lugar de
+  ACEPTAR/RECHAZAR). El contador del badge es una sola consulta (un RECIBIDO que pide cancelar
+  cuenta uno). **El badge del PdV leía `res.total`, que nunca existió**: estuvo siempre en 0 hasta
+  F9 (ahora lee `pendientes`).
+- **Solicitud que se queda sin responder**: si el pedido pasa a EN_CAMINO/ENTREGADO (bandeja o
+  sincronización con el delivery), `cierreSolicitudAlSalir` la cierra con «EL PEDIDO YA HABÍA
+  SALIDO»; si no, el cliente quedaba «esperando respuesta» para siempre.
+- Tras un «no» del local tampoco se puede «Modificar» (sería cancelarlo igual).
+- El invitado de mesa (sin cuenta) ve su pedido pero sin acciones.
+
+**WhatsApp elegible** (`tienda_online_config.whatsapp_proveedor` = META | EVOLUTION): el código de
+ingreso sale por Meta Cloud (plantilla) o por **el número del local vía Evolution API**
+(`POST {url}/message/sendText/{instancia}`, encabezado `apikey`, número `595…`). Evolution **no se
+configura dos veces**: usa la de «Configuración › Notificaciones» (`configuracion_notificaciones`
++ `getEvolutionApiKey`), releída como mucho cada 30 s en las llamadas públicas
+(`refrescarCredencialesWhatsapp`, lectura compartida; un error deja las credenciales que había) y
+siempre en la pantalla de config y en «Probar envío». Si el
+elegido no está cargado sale por el otro; un **error** de envío no cae al otro (serían dos
+códigos). La clave nunca aparece en errores. Google ya verificaba de verdad (tokeninfo + `aud`);
+falta sólo cargar el Client ID. Apple: no por ahora (decisión 05/11).
+
+Tests: `test:pedidos-online-detalle` (+ `-pg`), `test:whatsapp-proveedores`,
+`test:storefront-detalle`, F9 en `test:tienda-online-migracion`.
+
 ### Lo que sigue pendiente
 
-- El cliente **no puede cancelar** su pedido (`EstadoPedidoOnline.CANCELADO`
-  sigue sin usarse).
+- ~~El cliente no puede cancelar su pedido.~~ Hecho en F9 (solicitud que aprueba el local).
 - **No hay aviso al cliente por WhatsApp**; el seguimiento es por poll.
 - `CuentaCliente` **nunca se vincula** al `Cliente` interno: sin crédito, sin CPC,
   sin dashboard. Y el storefront no pide RUC en ningún lado. **El crédito en la tienda

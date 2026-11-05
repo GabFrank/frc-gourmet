@@ -328,5 +328,6 @@ MetodoPago = (ver archivo)
 MetodoPagoOnline = EFECTIVO | BANCARD | UPAY | PAGOPAR
                  | TARJETA_POS | QR | PIX | TRANSFERENCIA   // F8: se pagan al recibir / retirar
 PagoModalidad = AL_RECIBIR | ONLINE                         // F8 (ONLINE = uPay)
+// F9: WhatsappProveedor (string en tienda_online_config.whatsapp_proveedor) = META | EVOLUTION; CANCELADO = lo pidió el cliente (aprobado o «modificar»), RECHAZADO = lo decidió el local
 METODOS_AL_RECIBIR = [EFECTIVO, TARJETA_POS, QR, PIX, TRANSFERENCIA]  // los que el local puede habilitar
 ```

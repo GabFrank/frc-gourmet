@@ -203,7 +203,7 @@ Lista completa en `getEntitiesList()` de `src/app/database/database.config.ts`. 
 ## Entidades nuevas 2026-07 (por dominio)
 
 - **facturacion/**: `Timbrado`, `TimbradoDetalle`, `Factura`, `FacturaItem`, `FacturaPlantilla`, `FacturacionConfig`. → [domains/facturacion.md](../domains/facturacion.md).
-- **pedidos-online/**: `PedidoOnline`, `PedidoOnlineItem`, `CuentaCliente`, `ZonaDelivery`, `TiendaOnlineConfig`, `CustomerRefreshToken`, `CodigoOtp`. F8 suma a `PedidoOnline` `pago_modalidad`, `pago_moneda_id`, `vuelto_para`, `pago_cotizacion`, `pago_observacion` y a `TiendaOnlineConfig` `metodos_pago` (migración `TiendaPagoMoneda`). → [domains/pedidos-online.md](../domains/pedidos-online.md).
+- **pedidos-online/**: `PedidoOnline`, `PedidoOnlineItem`, `CuentaCliente`, `ZonaDelivery`, `TiendaOnlineConfig`, `CustomerRefreshToken`, `CodigoOtp`. F8 suma a `PedidoOnline` `pago_modalidad`, `pago_moneda_id`, `vuelto_para`, `pago_cotizacion`, `pago_observacion` y a `TiendaOnlineConfig` `metodos_pago` (migración `TiendaPagoMoneda`). F9 suma a `PedidoOnline` `cancelacion_solicitada_en`, `cancelacion_motivo`, `cancelacion_respuesta` y a `TiendaOnlineConfig` `whatsapp_proveedor`, `telefono_contacto` (migración `TiendaDetallePedido`). → [domains/pedidos-online.md](../domains/pedidos-online.md).
 - **ventas/**: `CobroParcial`, `CobroParcialItem` (+ cache `VentaItem.montoCubierto`, `PagoDetalle.cobroParcialId`). → [domains/ventas-pdv.md](../domains/ventas-pdv.md).
 - **financiero/**: `GastoCaja`, `EgresoCaja` (+ `ConteoDetalle.monto`, `Caja.motivoAjuste`).
 - **auth/**: `DeviceAuthCode` (login por QR).
