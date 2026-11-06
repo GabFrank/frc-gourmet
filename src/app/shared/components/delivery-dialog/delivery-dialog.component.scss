@@ -575,6 +575,12 @@ tr.mat-mdc-row {
   letter-spacing: .14em;
   transform: rotate(-3deg);
 
+  // Papel, como el resto del recibo: gris de tinta, ni el rojo de «a cobrar» ni el verde.
+  &.cancelado {
+    border-color: #555;
+    color: #555;
+  }
+
   &.pagado {
     border-color: #1b5e20;
     color: #1b5e20;

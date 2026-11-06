@@ -1658,6 +1658,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       if (estadoAnterior === VentaEstado.CANCELADA && (pagoAdoptadoId || validarDispositivoCaja)) {
         throw new Error('VENTA_CANCELADA: esta venta fue cancelada y no se puede cobrar.');
       }
+      // Rehabilitar (CANCELADA → CONCLUIDA desde el historial) la venta de un pedido web que ya se
+      // canceló revivía una venta sin ítems activos ni cobro, con el pedido cancelado y el pago
+      // online quizá ya devuelto. Ese pedido se vuelve a cargar, no se rehabilita.
+      if (estadoAnterior === VentaEstado.CANCELADA && data?.estado === VentaEstado.CONCLUIDA) {
+        const pedidoMuerto = await dataSource.getRepository(PedidoOnline).createQueryBuilder('p')
+          .where('p.venta_id = :id AND p.estado IN (:...fin)', { id: Number(id), fin: ['CANCELADO', 'RECHAZADO'] })
+          .getCount();
+        if (pedidoMuerto > 0) {
+          throw new Error('VENTA_DE_PEDIDO_CANCELADO: es la venta de un pedido web cancelado; no se rehabilita, se vuelve a cargar.');
+        }
+      }
       if (pagoAdoptadoId) {
         await assertCajaAbiertaSiVino(dataSource, cajaDeLaVenta, { contexto: 'updateVenta(pago)' });
         if (cajaDeLaVenta != null) {
@@ -1803,6 +1814,24 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       repo.merge(entity, ventaData);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
+
+      // La venta cancelada se lleva su delivery/retiro: si quedaba vivo, se podía pasar a listo o
+      // en camino sobre una venta que ya no existe (auditoría F10; mismo criterio que el rechazo
+      // de un pedido web y que `delivery-cancelar` del otro lado). Uno entregado no se toca.
+      if (saved.estado === VentaEstado.CANCELADA && estadoAnterior !== VentaEstado.CANCELADA) {
+        try {
+          const conDelivery = await repo.findOne({ where: { id } as any, relations: ['delivery'] });
+          const deliveryId = (conDelivery as any)?.delivery?.id;
+          if (deliveryId) {
+            await dataSource.createQueryBuilder().update(Delivery)
+              .set({ estado: DeliveryEstado.CANCELADO, fechaCancelacion: new Date(), motivoCancelacion: 'VENTA CANCELADA EN EL PDV' } as any)
+              .where('id = :d AND estado NOT IN (:...fin)', { d: deliveryId, fin: [DeliveryEstado.ENTREGADO, DeliveryEstado.CANCELADO] })
+              .execute();
+          }
+        } catch (e) {
+          console.warn('[updateVenta] cancelar el delivery de la venta falló:', e);
+        }
+      }
 
       // Pedidos online de la tienda sobre esta venta: la mesa cobrada queda
       // entregada y la venta cancelada los cancela. Sólo al salir de ABIERTA.

@@ -562,6 +562,12 @@ export function registerDeliveryHandlers(
 
       const venta = await manager.getRepository(Venta).findOne({ where: { delivery: { id } } });
 
+      // Sobre una venta cancelada no hay pedido que avanzar: sólo queda cancelar el delivery
+      // (acción CANCELAR). Sin esto se podía pasar a listo o en camino (auditoría F10).
+      if (venta && venta.estado === VentaEstado.CANCELADA) {
+        throw new Error('VENTA_CANCELADA: la venta de este pedido fue cancelada; sólo se puede cancelar el delivery.');
+      }
+
       // Entregar exige que la venta esté cobrada: marcar ENTREGADO con la venta
       // ABIERTA deja un pedido en la calle que nadie va a cobrar nunca.
       if (nuevoEstado === DeliveryEstado.ENTREGADO && venta && venta.estado !== VentaEstado.CONCLUIDA) {

@@ -50,6 +50,8 @@
     "test:pedidos-online-pago-pg": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-pago-e2e.ts --pg",
     "test:pedidos-online-detalle": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-detalle-e2e.ts",
     "test:pedidos-online-detalle-pg": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-detalle-e2e.ts --pg",
+    "test:pedidos-online-atencion-flujo": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-atencion-flujo-e2e.ts",
+    "test:pedidos-online-atencion-flujo-pg": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-atencion-flujo-e2e.ts --pg",
     "test:pedidos-online-sync": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-sync-e2e.ts",
     "test:storefront-carrito": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-storefront-carrito.ts",
     "test:storefront-vuelto": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-storefront-vuelto.ts",

@@ -681,14 +681,23 @@ export function registerPedidosOnlineAdminHandlers(
       }
     }
 
-    pedido.estado = nuevoEstado as EstadoPedidoOnline;
+    const estadoLeido = pedido.estado;
     // F9: si salió con una solicitud de cancelación sin responder, la solicitud se cierra sola
     // (ya no se puede cancelar) y el cliente ve por qué, en vez de quedar «esperando respuesta».
-    Object.assign(pedido, cierreSolicitudAlSalir(pedido, nuevoEstado));
-    if (nuevoEstado === EstadoPedidoOnline.LISTO) pedido.fechaListo = new Date();
-    if (nuevoEstado === EstadoPedidoOnline.ENTREGADO) pedido.fechaEntregado = new Date();
+    const cambios: any = { estado: nuevoEstado, ...cierreSolicitudAlSalir(pedido, nuevoEstado) };
+    if (nuevoEstado === EstadoPedidoOnline.LISTO) cambios.fechaListo = new Date();
+    if (nuevoEstado === EstadoPedidoOnline.ENTREGADO) cambios.fechaEntregado = new Date();
     try {
-      const saved = await repo().save(pedido);
+      // Condicionado al estado leído (auditoría F10): un `save` de la entidad pisaba una
+      // cancelación hecha en el medio y «revivía» el pedido. Si la sincronización desde el
+      // delivery ya lo dejó en el destino, también vale.
+      const r = await repo().createQueryBuilder().update(PedidoOnline).set(cambios)
+        .where('id = :id AND estado IN (:...ok)', { id: pedido.id, ok: [estadoLeido, nuevoEstado] })
+        .execute();
+      const saved = await repo().findOne({ where: { id: pedido.id }, relations: ['items', 'zonaDelivery'] });
+      if (!r.affected || saved?.estado !== nuevoEstado) {
+        return { success: false, error: 'pedido_cambio_reintentar', estadoActual: saved?.estado };
+      }
       return { success: true, pedido: mapPedidoAdmin(saved) };
     } catch (e) {
       // El delivery ya avanzó y el pedido no: se nombra el desfasaje en vez de

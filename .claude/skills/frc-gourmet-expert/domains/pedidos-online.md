@@ -397,6 +397,24 @@ sola a cocina (ver «Canal MESA_QR»). El recovery de una mesa sin venta sigue e
 del propietario para más adelante: que los pedidos pasen solos a cocina con reglas de cuidado
 para casos especiales.
 
+**Auditoría post-F10 (2026-11-06).** Pedido, venta y delivery terminan juntos por todas las
+puertas: rechazo/cancelación aprobada (`cancelarPedido`), `delivery-cancelar`, y la venta
+cancelada desde el PdV/historial (`updateVenta` → CANCELADA cancela su delivery). Un delivery
+sobre una venta CANCELADA no avanza (`VENTA_CANCELADA`), no se cobra, y la venta de un pedido web
+cancelado no se rehabilita (`VENTA_DE_PEDIDO_CANCELADO`). `avanzar-estado-pedido-online` es un
+UPDATE condicionado (no revive un pedido cancelado en el medio). Los textos de error de las dos
+pantallas salen de `src/app/shared/utils/pedido-online-errores.util.ts`. Flujo completo cubierto por
+`test:pedidos-online-atencion-flujo` (+`-pg`).
+
+Quedaron **sin tocar** (anteriores a F9/F10, tocan el núcleo del cobro; decisión del propietario):
+1. Cancelar desde el historial una venta CONCLUIDA de un pedido pagado online no marca la
+   devolución (`updateVenta` sólo sincroniza al salir de ABIERTA).
+2. Carrera cobro ↔ cancelación en Postgres: `updateVenta` lee el estado sin lock y guarda la
+   entidad entera (igual `cobrar-credito`).
+3. Cancelar por delivery o por la venta marca REEMBOLSO_PENDIENTE pero no registra ni avisa al
+   personal (`avisarReembolso` sólo corre en `cancelarPedido`).
+4. `delivery-convertir-modo` no actualiza `pedido.tipo_pedido`.
+
 ### Lo que sigue pendiente
 
 - ~~El cliente no puede cancelar su pedido.~~ Hecho en F9 (solicitud que aprueba el local).

@@ -15,6 +15,7 @@ import { catchError, switchMap } from 'rxjs/operators';
 import { AuthService } from '../../../services/auth.service';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { textoErrorPedidoOnline, textoExcepcionPedidoOnline } from '../../../shared/utils/pedido-online-errores.util';
 
 /**
  * Bandeja de PEDIDOS ONLINE (Fase 4): panel de OBSERVACIÓN Y ACCIÓN.
@@ -120,13 +121,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
         this.snack.open('No se pudo enviar a cocina', 'OK', { duration: 3500 });
       }
     }).catch((e: any) => {
-      const msg = String(e?.message || e);
-      const amigable = /no_hay_caja_abierta/.test(msg) ? 'No hay una caja abierta.'
-        : /pedido_sin_pago_confirmado/.test(msg) ? 'El pago con tarjeta todavía no está confirmado.'
-        : /pedido_no_aceptado|no_materializable/.test(msg) ? 'Primero hay que aceptar el pedido.'
-        : /caja_ambigua/.test(msg) ? 'Hay más de una caja abierta; abrí el pedido desde el PdV de la caja correspondiente.'
-        : msg;
-      this.snack.open('No se pudo enviar a cocina: ' + amigable, 'OK', { duration: 5000 });
+      this.snack.open('No se pudo enviar a cocina: ' + textoExcepcionPedidoOnline(e), 'OK', { duration: 6000 });
     });
   }
 
@@ -208,7 +203,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
         } else if (res?.error === 'sin_caja') {
           this.snack.open('Para aceptar un pedido tenés que tener tu caja abierta.', 'OK', { duration: 5000 });
         } else {
-          this.snack.open('No se pudo aceptar: ' + (res?.error || ''), 'OK', { duration: 3500 });
+          this.snack.open('No se pudo aceptar: ' + textoErrorPedidoOnline(res), 'OK', { duration: 5000 });
         }
       },
       error: (e) => this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 }),
@@ -262,7 +257,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
           this.snack.open(`Pedido ${p.numero}: devolución registrada`, 'OK', { duration: 2500 });
           this.cargar(true);
         } else {
-          this.snack.open('No se pudo marcar: ' + (res?.error || ''), 'OK', { duration: 3500 });
+          this.snack.open('No se pudo marcar: ' + textoErrorPedidoOnline(res), 'OK', { duration: 5000 });
         }
       },
       error: (e) => this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 }),
@@ -326,7 +321,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
             'OK', { duration: dev > 0 ? 10000 : 2500 });
           this.cargar(true);
         } else {
-          this.snack.open('No se pudo rechazar: ' + (res?.error || ''), 'OK', { duration: 3500 });
+          this.snack.open('No se pudo rechazar: ' + textoErrorPedidoOnline(res), 'OK', { duration: 5000 });
         }
       },
       error: (e) => this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 }),
@@ -368,26 +363,10 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** El delivery explica por qué no avanza (p. ej. venta sin cobrar): se muestra eso, no el código. */
-  private motivoAvance(res: any): string {
-    switch (res?.error) {
-      case 'sin_venta': return 'el pedido todavía no tiene venta. Usá «Enviar a cocina» con tu caja abierta.';
-      case 'transicion_invalida': return `el pedido ya está en ${res?.estadoActual || 'otro estado'}. Actualizá la lista.`;
-      case 'delivery_rechazo_transicion': return res?.detalle || 'el delivery no permite ese cambio.';
-      case 'pedido_desfasado_del_delivery': return 'el delivery avanzó pero el pedido no. Repetí la acción.';
-      default: return res?.detalle || res?.error || '';
-    }
-  }
+  /** Mismos textos que la cola del diálogo de delivery (`pedido-online-errores.util.ts`). */
+  private motivoAvance(res: any): string { return textoErrorPedidoOnline(res); }
 
-  private motivoResolucion(res: any): string {
-    switch (res?.error) {
-      case 'mesa_ya_materializada': return 'el pedido ya está en la cuenta de la mesa. Quitá los ítems desde el PdV y después rechazá la solicitud.';
-      case 'sin_solicitud': return 'la solicitud ya fue respondida.';
-      case 'estado_no_rechazable': return 'el pedido ya no se puede cancelar (ya salió o terminó).';
-      case 'pedido_cambio_reintentar': return 'el pedido cambió mientras tanto. Volvé a intentarlo.';
-      default: return res?.detalle || res?.error || '';
-    }
-  }
+  private motivoResolucion(res: any): string { return textoErrorPedidoOnline(res); }
 
   avanzar(p: any, nuevoEstado: string): void {
     this.repo.avanzarEstadoPedidoOnline(p.id, nuevoEstado).subscribe({

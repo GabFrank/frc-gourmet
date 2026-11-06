@@ -185,6 +185,7 @@
           <span>{{ p.total | number:'1.0-2' }}</span>
           <span class="cola-envio" *ngIf="p.costoEnvio > 0">envío {{ p.costoEnvio | number:'1.0-2' }}</span>
         </div>
+        <ng-container *appHasPermission="'PEDIDOS_ONLINE_GESTIONAR'">
         <div class="cola-acciones" *ngIf="p.esNuevo">
           <button mat-flat-button color="primary" [disabled]="procesandoPedidoId === p.id"
                   (click)="aceptarPedidoOnline(p)">
@@ -195,7 +196,9 @@
             <mat-icon>close</mat-icon> RECHAZAR
           </button>
         </div>
+        </ng-container>
         <!-- F9: el cliente pidió cancelar: primero se responde eso. -->
+        <ng-container *appHasPermission="'PEDIDOS_ONLINE_GESTIONAR'">
         <div class="cola-acciones" *ngIf="p.pideCancelar">
           <button mat-flat-button color="warn" [disabled]="procesandoPedidoId === p.id"
                   (click)="resolverCancelacionOnline(p, true)">
@@ -206,7 +209,9 @@
             NO SE PUEDE
           </button>
         </div>
+        </ng-container>
         <!-- F10: aceptado sin venta (sin caja abierta al aceptarlo): se manda con la caja de este PdV. -->
+        <ng-container *appHasPermission="'PEDIDOS_ONLINE_GESTIONAR'">
         <div class="cola-acciones" *ngIf="p.esSinCocina">
           <button mat-flat-button color="primary" [disabled]="procesandoPedidoId === p.id"
                   (click)="enviarACocinaOnline(p)">
@@ -217,13 +222,16 @@
             <mat-icon>close</mat-icon> RECHAZAR
           </button>
         </div>
+        </ng-container>
         <!-- F10: cancelado con pago online: se devuelve en el panel de uPay y se registra acá. -->
+        <ng-container *appHasPermission="'PEDIDOS_ONLINE_GESTIONAR'">
         <div class="cola-acciones" *ngIf="p.esDevolver">
           <button mat-flat-button color="primary" [disabled]="procesandoPedidoId === p.id"
                   (click)="marcarDevueltoOnline(p)">
             <mat-icon>undo</mat-icon> YA DEVOLVÍ
           </button>
         </div>
+        </ng-container>
       </div>
       </ng-container>
     </div>
@@ -339,8 +347,8 @@
         </div>
 
         <!-- Sello de cobro: lo primero que se mira en la foto. -->
-        <div class="recibo-sello" [class.pagado]="ventaCobrada">
-          {{ ventaCobrada ? 'PAGADO' : 'A COBRAR' }}
+        <div class="recibo-sello" [class.pagado]="selloPagado" [class.cancelado]="selloRecibo === 'CANCELADO'">
+          {{ selloRecibo }}
         </div>
 
         <!-- Cómo se pagó, sólo si ya se cobró. -->
@@ -370,13 +378,13 @@
   <div class="delivery-footer">
     <div class="footer-actions">
       <!-- Botón avance de etapa (solo uno visible según estado) -->
-      <button mat-raised-button color="primary" (click)="marcarListoParaEntrega()" *ngIf="isAbierto">
+      <button mat-raised-button color="primary" (click)="marcarListoParaEntrega()" *ngIf="isAbierto && !ventaCanceladaSel">
         <mat-icon>check</mat-icon> LISTO
       </button>
-      <button mat-raised-button color="primary" (click)="enviar()" *ngIf="isParaEntrega && !esRetiroSeleccionado">
+      <button mat-raised-button color="primary" (click)="enviar()" *ngIf="isParaEntrega && !esRetiroSeleccionado && !ventaCanceladaSel">
         <mat-icon>delivery_dining</mat-icon> ENVIAR
       </button>
-      <button mat-raised-button color="primary" (click)="finalizar()" *ngIf="isEnCamino || (isParaEntrega && esRetiroSeleccionado)">
+      <button mat-raised-button color="primary" (click)="finalizar()" *ngIf="(isEnCamino || (isParaEntrega && esRetiroSeleccionado)) && !ventaCanceladaSel">
         <mat-icon>done_all</mat-icon> FINALIZAR
       </button>
 
@@ -395,6 +403,7 @@
 
       <!-- F10: el cliente pidió cancelar este pedido: se responde sin volver a la cola. -->
       <ng-container *ngIf="pedidoWebSel?.pideCancelar">
+      <ng-container *appHasPermission="'PEDIDOS_ONLINE_GESTIONAR'">
         <button mat-raised-button color="warn" [disabled]="procesandoPedidoId === pedidoWebSel.id"
                 (click)="resolverCancelacionSeleccionado(true)"
                 [matTooltip]="pedidoWebSel.cancelacionMotivo || 'El cliente pidió cancelar'">
@@ -404,6 +413,7 @@
                 (click)="resolverCancelacionSeleccionado(false)">
           NO SE PUEDE
         </button>
+      </ng-container>
       </ng-container>
 
       <div class="footer-separator"></div>
