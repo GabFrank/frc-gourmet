@@ -105,14 +105,17 @@
             Está pagado: hay que devolver ₲ {{ p.pagoMonto | number:'1.0-2' }} desde uPay.
           </span>
           <button mat-flat-button [color]="resolviendoAprobar ? 'warn' : 'primary'" [disabled]="resolviendo" (click)="resolverCancelacion(p)">
-            {{ resolviendoAprobar ? 'Sí, cancelar' : 'Responder' }}
+            {{ resolviendoAprobar ? 'Sí, cancelar el pedido' : 'Responder' }}
           </button>
           <button mat-button (click)="cancelarResolucion()">Volver</button>
         </ng-container>
       </div>
       </ng-container>
 
+      <!-- Con una solicitud de cancelación sin responder, primero se responde eso (como la cola
+           del diálogo de delivery): aceptar o avanzar al lado de «Sí, cancelar» confunde. -->
       <div class="acciones" *appHasPermission="'VENTAS_PDV'">
+      <ng-container *ngIf="!p.pideCancelar">
         <ng-container *ngIf="p.estado === 'RECIBIDO'">
           <ng-container *ngIf="confirmandoRechazoId !== p.id">
             <button mat-flat-button color="primary" (click)="aceptar(p)">
@@ -152,6 +155,7 @@
         >
           <mat-icon>restaurant</mat-icon> Enviar a cocina
         </button>
+      </ng-container>
       </div>
     </mat-card>
   </div>
