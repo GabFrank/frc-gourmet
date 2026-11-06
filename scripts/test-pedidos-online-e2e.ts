@@ -625,6 +625,18 @@ async function main() {
   const vPlant: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { whatsappPlantilla: 'Código Ingreso' });
   ok(vPlant?.error === 'whatsapp_plantilla_invalida', 'F3: plantilla con espacios → rechazada', vPlant);
 
+  // Proveedores de pago (PLAN-tienda-pagos-proveedores): la pantalla recibe la lista y el activo.
+  const cfgProv: any = await invokeHandlerWithContext('get-tienda-online-config', undefined);
+  ok(cfgProv?.pago?.proveedorActivo === 'UPAY' && cfgProv?.pago?.proveedores?.some((x: any) => x.id === 'UPAY'),
+    'Proveedores: sin elegir, el activo es uPay y la pantalla recibe la lista', cfgProv?.pago);
+  const vProv: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoProveedor: 'MERCADOPAGO' });
+  ok(vProv?.error === 'pago_proveedor_invalido', 'Proveedores: un proveedor que no existe → rechazado', vProv);
+  const vProvCfg: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoConfig: { NOEXISTE: { a: 'b' } } });
+  ok(vProvCfg?.error === 'pago_proveedor_invalido', 'Proveedores: datos para un proveedor desconocido → rechazado', vProvCfg);
+  const pubProv = await pub('tienda.config', []);
+  ok(pubProv.result?.pagoOnline === false && pubProv.result?.pagoOnlineProveedor === null && Array.isArray(pubProv.result?.pagoOnlineHosts),
+    'Proveedores: sin pago online, tienda.config no publica proveedor ni hosts', pubProv.result);
+
   // Google desde la pantalla: tienda.config lo publica y auth.google deja de dar no_configurado.
   const GID = '1234-abc.apps.googleusercontent.com';
   const gSave: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, {

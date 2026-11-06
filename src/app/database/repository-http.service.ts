@@ -1118,6 +1118,10 @@ export class RepositoryHttpService extends RepositoryService {
   probarTiendaUpay(): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.probarTiendaUpay() no esta implementado todavia.`)) as any;
   }
+
+  probarTiendaPago(_proveedorId?: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.probarTiendaPago() no esta implementado todavia.`)) as any;
+  }
   marcarPagoDevueltoPedidoOnline(_pedidoId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.marcarPagoDevueltoPedidoOnline() no esta implementado todavia.`)) as any;
   }

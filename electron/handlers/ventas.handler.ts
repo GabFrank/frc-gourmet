@@ -79,6 +79,7 @@ import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/ped
 import { reapuntarPedidosDeVenta, sincronizarPedidosPorCierreDeVenta } from '../utils/pedido-online-sync.utils';
 import { DecisionPago, normalizarDecisionPagoOError, PagoDecidido } from '../utils/decision-pago-online.utils';
 import { registrarDecisionesPago } from '../services/pagos-online/pagos-online.service';
+import { proveedorDelPedido } from '../services/pagos-online/proveedores';
 import { EstadoPedidoOnline, TipoPedidoOnline, EstadoPagoOnline, FORMA_PAGO_UPAY } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { TiendaOnlineConfig } from '../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import { motivoNoMaterializable } from '../utils/pedido-online-materializable';
@@ -436,12 +437,14 @@ export async function materializarPedidoOnlineEnVenta(
       await setEntityUserTracking(dataSource, venta, userId, false);
       venta = await ventaRepo.save(venta);
 
-      // Pago con tarjeta por la tienda (PLAN-tienda-online F4): el cobro ya se hizo en uPay.
-      // Se registra como un cobro anticipado (Pago + detalle «UPAY ONLINE», que no mueve la
-      // caja física) para que el PdV vea la venta saldada y la concluya/facture como siempre.
+      // Pago con tarjeta por la tienda (PLAN-tienda-online F4): el cobro ya se hizo en el
+      // proveedor del pedido. Se registra como un cobro anticipado (Pago + detalle «UPAY ONLINE»,
+      // «BANCARD ONLINE»…, que no mueve la caja física) para que el PdV vea la venta saldada y la
+      // concluya/facture como siempre.
       if (pedido.estadoPago === EstadoPagoOnline.PAGADO) {
-        const fp = await qr.manager.getRepository(FormasPago).findOne({ where: { nombre: FORMA_PAGO_UPAY } });
-        if (!fp) throw new Error('falta la forma de pago UPAY ONLINE (migración TiendaPagoOnline)');
+        const formaPagoOnline = proveedorDelPedido(pedido)?.formaPago || FORMA_PAGO_UPAY;
+        const fp = await qr.manager.getRepository(FormasPago).findOne({ where: { nombre: formaPagoOnline } });
+        if (!fp) throw new Error(`falta la forma de pago ${formaPagoOnline} (migraciones de la tienda)`);
         const moneda = pedido.moneda?.id
           ? { id: pedido.moneda.id }
           : await qr.manager.getRepository(Moneda).findOne({ where: { principal: true } });
@@ -451,7 +454,7 @@ export async function materializarPedidoOnlineEnVenta(
         } as any) as any) as Pago;
         await qr.manager.getRepository(PagoDetalle).save(qr.manager.getRepository(PagoDetalle).create({
           valor: Number(pedido.pagoMonto ?? pedido.total),
-          descripcion: `UPAY ONLINE ${pedido.numero}${pedido.pagoId ? ' · ' + pedido.pagoId : ''}`.slice(0, 255),
+          descripcion: `${formaPagoOnline} ${pedido.numero}${pedido.pagoId ? ' · ' + pedido.pagoId : ''}`.slice(0, 255),
           activo: true,
           tipo: TipoDetalle.PAGO,
           pago: { id: pago.id } as any,
@@ -645,7 +648,7 @@ export async function materializarPedidoOnlineEnVenta(
     // ya impresa: el operador rechazó y la cocina cocinó igual.
     const estadoActual = await qr.manager.getRepository(PedidoOnline).findOne({
       where: { id: pedidoId },
-      select: ['id', 'estado', 'ventaId', 'tipoPedido', 'mesaId', 'metodoPago', 'estadoPago'],
+      select: ['id', 'estado', 'ventaId', 'tipoPedido', 'mesaId', 'metodoPago', 'estadoPago', 'pagoModalidad'],
     });
     if (!estadoActual) throw new Error(`Pedido online ${pedidoId} no encontrado`);
     // F5 (auditoría C1): solo va a cocina un pedido aceptado (o de mesa / con aceptación

@@ -80,6 +80,7 @@ const FORMA_PAGO_POR_METODO: Record<string, string[]> = {
   PIX: ['PIX'],
   TRANSFERENCIA: ['TRANSFERENCIA'],
   UPAY: ['UPAY ONLINE'],
+  BANCARD: ['BANCARD ONLINE'],
 };
 
 interface DetalleRow {

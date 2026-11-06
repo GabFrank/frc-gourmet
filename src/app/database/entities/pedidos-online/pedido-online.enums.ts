@@ -84,3 +84,12 @@ export enum DecisionPagoOnline {
 
 /** Forma de pago (formas_pago.nombre) del cobro con tarjeta por la tienda. La siembra TiendaPagoOnline. */
 export const FORMA_PAGO_UPAY = 'UPAY ONLINE';
+/** Forma de pago del cobro online con Bancard vPOS. La siembra TiendaPagoProveedores. */
+export const FORMA_PAGO_BANCARD = 'BANCARD ONLINE';
+/** Métodos que son un PROVEEDOR de pago online (el cliente paga antes, en su página/formulario). */
+export const METODOS_PAGO_ONLINE: string[] = ['UPAY', 'BANCARD'];
+export function esMetodoPagoOnline(m: string | null | undefined): boolean {
+  return METODOS_PAGO_ONLINE.includes(String(m || '').toUpperCase());
+}
+/** Formas de pago de los cobros online (no se ofrecen a mano en el PdV). */
+export const FORMAS_PAGO_ONLINE: string[] = [FORMA_PAGO_UPAY, FORMA_PAGO_BANCARD];

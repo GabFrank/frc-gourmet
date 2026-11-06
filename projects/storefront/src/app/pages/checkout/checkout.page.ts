@@ -14,7 +14,7 @@ import { TipoPedido } from '../../core/models';
 import { GuaraniPipe, guarani } from '../../core/guarani.pipe';
 import { PrecioPipe } from '../../core/precio.pipe';
 import { mensajeError } from '../../core/errores';
-import { esUrlCheckoutUpay } from '../../core/pago-online';
+import { esUrlPagoPermitida } from '../../core/pago-online';
 import { MonedasService } from '../../core/monedas.service';
 import { MonedaTienda, convertir, formatear, parsearMonto, sugerenciasVuelto } from '../../core/moneda-tienda';
 
@@ -211,7 +211,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
     if (this.modalidad === 'AL_RECIBIR' && !this.metodosDisponibles.some((m) => m.valor === this.metodoPago)) {
       this.metodoPago = this.metodosDisponibles[0]?.valor || 'EFECTIVO';
     }
-    if (this.modalidad === 'ONLINE') this.metodoPago = 'UPAY';
+    if (this.modalidad === 'ONLINE') this.metodoPago = this.config.config?.pagoOnlineProveedor || 'UPAY';
     this.ayudaMetodo = METODOS[this.metodoPago]?.ayuda || '';
     // Moneda del efectivo: por defecto, la que eligió para ver la carta.
     if (!this.monedaPago || !this.monedas.monedas.some((m) => m.id === this.monedaPago!.id)) {
@@ -381,9 +381,10 @@ export class CheckoutPage implements OnInit, OnDestroy {
           if (this.faltaNombreCuenta && this.auth.cuenta) this.auth.cuenta.nombre = this.nombreCuenta.trim().toUpperCase();
           if (this.pideTelefono && this.auth.cuenta) this.auth.cuenta.telefonoContacto = this.telefonoContacto.replace(/\D+/g, '');
           this.cart.limpiar();
-          // Tarjeta: a la página de pago de uPay (solo si la dirección es de uPay).
+          // Tarjeta: a la página del proveedor (solo si la dirección es de un host suyo). Si el
+          // proveedor arma su formulario en nuestra página (Bancard), va a /pago/<numero>.
           if (res.checkoutUrl) {
-            if (esUrlCheckoutUpay(res.checkoutUrl)) { window.location.href = res.checkoutUrl; return; }
+            if (esUrlPagoPermitida(res.checkoutUrl, this.config.config?.pagoOnlineHosts)) { window.location.href = res.checkoutUrl; return; }
             this.router.navigate(['/pago', res.numero]);
             return;
           }

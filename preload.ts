@@ -2616,6 +2616,9 @@ contextBridge.exposeInMainWorld('api', {
   probarTiendaUpay: async (): Promise<any> => {
     return await ipcRenderer.invoke('probar-tienda-upay');
   },
+  probarTiendaPago: async (proveedorId?: string): Promise<any> => {
+    return await ipcRenderer.invoke('probar-tienda-pago', proveedorId);
+  },
   marcarPagoDevueltoPedidoOnline: async (pedidoId: number): Promise<any> => {
     return await ipcRenderer.invoke('marcar-pago-devuelto-pedido-online', pedidoId);
   },

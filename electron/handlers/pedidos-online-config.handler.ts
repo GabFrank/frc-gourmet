@@ -1,10 +1,14 @@
 import { ipcMain } from 'electron';
-import { pagoOnlineOfrecido } from '../utils/tienda-ingreso.utils';
+import { pagoOnlineOfrecido, proveedorPagoActivo } from '../utils/tienda-ingreso.utils';
 import { metodosAlRecibir } from '../utils/pago-pedido.utils';
 import { METODOS_AL_RECIBIR, MetodoPagoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { upayConfigDe, apiKey as upayApiKeyActual } from '../services/pagos-online/pagos-online.service';
 import { upayProveedor } from '../services/pagos-online/proveedores/upay.proveedor';
 import { fetchActual } from '../services/pagos-online/proveedores/deps';
+import { listarProveedores, proveedorPorId } from '../services/pagos-online/proveedores';
+import { proveedorActivo } from '../services/pagos-online/pagos-online.service';
+import { leerPagoConfigJson, secretoProveedor, validarCampo, valoresProveedor } from '../services/pagos-online/proveedores/config-proveedor';
+import { setSecretoPago } from '../utils/tienda-secrets.util';
 import { evolutionConfigurado, otpWhatsappDisponible, proveedorWhatsappActivo, sendWhatsappOtp, whatsappCloudConfigurado, whatsappConfigurado } from '../utils/whatsapp-sender';
 import { cargarCredencialesTienda, credencialesTiendaListas, getGoogleClientId, refrescarCredencialesWhatsapp } from '../utils/tienda-ingreso.utils';
 import { almacenSeguroDisponible, getWhatsappToken, setWhatsappToken, getUpayApiKey, setUpayApiKey } from '../utils/tienda-secrets.util';
@@ -90,8 +94,11 @@ function mapConfigPublic(cfg: TiendaOnlineConfig): any {
     googleClientId: getGoogleClientId(),
     // Login por código de WhatsApp: solo si hay un canal real de envío.
     otpWhatsappDisponible: otpWhatsappDisponible(),
-    // F4: «Pagar con tarjeta» (uPay) solo con el interruptor y las credenciales cargadas.
+    // F4: «Pagar con tarjeta» solo con el interruptor y las credenciales del proveedor cargadas.
     pagoOnline: pagoOnlineOfrecido(cfg),
+    // Proveedores: con cuál se paga y desde qué hosts el storefront acepta ir o cargar su script.
+    pagoOnlineProveedor: pagoOnlineOfrecido(cfg) ? proveedorPagoActivo().id : null,
+    pagoOnlineHosts: pagoOnlineOfrecido(cfg) ? proveedorPagoActivo().hosts : [],
     // F8: métodos para pagar al recibir / retirar (sin configurar = sólo efectivo).
     metodosPago: metodosAlRecibir(cfg),
   };
@@ -120,6 +127,83 @@ async function estadoIngreso(cfgActual?: TiendaOnlineConfig | null): Promise<any
     // F4: solo si la API Key de uPay está guardada (nunca su valor).
     upayApiKeyGuardada: !!(await getUpayApiKey()),
   };
+}
+
+/**
+ * Proveedores de pago para la pantalla: cuál está activo, qué campos pide cada uno, sus valores NO
+ * secretos y, de los secretos, solo si están guardados.
+ */
+async function estadoProveedoresPago(cfg: TiendaOnlineConfig | null): Promise<any> {
+  const lista = [];
+  for (const prov of listarProveedores()) {
+    const secretosGuardados: Record<string, boolean> = {};
+    for (const c of prov.campos.filter((x) => x.secreto)) secretosGuardados[c.clave] = !!(await secretoProveedor(prov.id, c.clave));
+    lista.push({
+      id: prov.id,
+      nombre: prov.nombre,
+      campos: prov.campos,
+      valores: valoresProveedor(cfg, prov),
+      secretosGuardados,
+      devuelvePorApi: !!prov.devolver,
+      listo: !!(await prov.credenciales(null as any, cfg)),
+    });
+  }
+  return { proveedorActivo: proveedorActivo(cfg).id, proveedores: lista };
+}
+
+/**
+ * Aplica proveedor activo, datos por proveedor y devolución automática. Los secretos se validan
+ * acá y se devuelven para escribirlos en el almacén DESPUÉS de guardar la fila.
+ */
+async function aplicarProveedoresPago(
+  cfg: TiendaOnlineConfig, data: any,
+): Promise<{ error: string } | { secretos: { prov: string; clave: string; valor: string }[] }> {
+  if (data.pagoProveedor !== undefined) {
+    const v = String(data.pagoProveedor ?? '').trim().toUpperCase();
+    if (v && !proveedorPorId(v)) return { error: 'pago_proveedor_invalido' };
+    cfg.pagoProveedor = v || null;
+  }
+  if (data.pagoDevolucionAutomatica !== undefined) cfg.pagoDevolucionAutomatica = !!data.pagoDevolucionAutomatica;
+  const todo = leerPagoConfigJson(cfg);
+  if (data.pagoConfig && typeof data.pagoConfig === 'object') {
+    for (const [id, valores] of Object.entries<any>(data.pagoConfig)) {
+      const prov = proveedorPorId(id);
+      if (!prov || !valores || typeof valores !== 'object') return { error: 'pago_proveedor_invalido' };
+      const actual = { ...(todo[prov.id] || {}) };
+      for (const c of prov.campos.filter((x) => !x.secreto)) {
+        if (valores[c.clave] === undefined) continue;
+        const v = String(valores[c.clave] ?? '').trim();
+        const err = validarCampo(prov, c, v);
+        if (err) return { error: err };
+        if (v) actual[c.clave] = v; else delete actual[c.clave];
+      }
+      todo[prov.id] = actual;
+    }
+    cfg.pagoConfigJson = JSON.stringify(todo);
+  }
+  const secretos: { prov: string; clave: string; valor: string }[] = [];
+  const cargar = (bloque: any, borrar: boolean) => {
+    if (!bloque || typeof bloque !== 'object') return null;
+    for (const [id, valores] of Object.entries<any>(bloque)) {
+      const prov = proveedorPorId(id);
+      if (!prov) return 'pago_proveedor_invalido';
+      const claves = borrar ? (Array.isArray(valores) ? valores : []) : Object.keys(valores || {});
+      for (const clave of claves) {
+        const c = prov.campos.find((x) => x.secreto && x.clave === clave);
+        if (!c) return 'pago_proveedor_invalido';
+        const v = borrar ? '' : String(valores[clave] ?? '').trim();
+        if (!borrar && !v) continue;
+        const err = validarCampo(prov, c, v);
+        if (err) return err;
+        secretos.push({ prov: prov.id, clave, valor: v });
+      }
+    }
+    return null;
+  };
+  const e1 = cargar(data.pagoSecretos, false) || cargar(data.pagoSecretosBorrar, true);
+  if (e1) return { error: e1 };
+  if (secretos.some((x) => x.valor) && !almacenSeguroDisponible()) return { error: 'almacen_seguro_no_disponible' };
+  return { secretos };
 }
 
 /** F4: URL base de uPay: https y dominio de uPay (STG o la de producción que den al certificar). */
@@ -230,7 +314,7 @@ export function registerPedidosOnlineConfigHandlers(
     await credencialesTiendaListas();
     const cfg = await getTiendaConfig(dataSource);
     // metodosPago va como lista (en la base es JSON en texto).
-    return { ...cfg, metodosPago: metodosAlRecibir(cfg), abiertaAhora: estaAbierta(cfg), ingreso: await estadoIngreso(cfg) };
+    return { ...cfg, metodosPago: metodosAlRecibir(cfg), abiertaAhora: estaAbierta(cfg), ingreso: await estadoIngreso(cfg), pago: await estadoProveedoresPago(cfg) };
   });
 
   // Admin: actualizar.
@@ -281,9 +365,23 @@ export function registerPedidosOnlineConfigHandlers(
     if (upayKeyNueva && !data.upayApiKeyBorrar && !almacenSeguroDisponible()) {
       return { success: false, error: 'almacen_seguro_no_disponible' };
     }
+    // Proveedores de pago (activo, datos por proveedor, devolución automática).
+    const resProv = await aplicarProveedoresPago(cfg, data);
+    if ('error' in resProv) return { success: false, error: resProv.error };
     if (cfg.pagoOnlineActivo) {
-      const keyFinal = data.upayApiKeyBorrar ? '' : upayKeyNueva || (await upayApiKeyActual());
-      if (!cfg.upayMerchantId || !keyFinal) return { success: false, error: 'upay_faltan_credenciales' };
+      const activo = proveedorActivo(cfg);
+      if (activo.id === upayProveedor.id) {
+        const keyFinal = data.upayApiKeyBorrar ? '' : upayKeyNueva || (await upayApiKeyActual());
+        if (!cfg.upayMerchantId || !keyFinal) return { success: false, error: 'upay_faltan_credenciales' };
+      } else {
+        // Completo contando lo que se está guardando ahora (los secretos todavía no se escribieron).
+        const valores = valoresProveedor(cfg, activo);
+        for (const c of activo.campos.filter((x) => x.requerido)) {
+          const nuevo = resProv.secretos.find((x) => x.prov === activo.id && x.clave === c.clave);
+          const tiene = c.secreto ? (nuevo ? !!nuevo.valor : !!(await secretoProveedor(activo.id, c.clave))) : !!valores[c.clave];
+          if (!tiene) return { success: false, error: 'pago_faltan_credenciales', proveedor: activo.id };
+        }
+      }
     }
     // Token: solo escritura. Se manda para cambiarlo; `whatsappTokenBorrar` lo quita.
     // Se valida antes y se escribe en el keychain después de guardar la fila, así un error
@@ -298,9 +396,10 @@ export function registerPedidosOnlineConfigHandlers(
     else if (tokenNuevo) tokenOk = await setWhatsappToken(tokenNuevo);
     if (data.upayApiKeyBorrar) tokenOk = (await setUpayApiKey('')) && tokenOk;
     else if (upayKeyNueva) tokenOk = (await setUpayApiKey(upayKeyNueva)) && tokenOk;
+    for (const x of resProv.secretos) tokenOk = (await setSecretoPago(x.prov, x.clave, x.valor)) && tokenOk;
     await cargarCredencialesTienda(dataSource);
     if (!tokenOk) return { success: false, error: 'token_no_guardado' };
-    return { success: true, config: { ...saved, metodosPago: metodosAlRecibir(saved), abiertaAhora: estaAbierta(saved), ingreso: await estadoIngreso(saved) } };
+    return { success: true, config: { ...saved, metodosPago: metodosAlRecibir(saved), abiertaAhora: estaAbierta(saved), ingreso: await estadoIngreso(saved), pago: await estadoProveedoresPago(saved) } };
   });
 
   // Admin: prueba la conexión con uPay (F4) consultando una sesión que no existe: 404 = la
@@ -311,6 +410,18 @@ export function registerPedidosOnlineConfigHandlers(
     if (!u) return { success: false, error: 'upay_faltan_credenciales' };
     const r = await upayProveedor.probarConexion(u, { fetch: fetchActual() });
     return r.ok ? { success: true } : { success: false, error: r.error, ...(r.detalle ? { detalle: r.detalle } : {}) };
+  });
+
+  // Admin: prueba la conexión con un proveedor de pago (el activo si no se indica). No cobra.
+  ipcMain.handle('probar-tienda-pago', async (_event: any, proveedorId?: string) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM);
+    const cfg = await getTiendaConfig(dataSource);
+    const prov = proveedorId ? proveedorPorId(proveedorId) : proveedorActivo(cfg);
+    if (!prov) return { success: false, error: 'pago_proveedor_invalido' };
+    const creds = await prov.credenciales(dataSource, cfg);
+    if (!creds) return { success: false, error: prov.id === upayProveedor.id ? 'upay_faltan_credenciales' : 'pago_faltan_credenciales' };
+    const r = await prov.probarConexion(creds, { fetch: fetchActual() });
+    return r.ok ? { success: true, proveedor: prov.nombre } : { success: false, error: r.error, proveedor: prov.nombre, ...(r.detalle ? { detalle: r.detalle } : {}) };
   });
 
   // Admin: manda un código de prueba por WhatsApp con las credenciales vigentes (F3).

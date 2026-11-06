@@ -1,7 +1,7 @@
 import { iniciarPagoPedido, verificarPagoPedido, VERIFICAR_MIN_MS } from '../services/pagos-online/pagos-online.service';
 import { metodosAlRecibir, monedasTienda, validarPagoPedido, ResultadoPago } from '../utils/pago-pedido.utils';
 import { accionesPedido, ESTADOS_CANCELABLES_CLIENTE, limpiarMotivo } from '../utils/pedido-acciones.utils';
-import { pagoOnlineOfrecido } from '../utils/tienda-ingreso.utils';
+import { pagoOnlineOfrecido, proveedorPagoActivo } from '../utils/tienda-ingreso.utils';
 import { ipcMain } from 'electron';
 import { createHash, randomBytes } from 'crypto';
 import { DataSource, In, IsNull } from 'typeorm';
@@ -21,6 +21,7 @@ import {
   CanalPedidoOnline,
   MetodoPagoOnline,
   EstadoPagoOnline,
+  esMetodoPagoOnline,
 } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { PdvMesa } from '../../src/app/database/entities/ventas/pdv-mesa.entity';
 import { registerPublicOperation } from '../server/public-routes';
@@ -332,14 +333,17 @@ export function registerPedidosOnlinePedidosHandlers(
     // Topes de entrada (PLAN-tienda-online A2).
     if (itemsIn.length > MAX_ITEMS_PEDIDO) return { success: false, error: 'demasiados_items' };
     if (itemsIn.some((it) => Number(it?.cantidad) > MAX_CANTIDAD_ITEM)) return { success: false, error: 'cantidad_excedida' };
-    const metodoPagoIn = data?.metodoPago || MetodoPagoOnline.EFECTIVO;
+    const metodoPagoPedido = String(data?.metodoPago || MetodoPagoOnline.EFECTIVO).toUpperCase();
 
     // Config de tienda: apertura.
     const cfg = await getTiendaConfig(dataSource);
     if (!estaAbierta(cfg)) return { success: false, error: 'tienda_cerrada' };
-    // Tarjeta por uPay (F4) si el local la ofrece, o un método al recibir de los que habilitó la
+    // Tarjeta online (F4) si el local la ofrece, o un método al recibir de los que habilitó la
     // tienda (F8; sin configurar = sólo efectivo). MESA_QR paga siempre en caja.
-    const pagaOnline = metodoPagoIn === MetodoPagoOnline.UPAY;
+    // El cliente pide «online» y el servidor decide con qué proveedor: el activo (un storefront
+    // viejo que manda 'UPAY' con Bancard activo cobra igual con Bancard).
+    const pagaOnline = esMetodoPagoOnline(metodoPagoPedido);
+    const metodoPagoIn = (pagaOnline ? proveedorPagoActivo().id : metodoPagoPedido) as MetodoPagoOnline;
     if (pagaOnline && (tipoPedido === TipoPedidoOnline.MESA_QR || !pagoOnlineOfrecido(cfg))) {
       return { success: false, error: 'metodo_pago_no_disponible' };
     }

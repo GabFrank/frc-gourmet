@@ -1,5 +1,6 @@
 import { marcarDevuelto, registrarDecisionPago, resolverDevolucionPendiente } from '../services/pagos-online/pagos-online.service';
 import { DecisionPago, DecisionPagoError, estadoPagoPorDecision, normalizarDecisionPago } from '../utils/decision-pago-online.utils';
+import { nombreProveedor } from '../services/pagos-online/proveedores';
 import { cierreSolicitudAlSalir, ESTADOS_CANCELABLES_CLIENTE, limpiarMotivo, motivoAtencion, WHERE_ATENCION, PARAMS_ATENCION } from '../utils/pedido-acciones.utils';
 
 class PedidoCambioError extends Error { constructor() { super('pedido_cambio_reintentar'); } }
@@ -82,9 +83,10 @@ function mapPedidoAdmin(p: PedidoOnline, monedas: Pick<MonedaTienda, 'id' | 'sim
     fechaAceptado: p.fechaAceptado ?? null,
     fechaListo: p.fechaListo ?? null,
     fechaEntregado: p.fechaEntregado ?? null,
-    // F4: pago con tarjeta (uPay).
+    // F4: pago con tarjeta online (el proveedor del pedido).
     estadoPago: p.estadoPago ?? null,
     pagoId: p.pagoId ?? null,
+    pagoProveedorNombre: p.estadoPago ? nombreProveedor(p.pagoProveedor) : null,
     pagoMonto: p.pagoMonto != null ? Number(p.pagoMonto) : null,
     pagoDetalle: p.pagoDetalle ?? null,
     pagadoEn: p.pagadoEn ?? null,
@@ -420,7 +422,7 @@ export function registerPedidosOnlineAdminHandlers(
     const ps = await repo().find({ where: { ventaId: Number(ventaId), estadoPago: EstadoPagoOnline.PAGADO } as any });
     return {
       success: true,
-      pedidos: ps.map((p) => ({ id: p.id, numero: p.numero, monto: Number(p.pagoMonto ?? p.total), estado: p.estado })),
+      pedidos: ps.map((p) => ({ id: p.id, numero: p.numero, monto: Number(p.pagoMonto ?? p.total), estado: p.estado, proveedor: nombreProveedor(p.pagoProveedor) })),
     };
   });
 

@@ -17,6 +17,9 @@ export interface TiendaConfig {
   otpWhatsappDisponible?: boolean;
   /** F4: el local ofrece pagar con tarjeta (uPay) en retiro y delivery. */
   pagoOnline?: boolean;
+  /** Proveedor con el que se cobra (`UPAY`, `BANCARD`) y hosts a los que la tienda puede ir. */
+  pagoOnlineProveedor?: string | null;
+  pagoOnlineHosts?: string[];
   /** F8: métodos para pagar al recibir / retirar (sin configurar = sólo efectivo). */
   metodosPago?: string[];
   /** F9: teléfono del local (llamar / escribir desde el detalle del pedido). */

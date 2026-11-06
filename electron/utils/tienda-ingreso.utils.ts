@@ -13,12 +13,19 @@ import { ConfiguracionNotificacion } from '../../src/app/database/entities/notif
  * siguen siendo síncronos y no leen el keychain en cada pedido.
  */
 let googleClientIdOverride: string | null = null;
-// F4: hay API Key de uPay + merchant cargados (la clave nunca queda acá, solo el sí/no).
-let upayCredencialesListas = false;
+// F4 / proveedores: el proveedor activo tiene sus credenciales completas (nunca quedan acá,
+// solo el sí/no), su id y los hosts que el storefront acepta para pagar.
+let pagoCredencialesListas = false;
+let pagoProveedorActivo: { id: string; nombre: string; hosts: string[] } = { id: 'UPAY', nombre: 'uPay', hosts: [] };
 
 /** ¿Se ofrece «Pagar con tarjeta» a pedidos nuevos? (interruptor + credenciales cargadas) */
 export function pagoOnlineOfrecido(cfg: { pagoOnlineActivo?: boolean } | null | undefined): boolean {
-  return !!cfg?.pagoOnlineActivo && upayCredencialesListas;
+  return !!cfg?.pagoOnlineActivo && pagoCredencialesListas;
+}
+
+/** Proveedor con el que se cobran los pedidos nuevos (id, nombre y hosts permitidos). */
+export function proveedorPagoActivo(): { id: string; nombre: string; hosts: string[] } {
+  return pagoProveedorActivo;
 }
 
 export function getGoogleClientId(): string | null {
@@ -60,8 +67,10 @@ async function leerYAplicar(dataSource: DataSource): Promise<void> {
     nombreComercio: cfg?.nombreComercio || null,
   });
   googleClientIdOverride = cfg?.googleClientId || null;
-  const { apiKey: upayApiKey } = await import('../services/pagos-online/pagos-online.service');
-  upayCredencialesListas = !!cfg?.upayMerchantId && !!(await upayApiKey());
+  const { proveedorActivo } = await import('../services/pagos-online/pagos-online.service');
+  const prov = proveedorActivo(cfg);
+  pagoProveedorActivo = { id: prov.id, nombre: prov.nombre, hosts: prov.hosts };
+  pagoCredencialesListas = !!(await prov.credenciales(dataSource, cfg));
 }
 
 /** Claves de Evolution en `configuracion_notificaciones` (las mismas que usa `notificacion.service`). */

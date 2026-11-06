@@ -3,9 +3,10 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { PublicApiService } from '../../core/public-api.service';
 import { AuthService } from '../../core/auth.service';
+import { ConfigService } from '../../core/config.service';
 import { GuaraniPipe } from '../../core/guarani.pipe';
 import { IconComponent } from '../../core/icon.component';
-import { esUrlCheckoutUpay, textoEstadoPago } from '../../core/pago-online';
+import { esUrlPagoPermitida, textoEstadoPago } from '../../core/pago-online';
 
 /**
  * Vuelta de uPay (PLAN-tienda-online F4): /tienda/pago/<numero>. El resultado lo decide el
@@ -26,7 +27,7 @@ import { esUrlCheckoutUpay, textoEstadoPago } from '../../core/pago-online';
           <span>{{ pedido.total | guarani }}</span>
         </div>
         <p *ngIf="estadoPago === 'PENDIENTE'" class="sf-muted">
-          <sf-icon name="clock" [size]="16"></sf-icon> Confirmando tu pago con uPay… Esto puede tardar unos minutos.
+          <sf-icon name="clock" [size]="16"></sf-icon> Confirmando tu pago… Esto puede tardar unos minutos.
         </p>
         <div class="sf-ok" *ngIf="estadoPago === 'PAGADO'">
           <sf-icon name="check" [size]="16"></sf-icon> ¡Pago confirmado! Tu pedido ya está en el local.
@@ -56,6 +57,7 @@ export class PagoPage implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   auth = inject(AuthService);
+  private config = inject(ConfigService);
   numero = '';
   pedido: any = null;
   cargando = true;
@@ -96,7 +98,7 @@ export class PagoPage implements OnInit, OnDestroy {
     this.api.call<any>('pedido.pago.iniciar', [this.numero, { nuevoIntento: true }]).subscribe({
       next: (r) => {
         this.reintentando = false;
-        if (r?.success && esUrlCheckoutUpay(r.checkoutUrl)) { window.location.href = r.checkoutUrl; return; }
+        if (r?.success && esUrlPagoPermitida(r.checkoutUrl, this.config.config?.pagoOnlineHosts)) { window.location.href = r.checkoutUrl; return; }
         this.error = 'No pudimos abrir el pago con tarjeta. Probá de nuevo en un rato.';
       },
       error: () => { this.reintentando = false; this.error = 'No pudimos abrir el pago con tarjeta.'; },

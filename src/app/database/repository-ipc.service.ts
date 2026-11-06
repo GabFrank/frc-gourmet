@@ -494,6 +494,7 @@ interface ElectronAPI {
   updateTiendaOnlineConfig: (data: any) => Promise<any>;
   probarTiendaWhatsapp: (data: { telefono: string }) => Promise<any>;
   probarTiendaUpay: () => Promise<any>;
+  probarTiendaPago: (proveedorId?: string) => Promise<any>;
   marcarPagoDevueltoPedidoOnline: (pedidoId: number) => Promise<any>;
   resolverPagoPedidoOnline: (pedidoId: number, decisionPago: DecisionPagoPayload) => Promise<any>;
   pedidosOnlinePagadosDeVenta: (ventaId: number) => Promise<any>;
@@ -2672,6 +2673,10 @@ export class RepositoryIpcService extends RepositoryService {
   }
   probarTiendaUpay(): Observable<any> {
     return from(this.api.probarTiendaUpay());
+  }
+
+  probarTiendaPago(proveedorId?: string): Observable<any> {
+    return from(this.api.probarTiendaPago(proveedorId));
   }
   marcarPagoDevueltoPedidoOnline(pedidoId: number): Observable<any> {
     return from(this.api.marcarPagoDevueltoPedidoOnline(pedidoId));

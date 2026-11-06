@@ -21,14 +21,14 @@ import {
   DecisionPagoOnline,
   EstadoPagoOnline,
   EstadoPedidoOnline,
-  MetodoPagoOnline,
+  esMetodoPagoOnline,
 } from '../../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { DecisionPago, estadoPagoPorDecision, PagoDecidido } from '../../utils/decision-pago-online.utils';
 import { UpayConfig } from './upay-checkout.provider';
 import { ResultadoPago } from './interpretar-pago';
 import { deps, fetchActual } from './proveedores/deps';
 import { ContextoProveedor, FetchLike, ProveedorError, ProveedorPagoOnline } from './proveedores/tipos';
-import { nombreProveedor, proveedorDelPedido, PROVEEDOR_UPAY } from './proveedores';
+import { nombreProveedor, proveedorDelPedido, proveedorPorId, PROVEEDOR_UPAY } from './proveedores';
 import { upayApiKey, upayConfigDeCfg, upayProveedor } from './proveedores/upay.proveedor';
 
 export { PROVEEDOR_UPAY };
@@ -73,8 +73,9 @@ export async function upayConfigDe(ds: DataSource, cfg?: TiendaOnlineConfig | nu
 }
 
 /** El proveedor con el que se cobran los pedidos NUEVOS. */
-export function proveedorActivo(_cfg: TiendaOnlineConfig | null): ProveedorPagoOnline {
-  return upayProveedor;
+export function proveedorActivo(cfg: TiendaOnlineConfig | null): ProveedorPagoOnline {
+  // Vacío o desconocido = uPay (instalaciones de antes de que se pudiera elegir).
+  return proveedorPorId(cfg?.pagoProveedor) || upayProveedor;
 }
 
 /** Proveedor activo con sus credenciales, o null si el pago online no se puede ofrecer. */
@@ -133,13 +134,15 @@ export async function iniciarPagoPedido(
   p.pagoIdemKey = extra?.pagoIdemKey ?? null;
   p.pagoCheckoutUrl = extra?.pagoCheckoutUrl ?? null;
 
-  if (p.metodoPago !== MetodoPagoOnline.UPAY || p.estado !== EstadoPedidoOnline.PENDIENTE_PAGO) {
+  if (!esMetodoPagoOnline(p.metodoPago) || p.estado !== EstadoPedidoOnline.PENDIENTE_PAGO) {
     return { success: false, error: 'pedido_no_espera_pago' };
   }
   if (p.estadoPago === EstadoPagoOnline.PAGADO) return { success: false, error: 'pedido_ya_pagado' };
-  const listo = await proveedorActivoListo(ds, await getCfg(ds));
-  if (!listo) return { success: false, error: 'pago_online_no_disponible' };
-  const { prov, creds } = listo;
+  // Se cobra con el proveedor con que se creó el pedido (`metodoPago`), aunque el activo haya
+  // cambiado en el medio: así lo que vio el cliente y lo que se cobra coinciden.
+  const prov = proveedorPorId(p.metodoPago);
+  const creds = prov ? await prov.credenciales(ds, await getCfg(ds)) : null;
+  if (!prov || !creds) return { success: false, error: 'pago_online_no_disponible' };
 
   // Sesión vigente del mismo intento: se reusa (doble clic, reintento de red).
   const vigente = p.pagoSesionId && p.pagoCheckoutUrl && p.estadoPago === EstadoPagoOnline.PENDIENTE

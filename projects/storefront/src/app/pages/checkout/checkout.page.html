@@ -163,7 +163,7 @@
         </div>
       </ng-container>
 
-      <p class="sf-muted ayuda" *ngIf="modalidad === 'ONLINE'">Te llevamos a la página segura de uPay. El pedido va a la cocina cuando se confirma el pago.</p>
+      <p class="sf-muted ayuda" *ngIf="modalidad === 'ONLINE'">Te llevamos a la página segura de pago. El pedido va a la cocina cuando se confirma el pago.</p>
 
       <label class="sf-label" for="pago-obs">Observación del pago <span class="sf-muted">(opcional)</span></label>
       <textarea id="pago-obs" class="sf-input" rows="2" maxlength="200" [(ngModel)]="pagoObservacion" placeholder="Ej.: tengo un billete de 100.000"></textarea>
@@ -174,6 +174,6 @@
 
 <div class="sf-sticky-bar" *ngIf="config.config.abiertaAhora && (mesa.enMesa || auth.isAuthenticated)">
   <button class="sf-btn sf-btn--block" [disabled]="enviando || cart.items.length === 0" (click)="confirmar()">
-    {{ enviando ? 'Enviando…' : ((pagoOnline && metodoPago === 'UPAY' ? 'Pagar con tarjeta · ' : 'Confirmar pedido · ') + ((mesa.enMesa ? cart.subtotal : total) | precio: monedas.seleccionada)) }}
+    {{ enviando ? 'Enviando…' : ((pagoOnline && modalidad === 'ONLINE' ? 'Pagar con tarjeta · ' : 'Confirmar pedido · ') + ((mesa.enMesa ? cart.subtotal : total) | precio: monedas.seleccionada)) }}
   </button>
 </div>

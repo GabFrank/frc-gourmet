@@ -104,7 +104,7 @@ const SECCIONES_COLA: { clave: string; titulo: string }[] = [
   { clave: 'CANCELACION', titulo: 'PIDEN CANCELAR' },
   { clave: 'NUEVO', titulo: 'NUEVOS' },
   { clave: 'SIN_COCINA', titulo: 'ACEPTADOS SIN ENVIAR A COCINA' },
-  { clave: 'DEVOLVER', titulo: 'DEVOLVER PAGO EN UPAY' },
+  { clave: 'DEVOLVER', titulo: 'DEVOLVER PAGO ONLINE' },
 ];
 
 /** Insignia del pago online (uPay). Misma tabla que la bandeja (`pagoInsignia`). */
@@ -522,7 +522,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     if (!motivo) return;
     // Pagado online: qué se hace con ese cobro (auditoría post-F10).
     const pago = p.estadoPago === 'PAGADO'
-      ? await this.decisionPago.preguntar({ modo: 'CANCELAR', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0) }] })
+      ? await this.decisionPago.preguntar({ modo: 'CANCELAR', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0), proveedor: p.pagoProveedorNombre }] })
       : { seguir: true };
     if (!pago.seguir) return;
 
@@ -531,7 +531,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       const res: any = await firstValueFrom(this.repositoryService.rechazarPedidoOnline(p.id, motivo, pago.decision));
       if (res?.success) {
         this.snackBar.open(p.estadoPago === 'PAGADO'
-          ? textoResultadoPago(p.numero, p.pagoMonto, pago.decision, 'rechazado')
+          ? textoResultadoPago(p.numero, p.pagoMonto, pago.decision, 'rechazado', p.pagoProveedorNombre)
           : `Pedido ${p.numero} rechazado`, 'OK', { duration: p.estadoPago === 'PAGADO' ? 10000 : 3000 });
         await this.cargarPedidosOnline();
         await this.loadDeliveries();
@@ -557,7 +557,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     if (!r) return;
     const pagado = aprobar && p.estadoPago === 'PAGADO';
     const pago = pagado
-      ? await this.decisionPago.preguntar({ modo: 'CANCELAR', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0) }] })
+      ? await this.decisionPago.preguntar({ modo: 'CANCELAR', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0), proveedor: p.pagoProveedorNombre }] })
       : { seguir: true };
     if (!pago.seguir) return;
     this.procesandoPedidoId = p.id;
@@ -568,7 +568,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       if (res?.success) {
         this.snackBar.open(
           !aprobar ? `Se le respondió al cliente: ${p.numero} sigue`
-            : pagado ? textoResultadoPago(p.numero, p.pagoMonto, pago.decision)
+            : pagado ? textoResultadoPago(p.numero, p.pagoMonto, pago.decision, undefined, p.pagoProveedorNombre)
             : `Pedido ${p.numero} cancelado`,
           'OK', { duration: pagado ? 10000 : 3000 });
         await this.cargarPedidosOnline();
@@ -613,7 +613,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
    * no entró, o no se devuelve (auditoría post-F10, con motivo). Mismo diálogo que la bandeja.
    */
   async marcarDevueltoOnline(p: any): Promise<void> {
-    const pago = await this.decisionPago.preguntar({ modo: 'RESOLVER', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0) }] });
+    const pago = await this.decisionPago.preguntar({ modo: 'RESOLVER', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0), proveedor: p.pagoProveedorNombre }] });
     if (!pago.seguir || !pago.decision) return;
     this.procesandoPedidoId = p.id;
     try {
@@ -1340,14 +1340,14 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       // Pedido web pagado online: qué se hace con ese cobro (auditoría post-F10).
       const web = objetivo.pedidoWeb;
       const pago = web?.estadoPago === 'PAGADO'
-        ? await this.decisionPago.preguntar({ modo: 'CANCELAR', pedidos: [{ numero: web.numero, monto: Number(web.pagoMonto || 0) }] })
+        ? await this.decisionPago.preguntar({ modo: 'CANCELAR', pedidos: [{ numero: web.numero, monto: Number(web.pagoMonto || 0), proveedor: web.pagoProveedorNombre }] })
         : { seguir: true };
       if (!pago.seguir) return;
       try {
         // Una sola llamada transaccional: delivery + venta + cobro + stock.
         await firstValueFrom(this.repositoryService.deliveryCancelar(objetivo.id, motivo, pago.decision));
         if (web?.estadoPago === 'PAGADO') {
-          this.snackBar.open(textoResultadoPago(web.numero, web.pagoMonto, pago.decision), 'OK', { duration: 10000 });
+          this.snackBar.open(textoResultadoPago(web.numero, web.pagoMonto, pago.decision, undefined, web.pagoProveedorNombre), 'OK', { duration: 10000 });
         } else {
           this.snackBar.open(`${web?.numero || `Delivery #${objetivo.id}`} cancelado`, 'CERRAR', { duration: 3000 });
         }

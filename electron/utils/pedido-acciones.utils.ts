@@ -8,6 +8,7 @@
  * - Excepción: «Modificar» (cancelar y volver al carrito) es inmediato, pero sólo mientras el
  *   pedido espera confirmación y no hay nada armado detrás (sin venta, sin cobro online).
  */
+import { nombreProveedor } from '../services/pagos-online/proveedores';
 import { EstadoPagoOnline, EstadoPedidoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 
 /** Los mismos que acepta `rechazar-pedido-online` (la aprobación pasa por ahí). */
@@ -74,7 +75,7 @@ export function cierreSolicitudAlSalir(
 export function resumenPedidoWeb(p: {
   id: number; numero: string; estado: string; tipoPedido?: string | null; estadoPago?: string | null;
   pagoMonto?: any; pagoId?: string | null; cancelacionSolicitadaEn?: any; cancelacionMotivo?: string | null;
-  cancelacionRespuesta?: string | null;
+  cancelacionRespuesta?: string | null; pagoProveedor?: string | null;
 }) {
   return {
     id: p.id,
@@ -84,6 +85,8 @@ export function resumenPedidoWeb(p: {
     estadoPago: p.estadoPago ?? null,
     pagoMonto: p.pagoMonto != null ? Number(p.pagoMonto) : null,
     pagoId: p.pagoId ?? null,
+    // Con qué proveedor se pagó (para «REF. BANCARD …» y «devolvé en Bancard»).
+    pagoProveedorNombre: p.estadoPago ? nombreProveedor(p.pagoProveedor) : null,
     pideCancelar: !!p.cancelacionSolicitadaEn && ESTADOS_CANCELABLES_CLIENTE.includes(p.estado as EstadoPedidoOnline),
     cancelacionMotivo: p.cancelacionMotivo ?? null,
     cancelacionRespuesta: p.cancelacionRespuesta ?? null,

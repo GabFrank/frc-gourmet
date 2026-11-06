@@ -40,12 +40,20 @@ async function main() {
   };
   // Sube todo y baja las migraciones de la tienda posteriores a F4 (F6 en adelante), para
   // que los bloques F2-F4 de abajo sigan encontrando a F4 como la última.
-  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda|TiendaDetallePedido|TiendaTelefonoContactoCuenta/;
+  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda|TiendaDetallePedido|TiendaTelefonoContactoCuenta|TiendaPagoProveedores/;
   const subirSinPosteriores = async () => {
     await ds.runMigrations({ transaction: 'each' });
     for (;;) {
       const u = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
       if (!POSTERIORES_A_F4.test(String(u))) break;
+      await ds.undoLastMigration({ transaction: 'each' });
+    }
+  };
+  /** Baja migraciones hasta que la última sea la que matchea `re` (la cadena puede crecer). */
+  const bajarHasta = async (re: RegExp) => {
+    for (let i = 0; i < 20; i++) {
+      const u = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
+      if (re.test(String(u))) return;
       await ds.undoLastMigration({ transaction: 'each' });
     }
   };
@@ -65,7 +73,9 @@ async function main() {
   const F4_PEDIDO = ['estado_pago', 'pago_proveedor', 'pago_intento', 'pago_idem_key', 'pago_sesion_id', 'pago_checkout_url',
     'pago_id', 'pago_monto', 'pago_expira_en', 'pago_ultima_consulta', 'pago_detalle', 'pagado_en', 'pago_aviso_sin_aceptar'];
   // Columnas de config de migraciones posteriores a F4 (F6b), que estos bloques bajan antes.
-  const POST_F4_CFG = ['personalizar_sabores', 'metodos_pago', 'whatsapp_proveedor', 'telefono_contacto'];
+  // Columnas de config posteriores a F4 (F6, F8, F9 y proveedores de pago).
+  const PROV_CFG = ['pago_proveedor', 'pago_config_json', 'pago_devolucion_automatica'];
+  const POST_F4_CFG = ['personalizar_sabores', 'metodos_pago', 'whatsapp_proveedor', 'telefono_contacto', ...PROV_CFG];
   // Columnas de pedido de F8 (TiendaPagoMoneda), posteriores a F4.
   const F8_PEDIDO = ['pago_modalidad', 'pago_moneda_id', 'vuelto_para', 'pago_cotizacion', 'pago_observacion'];
   // Columnas de pedido y config de F9 (TiendaDetallePedido).
@@ -168,8 +178,7 @@ async function main() {
   ok((await columnas()).includes('pago_id'), 'F4 up de nuevo las vuelve a crear');
 
   // F8: TiendaPagoMoneda (cómo paga el cliente + métodos de la tienda), up / down / up.
-  await ds.undoLastMigration({ transaction: 'each' }); // baja el teléfono de contacto
-  await ds.undoLastMigration({ transaction: 'each' }); // baja F9 para que F8 quede última
+  await bajarHasta(/TiendaPagoMoneda/); // baja lo posterior a F8 para que quede última
   const ultimaF8 = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
   ok(/TiendaPagoMoneda/.test(String(ultimaF8)), 'F8: TiendaPagoMoneda es la última migración', ultimaF8);
   const colsF8 = await columnas();
@@ -181,13 +190,13 @@ async function main() {
   await ds.runMigrations({ transaction: 'each' });
   const conF8 = await columnas();
   ok(F8_PEDIDO.every((c) => conF8.includes(c)), 'F8 up de nuevo las vuelve a crear');
-  await ds.undoLastMigration({ transaction: 'each' }); // baja el teléfono de contacto: F9 queda última
+  await bajarHasta(/TiendaDetallePedido/); // baja lo posterior: F9 queda última
 
   // F9: TiendaDetallePedido (solicitud de cancelación + proveedor de WhatsApp + teléfono), up / down / up.
   const ultimaF9 = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
   ok(/TiendaDetallePedido/.test(String(ultimaF9)), 'F9: TiendaDetallePedido es la última migración', ultimaF9);
   ok(JSON.stringify(entTodas) === JSON.stringify([...(await columnas())].sort()), 'F9: las columnas del pedido coinciden con la entidad completa');
-  ok(JSON.stringify(metaCfg.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...(await colsCfg())].sort()), 'F9: las columnas de config coinciden con la entidad completa');
+  ok(JSON.stringify(metaCfg.columns.map((c) => c.databaseName).filter((c) => !PROV_CFG.includes(c)).sort()) === JSON.stringify([...(await colsCfg())].sort()), 'F9: las columnas de config coinciden con la entidad (sin proveedores de pago)');
   await ds.query(`INSERT INTO pedidos_online (numero, tipo_pedido, cancelacion_motivo) VALUES ('ZT-F9', 'PICKUP', 'X')`);
   await ds.undoLastMigration({ transaction: 'each' });
   const sinF9 = await columnas();
@@ -204,6 +213,7 @@ async function main() {
   const colsCuenta = async (): Promise<string[]> => pgDb
     ? (await ds.query(`SELECT column_name AS c FROM information_schema.columns WHERE table_schema='public' AND table_name='cuentas_cliente'`)).map((r: any) => r.c)
     : (await ds.query(`PRAGMA table_info('cuentas_cliente')`)).map((r: any) => r.name);
+  await bajarHasta(/TiendaTelefonoContactoCuenta/);
   const ultimaTel = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
   ok(/TiendaTelefonoContactoCuenta/.test(String(ultimaTel)), 'Contacto: TiendaTelefonoContactoCuenta es la última migración', ultimaTel);
   const metaCuenta = ds.entityMetadatas.find((m) => m.tableName === 'cuentas_cliente')!;
@@ -216,6 +226,25 @@ async function main() {
   await ds.runMigrations({ transaction: 'each' });
   ok((await colsCuenta()).includes('telefono_contacto'), 'Contacto: up de nuevo la vuelve a crear');
   await ds.query(`DELETE FROM cuentas_cliente WHERE email = 'zt-tel@x.com'`);
+
+  // Proveedores de pago (TiendaPagoProveedores): 3 columnas de config + forma de pago BANCARD ONLINE.
+  const ultimaProv = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
+  ok(/TiendaPagoProveedores/.test(String(ultimaProv)), 'Proveedores: TiendaPagoProveedores es la última migración', ultimaProv);
+  const PROV_COLS = ['pago_proveedor', 'pago_config_json', 'pago_devolucion_automatica'];
+  const conProv = await colsCfg();
+  ok(PROV_COLS.every((c) => metaCfg.columns.some((m) => m.databaseName === c) && conProv.includes(c)),
+    'Proveedores: las 3 columnas están en la entidad y en la base', conProv);
+  ok(JSON.stringify(metaCfg.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...(await colsCfg())].sort()),
+    'Proveedores: las columnas de config coinciden con la entidad completa');
+  const fpB = async () => Number((await ds.query(`SELECT COUNT(*) AS n FROM formas_pago WHERE nombre = 'BANCARD ONLINE'`))[0].n);
+  ok(await fpB() === 1, 'Proveedores: siembra la forma de pago BANCARD ONLINE');
+  await ds.undoLastMigration({ transaction: 'each' });
+  const sinProv = await colsCfg();
+  ok(!sinProv.some((c) => PROV_COLS.includes(c)), 'Proveedores: down quita las columnas', sinProv);
+  ok(await fpB() === 0, 'Proveedores: down quita la forma de pago sin usar');
+  await ds.runMigrations({ transaction: 'each' });
+  const deNuevo = await colsCfg();
+  ok(PROV_COLS.every((c) => deNuevo.includes(c)) && await fpB() === 1, 'Proveedores: up de nuevo las vuelve a crear');
 
   await ds.destroy();
   console.log(`\n[tienda-migracion] ${passed} OK, ${failed} fallas`);

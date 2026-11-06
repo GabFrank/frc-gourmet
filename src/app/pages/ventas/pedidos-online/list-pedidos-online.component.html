@@ -45,7 +45,7 @@
 
       <div class="pago-online" *ngIf="p.insignia as ins">
         <span class="pago-chip" [attr.data-tipo]="ins.clase"><mat-icon>credit_card</mat-icon> {{ ins.texto }}</span>
-        <span class="muted ref" *ngIf="p.pagoId">Ref. uPay {{ p.pagoId }}</span>
+        <span class="muted ref" *ngIf="p.pagoId">Ref. {{ p.pagoProveedorNombre }} {{ p.pagoId }}</span>
       </div>
 
       <div class="cliente">

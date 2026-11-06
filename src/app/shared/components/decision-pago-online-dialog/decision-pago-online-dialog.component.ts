@@ -10,7 +10,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { DecisionPagoOnlineTipo, DecisionPagoPayload } from '../../../database/decision-pago-online.types';
 
 /**
- * Qué se hace con lo cobrado online (uPay) de un pedido web.
+ * Qué se hace con lo cobrado online (uPay, Bancard…) de un pedido web.
  *
  * - `CANCELAR`: se está cancelando o rechazando un pedido pagado (bandeja, diálogo de delivery,
  *   historial de ventas, PdV). Ofrece las cuatro salidas; «Hay que devolverlo» es la de siempre.
@@ -21,8 +21,8 @@ import { DecisionPagoOnlineTipo, DecisionPagoPayload } from '../../../database/d
  */
 export interface DecisionPagoOnlineDialogData {
   modo: 'CANCELAR' | 'RESOLVER';
-  /** Pedidos web pagados afectados (normalmente uno). */
-  pedidos: { numero: string; monto: number }[];
+  /** Pedidos web pagados afectados (normalmente uno), con el nombre de su proveedor de pago. */
+  pedidos: { numero: string; monto: number; proveedor?: string | null }[];
 }
 
 interface OpcionPago {
@@ -32,12 +32,15 @@ interface OpcionPago {
   pideMotivo: boolean;
 }
 
-const OPCIONES: OpcionPago[] = [
-  { valor: 'DEVOLVER', titulo: 'Hay que devolverlo', detalle: 'Queda en la cola DEVOLVER y se avisa al personal para hacerlo desde uPay.', pideMotivo: false },
-  { valor: 'YA_DEVUELTO', titulo: 'Ya lo devolví en uPay', detalle: 'Queda como devuelto; no entra en la cola.', pideMotivo: false },
-  { valor: 'NO_ENTRO', titulo: 'El pago no entró', detalle: 'uPay no lo acreditó o se anuló allá: no hay nada que devolver.', pideMotivo: true },
-  { valor: 'NO_SE_DEVUELVE', titulo: 'No se devuelve', detalle: 'El local se queda con el cobro (por ejemplo, el cliente no retiró).', pideMotivo: true },
-];
+/** Las opciones, con el nombre del proveedor del pedido en los textos. */
+function opciones(prov: string): OpcionPago[] {
+  return [
+    { valor: 'DEVOLVER', titulo: 'Hay que devolverlo', detalle: `Queda en la cola DEVOLVER y se avisa al personal para hacerlo desde ${prov}.`, pideMotivo: false },
+    { valor: 'YA_DEVUELTO', titulo: `Ya lo devolví en ${prov}`, detalle: 'Queda como devuelto; no entra en la cola.', pideMotivo: false },
+    { valor: 'NO_ENTRO', titulo: 'El pago no entró', detalle: `${prov} no lo acreditó o se anuló allá: no hay nada que devolver.`, pideMotivo: true },
+    { valor: 'NO_SE_DEVUELVE', titulo: 'No se devuelve', detalle: 'El local se queda con el cobro (por ejemplo, el cliente no retiró).', pideMotivo: true },
+  ];
+}
 
 @Component({
   selector: 'app-decision-pago-online-dialog',
@@ -62,13 +65,15 @@ export class DecisionPagoOnlineDialogComponent {
     @Inject(MAT_DIALOG_DATA) public data: DecisionPagoOnlineDialogData,
   ) {
     const resolver = data.modo === 'RESOLVER';
-    this.opciones = resolver ? OPCIONES.filter((o) => o.valor !== 'DEVOLVER') : OPCIONES;
+    const prov = (data.pedidos || []).find((p) => p.proveedor)?.proveedor || 'el proveedor';
+    const todas = opciones(prov);
+    this.opciones = resolver ? todas.filter((o) => o.valor !== 'DEVOLVER') : todas;
     this.titulo = resolver ? 'Cerrar la devolución' : '¿Qué pasa con el pago con tarjeta?';
     const numeros = (data.pedidos || []).map((p) => p.numero).join(', ');
     this.montoTotal = (data.pedidos || []).reduce((s, p) => s + (Number(p.monto) || 0), 0);
     this.resumen = resolver
       ? `${numeros}: el pago está marcado para devolver. ¿Cómo se resolvió?`
-      : `${numeros} se pagó online con tarjeta (uPay). Al cancelarlo, ¿qué se hace con ese cobro?`;
+      : `${numeros} se pagó online con tarjeta (${prov}). Al cancelarlo, ¿qué se hace con ese cobro?`;
     // Al cancelar, lo de siempre queda marcado; al resolver, se elige a conciencia.
     this.seleccion = resolver ? null : 'DEVOLVER';
     this.recalcular();

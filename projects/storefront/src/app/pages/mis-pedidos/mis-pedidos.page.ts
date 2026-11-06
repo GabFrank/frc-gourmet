@@ -6,6 +6,7 @@ import { AuthService } from '../../core/auth.service';
 import { PedidoResumen } from '../../core/models';
 import { GuaraniPipe } from '../../core/guarani.pipe';
 import { IconComponent } from '../../core/icon.component';
+import { esMetodoPagoOnline } from '../../core/pago-online';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { tokensSeguimiento, quitarSeguimiento } from '../../core/seguimiento';
@@ -217,6 +218,6 @@ function conVista(pedidos: PedidoResumen[], monedas: Parameters<typeof textoPago
     vista: vistaEstadoPedido(p.estado, p.tipoPedido),
     pideCancelar: !!p.cancelacionSolicitadaEn && !TERMINALES.includes(p.estado),
     // F8/F9: cómo dijo que va a pagar (el de tarjeta online sale aparte, con su estado).
-    pagoTexto: p.metodoPago === 'UPAY' ? null : textoPagoCliente(p, monedas),
+    pagoTexto: esMetodoPagoOnline(p.metodoPago) ? null : textoPagoCliente(p, monedas),
   }));
 }

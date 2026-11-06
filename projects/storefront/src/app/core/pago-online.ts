@@ -1,8 +1,11 @@
 /**
- * Pago con tarjeta por uPay (PLAN-tienda-online F4). La tienda solo redirige a uPay: https y
- * host exacto o subdominio con punto (mismo criterio que el servidor).
+ * Pago con tarjeta online (PLAN-tienda-online F4; proveedores en PLAN-tienda-pagos-proveedores).
+ * La tienda solo va (o carga el script de pago) a los hosts del proveedor que publica el servidor
+ * (`tienda.config` → `pagoOnlineHosts`): https y host exacto o subdominio con punto.
  */
-export function esUrlCheckoutUpay(url: string): boolean {
+const HOSTS_UPAY = ['upay.com', 'upay.com.py'];
+
+export function esUrlPagoPermitida(url: string, hosts?: string[] | null): boolean {
   let u: URL;
   try {
     u = new URL(url);
@@ -11,7 +14,18 @@ export function esUrlCheckoutUpay(url: string): boolean {
   }
   if (u.protocol !== 'https:') return false;
   const h = u.hostname.toLowerCase();
-  return ['upay.com', 'upay.com.py'].some((d) => h === d || h.endsWith('.' + d));
+  const permitidos = hosts && hosts.length ? hosts : HOSTS_UPAY;
+  return permitidos.some((d) => h === d || h.endsWith('.' + d));
+}
+
+/** Compat: los tests y llamadores de F4. */
+export function esUrlCheckoutUpay(url: string): boolean {
+  return esUrlPagoPermitida(url, HOSTS_UPAY);
+}
+
+/** Métodos que son un proveedor de pago online (el cliente pagó antes). */
+export function esMetodoPagoOnline(m: string | null | undefined): boolean {
+  return ['UPAY', 'BANCARD'].includes(String(m || '').toUpperCase());
 }
 
 export type EstadoPago = 'PENDIENTE' | 'PAGADO' | 'FALLIDO' | 'EXPIRADO' | 'REEMBOLSO_PENDIENTE' | 'DEVUELTO'

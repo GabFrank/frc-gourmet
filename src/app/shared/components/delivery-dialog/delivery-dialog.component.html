@@ -176,7 +176,7 @@
         </div>
         <div class="cola-pago" *ngIf="p.pagoChip">
           <span class="pago-online-chip" [attr.data-tipo]="p.pagoChip.clase">{{ p.pagoChip.texto }}</span>
-          <span class="cola-ref" *ngIf="p.pagoId">REF. UPAY {{ p.pagoId }}</span>
+          <span class="cola-ref" *ngIf="p.pagoId">REF. {{ p.pagoProveedorNombre | uppercase }} {{ p.pagoId }}</span>
         </div>
         <div class="cola-cliente">{{ p.nombreCliente || 'SIN NOMBRE' }}</div>
         <div class="cola-dir" *ngIf="p.direccionEntrega && !p.esDevolver">{{ p.direccionEntrega }}</div>

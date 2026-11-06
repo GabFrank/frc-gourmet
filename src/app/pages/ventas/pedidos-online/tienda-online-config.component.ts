@@ -180,16 +180,50 @@ import { RepositoryService } from '../../../database/repository.service';
           </mat-form-field>
         </div>
 
-        <h3 class="sub">Pago online (uPay)</h3>
-        <p class="ayuda">El cliente paga con tarjeta en la página de uPay y el pedido llega a cocina recién cuando el pago está confirmado.</p>
+        <h3 class="sub">Pago online</h3>
+        <p class="ayuda">El cliente paga con tarjeta en la página del proveedor y el pedido llega a cocina recién cuando el pago está confirmado.</p>
         <div class="proveedor">
           <div class="proveedor-head">
             <mat-slide-toggle [(ngModel)]="cfg.pagoOnlineActivo">Ofrecer pago con tarjeta</mat-slide-toggle>
-            <span class="estado-chip" [class.abierta]="cfg.pagoOnlineActivo && ingreso.upayApiKeyGuardada">
-              {{ cfg.pagoOnlineActivo && ingreso.upayApiKeyGuardada ? 'Activo' : 'Apagado' }}
+            <span class="estado-chip" [class.abierta]="cfg.pagoOnlineActivo && provSelListo">
+              {{ cfg.pagoOnlineActivo && provSelListo ? 'Activo' : 'Apagado' }}
             </span>
           </div>
           <div class="grid">
+            <mat-form-field appearance="outline">
+              <mat-label>Proveedor</mat-label>
+              <mat-select [(ngModel)]="provSelId" (selectionChange)="elegirProveedor()">
+                <mat-option *ngFor="let p of proveedoresPago" [value]="p.id">{{ p.nombre }}</mat-option>
+              </mat-select>
+              <mat-hint>Con este se cobran los pedidos nuevos; los ya pagados siguen con el suyo.</mat-hint>
+            </mat-form-field>
+          </div>
+          <!-- Proveedores con campos declarados (Bancard…): la lista sale del servidor. -->
+          <div class="grid" *ngIf="provSel && provSel.campos.length">
+            <ng-container *ngFor="let c of provSel.campos">
+              <mat-form-field appearance="outline" *ngIf="!c.secreto && c.opciones" [class.full]="!!c.ayuda">
+                <mat-label>{{ c.etiqueta }}</mat-label>
+                <mat-select [(ngModel)]="valoresProv[provSel.id][c.clave]">
+                  <mat-option *ngFor="let o of c.opciones" [value]="o.valor">{{ o.etiqueta }}</mat-option>
+                </mat-select>
+                <mat-hint *ngIf="c.ayuda">{{ c.ayuda }}</mat-hint>
+              </mat-form-field>
+              <mat-form-field appearance="outline" *ngIf="!c.secreto && !c.opciones" class="full">
+                <mat-label>{{ c.etiqueta }}</mat-label>
+                <input matInput [(ngModel)]="valoresProv[provSel.id][c.clave]" [maxlength]="c.maxLength || 255" autocomplete="off">
+                <mat-hint *ngIf="c.ayuda">{{ c.ayuda }}</mat-hint>
+              </mat-form-field>
+              <mat-form-field appearance="outline" *ngIf="c.secreto" class="full">
+                <mat-label>{{ c.etiqueta }}</mat-label>
+                <input matInput type="password" [(ngModel)]="secretosNuevos[provSel.id][c.clave]" [maxlength]="c.maxLength || 500"
+                       autocomplete="off" [disabled]="!ingreso.almacenSeguroDisponible"
+                       [placeholder]="provSel.secretosGuardados[c.clave] ? '•••••• guardada (escribí para cambiar)' : ''">
+                <mat-hint *ngIf="ingreso.almacenSeguroDisponible">Se guarda cifrada en este servidor y no se vuelve a mostrar.</mat-hint>
+                <mat-hint *ngIf="!ingreso.almacenSeguroDisponible" class="hint-error">Este servidor no tiene almacén seguro: no se puede guardar.</mat-hint>
+              </mat-form-field>
+            </ng-container>
+          </div>
+          <div class="grid" *ngIf="provSelId === 'UPAY'">
             <mat-form-field appearance="outline" class="full">
               <mat-label>URL base de uPay</mat-label>
               <input matInput [(ngModel)]="cfg.upayBaseUrl" maxlength="255" placeholder="https://…upay.com.py">
@@ -213,16 +247,22 @@ import { RepositoryService } from '../../../database/repository.service';
                 Este servidor no tiene almacén seguro: no se puede guardar la API Key.
               </mat-hint>
             </mat-form-field>
+          </div>
+          <div class="grid">
             <mat-form-field appearance="outline">
               <mat-label>Aviso si está pagado y sin aceptar (min)</mat-label>
               <input matInput type="number" min="1" max="240" [(ngModel)]="cfg.minutosAvisoPagadoSinAceptar">
             </mat-form-field>
           </div>
+          <div class="devolucion-auto" *ngIf="provSel?.devuelvePorApi">
+            <mat-slide-toggle [(ngModel)]="cfg.pagoDevolucionAutomatica">Devolver automáticamente</mat-slide-toggle>
+            <p class="ayuda">Al cancelar un pedido pagado con «Hay que devolverlo», se intenta devolver por {{ provSel.nombre }} en el momento. Si no se puede, queda en la cola DEVOLVER como siempre.</p>
+          </div>
           <div class="fila-acciones">
-            <button mat-stroked-button *ngIf="ingreso.upayApiKeyGuardada" (click)="borrarUpayKey()" [disabled]="guardando">
+            <button mat-stroked-button *ngIf="provSelId === 'UPAY' && ingreso.upayApiKeyGuardada" (click)="borrarUpayKey()" [disabled]="guardando">
               <mat-icon>delete</mat-icon> Quitar API Key
             </button>
-            <button mat-stroked-button (click)="probarUpay()" [disabled]="probando || !ingreso.upayApiKeyGuardada">
+            <button mat-stroked-button (click)="probarPago()" [disabled]="probando || !provSelListo">
               <mat-icon>wifi_tethering</mat-icon> Probar conexión
             </button>
           </div>
@@ -263,6 +303,8 @@ import { RepositoryService } from '../../../database/repository.service';
     .tel-prueba { width: 220px; }
     .full-width { width: 100%; margin-top: 10px; }
     .hint-error { color: var(--error-color); }
+    .devolucion-auto { margin: 4px 0 8px; }
+    .devolucion-auto .ayuda { margin: 4px 0 0; }
     @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
   `],
 })
@@ -279,6 +321,15 @@ export class TiendaOnlineConfigComponent implements OnInit {
   telefonoPrueba = '';
   /** API Key de uPay nueva (solo escritura, F4). */
   upayKeyNueva = '';
+  // Proveedores de pago (precalculado para el template).
+  proveedoresPago: any[] = [];
+  provSelId = 'UPAY';
+  provSel: any = null;
+  provSelListo = false;
+  /** Valores NO secretos por proveedor, editables. */
+  valoresProv: Record<string, Record<string, string>> = {};
+  /** Secretos nuevos por proveedor (solo escritura: el servidor nunca los devuelve). */
+  secretosNuevos: Record<string, Record<string, string>> = {};
   ingreso: any = {};
 
   private static readonly ERRORES: Record<string, string> = {
@@ -302,7 +353,31 @@ export class TiendaOnlineConfigComponent implements OnInit {
     upay_credenciales: 'uPay rechazó la API Key',
     upay_sin_conexion: 'No se pudo conectar con uPay',
     upay_error: 'uPay respondió con un error',
+    pago_proveedor_invalido: 'Proveedor de pago inválido',
+    pago_faltan_credenciales: 'Para activar el pago con tarjeta faltan datos del proveedor',
+    bancard_publickey_invalido: 'La clave pública de Bancard no tiene el formato esperado',
+    bancard_privatekey_invalido: 'La clave privada de Bancard no tiene el formato esperado',
+    bancard_entorno_invalido: 'Entorno de Bancard inválido',
+    bancard_credenciales: 'Bancard rechazó las claves',
+    bancard_sin_conexion: 'No se pudo conectar con Bancard',
+    bancard_error: 'Bancard respondió con un error',
   };
+
+  /** Arma el estado de proveedores que vino del servidor. */
+  private armarProveedores(pago: any): void {
+    this.proveedoresPago = pago?.proveedores || [];
+    this.provSelId = pago?.proveedorActivo || 'UPAY';
+    for (const p of this.proveedoresPago) {
+      this.valoresProv[p.id] = { ...(p.valores || {}) };
+      this.secretosNuevos[p.id] = {};
+    }
+    this.elegirProveedor();
+  }
+
+  elegirProveedor(): void {
+    this.provSel = this.proveedoresPago.find((p) => p.id === this.provSelId) || null;
+    this.provSelListo = this.provSelId === 'UPAY' ? !!this.ingreso?.upayApiKeyGuardada && !!this.cfg?.upayMerchantId : !!this.provSel?.listo;
+  }
 
   private mensajeError(res: any): string {
     const base = TiendaOnlineConfigComponent.ERRORES[res?.error] || 'No se pudo guardar';
@@ -330,6 +405,7 @@ export class TiendaOnlineConfigComponent implements OnInit {
         if (!this.cfg.whatsappProveedor) this.cfg.whatsappProveedor = 'META';
         this.ingreso = c?.ingreso || {};
         this.armarMetodos();
+        this.armarProveedores(c?.pago);
         this.cargando = false;
       },
       error: () => { this.cargando = false; },
@@ -338,8 +414,19 @@ export class TiendaOnlineConfigComponent implements OnInit {
 
   guardar(extra: any = {}): void {
     this.guardando = true;
-    const { ingreso, abiertaAhora, ...datos } = this.cfg;
-    const payload = { ...datos, ...extra };
+    const { ingreso, abiertaAhora, pago, ...datos } = this.cfg;
+    const payload: any = { ...datos, ...extra };
+    payload.pagoProveedor = this.provSelId;
+    // Datos de los proveedores con campos (los de uPay van en sus columnas, como siempre).
+    const pagoConfig: Record<string, any> = {};
+    const pagoSecretos: Record<string, any> = {};
+    for (const p of this.proveedoresPago.filter((x) => x.campos?.length)) {
+      pagoConfig[p.id] = this.valoresProv[p.id] || {};
+      const nuevos = Object.entries(this.secretosNuevos[p.id] || {}).filter(([, v]) => String(v || '').trim());
+      if (nuevos.length) pagoSecretos[p.id] = Object.fromEntries(nuevos);
+    }
+    if (Object.keys(pagoConfig).length) payload.pagoConfig = pagoConfig;
+    if (Object.keys(pagoSecretos).length) payload.pagoSecretos = pagoSecretos;
     // Ninguno marcado = sólo efectivo (el servidor nunca deja la tienda sin forma de pago).
     // Si la config no llegó a cargarse, no se mandan: si no, se resetearía a sólo efectivo.
     if (this.metodosOpciones.length) payload.metodosPago = this.metodosOpciones.filter((m) => m.activo).map((m) => m.valor);
@@ -353,6 +440,7 @@ export class TiendaOnlineConfigComponent implements OnInit {
           this.cfg = res.config;
           this.ingreso = res.config?.ingreso || {};
           this.armarMetodos();
+          this.armarProveedores(res.config?.pago);
           this.tokenNuevo = '';
           this.upayKeyNueva = '';
           this.snack.open('Configuración guardada', 'OK', { duration: 2500 });
@@ -398,6 +486,7 @@ export class TiendaOnlineConfigComponent implements OnInit {
         if (res?.success) {
           this.cfg = res.config;
           this.ingreso = res.config?.ingreso || {};
+          this.armarProveedores(res.config?.pago);
           this.snack.open('API Key quitada', 'OK', { duration: 2500 });
         } else {
           this.snack.open(this.mensajeError(res), 'OK', { duration: 4000 });
@@ -410,12 +499,12 @@ export class TiendaOnlineConfigComponent implements OnInit {
     });
   }
 
-  probarUpay(): void {
+  probarPago(): void {
     this.probando = true;
-    this.repo.probarTiendaUpay().subscribe({
+    this.repo.probarTiendaPago(this.provSelId).subscribe({
       next: (res) => {
         this.probando = false;
-        this.snack.open(res?.success ? 'Conexión con uPay correcta' : this.mensajeError(res), 'OK', { duration: 5000 });
+        this.snack.open(res?.success ? `Conexión con ${res.proveedor || 'el proveedor'} correcta` : this.mensajeError(res), 'OK', { duration: 5000 });
       },
       error: (e) => {
         this.probando = false;

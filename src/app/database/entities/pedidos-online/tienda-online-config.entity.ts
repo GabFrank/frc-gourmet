@@ -127,6 +127,19 @@ export class TiendaOnlineConfig extends BaseModel {
   @Column({ name: 'upay_merchant_nombre', type: 'varchar', length: 150, nullable: true })
   upayMerchantNombre?: string | null;
 
+  // ── Proveedores de pago online (PLAN-tienda-pagos-proveedores). ──
+  /** Proveedor con el que se cobran los pedidos NUEVOS (`UPAY`, `BANCARD`). Vacío = uPay. */
+  @Column({ name: 'pago_proveedor', type: 'varchar', length: 20, nullable: true })
+  pagoProveedor?: string | null;
+
+  /** Datos NO secretos por proveedor, en JSON: `{"BANCARD":{"publicKey":"…","entorno":"PRUEBA"}}`. */
+  @Column({ name: 'pago_config_json', type: 'text', nullable: true })
+  pagoConfigJson?: string | null;
+
+  /** «Hay que devolverlo» intenta devolver por la API del proveedor (si la tiene). */
+  @Column({ name: 'pago_devolucion_automatica', type: 'boolean', default: false })
+  pagoDevolucionAutomatica!: boolean;
+
   /** Aviso al personal si un pedido pagado no se acepta en estos minutos. */
   @Column({ name: 'minutos_aviso_pagado_sin_aceptar', type: 'int', default: 20 })
   minutosAvisoPagadoSinAceptar!: number;

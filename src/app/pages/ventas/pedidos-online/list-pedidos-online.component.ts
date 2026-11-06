@@ -221,7 +221,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
   }
 
   pagoLabel(m: string): string {
-    return ({ EFECTIVO: 'Efectivo', BANCARD: 'Bancard', UPAY: 'uPay', PAGOPAR: 'Pagopar' } as Record<string, string>)[m] || m;
+    return ({ EFECTIVO: 'Efectivo', BANCARD: 'Tarjeta online (Bancard)', UPAY: 'Tarjeta online (uPay)', PAGOPAR: 'Pagopar' } as Record<string, string>)[m] || m;
   }
 
   /** Insignia del pago con tarjeta (F4); null en pedidos en efectivo. */
@@ -244,7 +244,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
    * (con motivo). Mismo diálogo que la cola del diálogo de delivery (auditoría post-F10).
    */
   async marcarDevuelto(p: any): Promise<void> {
-    const pago = await this.decisionPago.preguntar({ modo: 'RESOLVER', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0) }] });
+    const pago = await this.decisionPago.preguntar({ modo: 'RESOLVER', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0), proveedor: p.pagoProveedorNombre }] });
     if (!pago.seguir || !pago.decision) return;
     this.repo.resolverPagoPedidoOnline(p.id, pago.decision).subscribe({
       next: (res) => {
@@ -307,7 +307,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
     // Pagado online: qué se hace con ese cobro (auditoría post-F10). Volver no rechaza.
     const pagado = p.estadoPago === 'PAGADO';
     const pago = pagado
-      ? await this.decisionPago.preguntar({ modo: 'CANCELAR', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0) }] })
+      ? await this.decisionPago.preguntar({ modo: 'CANCELAR', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0), proveedor: p.pagoProveedorNombre }] })
       : { seguir: true };
     if (!pago.seguir) return;
     this.repo.rechazarPedidoOnline(p.id, 'RECHAZADO POR EL LOCAL', pago.decision).subscribe({
@@ -315,7 +315,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
         this.confirmandoRechazoId = null;
         if (res?.success) {
           this.snack.open(
-            pagado ? textoResultadoPago(p.numero, p.pagoMonto, pago.decision, 'rechazado') : `Pedido ${p.numero} rechazado`,
+            pagado ? textoResultadoPago(p.numero, p.pagoMonto, pago.decision, 'rechazado', p.pagoProveedorNombre) : `Pedido ${p.numero} rechazado`,
             'OK', { duration: pagado ? 10000 : 2500 });
           this.cargar(true);
         } else {
@@ -342,7 +342,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
     const aprobar = this.resolviendoAprobar;
     const pagado = aprobar && p.estadoPago === 'PAGADO';
     const pago = pagado
-      ? await this.decisionPago.preguntar({ modo: 'CANCELAR', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0) }] })
+      ? await this.decisionPago.preguntar({ modo: 'CANCELAR', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0), proveedor: p.pagoProveedorNombre }] })
       : { seguir: true };
     if (!pago.seguir) return;
     this.resolviendo = true;
@@ -353,7 +353,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
           this.resolviendoId = null;
           this.snack.open(
             !aprobar ? `Se le avisó al cliente que ${p.numero} sigue en curso`
-              : pagado ? textoResultadoPago(p.numero, p.pagoMonto, pago.decision)
+              : pagado ? textoResultadoPago(p.numero, p.pagoMonto, pago.decision, undefined, p.pagoProveedorNombre)
               : `Pedido ${p.numero} cancelado`,
             'OK', { duration: pagado ? 10000 : 3000 });
           this.cargar(true);

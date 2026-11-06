@@ -79,3 +79,38 @@ export async function setUpayApiKey(value: string): Promise<boolean> {
     return false;
   }
 }
+
+// ── Secretos de los proveedores de pago online (PLAN-tienda-pagos-proveedores). ──
+// Una cuenta por proveedor y campo: `tienda-pago-bancard-privatekey`. La API Key de uPay conserva
+// su cuenta de F4 (`tienda-upay-api-key`).
+function cuentaSecretoPago(proveedor: string, clave: string): string {
+  const p = String(proveedor).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const c = String(clave).toLowerCase().replace(/[^a-z0-9]/g, '');
+  return p === 'upay' && c === 'apikey' ? ACCOUNT_UPAY_API_KEY : `tienda-pago-${p}-${c}`;
+}
+
+export async function getSecretoPago(proveedor: string, clave: string): Promise<string> {
+  const k = loadKeytar();
+  if (!k) return '';
+  try {
+    return (await k.getPassword(KEYCHAIN_SERVICE, cuentaSecretoPago(proveedor, clave))) || '';
+  } catch (e) {
+    console.warn(`[tienda-secrets] error leyendo keychain (${proveedor}):`, (e as Error).message);
+    return '';
+  }
+}
+
+/** Guarda (o borra, con '') un secreto de un proveedor. Devuelve false si no se pudo persistir. */
+export async function setSecretoPago(proveedor: string, clave: string, value: string): Promise<boolean> {
+  const k = loadKeytar();
+  if (!k) return false;
+  try {
+    const cuenta = cuentaSecretoPago(proveedor, clave);
+    if (value) await k.setPassword(KEYCHAIN_SERVICE, cuenta, value);
+    else await k.deletePassword(KEYCHAIN_SERVICE, cuenta);
+    return true;
+  } catch (e) {
+    console.warn(`[tienda-secrets] error guardando en keychain (${proveedor}):`, (e as Error).message);
+    return false;
+  }
+}

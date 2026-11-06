@@ -13,7 +13,7 @@ import { DataSource } from 'typeorm';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { MonedaBillete } from '../../src/app/database/entities/financiero/moneda-billete.entity';
 import {
-  METODOS_AL_RECIBIR, MetodoPagoOnline, PagoModalidad,
+  METODOS_AL_RECIBIR, MetodoPagoOnline, PagoModalidad, esMetodoPagoOnline,
 } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { getCotizacionCompraLocal } from './moneda.utils';
 
@@ -100,7 +100,7 @@ export type ResultadoPago =
 
 /**
  * Valida y normaliza lo que manda el checkout. `total` es el del SERVIDOR (ya recalculado).
- * uPay ya pasó su propio control (`pagoOnlineOfrecido`) antes de llegar acá.
+ * El pago online ya pasó su propio control (`pagoOnlineOfrecido`) antes de llegar acá.
  */
 export function validarPagoPedido(params: {
   data: any;
@@ -116,8 +116,8 @@ export function validarPagoPedido(params: {
     : '';
   const pagoObservacion = obs || null;
 
-  if (metodoPago === MetodoPagoOnline.UPAY) {
-    // Online: no hay moneda ni vuelto (paga el total, en la principal, en la página de uPay).
+  if (esMetodoPagoOnline(metodoPago)) {
+    // Online: no hay moneda ni vuelto (paga el total, en la principal, en el proveedor).
     return { ok: true, campos: { metodoPago, pagoModalidad: PagoModalidad.ONLINE, pagoMonedaId: null, vueltoPara: null, pagoCotizacion: null, pagoObservacion } };
   }
   if (!habilitados.includes(metodoPago)) return { ok: false, error: 'metodo_pago_no_disponible' };
@@ -163,7 +163,7 @@ export function validarPagoPedido(params: {
 
 const NOMBRE_METODO: Record<string, string> = {
   EFECTIVO: 'EFECTIVO', TARJETA_POS: 'TARJETA (POS)', QR: 'QR', PIX: 'PIX',
-  TRANSFERENCIA: 'TRANSFERENCIA', UPAY: 'TARJETA ONLINE (UPAY)', BANCARD: 'BANCARD', PAGOPAR: 'PAGOPAR',
+  TRANSFERENCIA: 'TRANSFERENCIA', UPAY: 'TARJETA ONLINE (UPAY)', BANCARD: 'TARJETA ONLINE (BANCARD)', PAGOPAR: 'PAGOPAR',
 };
 
 function fmt(v: number, decimales: number): string {
@@ -181,7 +181,7 @@ export function resumenPago(p: {
   vueltoPara?: any; pagoCotizacion?: any; total?: any;
 }, monedas: Pick<MonedaTienda, 'id' | 'simbolo' | 'decimales' | 'principal'>[]): string {
   const metodo = NOMBRE_METODO[String(p.metodoPago || 'EFECTIVO')] || String(p.metodoPago || 'EFECTIVO').toUpperCase();
-  if (p.metodoPago === 'UPAY') return metodo;
+  if (esMetodoPagoOnline(p.metodoPago)) return metodo;
   // Pedido anterior a F8 (sin modalidad): no se sabe si necesitaba vuelto; sólo el método.
   if (!p.pagoModalidad) return metodo;
   const partes = [metodo];

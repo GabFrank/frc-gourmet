@@ -58,6 +58,27 @@ export interface CobroGuardado {
   pagoId?: string | null;
 }
 
+/**
+ * Un dato de configuración del proveedor. La pantalla de la tienda los dibuja y el servidor los
+ * valida a partir de esta lista: sumar un proveedor no toca la pantalla.
+ * - Los NO secretos van a `tienda_online_config.pago_config_json`.
+ * - Los secretos (`secreto: true`) van al almacén seguro y nunca vuelven a la pantalla.
+ */
+export interface CampoProveedor {
+  clave: string;
+  etiqueta: string;
+  secreto?: boolean;
+  requerido?: boolean;
+  /** Para elegir entre valores fijos (p. ej. entorno de prueba o producción). */
+  opciones?: { valor: string; etiqueta: string }[];
+  /** Expresión regular que tiene que cumplir (fuente, sin barras). */
+  patron?: string;
+  maxLength?: number;
+  ayuda?: string;
+  /** Valor si no se cargó nada (solo no secretos). */
+  porDefecto?: string;
+}
+
 export interface ProveedorPagoOnline<C = any> {
   /** = `MetodoPagoOnline` y `pedidos_online.pago_proveedor`. */
   id: string;
@@ -67,6 +88,11 @@ export interface ProveedorPagoOnline<C = any> {
   formaPago: string;
   /** Hosts desde los que el storefront acepta redirigir o cargar el script del proveedor. */
   hosts: string[];
+  /**
+   * Datos que pide la pantalla de config. Vacío = el proveedor tiene su propio bloque (uPay, de
+   * antes de que existiera esta lista, sigue con sus columnas `upay_*`).
+   */
+  campos: CampoProveedor[];
   /** Credenciales completas, o null si falta algo (el pago online no se ofrece). */
   credenciales(ds: DataSource, cfg: TiendaOnlineConfig | null): Promise<C | null>;
   iniciar(creds: C, input: CobroInput, ctx: ContextoProveedor): Promise<InicioCobro>;
