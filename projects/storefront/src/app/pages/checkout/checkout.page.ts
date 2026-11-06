@@ -49,6 +49,15 @@ export class CheckoutPage implements OnInit, OnDestroy {
   private menuSvc = inject(MenuService);
   /** Cambios de precio o productos quitados al revalidar contra la carta. */
   avisos: string[] = [];
+  /**
+   * La cuenta entró con Google o email y no tiene teléfono: se pide uno de contacto (avisos del
+   * pedido por WhatsApp, y el repartidor lo puede llamar). Queda en la cuenta para la próxima.
+   */
+  telefonoContacto = '';
+  get pideTelefono(): boolean {
+    return !this.mesa.enMesa && this.auth.isAuthenticated && !this.auth.cuenta?.telefono;
+  }
+
   /** M5: la cuenta entró por código y nunca cargó su nombre; se pide acá. */
   nombreCuenta = '';
   get faltaNombreCuenta(): boolean {
@@ -105,6 +114,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
   private subsPago: { unsubscribe(): void }[] = [];
 
   ngOnInit(): void {
+    this.telefonoContacto = this.auth.cuenta?.telefonoContacto || '';
     this.subsPago.push(this.config.cambios$.subscribe(() => this.recalcularPago()));
     this.subsPago.push(this.monedas.cambios.subscribe(() => { this.monedaPago = null; this.recalcularPago(); }));
     this.menuSvc.cargar(true).subscribe({
@@ -351,6 +361,15 @@ export class CheckoutPage implements OnInit, OnDestroy {
       if (!nombre) { this.enviando = false; this.error = 'Ingresá tu nombre para el pedido.'; return; }
       payload.nombreCliente = nombre;
     }
+    if (this.pideTelefono) {
+      const digitos = this.telefonoContacto.replace(/\D+/g, '');
+      if (digitos.length < 8 || digitos.length > 15) {
+        this.enviando = false;
+        this.error = 'Ingresá un teléfono válido para que podamos avisarte y contactarte.';
+        return;
+      }
+      payload.telefonoContacto = this.telefonoContacto;
+    }
     if (this.tipo === 'DELIVERY' && coords) {
       payload.latitud = this.lat; payload.longitud = this.lng;
     }
@@ -360,6 +379,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
         this.idemKey = null;
         if (res?.success) {
           if (this.faltaNombreCuenta && this.auth.cuenta) this.auth.cuenta.nombre = this.nombreCuenta.trim().toUpperCase();
+          if (this.pideTelefono && this.auth.cuenta) this.auth.cuenta.telefonoContacto = this.telefonoContacto.replace(/\D+/g, '');
           this.cart.limpiar();
           // Tarjeta: a la página de pago de uPay (solo si la dirección es de uPay).
           if (res.checkoutUrl) {
@@ -429,6 +449,8 @@ export class CheckoutPage implements OnInit, OnDestroy {
       case 'mesa_no_habilitada': return 'La mesa no está habilitada. Pedile al mozo que active el autoservicio.';
       case 'fuera_de_red_local': return 'Para pedir en la mesa tenés que estar conectado al WiFi del local.';
       case 'falta_nombre': return 'Ingresá tu nombre para el pedido.';
+      case 'falta_telefono': return 'Ingresá un teléfono para que podamos avisarte y contactarte.';
+      case 'telefono_invalido': return 'Ese teléfono no parece válido. Revisalo, por favor.';
       case 'metodo_pago_no_disponible': return 'Ese medio de pago no está disponible ahora. Elegí otro.';
       case 'vuelto_insuficiente': return 'El monto para el vuelto tiene que ser mayor que el total.';
       case 'vuelto_invalido': return 'Revisá el monto para el vuelto.';

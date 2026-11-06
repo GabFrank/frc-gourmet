@@ -72,7 +72,7 @@ export class AuthService {
     });
   }
 
-  actualizarPerfil(data: { nombre?: string; email?: string; password?: string }): Observable<any> {
+  actualizarPerfil(data: { nombre?: string; email?: string; password?: string; telefonoContacto?: string }): Observable<any> {
     return this.api.call<any>('auth.perfil.update', [data]).pipe(
       tap((res) => {
         if (res?.success) this.cuenta = res.cuenta;

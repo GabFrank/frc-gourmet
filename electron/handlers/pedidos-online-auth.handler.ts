@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import * as crypto from 'crypto';
 import { DataSource, MoreThan } from 'typeorm';
 import { CuentaCliente } from '../../src/app/database/entities/pedidos-online/cuenta-cliente.entity';
+import { normalizarTelefonoContacto } from '../utils/telefono-contacto.utils';
 import { CodigoOtp } from '../../src/app/database/entities/pedidos-online/codigo-otp.entity';
 import { hashPassword, verifyPassword } from '../utils/password.utils';
 import { sendWhatsappOtp, otpWhatsappDisponible } from '../utils/whatsapp-sender';
@@ -52,6 +53,8 @@ function mapCuenta(c: CuentaCliente): any {
     id: c.id,
     telefono: c.telefono,
     telefonoVerificado: c.telefonoVerificado,
+    // Contacto sin verificar (Google/email): el checkout lo pide si no hay `telefono`.
+    telefonoContacto: c.telefonoContacto ?? null,
     email: c.email ?? null,
     nombre: c.nombre ?? null,
     clienteId: (c.cliente as any)?.id ?? null,
@@ -294,6 +297,16 @@ export function registerPedidosOnlineAuthHandlers(
     if (!cuenta || !cuenta.activo) return { success: false, error: 'cuenta_no_encontrada' };
 
     if (data?.nombre !== undefined) cuenta.nombre = data.nombre ? String(data.nombre).toUpperCase() : undefined;
+    // Teléfono de contacto (sin verificar). Vacío lo borra; el de ingreso (`telefono`) no se toca acá.
+    if (data?.telefonoContacto !== undefined) {
+      if (!String(data.telefonoContacto ?? '').trim()) {
+        cuenta.telefonoContacto = null;
+      } else {
+        const t = normalizarTelefonoContacto(data.telefonoContacto);
+        if (t.ok === false) return { success: false, error: t.error };
+        cuenta.telefonoContacto = t.telefono;
+      }
+    }
     if (data?.email !== undefined) {
       const email = data.email ? String(data.email).toLowerCase().trim() : undefined;
       if (email) {
@@ -425,5 +438,5 @@ export function registerPedidosOnlineAuthHandlers(
   registerPublicOperation('auth.refresh', { channel: 'pub-cliente-refresh', requiresAuth: false, description: 'Rotar refresh token → nuevo access token.' });
   registerPublicOperation('auth.logout', { channel: 'pub-cliente-logout', requiresAuth: false, description: 'Revocar refresh token.' });
   registerPublicOperation('auth.me', { channel: 'pub-cliente-me', requiresAuth: true, description: 'Datos de la cuenta autenticada.' });
-  registerPublicOperation('auth.perfil.update', { channel: 'pub-cliente-perfil-update', requiresAuth: true, description: 'Actualizar nombre/email/password.' });
+  registerPublicOperation('auth.perfil.update', { channel: 'pub-cliente-perfil-update', requiresAuth: true, description: 'Actualizar nombre/email/password/teléfono de contacto.' });
 }

@@ -354,7 +354,18 @@ configura dos veces**: usa la de «Configuración › Notificaciones» (`configu
 siempre en la pantalla de config y en «Probar envío». Si el
 elegido no está cargado sale por el otro; un **error** de envío no cae al otro (serían dos
 códigos). La clave nunca aparece en errores. Google ya verificaba de verdad (tokeninfo + `aud`);
-falta sólo cargar el Client ID. Apple: no por ahora (decisión 05/11).
+Client ID cargado y probado en la base de copia el 06/11 (falta producción). Apple: no por ahora
+(decisión 05/11).
+
+**Teléfono de contacto (06/11).** Quien entra con Google o email no tiene `telefono` y el pedido
+llegaba sin cómo llamarlo. Ahora el checkout lo exige (no en mesa) con el aviso «te mandamos los
+avisos por WhatsApp y el repartidor te puede llamar o escribir», y `pedido.crear` responde
+`falta_telefono` / `telefono_invalido` (8 a 15 dígitos). Se guarda en
+`cuentas_cliente.telefono_contacto` (migración `TiendaTelefonoContactoCuenta`) y en
+`pedidos_online.telefono_cliente`; la próxima vez viene precargado y se edita en «Mi cuenta»
+(`auth.perfil.update` → `telefonoContacto`). ⚠️ **Nunca en `telefono`**: ese es el de ingreso por
+código (único). Sin verificar, anotar el número ajeno ahí daría acceso a la cuenta de esa persona.
+Cubierto en `test:pedidos-online` (bloque 24b) y `test:tienda-online-migracion`.
 
 Tests: `test:pedidos-online-detalle` (+ `-pg`), `test:whatsapp-proveedores`,
 `test:storefront-detalle`, F9 en `test:tienda-online-migracion`.

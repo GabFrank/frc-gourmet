@@ -127,6 +127,8 @@ export interface CuentaCliente {
   id: number;
   telefono: string;
   telefonoVerificado: boolean;
+  /** Contacto sin verificar (cuentas de Google o email). No sirve para ingresar. */
+  telefonoContacto?: string | null;
   email: string | null;
   nombre: string | null;
   clienteId: number | null;

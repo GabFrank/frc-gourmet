@@ -24,6 +24,14 @@ export class CuentaCliente extends BaseModel {
   @Column({ name: 'telefono_verificado', type: 'boolean', default: false })
   telefonoVerificado!: boolean;
 
+  /**
+   * Teléfono de CONTACTO (solo dígitos), sin verificar: lo carga el cliente en el checkout o en
+   * su cuenta cuando no ingresó por teléfono (Google, email). El local lo usa para llamarlo o
+   * escribirle por el pedido. **No sirve para ingresar** — eso es `telefono`, único y verificado.
+   */
+  @Column({ name: 'telefono_contacto', type: 'varchar', length: 30, nullable: true })
+  telefonoContacto?: string | null;
+
   @Column({ type: 'varchar', length: 150, nullable: true })
   email?: string;
 

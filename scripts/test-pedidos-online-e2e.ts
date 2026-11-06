@@ -583,6 +583,35 @@ async function main() {
   // 24. login con el email registrado
   const logEmail = await pub('auth.login', ['cliente@mail.com', 'secreto123']);
   ok(logEmail.result?.success === true && !!logEmail.result?.accessToken, 'login por email + password funciona');
+  // 24b. Cuenta sin teléfono (email/Google): el pedido exige un teléfono de CONTACTO, que queda en
+  // la cuenta y en el pedido, y nunca en `telefono` (el del ingreso por código).
+  const tokEmail = logEmail.result?.accessToken;
+  const itemsTel = [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }];
+  const sinTel = await pub('pedido.crear', [{ tipoPedido: 'PICKUP', items: itemsTel, metodoPago: 'EFECTIVO' }], tokEmail);
+  ok(sinTel.result?.error === 'falta_telefono', 'cuenta sin teléfono → falta_telefono', sinTel.result);
+  const telMalo = await pub('pedido.crear', [{ tipoPedido: 'PICKUP', items: itemsTel, metodoPago: 'EFECTIVO', telefonoContacto: '12-34' }], tokEmail);
+  ok(telMalo.result?.error === 'telefono_invalido', 'teléfono de contacto corto → telefono_invalido', telMalo.result);
+  const conTel = await pub('pedido.crear', [{ tipoPedido: 'PICKUP', items: itemsTel, metodoPago: 'EFECTIVO', telefonoContacto: '0981 777 888' }], tokEmail);
+  ok(conTel.result?.success === true, 'con teléfono de contacto el pedido se crea', conTel.result);
+  const cuentaTel: any = await dataSource.getRepository('CuentaCliente').findOne({ where: { email: 'cliente@mail.com' } });
+  ok(cuentaTel?.telefonoContacto === '0981777888' && !cuentaTel?.telefono,
+    'queda como contacto de la cuenta (solo dígitos), no como teléfono de ingreso', { c: cuentaTel?.telefonoContacto, t: cuentaTel?.telefono });
+  const pedTel: any = await dataSource.getRepository('PedidoOnline').findOne({ where: { numero: conTel.result?.numero } });
+  ok(pedTel?.telefonoCliente === '0981777888', 'el pedido lleva el teléfono para el local', pedTel?.telefonoCliente);
+  const otroPed = await pub('pedido.crear', [{ tipoPedido: 'PICKUP', items: itemsTel, metodoPago: 'EFECTIVO' }], tokEmail);
+  ok(otroPed.result?.success === true, 'el siguiente pedido ya no lo pide (lo recuerda la cuenta)', otroPed.result);
+  const meTel = await pub('auth.me', [], tokEmail);
+  ok(meTel.result?.cuenta?.telefonoContacto === '0981777888', 'auth.me lo devuelve para precargar el checkout', meTel.result?.cuenta);
+  const perfMalo = await pub('auth.perfil.update', [{ telefonoContacto: 'abc' }], tokEmail);
+  ok(perfMalo.result?.error === 'telefono_invalido', 'perfil: teléfono inválido rechazado', perfMalo.result);
+  const perfOk = await pub('auth.perfil.update', [{ telefonoContacto: '+595 981 222 333' }], tokEmail);
+  ok(perfOk.result?.success === true && perfOk.result?.cuenta?.telefonoContacto === '595981222333', 'perfil: se cambia el contacto', perfOk.result?.cuenta);
+  // Anotar el número de otra cuenta como contacto no da acceso a esa cuenta ni la pisa.
+  const ajeno = await pub('auth.perfil.update', [{ telefonoContacto: '0981123456' }], tokEmail);
+  const cuentaOtp: any = await dataSource.getRepository('CuentaCliente').findOne({ where: { telefono: '0981123456' } });
+  ok(ajeno.result?.success === true && cuentaOtp && cuentaOtp.email !== 'cliente@mail.com',
+    'un contacto igual al teléfono de otra cuenta no la toca (no es dato de ingreso)', ajeno.result);
+
   // 25. Google sin credenciales
   const g = await pub('auth.google', ['fake-token']);
   ok(g.result?.error === 'google_no_configurado', 'auth.google sin GOOGLE_CLIENT_ID → no_configurado');

@@ -14,6 +14,7 @@ import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zon
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { PedidoOnlineItem } from '../../src/app/database/entities/pedidos-online/pedido-online-item.entity';
 import { CuentaCliente } from '../../src/app/database/entities/pedidos-online/cuenta-cliente.entity';
+import { normalizarTelefonoContacto } from '../utils/telefono-contacto.utils';
 import {
   TipoPedidoOnline,
   EstadoPedidoOnline,
@@ -399,6 +400,20 @@ export function registerPedidosOnlinePedidosHandlers(
         cuenta.nombre = nombre.toUpperCase();
         await dataSource.getRepository(CuentaCliente).update({ id: cuenta.id }, { nombre: cuenta.nombre });
       }
+      // Sin teléfono de ingreso (entró con Google o email) el pedido llegaba sin cómo llamarlo.
+      // El checkout pide uno de contacto: queda en el pedido y en la cuenta para la próxima vez.
+      // No va en `telefono` (el del ingreso por código): sin verificar, no puede abrir cuentas.
+      if (!cuenta.telefono) {
+        if (String(data?.telefonoContacto ?? '').trim()) {
+          const t = normalizarTelefonoContacto(data.telefonoContacto);
+          if (t.ok === false) return { success: false, error: t.error };
+          if (t.telefono !== cuenta.telefonoContacto) {
+            cuenta.telefonoContacto = t.telefono;
+            await dataSource.getRepository(CuentaCliente).update({ id: cuenta.id }, { telefonoContacto: t.telefono } as any);
+          }
+        }
+        if (!cuenta.telefonoContacto) return { success: false, error: 'falta_telefono' };
+      }
     }
 
     if (idemKey) {
@@ -581,7 +596,7 @@ export function registerPedidosOnlinePedidosHandlers(
     pedido.numero = await siguienteNumero(pedidoRepo());
     pedido.cuentaCliente = (cuenta || null) as any;
     pedido.nombreCliente = (cuenta?.nombre || nombreClienteInvitado || null) as any;
-    pedido.telefonoCliente = (cuenta?.telefono ?? null) as any;
+    pedido.telefonoCliente = (cuenta?.telefono || cuenta?.telefonoContacto || null) as any;
     pedido.tipoPedido = tipoPedido;
     if (mesa) pedido.mesaId = mesa.id;
     // Sin dueño (no debería pasar) no se guarda la clave: no habría índice que la cubra.

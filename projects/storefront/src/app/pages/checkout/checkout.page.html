@@ -49,6 +49,14 @@
       <h3>¿A nombre de quién?</h3>
       <input class="sf-input" [(ngModel)]="nombreCuenta" placeholder="Tu nombre" maxlength="60" autocomplete="name" />
     </div>
+    <!-- Cuenta de Google o email: sin teléfono no hay cómo avisarle ni llamarlo. -->
+    <div class="sf-card" *ngIf="pideTelefono">
+      <h3>Tu teléfono</h3>
+      <input class="sf-input" [(ngModel)]="telefonoContacto" placeholder="Ej: 0981123456" inputmode="tel"
+             maxlength="20" autocomplete="tel" />
+      <p class="sf-muted aviso-tel"><sf-icon name="chat" [size]="14"></sf-icon>Te vamos a mandar los avisos del
+        pedido por WhatsApp, y el repartidor te puede llamar o escribir por WhatsApp.</p>
+    </div>
     <!-- Tipo -->
     <div class="sf-card">
       <h3>Tipo de pedido</h3>

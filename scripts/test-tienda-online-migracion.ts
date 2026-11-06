@@ -40,7 +40,7 @@ async function main() {
   };
   // Sube todo y baja las migraciones de la tienda posteriores a F4 (F6 en adelante), para
   // que los bloques F2-F4 de abajo sigan encontrando a F4 como la última.
-  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda|TiendaDetallePedido/;
+  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda|TiendaDetallePedido|TiendaTelefonoContactoCuenta/;
   const subirSinPosteriores = async () => {
     await ds.runMigrations({ transaction: 'each' });
     for (;;) {
@@ -168,6 +168,7 @@ async function main() {
   ok((await columnas()).includes('pago_id'), 'F4 up de nuevo las vuelve a crear');
 
   // F8: TiendaPagoMoneda (cómo paga el cliente + métodos de la tienda), up / down / up.
+  await ds.undoLastMigration({ transaction: 'each' }); // baja el teléfono de contacto
   await ds.undoLastMigration({ transaction: 'each' }); // baja F9 para que F8 quede última
   const ultimaF8 = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
   ok(/TiendaPagoMoneda/.test(String(ultimaF8)), 'F8: TiendaPagoMoneda es la última migración', ultimaF8);
@@ -180,6 +181,7 @@ async function main() {
   await ds.runMigrations({ transaction: 'each' });
   const conF8 = await columnas();
   ok(F8_PEDIDO.every((c) => conF8.includes(c)), 'F8 up de nuevo las vuelve a crear');
+  await ds.undoLastMigration({ transaction: 'each' }); // baja el teléfono de contacto: F9 queda última
 
   // F9: TiendaDetallePedido (solicitud de cancelación + proveedor de WhatsApp + teléfono), up / down / up.
   const ultimaF9 = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
@@ -197,6 +199,23 @@ async function main() {
   const conF9Cfg = await colsCfg();
   ok(F9_PEDIDO.every((c) => conF9.includes(c)) && F9_CFG.every((c) => conF9Cfg.includes(c)), 'F9 up de nuevo las vuelve a crear');
   await ds.query(`DELETE FROM pedidos_online WHERE numero = 'ZT-F9'`);
+
+  // Teléfono de contacto de la cuenta (TiendaTelefonoContactoCuenta), up / down / up.
+  const colsCuenta = async (): Promise<string[]> => pgDb
+    ? (await ds.query(`SELECT column_name AS c FROM information_schema.columns WHERE table_schema='public' AND table_name='cuentas_cliente'`)).map((r: any) => r.c)
+    : (await ds.query(`PRAGMA table_info('cuentas_cliente')`)).map((r: any) => r.name);
+  const ultimaTel = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
+  ok(/TiendaTelefonoContactoCuenta/.test(String(ultimaTel)), 'Contacto: TiendaTelefonoContactoCuenta es la última migración', ultimaTel);
+  const metaCuenta = ds.entityMetadatas.find((m) => m.tableName === 'cuentas_cliente')!;
+  ok(JSON.stringify(metaCuenta.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...(await colsCuenta())].sort()),
+    'Contacto: las columnas de la cuenta coinciden con la entidad');
+  await ds.query(`INSERT INTO cuentas_cliente (email, telefono_contacto, activo, telefono_verificado, email_verificado) VALUES ('zt-tel@x.com', '0981000111', ${pgDb ? 'true, false, false' : '1, 0, 0'})`);
+  await ds.undoLastMigration({ transaction: 'each' });
+  ok(!(await colsCuenta()).includes('telefono_contacto'), 'Contacto: down quita la columna');
+  ok(Number((await ds.query(`SELECT COUNT(*) AS n FROM cuentas_cliente WHERE email = 'zt-tel@x.com'`))[0].n) === 1, 'Contacto: down conserva las cuentas');
+  await ds.runMigrations({ transaction: 'each' });
+  ok((await colsCuenta()).includes('telefono_contacto'), 'Contacto: up de nuevo la vuelve a crear');
+  await ds.query(`DELETE FROM cuentas_cliente WHERE email = 'zt-tel@x.com'`);
 
   await ds.destroy();
   console.log(`\n[tienda-migracion] ${passed} OK, ${failed} fallas`);

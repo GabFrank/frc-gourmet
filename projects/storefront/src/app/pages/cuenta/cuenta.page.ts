@@ -24,6 +24,13 @@ import { mensajeError } from '../../core/errores';
             <div class="val">{{ c.telefono }}</div>
           </div>
 
+          <ng-container *ngIf="!c.telefono">
+            <label class="lbl">Teléfono de contacto</label>
+            <input class="sf-input" [(ngModel)]="telefonoContacto" placeholder="Ej: 0981123456" inputmode="tel"
+                   maxlength="20" autocomplete="tel" />
+            <p class="sf-muted ayuda">Para los avisos del pedido por WhatsApp y para que el repartidor te contacte.</p>
+          </ng-container>
+
           <label class="lbl">Nombre</label>
           <input class="sf-input" [(ngModel)]="nombre" placeholder="Tu nombre" />
           <label class="lbl">Email {{ c.telefono ? '(opcional)' : '' }}</label>
@@ -56,6 +63,7 @@ import { mensajeError } from '../../core/errores';
     .field { margin-bottom: 8px; }
     .lbl { display: block; font-size: 13px; color: var(--sf-text-muted); margin: 12px 0 4px; }
     .val { font-weight: 600; }
+    .ayuda { font-size: 12px; margin: 4px 0 0; }
     .mt { margin-top: 14px; }
     .ok { color: var(--sf-success); margin-top: 10px; }
     .err { color: var(--sf-error); margin-top: 10px; }
@@ -68,6 +76,7 @@ export class CuentaPage implements OnInit {
 
   nombre = this.auth.cuenta?.nombre || '';
   email = this.auth.cuenta?.email || '';
+  telefonoContacto = this.auth.cuenta?.telefonoContacto || '';
   password = '';
   passwordActual = '';
   /** Si ya tiene contraseña, para cambiarla hay que confirmar la actual. */
@@ -89,6 +98,7 @@ export class CuentaPage implements OnInit {
   private mensajeError(codigo?: string): string {
     switch (codigo) {
       case 'email_en_uso': return 'Ese email ya está en uso.';
+      case 'telefono_invalido': return 'Ese teléfono no parece válido. Revisalo, por favor.';
       case 'falta_password_actual': return 'Ingresá tu contraseña actual para cambiarla.';
       case 'password_actual_incorrecta': return 'La contraseña actual no coincide.';
       case 'cuenta_no_encontrada': return 'No encontramos tu cuenta. Volvé a ingresar.';
@@ -100,6 +110,7 @@ export class CuentaPage implements OnInit {
   guardar(): void {
     this.ok = false; this.error = null; this.guardando = true;
     const data: any = { nombre: this.nombre, email: this.email };
+    if (!this.auth.cuenta?.telefono) data.telefonoContacto = this.telefonoContacto;
     if (this.password) {
       data.password = this.password;
       if (this.tienePassword) data.passwordActual = this.passwordActual;

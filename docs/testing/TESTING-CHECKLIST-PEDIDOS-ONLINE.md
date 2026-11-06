@@ -235,6 +235,17 @@ Online sigue como panel de observación: lo que se hace en una tiene que verse e
     cobrado; cancelar su venta desde el historial pregunta por el pago y, con «devolver», el pedido
     sigue ENTREGADO pero entra en DEVOLVER.
 
+## 12 · Teléfono de contacto (cuentas de Google o email)
+
+1. Entrar a la tienda con Google (o email) en una cuenta sin teléfono e ir al checkout: arriba
+   aparece «Tu teléfono» con el aviso de WhatsApp y del repartidor.
+2. Confirmar sin teléfono → «Ingresá un teléfono válido…». Con uno corto, el mismo aviso.
+3. Con un teléfono válido el pedido se crea; en la bandeja y en la lista de delivery el pedido
+   muestra ese número.
+4. El siguiente checkout lo trae precargado; «Mi cuenta» lo muestra como «Teléfono de contacto» y
+   se puede cambiar.
+5. Una cuenta que entró por código de WhatsApp no ve el campo (ya tiene teléfono).
+
 ## Qué NO se probó automáticamente
 
 - **SQLite es lo que corren los tests** (`.tmp/*.db` con todas las migraciones).
