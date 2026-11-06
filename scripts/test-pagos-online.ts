@@ -317,6 +317,20 @@ async function main() {
   ok(ev.length > 10 && ev.every((e) => !String(e.respuesta || '').includes('k-test')), 'eventos registrados y sin la API Key', ev.length);
   ok((await iniciarPagoPedido(ds, (await nuevo(1000, EstadoPedidoOnline.RECIBIDO)).id) as any).error === 'pedido_no_espera_pago', 'no inicia pago de un pedido que no lo espera');
 
+  // ── Proveedores intercambiables (PLAN-tienda-pagos-proveedores, fase 1) ──
+  const { proveedorPorId, proveedorDelPedido, nombreProveedor } = require('../electron/services/pagos-online/proveedores');
+  ok(proveedorDelPedido({ pagoProveedor: null })?.id === 'UPAY', 'un pedido sin proveedor guardado es de uPay (los de F4)');
+  ok(proveedorPorId('upay')?.id === 'UPAY' && proveedorPorId('NOEXISTE') === null, 'el registro busca por id sin importar mayúsculas');
+  ok(nombreProveedor('UPAY') === 'uPay' && nombreProveedor('NOEXISTE') === 'el proveedor de pago', 'nombre del proveedor para los textos');
+  const pq = await nuevo(10000);
+  await iniciarPagoPedido(ds, pq.id);
+  ok((await leer(pq.id)).pagoProveedor === 'UPAY', 'el cobro guarda con qué proveedor se hizo');
+  // Un pedido de un proveedor que ya no existe no rompe: se informa y sigue pendiente.
+  await ds.getRepository(PedidoOnline).update({ id: pq.id }, { pagoProveedor: 'VIEJO' } as any);
+  v = await verificarPagoPedido(ds, pq.id);
+  ok(v.success && v.error === 'pago_online_no_configurado' && v.estadoPago === EstadoPagoOnline.PENDIENTE,
+    'pedido de un proveedor dado de baja: no se consulta y sigue pendiente', v);
+
   await ds.destroy();
   console.log(`\n${pass} ok, ${fail} fallas`);
   process.exit(fail ? 1 : 0);

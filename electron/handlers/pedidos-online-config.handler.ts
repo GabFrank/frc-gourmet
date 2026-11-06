@@ -3,7 +3,8 @@ import { pagoOnlineOfrecido } from '../utils/tienda-ingreso.utils';
 import { metodosAlRecibir } from '../utils/pago-pedido.utils';
 import { METODOS_AL_RECIBIR, MetodoPagoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { upayConfigDe, apiKey as upayApiKeyActual } from '../services/pagos-online/pagos-online.service';
-import { UpayCheckoutProvider } from '../services/pagos-online/upay-checkout.provider';
+import { upayProveedor } from '../services/pagos-online/proveedores/upay.proveedor';
+import { fetchActual } from '../services/pagos-online/proveedores/deps';
 import { evolutionConfigurado, otpWhatsappDisponible, proveedorWhatsappActivo, sendWhatsappOtp, whatsappCloudConfigurado, whatsappConfigurado } from '../utils/whatsapp-sender';
 import { cargarCredencialesTienda, credencialesTiendaListas, getGoogleClientId, refrescarCredencialesWhatsapp } from '../utils/tienda-ingreso.utils';
 import { almacenSeguroDisponible, getWhatsappToken, setWhatsappToken, getUpayApiKey, setUpayApiKey } from '../utils/tienda-secrets.util';
@@ -308,14 +309,8 @@ export function registerPedidosOnlineConfigHandlers(
     await ensurePermission(dataSource, getCurrentUser, PERM);
     const u = await upayConfigDe(dataSource);
     if (!u) return { success: false, error: 'upay_faltan_credenciales' };
-    try {
-      const r = await new UpayCheckoutProvider(u).consultarSesion('00000000-0000-4000-8000-000000000000');
-      if (r.status === 401 || r.status === 403) return { success: false, error: 'upay_credenciales' };
-      if (r.status === 404 || (r.status >= 200 && r.status < 300)) return { success: true };
-      return { success: false, error: 'upay_error', detalle: `HTTP ${r.status}` };
-    } catch (e: any) {
-      return { success: false, error: 'upay_sin_conexion', detalle: e?.message || String(e) };
-    }
+    const r = await upayProveedor.probarConexion(u, { fetch: fetchActual() });
+    return r.ok ? { success: true } : { success: false, error: r.error, ...(r.detalle ? { detalle: r.detalle } : {}) };
   });
 
   // Admin: manda un código de prueba por WhatsApp con las credenciales vigentes (F3).

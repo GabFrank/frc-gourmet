@@ -1,16 +1,19 @@
 /**
- * Pago online de pedidos de la tienda con uPay (PLAN-tienda-online F4).
+ * Pago online de pedidos de la tienda (PLAN-tienda-online F4; proveedores intercambiables en
+ * PLAN-tienda-pagos-proveedores). Este archivo es el NÚCLEO común: el cobro concreto lo hace el
+ * proveedor (`proveedores/`), y acá viven los estados, el pago tardío, las devoluciones, los avisos
+ * y el registro de eventos, iguales para todos.
  *
- * - `iniciarPagoPedido`: crea (o reusa) la sesión de checkout del intento actual.
- * - `verificarPagoPedido`: consulta a uPay y aplica el resultado. ÚNICA puerta para dar un
- *   pedido por pagado (nunca el retorno del navegador). Idempotente: el cambio se hace con
- *   un UPDATE condicionado al estado anterior, así dos verificaciones a la vez no duplican.
+ * - `iniciarPagoPedido`: crea (o reusa) el cobro del intento actual con el proveedor activo.
+ * - `verificarPagoPedido`: consulta al proveedor DEL PEDIDO y aplica el resultado. ÚNICA puerta
+ *   para dar un pedido por pagado (nunca el retorno del navegador). Idempotente: el cambio se
+ *   hace con un UPDATE condicionado al estado anterior, así dos verificaciones a la vez no duplican.
  * - `tickPagosOnline`: lo llama el job del proceso principal (cada 60 s) para los pedidos
  *   en espera, los pagos tardíos y el aviso de pagado-sin-aceptar. Corre aunque
  *   `pagoOnlineActivo` esté apagado: apagarlo solo deja de ofrecer el pago a pedidos nuevos.
  */
 import { randomUUID } from 'crypto';
-import { Brackets, DataSource, In, IsNull, Not } from 'typeorm';
+import { Brackets, DataSource, IsNull } from 'typeorm';
 import { PedidoOnline } from '../../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { PagoOnlineEvento } from '../../../src/app/database/entities/pedidos-online/pago-online-evento.entity';
 import { TiendaOnlineConfig } from '../../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
@@ -21,36 +24,38 @@ import {
   MetodoPagoOnline,
 } from '../../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { DecisionPago, estadoPagoPorDecision, PagoDecidido } from '../../utils/decision-pago-online.utils';
-import { FetchLike, UpayCheckoutProvider, UpayConfig, UpayError, UPAY_STG_BASE_URL } from './upay-checkout.provider';
-import { interpretarPago, interpretarSesion, ResultadoPago } from './interpretar-pago';
+import { UpayConfig } from './upay-checkout.provider';
+import { ResultadoPago } from './interpretar-pago';
+import { deps, fetchActual } from './proveedores/deps';
+import { ContextoProveedor, FetchLike, ProveedorError, ProveedorPagoOnline } from './proveedores/tipos';
+import { nombreProveedor, proveedorDelPedido, PROVEEDOR_UPAY } from './proveedores';
+import { upayApiKey, upayConfigDeCfg, upayProveedor } from './proveedores/upay.proveedor';
 
-export const PROVEEDOR_UPAY = 'UPAY';
-/** Mínimo entre consultas a uPay por pedido desde el endpoint público. */
+export { PROVEEDOR_UPAY };
+/** Mínimo entre consultas al proveedor por pedido desde el endpoint público. */
 export const VERIFICAR_MIN_MS = 10_000;
 const URL_PUBLICA_DEF = 'https://app.frc-gourmet.com';
 
 // ── Dependencias inyectables (tests) ──
 type Avisar = (texto: string, dedupe: string) => Promise<void>;
 type ApiKeyFn = () => Promise<string>;
-let fetchOverride: FetchLike | null = null;
-let apiKeyOverride: ApiKeyFn | null = null;
-let avisarOverride: Avisar | null = null;
-export function setPagosOnlineDeps(d: { fetch?: FetchLike | null; apiKey?: ApiKeyFn | null; avisar?: Avisar | null }): void {
-  if (d.fetch !== undefined) fetchOverride = d.fetch;
-  if (d.apiKey !== undefined) apiKeyOverride = d.apiKey;
-  if (d.avisar !== undefined) avisarOverride = d.avisar;
+export function setPagosOnlineDeps(d: {
+  fetch?: FetchLike | null; apiKey?: ApiKeyFn | null; avisar?: Avisar | null; secretos?: Record<string, ApiKeyFn>;
+}): void {
+  if (d.fetch !== undefined) deps.fetch = d.fetch;
+  if (d.apiKey !== undefined) deps.apiKey = d.apiKey;
+  if (d.avisar !== undefined) deps.avisar = d.avisar;
+  if (d.secretos !== undefined) deps.secretos = d.secretos;
 }
 
 /** API Key de uPay vigente (almacén seguro, o la de prueba inyectada). */
-export async function apiKey(): Promise<string> {
-  if (apiKeyOverride) return apiKeyOverride();
-  const { getUpayApiKey } = await import('../../utils/tienda-secrets.util');
-  return getUpayApiKey();
-}
+export const apiKey = upayApiKey;
+
+const ctx = (): ContextoProveedor => ({ fetch: fetchActual() });
 
 async function avisarPersonal(texto: string, dedupe: string): Promise<void> {
   try {
-    if (avisarOverride) return await avisarOverride(texto, dedupe);
+    if (deps.avisar) return await deps.avisar(texto, dedupe);
     const { dispatchEvento } = await import('../notificacion.service');
     await dispatchEvento('TIENDA_PAGO_ONLINE', { asunto: 'Tienda online: pago con tarjeta', texto, dedupeKey: dedupe });
   } catch (e: any) {
@@ -62,27 +67,32 @@ async function getCfg(ds: DataSource): Promise<TiendaOnlineConfig | null> {
   return ds.getRepository(TiendaOnlineConfig).findOne({ where: {}, order: { id: 'ASC' } });
 }
 
-/** Config completa para hablar con uPay, o null si falta algo. */
+/** Config completa para hablar con uPay, o null si falta algo (pantalla de config). */
 export async function upayConfigDe(ds: DataSource, cfg?: TiendaOnlineConfig | null): Promise<UpayConfig | null> {
-  const c = cfg === undefined ? await getCfg(ds) : cfg;
-  const key = await apiKey();
-  if (!c || !key || !c.upayMerchantId) return null;
-  return {
-    baseUrl: c.upayBaseUrl || UPAY_STG_BASE_URL,
-    apiKey: key,
-    merchantId: c.upayMerchantId,
-    merchantNombre: c.upayMerchantNombre || c.nombreComercio || 'Tienda',
-  };
+  return upayConfigDeCfg(cfg === undefined ? await getCfg(ds) : cfg);
+}
+
+/** El proveedor con el que se cobran los pedidos NUEVOS. */
+export function proveedorActivo(_cfg: TiendaOnlineConfig | null): ProveedorPagoOnline {
+  return upayProveedor;
+}
+
+/** Proveedor activo con sus credenciales, o null si el pago online no se puede ofrecer. */
+async function proveedorActivoListo(ds: DataSource, cfg: TiendaOnlineConfig | null): Promise<{ prov: ProveedorPagoOnline; creds: any } | null> {
+  const prov = proveedorActivo(cfg);
+  const creds = await prov.credenciales(ds, cfg);
+  return creds ? { prov, creds } : null;
 }
 
 /** ¿Se ofrece «Pagar con tarjeta» a pedidos nuevos? */
 export async function pagoOnlineDisponible(ds: DataSource, cfg?: TiendaOnlineConfig | null): Promise<boolean> {
   const c = cfg === undefined ? await getCfg(ds) : cfg;
-  return !!c?.pagoOnlineActivo && !!(await upayConfigDe(ds, c));
+  return !!c?.pagoOnlineActivo && !!(await proveedorActivoListo(ds, c));
 }
 
-function proveedor(u: UpayConfig): UpayCheckoutProvider {
-  return new UpayCheckoutProvider(u, fetchOverride || (globalThis as any).fetch);
+/** Código de error de una excepción del proveedor (`upay_error` si no es un `ProveedorError`). */
+function codigoError(prov: ProveedorPagoOnline, e: any): string {
+  return e instanceof ProveedorError ? e.codigo : `${prov.id.toLowerCase()}_error`;
 }
 
 async function registrar(ds: DataSource, p: { id: number; pagoIntento?: number | null }, tipo: string, estado: string | null, resp?: any) {
@@ -127,8 +137,9 @@ export async function iniciarPagoPedido(
     return { success: false, error: 'pedido_no_espera_pago' };
   }
   if (p.estadoPago === EstadoPagoOnline.PAGADO) return { success: false, error: 'pedido_ya_pagado' };
-  const u = await upayConfigDe(ds);
-  if (!u) return { success: false, error: 'pago_online_no_disponible' };
+  const listo = await proveedorActivoListo(ds, await getCfg(ds));
+  if (!listo) return { success: false, error: 'pago_online_no_disponible' };
+  const { prov, creds } = listo;
 
   // Sesión vigente del mismo intento: se reusa (doble clic, reintento de red).
   const vigente = p.pagoSesionId && p.pagoCheckoutUrl && p.estadoPago === EstadoPagoOnline.PENDIENTE
@@ -147,7 +158,7 @@ export async function iniciarPagoPedido(
     // la vez abrían dos sesiones en uPay y la que no quedaba guardada seguía siendo pagable.
     const claim = await repo.createQueryBuilder().update(PedidoOnline)
       .set({
-        pagoIntento: intento, pagoIdemKey: idem, pagoProveedor: PROVEEDOR_UPAY,
+        pagoIntento: intento, pagoIdemKey: idem, pagoProveedor: prov.id,
         estadoPago: EstadoPagoOnline.PENDIENTE, pagoSesionId: null, pagoCheckoutUrl: null,
       } as any)
       .where('id = :id AND estado_pago = :fal AND pago_sesion_id = :ses AND COALESCE(pago_intento, 1) = :prev', {
@@ -156,7 +167,7 @@ export async function iniciarPagoPedido(
       .execute();
     if (!claim.affected) return { success: false, error: 'pago_en_curso' };
   } else {
-    await repo.update({ id: p.id }, { pagoIntento: intento, pagoIdemKey: idem, pagoProveedor: PROVEEDOR_UPAY } as any);
+    await repo.update({ id: p.id }, { pagoIntento: intento, pagoIdemKey: idem, pagoProveedor: prov.id } as any);
   }
   p.pagoIntento = intento;
 
@@ -166,12 +177,12 @@ export async function iniciarPagoPedido(
   const base = (opts.urlPublica || (/^https:\/\/[a-z0-9.-]+(:\d+)?\/?$/i.test(delEntorno) ? delEntorno : URL_PUBLICA_DEF)).replace(/\/+$/, '');
   const vuelta = `${base}/tienda/pago/${encodeURIComponent(p.numero)}`;
   try {
-    const r = await proveedor(u).crearSesion({
+    const r = await prov.iniciar(creds, {
       referencia: referencia(p),
       idempotencyKey: idem,
       monto: Number(p.total),
-      successUrl: vuelta + '?r=ok',
-      failureUrl: vuelta + '?r=error',
+      urlVuelta: vuelta,
+      descripcion: `Pedido ${p.numero}`,
       items: [
         ...(p.items || []).map((it) => ({
           name: [it.nombreProducto, it.nombrePresentacion].filter(Boolean).join(' '),
@@ -180,19 +191,21 @@ export async function iniciarPagoPedido(
         })),
         ...(Number(p.costoEnvio) > 0 ? [{ name: 'Envío', quantity: 1, unitPrice: Number(p.costoEnvio) }] : []),
       ],
-    });
+    }, ctx());
+    // Con formulario (Bancard) no hay URL a la que redirigir: se guarda el `process_id`.
+    const urlGuardada = r.tipo === 'REDIRECCION' ? r.url : r.procesoId;
     await repo.update({ id: p.id }, {
-      pagoSesionId: r.sessionId,
-      pagoCheckoutUrl: r.checkoutUrl,
-      pagoExpiraEn: r.expiresAt ?? new Date(Date.now() + 2 * 3600_000),
+      pagoSesionId: r.sesionId,
+      pagoCheckoutUrl: urlGuardada,
+      pagoExpiraEn: r.expiraEn ?? new Date(Date.now() + 2 * 3600_000),
       estadoPago: EstadoPagoOnline.PENDIENTE,
       pagoDetalle: null,
     } as any);
-    await registrar(ds, p, 'SESION_CREADA', null, r.resp.raw);
-    return { success: true, checkoutUrl: r.checkoutUrl };
+    await registrar(ds, p, 'SESION_CREADA', null, r.crudo);
+    return { success: true, checkoutUrl: urlGuardada };
   } catch (e: any) {
-    await registrar(ds, p, 'ERROR', e instanceof UpayError ? e.codigo : 'error', e?.message || String(e));
-    return { success: false, error: e instanceof UpayError ? e.codigo : 'upay_error' };
+    await registrar(ds, p, 'ERROR', e instanceof ProveedorError ? e.codigo : 'error', e?.message || String(e));
+    return { success: false, error: codigoError(prov, e) };
   }
 }
 
@@ -207,7 +220,7 @@ export interface VerificacionResultado {
 }
 
 /**
- * Consulta a uPay y aplica. `minIntervaloMs` evita martillar la API desde el endpoint público:
+ * Consulta al proveedor y aplica. `minIntervaloMs` evita martillar la API desde el endpoint público:
  * si la última consulta es más reciente, devuelve el estado guardado.
  */
 export async function verificarPagoPedido(
@@ -227,30 +240,24 @@ export async function verificarPagoPedido(
   if (opts.minIntervaloMs && p.pagoUltimaConsulta
     && ahora.getTime() - new Date(p.pagoUltimaConsulta).getTime() < opts.minIntervaloMs) return actual;
 
-  const u = await upayConfigDe(ds);
-  if (!u) return { ...actual, error: 'pago_online_no_configurado' };
+  // El pedido se consulta con SU proveedor, aunque el local haya cambiado el activo.
+  const prov = proveedorDelPedido(p);
+  const creds = prov ? await prov.credenciales(ds, await getCfg(ds)) : null;
+  if (!prov || !creds) return { ...actual, error: 'pago_online_no_configurado' };
   await repo.update({ id: p.id }, { pagoUltimaConsulta: ahora } as any);
 
   let res: ResultadoPago;
   let crudo: any = null;
   try {
-    const prov = proveedor(u);
-    const s = await prov.consultarSesion(p.pagoSesionId);
-    crudo = { sesion: s.body ?? s.raw, status: s.status };
-    if (s.status === 401 || s.status === 403) throw new UpayError('upay_credenciales', 'API Key rechazada', s.status);
-    if (s.status < 200 || s.status >= 300) throw new UpayError('upay_error', `HTTP ${s.status}`, s.status);
-    const ses = interpretarSesion(s.body);
-    let pago: any = null;
-    if (ses.estado === 'complete' && ses.paymentId) {
-      const pr = await prov.consultarPago(ses.paymentId);
-      crudo.pago = pr.body ?? pr.raw;
-      if (pr.status >= 200 && pr.status < 300) pago = pr.body;
-    }
-    res = interpretarPago(s.body, pago, { monto: Number(p.total), referencia: referencia(p) });
+    const c = await prov.consultar(creds, {
+      sesionId: p.pagoSesionId, referencia: referencia(p), monto: Number(p.total), pagoId: p.pagoId ?? null,
+    }, ctx());
+    res = c.resultado;
+    crudo = c.crudo;
   } catch (e: any) {
-    // Sin respuesta de uPay no se decide nada: sigue pendiente.
-    await registrar(ds, p, 'ERROR', e instanceof UpayError ? e.codigo : 'error', crudo ?? (e?.message || String(e)));
-    return { ...actual, error: e instanceof UpayError ? e.codigo : 'upay_error' };
+    // Sin respuesta del proveedor no se decide nada: sigue pendiente.
+    await registrar(ds, p, 'ERROR', e instanceof ProveedorError ? e.codigo : 'error', e?.crudo ?? (e?.message || String(e)));
+    return { ...actual, error: codigoError(prov, e) };
   }
   await registrar(ds, p, 'CONSULTA', res.tipo, { ...crudo, resultado: res });
   return aplicarResultado(ds, p, res, ahora);
@@ -266,12 +273,12 @@ async function aplicarResultado(ds: DataSource, p: PedidoOnline, res: ResultadoP
   try {
     return await aplicarResultadoSinCaptura(ds, p, res, ahora);
   } catch (e: any) {
-    // F5 (plan §14): el mismo pago de uPay ya está asignado a otro pedido. No se da por pagado
+    // F5 (plan §14): el mismo pago del proveedor ya está asignado a otro pedido. No se da por pagado
     // este, se registra y se avisa; el ciclo del job sigue con los demás.
     if (!(res.tipo === 'PAGADO' && esPagoIdDuplicado(e))) throw e;
     await registrar(ds, p, 'ERROR', 'pago_id_duplicado', { paymentId: res.paymentId });
     await avisarPersonal(
-      `Pedido ${p.numero}: uPay informa el pago ${res.paymentId}, que ya figura en otro pedido. No se dio por pagado; revisalo en uPay.`,
+      `Pedido ${p.numero}: ${nombreProveedor(p.pagoProveedor)} informa el pago ${res.paymentId}, que ya figura en otro pedido. No se dio por pagado; revisalo en ${nombreProveedor(p.pagoProveedor)}.`,
       `pago-duplicado-${p.id}-${res.paymentId}`,
     );
     return { ...(await estadoGuardado(ds, p.id)), error: 'pago_id_duplicado' };
@@ -317,7 +324,7 @@ async function aplicarResultadoSinCaptura(ds: DataSource, p: PedidoOnline, res: 
     if (r.affected) {
       await registrar(ds, p, 'REEMBOLSO', 'pago tardío', null);
       await avisarPersonal(
-        `Pedido ${p.numero}: llegó un pago con tarjeta de ${gs(res.monto)} pero el pedido ya estaba ${p.estado.toLowerCase()}. Hay que devolverlo en uPay.`,
+        `Pedido ${p.numero}: llegó un pago con tarjeta de ${gs(res.monto)} pero el pedido ya estaba ${p.estado.toLowerCase()}. Hay que devolverlo en ${nombreProveedor(p.pagoProveedor)}.`,
         `tarde-${p.id}`,
       );
     }
@@ -326,7 +333,7 @@ async function aplicarResultadoSinCaptura(ds: DataSource, p: PedidoOnline, res: 
 
   if (res.tipo === 'INCONSISTENTE') {
     await avisarPersonal(
-      `Pedido ${p.numero}: uPay informa un cobro que no coincide con el pedido (${res.detalle}). No se dio por pagado; revisalo en uPay.`,
+      `Pedido ${p.numero}: ${nombreProveedor(p.pagoProveedor)} informa un cobro que no coincide con el pedido (${res.detalle}). No se dio por pagado; revisalo en ${nombreProveedor(p.pagoProveedor)}.`,
       `inconsistente-${p.id}-${res.paymentId ?? ''}`,
     );
     await repo.update({ id: p.id }, { pagoDetalle: ('no coincide: ' + res.detalle).slice(0, 255) } as any);
@@ -354,10 +361,10 @@ async function aplicarResultadoSinCaptura(ds: DataSource, p: PedidoOnline, res: 
   }
 
   // PENDIENTE: sesión abierta o algo que no entendemos. Si ya pasó el vencimiento propio y
-  // uPay sigue sin decir nada, se espera: nunca se cancela un pedido sin la palabra de uPay.
+  // el proveedor sigue sin decir nada, se espera: nunca se cancela un pedido sin su palabra.
   if (p.pagoExpiraEn && ahora.getTime() > new Date(p.pagoExpiraEn).getTime() + 15 * 60_000) {
     await avisarPersonal(
-      `Pedido ${p.numero}: la sesión de pago venció hace más de 15 min y uPay sigue sin confirmar (${res.detalle}). Revisalo en uPay.`,
+      `Pedido ${p.numero}: la sesión de pago venció hace más de 15 min y ${nombreProveedor(p.pagoProveedor)} sigue sin confirmar (${res.detalle}). Revisalo en ${nombreProveedor(p.pagoProveedor)}.`,
       `sin-confirmar-${p.id}`,
     );
   }
@@ -383,7 +390,7 @@ export async function marcarReembolsoSiPagado(ds: DataSource, pedidoId: number):
     .execute();
   if (r.affected) {
     await registrar(ds, p, 'REEMBOLSO', 'rechazado por el local', null);
-    await avisarPersonal(`Pedido ${p.numero} rechazado con pago con tarjeta: hay que devolver ${gs(Number(p.pagoMonto ?? p.total))} en uPay.`, `rechazo-${p.id}`);
+    await avisarPersonal(`Pedido ${p.numero} rechazado con pago con tarjeta: hay que devolver ${gs(Number(p.pagoMonto ?? p.total))} en ${nombreProveedor(p.pagoProveedor)}.`, `rechazo-${p.id}`);
   }
   return Number(p.pagoMonto ?? p.total);
 }
@@ -408,13 +415,13 @@ export async function avisarReembolso(ds: DataSource, p: PedidoOnline, motivo: C
   const monto = Number(p.pagoMonto ?? p.total);
   const que = QUE_PASO[motivo];
   await registrar(ds, p, 'REEMBOLSO', que, null);
-  await avisarPersonal(`Pedido ${p.numero} ${que} con pago con tarjeta: hay que devolver ${gs(monto)} en uPay.`, `rechazo-${p.id}`);
+  await avisarPersonal(`Pedido ${p.numero} ${que} con pago con tarjeta: hay que devolver ${gs(monto)} en ${nombreProveedor(p.pagoProveedor)}.`, `rechazo-${p.id}`);
   return monto;
 }
 
 const TEXTO_DECISION: Record<DecisionPagoOnline, string> = {
   [DecisionPagoOnline.DEVOLVER]: 'hay que devolverlo',
-  [DecisionPagoOnline.YA_DEVUELTO]: 'ya se devolvió en uPay',
+  [DecisionPagoOnline.YA_DEVUELTO]: 'ya se devolvió en el portal del proveedor',
   [DecisionPagoOnline.NO_ENTRO]: 'el pago no entró',
   [DecisionPagoOnline.NO_SE_DEVUELVE]: 'no se devuelve',
 };
@@ -486,7 +493,7 @@ export async function resolverDevolucionPendiente(
   return true;
 }
 
-/** Marca como devuelto (el personal ya lo hizo en el portal de uPay). */
+/** Marca como devuelto (el personal ya lo hizo en el portal del proveedor). */
 export async function marcarDevuelto(ds: DataSource, pedidoId: number): Promise<boolean> {
   const r = await ds.getRepository(PedidoOnline).createQueryBuilder().update(PedidoOnline)
     .set({ estadoPago: EstadoPagoOnline.DEVUELTO } as any)

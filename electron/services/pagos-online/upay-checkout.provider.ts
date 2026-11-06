@@ -5,7 +5,8 @@
  * GET /v1/payments/{id}/status. Autenticación solo por `X-Api-Key` (nunca Bearer).
  * El `fetch` va inyectado para poder probar contra un uPay simulado.
  */
-export type FetchLike = (url: string, init?: any) => Promise<{ status: number; text(): Promise<string> }>;
+import { FetchLike, ProveedorError } from './proveedores/tipos';
+export type { FetchLike } from './proveedores/tipos';
 
 export const UPAY_STG_BASE_URL = 'https://external-api-hub.stg.upay.com.py';
 
@@ -24,11 +25,8 @@ export interface UpayRespuesta {
   raw: string;
 }
 
-export class UpayError extends Error {
-  constructor(public codigo: string, message: string, public status?: number) {
-    super(message);
-  }
-}
+/** Error de uPay: un `ProveedorError` con códigos `upay_*`. */
+export class UpayError extends ProveedorError {}
 
 export interface CrearSesionInput {
   referencia: string; // operationReferenceId: <numero>-<intento>
