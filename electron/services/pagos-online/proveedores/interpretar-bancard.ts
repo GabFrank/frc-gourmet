@@ -13,6 +13,11 @@ export interface EsperadoBancard {
   privateKey: string;
   spid: number;
   monto: number;
+  /**
+   * Aviso (webhook): la firma es obligatoria, es lo único que prueba que lo mandó Bancard.
+   * Consulta: la respuesta viene directo de Bancard por TLS; si trae firma, se verifica igual.
+   */
+  exigirFirma?: boolean;
 }
 
 /** El id del pago para el índice único: el ticket de Bancard (o la autorización, o el proceso). */
@@ -32,7 +37,10 @@ export function interpretarConfirmacionBancard(c: any, esperado: EsperadoBancard
   const amount = String(c.amount ?? '');
   const moneda = String(c.currency ?? '').toUpperCase();
   // El token prueba que la confirmación la armó Bancard con nuestra clave y para este monto.
-  if (!c.token || !mismoToken(String(c.token), tokenConfirmacion(esperado.privateKey, esperado.spid, amount, moneda || 'PYG'))) {
+  // OJO: no cubre `response`: un aviso rechazado y uno aprobado del mismo cobro llevan el mismo
+  // token. Por eso el aviso nunca decide solo (ver `procesarAvisoPago`): dispara una consulta.
+  const firmaOk = !!c.token && mismoToken(String(c.token), tokenConfirmacion(esperado.privateKey, esperado.spid, amount, moneda || 'PYG'));
+  if ((esperado.exigirFirma && !firmaOk) || (c.token && !firmaOk)) {
     return { tipo: 'INCONSISTENTE', paymentId: null, detalle: 'token de confirmación inválido' };
   }
   if (response === 'N') return { tipo: 'FALLIDO', paymentId: null, detalle: detalle || 'rechazado' };

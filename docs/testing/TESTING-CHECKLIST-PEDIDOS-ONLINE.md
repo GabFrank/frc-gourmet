@@ -246,6 +246,28 @@ Online sigue como panel de observación: lo que se hace en una tiene que verse e
    se puede cambiar.
 5. Una cuenta que entró por código de WhatsApp no ve el campo (ya tiene teléfono).
 
+## 13 · Pago online con Bancard (proveedores intercambiables)
+
+Requiere las claves de PRUEBA de Bancard (Portal de Comercios › vPOS) y la URL pública de la
+tienda registrada en el portal como URL de confirmación.
+
+1. **Config:** Config Tienda Online › Pago online › Proveedor «Bancard». Entorno «Prueba», clave
+   pública y privada. Guardar: la privada queda «guardada» y no se vuelve a mostrar. Abajo aparece
+   la URL de confirmación para copiar al portal. «Probar conexión» → correcta.
+2. **Activar** «Ofrecer pago con tarjeta» sin la clave privada → no deja («faltan datos del
+   proveedor»). Con las dos → Activo.
+3. **Cobro aprobado:** en la tienda, checkout con «Pagar con tarjeta». Lleva a la página de pago con
+   el formulario de Bancard dentro. Pagar con la tarjeta de prueba de Bancard. Vuelve a la misma
+   página y dice «¡Pago confirmado!». En la bandeja y el delivery: «REF. BANCARD …».
+4. **Rechazo:** tarjeta de prueba que Bancard rechaza → «no se aprobó», botón «Intentar de nuevo».
+5. **Cancelar en Bancard:** el botón cancelar del formulario vuelve con «Cancelaste el pago» y
+   «Pagar con tarjeta».
+6. **Cancelación con devolución automática:** activar «Devolver automáticamente», cancelar un
+   pedido pagado eligiendo «Hay que devolverlo» → queda «PAGO DEVUELTO» y en Bancard la compra
+   aparece anulada. Sin el interruptor, queda en la cola DEVOLVER.
+7. **Cambio de proveedor:** con un pedido de uPay en curso, pasar a Bancard: el pedido viejo
+   sigue mostrando uPay y no se consulta a Bancard.
+
 ## Qué NO se probó automáticamente
 
 - **SQLite es lo que corren los tests** (`.tmp/*.db` con todas las migraciones).

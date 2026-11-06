@@ -223,6 +223,9 @@ import { RepositoryService } from '../../../database/repository.service';
               </mat-form-field>
             </ng-container>
           </div>
+          <p class="aviso-prueba" *ngIf="provSel?.campos?.length && valoresProv[provSel.id]?.['entorno'] === 'PRUEBA' && cfg.pagoOnlineActivo">
+            <mat-icon>warning</mat-icon> Está en el entorno de PRUEBA: los cobros no son reales. Pasalo a producción antes de abrir la tienda.
+          </p>
           <div class="datos-portal" *ngIf="provSel?.datosPortal?.length">
             <div *ngFor="let d of provSel.datosPortal">
               <span class="lbl">{{ d.etiqueta }}</span>
@@ -311,6 +314,7 @@ import { RepositoryService } from '../../../database/repository.service';
     .hint-error { color: var(--error-color); }
     .devolucion-auto { margin: 4px 0 8px; }
     .datos-portal { margin: 4px 0 12px; font-size: 13px; }
+    .aviso-prueba { display: flex; align-items: center; gap: 6px; color: var(--warning-color); font-size: 13px; margin: 4px 0 8px; }
     .datos-portal .lbl { display: block; color: var(--text-secondary); }
     .datos-portal code { word-break: break-all; user-select: all; }
     .devolucion-auto .ayuda { margin: 4px 0 0; }

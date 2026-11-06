@@ -95,7 +95,11 @@ const proveedor: ProveedorPagoOnline<BancardConfig> = {
       throw Object.assign(new ProveedorError('bancard_credenciales', `Bancard rechazó las claves (${claves || r.status})`, r.status), { crudo });
     }
     if (r.body?.status === 'success' && r.body?.confirmation) {
-      return { resultado: interpretarConfirmacionBancard(r.body.confirmation, { privateKey: creds.privateKey, spid, monto: cobro.monto }), crudo };
+      const { token: _t, ...sinToken } = r.body.confirmation;
+      return {
+        resultado: interpretarConfirmacionBancard(r.body.confirmation, { privateKey: creds.privateKey, spid, monto: cobro.monto }),
+        crudo: { status: r.status, body: { ...r.body, confirmation: sinToken } },
+      };
     }
     if (NO_ENCONTRADO.test(claves)) {
       // Bancard no informa sesiones vencidas: sin pago y pasado nuestro vencimiento, se da por vencida.
@@ -115,12 +119,15 @@ const proveedor: ProveedorPagoOnline<BancardConfig> = {
     if (!op || !Number.isSafeInteger(spid) || spid <= 0) throw new ProveedorError('bancard_aviso_invalido', 'aviso sin shop_process_id');
     const cobro = await buscar(String(spid));
     if (!cobro) throw new ProveedorError('bancard_aviso_desconocido', `proceso ${spid} sin pedido`);
-    const resultado = interpretarConfirmacionBancard(op, { privateKey: creds.privateKey, spid, monto: cobro.monto });
+    const resultado = interpretarConfirmacionBancard(op, { privateKey: creds.privateKey, spid, monto: cobro.monto, exigirFirma: true });
     // Un aviso con firma inválida no es de Bancard: no se aplica y se responde error.
     if (resultado.tipo === 'INCONSISTENTE' && /token/.test(resultado.detalle)) {
       throw new ProveedorError('bancard_aviso_firma', resultado.detalle);
     }
-    return { sesionId: String(spid), resultado, crudo: body, respuesta: { status: 'success' } };
+    // Lo que se guarda en el historial va SIN el token: con él, cualquiera que lea la tabla podría
+    // armar un aviso «aprobado» para el mismo cobro (el token no cubre la respuesta).
+    const { token: _t, ...sinToken } = op;
+    return { sesionId: String(spid), resultado, crudo: { operation: sinToken }, respuesta: { status: 'success' } };
   },
 
   async devolver(creds, cobro, ctx) {

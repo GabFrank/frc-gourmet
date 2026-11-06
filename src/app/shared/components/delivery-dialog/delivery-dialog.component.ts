@@ -115,6 +115,7 @@ export function chipPagoOnline(estadoPago: string | null | undefined, monto?: nu
     case 'FALLIDO': return { texto: 'PAGO RECHAZADO', clase: 'mal' };
     case 'EXPIRADO': return { texto: 'PAGO VENCIDO', clase: 'mal' };
     case 'REEMBOLSO_PENDIENTE': return { texto: `DEVOLVER ${Number(monto || 0).toLocaleString('es-PY')}`, clase: 'mal' };
+    case 'DEVOLVIENDO': return { texto: 'DEVOLVIENDO…', clase: 'espera' };
     case 'DEVUELTO': return { texto: 'PAGO DEVUELTO', clase: 'neutro' };
     case 'NO_ACREDITADO': return { texto: 'PAGO NO ENTRÓ', clase: 'neutro' };
     case 'RETENIDO': return { texto: 'PAGO NO DEVUELTO', clase: 'neutro' };

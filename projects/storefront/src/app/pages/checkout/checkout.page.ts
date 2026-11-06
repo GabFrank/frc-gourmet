@@ -384,7 +384,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
           // Tarjeta: a la página del proveedor (solo si la dirección es de un host suyo). Si el
           // proveedor arma su formulario en nuestra página (Bancard), va a /pago/<numero>.
           if (res.checkoutUrl) {
-            if (esUrlPagoPermitida(res.checkoutUrl, this.config.config?.pagoOnlineHosts)) { window.location.href = res.checkoutUrl; return; }
+            if (esUrlPagoPermitida(res.checkoutUrl, res.pagoHosts || this.config.config?.pagoOnlineHosts)) { window.location.href = res.checkoutUrl; return; }
             this.router.navigate(['/pago', res.numero]);
             return;
           }

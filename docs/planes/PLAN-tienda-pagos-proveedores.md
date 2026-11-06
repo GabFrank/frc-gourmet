@@ -4,6 +4,12 @@ Rama: `bot/ceo-frc-gourmet/feat-tienda-pagos-proveedores`, sale de la de F9. Nad
 OK del propietario. Como toca cobro, **antes del merge hay que cobrar de verdad** contra el entorno
 de prueba del proveedor (y uno real chico antes de lanzar).
 
+## Estado (2026-11-06)
+
+Fases 1 a 4 hechas en la rama (commits `7ad6256d`, `4aef556f`, `77f799c4`), con simulador de
+Bancard. Falta: probar contra el staging de Bancard con las claves de prueba, cobrar de verdad, y
+la certificación de Bancard para producción.
+
 ## Por qué
 
 uPay se bajó (noviembre 2026: el BCP intervino Ueno y congeló sus cuentas). El propietario no quiere

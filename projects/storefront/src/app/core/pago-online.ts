@@ -28,7 +28,7 @@ export function esMetodoPagoOnline(m: string | null | undefined): boolean {
   return ['UPAY', 'BANCARD'].includes(String(m || '').toUpperCase());
 }
 
-export type EstadoPago = 'PENDIENTE' | 'PAGADO' | 'FALLIDO' | 'EXPIRADO' | 'REEMBOLSO_PENDIENTE' | 'DEVUELTO'
+export type EstadoPago = 'PENDIENTE' | 'PAGADO' | 'FALLIDO' | 'EXPIRADO' | 'REEMBOLSO_PENDIENTE' | 'DEVOLVIENDO' | 'DEVUELTO'
   | 'NO_ACREDITADO' | 'RETENIDO';
 
 /** Texto para el cliente según el estado del pago. */
@@ -40,6 +40,7 @@ export function textoEstadoPago(e: string | null | undefined, monto?: number | n
     case 'EXPIRADO': return 'El pago con tarjeta no se completó a tiempo.';
     case 'REEMBOLSO_PENDIENTE':
       return `Te devolvemos ${monto != null ? '₲' + Math.round(monto).toLocaleString('es-PY') : 'el pago'} a tu tarjeta. Puede tardar lo que indique tu banco.`;
+    case 'DEVOLVIENDO':
     case 'DEVUELTO': return 'Te devolvimos el pago a tu tarjeta.';
     // El local registró que el cobro no llegó a acreditarse: no hay nada que devolver.
     case 'NO_ACREDITADO': return 'El pago con tarjeta no llegó a acreditarse.';

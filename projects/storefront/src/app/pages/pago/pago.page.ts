@@ -89,6 +89,7 @@ export class PagoPage implements OnInit, OnDestroy {
   cancelado = false;
   /** Ya se pidió el formulario en esta visita (no se vuelve a pedir en cada consulta). */
   private formularioPedido = false;
+  private scriptPago: HTMLScriptElement | null = null;
 
   get estadoPago(): string | null { return this.pedido?.estadoPago ?? null; }
   get texto(): string | null { return textoEstadoPago(this.estadoPago, this.pedido?.pagoMonto ?? this.pedido?.total); }
@@ -114,10 +115,12 @@ export class PagoPage implements OnInit, OnDestroy {
           this.pedido = r.pedido;
           if (this.estadoPago !== 'PENDIENTE' && this.timer) { clearInterval(this.timer); this.timer = null; }
           if (this.estadoPago !== 'PENDIENTE') this.formulario = false;
-          // Llegó recién del checkout con un proveedor de formulario: se abre acá.
+          // Proveedor de formulario (Bancard): se arma acá. Con uno de redirección (uPay) esta es la
+          // página de vuelta: nunca se manda al cliente de nuevo al proveedor sin que lo pida (si
+          // no, «Atrás» desde uPay rebotaba otra vez a uPay).
           if (!this.formularioPedido && this.estadoPago === 'PENDIENTE' && this.pedido.estado === 'PENDIENTE_PAGO') {
             this.formularioPedido = true;
-            this.abrirPago(false);
+            this.conConfig(() => this.abrirPago(false, true));
           }
         } else {
           this.error = 'No encontramos ese pedido.';
@@ -131,19 +134,37 @@ export class PagoPage implements OnInit, OnDestroy {
     this.abrirPago(true);
   }
 
-  /** Pide el cobro (o reusa el vigente) y lleva al cliente al proveedor o arma su formulario. */
-  abrirPago(nuevoIntento: boolean): void {
+  /** Espera la config de la tienda (hosts permitidos del proveedor) antes de seguir. */
+  private conConfig(fn: () => void): void {
+    if (this.config.loaded) { fn(); return; }
+    const sub = this.config.cambios$.subscribe(() => {
+      if (!this.config.loaded) return;
+      setTimeout(() => sub.unsubscribe());
+      fn();
+    });
+  }
+
+  /**
+   * Pide el cobro (o reusa el vigente) y lleva al cliente al proveedor o arma su formulario.
+   * `soloFormulario`: al entrar a la página, solo se arma el formulario; no se redirige.
+   */
+  abrirPago(nuevoIntento: boolean, soloFormulario = false): void {
     this.reintentando = true;
     this.error = null;
     this.api.call<any>('pedido.pago.iniciar', [this.numero, { nuevoIntento }]).subscribe({
       next: (r) => {
         this.reintentando = false;
-        const hosts = this.config.config?.pagoOnlineHosts;
+        // Los hosts del proveedor DEL PEDIDO (si el local cambió de proveedor, sigue valiendo).
+        const hosts = r?.hosts || this.config.config?.pagoOnlineHosts;
         if (r?.success && r.tipo === 'FORMULARIO' && r.procesoId && esUrlPagoPermitida(r.script, hosts)) {
           this.cancelado = false;
+          // Intento nuevo tras un rechazo: vuelve a esperar el pago y a consultar.
+          if (this.pedido) this.pedido = { ...this.pedido, estadoPago: 'PENDIENTE' };
+          if (!this.timer) this.timer = setInterval(() => this.verificar(), 5000);
           this.mostrarFormulario(r.script, r.procesoId, r.proveedor);
           return;
         }
+        if (soloFormulario) return;
         if (r?.success && esUrlPagoPermitida(r.checkoutUrl, hosts)) { window.location.href = r.checkoutUrl; return; }
         this.error = 'No pudimos abrir el pago con tarjeta. Probá de nuevo en un rato.';
       },
@@ -164,7 +185,10 @@ export class PagoPage implements OnInit, OnDestroy {
       }
     });
     if (typeof Bancard !== 'undefined') { armar(); return; }
+    // Un intento anterior que cargó mal: se saca antes de volver a cargarlo.
+    if (this.scriptPago) { this.scriptPago.remove(); this.scriptPago = null; }
     const s = document.createElement('script');
+    this.scriptPago = s;
     s.src = script;
     s.async = true;
     s.onload = armar;

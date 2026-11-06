@@ -39,6 +39,9 @@ interface Compra { spid: number; amount: string; processId: string; pago?: any; 
 const compras = new Map<number, Compra>();
 const llamadas: Array<{ ruta: string; body: any }> = [];
 let anulacionFalla = false;
+let anulacionSinRespuesta = false;
+/** Se llama durante la anulación, antes de responder (para mirar el estado en ese instante). */
+let alAnular: (() => Promise<void>) | null = null;
 let n = 0;
 const fakeFetch = async (url: string, init: any = {}) => {
   const res = (status: number, b: any) => ({ status, text: async () => JSON.stringify(b) });
@@ -66,6 +69,8 @@ const fakeFetch = async (url: string, init: any = {}) => {
   }
   if (ruta === 'single_buy/rollback') {
     if (op.token !== md5(`${PRIV}${spid}rollback0.00`)) return err('InvalidTokenError');
+    if (alAnular) await alAnular();
+    if (anulacionSinRespuesta) throw new Error('timeout');
     if (anulacionFalla) return err('PosCommunicationError');
     const c = compras.get(spid);
     if (!c) return err('PaymentNotFoundError');
@@ -124,7 +129,8 @@ async function main() {
   const conf = (o: any = {}) => ({ ...{ token: tokenConfirmacion(PRIV, 501, '1000.00'), shop_process_id: 501, response: 'S', response_code: '00', amount: '1000.00', currency: 'PYG', ticket_number: 'T1' }, ...o });
   ok(interpretarConfirmacionBancard(conf(), esp).tipo === 'PAGADO', 'aprobada con firma y monto correctos → PAGADO');
   ok(interpretarConfirmacionBancard(conf({ token: 'x' }), esp).tipo === 'INCONSISTENTE', 'firma falsa → INCONSISTENTE');
-  ok(interpretarConfirmacionBancard(conf({ token: undefined }), esp).tipo === 'INCONSISTENTE', 'sin firma → INCONSISTENTE');
+  ok(interpretarConfirmacionBancard(conf({ token: undefined }), { ...esp, exigirFirma: true }).tipo === 'INCONSISTENTE', 'aviso sin firma → INCONSISTENTE');
+  ok(interpretarConfirmacionBancard(conf({ token: undefined }), esp).tipo === 'PAGADO', 'consulta directa a Bancard sin firma → se acepta (viene por TLS de Bancard)');
   ok(interpretarConfirmacionBancard(conf({ amount: '999.00', token: tokenConfirmacion(PRIV, 501, '999.00') }), esp).tipo === 'INCONSISTENTE', 'otro monto (bien firmado) → INCONSISTENTE');
   ok(interpretarConfirmacionBancard(conf({ currency: 'USD', token: tokenConfirmacion(PRIV, 501, '1000.00', 'USD') }), esp).tipo === 'INCONSISTENTE', 'otra moneda → INCONSISTENTE');
   ok(interpretarConfirmacionBancard(conf({ response: 'N', response_code: '05' }), esp).tipo === 'FALLIDO', 'rechazada → FALLIDO');
@@ -156,6 +162,7 @@ async function main() {
   const spid1 = p1.id * 100 + 1;
   ok(i1.success && i1.tipo === 'FORMULARIO' && i1.procesoId === compras.get(spid1)?.processId, 'crea el cobro y devuelve el proceso para el formulario', i1);
   ok(i1.script === 'https://vpos.infonet.com.py:8888/checkout/javascript/dist/bancard-checkout-4.0.0.js', 'script del entorno de prueba', i1.script);
+  ok(Array.isArray(i1.hosts) && i1.hosts.includes('vpos.infonet.com.py'), 'devuelve los hosts del proveedor del pedido', i1.hosts);
   const sb = llamadas.find((l) => l.ruta === 'single_buy')!;
   ok(sb.body.operation.amount === '112000.00' && sb.body.operation.shop_process_id === spid1 && !JSON.stringify(sb.body).includes(PRIV),
     'monto, proceso y firma correctos; la clave privada no viaja', sb.body.operation);
@@ -175,7 +182,10 @@ async function main() {
   ok(a.http === 200 && a.respuesta?.status === 'success' && a.resultado?.recienPagado, 'aviso aprobado → responde success y el pedido queda pagado', a);
   ok(q.estadoPago === EstadoPagoOnline.PAGADO && q.estado === EstadoPedidoOnline.RECIBIDO && q.pagoId === `T${spid1}` && Number(q.pagoMonto) === 112000,
     'pagado: RECIBIDO, ticket de Bancard y monto', q);
-  ok((await eventos(p1.id)).some((e) => e.startsWith('AVISO:PAGADO')), 'queda el evento del aviso');
+  ok((await eventos(p1.id)).some((e) => e.startsWith('AVISO:PAGADO')) && (await eventos(p1.id)).some((e) => e.startsWith('CONSULTA:PAGADO')),
+    'queda el evento del aviso y el de la consulta que lo confirmó');
+  const crudos = (await ds.getRepository(PagoOnlineEvento).find({ where: { pedidoOnlineId: p1.id } })).map((e) => e.respuesta || '').join(' ');
+  ok(!crudos.includes(aviso1.operation.token) && !crudos.includes(PRIV), 'el historial no guarda el token del aviso ni la clave privada');
   a = await procesarAvisoPago(ds, 'BANCARD', aviso1);
   ok(a.http === 200 && !a.resultado?.recienPagado && (await leer(p1.id)).estadoPago === EstadoPagoOnline.PAGADO, 'aviso repetido → idempotente');
 
@@ -188,7 +198,17 @@ async function main() {
   a = await procesarAvisoPago(ds, 'BANCARD', { operation: confirmacion(999999) });
   ok(a.http === 400, 'aviso de un proceso que no es nuestro → rechazado', a);
   a = await procesarAvisoPago(ds, 'UPAY', {});
-  ok(a.http === 404, 'uPay no recibe avisos por esta vía');
+  ok(a.http === 400, 'uPay no recibe avisos por esta vía');
+
+  console.log('Aviso que no dice la verdad');
+  const pf = await nuevo(70000);
+  await iniciarPagoPedido(ds, pf.id);
+  const spidF = pf.id * 100 + 1;
+  // Un rechazo legítimo, y alguien que le cambia la respuesta a «aprobado» (el token no la cubre).
+  const rechazoReal = { ...confirmacion(spidF, { response: 'N', code: '05' }), amount: compras.get(spidF)!.amount };
+  a = await procesarAvisoPago(ds, 'BANCARD', { operation: { ...rechazoReal, response: 'S', response_code: '00' } });
+  ok(a.http === 200 && (await leer(pf.id)).estadoPago === EstadoPagoOnline.PENDIENTE,
+    'aviso «aprobado» armado sobre un rechazo: Bancard no tiene el pago, el pedido sigue pendiente', a);
 
   console.log('Aviso perdido: la consulta lo confirma');
   v = await verificarPagoPedido(ds, p2.id);
@@ -202,6 +222,21 @@ async function main() {
   ok(v.estadoPago === EstadoPagoOnline.FALLIDO, 'rechazada por el banco → FALLIDO', v);
   const i3: any = await iniciarPagoPedido(ds, p3.id, { nuevoIntento: true });
   ok(i3.success && compras.has(p3.id * 100 + 2) && (await leer(p3.id)).pagoSesionId === String(p3.id * 100 + 2), 'reintento → proceso nuevo (intento 2)', i3);
+
+  console.log('Pago en un intento anterior');
+  const pv = await nuevo(33000);
+  await iniciarPagoPedido(ds, pv.id);
+  pagarEnBancard(pv.id * 100 + 1, { response: 'N', code: '05' });
+  await verificarPagoPedido(ds, pv.id);
+  await iniciarPagoPedido(ds, pv.id, { nuevoIntento: true });
+  // El cliente terminó pagando con otra tarjeta en el proceso viejo.
+  a = await procesarAvisoPago(ds, 'BANCARD', { operation: pagarEnBancard(pv.id * 100 + 1) });
+  ok(a.http === 200 && (await leer(pv.id)).estadoPago === EstadoPagoOnline.PAGADO, 'un pago en el intento anterior también cuenta', a);
+  avisos.length = 0;
+  pagarEnBancard(pv.id * 100 + 2);
+  await procesarAvisoPago(ds, 'BANCARD', { operation: compras.get(pv.id * 100 + 2)!.pago });
+  ok((await eventos(pv.id)).some((e) => e.startsWith('COBRO_DUPLICADO')) && avisos.some((t) => /segundo cobro/.test(t)),
+    'y si además pagó el intento nuevo: se registra el cobro duplicado y se avisa para devolverlo', avisos);
 
   console.log('Monto que no coincide');
   const p4 = await nuevo(40000);
@@ -251,6 +286,45 @@ async function main() {
     'si Bancard no la anula, queda en la cola DEVOLVER como siempre', d8);
   ok(avisos.some((t) => /no se pudo/.test(t)) && (await eventos(p8.id)).includes('DEVOLUCION_AUTO:FALLO'), 'y avisa por qué no se pudo', avisos);
   anulacionFalla = false;
+
+  // Mientras se llama a Bancard, el pedido está reclamado: nadie lo resuelve a mano en el medio.
+  const pc = await nuevo(14000);
+  await iniciarPagoPedido(ds, pc.id);
+  await procesarAvisoPago(ds, 'BANCARD', { operation: pagarEnBancard(pc.id * 100 + 1) });
+  await repo.update({ id: pc.id }, { estado: EstadoPedidoOnline.CANCELADO, estadoPago: EstadoPagoOnline.REEMBOLSO_PENDIENTE } as any);
+  let enMedio: string | null | undefined = null;
+  alAnular = async () => { enMedio = (await leer(pc.id)).estadoPago; };
+  const { resolverDevolucionPendiente } = require('../electron/services/pagos-online/pagos-online.service');
+  let manual: any = null;
+  alAnular = async () => {
+    enMedio = (await leer(pc.id)).estadoPago;
+    manual = await resolverDevolucionPendiente(ds, pc.id, { decision: 'NO_SE_DEVUELVE', motivo: 'X' }, 1);
+  };
+  await registrarDecisionPago(ds, pc.id, { decision: 'DEVOLVER' as any, motivo: null }, 'CANCELADO_PDV', 1);
+  alAnular = null;
+  ok(enMedio === 'DEVOLVIENDO' && manual === false && (await leer(pc.id)).estadoPago === EstadoPagoOnline.DEVUELTO,
+    'durante la anulación queda DEVOLVIENDO y una resolución manual en ese instante no pisa', { enMedio, manual });
+
+  // Sin respuesta de Bancard: vuelve a la cola y el aviso pide verificar antes de devolver a mano.
+  anulacionSinRespuesta = true;
+  const ps = await nuevo(13000);
+  await iniciarPagoPedido(ds, ps.id);
+  await procesarAvisoPago(ds, 'BANCARD', { operation: pagarEnBancard(ps.id * 100 + 1) });
+  await repo.update({ id: ps.id }, { estado: EstadoPedidoOnline.CANCELADO, estadoPago: EstadoPagoOnline.REEMBOLSO_PENDIENTE } as any);
+  avisos.length = 0;
+  const ds1 = await registrarDecisionPago(ds, ps.id, { decision: 'DEVOLVER' as any, motivo: null }, 'CANCELADO_PDV', 1);
+  ok(ds1.devolucionAutomatica?.ok === false && (await leer(ps.id)).estadoPago === EstadoPagoOnline.REEMBOLSO_PENDIENTE
+    && avisos.some((t) => /verificá/.test(t)) && (await eventos(ps.id)).includes('DEVOLUCION_AUTO:INCIERTO'),
+    'sin respuesta: vuelve a DEVOLVER y avisa que hay que verificar en Bancard', avisos);
+  anulacionSinRespuesta = false;
+
+  // Una devolución que quedó a medias (el servidor se cortó) vuelve a la cola sola.
+  const pt = await nuevo(12500);
+  await repo.update({ id: pt.id }, { estadoPago: EstadoPagoOnline.DEVOLVIENDO, pagoProveedor: 'BANCARD' } as any);
+  await ds.query(`UPDATE pedidos_online SET updated_at = ${pgDb ? "NOW() - INTERVAL '20 minutes'" : "datetime('now', '-20 minutes')"} WHERE id = ${pt.id}`);
+  avisos.length = 0;
+  await tickPagosOnline(ds);
+  ok((await leer(pt.id)).estadoPago === EstadoPagoOnline.REEMBOLSO_PENDIENTE && avisos.some((t) => t.includes(pt.numero)), 'DEVOLVIENDO trabada → vuelve a la cola con aviso', avisos);
   await conBancard({ pagoDevolucionAutomatica: false });
 
   console.log('Sesión vencida sin pago');

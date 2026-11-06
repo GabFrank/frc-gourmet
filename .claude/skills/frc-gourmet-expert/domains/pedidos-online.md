@@ -449,6 +449,36 @@ Toca el núcleo del cobro: probar cobrando y facturando de verdad antes del merg
 Falso positivo de la auditoría: «`delivery-convertir-modo` no actualiza `tipo_pedido`». Sí lo hace
 desde f826c761 (y `test:delivery-conversion` lo cubre).
 
+### Pago online con proveedores intercambiables (2026-11, PLAN-tienda-pagos-proveedores)
+
+uPay se bajó (intervención de Ueno, nov. 2026). El pago online ya no está escrito para uPay:
+`electron/services/pagos-online/pagos-online.service.ts` es el **núcleo común** (estados,
+pago tardío, devoluciones, avisos, eventos) y cada proveedor es un módulo en
+`electron/services/pagos-online/proveedores/` que cumple `ProveedorPagoOnline` (`tipos.ts`):
+`credenciales`, `iniciar`, `consultar`, `probarConexion` y opcionales `procesarAviso`, `devolver`,
+`datosPortal`. **Sumar un proveedor = escribir su módulo + agregarlo a `PROVEEDORES` en
+`index.ts`** (+ su forma de pago y su id en `METODOS_PAGO_ONLINE`).
+
+- **Qué proveedor:** `tienda_online_config.pago_proveedor` (vacío = UPAY) cobra los pedidos
+  NUEVOS. Un pedido se cobra con su `metodoPago` y se consulta/devuelve con su `pago_proveedor`:
+  cambiar el activo no rompe los que están en curso. «Pagó online» = `esMetodoPagoOnline(m)` o
+  `pagoModalidad = 'ONLINE'`, nunca `=== 'UPAY'`.
+- **Config:** cada proveedor declara `campos`; la pantalla y el guardado salen de esa lista. No
+  secretos en `pago_config_json`, secretos en el almacén seguro (`tienda-pago-<prov>-<clave>`).
+  uPay sigue con sus columnas `upay_*` y su bloque propio.
+- **Bancard vPOS** (`bancard.proveedor.ts`, API 0.3): `single_buy` firmado con md5 de la clave
+  privada; el formulario de la tarjeta se arma en `/tienda/pago/<numero>` con
+  `bancard-checkout-4.0.0.js` (solo de sus hosts). `shop_process_id = pedido.id * 100 + intento`.
+  Confirmación por **dos caminos**: aviso firmado a `POST /pub/pagos/bancard/aviso` (fuera de
+  /pub/rpc; la firma la verifica el proveedor) y consulta `single_buy/confirmations` del job. Sin
+  pago y vencida +30 min → EXPIRADO. Prueba `https://vpos.infonet.com.py:8888`, producción sin puerto.
+- **Devolución automática** (`pago_devolucion_automatica`, apagada): «Hay que devolverlo» y el
+  pago tardío anulan por API (`rollback`) después del commit; si no se puede, cola DEVOLVER.
+- Tests: `test:pagos-bancard` (simulador, SQLite y `TIENDA_PG`), `test:pagos-online` (uPay +
+  registro), `test:tienda-online-migracion`.
+- **Pendiente:** validar contra el staging de Bancard con claves reales y certificar (Bancard la
+  exige antes de habilitar producción). Antes del merge, cobrar de verdad en prueba.
+
 ### Lo que sigue pendiente
 
 - ~~El cliente no puede cancelar su pedido.~~ Hecho en F9 (solicitud que aprueba el local).

@@ -687,7 +687,7 @@ export function registerPedidosOnlinePedidosHandlers(
       }
       return {
         success: true, numero: saved.numero, pedidoId: saved.id, estado: EstadoPedidoOnline.PENDIENTE_PAGO,
-        subtotal, costoEnvio, total, ventaId: null, checkoutUrl: ini.checkoutUrl,
+        subtotal, costoEnvio, total, ventaId: null, checkoutUrl: ini.checkoutUrl, pagoHosts: ini.hosts,
       };
     }
 

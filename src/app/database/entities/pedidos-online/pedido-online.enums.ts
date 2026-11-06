@@ -64,6 +64,8 @@ export enum EstadoPagoOnline {
   EXPIRADO = 'EXPIRADO',
   /** Cobrado pero el pedido no sigue (rechazado, vencido o pago tardío): devolver en uPay. */
   REEMBOLSO_PENDIENTE = 'REEMBOLSO_PENDIENTE',
+  /** La devolución automática está en curso (reclamada antes de llamar al proveedor). Segundos. */
+  DEVOLVIENDO = 'DEVOLVIENDO',
   DEVUELTO = 'DEVUELTO',
   /** Se canceló y el local registró que el cobro no llegó a entrar (uPay no lo acreditó o se anuló allá). */
   NO_ACREDITADO = 'NO_ACREDITADO',

@@ -232,6 +232,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
       case 'FALLIDO': return { texto: 'Pago rechazado', clase: 'mal' };
       case 'EXPIRADO': return { texto: 'Pago vencido', clase: 'mal' };
       case 'REEMBOLSO_PENDIENTE': return { texto: `Devolver ₲ ${Number(p.pagoMonto || 0).toLocaleString('es-PY')}`, clase: 'mal' };
+      case 'DEVOLVIENDO': return { texto: 'Devolviendo…', clase: 'espera' };
       case 'DEVUELTO': return { texto: 'Pago devuelto', clase: 'neutro' };
       case 'NO_ACREDITADO': return { texto: 'El pago no entró', clase: 'neutro' };
       case 'RETENIDO': return { texto: 'Pago no devuelto', clase: 'neutro' };
