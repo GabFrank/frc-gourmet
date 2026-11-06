@@ -1,4 +1,4 @@
-import { iniciarPagoPedido, verificarPagoPedido, VERIFICAR_MIN_MS } from '../services/pagos-online/pagos-online.service';
+import { iniciarPagoPedido, procesarAvisoPago, verificarPagoPedido, VERIFICAR_MIN_MS } from '../services/pagos-online/pagos-online.service';
 import { metodosAlRecibir, monedasTienda, validarPagoPedido, ResultadoPago } from '../utils/pago-pedido.utils';
 import { accionesPedido, ESTADOS_CANCELABLES_CLIENTE, limpiarMotivo } from '../utils/pedido-acciones.utils';
 import { pagoOnlineOfrecido, proveedorPagoActivo } from '../utils/tienda-ingreso.utils';
@@ -884,6 +884,15 @@ export function registerPedidosOnlinePedidosHandlers(
     return { success: true, pedido: q ? mapPedido(q) : null };
   });
 
+  // Aviso firmado del proveedor de pago (webhook). Lo llama la ruta `/pub/pagos/:proveedor/aviso`
+  // (no va por /pub/rpc: el proveedor manda su propio formato a una URL fija). Si el pago quedó
+  // confirmado y la tienda acepta sola, se manda a cocina igual que con la consulta.
+  ipcMain.handle('pub-pago-aviso', async (_event: any, proveedorId: string, body: any) => {
+    const r = await procesarAvisoPago(dataSource, String(proveedorId || ''), body);
+    if (r.pedidoId && r.resultado?.recienPagado && r.resultado.aceptadoAutomatico) await materializarTrasPago(dataSource, r.pedidoId);
+    return { http: r.http, respuesta: r.respuesta };
+  });
+
   // ---- Operaciones públicas ----
   registerPublicOperation('zonas.get', { channel: 'get-zonas-delivery-online', requiresAuth: false, description: 'Zonas de delivery activas.' });
   registerPublicOperation('monedas.get', { channel: 'get-monedas-tienda', requiresAuth: false, description: 'Monedas para ver la carta y pagar en efectivo (F8).' });
@@ -895,7 +904,7 @@ export function registerPedidosOnlinePedidosHandlers(
   registerPublicOperation('pedido.mis', { channel: 'get-mis-pedidos-online', requiresAuth: true, description: 'Mis pedidos.' });
   registerPublicOperation('pedido.seguimiento', { channel: 'get-pedido-online-seguimiento', requiresAuth: false, description: 'Estado del pedido del invitado de mesa por su token de seguimiento.' });
   registerPublicOperation('pedido.pago.iniciar', { channel: 'iniciar-pago-pedido-online', requiresAuth: true, description: 'Iniciar o reintentar el pago con tarjeta de un pedido propio.' });
-  registerPublicOperation('pedido.pago.verificar', { channel: 'verificar-pago-pedido-online', requiresAuth: true, description: 'Consultar a uPay el pago de un pedido propio.' });
+  registerPublicOperation('pedido.pago.verificar', { channel: 'verificar-pago-pedido-online', requiresAuth: true, description: 'Consultar al proveedor el pago de un pedido propio.' });
   registerPublicOperation('pedido.estado', { channel: 'get-pedido-online-estado', requiresAuth: true, description: 'Estado de un pedido por número.' });
   registerPublicOperation('pedido.cancelacion.solicitar', { channel: 'solicitar-cancelacion-pedido-online', requiresAuth: true, description: 'Pedir al local que cancele un pedido propio (F9).' });
   registerPublicOperation('pedido.modificar', { channel: 'modificar-pedido-online', requiresAuth: true, description: 'Cancelar un pedido propio sin confirmar para volver a armarlo (F9).' });

@@ -73,6 +73,33 @@ export function registerPublicRoutes(fastify: FastifyInstance): void {
     timestamp: new Date().toISOString(),
   }));
 
+  // ---- Aviso de un proveedor de pago (webhook, PLAN-tienda-pagos-proveedores §4). El proveedor
+  // postea su propio formato a una URL fija que se carga en su portal. Sin JWT: la autenticidad la
+  // prueba la firma del aviso, que verifica el proveedor (`procesarAviso`). Solo proveedores
+  // conocidos (letras), y con el mismo tope que el RPC público.
+  fastify.post<{ Params: { proveedor: string } }>(
+    '/pub/pagos/:proveedor/aviso',
+    { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const proveedor = String(request.params.proveedor || '').toUpperCase();
+      if (!/^[A-Z]{2,20}$/.test(proveedor)) {
+        reply.code(404);
+        return { status: 'error' };
+      }
+      try {
+        const ipInfo = clientIpDe(request);
+        const ctx = { userId: null, deviceId: null, customerId: null, clientIp: ipInfo.ip, viaTunel: ipInfo.viaTunel };
+        const r: any = await invokeHandlerWithContext('pub-pago-aviso', ctx, proveedor, request.body ?? null);
+        reply.code(Number(r?.http) || 200);
+        return r?.respuesta ?? { status: 'error' };
+      } catch (err: any) {
+        console.error(`[pub] aviso de pago (${proveedor}) falló:`, err);
+        reply.code(500);
+        return { status: 'error' };
+      }
+    },
+  );
+
   // ---- RPC público acotado por whitelist.
   fastify.post<{ Body: { op: string; params?: any[] } }>(
     '/pub/rpc',

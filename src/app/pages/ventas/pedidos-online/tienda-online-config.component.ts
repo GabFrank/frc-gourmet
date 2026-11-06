@@ -223,6 +223,12 @@ import { RepositoryService } from '../../../database/repository.service';
               </mat-form-field>
             </ng-container>
           </div>
+          <div class="datos-portal" *ngIf="provSel?.datosPortal?.length">
+            <div *ngFor="let d of provSel.datosPortal">
+              <span class="lbl">{{ d.etiqueta }}</span>
+              <code>{{ d.valor }}</code>
+            </div>
+          </div>
           <div class="grid" *ngIf="provSelId === 'UPAY'">
             <mat-form-field appearance="outline" class="full">
               <mat-label>URL base de uPay</mat-label>
@@ -304,6 +310,9 @@ import { RepositoryService } from '../../../database/repository.service';
     .full-width { width: 100%; margin-top: 10px; }
     .hint-error { color: var(--error-color); }
     .devolucion-auto { margin: 4px 0 8px; }
+    .datos-portal { margin: 4px 0 12px; font-size: 13px; }
+    .datos-portal .lbl { display: block; color: var(--text-secondary); }
+    .datos-portal code { word-break: break-all; user-select: all; }
     .devolucion-auto .ayuda { margin: 4px 0 0; }
     @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
   `],

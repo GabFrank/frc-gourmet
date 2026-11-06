@@ -633,6 +633,22 @@ async function main() {
   ok(vProv?.error === 'pago_proveedor_invalido', 'Proveedores: un proveedor que no existe → rechazado', vProv);
   const vProvCfg: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoConfig: { NOEXISTE: { a: 'b' } } });
   ok(vProvCfg?.error === 'pago_proveedor_invalido', 'Proveedores: datos para un proveedor desconocido → rechazado', vProvCfg);
+  const vBkey: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoConfig: { BANCARD: { publicKey: 'con espacios ' } } });
+  ok(vBkey?.error === 'bancard_publickey_invalido', 'Bancard: clave pública con formato inválido → rechazada', vBkey);
+  const vBent: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoConfig: { BANCARD: { entorno: 'OTRO' } } });
+  ok(vBent?.error === 'bancard_entorno_invalido', 'Bancard: entorno que no existe → rechazado', vBent);
+  const okB: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoProveedor: 'BANCARD', pagoConfig: { BANCARD: { publicKey: 'pubABC12345', entorno: 'PRUEBA' } } });
+  const bEst = okB?.config?.pago?.proveedores?.find((x: any) => x.id === 'BANCARD');
+  ok(okB?.success === true && okB.config.pago.proveedorActivo === 'BANCARD' && bEst?.valores?.publicKey === 'pubABC12345'
+    && bEst?.secretosGuardados?.privateKey === false && !('privateKey' in (bEst?.valores || {})),
+    'Bancard: se guarda la clave pública; de la privada solo se informa si está', bEst);
+  ok(bEst?.datosPortal?.[0]?.valor?.endsWith('/pub/pagos/bancard/aviso') && bEst?.devuelvePorApi === true, 'Bancard: la pantalla recibe la URL de confirmación y que sabe devolver', bEst);
+  const sinPriv: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoOnlineActivo: true });
+  ok(sinPriv?.error === 'pago_faltan_credenciales', 'Bancard: no se activa el pago online sin la clave privada', sinPriv);
+  const secretoNoSoportado: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoSecretos: { BANCARD: { publicKey: 'x12345678' } } });
+  ok(secretoNoSoportado?.error === 'pago_proveedor_invalido', 'Bancard: un campo no secreto no entra como secreto', secretoNoSoportado);
+  await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoProveedor: 'UPAY' });
+
   const pubProv = await pub('tienda.config', []);
   ok(pubProv.result?.pagoOnline === false && pubProv.result?.pagoOnlineProveedor === null && Array.isArray(pubProv.result?.pagoOnlineHosts),
     'Proveedores: sin pago online, tienda.config no publica proveedor ni hosts', pubProv.result);

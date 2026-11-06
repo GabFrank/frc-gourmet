@@ -373,13 +373,16 @@ export function registerPedidosOnlineAdminHandlers(
     }
 
     // Pagado con tarjeta: se registra lo decidido con el cobro y se avisa al personal (F4 §6).
-    const montoDevolver = pagado
+    const decidido = pagado
       ? await registrarDecisionPago(dataSource, pedido.id, decision,
         estadoFinal === EstadoPedidoOnline.CANCELADO ? 'CANCELADO' : 'RECHAZADO', usuarioId)
       : null;
 
     const saved = await repo().findOne({ where: { id: pedidoId } });
-    return { success: true, pedido: mapPedidoAdmin(saved || pedido), reversa, montoDevolver };
+    return {
+      success: true, pedido: mapPedidoAdmin(saved || pedido), reversa,
+      montoDevolver: decidido?.montoDevolver ?? null, devolucionAutomatica: decidido?.devolucionAutomatica ?? null,
+    };
   };
 
   // ============== F9: RESOLVER LA SOLICITUD DE CANCELACIÓN DEL CLIENTE ==============

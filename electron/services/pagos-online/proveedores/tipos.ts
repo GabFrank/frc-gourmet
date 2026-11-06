@@ -34,6 +34,8 @@ export interface ItemCobro {
 export interface CobroInput {
   /** Identifica el intento ante el proveedor: `<numero>-<intento>`. */
   referencia: string;
+  /** El mismo intento como entero único (`pedido.id * 100 + intento`), para quien lo exige (Bancard). */
+  procesoNumerico: number;
   idempotencyKey: string;
   /** Guaraníes enteros. */
   monto: number;
@@ -56,6 +58,10 @@ export interface CobroGuardado {
   referencia: string;
   monto: number;
   pagoId?: string | null;
+  /** Vencimiento propio de la sesión (para quien no informa sesiones vencidas). */
+  expiraEn?: Date | null;
+  /** «Ahora» del servicio (inyectable en tests). */
+  ahora?: Date;
 }
 
 /**
@@ -88,6 +94,10 @@ export interface ProveedorPagoOnline<C = any> {
   formaPago: string;
   /** Hosts desde los que el storefront acepta redirigir o cargar el script del proveedor. */
   hosts: string[];
+  /** Cómo paga el cliente: lo redirigimos, o el formulario del proveedor va en nuestra página. */
+  modo: 'REDIRECCION' | 'FORMULARIO';
+  /** URL del script del formulario (solo `FORMULARIO`), según el entorno de las credenciales. */
+  scriptUrl?(creds: C): string;
   /**
    * Datos que pide la pantalla de config. Vacío = el proveedor tiene su propio bloque (uPay, de
    * antes de que existiera esta lista, sigue con sus columnas `upay_*`).
@@ -101,4 +111,12 @@ export interface ProveedorPagoOnline<C = any> {
   probarConexion(creds: C, ctx: ContextoProveedor): Promise<{ ok: boolean; error?: string; detalle?: string }>;
   /** Devuelve por API (si el proveedor lo permite). */
   devolver?(creds: C, cobro: CobroGuardado, ctx: ContextoProveedor): Promise<{ ok: boolean; detalle: string; crudo?: any }>;
+  /**
+   * Aviso que el proveedor manda a `/pub/pagos/<id>/aviso` (webhook). Verifica la firma y dice de
+   * qué cobro es y qué significa. Lanza `ProveedorError` si la firma no es válida.
+   */
+  procesarAviso?(creds: C, body: any, buscar: (sesionId: string) => Promise<CobroGuardado | null>):
+    Promise<{ sesionId: string; resultado: ResultadoPago; crudo: any; respuesta: any }>;
+  /** Datos para cargar en el portal del proveedor (p. ej. la URL de confirmación). */
+  datosPortal?(urlPublica: string): { etiqueta: string; valor: string }[];
 }

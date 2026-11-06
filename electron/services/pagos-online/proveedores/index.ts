@@ -4,8 +4,9 @@
  */
 import { ProveedorPagoOnline } from './tipos';
 import { upayProveedor, PROVEEDOR_UPAY } from './upay.proveedor';
+import { bancardProveedor } from './bancard.proveedor';
 
-const PROVEEDORES: ProveedorPagoOnline[] = [upayProveedor];
+const PROVEEDORES: ProveedorPagoOnline[] = [upayProveedor, bancardProveedor];
 
 export { PROVEEDOR_UPAY };
 

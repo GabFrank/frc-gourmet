@@ -6,7 +6,7 @@ import { upayConfigDe, apiKey as upayApiKeyActual } from '../services/pagos-onli
 import { upayProveedor } from '../services/pagos-online/proveedores/upay.proveedor';
 import { fetchActual } from '../services/pagos-online/proveedores/deps';
 import { listarProveedores, proveedorPorId } from '../services/pagos-online/proveedores';
-import { proveedorActivo } from '../services/pagos-online/pagos-online.service';
+import { proveedorActivo, urlPublicaTienda } from '../services/pagos-online/pagos-online.service';
 import { leerPagoConfigJson, secretoProveedor, validarCampo, valoresProveedor } from '../services/pagos-online/proveedores/config-proveedor';
 import { setSecretoPago } from '../utils/tienda-secrets.util';
 import { evolutionConfigurado, otpWhatsappDisponible, proveedorWhatsappActivo, sendWhatsappOtp, whatsappCloudConfigurado, whatsappConfigurado } from '../utils/whatsapp-sender';
@@ -145,6 +145,8 @@ async function estadoProveedoresPago(cfg: TiendaOnlineConfig | null): Promise<an
       valores: valoresProveedor(cfg, prov),
       secretosGuardados,
       devuelvePorApi: !!prov.devolver,
+      // Lo que hay que cargar en el portal del proveedor (p. ej. la URL de confirmación de Bancard).
+      datosPortal: prov.datosPortal ? prov.datosPortal(urlPublicaTienda()) : [],
       listo: !!(await prov.credenciales(null as any, cfg)),
     });
   }

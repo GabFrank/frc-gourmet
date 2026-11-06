@@ -38,6 +38,7 @@ export const upayProveedor: ProveedorPagoOnline<UpayConfig> = {
   hosts: ['upay.com', 'upay.com.py'],
   // uPay tiene su bloque propio en la pantalla (columnas `upay_*` y su API Key, de F4).
   campos: [],
+  modo: 'REDIRECCION',
 
   credenciales: (_ds: DataSource, cfg) => upayConfigDeCfg(cfg),
 

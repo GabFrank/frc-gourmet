@@ -116,13 +116,38 @@ const gs = (n: number) => '₲' + Math.round(n).toLocaleString('es-PY');
 
 /**
  * Crea la sesión del intento actual. `nuevoIntento` (reintento tras FALLIDO) abre otra sesión.
- * Devuelve la URL a la que el storefront redirige.
+ * Devuelve a dónde va el cliente: la URL del proveedor (`REDIRECCION`), o el proceso y el script
+ * para armar el formulario en la página de pago de la tienda (`FORMULARIO`, Bancard). En los dos
+ * casos `checkoutUrl` viene (compat F4): con formulario es el id del proceso.
  */
+export type InicioPagoRespuesta =
+  | { success: true; checkoutUrl: string; tipo: 'REDIRECCION' }
+  | { success: true; checkoutUrl: string; tipo: 'FORMULARIO'; procesoId: string; script: string; proveedor: string }
+  | { success: false; error: string };
+
+function respuestaInicio(prov: ProveedorPagoOnline, creds: any, guardado: string): InicioPagoRespuesta {
+  if (prov.modo === 'FORMULARIO') {
+    return { success: true, checkoutUrl: guardado, tipo: 'FORMULARIO', procesoId: guardado, script: prov.scriptUrl ? prov.scriptUrl(creds) : '', proveedor: prov.id };
+  }
+  return { success: true, checkoutUrl: guardado, tipo: 'REDIRECCION' };
+}
+
+/** URL pública de la tienda (vuelta del pago, URL de confirmación del proveedor). Solo https. */
+export function urlPublicaTienda(override?: string): string {
+  const delEntorno = String(process.env['FRC_TIENDA_URL_PUBLICA'] || '').trim();
+  return (override || (/^https:\/\/[a-z0-9.-]+(:\d+)?\/?$/i.test(delEntorno) ? delEntorno : URL_PUBLICA_DEF)).replace(/\/+$/, '');
+}
+
+/** Un intento como entero único, para los proveedores que lo exigen (Bancard). */
+const MAX_INTENTOS = 99;
+function procesoNumerico(pedidoId: number, intento: number): number {
+  return pedidoId * 100 + intento;
+}
 export async function iniciarPagoPedido(
   ds: DataSource,
   pedidoId: number,
   opts: { nuevoIntento?: boolean; urlPublica?: string } = {},
-): Promise<{ success: true; checkoutUrl: string } | { success: false; error: string }> {
+): Promise<InicioPagoRespuesta> {
   const repo = ds.getRepository(PedidoOnline);
   const p = await repo.findOne({
     where: { id: pedidoId },
@@ -147,7 +172,7 @@ export async function iniciarPagoPedido(
   // Sesión vigente del mismo intento: se reusa (doble clic, reintento de red).
   const vigente = p.pagoSesionId && p.pagoCheckoutUrl && p.estadoPago === EstadoPagoOnline.PENDIENTE
     && (!p.pagoExpiraEn || new Date(p.pagoExpiraEn).getTime() > Date.now() + 60_000);
-  if (vigente && !opts.nuevoIntento) return { success: true, checkoutUrl: p.pagoCheckoutUrl! };
+  if (vigente && !opts.nuevoIntento) return respuestaInicio(prov, creds, p.pagoCheckoutUrl!);
 
   // Hay sesión: un intento nuevo solo si la anterior FALLÓ. Con una abierta (que todavía se
   // puede pagar) no se abre otra: cobraría dos veces.
@@ -156,6 +181,7 @@ export async function iniciarPagoPedido(
   if (p.pagoSesionId) {
     if (p.estadoPago !== EstadoPagoOnline.FALLIDO) return { success: false, error: 'pago_en_curso' };
     intento += 1;
+    if (intento > MAX_INTENTOS) return { success: false, error: 'demasiados_intentos' };
     idem = randomUUID();
     // F5 (auditoría A-pay3): se RECLAMA el intento con un UPDATE condicionado. Dos reintentos a
     // la vez abrían dos sesiones en uPay y la que no quedaba guardada seguía siendo pagable.
@@ -176,12 +202,11 @@ export async function iniciarPagoPedido(
 
   // F5 (M-pay3): la URL pública de vuelta se puede cambiar por entorno (otro dominio o una
   // instalación de prueba); solo https.
-  const delEntorno = String(process.env['FRC_TIENDA_URL_PUBLICA'] || '').trim();
-  const base = (opts.urlPublica || (/^https:\/\/[a-z0-9.-]+(:\d+)?\/?$/i.test(delEntorno) ? delEntorno : URL_PUBLICA_DEF)).replace(/\/+$/, '');
-  const vuelta = `${base}/tienda/pago/${encodeURIComponent(p.numero)}`;
+  const vuelta = `${urlPublicaTienda(opts.urlPublica)}/tienda/pago/${encodeURIComponent(p.numero)}`;
   try {
     const r = await prov.iniciar(creds, {
       referencia: referencia(p),
+      procesoNumerico: procesoNumerico(p.id, intento),
       idempotencyKey: idem,
       monto: Number(p.total),
       urlVuelta: vuelta,
@@ -205,7 +230,7 @@ export async function iniciarPagoPedido(
       pagoDetalle: null,
     } as any);
     await registrar(ds, p, 'SESION_CREADA', null, r.crudo);
-    return { success: true, checkoutUrl: urlGuardada };
+    return respuestaInicio(prov, creds, urlGuardada);
   } catch (e: any) {
     await registrar(ds, p, 'ERROR', e instanceof ProveedorError ? e.codigo : 'error', e?.message || String(e));
     return { success: false, error: codigoError(prov, e) };
@@ -254,6 +279,7 @@ export async function verificarPagoPedido(
   try {
     const c = await prov.consultar(creds, {
       sesionId: p.pagoSesionId, referencia: referencia(p), monto: Number(p.total), pagoId: p.pagoId ?? null,
+      expiraEn: p.pagoExpiraEn ?? null, ahora,
     }, ctx());
     res = c.resultado;
     crudo = c.crudo;
@@ -264,6 +290,40 @@ export async function verificarPagoPedido(
   }
   await registrar(ds, p, 'CONSULTA', res.tipo, { ...crudo, resultado: res });
   return aplicarResultado(ds, p, res, ahora);
+}
+
+/**
+ * Aviso del proveedor (webhook: Bancard manda la confirmación a `/pub/pagos/bancard/aviso`). Es
+ * un SEGUNDO camino a la misma decisión que la consulta del job: la firma la verifica el
+ * proveedor, el resultado se aplica con `aplicarResultado` (UPDATE condicionado, idempotente) y un
+ * aviso repetido o tardío no cambia nada que ya esté decidido.
+ */
+export async function procesarAvisoPago(
+  ds: DataSource, proveedorId: string, body: any, opts: { ahora?: Date } = {},
+): Promise<{ http: number; respuesta: any; pedidoId?: number; resultado?: VerificacionResultado }> {
+  const prov = proveedorPorId(proveedorId);
+  if (!prov?.procesarAviso) return { http: 404, respuesta: { status: 'error', error: 'proveedor_sin_avisos' } };
+  const creds = await prov.credenciales(ds, await getCfg(ds));
+  if (!creds) return { http: 503, respuesta: { status: 'error', error: 'pago_online_no_configurado' } };
+  const repo = ds.getRepository(PedidoOnline);
+  let pedido: PedidoOnline | null = null;
+  try {
+    const a = await prov.procesarAviso(creds, body, async (sesionId) => {
+      pedido = await repo.findOne({ where: { pagoSesionId: sesionId, pagoProveedor: prov.id } as any });
+      return pedido ? { sesionId, referencia: referencia(pedido), monto: Number(pedido.total) } : null;
+    });
+    const p = pedido as PedidoOnline | null;
+    if (!p) return { http: 404, respuesta: { status: 'error' } };
+    await registrar(ds, p, 'AVISO', a.resultado.tipo, { aviso: a.crudo, resultado: a.resultado });
+    const r = await aplicarResultado(ds, p, a.resultado, opts.ahora ?? new Date());
+    return { http: 200, respuesta: a.respuesta, pedidoId: p.id, resultado: r };
+  } catch (e: any) {
+    const p = pedido as PedidoOnline | null;
+    const codigo = e instanceof ProveedorError ? e.codigo : 'error';
+    if (p) await registrar(ds, p, 'ERROR', codigo, { aviso: body, error: e?.message || String(e) });
+    console.warn(`[pagos-online] aviso de ${prov.nombre} rechazado (${codigo}):`, e?.message || e);
+    return { http: 400, respuesta: { status: 'error' } };
+  }
 }
 
 /** Violación del índice único (pago_proveedor, pago_id): SQLite y Postgres. */
@@ -326,8 +386,10 @@ async function aplicarResultadoSinCaptura(ds: DataSource, p: PedidoOnline, res: 
       .execute();
     if (r.affected) {
       await registrar(ds, p, 'REEMBOLSO', 'pago tardío', null);
+      const auto = await intentarDevolucionAutomatica(ds, p.id);
       await avisarPersonal(
-        `Pedido ${p.numero}: llegó un pago con tarjeta de ${gs(res.monto)} pero el pedido ya estaba ${p.estado.toLowerCase()}. Hay que devolverlo en ${nombreProveedor(p.pagoProveedor)}.`,
+        `Pedido ${p.numero}: llegó un pago con tarjeta de ${gs(res.monto)} pero el pedido ya estaba ${p.estado.toLowerCase()}. `
+          + textoDevolver({ ...p, pagoMonto: res.monto } as PedidoOnline, res.monto, auto).replace(/^./, (c) => c.toUpperCase()),
         `tarde-${p.id}`,
       );
     }
@@ -414,12 +476,64 @@ const QUE_PASO: Record<ContextoCancelacionPago, string> = {
   CANCELADO_PDV: 'cancelado en el PdV',
 };
 
-export async function avisarReembolso(ds: DataSource, p: PedidoOnline, motivo: ContextoCancelacionPago = 'RECHAZADO'): Promise<number> {
+export interface DevolucionAutomatica {
+  ok: boolean;
+  detalle: string;
+}
+
+/**
+ * Devolución automática (PLAN-tienda-pagos-proveedores §5): si la tienda la activó y el proveedor
+ * del pedido sabe devolver por API, se intenta sobre un pedido que quedó REEMBOLSO_PENDIENTE.
+ * Sale bien → DEVUELTO (condicionado: dos intentos a la vez no se pisan). Sale mal → queda en la
+ * cola DEVOLVER como siempre, con el motivo en el evento. Devuelve null si no se intentó.
+ */
+export async function intentarDevolucionAutomatica(ds: DataSource, pedidoId: number): Promise<DevolucionAutomatica | null> {
+  try {
+    const cfg = await getCfg(ds);
+    if (!cfg?.pagoDevolucionAutomatica) return null;
+    const p = await ds.getRepository(PedidoOnline).findOne({ where: { id: pedidoId } });
+    if (!p || p.estadoPago !== EstadoPagoOnline.REEMBOLSO_PENDIENTE || !p.pagoSesionId) return null;
+    const prov = proveedorDelPedido(p);
+    if (!prov?.devolver) return null;
+    const creds = await prov.credenciales(ds, cfg);
+    if (!creds) return { ok: false, detalle: `${prov.nombre} no está configurado` };
+    let r: { ok: boolean; detalle: string; crudo?: any };
+    try {
+      r = await prov.devolver(creds, { sesionId: p.pagoSesionId, referencia: referencia(p), monto: Number(p.total), pagoId: p.pagoId ?? null }, ctx());
+    } catch (e: any) {
+      r = { ok: false, detalle: e?.message || String(e) };
+    }
+    await registrar(ds, p, 'DEVOLUCION_AUTO', r.ok ? 'OK' : 'FALLO', { detalle: r.detalle, respuesta: r.crudo ?? null });
+    if (!r.ok) return { ok: false, detalle: r.detalle };
+    const u = await ds.getRepository(PedidoOnline).createQueryBuilder().update(PedidoOnline)
+      .set({ estadoPago: EstadoPagoOnline.DEVUELTO } as any)
+      .where('id = :id AND estado_pago = :r', { id: p.id, r: EstadoPagoOnline.REEMBOLSO_PENDIENTE })
+      .execute();
+    if (u.affected) await registrar(ds, p, 'DEVUELTO', 'automática', null);
+    return { ok: true, detalle: r.detalle };
+  } catch (e: any) {
+    console.warn('[pagos-online] devolución automática falló:', e?.message || e);
+    return { ok: false, detalle: e?.message || String(e) };
+  }
+}
+
+/** Texto del aviso al personal para algo que quedó para devolver, según la devolución automática. */
+function textoDevolver(p: PedidoOnline, monto: number, auto: DevolucionAutomatica | null): string {
+  const prov = nombreProveedor(p.pagoProveedor);
+  if (auto?.ok) return `se devolvió ${gs(monto)} automáticamente en ${prov}.`;
+  if (auto) return `hay que devolver ${gs(monto)} en ${prov} (la devolución automática no se pudo: ${auto.detalle}).`;
+  return `hay que devolver ${gs(monto)} en ${prov}.`;
+}
+
+export async function avisarReembolso(
+  ds: DataSource, p: PedidoOnline, motivo: ContextoCancelacionPago = 'RECHAZADO',
+): Promise<{ monto: number; devolucionAutomatica: DevolucionAutomatica | null }> {
   const monto = Number(p.pagoMonto ?? p.total);
   const que = QUE_PASO[motivo];
   await registrar(ds, p, 'REEMBOLSO', que, null);
-  await avisarPersonal(`Pedido ${p.numero} ${que} con pago con tarjeta: hay que devolver ${gs(monto)} en ${nombreProveedor(p.pagoProveedor)}.`, `rechazo-${p.id}`);
-  return monto;
+  const auto = await intentarDevolucionAutomatica(ds, p.id);
+  await avisarPersonal(`Pedido ${p.numero} ${que} con pago con tarjeta: ${textoDevolver(p, monto, auto)}`, `rechazo-${p.id}`);
+  return { monto, devolucionAutomatica: auto };
 }
 
 const TEXTO_DECISION: Record<DecisionPagoOnline, string> = {
@@ -428,6 +542,12 @@ const TEXTO_DECISION: Record<DecisionPagoOnline, string> = {
   [DecisionPagoOnline.NO_ENTRO]: 'el pago no entró',
   [DecisionPagoOnline.NO_SE_DEVUELVE]: 'no se devuelve',
 };
+
+export interface ResultadoDecisionPago {
+  /** Lo que queda para devolver a mano (null si no hay, o si se devolvió solo). */
+  montoDevolver: number | null;
+  devolucionAutomatica: DevolucionAutomatica | null;
+}
 
 /**
  * Auditoría post-F10: después del commit de una cancelación, deja en el historial del pago qué
@@ -441,13 +561,17 @@ export async function registrarDecisionPago(
   decision: DecisionPago,
   contexto: ContextoDecision,
   usuarioId?: number | null,
-): Promise<number | null> {
+): Promise<ResultadoDecisionPago> {
+  const nada: ResultadoDecisionPago = { montoDevolver: null, devolucionAutomatica: null };
   try {
     const p = await ds.getRepository(PedidoOnline).findOne({ where: { id: pedidoId } });
-    if (!p) return null;
+    if (!p) return nada;
     const monto = Number(p.pagoMonto ?? p.total);
     if (decision.decision === DecisionPagoOnline.DEVOLVER) {
-      return contexto === 'RESUELTO' ? null : await avisarReembolso(ds, p, contexto);
+      if (contexto === 'RESUELTO') return nada;
+      const r = await avisarReembolso(ds, p, contexto);
+      // Devuelto solo: ya no queda nada para devolver a mano.
+      return { montoDevolver: r.devolucionAutomatica?.ok ? null : r.monto, devolucionAutomatica: r.devolucionAutomatica };
     }
     await registrar(ds, p, 'DECISION_PAGO', decision.decision, {
       contexto, motivo: decision.motivo, usuarioId: usuarioId ?? null, monto,
@@ -461,18 +585,20 @@ export async function registrarDecisionPago(
         `decision-${p.id}`,
       );
     }
-    return null;
+    return nada;
   } catch (e: any) {
     console.warn('[pagos-online] registrar la decisión del pago falló:', e?.message || e);
-    return null;
+    return nada;
   }
 }
 
 /** Avisa cada pago decidido dentro de una transacción ya confirmada. */
 export async function registrarDecisionesPago(
   ds: DataSource, pagos: PagoDecidido[], contexto: ContextoCancelacionPago, usuarioId?: number | null,
-): Promise<void> {
-  for (const x of pagos) await registrarDecisionPago(ds, x.pedidoId, x.decision, contexto, usuarioId);
+): Promise<ResultadoDecisionPago[]> {
+  const out: ResultadoDecisionPago[] = [];
+  for (const x of pagos) out.push(await registrarDecisionPago(ds, x.pedidoId, x.decision, contexto, usuarioId));
+  return out;
 }
 
 /**

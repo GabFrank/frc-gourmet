@@ -986,8 +986,9 @@ export function registerDeliveryHandlers(
     });
 
     // Después del commit: historial del pago y aviso al personal (antes solo lo hacía la bandeja).
-    await registrarDecisionesPago(dataSource, pagos, 'CANCELADO_PDV', usuarioId);
-    return resultado;
+    const decididos = await registrarDecisionesPago(dataSource, pagos, 'CANCELADO_PDV', usuarioId);
+    const auto = decididos.find((d) => d.devolucionAutomatica)?.devolucionAutomatica ?? null;
+    return auto ? { ...resultado, devolucionAutomatica: auto } : resultado;
   });
 
   // ─── Impresión ──────────────────────────────────────────────────────────

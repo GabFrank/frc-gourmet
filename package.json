@@ -42,6 +42,7 @@
     "test:tienda-seguridad": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-tienda-seguridad.ts",
     "test:tienda-online-migracion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-tienda-online-migracion.ts",
     "test:pagos-online": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pagos-online.ts",
+    "test:pagos-bancard": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pagos-bancard.ts",
     "test:pedidos-online": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-e2e.ts",
     "test:dashboard-zonas": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-dashboard-zonas-delivery-e2e.ts",
     "test:zonas-geometria": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-zonas-geometria.ts",
