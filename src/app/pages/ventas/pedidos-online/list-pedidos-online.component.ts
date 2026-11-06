@@ -335,6 +335,17 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** El delivery explica por qué no avanza (p. ej. venta sin cobrar): se muestra eso, no el código. */
+  private motivoAvance(res: any): string {
+    switch (res?.error) {
+      case 'sin_venta': return 'el pedido todavía no tiene venta. Usá «Enviar a cocina» con tu caja abierta.';
+      case 'transicion_invalida': return `el pedido ya está en ${res?.estadoActual || 'otro estado'}. Actualizá la lista.`;
+      case 'delivery_rechazo_transicion': return res?.detalle || 'el delivery no permite ese cambio.';
+      case 'pedido_desfasado_del_delivery': return 'el delivery avanzó pero el pedido no. Repetí la acción.';
+      default: return res?.detalle || res?.error || '';
+    }
+  }
+
   private motivoResolucion(res: any): string {
     switch (res?.error) {
       case 'mesa_ya_materializada': return 'el pedido ya está en la cuenta de la mesa. Quitá los ítems desde el PdV y después rechazá la solicitud.';
@@ -351,10 +362,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
         if (res?.success) {
           this.cargar(true);
         } else {
-          const msg = res?.error === 'sin_venta'
-            ? 'el pedido todavía no tiene venta. Usá «Enviar a cocina» con tu caja abierta.'
-            : (res?.error || '');
-          this.snack.open('No se pudo actualizar: ' + msg, 'OK', { duration: 5000 });
+          this.snack.open('No se pudo actualizar: ' + this.motivoAvance(res), 'OK', { duration: 6000 });
         }
       },
       error: (e) => this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 }),
