@@ -359,6 +359,44 @@ falta sólo cargar el Client ID. Apple: no por ahora (decisión 05/11).
 Tests: `test:pedidos-online-detalle` (+ `-pg`), `test:whatsapp-proveedores`,
 `test:storefront-detalle`, F9 en `test:tienda-online-migracion`.
 
+### Dos pantallas, un pedido: atención en el diálogo de delivery (F10, 2026-11)
+
+**Decisión del propietario (2026-11-06):** la pantalla de **atención** de los pedidos web es la
+cola del **diálogo de delivery del PdV** (`shared/components/delivery-dialog`). La **bandeja**
+(`pages/ventas/pedidos-online/list-pedidos-online`) sigue viva como **panel de observación y
+acción**: historial, filtros, mesa QR y actuar sin entrar al PdV.
+
+⚠️ **Regla: todo cambio en el flujo de atención se hace en LAS DOS pantallas.** Una acción, un
+estado o un aviso que aparece en una y no en la otra es exactamente el desfase que motivó F10
+(el cajero veía el pedido en un lugar y no podía hacer nada con él en el otro). Al tocar
+cualquiera de las dos, revisar la otra en el mismo PR. Los dos componentes lo dicen en su
+cabecera.
+
+Qué comparten (para no duplicar reglas):
+- **Qué espera a alguien:** `motivoAtencion()` y `WHERE_ATENCION` en `electron/utils/pedido-acciones.utils.ts`
+  — `CANCELACION` > `NUEVO` > `SIN_COCINA` > `DEVOLVER`, una sola por pedido. Lo usan el filtro
+  `get-pedidos-online-admin({ atencion: true })` (la cola del diálogo), el `motivoAtencion` de
+  cada pedido y `contar-pedidos-online-pendientes`. Un test (`[K]` del e2e de detalle) verifica
+  que el WHERE y la función digan lo mismo.
+- **Contador del PdV:** `pendientes` (nuevos + piden cancelar + sin cocina) hace sonar el aviso;
+  `total` (suma las devoluciones de uPay) es el número del badge. Antes contaba todo ACEPTADO
+  aunque ya estuviera en cocina.
+- **Un solo número:** el pedido web se nombra con su **PO-…** (el que ve el cliente) en la lista
+  de delivery (columna PEDIDO), en el comprobante del diálogo y en el ticket impreso
+  («PEDIDO WEB PO-000005» y debajo «DELIVERY N° 8 · VENTA #14»). La bandeja muestra a su vez
+  «Delivery N° 8 · Venta #14». `delivery-listar-pdv` trae `pedidoWeb` (`resumenPedidoWeb()`:
+  sólo número, estado, pago online y cancelación — nada del cliente).
+
+Qué hace la cola del diálogo, por sección: **PIDEN CANCELAR** (cancelar / no se puede; también
+desde el footer con la fila seleccionada), **NUEVOS** (aceptar / rechazar), **ACEPTADOS SIN ENVIAR
+A COCINA** (enviar a cocina con la caja de este PdV / rechazar), **DEVOLVER PAGO EN UPAY** (ya
+devolví). Cancelar desde el footer un pedido pagado online avisa que queda para devolver.
+
+**Mesa QR queda afuera a propósito:** su aprobación es habilitar la mesa en el PdV y después va
+sola a cocina (ver «Canal MESA_QR»). El recovery de una mesa sin venta sigue en la bandeja. Idea
+del propietario para más adelante: que los pedidos pasen solos a cocina con reglas de cuidado
+para casos especiales.
+
 ### Lo que sigue pendiente
 
 - ~~El cliente no puede cancelar su pedido.~~ Hecho en F9 (solicitud que aprueba el local).

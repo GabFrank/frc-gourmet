@@ -11,6 +11,8 @@
  *  [H] materialización contra un pedido que el cliente ya canceló: no arma la venta
  *  [I] topes por cuenta para las acciones
  *  [J] snapshot para «Repetir» (receta y producto) y teléfono del local
+ *  [K] F10 · atención en el diálogo de delivery: cola por motivo, contador, número PO en la lista
+ *      de delivery y en el ticket
  *
  * Uso: npm run test:pedidos-online-detalle   ·   npm run test:pedidos-online-detalle-pg (Postgres temporal)
  */
@@ -310,6 +312,62 @@ async function main() {
   ok(pub?.telefonoContacto === '0981 123 456', 'J: la tienda recibe el teléfono del local', pub?.telefonoContacto);
   await invokeHandler('update-tienda-online-config', { telefonoContacto: '' });
   ok((await invokeHandler('get-tienda-online-config-public') as any)?.telefonoContacto === null, 'J: vacío = sin teléfono');
+
+  // ═══════ [K] F10: atención desde el diálogo de delivery ═══════
+  console.log('\n[K] Atención en el diálogo de delivery');
+  const { Delivery } = E('ventas/delivery.entity');
+  const { motivoAtencion } = require('../electron/utils/pedido-acciones.utils');
+  require('../electron/handlers/delivery.handler').registerDeliveryHandlers(ds, getUser);
+  // Se parte de una cola vacía: lo que dejaron los bloques anteriores se da por terminado.
+  await ds.getRepository(PedidoOnline).createQueryBuilder().update().set({ estado: 'ENTREGADO', cancelacionSolicitadaEn: null, estadoPago: null } as any).execute();
+  const cola = async () => ((await invokeHandler('get-pedidos-online-admin', { atencion: true })) as any[]) || [];
+  ok((await cola()).length === 0 && (await pendientes()).total === 0, 'K: sin nada que atender, cola y contador vacíos', await pendientes());
+
+  const kNuevo = await pedir();
+  const kSinCocina = await pedir();
+  await ds.getRepository(PedidoOnline).update({ numero: kSinCocina }, { estado: 'ACEPTADO' } as any);
+  const kEnCurso = await pedir();
+  const ventaK = await save(Venta, { estado: 'ABIERTA', canalOrigen: 'WEB' });
+  await ds.getRepository(PedidoOnline).update({ numero: kEnCurso }, { estado: 'ACEPTADO', ventaId: ventaK.id } as any);
+  const kDevolver = await pedir();
+  await ds.getRepository(PedidoOnline).update({ numero: kDevolver }, { estado: 'CANCELADO', estadoPago: 'REEMBOLSO_PENDIENTE', pagoMonto: 90000 } as any);
+  const kCancela = await pedir();
+  await ds.getRepository(PedidoOnline).update({ numero: kCancela }, { estado: 'EN_PREPARACION', ventaId: ventaK.id } as any);
+  await solicitar(kCancela, 'me equivoqué');
+  const kMesa = await pedir();
+  await ds.getRepository(PedidoOnline).update({ numero: kMesa }, { estado: 'ACEPTADO', tipoPedido: 'MESA_QR', mesaId: 1 } as any);
+
+  const c: any[] = await cola();
+  const motivoDe = (n: string) => c.find((p) => p.numero === n)?.motivoAtencion ?? null;
+  ok(motivoDe(kNuevo) === 'NUEVO', 'K: recibido → NUEVO', motivoDe(kNuevo));
+  ok(motivoDe(kSinCocina) === 'SIN_COCINA', 'K: aceptado sin venta → SIN_COCINA', motivoDe(kSinCocina));
+  ok(motivoDe(kDevolver) === 'DEVOLVER', 'K: cancelado con pago online → DEVOLVER', motivoDe(kDevolver));
+  ok(motivoDe(kCancela) === 'CANCELACION', 'K: pidió cancelar → CANCELACION', motivoDe(kCancela));
+  ok(!c.some((p) => p.numero === kEnCurso), 'K: aceptado con venta (en curso) no espera a nadie');
+  ok(!c.some((p) => p.numero === kMesa), 'K: mesa QR sin venta se atiende en el PdV de la mesa, no en la cola');
+  ok(c.every((p) => p.motivoAtencion), 'K: todo lo que trae el filtro tiene motivo (filtro SQL = criterio del código)');
+  const k: any = await pendientes();
+  ok(k.nuevos === 1 && k.sinCocina === 1 && k.cancelaciones === 1 && k.devoluciones === 1, 'K: el contador separa por motivo', k);
+  ok(k.pendientes === 3 && k.total === 4, 'K: suenan nuevos, cancelaciones y sin cocina; el badge suma las devoluciones', k);
+  ok(motivoAtencion({ estado: 'RECIBIDO', estadoPago: 'REEMBOLSO_PENDIENTE', cancelacionSolicitadaEn: new Date() }) === 'CANCELACION',
+    'K: un pedido cae en una sola sección (la más urgente)');
+
+  // La fila de la lista de delivery trae el pedido web (número PO y solicitud) y el ticket lo imprime.
+  const delK = await save(Delivery, { estado: 'ABIERTO', modo: 'RETIRO', fechaAbierto: new Date(), nombre: 'CLIENTE UNO' } as any);
+  await ds.getRepository(Venta).update({ id: ventaK.id }, { delivery: { id: delK.id } } as any);
+  await ds.getRepository(PedidoOnline).update({ numero: kCancela }, { deliveryId: delK.id } as any);
+  const lista: any = await invokeHandler('delivery-listar-pdv', 999, { page: 1, pageSize: 20 });
+  const filaK = (lista?.data || []).find((d: any) => d.id === delK.id);
+  ok(filaK?.pedidoWeb?.numero === kCancela && filaK.pedidoWeb.pideCancelar === true && filaK.pedidoWeb.cancelacionMotivo === 'ME EQUIVOQUÉ',
+    'K: la lista de delivery trae el número PO y la cancelación pedida', filaK?.pedidoWeb);
+  ok(filaK && !('telefonoCliente' in filaK.pedidoWeb) && !('direccionEntrega' in filaK.pedidoWeb),
+    'K: del pedido web viaja sólo lo que la pantalla usa', filaK?.pedidoWeb && Object.keys(filaK.pedidoWeb));
+  const { buildDeliveryTicketLines } = require('../electron/handlers/documentos-tickets.handler');
+  const ticket: any = await buildDeliveryTicketLines(ds, delK.id, { width: 42 });
+  const textos: string[] = (ticket?.lines || []).map((l: any) => String(l?.text ?? l?.value ?? JSON.stringify(l)));
+  ok(textos.some((t) => t.includes(`PEDIDO WEB ${kCancela}`)), 'K: el ticket imprime el número PO', textos.slice(0, 12));
+  ok(textos.some((t) => t.includes(`RETIRO N° ${delK.id}`) && t.includes(`VENTA #${ventaK.id}`)),
+    'K: debajo, el número de retiro/delivery y el de la venta, con su nombre', textos.slice(0, 12));
 
   await cerrar();
   console.log(`\n${TAG} RESULTADO: ${passed} passed, ${failed} failed.`);

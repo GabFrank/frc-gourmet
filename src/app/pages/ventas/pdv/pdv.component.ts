@@ -1093,14 +1093,18 @@ export class PdvComponent implements OnInit, OnDestroy {
    */
   private async refrescarContadoresDelivery(): Promise<void> {
     if (!this.deliveryHabilitado) return;
-    if (this.tiendaOnlineActiva) {
+    // F10: se cuenta aunque la tienda esté apagada (la cola del diálogo también muestra lo que quedó:
+    // cancelaciones pedidas, devoluciones). Sin el permiso de ver pedidos web, el conteo falla y no se muestra.
+    {
       try {
         const res: any = await firstValueFrom(this.repositoryService.contarPedidosOnlinePendientes());
-        // El handler devuelve { pendientes, cancelaciones } (antes se leía `total`, que no existe: el badge quedaba en 0).
-        const nuevos = Number(res?.pendientes ?? res?.total ?? 0) || 0;
-        if (nuevos > this.ultimoConteoPedidosOnline) this.sonarAvisoPedido();
-        this.ultimoConteoPedidosOnline = nuevos;
-        this.pedidosOnlinePendientesCount = nuevos;
+        // F10: `pendientes` (nuevos, piden cancelar, sin cocina) hace sonar el aviso; `total` es lo
+        // que muestra la cola del diálogo de delivery, devoluciones incluidas (mismo criterio).
+        const urgentes = Number(res?.pendientes ?? 0) || 0;
+        // Con la tienda apagada sólo una cancelación pedida puede crecer: también avisa.
+        if (urgentes > this.ultimoConteoPedidosOnline) this.sonarAvisoPedido();
+        this.ultimoConteoPedidosOnline = urgentes;
+        this.pedidosOnlinePendientesCount = Number(res?.total ?? urgentes) || 0;
       } catch {
         /* el badge no puede romper el PdV */
       }

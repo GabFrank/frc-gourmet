@@ -65,3 +65,64 @@ export function cierreSolicitudAlSalir(
   if (destino === EstadoPedidoOnline.CANCELADO || destino === EstadoPedidoOnline.RECHAZADO) return {};
   return { cancelacionSolicitadaEn: null, cancelacionRespuesta: 'EL PEDIDO YA HABÍA SALIDO' };
 }
+
+/**
+ * F10: lo que el diálogo de delivery necesita saber del pedido web de una fila. El diálogo es la
+ * pantalla de atención; la bandeja sigue viva como panel de observación. Cualquier regla de
+ * atención nueva va en las DOS (ver domains/pedidos-online.md, «Dos pantallas, un pedido»).
+ */
+export function resumenPedidoWeb(p: {
+  id: number; numero: string; estado: string; tipoPedido?: string | null; estadoPago?: string | null;
+  pagoMonto?: any; pagoId?: string | null; cancelacionSolicitadaEn?: any; cancelacionMotivo?: string | null;
+  cancelacionRespuesta?: string | null;
+}) {
+  return {
+    id: p.id,
+    numero: p.numero,
+    estado: p.estado,
+    tipoPedido: p.tipoPedido ?? null,
+    estadoPago: p.estadoPago ?? null,
+    pagoMonto: p.pagoMonto != null ? Number(p.pagoMonto) : null,
+    pagoId: p.pagoId ?? null,
+    pideCancelar: !!p.cancelacionSolicitadaEn && ESTADOS_CANCELABLES_CLIENTE.includes(p.estado as EstadoPedidoOnline),
+    cancelacionMotivo: p.cancelacionMotivo ?? null,
+    cancelacionRespuesta: p.cancelacionRespuesta ?? null,
+  };
+}
+
+/**
+ * F10: qué espera a alguien en la cola de atención (diálogo de delivery y contador del PdV).
+ * Un pedido puede caer en una sola: se toma la primera que aplica, en este orden.
+ * - CANCELACION: el cliente pidió cancelar y no se le respondió.
+ * - NUEVO: espera que el local lo acepte.
+ * - SIN_COCINA: aceptado pero no llegó a crear su venta (p. ej. sin caja abierta). Los de mesa
+ *   se atienden desde el PdV de la mesa, no desde acá.
+ * - DEVOLVER: se cobró online y se canceló: hay que devolver desde uPay.
+ */
+export type MotivoAtencion = 'CANCELACION' | 'NUEVO' | 'SIN_COCINA' | 'DEVOLVER';
+
+export function motivoAtencion(p: {
+  estado: string; tipoPedido?: string | null; ventaId?: number | null; mesaId?: number | null;
+  estadoPago?: string | null; cancelacionSolicitadaEn?: any;
+}): MotivoAtencion | null {
+  if (p.cancelacionSolicitadaEn && ESTADOS_CANCELABLES_CLIENTE.includes(p.estado as EstadoPedidoOnline)) return 'CANCELACION';
+  if (p.estado === EstadoPedidoOnline.RECIBIDO && p.tipoPedido !== TipoPedidoOnline.MESA_QR) return 'NUEVO';
+  if (p.estado === EstadoPedidoOnline.ACEPTADO && !p.ventaId && !p.mesaId && p.tipoPedido !== TipoPedidoOnline.MESA_QR) return 'SIN_COCINA';
+  if (p.estadoPago === EstadoPagoOnline.REEMBOLSO_PENDIENTE) return 'DEVOLVER';
+  return null;
+}
+
+/** El mismo criterio que `motivoAtencion`, como WHERE (alias `p`) para listar y contar. */
+export const WHERE_ATENCION = `(
+  (p.cancelacion_solicitada_en IS NOT NULL AND p.estado IN (:...atCanc))
+  OR (p.estado = :atRecibido AND p.tipo_pedido <> :atMesa)
+  OR (p.estado = :atAceptado AND p.venta_id IS NULL AND p.mesa_id IS NULL AND p.tipo_pedido <> :atMesa)
+  OR p.estado_pago = :atDevolver
+)`;
+export const PARAMS_ATENCION = {
+  atCanc: ESTADOS_CANCELABLES_CLIENTE,
+  atRecibido: EstadoPedidoOnline.RECIBIDO,
+  atAceptado: EstadoPedidoOnline.ACEPTADO,
+  atMesa: TipoPedidoOnline.MESA_QR,
+  atDevolver: EstadoPagoOnline.REEMBOLSO_PENDIENTE,
+};

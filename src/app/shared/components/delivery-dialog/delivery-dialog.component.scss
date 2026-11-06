@@ -620,3 +620,63 @@ tr.mat-mdc-row {
   font-size: 12px; font-weight: 600;
   mat-icon { font-size: 16px; width: 16px; height: 16px; }
 }
+
+// F10: número del pedido en la lista. El de la web resalta: es el que dice el cliente al llamar.
+.numero-pedido {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  &.numero-web { color: var(--text-primary); font-weight: 700; }
+}
+
+// F10: chips de atención en la columna ESTADO (mismo formato que `.canal-chip`).
+.pide-cancelar-chip,
+.pago-online-chip {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.pide-cancelar-chip {
+  border: 1px solid var(--error-color);
+  color: var(--error-color);
+  background: color-mix(in srgb, var(--error-color) 14%, transparent);
+}
+.pago-online-chip {
+  border: 1px solid var(--divider-color, rgba(255,255,255,0.24));
+  color: var(--text-secondary);
+  &[data-tipo='ok'] { border-color: var(--success-color); color: var(--success-color); }
+  &[data-tipo='espera'] { border-color: var(--warning-color); color: var(--warning-color); }
+  &[data-tipo='mal'] { border-color: var(--error-color); color: var(--error-color); }
+}
+
+// F10: secciones de la cola de atención.
+.cola-seccion {
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--text-secondary);
+  .cola-seccion-count { margin-left: 4px; color: var(--text-primary); }
+}
+.cola-pago {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  .pago-online-chip { margin-left: 0; }
+  .cola-ref { font-size: 11px; color: var(--text-secondary); }
+}
+
+// F10: el número del pedido web en el comprobante (va en la foto que se le manda al cliente,
+// así que sigue la paleta de papel del recibo, no el tema).
+.recibo-pedido-web {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  padding-top: 5px;
+}

@@ -1,5 +1,5 @@
 import { avisarReembolso, marcarDevuelto } from '../services/pagos-online/pagos-online.service';
-import { cierreSolicitudAlSalir, ESTADOS_CANCELABLES_CLIENTE, limpiarMotivo } from '../utils/pedido-acciones.utils';
+import { cierreSolicitudAlSalir, ESTADOS_CANCELABLES_CLIENTE, limpiarMotivo, motivoAtencion, WHERE_ATENCION, PARAMS_ATENCION } from '../utils/pedido-acciones.utils';
 
 class PedidoCambioError extends Error { constructor() { super('pedido_cambio_reintentar'); } }
 import { ipcMain } from 'electron';
@@ -98,6 +98,8 @@ function mapPedidoAdmin(p: PedidoOnline, monedas: Pick<MonedaTienda, 'id' | 'sim
     cancelacionSolicitadaEn: p.cancelacionSolicitadaEn ?? null,
     cancelacionMotivo: p.cancelacionMotivo ?? null,
     cancelacionRespuesta: p.cancelacionRespuesta ?? null,
+    // F10: por qué está en la cola de atención del diálogo de delivery (null = no espera nada).
+    motivoAtencion: motivoAtencion(p as any),
     createdAt: p.createdAt,
     items: (p.items || []).map((it) => ({
       id: it.id,
@@ -129,7 +131,10 @@ export function registerPedidosOnlineAdminHandlers(
       .orderBy('p.createdAt', 'DESC')
       .take(filtros?.take || 100);
 
-    if (filtros?.cancelacionPendiente) {
+    if (filtros?.atencion) {
+      // F10: la cola de atención del diálogo de delivery (mismo criterio que el contador).
+      qb.andWhere(WHERE_ATENCION, PARAMS_ATENCION);
+    } else if (filtros?.cancelacionPendiente) {
       // F9: solicitudes de cancelación del cliente que esperan respuesta.
       qb.andWhere('p.cancelacion_solicitada_en IS NOT NULL AND p.estado IN (:...canc)', { canc: ESTADOS_CANCELABLES_CLIENTE });
     } else if (filtros?.estado) {
@@ -143,29 +148,25 @@ export function registerPedidosOnlineAdminHandlers(
   });
 
   // ============== CONTADOR DE PENDIENTES (badge/sonido) ==============
-  // Cuenta RECIBIDO + ACEPTADO sin venta materializada: así el staff también ve
-  // señal de los pedidos auto-aceptados (que no pasan por RECIBIDO).
-  /**
-   * Retiros en curso: pedidos PICKUP ya materializados y todavía sin entregar.
-   *
-   * Un DELIVERY materializado aparece solo en la tabla de la izquierda del
-   * diálogo, porque tiene un `Delivery` detrás. Un PICKUP no genera ninguno, así
-   * que su `Venta` -sin mesa, sin comanda, sin delivery- no sale en ninguna
-   * pantalla del PdV y no habría forma de cobrarla. Esta lista es esa pantalla.
-   */
   ipcMain.handle('contar-pedidos-online-pendientes', async () => {
     await ensurePermission(dataSource, getCurrentUser, PERM_VER);
-    // F9: una solicitud de cancelación también espera a alguien (badge y sonido). Una sola cuenta:
-    // un pedido RECIBIDO que además pide cancelar suma uno, no dos.
-    const pendientes = await repo().createQueryBuilder('p')
-      .where('p.estado IN (:...nuevos) OR (p.cancelacion_solicitada_en IS NOT NULL AND p.estado IN (:...canc))', {
-        nuevos: [EstadoPedidoOnline.RECIBIDO, EstadoPedidoOnline.ACEPTADO], canc: ESTADOS_CANCELABLES_CLIENTE,
-      })
-      .getCount();
-    const cancelaciones = await repo().createQueryBuilder('p')
-      .where('p.cancelacion_solicitada_en IS NOT NULL AND p.estado IN (:...e)', { e: ESTADOS_CANCELABLES_CLIENTE })
-      .getCount();
-    return { pendientes, cancelaciones };
+    // F10: el badge cuenta lo mismo que muestra la cola de atención del diálogo de delivery
+    // (`motivoAtencion`). Antes contaba todo ACEPTADO, aunque ya tuviera venta y estuviera en curso.
+    // `pendientes` (nuevos, piden cancelar y aceptados que no llegaron a cocina —p. ej. la aceptación
+    // automática sin caja abierta—) es lo que hace sonar el aviso; `total` es el número del badge,
+    // que suma además las devoluciones de uPay (esperan a alguien, pero no hay cliente esperando).
+    const filas: any[] = await repo().createQueryBuilder('p')
+      .select(['p.id', 'p.estado', 'p.tipoPedido', 'p.ventaId', 'p.mesaId', 'p.estadoPago', 'p.cancelacionSolicitadaEn'])
+      .where(WHERE_ATENCION, PARAMS_ATENCION)
+      .getMany();
+    const motivos = filas.map((p) => motivoAtencion(p));
+    const cuenta = (m: string) => motivos.filter((x) => x === m).length;
+    const cancelaciones = cuenta('CANCELACION');
+    const nuevos = cuenta('NUEVO');
+    const sinCocina = cuenta('SIN_COCINA');
+    const devoluciones = cuenta('DEVOLVER');
+    const pendientes = nuevos + cancelaciones + sinCocina;
+    return { pendientes, cancelaciones, nuevos, sinCocina, devoluciones, total: motivos.filter(Boolean).length };
   });
 
   // ============== ACEPTAR ==============

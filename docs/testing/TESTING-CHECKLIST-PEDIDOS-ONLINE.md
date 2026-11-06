@@ -197,6 +197,31 @@ Ventas → Configuración → Zonas de Delivery. Necesita ventas de delivery **c
    WhatsApp desde el número del local. Con Meta elegido y sin token, sale igual por Evolution
    (aviso en pantalla).
 
+## 11 · Atención desde el diálogo de delivery (F10)
+
+La cola del diálogo de delivery (PdV → DELIVERY) es la pantalla de atención. La bandeja de Pedidos
+Online sigue como panel de observación: lo que se hace en una tiene que verse en la otra.
+
+1. **Un solo número:** en la lista de delivery, la columna PEDIDO dice `PO-…` para los de la web y
+   `N° 8` para los cargados en el PdV. Al abrir uno web, el comprobante dice «PEDIDO WEB PO-…» y
+   debajo «DELIVERY N° 8 · VENTA #14». El ticket impreso dice lo mismo. En la bandeja, la tarjeta
+   muestra «Delivery N° 8 · Venta #14».
+2. **Cola por secciones:** con un pedido nuevo, uno que pidió cancelar, uno aceptado sin caja
+   abierta y uno cancelado que estaba pagado con tarjeta, la cola los muestra en PIDEN CANCELAR,
+   NUEVOS, ACEPTADOS SIN ENVIAR A COCINA y DEVOLVER PAGO EN UPAY, cada uno con sus botones. El
+   botón rojo del subheader dice cuántos hay.
+3. **Badge del PdV:** cuenta lo mismo que la cola. Suena con un pedido nuevo, una cancelación
+   pedida o un aceptado sin cocina; una devolución suma al número sin sonar.
+4. **Pidió cancelar, con la fila abierta:** la fila muestra «PIDE CANCELAR»; en el footer aparecen
+   «CANCELAR (LO PIDIÓ)» y «NO SE PUEDE». Responder desde ahí: la bandeja lo refleja.
+5. **Enviar a cocina:** un pedido aceptado sin venta → «ENVIAR A COCINA» usa la caja de este PdV;
+   aparece en la lista como un delivery más.
+6. **Devolución:** cancelar desde el footer un pedido pagado con tarjeta → aviso de devolver en
+   uPay; en la cola sale en DEVOLVER con su referencia; «YA DEVOLVÍ» lo saca (y la bandeja lo
+   muestra como «Pago devuelto»).
+7. **Chip de pago online** en la lista (PAGADO ONLINE, ESPERANDO PAGO, DEVOLVER…), igual que la
+   insignia de la bandeja.
+
 ## Qué NO se probó automáticamente
 
 - **SQLite es lo que corren los tests** (`.tmp/*.db` con todas las migraciones).

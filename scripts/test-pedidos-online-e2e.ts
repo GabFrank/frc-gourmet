@@ -518,7 +518,9 @@ async function main() {
 
   // 15. pendientes (primero=LISTO ya no cuenta, segundo/tercero rechazados) = 0
   const pend = await invokeHandlerWithContext('contar-pedidos-online-pendientes', undefined);
-  ok(pend?.pendientes === 0, 'contar pendientes = 0 (ya no hay RECIBIDO/ACEPTADO)', pend?.pendientes);
+  // F10: `pendientes` = nuevos + piden cancelar + aceptados sin cocina; ninguno de los tres quedó.
+  ok(pend?.pendientes === 0 && pend?.nuevos === 0 && pend?.sinCocina === 0,
+    'contar pendientes = 0 (sin nuevos, sin cancelaciones pedidas, sin aceptados sin cocina)', pend);
 
   console.log('\n[e2e] === CONFIG DE TIENDA + REFRESH TOKEN ===');
   // 16. config pública (default: abierta, ambos tipos)

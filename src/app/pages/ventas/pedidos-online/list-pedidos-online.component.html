@@ -22,11 +22,13 @@
       <div class="pedido-top">
         <div>
           <span class="numero">{{ p.numero }}</span>
-          <span class="tipo">{{ tipoLabel(p.tipoPedido) }}</span>
-          <span class="tipo" *ngIf="p.metodoPago && !p.pagoResumen">· {{ pagoLabel(p.metodoPago) }}</span>
+          <span class="tipo">{{ p.tipoTexto }}</span>
+          <span class="tipo" *ngIf="p.pagoTexto">· {{ p.pagoTexto }}</span>
         </div>
-        <span class="estado" [attr.data-estado]="p.estado">{{ estadoLabel(p.estado) }}</span>
+        <span class="estado" [attr.data-estado]="p.estado">{{ p.estadoTexto }}</span>
       </div>
+      <!-- F10: los números con que aparece en el PdV, para cruzarlo con la lista de delivery. -->
+      <div class="muted numeros-pdv" *ngIf="p.numerosPdv">{{ p.numerosPdv }}</div>
 
       <!-- F9: el cliente pidió cancelar desde la tienda. -->
       <div class="pide-cancelar" *ngIf="p.pideCancelar">
@@ -41,7 +43,7 @@
         Pidió cancelar; se le respondió: {{ p.cancelacionRespuesta }}
       </div>
 
-      <div class="pago-online" *ngIf="pagoInsignia(p) as ins">
+      <div class="pago-online" *ngIf="p.insignia as ins">
         <span class="pago-chip" [attr.data-tipo]="ins.clase"><mat-icon>credit_card</mat-icon> {{ ins.texto }}</span>
         <span class="muted ref" *ngIf="p.pagoId">Ref. uPay {{ p.pagoId }}</span>
       </div>
@@ -55,7 +57,7 @@
         <mat-icon>place</mat-icon>
         <span>{{ p.direccionEntrega }}<span *ngIf="p.zonaDelivery"> · {{ p.zonaDelivery.nombre }}</span>
           <span class="muted" *ngIf="p.referenciaDireccion"><br />Ref.: {{ p.referenciaDireccion }}</span>
-          <a *ngIf="mapaUrl(p) as url" [href]="url" target="_blank" rel="noopener"> · Ver en el mapa</a>
+          <a *ngIf="p.mapa as url" [href]="url" target="_blank" rel="noopener"> · Ver en el mapa</a>
         </span>
       </div>
 

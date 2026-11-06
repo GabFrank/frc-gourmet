@@ -13,13 +13,18 @@ import { HasPermissionDirective } from 'src/app/shared/directives/has-permission
 import { firstValueFrom, of } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
 import { AuthService } from '../../../services/auth.service';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
 
 /**
- * Bandeja de PEDIDOS ONLINE en el PdV (Fase 4).
+ * Bandeja de PEDIDOS ONLINE (Fase 4): panel de OBSERVACIÓN Y ACCIÓN.
  *
- * Lista los pedidos entrantes de la web y permite aceptar / rechazar / avanzar
- * su estado. La venta se materializa con el flujo normal del PdV; acá se maneja
- * la máquina de estados del pedido. Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md.
+ * ⚠️ DOS PANTALLAS, UN PEDIDO (F10). La pantalla de ATENCIÓN es la cola del diálogo de delivery
+ * del PdV (`delivery-dialog.component.ts`): ahí se acepta, rechaza, responde la cancelación, se
+ * manda a cocina y se registra la devolución. Esta bandeja sigue viva para mirar todos los pedidos
+ * (historial, filtros, mesa QR) y actuar sin entrar al PdV. Toda regla o acción nueva de atención
+ * va en LAS DOS, o la una muestra algo que la otra no sabe hacer. Detalle en
+ * .claude/skills/frc-gourmet-expert/domains/pedidos-online.md, «Dos pantallas, un pedido».
  */
 @Component({
   selector: 'app-list-pedidos-online',
@@ -34,6 +39,7 @@ import { AuthService } from '../../../services/auth.service';
     MatSelectModule,
     MatInputModule,
     MatSnackBarModule,
+    MatDialogModule,
     HasPermissionDirective,
   ],
   templateUrl: './list-pedidos-online.component.html',
@@ -54,6 +60,8 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
 
   readonly estados = [
     { value: 'ACTIVOS', label: 'Activos' },
+    // F10: lo mismo que la cola del diálogo de delivery (y el badge del PdV).
+    { value: 'ATENCION', label: 'Para atender' },
     { value: 'SOLICITUD_CANCELACION', label: 'Piden cancelar' },
     { value: 'PENDIENTE_PAGO', label: 'Esperando pago' },
     { value: 'RECIBIDO', label: 'Recibidos' },
@@ -86,6 +94,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
     private repo: RepositoryService,
     private snack: MatSnackBar,
     private auth: AuthService,
+    private dialog: MatDialog,
   ) {}
 
   private get api(): any {
@@ -136,6 +145,8 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
     const filtros: any = {};
     if (this.filtroEstado === 'ACTIVOS') {
       filtros.estados = ['RECIBIDO', 'ACEPTADO', 'EN_PREPARACION', 'LISTO', 'EN_CAMINO'];
+    } else if (this.filtroEstado === 'ATENCION') {
+      filtros.atencion = true;
     } else if (this.filtroEstado === 'SOLICITUD_CANCELACION') {
       filtros.cancelacionPendiente = true;
     } else {
@@ -147,6 +158,17 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
         this.pedidos = (res || []).map((p: any) => ({
           ...p,
           siguiente: this.siguienteEstado(p),
+          // Pre-computados: el template no llama funciones.
+          estadoTexto: this.estadoLabel(p.estado),
+          tipoTexto: this.tipoLabel(p.tipoPedido),
+          pagoTexto: p.metodoPago && !p.pagoResumen ? this.pagoLabel(p.metodoPago) : '',
+          insignia: this.pagoInsignia(p),
+          mapa: this.mapaUrl(p),
+          // F10: con qué números aparece en el PdV (lista de delivery, ticket, venta).
+          numerosPdv: [
+            p.deliveryId ? `${p.tipoPedido === 'PICKUP' ? 'Retiro' : 'Delivery'} N° ${p.deliveryId}` : '',
+            p.ventaId ? `Venta #${p.ventaId}` : '',
+          ].filter(Boolean).join(' · '),
           // F9: el cliente pidió cancelar y espera respuesta.
           pideCancelar: !!p.cancelacionSolicitadaEn && ['RECIBIDO', 'ACEPTADO', 'EN_PREPARACION', 'LISTO'].includes(p.estado),
           items: (p.items || []).map((it: any) => ({ ...it, ...this.detalleItem(it) })),
@@ -222,7 +244,18 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
 
   marcarDevuelto(p: any): void {
     const monto = Number(p.pagoMonto || 0).toLocaleString('es-PY');
-    if (!confirm(`¿Ya devolviste ₲ ${monto} del pedido ${p.numero} desde el panel de uPay?`)) return;
+    // El diálogo del repo, no `confirm()`: el nativo bloquea la ventana y no sigue el tema.
+    this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: `Devolución de ${p.numero}`,
+        message: `¿Ya devolviste ₲ ${monto} desde el panel de uPay?`,
+        confirmText: 'Sí, ya devolví',
+        cancelText: 'Volver',
+      },
+    }).afterClosed().subscribe((ok) => { if (ok) this.registrarDevuelto(p); });
+  }
+
+  private registrarDevuelto(p: any): void {
     this.repo.marcarPagoDevueltoPedidoOnline(p.id).subscribe({
       next: (res) => {
         if (res?.success) {

@@ -46,6 +46,7 @@ import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/ped
 import { PEDIDO_POR_ESTADO_DELIVERY, sincronizarPedidosOnline } from '../utils/pedido-online-sync.utils';
 import { monedasParaResumen, resumenPago } from '../utils/pago-pedido.utils';
 import { TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { resumenPedidoWeb } from '../utils/pedido-acciones.utils';
 /**
  * Columnas de la `Persona` del **`Funcionario`** repartidor que este canal publica.
  *
@@ -264,6 +265,10 @@ export function registerDeliveryHandlers(
       resumen: resumenPago(p, monedasPago),
       observacion: p.pagoObservacion ?? null,
     }]));
+    // F10: el pedido web detrás de cada fila, para que el diálogo use el MISMO número que ve el
+    // cliente (PO-…) y pueda atender lo que la bandeja atendía (cancelación pedida, devolución).
+    // Sólo lo que la pantalla usa: nada del cliente que no esté ya en el delivery.
+    const webPorDelivery = new Map(pedidosWeb.map((p: any) => [p.deliveryId, resumenPedidoWeb(p)]));
 
     const data = ventas.map((venta) => ({
       ...(venta.delivery as any),
@@ -287,6 +292,7 @@ export function registerDeliveryHandlers(
         canalOrigen: (venta as any).canalOrigen ?? 'LOCAL',
       },
       pagoPrevisto: pagoPorDelivery.get((venta.delivery as any)?.id) || null,
+      pedidoWeb: webPorDelivery.get((venta.delivery as any)?.id) || null,
     }));
 
     return { data, total };

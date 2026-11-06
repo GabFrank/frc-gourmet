@@ -45,6 +45,14 @@ export interface DeliveryDialogData {
   terminalDeLaCaja?: string;
 }
 
+/*
+ * ⚠️ DOS PANTALLAS, UN PEDIDO (F10). Esta cola es la pantalla de ATENCIÓN de los pedidos web; la
+ * bandeja (`list-pedidos-online.component.ts`) sigue viva como panel de observación y acción.
+ * Toda regla o acción nueva de atención va en LAS DOS. Lo que espera a alguien lo decide el
+ * servidor (`motivoAtencion` en `electron/utils/pedido-acciones.utils.ts`), no esta pantalla.
+ * Ver .claude/skills/frc-gourmet-expert/domains/pedidos-online.md, «Dos pantallas, un pedido».
+ */
+
 /**
  * Una fila de la lista. Siempre es un `Delivery`: el pedido para retirar es el
  * mismo registro en `modo: RETIRO`, con dirección, costo de envío y repartidor
@@ -75,6 +83,38 @@ interface DeliveryRow {
    * en la fila para que el cajero no lo descubra recién al confirmar el pago.
    */
   cajaCerrada: boolean;
+  /**
+   * F10: con qué número se habla de este pedido. El de la web es el PO-… que ve el cliente (y
+   * la bandeja); el que cargó el cajero, el número del delivery. Antes la lista no mostraba
+   * ninguno y el detalle decía «N° 8» sin aclarar de qué.
+   */
+  numero: string;
+  /** El pedido web detrás de la fila (o null): cancelación pedida, pago online. */
+  pedidoWeb: any | null;
+  pideCancelar: boolean;
+  /** Estado del pago online (uPay), si lo hay. */
+  pagoChip: { texto: string; clase: string } | null;
+}
+
+/** Secciones de la cola de atención, en el orden en que se muestran (lo urgente primero). */
+const SECCIONES_COLA: { clave: string; titulo: string }[] = [
+  { clave: 'CANCELACION', titulo: 'PIDEN CANCELAR' },
+  { clave: 'NUEVO', titulo: 'NUEVOS' },
+  { clave: 'SIN_COCINA', titulo: 'ACEPTADOS SIN ENVIAR A COCINA' },
+  { clave: 'DEVOLVER', titulo: 'DEVOLVER PAGO EN UPAY' },
+];
+
+/** Insignia del pago online (uPay). Misma tabla que la bandeja (`pagoInsignia`). */
+export function chipPagoOnline(estadoPago: string | null | undefined, monto?: number | null): { texto: string; clase: string } | null {
+  switch (estadoPago) {
+    case 'PAGADO': return { texto: 'PAGADO ONLINE', clase: 'ok' };
+    case 'PENDIENTE': return { texto: 'ESPERANDO PAGO', clase: 'espera' };
+    case 'FALLIDO': return { texto: 'PAGO RECHAZADO', clase: 'mal' };
+    case 'EXPIRADO': return { texto: 'PAGO VENCIDO', clase: 'mal' };
+    case 'REEMBOLSO_PENDIENTE': return { texto: `DEVOLVER ${Number(monto || 0).toLocaleString('es-PY')}`, clase: 'mal' };
+    case 'DEVUELTO': return { texto: 'PAGO DEVUELTO', clase: 'neutro' };
+    default: return null;
+  }
 }
 
 @Component({
@@ -132,10 +172,16 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   detalleFecha: Date | null = null;
   /** Título del comprobante: qué es este pedido. */
   detalleTitulo = 'DELIVERY';
+  /** F10: el número del pedido web (PO-…) si lo hay; es el que conoce el cliente. */
+  detallePedidoWeb = '';
+  /** F10: «DELIVERY N° 8 · VENTA #14»: cada número con su nombre. */
+  detalleNumeros = '';
+  /** F10: el pedido web de la fila seleccionada (para responder su cancelación desde el footer). */
+  pedidoWebSel: any = null;
   selectedPagoDetalles: any[] = [];
   estadoFiltro = '';
   estados = Object.values(DeliveryEstado);
-  displayedColumns = ['telefono', 'nombre', 'estado', 'espera', 'valorDelivery', 'total', 'entregador', 'observacion'];
+  displayedColumns = ['numero', 'telefono', 'nombre', 'estado', 'espera', 'valorDelivery', 'total', 'entregador', 'observacion'];
 
   // Paginación
   totalDeliveries = 0;
@@ -170,6 +216,11 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
    */
   colaWeb: any[] = [];
   /**
+   * F10: la cola agrupada por lo que espera (`motivoAtencion` del servidor): piden cancelar,
+   * nuevos, aceptados sin cocina y devoluciones. Pre-computado: la vista no llama funciones.
+   */
+  seccionesCola: { clave: string; titulo: string; pedidos: any[] }[] = [];
+  /**
    * Con la tienda online apagada no hay pedidos web posibles, así que todo lo
    * que habla de ellos —el botón del subheader, el panel, el poll— sobra y
    * confunde: el cajero ve un sector vacío de algo que no existe.
@@ -185,6 +236,8 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   panelOcupado = false;
   avisoTooltip = 'Pedidos de la web';
   procesandoPedidoId: number | null = null;
+  /** F10: qué había en la cola en el último poll (null = todavía no se cargó). */
+  private firmaCola: string | null = null;
   private pedidosInterval: any;
   /**
    * F4 (backoff exponencial ante 429): intervalo del poll en ms. Crece de 15s
@@ -258,10 +311,9 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       this.updateEsperas();
     }, 1000);
     // Los pedidos de la web entran solos: sin este poll el cajero tendría que
-    // cerrar y reabrir el diálogo para enterarse.
-    if (this.tiendaActiva) {
-      this.pedidosInterval = setInterval(() => this.cargarPedidosOnline(), 15000);
-    }
+    // cerrar y reabrir el diálogo para enterarse. F10: corre aunque la tienda esté
+    // apagada — una cancelación pedida o una devolución son de pedidos que ya existen.
+    this.pedidosInterval = setInterval(() => this.cargarPedidosOnline(), 15000);
   }
 
   ngOnDestroy(): void {
@@ -283,16 +335,10 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
    */
   async cargarPedidosOnline(): Promise<void> {
     try {
-      const recibidos = this.tiendaActiva
-        ? await firstValueFrom(this.repositoryService.getPedidosOnlineAdmin({ estado: 'RECIBIDO' }))
-        : [];
-      // F9: las solicitudes de cancelación del cliente también esperan respuesta acá (un pedido ya
-      // aceptado se ve como un reparto más y la solicitud quedaría invisible). Se piden aunque la
-      // tienda esté apagada: son de pedidos que ya están en curso.
-      const piden = await firstValueFrom(this.repositoryService.getPedidosOnlineAdmin({ cancelacionPendiente: true }))
-        .catch(() => [] as any[]);
-      const vistos = new Set((recibidos || []).map((p: any) => p.id));
-      const pedidos = [...(recibidos || []), ...(piden || []).filter((p: any) => !vistos.has(p.id))];
+      // F10: todo lo que espera a alguien, con el mismo criterio que el badge del PdV
+      // (`motivoAtencion` en el servidor). Se pide aunque la tienda esté apagada: una cancelación
+      // pedida, un pedido sin cocina o una devolución son de pedidos que ya existen.
+      const pedidos = await firstValueFrom(this.repositoryService.getPedidosOnlineAdmin({ atencion: true }));
       // El handler devuelve DESC (más nuevo arriba), que sirve para la pantalla
       // de historial pero no para una cola de atención: acá el que espera hace
       // más tiempo va primero, y el orden se mantiene estable aunque entren
@@ -302,6 +348,13 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
         .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
       this.armarColaWeb();
+
+      // F10: si la cola cambió (entró o se resolvió algo), la lista también: la fila muestra el
+      // chip «PIDE CANCELAR» / el pago y el footer sus botones. Sólo al cambiar, para no recargar
+      // el detalle abierto cada 15 s. La primera carga la hace `ngOnInit`.
+      const firma = this.colaWeb.map((p) => `${p.id}:${p.motivoAtencion}:${p.estadoPago || ''}`).join('|');
+      if (this.firmaCola !== null && firma !== this.firmaCola) await this.recargarManteniendoSeleccion();
+      this.firmaCola = firma;
 
       // Reset en éxito (F4 fix bloqueante auditoría UI)
       const wasBackedOff = this.pollIntervalMs > 15000;
@@ -346,9 +399,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       clearInterval(this.pedidosInterval);
       this.pedidosInterval = null;
     }
-    if (this.tiendaActiva) {
-      this.pedidosInterval = setInterval(() => this.cargarPedidosOnline(), this.pollIntervalMs);
-    }
+    this.pedidosInterval = setInterval(() => this.cargarPedidosOnline(), this.pollIntervalMs);
   }
 
   /**
@@ -358,11 +409,15 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
    */
   private armarColaWeb(): void {
     this.colaWeb = [...this.pedidosOnline]
+      .filter((p) => !!p.motivoAtencion)
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    this.hayColaWeb = (this.tiendaActiva || this.colaWeb.some((p) => p.pideCancelar)) && this.colaWeb.length > 0;
+    this.seccionesCola = SECCIONES_COLA
+      .map((sec) => ({ ...sec, pedidos: this.colaWeb.filter((p) => p.motivoAtencion === sec.clave) }))
+      .filter((sec) => sec.pedidos.length > 0);
+    this.hayColaWeb = this.colaWeb.length > 0;
     this.actualizarPanel();
     this.avisoTooltip = this.colaWeb.length
-      ? `${this.colaWeb.length} pedido(s) de la web esperando confirmación`
+      ? this.seccionesCola.map((sec) => `${sec.pedidos.length} ${sec.titulo.toLowerCase()}`).join(' · ')
       : 'Pedidos de la web';
   }
 
@@ -399,8 +454,14 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       // Por defecto pendiente de aceptación; los retiros en curso lo pisan.
       pendiente: true,
       // F9: el cliente pidió cancelar (y el pedido todavía se puede cancelar).
-      pideCancelar: !!p.cancelacionSolicitadaEn && ['RECIBIDO', 'ACEPTADO', 'EN_PREPARACION', 'LISTO'].includes(p.estado),
+      pideCancelar: p.motivoAtencion === 'CANCELACION',
       esRecibido: p.estado === 'RECIBIDO',
+      // F10: qué botones lleva en la cola.
+      esNuevo: p.motivoAtencion === 'NUEVO',
+      esSinCocina: p.motivoAtencion === 'SIN_COCINA',
+      esDevolver: p.motivoAtencion === 'DEVOLVER',
+      montoDevolver: Number(p.pagoMonto || 0),
+      pagoChip: chipPagoOnline(p.estadoPago, p.pagoMonto),
     };
   }
 
@@ -490,7 +551,8 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
             : `Pedido ${p.numero} cancelado`,
           'OK', { duration: dev > 0 ? 10000 : 3000 });
         await this.cargarPedidosOnline();
-        await this.loadDeliveries();
+        // Manteniendo la fila abierta: se puede responder desde el footer con ella seleccionada.
+        await this.recargarManteniendoSeleccion();
       } else {
         const msg = res?.error === 'mesa_ya_materializada' ? 'el pedido ya está en la cuenta de la mesa; quitá los ítems desde el PdV.'
           : res?.error === 'sin_solicitud' ? 'la solicitud ya fue respondida.'
@@ -504,6 +566,70 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     } finally {
       this.procesandoPedidoId = null;
     }
+  }
+
+  /**
+   * F10: un pedido aceptado que no llegó a crear su venta (aceptación sin caja abierta, o
+   * automática que falló). Antes sólo se destrababa desde la bandeja.
+   */
+  async enviarACocinaOnline(p: any): Promise<void> {
+    this.procesandoPedidoId = p.id;
+    try {
+      const res: any = await (window as any).api.callIpc('materializar-pedido-online-en-venta', p.id, { cajaId: this.data.caja.id });
+      if (res?.ventaId) {
+        this.snackBar.open(`Pedido ${p.numero} enviado a cocina`, 'OK', { duration: 3000 });
+        await this.cargarPedidosOnline();
+        await this.loadDeliveries();
+      } else {
+        this.snackBar.open(`No se pudo enviar ${p.numero} a cocina`, 'OK', { duration: 4000 });
+      }
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      const amigable = /no_hay_caja_abierta|sin_caja/.test(msg) ? 'la caja de este PdV ya no está abierta.'
+        : /pedido_sin_pago_confirmado/.test(msg) ? 'el pago con tarjeta todavía no está confirmado.'
+        : /pedido_no_aceptado|no_materializable/.test(msg) ? 'el pedido ya no está aceptado.'
+        : null;
+      if (amigable) this.snackBar.open(`No se pudo enviar a cocina: ${amigable}`, 'OK', { duration: 5000 });
+      else this.mostrarError(e, 'No se pudo enviar el pedido a cocina');
+      await this.cargarPedidosOnline();
+    } finally {
+      this.procesandoPedidoId = null;
+    }
+  }
+
+  /** F10: el cajero ya devolvió desde el panel de uPay lo cobrado de un pedido cancelado. */
+  async marcarDevueltoOnline(p: any): Promise<void> {
+    const monto = Number(p.pagoMonto || 0).toLocaleString('es-PY');
+    const ref = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: `Devolución de ${p.numero}`,
+        message: `¿Ya devolviste ${monto} desde el panel de uPay?${p.pagoId ? ` (ref. ${p.pagoId})` : ''}`,
+        confirmText: 'Sí, ya devolví',
+        cancelText: 'Volver',
+      },
+    });
+    if (!(await firstValueFrom(ref.afterClosed()))) return;
+    this.procesandoPedidoId = p.id;
+    try {
+      const res: any = await firstValueFrom(this.repositoryService.marcarPagoDevueltoPedidoOnline(p.id));
+      if (res?.success) {
+        this.snackBar.open(`Pedido ${p.numero}: devolución registrada`, 'OK', { duration: 3000 });
+      } else {
+        this.snackBar.open(`No se pudo registrar: ${res?.error || ''}`, 'OK', { duration: 4000 });
+      }
+      await this.cargarPedidosOnline();
+      await this.recargarManteniendoSeleccion();
+    } catch (e: any) {
+      this.mostrarError(e, 'No se pudo registrar la devolución');
+    } finally {
+      this.procesandoPedidoId = null;
+    }
+  }
+
+  /** F10: responder la cancelación pedida desde el footer, con la fila seleccionada. */
+  async resolverCancelacionSeleccionado(aprobar: boolean): Promise<void> {
+    if (!this.pedidoWebSel?.pideCancelar) return;
+    await this.resolverCancelacionOnline(this.pedidoWebSel, aprobar);
   }
 
   async loadDeliveries(): Promise<void> {
@@ -547,6 +673,10 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       tiempoColor: this.colorDe(d, mins),
       otraCaja: !!d.otraCaja,
       cajaCerrada: !!d.cajaCerrada,
+      numero: d.pedidoWeb?.numero || `N° ${d.id}`,
+      pedidoWeb: d.pedidoWeb || null,
+      pideCancelar: !!d.pedidoWeb?.pideCancelar,
+      pagoChip: chipPagoOnline(d.pedidoWeb?.estadoPago, d.pedidoWeb?.pagoMonto),
     };
   }
 
@@ -853,6 +983,13 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     this.detalleFecha = this.selectedDelivery?.fechaAbierto
       ? new Date(this.selectedDelivery.fechaAbierto) : null;
     this.detalleTitulo = this.selectedDelivery?.modo === 'RETIRO' ? 'RETIRO EN LOCAL' : 'DELIVERY';
+    // F10: los mismos números que el ticket impreso, cada uno con su nombre.
+    this.pedidoWebSel = this.selectedDelivery?.pedidoWeb || null;
+    this.detallePedidoWeb = this.pedidoWebSel?.numero || '';
+    this.detalleNumeros = this.selectedDelivery
+      ? `${this.selectedDelivery.modo === 'RETIRO' ? 'RETIRO' : 'DELIVERY'} N° ${this.selectedDelivery.id}`
+        + (this.selectedDelivery.venta?.id ? ` · VENTA #${this.selectedDelivery.venta.id}` : '')
+      : '';
     this.recalcularTotalesMoneda();
   }
 
@@ -1139,7 +1276,16 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       try {
         // Una sola llamada transaccional: delivery + venta + cobro + stock.
         await firstValueFrom(this.repositoryService.deliveryCancelar(this.selectedDelivery.id, motivo));
-        this.snackBar.open(`Delivery #${this.selectedDelivery.id} cancelado`, 'CERRAR', { duration: 3000 });
+        // F10: si el cliente había pagado online, el pedido queda para devolver (cola «DEVOLVER»).
+        const web = this.selectedDelivery.pedidoWeb;
+        if (web?.estadoPago === 'PAGADO') {
+          this.snackBar.open(
+            `${web.numero} cancelado. Estaba pagado online: devolvé ${Number(web.pagoMonto || 0).toLocaleString('es-PY')} desde uPay y marcalo en la cola.`,
+            'OK', { duration: 10000 });
+          await this.cargarPedidosOnline();
+        } else {
+          this.snackBar.open(`${web?.numero || `Delivery #${this.selectedDelivery.id}`} cancelado`, 'CERRAR', { duration: 3000 });
+        }
         this.selectedDelivery = null;
         this.selectedItems = [];
         this.selectedPagoDetalles = [];
