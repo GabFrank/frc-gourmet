@@ -174,3 +174,10 @@
   .respuesta-field { flex: 1 1 220px; min-width: 0; }
 }
 .numeros-pdv { font-size: 12px; margin: -2px 0 6px; }
+
+/* Acción destructiva con borde: el primario del tema es rojo y el warn (rojo 900) casi no se ve
+   con borde en el tema oscuro. `--error-color` se lee en los dos temas. */
+button.btn-peligro:not([disabled]) {
+  color: var(--error-color);
+  border-color: var(--error-color);
+}

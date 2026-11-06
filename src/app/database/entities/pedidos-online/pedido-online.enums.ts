@@ -65,6 +65,21 @@ export enum EstadoPagoOnline {
   /** Cobrado pero el pedido no sigue (rechazado, vencido o pago tardío): devolver en uPay. */
   REEMBOLSO_PENDIENTE = 'REEMBOLSO_PENDIENTE',
   DEVUELTO = 'DEVUELTO',
+  /** Se canceló y el local registró que el cobro no llegó a entrar (uPay no lo acreditó o se anuló allá). */
+  NO_ACREDITADO = 'NO_ACREDITADO',
+  /** Se canceló y el local decidió no devolver el cobro (con motivo). */
+  RETENIDO = 'RETENIDO',
+}
+
+/**
+ * Qué se hace con lo cobrado online al cancelar un pedido pagado (o al resolver una devolución
+ * pendiente). La elige quien cancela; sin elección, se devuelve (lo de siempre).
+ */
+export enum DecisionPagoOnline {
+  DEVOLVER = 'DEVOLVER',
+  YA_DEVUELTO = 'YA_DEVUELTO',
+  NO_ENTRO = 'NO_ENTRO',
+  NO_SE_DEVUELVE = 'NO_SE_DEVUELVE',
 }
 
 /** Forma de pago (formas_pago.nombre) del cobro con tarjeta por la tienda. La siembra TiendaPagoOnline. */

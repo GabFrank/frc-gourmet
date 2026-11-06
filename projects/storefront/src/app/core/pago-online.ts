@@ -14,7 +14,8 @@ export function esUrlCheckoutUpay(url: string): boolean {
   return ['upay.com', 'upay.com.py'].some((d) => h === d || h.endsWith('.' + d));
 }
 
-export type EstadoPago = 'PENDIENTE' | 'PAGADO' | 'FALLIDO' | 'EXPIRADO' | 'REEMBOLSO_PENDIENTE' | 'DEVUELTO';
+export type EstadoPago = 'PENDIENTE' | 'PAGADO' | 'FALLIDO' | 'EXPIRADO' | 'REEMBOLSO_PENDIENTE' | 'DEVUELTO'
+  | 'NO_ACREDITADO' | 'RETENIDO';
 
 /** Texto para el cliente según el estado del pago. */
 export function textoEstadoPago(e: string | null | undefined, monto?: number | null): string | null {
@@ -26,6 +27,10 @@ export function textoEstadoPago(e: string | null | undefined, monto?: number | n
     case 'REEMBOLSO_PENDIENTE':
       return `Te devolvemos ${monto != null ? '₲' + Math.round(monto).toLocaleString('es-PY') : 'el pago'} a tu tarjeta. Puede tardar lo que indique tu banco.`;
     case 'DEVUELTO': return 'Te devolvimos el pago a tu tarjeta.';
+    // El local registró que el cobro no llegó a acreditarse: no hay nada que devolver.
+    case 'NO_ACREDITADO': return 'El pago con tarjeta no llegó a acreditarse.';
+    // El local decidió no devolver: el detalle lo da el local, no la tienda.
+    case 'RETENIDO': return 'El pago con tarjeta no se devuelve. Por dudas, comunicate con el local.';
     default: return null;
   }
 }

@@ -6,6 +6,7 @@ import {
   EstadoPedidoOnline,
   TipoPedidoOnline,
 } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { DecisionPago, DECISION_PAGO_DEFAULT, estadoPagoPorDecision, PagoDecidido } from './decision-pago-online.utils';
 
 /**
  * Lleva el estado del pedido online detrás de lo que pasa en el PdV.
@@ -54,7 +55,18 @@ export async function sincronizarPedidosOnline(
   manager: EntityManager,
   filtro: FiltroPedidosSync,
   destino: EstadoPedidoOnline,
-  opts?: { motivo?: string },
+  opts?: {
+    motivo?: string;
+    /** Qué se hace con lo cobrado online; sin esto, se devuelve. */
+    decisionPago?: DecisionPago;
+    /** Junta los pedidos cuyo pago se decidió, para avisar después del commit. */
+    pagos?: PagoDecidido[];
+    /**
+     * Cancelar una venta ya CONCLUIDA (historial): su pedido entregado no cambia de estado,
+     * pero lo cobrado online sí se resuelve (antes quedaba PAGADO y nadie lo devolvía).
+     */
+    pagoDeEntregados?: boolean;
+  },
 ): Promise<number> {
   const where: any = {};
   if (filtro.deliveryId) where.deliveryId = filtro.deliveryId;
@@ -65,9 +77,19 @@ export async function sincronizarPedidosOnline(
   const repo = manager.getRepository(PedidoOnline);
   const pedidos = await repo.find({ where });
   let cambiados = 0;
+  const cancela = destino === EstadoPedidoOnline.CANCELADO;
+  const decision = opts?.decisionPago ?? DECISION_PAGO_DEFAULT;
   for (const p of pedidos) {
+    if (cancela && opts?.pagoDeEntregados && p.estado === EstadoPedidoOnline.ENTREGADO
+      && p.estadoPago === EstadoPagoOnline.PAGADO) {
+      const r = await repo.createQueryBuilder().update(PedidoOnline)
+        .set({ estadoPago: estadoPagoPorDecision(decision) } as any)
+        .where('id = :id AND estado = :estado AND estado_pago = :pag', { id: p.id, estado: p.estado, pag: EstadoPagoOnline.PAGADO })
+        .execute();
+      if (r.affected) opts.pagos?.push({ pedidoId: p.id, decision });
+      continue;
+    }
     if (TERMINALES.includes(p.estado)) continue;
-    const cancela = destino === EstadoPedidoOnline.CANCELADO;
     if (!cancela && (ORDEN[destino] ?? -1) <= (ORDEN[p.estado] ?? 99)) continue;
 
     const cambios: any = { estado: destino, ...cierreSolicitudAlSalir(p, destino) };
@@ -79,13 +101,17 @@ export async function sincronizarPedidosOnline(
     }
     if (cancela) {
       cambios.motivoRechazo = (opts?.motivo || 'CANCELADO EN EL PDV').toUpperCase();
-      // Mismo criterio que el rechazo desde la bandeja: lo cobrado online queda para devolver.
-      if (p.estadoPago === EstadoPagoOnline.PAGADO) cambios.estadoPago = EstadoPagoOnline.REEMBOLSO_PENDIENTE;
+      // Mismo criterio que el rechazo desde la bandeja: lo cobrado online se resuelve como
+      // eligió quien canceló (por defecto, queda para devolver).
+      if (p.estadoPago === EstadoPagoOnline.PAGADO) cambios.estadoPago = estadoPagoPorDecision(decision);
     }
     const r = await repo.createQueryBuilder().update(PedidoOnline).set(cambios)
       .where('id = :id AND estado = :estado', { id: p.id, estado: p.estado })
       .execute();
-    if (r.affected) cambiados++;
+    if (r.affected) {
+      cambiados++;
+      if (cambios.estadoPago) opts?.pagos?.push({ pedidoId: p.id, decision });
+    }
   }
   return cambiados;
 }
@@ -99,12 +125,13 @@ export async function sincronizarPedidosPorCierreDeVenta(
   manager: EntityManager,
   ventaId: number,
   estadoVenta: string,
+  opts?: { decisionPago?: DecisionPago; pagos?: PagoDecidido[]; pagoDeEntregados?: boolean },
 ): Promise<number> {
   if (estadoVenta === 'CONCLUIDA') {
     return sincronizarPedidosOnline(manager, { ventaId, tipoPedido: TipoPedidoOnline.MESA_QR }, EstadoPedidoOnline.ENTREGADO);
   }
   if (estadoVenta === 'CANCELADA') {
-    return sincronizarPedidosOnline(manager, { ventaId }, EstadoPedidoOnline.CANCELADO, { motivo: 'VENTA CANCELADA EN EL PDV' });
+    return sincronizarPedidosOnline(manager, { ventaId }, EstadoPedidoOnline.CANCELADO, { motivo: 'VENTA CANCELADA EN EL PDV', ...opts });
   }
   return 0;
 }

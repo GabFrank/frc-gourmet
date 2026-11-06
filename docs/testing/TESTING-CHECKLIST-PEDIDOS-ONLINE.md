@@ -219,8 +219,21 @@ Online sigue como panel de observación: lo que se hace en una tiene que verse e
 6. **Devolución:** cancelar desde el footer un pedido pagado con tarjeta → aviso de devolver en
    uPay; en la cola sale en DEVOLVER con su referencia; «YA DEVOLVÍ» lo saca (y la bandeja lo
    muestra como «Pago devuelto»).
-7. **Chip de pago online** en la lista (PAGADO ONLINE, ESPERANDO PAGO, DEVOLVER…), igual que la
+7. **Chip de pago online** en la lista (PAGADO ONLINE, ESPERANDO PAGO, DEVOLVER, PAGO NO ENTRÓ, PAGO NO DEVUELTO…), igual que la
    insignia de la bandeja.
+8. **Qué pasa con el pago al cancelar:** cancelar un pedido pagado con tarjeta por cualquier
+   puerta (CANCELAR del diálogo, CANCELAR (LO PIDIÓ), RECHAZAR de la cola o de la bandeja,
+   Aprobar cancelación, CANCELAR VENTA del historial o de Últimas ventas, CANCELAR del PdV) abre
+   «¿Qué pasa con el pago con tarjeta?» con cuatro opciones. «Hay que devolverlo» viene marcada.
+   «El pago no entró» y «No se devuelve» no dejan confirmar sin motivo. «Volver» no cancela nada.
+   Resultado: DEVOLVER → cola DEVOLVER; Ya lo devolví → «PAGO DEVUELTO»; no entró → «PAGO NO
+   ENTRÓ»; no se devuelve → «PAGO NO DEVUELTO». El personal recibe aviso en todas menos «ya lo
+   devolví».
+9. **Cerrar una devolución:** en la cola DEVOLVER, «RESOLVER DEVOLUCIÓN» (en la bandeja «Resolver
+   devolución») ofrece las tres salidas sin «devolver»; el pedido sale de la cola.
+10. **Venta cobrada cancelada desde el historial:** un pedido web pagado online, entregado y
+    cobrado; cancelar su venta desde el historial pregunta por el pago y, con «devolver», el pedido
+    sigue ENTREGADO pero entra en DEVOLVER.
 
 ## Qué NO se probó automáticamente
 

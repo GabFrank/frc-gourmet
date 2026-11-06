@@ -1,4 +1,5 @@
 import { Component, Inject, OnInit, Optional } from '@angular/core';
+import { DecisionPagoOnlineService } from 'src/app/shared/components/decision-pago-online-dialog/decision-pago-online.service';
 import { CommonModule } from '@angular/common';
 import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -50,6 +51,7 @@ export class UltimasVentasDialogComponent implements OnInit {
     private repositoryService: RepositoryService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
+    private decisionPago: DecisionPagoOnlineService,
     @Optional() public dialogRef: MatDialogRef<UltimasVentasDialogComponent>,
     @Optional() @Inject(MAT_DIALOG_DATA) public data: any,
   ) {}
@@ -174,9 +176,15 @@ export class UltimasVentasDialogComponent implements OnInit {
     });
     ref.afterClosed().subscribe(async (ok) => {
       if (!ok) return;
+      // Pedido web pagado online: qué se hace con ese cobro.
+      const pago = await this.decisionPago.preguntarParaVenta(row.venta.id);
+      if (!pago.seguir) return;
       try {
         const estadoAnterior = row.venta.estado;
-        await firstValueFrom(this.repositoryService.updateVenta(row.venta.id, { estado: VentaEstado.CANCELADA }));
+        await firstValueFrom(this.repositoryService.updateVenta(row.venta.id, {
+          estado: VentaEstado.CANCELADA,
+          ...(pago.decision ? { __decisionPagoOnline: pago.decision } : {}),
+        } as any));
         if (estadoAnterior === VentaEstado.CONCLUIDA) {
           this.repositoryService.revertirStockVenta(row.venta.id).subscribe({
             next: (r) => console.log('Stock revertido:', r),

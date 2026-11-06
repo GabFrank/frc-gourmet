@@ -1,0 +1,24 @@
+<h2 mat-dialog-title>
+  <mat-icon class="titulo-icon">credit_card</mat-icon>
+  {{ titulo }}
+</h2>
+<mat-dialog-content>
+  <p class="subtitulo">{{ resumen }}</p>
+  <div class="monto">Cobrado: ₲ {{ montoTotal | number:'1.0-2' }}</div>
+
+  <mat-radio-group class="opciones" [(ngModel)]="seleccion" (ngModelChange)="recalcular()">
+    <mat-radio-button *ngFor="let op of opciones" [value]="op.valor" class="opcion">
+      <span class="opcion-titulo">{{ op.titulo }}</span>
+      <span class="opcion-detalle">{{ op.detalle }}</span>
+    </mat-radio-button>
+  </mat-radio-group>
+
+  <mat-form-field *ngIf="pideMotivo" appearance="outline" class="full-width">
+    <mat-label>Motivo (queda registrado)</mat-label>
+    <input matInput maxlength="200" [(ngModel)]="motivo" (ngModelChange)="recalcular()" cdkFocusInitial />
+  </mat-form-field>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>Volver</button>
+  <button mat-flat-button color="primary" [disabled]="!puedeConfirmar" (click)="confirmar()">Confirmar</button>
+</mat-dialog-actions>

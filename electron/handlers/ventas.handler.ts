@@ -77,6 +77,8 @@ import { limiteFechaSqlite } from '../utils/db-query';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { reapuntarPedidosDeVenta, sincronizarPedidosPorCierreDeVenta } from '../utils/pedido-online-sync.utils';
+import { DecisionPago, normalizarDecisionPagoOError, PagoDecidido } from '../utils/decision-pago-online.utils';
+import { registrarDecisionesPago } from '../services/pagos-online/pagos-online.service';
 import { EstadoPedidoOnline, TipoPedidoOnline, EstadoPagoOnline, FORMA_PAGO_UPAY } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { TiendaOnlineConfig } from '../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import { motivoNoMaterializable } from '../utils/pedido-online-materializable';
@@ -1603,6 +1605,14 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         delete data.__validarDispositivoCaja;
       }
 
+      // Auditoría post-F10: al cancelar la venta de un pedido web pagado online, qué se hace con
+      // lo cobrado (devolver, ya devuelto, no entró, no se devuelve). Sin esto, se devuelve.
+      let decisionPagoOnline: DecisionPago | undefined;
+      if (data && Object.prototype.hasOwnProperty.call(data, '__decisionPagoOnline')) {
+        decisionPagoOnline = normalizarDecisionPagoOError(data.__decisionPagoOnline);
+        delete data.__decisionPagoOnline;
+      }
+
       const estadoAnterior = entity.estado;
 
       // `findOneBy` no trae las relaciones `mesa` ni `caja`: se leen las FK
@@ -1834,10 +1844,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       }
 
       // Pedidos online de la tienda sobre esta venta: la mesa cobrada queda
-      // entregada y la venta cancelada los cancela. Sólo al salir de ABIERTA.
-      if (estadoAnterior === VentaEstado.ABIERTA && saved.estado !== VentaEstado.ABIERTA) {
+      // entregada y la venta cancelada los cancela. Al salir de ABIERTA, y también al cancelar
+      // una venta ya CONCLUIDA desde el historial: su pedido entregado no cambia, pero lo cobrado
+      // online se resuelve (antes quedaba PAGADO y nadie se enteraba de que había que devolverlo).
+      const cancelaConcluida = estadoAnterior === VentaEstado.CONCLUIDA && saved.estado === VentaEstado.CANCELADA;
+      if ((estadoAnterior === VentaEstado.ABIERTA && saved.estado !== VentaEstado.ABIERTA) || cancelaConcluida) {
         try {
-          await sincronizarPedidosPorCierreDeVenta(dataSource.manager, id, saved.estado);
+          const pagos: PagoDecidido[] = [];
+          await sincronizarPedidosPorCierreDeVenta(dataSource.manager, id, saved.estado, {
+            decisionPago: decisionPagoOnline, pagos, pagoDeEntregados: cancelaConcluida,
+          });
+          await registrarDecisionesPago(dataSource, pagos, 'CANCELADO_PDV', getCurrentUser()?.id);
         } catch (e) {
           console.warn('[updateVenta] sincronizar pedidos online falló:', e);
         }

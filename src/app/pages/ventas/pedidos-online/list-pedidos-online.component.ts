@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { DecisionPagoOnlineService, textoResultadoPago } from '../../../shared/components/decision-pago-online-dialog/decision-pago-online.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -13,8 +14,7 @@ import { HasPermissionDirective } from 'src/app/shared/directives/has-permission
 import { firstValueFrom, of } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
 import { AuthService } from '../../../services/auth.service';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { MatDialogModule } from '@angular/material/dialog';
 import { textoErrorPedidoOnline, textoExcepcionPedidoOnline } from '../../../shared/utils/pedido-online-errores.util';
 
 /**
@@ -95,7 +95,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
     private repo: RepositoryService,
     private snack: MatSnackBar,
     private auth: AuthService,
-    private dialog: MatDialog,
+    private decisionPago: DecisionPagoOnlineService,
   ) {}
 
   private get api(): any {
@@ -233,28 +233,23 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
       case 'EXPIRADO': return { texto: 'Pago vencido', clase: 'mal' };
       case 'REEMBOLSO_PENDIENTE': return { texto: `Devolver ₲ ${Number(p.pagoMonto || 0).toLocaleString('es-PY')}`, clase: 'mal' };
       case 'DEVUELTO': return { texto: 'Pago devuelto', clase: 'neutro' };
+      case 'NO_ACREDITADO': return { texto: 'El pago no entró', clase: 'neutro' };
+      case 'RETENIDO': return { texto: 'Pago no devuelto', clase: 'neutro' };
       default: return null;
     }
   }
 
-  marcarDevuelto(p: any): void {
-    const monto = Number(p.pagoMonto || 0).toLocaleString('es-PY');
-    // El diálogo del repo, no `confirm()`: el nativo bloquea la ventana y no sigue el tema.
-    this.dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: `Devolución de ${p.numero}`,
-        message: `¿Ya devolviste ₲ ${monto} desde el panel de uPay?`,
-        confirmText: 'Sí, ya devolví',
-        cancelText: 'Volver',
-      },
-    }).afterClosed().subscribe((ok) => { if (ok) this.registrarDevuelto(p); });
-  }
-
-  private registrarDevuelto(p: any): void {
-    this.repo.marcarPagoDevueltoPedidoOnline(p.id).subscribe({
+  /**
+   * Cerrar la devolución pendiente: ya se devolvió desde uPay, el pago no entró, o no se devuelve
+   * (con motivo). Mismo diálogo que la cola del diálogo de delivery (auditoría post-F10).
+   */
+  async marcarDevuelto(p: any): Promise<void> {
+    const pago = await this.decisionPago.preguntar({ modo: 'RESOLVER', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0) }] });
+    if (!pago.seguir || !pago.decision) return;
+    this.repo.resolverPagoPedidoOnline(p.id, pago.decision).subscribe({
       next: (res) => {
         if (res?.success) {
-          this.snack.open(`Pedido ${p.numero}: devolución registrada`, 'OK', { duration: 2500 });
+          this.snack.open(`Pedido ${p.numero}: devolución cerrada`, 'OK', { duration: 2500 });
           this.cargar(true);
         } else {
           this.snack.open('No se pudo marcar: ' + textoErrorPedidoOnline(res), 'OK', { duration: 5000 });
@@ -308,17 +303,20 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
     this.confirmandoRechazoId = null;
   }
 
-  rechazar(p: any): void {
-    this.repo.rechazarPedidoOnline(p.id, 'RECHAZADO POR EL LOCAL').subscribe({
+  async rechazar(p: any): Promise<void> {
+    // Pagado online: qué se hace con ese cobro (auditoría post-F10). Volver no rechaza.
+    const pagado = p.estadoPago === 'PAGADO';
+    const pago = pagado
+      ? await this.decisionPago.preguntar({ modo: 'CANCELAR', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0) }] })
+      : { seguir: true };
+    if (!pago.seguir) return;
+    this.repo.rechazarPedidoOnline(p.id, 'RECHAZADO POR EL LOCAL', pago.decision).subscribe({
       next: (res) => {
         this.confirmandoRechazoId = null;
         if (res?.success) {
-          const dev = Number(res.montoDevolver || 0);
           this.snack.open(
-            dev > 0
-              ? `Pedido ${p.numero} rechazado. Estaba pagado: devolvé ₲ ${dev.toLocaleString('es-PY')} desde uPay y marcalo como devuelto.`
-              : `Pedido ${p.numero} rechazado`,
-            'OK', { duration: dev > 0 ? 10000 : 2500 });
+            pagado ? textoResultadoPago(p.numero, p.pagoMonto, pago.decision, 'rechazado') : `Pedido ${p.numero} rechazado`,
+            'OK', { duration: pagado ? 10000 : 2500 });
           this.cargar(true);
         } else {
           this.snack.open('No se pudo rechazar: ' + textoErrorPedidoOnline(res), 'OK', { duration: 5000 });
@@ -339,21 +337,25 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
     this.resolviendoId = null;
   }
 
-  resolverCancelacion(p: any): void {
+  async resolverCancelacion(p: any): Promise<void> {
     if (this.resolviendo) return;
-    this.resolviendo = true;
     const aprobar = this.resolviendoAprobar;
-    this.repo.resolverCancelacionPedidoOnline(p.id, aprobar, this.respuestaCancelacion || undefined).subscribe({
+    const pagado = aprobar && p.estadoPago === 'PAGADO';
+    const pago = pagado
+      ? await this.decisionPago.preguntar({ modo: 'CANCELAR', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0) }] })
+      : { seguir: true };
+    if (!pago.seguir) return;
+    this.resolviendo = true;
+    this.repo.resolverCancelacionPedidoOnline(p.id, aprobar, this.respuestaCancelacion || undefined, pago.decision).subscribe({
       next: (res) => {
         this.resolviendo = false;
         if (res?.success) {
           this.resolviendoId = null;
-          const dev = Number(res.montoDevolver || 0);
           this.snack.open(
             !aprobar ? `Se le avisó al cliente que ${p.numero} sigue en curso`
-              : dev > 0 ? `Pedido ${p.numero} cancelado. Estaba pagado: devolvé ₲ ${dev.toLocaleString('es-PY')} desde uPay y marcalo como devuelto.`
+              : pagado ? textoResultadoPago(p.numero, p.pagoMonto, pago.decision)
               : `Pedido ${p.numero} cancelado`,
-            'OK', { duration: dev > 0 ? 10000 : 3000 });
+            'OK', { duration: pagado ? 10000 : 3000 });
           this.cargar(true);
         } else {
           this.snack.open('No se pudo: ' + this.motivoResolucion(res), 'OK', { duration: 6000 });

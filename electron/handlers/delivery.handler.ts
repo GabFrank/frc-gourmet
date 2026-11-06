@@ -44,6 +44,8 @@ import { printDeliveryTicketInternal } from './documentos-tickets.handler';
 import { getEstadoCobroVentaInternal } from './ventas.handler';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { PEDIDO_POR_ESTADO_DELIVERY, sincronizarPedidosOnline } from '../utils/pedido-online-sync.utils';
+import { normalizarDecisionPagoOError, PagoDecidido } from '../utils/decision-pago-online.utils';
+import { registrarDecisionesPago } from '../services/pagos-online/pagos-online.service';
 import { monedasParaResumen, resumenPago } from '../utils/pago-pedido.utils';
 import { TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { resumenPedidoWeb } from '../utils/pedido-acciones.utils';
@@ -900,9 +902,12 @@ export function registerDeliveryHandlers(
    * Si la venta ya estaba CONCLUIDA se exige un permiso adicional: revertir un
    * cobro no es lo mismo que descartar un pedido que nunca se cobró.
    */
-  ipcMain.handle('delivery-cancelar', async (_event: any, id: number, motivo?: string) => {
+  ipcMain.handle('delivery-cancelar', async (_event: any, id: number, motivo?: string, decisionPago?: any) => {
     await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
     const usuarioId = getCurrentUser()?.id;
+    // Qué se hace con lo cobrado online si es un pedido web pagado (auditoría post-F10).
+    const decision = normalizarDecisionPagoOError(decisionPago);
+    const pagos: PagoDecidido[] = [];
 
     const motivoNormalizado = upper(motivo);
     if (!motivoNormalizado) throw new Error('Indicá el motivo de la cancelación.');
@@ -962,7 +967,9 @@ export function registerDeliveryHandlers(
       const guardado = await manager.save(Delivery, delivery);
 
       // El pedido online de la tienda (si lo hay) queda cancelado con el mismo motivo.
-      await sincronizarPedidosOnline(manager, { deliveryId: id }, PEDIDO_POR_ESTADO_DELIVERY.CANCELADO!, { motivo: motivoNormalizado });
+      await sincronizarPedidosOnline(manager, { deliveryId: id }, PEDIDO_POR_ESTADO_DELIVERY.CANCELADO!, {
+        motivo: motivoNormalizado, decisionPago: decision, pagos,
+      });
 
       // ─── SSE: emitir evento si tiene mesa ─────────────────────────────────────
       const ventaMesaId = (venta as any)?.mesa?.id ?? null;
@@ -978,6 +985,8 @@ export function registerDeliveryHandlers(
       return { delivery: guardado, reversa };
     });
 
+    // Después del commit: historial del pago y aviso al personal (antes solo lo hacía la bandeja).
+    await registrarDecisionesPago(dataSource, pagos, 'CANCELADO_PDV', usuarioId);
     return resultado;
   });
 

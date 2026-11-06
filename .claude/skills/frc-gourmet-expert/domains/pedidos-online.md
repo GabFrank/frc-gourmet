@@ -406,14 +406,37 @@ UPDATE condicionado (no revive un pedido cancelado en el medio). Los textos de e
 pantallas salen de `src/app/shared/utils/pedido-online-errores.util.ts`. Flujo completo cubierto por
 `test:pedidos-online-atencion-flujo` (+`-pg`).
 
-Quedaron **sin tocar** (anteriores a F9/F10, tocan el núcleo del cobro; decisión del propietario):
-1. Cancelar desde el historial una venta CONCLUIDA de un pedido pagado online no marca la
-   devolución (`updateVenta` sólo sincroniza al salir de ABIERTA).
-2. Carrera cobro ↔ cancelación en Postgres: `updateVenta` lee el estado sin lock y guarda la
-   entidad entera (igual `cobrar-credito`).
-3. Cancelar por delivery o por la venta marca REEMBOLSO_PENDIENTE pero no registra ni avisa al
-   personal (`avisarReembolso` sólo corre en `cancelarPedido`).
-4. `delivery-convertir-modo` no actualiza `pedido.tipo_pedido`.
+**Qué pasa con lo cobrado online al cancelar (2026-11-06, decisión del propietario).** Antes
+toda cancelación dejaba el pago «a devolver». Ahora quien cancela elige, con el mismo diálogo en
+las tres puertas (`DecisionPagoOnlineDialogComponent` + `DecisionPagoOnlineService`):
+
+| Decisión (`DecisionPagoOnline`) | `estado_pago` | Motivo | Aviso al personal |
+|---|---|---|---|
+| `DEVOLVER` (default, y lo que pasa si no viene nada) | `REEMBOLSO_PENDIENTE` → cola DEVOLVER | — | sí (`avisarReembolso`) |
+| `YA_DEVUELTO` | `DEVUELTO` | — | no |
+| `NO_ENTRO` | `NO_ACREDITADO` | obligatorio | sí |
+| `NO_SE_DEVUELVE` | `RETENIDO` | obligatorio | sí |
+
+- Viaja como argumento extra de `rechazar-pedido-online`, `resolver-cancelacion-pedido-online` y
+  `delivery-cancelar`, y como `__decisionPagoOnline` en el payload de `updateVenta` (historial,
+  últimas ventas, PdV). Lo valida `electron/utils/decision-pago-online.utils.ts`.
+- Cada decisión queda en `pagos_online_eventos` (`DECISION_PAGO` / `REEMBOLSO` / `DEVUELTO`) con
+  motivo y `usuarioId`, y avisa **después del commit** (`registrarDecisionPago[s]`). Las tres
+  puertas avisan igual (antes solo la bandeja).
+- Cancelar desde el historial una venta **CONCLUIDA** también resuelve el pago de su pedido
+  entregado (`pagoDeEntregados`); el pedido sigue ENTREGADO.
+- Una devolución pendiente se cierra con `resolver-pago-pedido-online` (YA_DEVUELTO / NO_ENTRO /
+  NO_SE_DEVUELVE; condicionado a `REEMBOLSO_PENDIENTE`). Botón «RESOLVER DEVOLUCIÓN» / «Resolver
+  devolución» en las dos pantallas. `marcar-pago-devuelto-pedido-online` sigue para llamadores viejos.
+- `pedidos-online-pagados-de-venta` dice antes de cancelar una venta si hay que preguntar.
+- `verificarPagoPedido` no vuelve a consultar uPay sobre `NO_ACREDITADO`/`RETENIDO`.
+
+Pendiente, en **rama aparte** (decisión del propietario): carrera cobro ↔ cancelación en
+Postgres — `updateVenta` lee el estado sin lock y guarda la entidad entera (igual `cobrar-credito`).
+Toca el núcleo del cobro: probar cobrando y facturando de verdad antes del merge.
+
+Falso positivo de la auditoría: «`delivery-convertir-modo` no actualiza `tipo_pedido`». Sí lo hace
+desde f826c761 (y `test:delivery-conversion` lo cubre).
 
 ### Lo que sigue pendiente
 

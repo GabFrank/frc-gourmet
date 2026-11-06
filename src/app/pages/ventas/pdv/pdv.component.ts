@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy, HostListener, ElementRef } from '@angular/core';
+import { DecisionPagoOnlineService } from 'src/app/shared/components/decision-pago-online-dialog/decision-pago-online.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -350,6 +351,7 @@ export class PdvComponent implements OnInit, OnDestroy {
     private repositoryService: RepositoryService,
     private dialog: MatDialog,
     private fb: FormBuilder,
+    private decisionPago: DecisionPagoOnlineService,
     private authService: AuthService,
     private permissionService: PermissionService,
     private tabsService: TabsService,
@@ -2876,6 +2878,9 @@ export class PdvComponent implements OnInit, OnDestroy {
 
     dialogRef.afterClosed().subscribe(async (result) => {
       if (result?.confirmed) {
+        // Pedido web pagado online: qué se hace con ese cobro. Antes de tocar los ítems.
+        const pago = await this.decisionPago.preguntarParaVenta(venta.id);
+        if (!pago.seguir) return;
         try {
           // Cancelar todos los items activos
           const activeItems = this.ventaItemsDataSource.data.filter(i => i.estado === EstadoVentaItem.ACTIVO);
@@ -2890,7 +2895,8 @@ export class PdvComponent implements OnInit, OnDestroy {
           // Cancelar esta venta y cualquier otra abierta de la misma mesa
           await firstValueFrom(this.repositoryService.updateVenta(venta.id, {
             estado: VentaEstado.CANCELADA,
-          }));
+            ...(pago.decision ? { __decisionPagoOnline: pago.decision } : {}),
+          } as any));
 
           // Cerrar comanda si estaba vinculada
           if (this.selectedComanda) {

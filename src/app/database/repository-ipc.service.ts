@@ -29,6 +29,7 @@ import { FormasPago } from './entities/compras/forma-pago.entity';
 import { PrecioDelivery } from './entities/ventas/precio-delivery.entity';
 import { Delivery, DeliveryEstado } from './entities/ventas/delivery.entity';
 import { ConvertirModoDeliveryPayload } from './convertir-modo-delivery.types';
+import { DecisionPagoPayload } from './decision-pago-online.types';
 import { Venta, VentaEstado } from './entities/ventas/venta.entity';
 import { VentaItem } from './entities/ventas/venta-item.entity';
 import { PdvGrupoCategoria } from './entities/ventas/pdv-grupo-categoria.entity';
@@ -284,7 +285,7 @@ interface ElectronAPI {
   deliveryActualizarDatos: (deliveryId: number, payload: any) => Promise<any>;
   deliveryCambiarEstado: (deliveryId: number, nuevoEstado: string, opts?: any) => Promise<any>;
   deliveryAsignarRepartidor: (deliveryId: number, funcionarioId: number | null) => Promise<any>;
-  deliveryCancelar: (deliveryId: number, motivo: string) => Promise<any>;
+  deliveryCancelar: (deliveryId: number, motivo: string, decisionPago?: DecisionPagoPayload) => Promise<any>;
   deliveryConvertirModo: (deliveryId: number, payload: any) => Promise<any>;
   deliveryImprimirTicket: (deliveryId: number, printerId?: number) => Promise<any>;
   getDeliveriesByCaja: (cajaId: number, filtros?: any) => Promise<{ data: any[], total: number }>;
@@ -484,8 +485,8 @@ interface ElectronAPI {
   getPedidosOnlineAdmin: (filtros?: any) => Promise<any[]>;
   contarPedidosOnlinePendientes: () => Promise<any>;
   aceptarPedidoOnline: (pedidoId: number, data?: any) => Promise<any>;
-  rechazarPedidoOnline: (pedidoId: number, motivo: string) => Promise<any>;
-  resolverCancelacionPedidoOnline: (pedidoId: number, aprobar: boolean, respuesta?: string) => Promise<any>;
+  rechazarPedidoOnline: (pedidoId: number, motivo: string, decisionPago?: DecisionPagoPayload) => Promise<any>;
+  resolverCancelacionPedidoOnline: (pedidoId: number, aprobar: boolean, respuesta?: string, decisionPago?: DecisionPagoPayload) => Promise<any>;
   avanzarEstadoPedidoOnline: (pedidoId: number, nuevoEstado: string) => Promise<any>;
   vincularVentaPedidoOnline: (pedidoId: number, ventaId: number) => Promise<any>;
   getDetalleVariacionItems: (itemIds: number[]) => Promise<any>;
@@ -494,6 +495,8 @@ interface ElectronAPI {
   probarTiendaWhatsapp: (data: { telefono: string }) => Promise<any>;
   probarTiendaUpay: () => Promise<any>;
   marcarPagoDevueltoPedidoOnline: (pedidoId: number) => Promise<any>;
+  resolverPagoPedidoOnline: (pedidoId: number, decisionPago: DecisionPagoPayload) => Promise<any>;
+  pedidosOnlinePagadosDeVenta: (ventaId: number) => Promise<any>;
   getZonasDeliveryAdmin: () => Promise<any[]>;
   getDashboardZonasDelivery: (params?: { rango?: string }) => Promise<any>;
   guardarZonaDelivery: (data: any) => Promise<any>;
@@ -2007,8 +2010,8 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.deliveryAsignarRepartidor(deliveryId, funcionarioId));
   }
 
-  deliveryCancelar(deliveryId: number, motivo: string): Observable<any> {
-    return from(this.api.deliveryCancelar(deliveryId, motivo));
+  deliveryCancelar(deliveryId: number, motivo: string, decisionPago?: DecisionPagoPayload): Observable<any> {
+    return from(this.api.deliveryCancelar(deliveryId, motivo, decisionPago));
   }
 
   deliveryConvertirModo(deliveryId: number, payload: ConvertirModoDeliveryPayload): Observable<any> {
@@ -2642,12 +2645,12 @@ export class RepositoryIpcService extends RepositoryService {
   aceptarPedidoOnline(pedidoId: number, data?: any): Observable<any> {
     return from(this.api.aceptarPedidoOnline(pedidoId, data));
   }
-  rechazarPedidoOnline(pedidoId: number, motivo: string): Observable<any> {
-    return from(this.api.rechazarPedidoOnline(pedidoId, motivo));
+  rechazarPedidoOnline(pedidoId: number, motivo: string, decisionPago?: DecisionPagoPayload): Observable<any> {
+    return from(this.api.rechazarPedidoOnline(pedidoId, motivo, decisionPago));
   }
 
-  resolverCancelacionPedidoOnline(pedidoId: number, aprobar: boolean, respuesta?: string): Observable<any> {
-    return from(this.api.resolverCancelacionPedidoOnline(pedidoId, aprobar, respuesta));
+  resolverCancelacionPedidoOnline(pedidoId: number, aprobar: boolean, respuesta?: string, decisionPago?: DecisionPagoPayload): Observable<any> {
+    return from(this.api.resolverCancelacionPedidoOnline(pedidoId, aprobar, respuesta, decisionPago));
   }
   avanzarEstadoPedidoOnline(pedidoId: number, nuevoEstado: string): Observable<any> {
     return from(this.api.avanzarEstadoPedidoOnline(pedidoId, nuevoEstado));
@@ -2672,6 +2675,14 @@ export class RepositoryIpcService extends RepositoryService {
   }
   marcarPagoDevueltoPedidoOnline(pedidoId: number): Observable<any> {
     return from(this.api.marcarPagoDevueltoPedidoOnline(pedidoId));
+  }
+
+  resolverPagoPedidoOnline(pedidoId: number, decisionPago: DecisionPagoPayload): Observable<any> {
+    return from(this.api.resolverPagoPedidoOnline(pedidoId, decisionPago));
+  }
+
+  pedidosOnlinePagadosDeVenta(ventaId: number): Observable<any> {
+    return from(this.api.pedidosOnlinePagadosDeVenta(ventaId));
   }
   getZonasDeliveryAdmin(): Observable<any[]> {
     return from(this.api.getZonasDeliveryAdmin());

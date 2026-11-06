@@ -19,6 +19,10 @@
  *  [7] la venta del pedido se cancela desde el PdV → el pedido y el retiro no quedan vivos; esa
  *      venta no se rehabilita; una venta común sí
  *  [8] avanzar desde la bandeja mueve pedido y retiro, y no revive un pedido rechazado
+ *  [9] qué pasa con lo cobrado online al cancelar (auditoría post-F10): cada puerta acepta la
+ *      decisión (devolver / ya devuelto / no entró / no se devuelve), exige motivo cuando no se
+ *      devuelve, registra el evento y avisa al personal; una venta CONCLUIDA cancelada desde el
+ *      historial también resuelve el pago; una devolución pendiente se cierra sin devolver
  *
  * Uso: npm run test:pedidos-online-atencion-flujo   ·   … -- --pg (Postgres temporal)
  */
@@ -277,6 +281,99 @@ async function main() {
   const avH2: any = await invokeHandler('avanzar-estado-pedido-online', h.id, 'ENTREGADO');
   s = await estado(h.id);
   ok(avH2?.success === false && s.p?.estado === 'RECHAZADO', '8: un pedido ya rechazado no se «revive» al avanzarlo', { r: avH2, s: s.resumen });
+
+  // ═══════ [9] Qué pasa con lo cobrado online al cancelar ═══════
+  console.log('\n[9] Decisión sobre el pago online al cancelar');
+  const { PagoOnlineEvento } = E('pedidos-online/pago-online-evento.entity');
+  const { setPagosOnlineDeps } = require('../electron/services/pagos-online/pagos-online.service');
+  const avisos: string[] = [];
+  setPagosOnlineDeps({ avisar: async (t: string) => { avisos.push(t); } });
+  const PAGADO = { metodoPago: 'UPAY', pagoModalidad: 'ONLINE', estadoPago: 'PAGADO', pagoMonto: 45000, pagoId: 'UP-9' };
+  const eventos = async (pedidoId: number) => (await R(PagoOnlineEvento).find({ where: { pedidoOnlineId: pedidoId } })) as any[];
+
+  // 9a: delivery-cancelar con «el pago no entró» y motivo.
+  const i1 = await materializado(PAGADO);
+  s = await estado(i1.id);
+  ok(/MOTIVO_PAGO_REQUERIDO/.test(await lanza(() => invokeHandler('delivery-cancelar', s.d.id, 'cliente no vino', { decision: 'NO_ENTRO' }))),
+    '9a: «no entró» sin motivo se rechaza');
+  ok((await estado(i1.id)).resumen === 'EN_PREPARACION/ABIERTA/ABIERTO', '9a: y no cambió nada', (await estado(i1.id)).resumen);
+  avisos.length = 0;
+  await invokeHandler('delivery-cancelar', s.d.id, 'cliente no vino', { decision: 'NO_ENTRO', motivo: 'uPay lo anuló' });
+  s = await estado(i1.id);
+  ok(s.resumen === 'CANCELADO/CANCELADA/CANCELADO' && s.p?.estadoPago === 'NO_ACREDITADO',
+    '9a: cancelado desde delivery: pago NO_ACREDITADO', { s: s.resumen, pago: s.p?.estadoPago });
+  ok(await enCola(i1.numero) === null, '9a: no entra a la cola DEVOLVER');
+  const ev1 = (await eventos(i1.id)).find((e) => e.tipo === 'DECISION_PAGO');
+  ok(ev1?.estadoProveedor === 'NO_ENTRO' && /UPAY LO ANULÓ/.test(ev1?.respuesta || '') && /"usuarioId":\d+/.test(ev1?.respuesta || ''),
+    '9a: queda el evento con decisión, motivo y usuario', ev1);
+  ok(avisos.some((t) => t.includes(i1.numero) && /no entró/.test(t)), '9a: se avisa al personal', avisos);
+
+  // 9b: delivery-cancelar sin decisión = devolver, y ahora también avisa (antes solo la bandeja).
+  const i2 = await materializado(PAGADO);
+  s = await estado(i2.id);
+  avisos.length = 0;
+  await invokeHandler('delivery-cancelar', s.d.id, 'se arrepintió');
+  s = await estado(i2.id);
+  ok(s.p?.estadoPago === 'REEMBOLSO_PENDIENTE' && await enCola(i2.numero) === 'DEVOLVER', '9b: sin decisión, queda a devolver (como antes)');
+  ok(avisos.some((t) => t.includes(i2.numero) && /hay que devolver/.test(t)), '9b: y se avisa al personal', avisos);
+  ok((await eventos(i2.id)).some((e) => e.tipo === 'REEMBOLSO'), '9b: con su evento REEMBOLSO');
+
+  // 9c: cerrar esa devolución pendiente sin devolver.
+  ok((await invokeHandler('resolver-pago-pedido-online', i2.id, { decision: 'DEVOLVER' }) as any)?.error === 'decision_pago_invalida',
+    '9c: «devolver» no es una forma de cerrar la devolución');
+  ok((await invokeHandler('resolver-pago-pedido-online', i2.id, { decision: 'NO_SE_DEVUELVE' }) as any)?.error === 'motivo_pago_requerido',
+    '9c: «no se devuelve» sin motivo se rechaza');
+  const r9c: any = await invokeHandler('resolver-pago-pedido-online', i2.id, { decision: 'NO_SE_DEVUELVE', motivo: 'acordado con el cliente' });
+  ok(r9c?.success === true && (await estado(i2.id)).p?.estadoPago === 'RETENIDO' && await enCola(i2.numero) === null,
+    '9c: cerrada como «no se devuelve»: RETENIDO y sale de la cola', r9c);
+  ok((await invokeHandler('resolver-pago-pedido-online', i2.id, { decision: 'YA_DEVUELTO' }) as any)?.error === 'no_hay_devolucion_pendiente',
+    '9c: una segunda resolución no pisa la primera');
+
+  // 9d: rechazo desde la bandeja con «ya lo devolví».
+  const i3 = await materializado(PAGADO);
+  const r9d: any = await invokeHandler('rechazar-pedido-online', i3.id, 'sin stock', { decision: 'YA_DEVUELTO' });
+  s = await estado(i3.id);
+  ok(r9d?.success === true && s.resumen === 'RECHAZADO/CANCELADA/CANCELADO' && s.p?.estadoPago === 'DEVUELTO' && await enCola(i3.numero) === null,
+    '9d: rechazado con «ya devuelto»: DEVUELTO, fuera de la cola', { r: r9d?.error, s: s.resumen, pago: s.p?.estadoPago });
+  ok((await invokeHandler('rechazar-pedido-online', (await materializado(PAGADO)).id, 'x', { decision: 'CUALQUIERA' }) as any)?.error === 'decision_pago_invalida',
+    '9d: una decisión desconocida se rechaza');
+
+  // 9e: aprobar la cancelación pedida con «no se devuelve».
+  const i4 = await materializado(PAGADO);
+  await pedirCancelar(i4.id, 'no lo quiero');
+  ok((await invokeHandler('resolver-cancelacion-pedido-online', i4.id, true, undefined, { decision: 'NO_SE_DEVUELVE' }) as any)?.error === 'motivo_pago_requerido',
+    '9e: aprobar con «no se devuelve» sin motivo se rechaza');
+  ok((await estado(i4.id)).p?.estado === 'EN_PREPARACION', '9e: y el pedido sigue');
+  const r9e: any = await invokeHandler('resolver-cancelacion-pedido-online', i4.id, true, undefined, { decision: 'NO_SE_DEVUELVE', motivo: 'ya cocinado' });
+  s = await estado(i4.id);
+  ok(r9e?.success === true && s.resumen === 'CANCELADO/CANCELADA/CANCELADO' && s.p?.estadoPago === 'RETENIDO',
+    '9e: cancelado con el pago retenido', { r: r9e?.error, s: s.resumen, pago: s.p?.estadoPago });
+
+  // 9f: la venta ya cobrada y entregada se cancela desde el historial.
+  const i5 = await materializado(PAGADO);
+  s = await estado(i5.id);
+  ok((await invokeHandler('pedidos-online-pagados-de-venta', i5.ventaId) as any)?.pedidos?.[0]?.numero === i5.numero,
+    '9f: la consulta previa encuentra el pedido pagado de la venta');
+  await invokeHandler('delivery-cambiar-estado', s.d.id, 'PARA_ENTREGA');
+  await cobrar(i5.ventaId);
+  await invokeHandler('delivery-cambiar-estado', s.d.id, 'ENTREGADO');
+  s = await estado(i5.id);
+  ok(s.resumen === 'ENTREGADO/CONCLUIDA/ENTREGADO' && s.p?.estadoPago === 'PAGADO', '9f: entregado y cobrado', s.resumen);
+  avisos.length = 0;
+  await invokeHandler('updateVenta', i5.ventaId, { estado: 'CANCELADA' });
+  s = await estado(i5.id);
+  ok(s.v?.estado === 'CANCELADA' && s.p?.estado === 'ENTREGADO' && s.p?.estadoPago === 'REEMBOLSO_PENDIENTE',
+    '9f: cancelada la venta CONCLUIDA: el pedido sigue entregado y el pago queda a devolver', { s: s.resumen, pago: s.p?.estadoPago });
+  ok(await enCola(i5.numero) === 'DEVOLVER' && avisos.some((t) => t.includes(i5.numero)), '9f: entra en DEVOLVER y avisa', avisos);
+
+  // 9g: misma puerta con decisión explícita.
+  const i6 = await materializado(PAGADO);
+  await invokeHandler('updateVenta', i6.ventaId, { estado: 'CANCELADA', __decisionPagoOnline: { decision: 'YA_DEVUELTO' } });
+  s = await estado(i6.id);
+  ok(s.resumen === 'CANCELADO/CANCELADA/CANCELADO' && s.p?.estadoPago === 'DEVUELTO', '9g: venta cancelada en el PdV con «ya devuelto»', { s: s.resumen, pago: s.p?.estadoPago });
+  ok(/MOTIVO_PAGO_REQUERIDO/.test(await lanza(() => invokeHandler('updateVenta', (s.v.id), { estado: 'CANCELADA', __decisionPagoOnline: { decision: 'NO_ENTRO' } }))),
+    '9g: el historial también exige motivo');
+  setPagosOnlineDeps({ avisar: null });
 
   await cerrar();
   console.log(`\n${TAG} RESULTADO: ${passed} passed, ${failed} failed.`);

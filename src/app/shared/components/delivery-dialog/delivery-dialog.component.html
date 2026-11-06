@@ -191,7 +191,7 @@
                   (click)="aceptarPedidoOnline(p)">
             <mat-icon>check</mat-icon> ACEPTAR
           </button>
-          <button mat-stroked-button color="warn" [disabled]="procesandoPedidoId === p.id"
+          <button mat-stroked-button class="btn-peligro" [disabled]="procesandoPedidoId === p.id"
                   (click)="rechazarPedidoOnline(p)">
             <mat-icon>close</mat-icon> RECHAZAR
           </button>
@@ -200,7 +200,7 @@
         <!-- F9: el cliente pidió cancelar: primero se responde eso. -->
         <ng-container *appHasPermission="'PEDIDOS_ONLINE_GESTIONAR'">
         <div class="cola-acciones" *ngIf="p.pideCancelar">
-          <button mat-flat-button color="warn" [disabled]="procesandoPedidoId === p.id"
+          <button mat-stroked-button class="btn-peligro" [disabled]="procesandoPedidoId === p.id"
                   (click)="resolverCancelacionOnline(p, true)">
             <mat-icon>check</mat-icon> CANCELAR PEDIDO
           </button>
@@ -217,18 +217,19 @@
                   (click)="enviarACocinaOnline(p)">
             <mat-icon>restaurant</mat-icon> ENVIAR A COCINA
           </button>
-          <button mat-stroked-button color="warn" [disabled]="procesandoPedidoId === p.id"
+          <button mat-stroked-button class="btn-peligro" [disabled]="procesandoPedidoId === p.id"
                   (click)="rechazarPedidoOnline(p)">
             <mat-icon>close</mat-icon> RECHAZAR
           </button>
         </div>
         </ng-container>
-        <!-- F10: cancelado con pago online: se devuelve en el panel de uPay y se registra acá. -->
+        <!-- F10: cancelado con pago online: se devuelve en el panel de uPay y se registra acá (o se
+             cierra sin devolver: no entró / no se devuelve, con motivo). -->
         <ng-container *appHasPermission="'PEDIDOS_ONLINE_GESTIONAR'">
         <div class="cola-acciones" *ngIf="p.esDevolver">
           <button mat-flat-button color="primary" [disabled]="procesandoPedidoId === p.id"
                   (click)="marcarDevueltoOnline(p)">
-            <mat-icon>undo</mat-icon> YA DEVOLVÍ
+            <mat-icon>undo</mat-icon> RESOLVER DEVOLUCIÓN
           </button>
         </div>
         </ng-container>
@@ -404,7 +405,8 @@
       <!-- F10: el cliente pidió cancelar este pedido: se responde sin volver a la cola. -->
       <ng-container *ngIf="pedidoWebSel?.pideCancelar">
       <ng-container *appHasPermission="'PEDIDOS_ONLINE_GESTIONAR'">
-        <button mat-raised-button color="warn" [disabled]="procesandoPedidoId === pedidoWebSel.id"
+        <!-- Con borde y no lleno: FINALIZAR (primario) también es rojo y se confundían. -->
+        <button mat-stroked-button class="btn-peligro" [disabled]="procesandoPedidoId === pedidoWebSel.id"
                 (click)="resolverCancelacionSeleccionado(true)"
                 [matTooltip]="pedidoWebSel.cancelacionMotivo || 'El cliente pidió cancelar'">
           <mat-icon>cancel</mat-icon> CANCELAR (LO PIDIÓ)

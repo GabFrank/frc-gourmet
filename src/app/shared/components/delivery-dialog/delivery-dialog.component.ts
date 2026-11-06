@@ -1,4 +1,5 @@
 import { Component, Inject, OnInit, OnDestroy } from '@angular/core';
+import { DecisionPagoOnlineService, textoResultadoPago } from '../decision-pago-online-dialog/decision-pago-online.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule, MatDialog } from '@angular/material/dialog';
@@ -115,6 +116,8 @@ export function chipPagoOnline(estadoPago: string | null | undefined, monto?: nu
     case 'EXPIRADO': return { texto: 'PAGO VENCIDO', clase: 'mal' };
     case 'REEMBOLSO_PENDIENTE': return { texto: `DEVOLVER ${Number(monto || 0).toLocaleString('es-PY')}`, clase: 'mal' };
     case 'DEVUELTO': return { texto: 'PAGO DEVUELTO', clase: 'neutro' };
+    case 'NO_ACREDITADO': return { texto: 'PAGO NO ENTRÓ', clase: 'neutro' };
+    case 'RETENIDO': return { texto: 'PAGO NO DEVUELTO', clase: 'neutro' };
     default: return null;
   }
 }
@@ -263,6 +266,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     private repositoryService: RepositoryService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
+    private decisionPago: DecisionPagoOnlineService,
   ) {}
 
   async ngOnInit(): Promise<void> {
@@ -516,12 +520,19 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     });
     const motivo = await firstValueFrom(ref.afterClosed());
     if (!motivo) return;
+    // Pagado online: qué se hace con ese cobro (auditoría post-F10).
+    const pago = p.estadoPago === 'PAGADO'
+      ? await this.decisionPago.preguntar({ modo: 'CANCELAR', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0) }] })
+      : { seguir: true };
+    if (!pago.seguir) return;
 
     this.procesandoPedidoId = p.id;
     try {
-      const res: any = await firstValueFrom(this.repositoryService.rechazarPedidoOnline(p.id, motivo));
+      const res: any = await firstValueFrom(this.repositoryService.rechazarPedidoOnline(p.id, motivo, pago.decision));
       if (res?.success) {
-        this.snackBar.open(`Pedido ${p.numero} rechazado`, 'OK', { duration: 3000 });
+        this.snackBar.open(p.estadoPago === 'PAGADO'
+          ? textoResultadoPago(p.numero, p.pagoMonto, pago.decision, 'rechazado')
+          : `Pedido ${p.numero} rechazado`, 'OK', { duration: p.estadoPago === 'PAGADO' ? 10000 : 3000 });
         await this.cargarPedidosOnline();
         await this.loadDeliveries();
       } else {
@@ -544,18 +555,22 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     });
     const r = await firstValueFrom(ref.afterClosed());
     if (!r) return;
+    const pagado = aprobar && p.estadoPago === 'PAGADO';
+    const pago = pagado
+      ? await this.decisionPago.preguntar({ modo: 'CANCELAR', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0) }] })
+      : { seguir: true };
+    if (!pago.seguir) return;
     this.procesandoPedidoId = p.id;
     try {
       const res: any = await firstValueFrom(
-        this.repositoryService.resolverCancelacionPedidoOnline(p.id, aprobar, typeof r === 'string' ? r : undefined),
+        this.repositoryService.resolverCancelacionPedidoOnline(p.id, aprobar, typeof r === 'string' ? r : undefined, pago.decision),
       );
       if (res?.success) {
-        const dev = Number(res.montoDevolver || 0);
         this.snackBar.open(
           !aprobar ? `Se le respondió al cliente: ${p.numero} sigue`
-            : dev > 0 ? `Pedido ${p.numero} cancelado. Estaba pagado: devolvé ${dev.toLocaleString('es-PY')} desde uPay.`
+            : pagado ? textoResultadoPago(p.numero, p.pagoMonto, pago.decision)
             : `Pedido ${p.numero} cancelado`,
-          'OK', { duration: dev > 0 ? 10000 : 3000 });
+          'OK', { duration: pagado ? 10000 : 3000 });
         await this.cargarPedidosOnline();
         // Manteniendo la fila abierta: se puede responder desde el footer con ella seleccionada.
         await this.recargarManteniendoSeleccion();
@@ -593,23 +608,18 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** F10: el cajero ya devolvió desde el panel de uPay lo cobrado de un pedido cancelado. */
+  /**
+   * F10: cerrar la devolución pendiente de un pedido cancelado: ya se devolvió desde uPay, el pago
+   * no entró, o no se devuelve (auditoría post-F10, con motivo). Mismo diálogo que la bandeja.
+   */
   async marcarDevueltoOnline(p: any): Promise<void> {
-    const monto = Number(p.pagoMonto || 0).toLocaleString('es-PY');
-    const ref = this.dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: `Devolución de ${p.numero}`,
-        message: `¿Ya devolviste ${monto} desde el panel de uPay?${p.pagoId ? ` (ref. ${p.pagoId})` : ''}`,
-        confirmText: 'Sí, ya devolví',
-        cancelText: 'Volver',
-      },
-    });
-    if (!(await firstValueFrom(ref.afterClosed()))) return;
+    const pago = await this.decisionPago.preguntar({ modo: 'RESOLVER', pedidos: [{ numero: p.numero, monto: Number(p.pagoMonto || 0) }] });
+    if (!pago.seguir || !pago.decision) return;
     this.procesandoPedidoId = p.id;
     try {
-      const res: any = await firstValueFrom(this.repositoryService.marcarPagoDevueltoPedidoOnline(p.id));
+      const res: any = await firstValueFrom(this.repositoryService.resolverPagoPedidoOnline(p.id, pago.decision));
       if (res?.success) {
-        this.snackBar.open(`Pedido ${p.numero}: devolución registrada`, 'OK', { duration: 3000 });
+        this.snackBar.open(`Pedido ${p.numero}: devolución cerrada`, 'OK', { duration: 3000 });
       } else {
         this.snackBar.open(`No se pudo registrar: ${textoErrorPedidoOnline(res)}`, 'OK', { duration: 5000 });
       }
@@ -1327,15 +1337,17 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     dialogRef.afterClosed().subscribe(async (motivo) => {
       // El diálogo devuelve el texto del motivo (o `false` si se cerró).
       if (!motivo || typeof motivo !== 'string') return;
+      // Pedido web pagado online: qué se hace con ese cobro (auditoría post-F10).
+      const web = objetivo.pedidoWeb;
+      const pago = web?.estadoPago === 'PAGADO'
+        ? await this.decisionPago.preguntar({ modo: 'CANCELAR', pedidos: [{ numero: web.numero, monto: Number(web.pagoMonto || 0) }] })
+        : { seguir: true };
+      if (!pago.seguir) return;
       try {
         // Una sola llamada transaccional: delivery + venta + cobro + stock.
-        await firstValueFrom(this.repositoryService.deliveryCancelar(objetivo.id, motivo));
-        // F10: si el cliente había pagado online, el pedido queda para devolver (cola «DEVOLVER»).
-        const web = objetivo.pedidoWeb;
+        await firstValueFrom(this.repositoryService.deliveryCancelar(objetivo.id, motivo, pago.decision));
         if (web?.estadoPago === 'PAGADO') {
-          this.snackBar.open(
-            `${web.numero} cancelado. Estaba pagado online: devolvé ${Number(web.pagoMonto || 0).toLocaleString('es-PY')} desde uPay y marcalo en la cola.`,
-            'OK', { duration: 10000 });
+          this.snackBar.open(textoResultadoPago(web.numero, web.pagoMonto, pago.decision), 'OK', { duration: 10000 });
         } else {
           this.snackBar.open(`${web?.numero || `Delivery #${objetivo.id}`} cancelado`, 'CERRAR', { duration: 3000 });
         }

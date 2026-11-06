@@ -1,4 +1,5 @@
-import { avisarReembolso, marcarDevuelto } from '../services/pagos-online/pagos-online.service';
+import { marcarDevuelto, registrarDecisionPago, resolverDevolucionPendiente } from '../services/pagos-online/pagos-online.service';
+import { DecisionPago, DecisionPagoError, estadoPagoPorDecision, normalizarDecisionPago } from '../utils/decision-pago-online.utils';
 import { cierreSolicitudAlSalir, ESTADOS_CANCELABLES_CLIENTE, limpiarMotivo, motivoAtencion, WHERE_ATENCION, PARAMS_ATENCION } from '../utils/pedido-acciones.utils';
 
 class PedidoCambioError extends Error { constructor() { super('pedido_cambio_reintentar'); } }
@@ -12,7 +13,7 @@ import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zon
 import { TiendaCategoria, TiendaCategoriaProducto } from '../../src/app/database/entities/pedidos-online/tienda-categoria.entity';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
 import { Delivery, DeliveryEstado } from '../../src/app/database/entities/ventas/delivery.entity';
-import { EstadoPedidoOnline, EstadoPagoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { DecisionPagoOnline, EstadoPedidoOnline, EstadoPagoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { checkPermission, ensurePermission } from '../utils/auth.utils';
 import { PrecioDelivery } from '../../src/app/database/entities/ventas/precio-delivery.entity';
 import { enviosPorZonaYCanal, filtroDeRango } from './reportes-delivery.helper';
@@ -256,9 +257,19 @@ export function registerPedidosOnlineAdminHandlers(
     EstadoPedidoOnline.LISTO,
   ];
 
-  ipcMain.handle('rechazar-pedido-online', async (_event: any, pedidoId: number, motivo: string) => {
+  /** La decisión del pago llega del cliente; mal formada o sin motivo, se corta antes de tocar nada. */
+  const leerDecision = (raw: any): DecisionPago | { error: string } => {
+    try { return normalizarDecisionPago(raw); } catch (e) {
+      if (e instanceof DecisionPagoError) return { error: e.codigo };
+      throw e;
+    }
+  };
+
+  ipcMain.handle('rechazar-pedido-online', async (_event: any, pedidoId: number, motivo: string, decisionPago?: any) => {
     await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
-    return cancelarPedido(pedidoId, motivo, EstadoPedidoOnline.RECHAZADO);
+    const d = leerDecision(decisionPago);
+    if ('error' in d) return { success: false, error: d.error };
+    return cancelarPedido(pedidoId, motivo, EstadoPedidoOnline.RECHAZADO, {}, undefined, d);
   });
 
   /**
@@ -271,6 +282,7 @@ export function registerPedidosOnlineAdminHandlers(
     estadoFinal: EstadoPedidoOnline.RECHAZADO | EstadoPedidoOnline.CANCELADO,
     extra: Partial<PedidoOnline> = {},
     condicion?: string,
+    decisionPago?: DecisionPago,
   ): Promise<any> => {
     const pedido = await repo().findOne({ where: { id: pedidoId } });
     if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
@@ -280,6 +292,8 @@ export function registerPedidosOnlineAdminHandlers(
 
     const motivoNormalizado = motivo ? String(motivo).toUpperCase() : 'SIN MOTIVO';
     const usuarioId = getCurrentUser()?.id;
+    const pagado = pedido.estadoPago === EstadoPagoOnline.PAGADO;
+    const decision = decisionPago ?? normalizarDecisionPago(null);
 
     // MESA_QR comparte UNA cuenta por mesa: varios comensales pidiendo desde su
     // celular caen en la misma `Venta`. Revertirla por el rechazo de un solo
@@ -339,7 +353,8 @@ export function registerPedidosOnlineAdminHandlers(
           ...extra,
           estado: estadoFinal,
           motivoRechazo: motivoNormalizado,
-          ...(pedido.estadoPago === EstadoPagoOnline.PAGADO ? { estadoPago: EstadoPagoOnline.REEMBOLSO_PENDIENTE } : {}),
+          // Auditoría post-F10: lo cobrado no siempre se devuelve; lo elige quien cancela.
+          ...(pagado ? { estadoPago: estadoPagoPorDecision(decision) } : {}),
         } as any)
         .where('id = :id AND estado IN (:...cancelables)', { id: pedido.id, cancelables: ESTADOS_CANCELABLES });
       if (pedido.ventaId) qb.andWhere('venta_id = :v', { v: pedido.ventaId });
@@ -355,9 +370,10 @@ export function registerPedidosOnlineAdminHandlers(
       return { success: false, error: 'pedido_cambio_reintentar', detalle: 'El pedido cambió mientras se rechazaba. Volvé a intentarlo.' };
     }
 
-    // Pagado con tarjeta: ya quedó para devolver en uPay (F4 §6); se registra y se avisa al personal.
-    const montoDevolver = pedido.estadoPago === EstadoPagoOnline.PAGADO
-      ? await avisarReembolso(dataSource, pedido, estadoFinal === EstadoPedidoOnline.CANCELADO ? 'CANCELADO' : 'RECHAZADO')
+    // Pagado con tarjeta: se registra lo decidido con el cobro y se avisa al personal (F4 §6).
+    const montoDevolver = pagado
+      ? await registrarDecisionPago(dataSource, pedido.id, decision,
+        estadoFinal === EstadoPedidoOnline.CANCELADO ? 'CANCELADO' : 'RECHAZADO', usuarioId)
       : null;
 
     const saved = await repo().findOne({ where: { id: pedidoId } });
@@ -368,8 +384,10 @@ export function registerPedidosOnlineAdminHandlers(
   // Aprobar = cancelar por el mismo camino que el rechazo (estado CANCELADO: lo pidió el
   // cliente). Rechazar = el pedido sigue; se guarda la respuesta y el cliente no puede volver a
   // pedirlo (para eso está el teléfono del local).
-  ipcMain.handle('resolver-cancelacion-pedido-online', async (_event: any, pedidoId: number, aprobar: boolean, respuesta?: string) => {
+  ipcMain.handle('resolver-cancelacion-pedido-online', async (_event: any, pedidoId: number, aprobar: boolean, respuesta?: string, decisionPago?: any) => {
     await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
+    const d = leerDecision(decisionPago);
+    if ('error' in d) return { success: false, error: d.error };
     const pedido = await repo().findOne({ where: { id: Number(pedidoId) } });
     if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
     if (!pedido.cancelacionSolicitadaEn) return { success: false, error: 'sin_solicitud' };
@@ -377,7 +395,7 @@ export function registerPedidosOnlineAdminHandlers(
     if (aprobar) {
       return cancelarPedido(pedido.id, pedido.cancelacionMotivo || 'CANCELADO A PEDIDO DEL CLIENTE',
         EstadoPedidoOnline.CANCELADO, { cancelacionRespuesta: texto || 'APROBADA' } as any,
-        'cancelacion_solicitada_en IS NOT NULL');
+        'cancelacion_solicitada_en IS NOT NULL', d);
     }
     const r = await repo().createQueryBuilder().update(PedidoOnline)
       .set({ cancelacionSolicitadaEn: null, cancelacionRespuesta: texto || 'NO SE PUEDE CANCELAR' } as any)
@@ -393,6 +411,30 @@ export function registerPedidosOnlineAdminHandlers(
     await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
     const okDev = await marcarDevuelto(dataSource, Number(pedidoId));
     return okDev ? { success: true } : { success: false, error: 'no_hay_devolucion_pendiente' };
+  });
+
+  // Auditoría post-F10: antes de cancelar una venta (historial, PdV), saber si tiene un pedido web
+  // pagado online para preguntar qué se hace con ese cobro. Solo lo mínimo para la pregunta.
+  ipcMain.handle('pedidos-online-pagados-de-venta', async (_event: any, ventaId: number) => {
+    if (!getCurrentUser()) return { success: false, error: 'no_autenticado' };
+    const ps = await repo().find({ where: { ventaId: Number(ventaId), estadoPago: EstadoPagoOnline.PAGADO } as any });
+    return {
+      success: true,
+      pedidos: ps.map((p) => ({ id: p.id, numero: p.numero, monto: Number(p.pagoMonto ?? p.total), estado: p.estado })),
+    };
+  });
+
+  // Auditoría post-F10: una devolución pendiente también puede cerrarse sin devolver (el pago no
+  // entró, o el local no lo devuelve), con motivo. Mismo diálogo en la bandeja y en el delivery.
+  ipcMain.handle('resolver-pago-pedido-online', async (_event: any, pedidoId: number, decisionPago: any) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
+    const d = leerDecision(decisionPago);
+    if ('error' in d) return { success: false, error: d.error };
+    if (d.decision === DecisionPagoOnline.DEVOLVER) return { success: false, error: 'decision_pago_invalida' };
+    const ok = await resolverDevolucionPendiente(dataSource, Number(pedidoId), d, getCurrentUser()?.id);
+    if (!ok) return { success: false, error: 'no_hay_devolucion_pendiente' };
+    const saved = await repo().findOne({ where: { id: Number(pedidoId) } });
+    return { success: true, pedido: saved ? mapPedidoAdmin(saved) : null };
   });
 
   // ============== ZONAS DE DELIVERY (CRUD admin) ==============

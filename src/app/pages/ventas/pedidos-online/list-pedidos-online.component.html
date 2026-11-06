@@ -104,7 +104,7 @@
                    [placeholder]="resolviendoAprobar ? '' : 'Ej.: ya salió con el repartidor'" />
           </mat-form-field>
           <span class="confirm-text" *ngIf="resolviendoAprobar && p.estadoPago === 'PAGADO'">
-            Está pagado: hay que devolver ₲ {{ p.pagoMonto | number:'1.0-2' }} desde uPay.
+            Está pagado (₲ {{ p.pagoMonto | number:'1.0-2' }}): después elegís qué se hace con el cobro.
           </span>
           <button mat-flat-button [color]="resolviendoAprobar ? 'warn' : 'primary'" [disabled]="resolviendo" (click)="resolverCancelacion(p)">
             {{ resolviendoAprobar ? 'Sí, cancelar el pedido' : 'Responder' }}
@@ -123,11 +123,11 @@
             <button mat-flat-button color="primary" (click)="aceptar(p)">
               <mat-icon>check</mat-icon> Aceptar
             </button>
-            <button mat-stroked-button color="warn" (click)="confirmarRechazo(p)">Rechazar</button>
+            <button mat-stroked-button class="btn-peligro" (click)="confirmarRechazo(p)">Rechazar</button>
           </ng-container>
           <ng-container *ngIf="confirmandoRechazoId === p.id">
             <span class="confirm-text">¿Rechazar {{ p.numero }}?
-              <span *ngIf="p.estadoPago === 'PAGADO'"> Está pagado: hay que devolver ₲ {{ p.pagoMonto | number:'1.0-0' }} desde uPay.</span>
+              <span *ngIf="p.estadoPago === 'PAGADO'"> Está pagado (₲ {{ p.pagoMonto | number:'1.0-2' }}): después elegís qué se hace con el cobro.</span>
             </span>
             <button mat-flat-button color="warn" (click)="rechazar(p)">Sí, rechazar</button>
             <button mat-button (click)="cancelarRechazo()">Cancelar</button>
@@ -144,7 +144,7 @@
         </button>
 
         <button mat-flat-button color="warn" *ngIf="p.estadoPago === 'REEMBOLSO_PENDIENTE'" (click)="marcarDevuelto(p)">
-          <mat-icon>undo</mat-icon> Marcar devuelto
+          <mat-icon>undo</mat-icon> Resolver devolución
         </button>
 
         <!-- Recovery (F5): pedido aceptado (o de mesa) que no llegó a crear su venta

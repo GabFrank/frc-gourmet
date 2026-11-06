@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { DecisionPagoOnlineService } from 'src/app/shared/components/decision-pago-online-dialog/decision-pago-online.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatTableModule } from '@angular/material/table';
@@ -98,6 +99,7 @@ export class ListVentasComponent implements OnInit {
     private repositoryService: RepositoryService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
+    private decisionPago: DecisionPagoOnlineService,
   ) {
     this.fechaDesde.setHours(0, 0, 0, 0);
     this.fechaHasta.setHours(23, 59, 59, 999);
@@ -315,10 +317,14 @@ export class ListVentasComponent implements OnInit {
       if (result) {
         // TODO: validar credenciales admin via validate-credentials
         const estadoAnterior = venta.estado;
+        // Pedido web pagado online: qué se hace con ese cobro (devolver, ya devuelto, no entró…).
+        const pago = await this.decisionPago.preguntarParaVenta(venta.id);
+        if (!pago.seguir) return;
         try {
           await firstValueFrom(this.repositoryService.updateVenta(venta.id, {
             estado: VentaEstado.CANCELADA,
-          }));
+            ...(pago.decision ? { __decisionPagoOnline: pago.decision } : {}),
+          } as any));
         } catch (e) {
           // Antes el rechazo quedaba en una promesa sin manejar y la pantalla
           // no decía nada. Con fichas, el motivo (falta de permiso) importa.

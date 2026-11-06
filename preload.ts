@@ -2058,8 +2058,8 @@ contextBridge.exposeInMainWorld('api', {
   deliveryAsignarRepartidor: async (deliveryId: number, funcionarioId: number | null): Promise<any> => {
     return await ipcRenderer.invoke('delivery-asignar-repartidor', deliveryId, funcionarioId);
   },
-  deliveryCancelar: async (deliveryId: number, motivo: string): Promise<any> => {
-    return await ipcRenderer.invoke('delivery-cancelar', deliveryId, motivo);
+  deliveryCancelar: async (deliveryId: number, motivo: string, decisionPago?: any): Promise<any> => {
+    return await ipcRenderer.invoke('delivery-cancelar', deliveryId, motivo, decisionPago);
   },
   deliveryConvertirModo: async (deliveryId: number, payload: any): Promise<any> => {
     return await ipcRenderer.invoke('delivery-convertir-modo', deliveryId, payload);
@@ -2589,11 +2589,11 @@ contextBridge.exposeInMainWorld('api', {
   aceptarPedidoOnline: async (pedidoId: number, data?: any): Promise<any> => {
     return await ipcRenderer.invoke('aceptar-pedido-online', pedidoId, data);
   },
-  rechazarPedidoOnline: async (pedidoId: number, motivo: string): Promise<any> => {
-    return await ipcRenderer.invoke('rechazar-pedido-online', pedidoId, motivo);
+  rechazarPedidoOnline: async (pedidoId: number, motivo: string, decisionPago?: any): Promise<any> => {
+    return await ipcRenderer.invoke('rechazar-pedido-online', pedidoId, motivo, decisionPago);
   },
-  resolverCancelacionPedidoOnline: async (pedidoId: number, aprobar: boolean, respuesta?: string): Promise<any> => {
-    return await ipcRenderer.invoke('resolver-cancelacion-pedido-online', pedidoId, aprobar, respuesta);
+  resolverCancelacionPedidoOnline: async (pedidoId: number, aprobar: boolean, respuesta?: string, decisionPago?: any): Promise<any> => {
+    return await ipcRenderer.invoke('resolver-cancelacion-pedido-online', pedidoId, aprobar, respuesta, decisionPago);
   },
   avanzarEstadoPedidoOnline: async (pedidoId: number, nuevoEstado: string): Promise<any> => {
     return await ipcRenderer.invoke('avanzar-estado-pedido-online', pedidoId, nuevoEstado);
@@ -2618,6 +2618,12 @@ contextBridge.exposeInMainWorld('api', {
   },
   marcarPagoDevueltoPedidoOnline: async (pedidoId: number): Promise<any> => {
     return await ipcRenderer.invoke('marcar-pago-devuelto-pedido-online', pedidoId);
+  },
+  resolverPagoPedidoOnline: async (pedidoId: number, decisionPago: any): Promise<any> => {
+    return await ipcRenderer.invoke('resolver-pago-pedido-online', pedidoId, decisionPago);
+  },
+  pedidosOnlinePagadosDeVenta: async (ventaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('pedidos-online-pagados-de-venta', ventaId);
   },
   getZonasDeliveryAdmin: async (): Promise<any[]> => {
     return await ipcRenderer.invoke('get-zonas-delivery-admin');

@@ -15,10 +15,12 @@ import { PedidoOnline } from '../../../src/app/database/entities/pedidos-online/
 import { PagoOnlineEvento } from '../../../src/app/database/entities/pedidos-online/pago-online-evento.entity';
 import { TiendaOnlineConfig } from '../../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import {
+  DecisionPagoOnline,
   EstadoPagoOnline,
   EstadoPedidoOnline,
   MetodoPagoOnline,
 } from '../../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { DecisionPago, estadoPagoPorDecision, PagoDecidido } from '../../utils/decision-pago-online.utils';
 import { FetchLike, UpayCheckoutProvider, UpayConfig, UpayError, UPAY_STG_BASE_URL } from './upay-checkout.provider';
 import { interpretarPago, interpretarSesion, ResultadoPago } from './interpretar-pago';
 
@@ -218,8 +220,10 @@ export async function verificarPagoPedido(
   const p = await repo.findOne({ where: { id: pedidoId } });
   if (!p) return { success: false, error: 'pedido_no_encontrado' };
   const actual = { success: true, estado: p.estado, estadoPago: p.estadoPago ?? null };
+  // Lo que el local ya decidió a mano (devuelto, no acreditado, retenido) no se vuelve a consultar.
   if (!p.pagoSesionId || p.estadoPago === EstadoPagoOnline.PAGADO || p.estadoPago === EstadoPagoOnline.DEVUELTO
-    || p.estadoPago === EstadoPagoOnline.REEMBOLSO_PENDIENTE) return actual;
+    || p.estadoPago === EstadoPagoOnline.REEMBOLSO_PENDIENTE || p.estadoPago === EstadoPagoOnline.NO_ACREDITADO
+    || p.estadoPago === EstadoPagoOnline.RETENIDO) return actual;
   if (opts.minIntervaloMs && p.pagoUltimaConsulta
     && ahora.getTime() - new Date(p.pagoUltimaConsulta).getTime() < opts.minIntervaloMs) return actual;
 
@@ -388,13 +392,98 @@ export async function marcarReembolsoSiPagado(ds: DataSource, pedidoId: number):
  * F5 (M-pay4): el rechazo ya dejó el pago en REEMBOLSO_PENDIENTE dentro de su transacción; acá
  * solo se registra el evento y se avisa al personal. Devuelve el monto a devolver.
  */
-export async function avisarReembolso(ds: DataSource, p: PedidoOnline, motivo: 'RECHAZADO' | 'CANCELADO' = 'RECHAZADO'): Promise<number> {
-  const monto = Number(p.pagoMonto ?? p.total);
+export type ContextoCancelacionPago = 'RECHAZADO' | 'CANCELADO' | 'CANCELADO_PDV';
+/** Además de las cancelaciones, una devolución pendiente que se resuelve sin devolver. */
+type ContextoDecision = ContextoCancelacionPago | 'RESUELTO';
+
+const QUE_PASO: Record<ContextoCancelacionPago, string> = {
+  RECHAZADO: 'rechazado por el local',
   // F9: aprobar la cancelación que pidió el cliente también devuelve; el texto lo dice.
-  const que = motivo === 'CANCELADO' ? 'cancelado a pedido del cliente' : 'rechazado por el local';
+  CANCELADO: 'cancelado a pedido del cliente',
+  // Auditoría post-F10: cancelado desde el diálogo de delivery, el PdV o el historial de ventas.
+  CANCELADO_PDV: 'cancelado en el PdV',
+};
+
+export async function avisarReembolso(ds: DataSource, p: PedidoOnline, motivo: ContextoCancelacionPago = 'RECHAZADO'): Promise<number> {
+  const monto = Number(p.pagoMonto ?? p.total);
+  const que = QUE_PASO[motivo];
   await registrar(ds, p, 'REEMBOLSO', que, null);
-  await avisarPersonal(`Pedido ${p.numero} ${motivo === 'CANCELADO' ? 'cancelado a pedido del cliente' : 'rechazado'} con pago con tarjeta: hay que devolver ${gs(monto)} en uPay.`, `rechazo-${p.id}`);
+  await avisarPersonal(`Pedido ${p.numero} ${que} con pago con tarjeta: hay que devolver ${gs(monto)} en uPay.`, `rechazo-${p.id}`);
   return monto;
+}
+
+const TEXTO_DECISION: Record<DecisionPagoOnline, string> = {
+  [DecisionPagoOnline.DEVOLVER]: 'hay que devolverlo',
+  [DecisionPagoOnline.YA_DEVUELTO]: 'ya se devolvió en uPay',
+  [DecisionPagoOnline.NO_ENTRO]: 'el pago no entró',
+  [DecisionPagoOnline.NO_SE_DEVUELVE]: 'no se devuelve',
+};
+
+/**
+ * Auditoría post-F10: después del commit de una cancelación, deja en el historial del pago qué
+ * se decidió con lo cobrado, quién y por qué, y avisa al personal. «Devolver» es el aviso de
+ * siempre (`avisarReembolso`); «no entró» y «no se devuelve» también avisan, porque dejan plata
+ * del cliente sin devolver. Nunca lanza: el cambio ya quedó hecho.
+ */
+export async function registrarDecisionPago(
+  ds: DataSource,
+  pedidoId: number,
+  decision: DecisionPago,
+  contexto: ContextoDecision,
+  usuarioId?: number | null,
+): Promise<number | null> {
+  try {
+    const p = await ds.getRepository(PedidoOnline).findOne({ where: { id: pedidoId } });
+    if (!p) return null;
+    const monto = Number(p.pagoMonto ?? p.total);
+    if (decision.decision === DecisionPagoOnline.DEVOLVER) {
+      return contexto === 'RESUELTO' ? null : await avisarReembolso(ds, p, contexto);
+    }
+    await registrar(ds, p, 'DECISION_PAGO', decision.decision, {
+      contexto, motivo: decision.motivo, usuarioId: usuarioId ?? null, monto,
+    });
+    if (decision.decision !== DecisionPagoOnline.YA_DEVUELTO) {
+      const que = contexto === 'RESUELTO'
+        ? `: la devolución pendiente de ${gs(monto)} se cerró`
+        : ` ${QUE_PASO[contexto]} con pago con tarjeta de ${gs(monto)}`;
+      await avisarPersonal(
+        `Pedido ${p.numero}${que}: ${TEXTO_DECISION[decision.decision]}` + (decision.motivo ? ` (${decision.motivo}).` : '.'),
+        `decision-${p.id}`,
+      );
+    }
+    return null;
+  } catch (e: any) {
+    console.warn('[pagos-online] registrar la decisión del pago falló:', e?.message || e);
+    return null;
+  }
+}
+
+/** Avisa cada pago decidido dentro de una transacción ya confirmada. */
+export async function registrarDecisionesPago(
+  ds: DataSource, pagos: PagoDecidido[], contexto: ContextoCancelacionPago, usuarioId?: number | null,
+): Promise<void> {
+  for (const x of pagos) await registrarDecisionPago(ds, x.pedidoId, x.decision, contexto, usuarioId);
+}
+
+/**
+ * Resuelve una devolución pendiente: ya se devolvió, el pago no entró, o no se devuelve.
+ * Condicionado a REEMBOLSO_PENDIENTE: dos personas resolviendo a la vez no se pisan.
+ */
+export async function resolverDevolucionPendiente(
+  ds: DataSource, pedidoId: number, decision: DecisionPago, usuarioId?: number | null,
+): Promise<boolean> {
+  if (decision.decision === DecisionPagoOnline.DEVOLVER) return false;
+  const r = await ds.getRepository(PedidoOnline).createQueryBuilder().update(PedidoOnline)
+    .set({ estadoPago: estadoPagoPorDecision(decision) } as any)
+    .where('id = :id AND estado_pago = :r', { id: pedidoId, r: EstadoPagoOnline.REEMBOLSO_PENDIENTE })
+    .execute();
+  if (!r.affected) return false;
+  if (decision.decision === DecisionPagoOnline.YA_DEVUELTO) {
+    await registrar(ds, { id: pedidoId }, 'DEVUELTO', null, usuarioId ? { usuarioId } : null);
+  } else {
+    await registrarDecisionPago(ds, pedidoId, decision, 'RESUELTO', usuarioId);
+  }
+  return true;
 }
 
 /** Marca como devuelto (el personal ya lo hizo en el portal de uPay). */
