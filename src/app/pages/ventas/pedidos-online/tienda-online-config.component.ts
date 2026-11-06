@@ -313,7 +313,7 @@ import { RepositoryService } from '../../../database/repository.service';
     .full-width { width: 100%; margin-top: 10px; }
     .hint-error { color: var(--error-color); }
     .devolucion-auto { margin: 4px 0 8px; }
-    .datos-portal { margin: 4px 0 12px; font-size: 13px; }
+    .datos-portal { margin: 4px 0 20px; font-size: 13px; }
     .aviso-prueba { display: flex; align-items: center; gap: 6px; color: var(--warning-color); font-size: 13px; margin: 4px 0 8px; }
     .datos-portal .lbl { display: block; color: var(--text-secondary); }
     .datos-portal code { word-break: break-all; user-select: all; }
