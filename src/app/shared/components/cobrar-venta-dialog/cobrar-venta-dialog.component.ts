@@ -1361,6 +1361,10 @@ export class CobrarVentaDialogComponent implements OnInit, AfterViewInit {
       this.snackBar.open('Esta venta ya fue cobrada.', 'CERRAR', { duration: 4000 });
       return;
     }
+    if ((this.data.venta as any)?.estado === VentaEstado.CANCELADA) {
+      this.snackBar.open('Esta venta fue cancelada: no se puede cobrar.', 'CERRAR', { duration: 5000 });
+      return;
+    }
     this.setProcessing(true);
 
     try {

@@ -11,7 +11,7 @@ import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caj
 import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zona-delivery.entity';
 import { TiendaCategoria, TiendaCategoriaProducto } from '../../src/app/database/entities/pedidos-online/tienda-categoria.entity';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
-import { Delivery } from '../../src/app/database/entities/ventas/delivery.entity';
+import { Delivery, DeliveryEstado } from '../../src/app/database/entities/ventas/delivery.entity';
 import { EstadoPedidoOnline, EstadoPagoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { checkPermission, ensurePermission } from '../utils/auth.utils';
 import { PrecioDelivery } from '../../src/app/database/entities/ventas/precio-delivery.entity';
@@ -319,6 +319,17 @@ export function registerPedidosOnlineAdminHandlers(
           usuarioId,
           motivo: motivoNormalizado,
         });
+      }
+      // El delivery (o retiro) del pedido se cancela con él, como hace `delivery-cancelar` del
+      // otro lado. Sin esto quedaba vivo en la lista de delivery sobre una venta ya cancelada, y
+      // el cajero podía cobrarlo y finalizarlo (pasó el 2026-11-06 con PO-000006).
+      if (pedido.deliveryId) {
+        await manager.createQueryBuilder().update(Delivery)
+          .set({ estado: DeliveryEstado.CANCELADO, fechaCancelacion: new Date(), motivoCancelacion: motivoNormalizado } as any)
+          .where('id = :id AND estado NOT IN (:...terminales)', {
+            id: pedido.deliveryId, terminales: [DeliveryEstado.ENTREGADO, DeliveryEstado.CANCELADO],
+          })
+          .execute();
       }
       // F5 (auditoría M-F2-8/M-pay4): rechazo condicionado al estado y a la venta que se
       // revirtió (una materialización concurrente no queda pisada), y el «a devolver» del pago

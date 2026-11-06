@@ -1652,6 +1652,12 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // y rechazar dejaría al cajero trabado sin poder cobrar. Si la caja de la
       // venta está cerrada, ahí sí se rechaza (Q1).
       const pagoAdoptadoId = Number((data?.pago as any)?.id ?? data?.pago) || null;
+      // Una venta CANCELADA no se cobra: el cobro adopta un Pago (y finalizarlo la volvería
+      // CONCLUIDA con plata en la caja). Rehabilitar desde el historial no adopta pago y sigue
+      // permitido. Pasó con un pedido web cancelado cuyo delivery quedó vivo (2026-11-06).
+      if (estadoAnterior === VentaEstado.CANCELADA && (pagoAdoptadoId || validarDispositivoCaja)) {
+        throw new Error('VENTA_CANCELADA: esta venta fue cancelada y no se puede cobrar.');
+      }
       if (pagoAdoptadoId) {
         await assertCajaAbiertaSiVino(dataSource, cajaDeLaVenta, { contexto: 'updateVenta(pago)' });
         if (cajaDeLaVenta != null) {

@@ -850,8 +850,10 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     // `CAJA_CERRADA`, así que ofrecerlo sería mandar al cajero a un rechazo.
     // Cancelar sigue habilitado: es una reversa y resta del arqueo.
     this.cajaCerradaSeleccionada = !!this.selectedDelivery?.cajaCerrada;
+    // Una venta cancelada tampoco se cobra (el servidor lo rechaza con VENTA_CANCELADA).
+    const ventaCancelada = this.selectedDelivery?.venta?.estado === 'CANCELADA';
     this.puedeEditarPago = !!this.selectedDelivery && !this.isTerminal
-      && !this.cobroBloqueadoPorTerminal && !yaCobrada && !this.cajaCerradaSeleccionada;
+      && !this.cobroBloqueadoPorTerminal && !yaCobrada && !ventaCancelada && !this.cajaCerradaSeleccionada;
     this.tooltipPago = this.cajaCerradaSeleccionada
       ? 'Caja cerrada: este pedido sólo se puede cancelar y volver a cargar en la caja de hoy'
       : this.tooltipPagoTerminal;
@@ -1214,6 +1216,10 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
 
     // Sin cobro cerrado no hay entrega: el backend rechaza la transición, así
     // que primero se abre el cobro.
+    if (this.selectedDelivery.venta?.estado === 'CANCELADA') {
+      this.snackBar.open('La venta de este pedido fue cancelada: no se cobra ni se entrega.', 'CERRAR', { duration: 5000 });
+      return;
+    }
     if (this.selectedDelivery.venta?.estado !== 'CONCLUIDA') {
       this.editarPago();
       return;

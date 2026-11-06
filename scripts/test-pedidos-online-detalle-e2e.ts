@@ -369,6 +369,39 @@ async function main() {
   ok(textos.some((t) => t.includes(`RETIRO N° ${delK.id}`) && t.includes(`VENTA #${ventaK.id}`)),
     'K: debajo, el número de retiro/delivery y el de la venta, con su nombre', textos.slice(0, 12));
 
+  // Aprobar la cancelación de un pedido con delivery: el delivery se cancela con él (PO-000006,
+  // 2026-11-06: quedaba PARA_ENTREGA sobre la venta cancelada y se pudo cobrar y finalizar).
+  const kDel = await pedir();
+  const ventaKD = await save(Venta, { estado: 'ABIERTA', canalOrigen: 'WEB' });
+  const delKD = await save(Delivery, { estado: 'PARA_ENTREGA', modo: 'RETIRO', fechaAbierto: new Date(), nombre: 'CLIENTE UNO' } as any);
+  await ds.getRepository(PedidoOnline).update({ numero: kDel }, { estado: 'LISTO', ventaId: ventaKD.id, deliveryId: delKD.id } as any);
+  await solicitar(kDel, 'ya no lo quiero');
+  const apKD: any = await invokeHandler('resolver-cancelacion-pedido-online', (await fila(kDel)).id, true);
+  const delKDdespues: any = await ds.getRepository(Delivery).findOne({ where: { id: delKD.id } });
+  ok(apKD?.success === true && delKDdespues?.estado === 'CANCELADO' && delKDdespues?.motivoCancelacion === 'YA NO LO QUIERO',
+    'K: aprobar la cancelación cancela también el delivery/retiro', { ap: apKD?.error, del: delKDdespues?.estado });
+  // Rechazar (el local) un pedido aceptado con delivery: mismo camino.
+  const kRech = await pedir();
+  const ventaKR = await save(Venta, { estado: 'ABIERTA', canalOrigen: 'WEB' });
+  const delKR = await save(Delivery, { estado: 'ABIERTO', modo: 'RETIRO', fechaAbierto: new Date(), nombre: 'CLIENTE UNO' } as any);
+  await ds.getRepository(PedidoOnline).update({ numero: kRech }, { estado: 'EN_PREPARACION', ventaId: ventaKR.id, deliveryId: delKR.id } as any);
+  await invokeHandler('rechazar-pedido-online', (await fila(kRech)).id, 'sin stock');
+  ok((await ds.getRepository(Delivery).findOne({ where: { id: delKR.id } }) as any)?.estado === 'CANCELADO',
+    'K: rechazar un pedido con delivery también lo cancela');
+
+  // Una venta cancelada no se cobra (el cobro adopta un pago); rehabilitarla sí se puede.
+  require('../electron/handlers/ventas.handler').registerVentasHandlers(ds, getUser);
+  const { Pago } = E('compras/pago.entity');
+  const pagoK = await save(Pago, { estado: 'PAGADO' } as any);
+  let errCobro = '';
+  try { await invokeHandler('updateVenta', ventaKD.id, { estado: 'CONCLUIDA', pago: { id: pagoK.id } }); }
+  catch (e: any) { errCobro = String(e?.message || e); }
+  const vKD: any = await ds.getRepository(Venta).findOne({ where: { id: ventaKD.id } });
+  ok(/VENTA_CANCELADA/.test(errCobro) && vKD?.estado === 'CANCELADA', 'K: cobrar una venta cancelada se rechaza', { errCobro, estado: vKD?.estado });
+  let errRehab = '';
+  try { await invokeHandler('updateVenta', ventaKR.id, { estado: 'CONCLUIDA' }); } catch (e: any) { errRehab = String(e?.message || e); }
+  ok(!/VENTA_CANCELADA/.test(errRehab), 'K: rehabilitar desde el historial (sin pago) sigue permitido', errRehab);
+
   await cerrar();
   console.log(`\n${TAG} RESULTADO: ${passed} passed, ${failed} failed.`);
   process.exit(failed === 0 ? 0 : 1);
