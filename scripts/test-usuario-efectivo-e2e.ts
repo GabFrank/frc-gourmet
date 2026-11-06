@@ -27,6 +27,11 @@ import { clearPermissionCache, withRequestUser } from '../electron/utils/auth.ut
 import { registerAllAppHandlers } from '../electron/utils/register-all-handlers';
 import { seedPermissions } from '../electron/handlers/permissions.handler';
 import { seedSystemData } from '../electron/utils/seed-system';
+import Fastify, { FastifyInstance } from 'fastify';
+import { registerAuthPlugin } from '../electron/server/auth-middleware';
+import { registerRpcRoute } from '../electron/server/rpc-router';
+import { registerAuthRoutes } from '../electron/server/auth-routes';
+import rateLimit from '@fastify/rate-limit';
 
 const results: { name: string; ok: boolean; detail?: string }[] = [];
 
@@ -171,6 +176,80 @@ async function main() {
   const src = fs.readFileSync(path.resolve(__dirname, '../electron/utils/register-all-handlers.ts'), 'utf8');
   if (/getEffectiveUser\(\s*rawGetCurrentUser\s*\)/.test(src)) pass('register-all-handlers envuelve getCurrentUser con getEffectiveUser');
   else fail('guardia estática', 'register-all-handlers no envuelve getCurrentUser con getEffectiveUser(rawGetCurrentUser)');
+
+  // 7. #357: /api/rpc real (Fastify) es fail-closed y no deja tocar la sesión de la consola.
+  console.log('\n=== #357 /api/rpc fail-closed ===\n');
+  const fastify: FastifyInstance = Fastify({ logger: false });
+  await fastify.register(rateLimit, { max: 1000, timeWindow: '1 minute' });
+  await registerAuthPlugin(fastify);
+  registerAuthRoutes(fastify, dataSource);
+  registerRpcRoute(fastify, dataSource);
+  await fastify.ready();
+  const firmar = (payload: any) => (fastify as any).jwt.sign(payload);
+  async function rpc(token: string, method: string, params: any[] = []) {
+    const res = await fastify.inject({
+      method: 'POST', url: '/api/rpc',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      payload: { method, params },
+    });
+    let body: any;
+    try { body = JSON.parse(res.body); } catch { body = res.body; }
+    return { status: res.statusCode, body };
+  }
+  async function esperarStatus(token: string, method: string, params: any[], status: number, name: string) {
+    const r = await rpc(token, method, params);
+    if (r.status === status) pass(name);
+    else fail(name, `Esperado ${status}, recibido ${r.status} ${JSON.stringify(r.body).slice(0, 200)}`);
+    return r;
+  }
+
+  consola = admin;
+  const tokCajero = firmar({ id: cajero.id, nickname: cajero.nickname, device_id: null });
+  const r7a = await esperarStatus(tokCajero, 'getCurrentUser', [], 200, 'HTTP token cajero activo → 200 (control)');
+  if (r7a.body?.result?.id === cajero.id) pass('HTTP getCurrentUser = cajero del token, no la consola');
+  else fail('HTTP getCurrentUser = cajero del token', `recibido ${JSON.stringify(r7a.body).slice(0, 200)}`);
+
+  const r7b = await esperarStatus(firmar({ id: 987654, nickname: 'BORRADO', device_id: null }), 'getCurrentUser', [], 401,
+    'HTTP token de usuario inexistente → 401 (no cae a la consola)');
+  if (r7b.body?.result?.id === admin.id) fail('usuario inexistente no ve a la consola', 'el handler corrió con la consola');
+
+  await userRepo.update({ id: cajero.id }, { activo: false } as any);
+  await esperarStatus(tokCajero, 'getCurrentUser', [], 401, 'HTTP token de usuario inactivo → 401');
+  await userRepo.update({ id: cajero.id }, { activo: true } as any);
+
+  await esperarStatus(firmar({ nickname: 'SIN_ID' }), 'getCurrentUser', [], 401, 'HTTP token sin id → 401');
+
+  await esperarStatus(tokCajero, 'logout', [1], 403, 'HTTP logout por /api/rpc → 403');
+  await esperarStatus(tokCajero, 'login', [{ nickname: 'cajero_efectivo', password: 'cajero' }], 403,
+    'HTTP login por /api/rpc → 403 (no reemplaza la consola)');
+  await esperarStatus(tokCajero, 'restoreSession', [{ sessionId: 1, token: 'x' }], 403, 'HTTP restoreSession por /api/rpc → 403');
+  if (consola && (consola as Usuario).id === admin.id) pass('la sesión de la consola sigue intacta tras logout por HTTP');
+  else fail('sesión de la consola intacta', `consola=${JSON.stringify(consola)?.slice(0, 80)}`);
+
+  // Refresh: un usuario desactivado no renueva (vuelve al login en vez de quedar con 401 en cada RPC).
+  const refrescar = async (refreshToken: string) => {
+    const res = await fastify.inject({ method: 'POST', url: '/api/auth/refresh', payload: { refreshToken } });
+    let body: any; try { body = JSON.parse(res.body); } catch { body = res.body; }
+    return { status: res.statusCode, body };
+  };
+  const login = await fastify.inject({ method: 'POST', url: '/api/auth/login', payload: { nickname: 'cajero_efectivo', password: 'cajero' } });
+  const rt1 = login.statusCode === 200 ? JSON.parse(login.body).refreshToken : null;
+  if (!rt1) fail('HTTP login cajero', `status=${login.statusCode} body=${login.body.slice(0, 200)}`);
+  else {
+    const ok = await refrescar(rt1);
+    if (ok.status === 200 && ok.body?.refreshToken) pass('refresh de cajero activo → 200 (control)');
+    else fail('refresh de cajero activo → 200', `status=${ok.status} ${JSON.stringify(ok.body).slice(0, 200)}`);
+    await userRepo.update({ id: cajero.id }, { activo: false } as any);
+    const r = await refrescar(ok.body?.refreshToken);
+    if (r.status === 401) pass('refresh de usuario inactivo → 401');
+    else fail('refresh de usuario inactivo → 401', `status=${r.status} ${JSON.stringify(r.body).slice(0, 200)}`);
+    const vivos = await dataSource.query(
+      'SELECT COUNT(*) AS n FROM refresh_tokens WHERE usuario_id = ? AND revoked_at IS NULL', [cajero.id]);
+    if (Number(vivos[0]?.n) === 0) pass('al rechazar el refresh se revocan los tokens del inactivo');
+    else fail('tokens del inactivo revocados', `quedan ${vivos[0]?.n}`);
+    await userRepo.update({ id: cajero.id }, { activo: true } as any);
+  }
+  await fastify.close();
 
   await dataSource.destroy();
   const fallas = results.filter((r) => !r.ok);
