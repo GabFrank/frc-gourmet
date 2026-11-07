@@ -98,7 +98,13 @@ el teléfono de otro y comprar a su nombre.
 - Índice único parcial «un cliente, una cuenta» en los dos drivers. Permiso `CLIENTES_GESTIONAR`
   ya existe.
 
-## Decisiones para el propietario
+## Decisiones del propietario (07/11)
+
+- La deuda nace **al aceptar el pedido**, en la misma transacción que crea la venta.
+- **1 cuota que vence el último día del mes** de la compra.
+- El cliente ve en la tienda solo su disponible.
+
+## Opciones que se plantearon
 
 1. **¿Cuándo nace la CPC?**
    - **a) Al aceptar el pedido, cuando pasa a venta (recomendado tras la auditoría).** La deuda
