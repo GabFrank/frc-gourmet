@@ -25,7 +25,7 @@ el definitivo es **Meta (WhatsApp Cloud API)**, que todavía está en revisión.
 | Aceptado | «{comercio}: recibimos tu pedido {numero} y ya lo estamos preparando.» |
 | Listo para retirar | «{comercio}: tu pedido {numero} está listo para retirar.» |
 | En camino | «{comercio}: tu pedido {numero} salió y va en camino. El repartidor puede llamarte a este número.» |
-| Entregado | (sin aviso — propuesta; el cliente ya lo tiene en la mano) |
+| Entregado | «{comercio}: tu pedido {numero} fue entregado. ¡Gracias!» |
 | Rechazado / cancelado | «{comercio}: tu pedido {numero} fue cancelado. {motivo}» + si estaba pagado online: «Te devolvemos el pago.» / según la decisión del pago |
 | Cancelación pedida no aceptada | «{comercio}: tu pedido {numero} ya estaba en preparación y no se pudo cancelar.» |
 
@@ -83,7 +83,13 @@ Cada línea termina con el enlace al detalle del pedido (`/tienda/pedido/<numero
   encola en cada transición real (`affected > 0`) de todas las puertas.
 - Sin teléfonos completos ni textos en los logs; los avisos viejos se purgan.
 
-## Lo que necesita el propietario
+## Decisiones del propietario (07/11)
+
+- Textos aprobados tal cual, **y también aviso al entregar**: «{comercio}: tu pedido {numero} fue
+  entregado. ¡Gracias!» (vigilar que Meta lo acepte como Utilidad).
+- Clientes de Google: el teléfono de contacto **se verifica con un código** la primera vez.
+
+## Lo que necesitaba el propietario
 
 1. **Aprobar los textos** (o corregirlos). Con Meta, cada texto es una plantilla que hay que dar
    de alta en el Business Manager y esperar su aprobación; conviene pedirlas apenas estén los
