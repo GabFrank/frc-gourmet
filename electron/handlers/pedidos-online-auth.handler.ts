@@ -57,7 +57,7 @@ function mapCuenta(c: CuentaCliente): any {
     telefonoContacto: c.telefonoContacto ?? null,
     email: c.email ?? null,
     nombre: c.nombre ?? null,
-    clienteId: (c.cliente as any)?.id ?? null,
+    // El id del Cliente interno no sale a la web (auditoría F8b): es un dato del local.
     // Sólo si tiene contraseña, nunca el hash: la UI necesita saber si pedir la
     // actual antes de dejar cambiarla.
     tienePassword: !!c.passwordHash,

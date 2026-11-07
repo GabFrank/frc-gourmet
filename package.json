@@ -49,6 +49,8 @@
     "test:dashboard-zonas-pg": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-dashboard-zonas-delivery-e2e.ts --pg",
     "test:pedidos-online-pago": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-pago-e2e.ts",
     "test:pedidos-online-pago-pg": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-pago-e2e.ts --pg",
+    "test:tienda-vinculacion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-tienda-vinculacion-e2e.ts",
+    "test:tienda-vinculacion-pg": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-tienda-vinculacion-e2e.ts --pg",
     "test:pedidos-online-detalle": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-detalle-e2e.ts",
     "test:pedidos-online-detalle-pg": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-detalle-e2e.ts --pg",
     "test:pedidos-online-atencion-flujo": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-atencion-flujo-e2e.ts",

@@ -496,6 +496,11 @@ interface ElectronAPI {
   probarTiendaUpay: () => Promise<any>;
   probarTiendaPago: (proveedorId?: string) => Promise<any>;
   marcarPagoDevueltoPedidoOnline: (pedidoId: number) => Promise<any>;
+  getCuentasTienda: (filtros?: any) => Promise<any>;
+  getVinculosCuentaTienda: (cuentaId: number) => Promise<any>;
+  vincularCuentaTienda: (cuentaId: number, clienteId: number, motivo?: string) => Promise<any>;
+  desvincularCuentaTienda: (cuentaId: number, motivo: string) => Promise<any>;
+  getCuentaTiendaDeCliente: (clienteId: number) => Promise<any>;
   resolverPagoPedidoOnline: (pedidoId: number, decisionPago: DecisionPagoPayload) => Promise<any>;
   pedidosOnlinePagadosDeVenta: (ventaId: number) => Promise<any>;
   getZonasDeliveryAdmin: () => Promise<any[]>;
@@ -2682,6 +2687,21 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.marcarPagoDevueltoPedidoOnline(pedidoId));
   }
 
+  getCuentasTienda(filtros?: any): Observable<any> {
+    return from(this.api.getCuentasTienda(filtros));
+  }
+  getVinculosCuentaTienda(cuentaId: number): Observable<any> {
+    return from(this.api.getVinculosCuentaTienda(cuentaId));
+  }
+  vincularCuentaTienda(cuentaId: number, clienteId: number, motivo?: string): Observable<any> {
+    return from(this.api.vincularCuentaTienda(cuentaId, clienteId, motivo));
+  }
+  desvincularCuentaTienda(cuentaId: number, motivo: string): Observable<any> {
+    return from(this.api.desvincularCuentaTienda(cuentaId, motivo));
+  }
+  getCuentaTiendaDeCliente(clienteId: number): Observable<any> {
+    return from(this.api.getCuentaTiendaDeCliente(clienteId));
+  }
   resolverPagoPedidoOnline(pedidoId: number, decisionPago: DecisionPagoPayload): Observable<any> {
     return from(this.api.resolverPagoPedidoOnline(pedidoId, decisionPago));
   }

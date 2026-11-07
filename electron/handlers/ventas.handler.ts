@@ -393,6 +393,9 @@ export async function materializarPedidoOnlineEnVenta(
         caja: { id: cajaId } as any,
         canalOrigen: 'WEB',
         nombreCliente: pedido.nombreCliente ? pedido.nombreCliente.toUpperCase() : undefined,
+        // F8b: el cliente interno de la cuenta vinculada (fijado al crear el pedido): queda en su
+        // historial y la factura sale con sus datos.
+        ...(pedido.clienteId ? { cliente: { id: pedido.clienteId } as any } : {}),
       });
 
       // DELIVERY y PICKUP abren su registro en la misma transacción. Sin esto

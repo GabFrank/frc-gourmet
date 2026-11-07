@@ -1126,6 +1126,21 @@ export class RepositoryHttpService extends RepositoryService {
     return throwError(() => new Error(`RepositoryHttpService.marcarPagoDevueltoPedidoOnline() no esta implementado todavia.`)) as any;
   }
 
+  getCuentasTienda(_filtros?: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getCuentasTienda() no esta implementado todavia.`)) as any;
+  }
+  getVinculosCuentaTienda(_cuentaId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getVinculosCuentaTienda() no esta implementado todavia.`)) as any;
+  }
+  vincularCuentaTienda(_cuentaId: number, _clienteId: number, _motivo?: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.vincularCuentaTienda() no esta implementado todavia.`)) as any;
+  }
+  desvincularCuentaTienda(_cuentaId: number, _motivo: string): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.desvincularCuentaTienda() no esta implementado todavia.`)) as any;
+  }
+  getCuentaTiendaDeCliente(_clienteId: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getCuentaTiendaDeCliente() no esta implementado todavia.`)) as any;
+  }
   resolverPagoPedidoOnline(_pedidoId: number, _decisionPago: DecisionPagoPayload): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.resolverPagoPedidoOnline() no esta implementado todavia.`)) as any;
   }

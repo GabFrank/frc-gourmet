@@ -4,6 +4,14 @@ Rama: `bot/ceo-frc-gourmet/feat-tienda-f8b-credito`, sale de `feat-tienda-pagos-
 Nada se mergea sin el OK del propietario. Toca crédito y cuentas por cobrar: antes del merge se
 prueba **cobrando de verdad** en la copia (pedido a cuenta → entrega → CPC → cobro de la cuota).
 
+## Estado (2026-11-07)
+
+Fase 1 (vinculación) hecha: migración `TiendaVinculoCuentaCliente`, handlers
+`cuentas-tienda.handler.ts`, pantalla «Cuentas de la Tienda», chip en la ficha del cliente,
+pedido y venta con el cliente. Tests `test:tienda-vinculacion` 31/31 en SQLite y Postgres,
+migraciones 74/74, batería completa 105/105, AOT y Chrome. Guía para agentes:
+`docs/runbooks/RUNBOOK-TIENDA-VINCULAR-CUENTAS.md`. Fase 2 (compra a cuenta) pendiente.
+
 ## Por qué
 
 Decisión del propietario (05/11, confirmada 07/11): la tienda tiene que poder vender a cuenta a

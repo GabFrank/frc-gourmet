@@ -131,7 +131,6 @@ export interface CuentaCliente {
   telefonoContacto?: string | null;
   email: string | null;
   nombre: string | null;
-  clienteId: number | null;
 }
 
 /** Opción elegida de una línea (cubre todos los tipos, incluida pizza). */

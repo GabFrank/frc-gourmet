@@ -32,6 +32,13 @@ export class PedidoOnline extends BaseModel {
   @JoinColumn({ name: 'cuenta_cliente_id' })
   cuentaCliente?: CuentaCliente;
 
+  /**
+   * F8b: el `Cliente` interno del pedido, fijado al crearlo desde el vínculo de la cuenta. La
+   * venta sale con este cliente; desvincular la cuenta después no lo cambia.
+   */
+  @Column({ name: 'cliente_id', type: 'int', nullable: true })
+  clienteId?: number | null;
+
   // Snapshot de contacto (por si la cuenta se edita/borra).
   @Column({ name: 'nombre_cliente', type: 'varchar', length: 150, nullable: true })
   nombreCliente?: string;

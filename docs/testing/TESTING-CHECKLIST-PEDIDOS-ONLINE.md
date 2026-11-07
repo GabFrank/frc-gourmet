@@ -268,6 +268,27 @@ tienda registrada en el portal como URL de confirmación.
 7. **Cambio de proveedor:** con un pedido de uPay en curso, pasar a Bancard: el pedido viejo
    sigue mostrando uPay y no se consulta a Bancard.
 
+## 14 · Cuentas de la tienda vinculadas a un cliente (F8b fase 1)
+
+Pantalla: Ventas → **Cuentas de la Tienda**. Operación por agentes:
+`docs/runbooks/RUNBOOK-TIENDA-VINCULAR-CUENTAS.md`.
+
+1. **Lista:** aparecen las cuentas con su teléfono (verificado o «de contacto, sin verificar»),
+   pedidos, último ingreso y cliente vinculado. Filtrar por texto y por vínculo con **Buscar**.
+2. **Vincular:** ⋮ → Vincular a un cliente → elegir uno → confirmar con una nota. La fila muestra
+   el cliente y «Vinculada por <usuario> · <fecha>».
+3. **Un cliente, una cuenta:** intentar vincular otra cuenta al mismo cliente → «ese cliente ya
+   tiene otra cuenta web vinculada».
+4. **Pedido a nombre del cliente:** con la cuenta vinculada, hacer un pedido en la tienda y
+   aceptarlo: la venta del PdV sale con el cliente (y la factura con sus datos).
+5. **Ficha del cliente:** Clientes → ⋮ → Ver estado de cuenta: arriba a la derecha
+   «Cuenta web: …», con quién vinculó en el tooltip.
+6. **Desvincular:** ⋮ → Desvincular → pide motivo. El pedido del paso 4 sigue a nombre del
+   cliente; un pedido nuevo ya no.
+7. **Historial:** ⋮ → Historial de vínculos: las dos acciones con usuario, fecha y nota/motivo.
+8. **Permisos:** con un usuario que solo tiene `CLIENTES_VER` se ve la lista pero no aparecen
+   Vincular ni Desvincular; sin `CLIENTES_VER` la pantalla no está en el menú.
+
 ## Qué NO se probó automáticamente
 
 - **SQLite es lo que corren los tests** (`.tmp/*.db` con todas las migraciones).

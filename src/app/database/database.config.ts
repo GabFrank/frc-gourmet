@@ -348,8 +348,10 @@ import { TiendaPagoMoneda1793912540026 } from './migrations/1793912540026-Tienda
 import { TiendaDetallePedido1793919146544 } from './migrations/1793919146544-TiendaDetallePedido';
 import { TiendaTelefonoContactoCuenta1793995236513 } from './migrations/1793995236513-TiendaTelefonoContactoCuenta';
 import { TiendaPagoProveedores1793998020104 } from './migrations/1793998020104-TiendaPagoProveedores';
+import { TiendaVinculoCuentaCliente1794069224523 } from './migrations/1794069224523-TiendaVinculoCuentaCliente';
 import { PagoOnlineEvento } from './entities/pedidos-online/pago-online-evento.entity';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
+import { CuentaClienteVinculo } from './entities/pedidos-online/cuenta-cliente-vinculo.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
 import { PedidoOnline } from './entities/pedidos-online/pedido-online.entity';
@@ -462,6 +464,7 @@ function getEntitiesList(): any[] {
       PasswordResetToken,
       // Pedidos online (web app)
       CuentaCliente,
+      CuentaClienteVinculo,
       CodigoOtp,
       ZonaDelivery,
       PedidoOnline,
@@ -841,6 +844,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     TiendaDetallePedido1793919146544,
     TiendaTelefonoContactoCuenta1793995236513,
     TiendaPagoProveedores1793998020104,
+    TiendaVinculoCuentaCliente1794069224523,
   ];
 }
 

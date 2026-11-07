@@ -2622,6 +2622,22 @@ contextBridge.exposeInMainWorld('api', {
   marcarPagoDevueltoPedidoOnline: async (pedidoId: number): Promise<any> => {
     return await ipcRenderer.invoke('marcar-pago-devuelto-pedido-online', pedidoId);
   },
+  // F8b: cuentas de la tienda y su vínculo con el Cliente interno.
+  getCuentasTienda: async (filtros?: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-cuentas-tienda', filtros);
+  },
+  getVinculosCuentaTienda: async (cuentaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-vinculos-cuenta-tienda', cuentaId);
+  },
+  vincularCuentaTienda: async (cuentaId: number, clienteId: number, motivo?: string): Promise<any> => {
+    return await ipcRenderer.invoke('vincular-cuenta-tienda', cuentaId, clienteId, motivo);
+  },
+  desvincularCuentaTienda: async (cuentaId: number, motivo: string): Promise<any> => {
+    return await ipcRenderer.invoke('desvincular-cuenta-tienda', cuentaId, motivo);
+  },
+  getCuentaTiendaDeCliente: async (clienteId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cuenta-tienda-de-cliente', clienteId);
+  },
   resolverPagoPedidoOnline: async (pedidoId: number, decisionPago: any): Promise<any> => {
     return await ipcRenderer.invoke('resolver-pago-pedido-online', pedidoId, decisionPago);
   },

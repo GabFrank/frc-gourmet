@@ -40,7 +40,7 @@ async function main() {
   };
   // Sube todo y baja las migraciones de la tienda posteriores a F4 (F6 en adelante), para
   // que los bloques F2-F4 de abajo sigan encontrando a F4 como la última.
-  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda|TiendaDetallePedido|TiendaTelefonoContactoCuenta|TiendaPagoProveedores/;
+  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda|TiendaDetallePedido|TiendaTelefonoContactoCuenta|TiendaPagoProveedores|TiendaVinculoCuentaCliente/;
   const subirSinPosteriores = async () => {
     await ds.runMigrations({ transaction: 'each' });
     for (;;) {
@@ -82,7 +82,10 @@ async function main() {
   const F9_PEDIDO = ['cancelacion_solicitada_en', 'cancelacion_motivo', 'cancelacion_respuesta'];
   const F9_CFG = ['whatsapp_proveedor', 'telefono_contacto'];
   const F4_CFG = ['pago_online_activo', 'upay_base_url', 'upay_merchant_id', 'upay_merchant_nombre', 'minutos_aviso_pagado_sin_aceptar'];
-  const POSTERIORES = ['seguimiento_token_hash', ...F4_PEDIDO, ...F8_PEDIDO, ...F9_PEDIDO];
+  // F8b fase 1 (TiendaVinculoCuentaCliente): cliente del pedido y quién vinculó la cuenta.
+  const VINC_PEDIDO = ['cliente_id'];
+  const VINC_CUENTA = ['vinculado_por', 'vinculado_en'];
+  const POSTERIORES = ['seguimiento_token_hash', ...F4_PEDIDO, ...F8_PEDIDO, ...F9_PEDIDO, ...VINC_PEDIDO];
   const entTodas = meta.columns.map((c) => c.databaseName).sort();
   const ent = entTodas.filter((c) => !POSTERIORES.includes(c));
   ok(JSON.stringify(ent) === JSON.stringify([...cols].sort()), 'las columnas coinciden con la entidad', [ent, cols]);
@@ -121,7 +124,7 @@ async function main() {
   ok((await columnas()).includes('seguimiento_token_hash'), 'F2 up agrega pedidos_online.seguimiento_token_hash');
   ok((await indices()).some((n) => /IDX_pedidos_online_seguimiento/.test(n)), 'F2 up crea el índice de seguimiento');
   ok((await columnas()).includes('idempotency_key'), 'F2 no toca idempotency_key');
-  ok(JSON.stringify(entTodas.filter((c) => !F4_PEDIDO.includes(c) && !F8_PEDIDO.includes(c) && !F9_PEDIDO.includes(c))) === JSON.stringify([...(await columnas())].sort()), 'F2: las columnas coinciden con la entidad (sin F4, F8 ni F9)');
+  ok(JSON.stringify(entTodas.filter((c) => !F4_PEDIDO.includes(c) && !F8_PEDIDO.includes(c) && !F9_PEDIDO.includes(c) && !VINC_PEDIDO.includes(c))) === JSON.stringify([...(await columnas())].sort()), 'F2: las columnas coinciden con la entidad (sin F4, F8 ni F9)');
   await ds.undoLastMigration({ transaction: 'each' });
   ok(!(await columnas()).includes('seguimiento_token_hash'), 'F2 down quita la columna');
   ok(!(await indices()).some((n) => /IDX_pedidos_online_seguimiento/.test(n)), 'F2 down quita el índice');
@@ -156,7 +159,7 @@ async function main() {
   ok(/TiendaPagoOnline/.test(String(ultimaF4)), 'F4: TiendaPagoOnline es la última migración', ultimaF4);
   const colsF4 = await columnas();
   ok(F4_PEDIDO.every((c) => colsF4.includes(c)), 'F4 up agrega las columnas de pago al pedido');
-  ok(JSON.stringify(entTodas.filter((c) => !F8_PEDIDO.includes(c) && !F9_PEDIDO.includes(c))) === JSON.stringify([...colsF4].sort()), 'F4: las columnas del pedido coinciden con la entidad (sin F8 ni F9)');
+  ok(JSON.stringify(entTodas.filter((c) => !F8_PEDIDO.includes(c) && !F9_PEDIDO.includes(c) && !VINC_PEDIDO.includes(c))) === JSON.stringify([...colsF4].sort()), 'F4: las columnas del pedido coinciden con la entidad (sin F8 ni F9)');
   ok(JSON.stringify(metaCfg.columns.map((c) => c.databaseName).filter((c) => !POST_F4_CFG.includes(c)).sort()) === JSON.stringify([...(await colsCfg())].sort()), 'F4: las columnas de config coinciden con la entidad');
   ok((await indices()).includes('UQ_pedidos_online_pago_id'), 'F4 crea el índice único de pago_id');
   const actCfg = await ds.query(`SELECT pago_online_activo AS a FROM tienda_online_config`);
@@ -182,7 +185,7 @@ async function main() {
   const ultimaF8 = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
   ok(/TiendaPagoMoneda/.test(String(ultimaF8)), 'F8: TiendaPagoMoneda es la última migración', ultimaF8);
   const colsF8 = await columnas();
-  ok(JSON.stringify(entTodas.filter((c) => !F9_PEDIDO.includes(c))) === JSON.stringify([...colsF8].sort()), 'F8: las columnas del pedido coinciden con la entidad (sin F9)');
+  ok(JSON.stringify(entTodas.filter((c) => !F9_PEDIDO.includes(c) && !VINC_PEDIDO.includes(c))) === JSON.stringify([...colsF8].sort()), 'F8: las columnas del pedido coinciden con la entidad (sin F9)');
   ok((await colsCfg()).includes('metodos_pago'), 'F8 up agrega metodos_pago a la config');
   await ds.undoLastMigration({ transaction: 'each' });
   const sinF8 = await columnas();
@@ -195,7 +198,7 @@ async function main() {
   // F9: TiendaDetallePedido (solicitud de cancelación + proveedor de WhatsApp + teléfono), up / down / up.
   const ultimaF9 = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
   ok(/TiendaDetallePedido/.test(String(ultimaF9)), 'F9: TiendaDetallePedido es la última migración', ultimaF9);
-  ok(JSON.stringify(entTodas) === JSON.stringify([...(await columnas())].sort()), 'F9: las columnas del pedido coinciden con la entidad completa');
+  ok(JSON.stringify(entTodas.filter((c) => !VINC_PEDIDO.includes(c))) === JSON.stringify([...(await columnas())].sort()), 'F9: las columnas del pedido coinciden con la entidad (sin el vínculo F8b)');
   ok(JSON.stringify(metaCfg.columns.map((c) => c.databaseName).filter((c) => !PROV_CFG.includes(c)).sort()) === JSON.stringify([...(await colsCfg())].sort()), 'F9: las columnas de config coinciden con la entidad (sin proveedores de pago)');
   await ds.query(`INSERT INTO pedidos_online (numero, tipo_pedido, cancelacion_motivo) VALUES ('ZT-F9', 'PICKUP', 'X')`);
   await ds.undoLastMigration({ transaction: 'each' });
@@ -217,8 +220,8 @@ async function main() {
   const ultimaTel = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
   ok(/TiendaTelefonoContactoCuenta/.test(String(ultimaTel)), 'Contacto: TiendaTelefonoContactoCuenta es la última migración', ultimaTel);
   const metaCuenta = ds.entityMetadatas.find((m) => m.tableName === 'cuentas_cliente')!;
-  ok(JSON.stringify(metaCuenta.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...(await colsCuenta())].sort()),
-    'Contacto: las columnas de la cuenta coinciden con la entidad');
+  ok(JSON.stringify(metaCuenta.columns.map((c) => c.databaseName).filter((c) => !VINC_CUENTA.includes(c)).sort()) === JSON.stringify([...(await colsCuenta())].sort()),
+    'Contacto: las columnas de la cuenta coinciden con la entidad (sin el vínculo F8b)');
   await ds.query(`INSERT INTO cuentas_cliente (email, telefono_contacto, activo, telefono_verificado, email_verificado) VALUES ('zt-tel@x.com', '0981000111', ${pgDb ? 'true, false, false' : '1, 0, 0'})`);
   await ds.undoLastMigration({ transaction: 'each' });
   ok(!(await colsCuenta()).includes('telefono_contacto'), 'Contacto: down quita la columna');
@@ -228,6 +231,7 @@ async function main() {
   await ds.query(`DELETE FROM cuentas_cliente WHERE email = 'zt-tel@x.com'`);
 
   // Proveedores de pago (TiendaPagoProveedores): 3 columnas de config + forma de pago BANCARD ONLINE.
+  await bajarHasta(/TiendaPagoProveedores/);
   const ultimaProv = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
   ok(/TiendaPagoProveedores/.test(String(ultimaProv)), 'Proveedores: TiendaPagoProveedores es la última migración', ultimaProv);
   const PROV_COLS = ['pago_proveedor', 'pago_config_json', 'pago_devolucion_automatica'];
@@ -245,6 +249,37 @@ async function main() {
   await ds.runMigrations({ transaction: 'each' });
   const deNuevo = await colsCfg();
   ok(PROV_COLS.every((c) => deNuevo.includes(c)) && await fpB() === 1, 'Proveedores: up de nuevo las vuelve a crear');
+
+  // F8b fase 1 (TiendaVinculoCuentaCliente): vínculo cuenta ↔ cliente, historial, cliente del pedido.
+  const ultimaVinc = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
+  ok(/TiendaVinculoCuentaCliente/.test(String(ultimaVinc)), 'Vínculo: TiendaVinculoCuentaCliente es la última migración', ultimaVinc);
+  ok(JSON.stringify(entTodas) === JSON.stringify([...(await columnas())].sort()), 'Vínculo: las columnas del pedido coinciden con la entidad completa');
+  ok(JSON.stringify(metaCuenta.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...(await colsCuenta())].sort()),
+    'Vínculo: las columnas de la cuenta coinciden con la entidad completa');
+  const tablaVinc = async () => Number((await ds.query(pgDb
+    ? `SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema='public' AND table_name='cuentas_cliente_vinculos'`
+    : `SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='cuentas_cliente_vinculos'`))[0].n);
+  ok(await tablaVinc() === 1, 'Vínculo: crea la tabla de historial');
+  const metaVinc = ds.entityMetadatas.find((m) => m.tableName === 'cuentas_cliente_vinculos')!;
+  const colsVinc = pgDb
+    ? (await ds.query(`SELECT column_name AS c FROM information_schema.columns WHERE table_schema='public' AND table_name='cuentas_cliente_vinculos'`)).map((r: any) => r.c)
+    : (await ds.query(`PRAGMA table_info('cuentas_cliente_vinculos')`)).map((r: any) => r.name);
+  ok(JSON.stringify(metaVinc.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...colsVinc].sort()), 'Vínculo: el historial coincide con su entidad', colsVinc);
+  const B = pgDb ? ['true', 'false'] : ['1', '0'];
+  const cuentaCon = (email: string, cli: number | null) => ds.query(`INSERT INTO cuentas_cliente (email, cliente_id, activo, telefono_verificado, email_verificado) VALUES ('${email}', ${cli ?? 'NULL'}, ${B[0]}, ${B[1]}, ${B[1]})`);
+  await cuentaCon('zt-v1@x.com', 777001);
+  ok(await falla(() => cuentaCon('zt-v2@x.com', 777001)), 'Vínculo: dos cuentas con el mismo cliente → rechazado');
+  await cuentaCon('zt-v3@x.com', null);
+  await cuentaCon('zt-v4@x.com', null);
+  ok(Number((await ds.query(`SELECT COUNT(*) AS n FROM cuentas_cliente WHERE email LIKE 'zt-v%'`))[0].n) === 3, 'Vínculo: muchas cuentas sin cliente sí');
+  await ds.undoLastMigration({ transaction: 'each' });
+  ok(!(await columnas()).includes('cliente_id') && await tablaVinc() === 0, 'Vínculo: down quita la columna del pedido y la tabla');
+  const sinVincCuenta = await colsCuenta();
+  ok(!VINC_CUENTA.some((c) => sinVincCuenta.includes(c)) && sinVincCuenta.includes('cliente_id'), 'Vínculo: down quita quién/cuándo y deja el cliente_id original de la cuenta');
+  ok(Number((await ds.query(`SELECT COUNT(*) AS n FROM cuentas_cliente WHERE email LIKE 'zt-v%'`))[0].n) === 3, 'Vínculo: down conserva las cuentas');
+  await ds.runMigrations({ transaction: 'each' });
+  ok((await columnas()).includes('cliente_id') && await tablaVinc() === 1, 'Vínculo: up de nuevo vuelve a crear todo');
+  await ds.query(`DELETE FROM cuentas_cliente WHERE email LIKE 'zt-v%'`);
 
   await ds.destroy();
   console.log(`\n[tienda-migracion] ${passed} OK, ${failed} fallas`);

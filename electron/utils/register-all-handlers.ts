@@ -95,6 +95,7 @@ import { registerPedidosOnlineHandlers } from '../handlers/pedidos-online.handle
 import { registerPedidosOnlineAuthHandlers } from '../handlers/pedidos-online-auth.handler';
 import { registerPedidosOnlinePedidosHandlers } from '../handlers/pedidos-online-pedidos.handler';
 import { registerPedidosOnlineAdminHandlers } from '../handlers/pedidos-online-admin.handler';
+import { registerCuentasTiendaHandlers } from '../handlers/cuentas-tienda.handler';
 import { registerPedidosOnlineConfigHandlers } from '../handlers/pedidos-online-config.handler';
 import { registerMesaQrHandlers } from '../handlers/mesa-qr.handler';
 import { registerBackupHandlers } from '../handlers/backup.handler';
@@ -199,6 +200,7 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerPedidosOnlineAuthHandlers(dataSource, getCurrentUser); // auth de cliente (OTP WhatsApp + password)
   registerPedidosOnlinePedidosHandlers(dataSource, getCurrentUser); // crear pedido + zonas (publico)
   registerPedidosOnlineAdminHandlers(dataSource, getCurrentUser); // bandeja de pedidos en el PdV
+  registerCuentasTiendaHandlers(dataSource, getCurrentUser); // F8b: cuentas web ↔ Cliente
   registerPedidosOnlineConfigHandlers(dataSource, getCurrentUser); // config de tienda online
   registerMesaQrHandlers(dataSource, getCurrentUser); // QR de mesa (MESA_QR autoservicio)
 

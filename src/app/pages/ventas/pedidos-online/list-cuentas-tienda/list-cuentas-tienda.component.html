@@ -1,0 +1,125 @@
+<div class="cuentas-container">
+  <mat-card class="filter-card">
+    <mat-card-header>
+      <mat-card-title>Cuentas de la tienda</mat-card-title>
+      <mat-card-subtitle>Vinculá cada cuenta web con su cliente para que sus pedidos salgan a su nombre.</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="filter-fields">
+        <mat-form-field appearance="outline">
+          <mat-label>Nombre, correo o teléfono</mat-label>
+          <input matInput [(ngModel)]="texto" (keyup.enter)="buscar()" placeholder="Ej: 0981 o gabriel" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Vínculo</mat-label>
+          <mat-select [(ngModel)]="vinculo">
+            <mat-option *ngFor="let o of opcionesVinculo" [value]="o.valor">{{ o.texto }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+      <div class="filter-actions">
+        <button mat-raised-button color="primary" type="button" (click)="buscar()">
+          <mat-icon>search</mat-icon> Buscar
+        </button>
+        <button mat-button type="button" (click)="limpiar()">
+          <mat-icon>clear</mat-icon> Limpiar
+        </button>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <div class="table-container">
+    <div class="loading-shade" *ngIf="cargando"><mat-spinner diameter="40"></mat-spinner></div>
+    <mat-card class="table-card">
+      <table mat-table [dataSource]="filas">
+        <ng-container matColumnDef="cuenta">
+          <th mat-header-cell *matHeaderCellDef>Cuenta</th>
+          <td mat-cell *matCellDef="let f">
+            <div class="cell-stack">
+              <span class="primary">{{ f.nombre }}</span>
+              <span class="muted" *ngIf="f.email">{{ f.email }}</span>
+            </div>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="telefono">
+          <th mat-header-cell *matHeaderCellDef>Teléfono</th>
+          <td mat-cell *matCellDef="let f">
+            <div class="cell-stack">
+              <span>{{ f.telefonoTexto }}</span>
+              <span class="muted" *ngIf="f.telefonoNota">{{ f.telefonoNota }}</span>
+            </div>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="pedidos">
+          <th mat-header-cell *matHeaderCellDef class="num">Pedidos</th>
+          <td mat-cell *matCellDef="let f" class="num">{{ f.pedidos | number:'1.0-2' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="ultimoLogin">
+          <th mat-header-cell *matHeaderCellDef>Último ingreso</th>
+          <td mat-cell *matCellDef="let f">{{ f.ultimoLogin || '—' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="cliente">
+          <th mat-header-cell *matHeaderCellDef>Cliente vinculado</th>
+          <td mat-cell *matCellDef="let f">
+            <div class="cell-stack" *ngIf="f.cliente; else sinVinculo">
+              <span class="primary">
+                {{ f.cliente.nombre }}
+                <span class="chip" *ngIf="f.cliente.credito">CRÉDITO</span>
+              </span>
+              <span class="muted" *ngIf="f.cliente.ruc">RUC {{ f.cliente.ruc }}</span>
+              <span class="muted" *ngIf="f.vinculoTexto">Vinculada {{ f.vinculoTexto }}</span>
+            </div>
+            <ng-template #sinVinculo><span class="muted">Sin vincular</span></ng-template>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let f" class="acciones">
+            <button mat-icon-button [matMenuTriggerFor]="menu" [disabled]="procesandoId === f.id" matTooltip="Acciones">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              <ng-container *appHasPermission="'CLIENTES_GESTIONAR'">
+                <button mat-menu-item *ngIf="!f.cliente" (click)="vincular(f)">
+                  <mat-icon>link</mat-icon> Vincular a un cliente
+                </button>
+                <button mat-menu-item *ngIf="f.cliente" (click)="desvincular(f)">
+                  <mat-icon class="icono-peligro">link_off</mat-icon> Desvincular
+                </button>
+              </ng-container>
+              <button mat-menu-item (click)="verHistorial(f)">
+                <mat-icon>history</mat-icon> Historial de vínculos
+              </button>
+            </mat-menu>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="columnas"></tr>
+        <tr mat-row *matRowDef="let f; columns: columnas" [class.fila-activa]="historialDe?.id === f.id"></tr>
+      </table>
+      <p class="muted vacio" *ngIf="!cargando && filas.length === 0">No hay cuentas para este filtro.</p>
+      <mat-paginator [length]="total" [pageIndex]="page - 1" [pageSize]="pageSize" [pageSizeOptions]="[25, 50, 100]"
+                     (page)="cambiarPagina($event)"></mat-paginator>
+    </mat-card>
+  </div>
+
+  <mat-card class="historial-card" *ngIf="historialDe">
+    <div class="historial-header">
+      <strong>Historial de vínculos — {{ historialDe.nombre }}</strong>
+      <button mat-icon-button (click)="cerrarHistorial()" matTooltip="Cerrar"><mat-icon>close</mat-icon></button>
+    </div>
+    <p class="muted" *ngIf="historialVacio">Esta cuenta nunca se vinculó.</p>
+    <div class="historial-fila" *ngFor="let h of historial">
+      <mat-icon [class.icono-peligro]="h.accion === 'DESVINCULAR'">{{ h.accion === 'VINCULAR' ? 'link' : 'link_off' }}</mat-icon>
+      <div class="cell-stack">
+        <span>{{ h.usuario }} {{ h.accionTexto | lowercase }} con {{ h.cliente }}</span>
+        <span class="muted">{{ h.fecha }}<span *ngIf="h.motivo"> · {{ h.motivo }}</span></span>
+      </div>
+    </div>
+  </mat-card>
+</div>

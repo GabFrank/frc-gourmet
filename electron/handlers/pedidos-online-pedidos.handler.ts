@@ -388,7 +388,7 @@ export function registerPedidosOnlinePedidosHandlers(
       }
     } else {
       if (!customerId) return { success: false, error: 'no_autenticado' };
-      cuenta = await dataSource.getRepository(CuentaCliente).findOne({ where: { id: customerId } });
+      cuenta = await dataSource.getRepository(CuentaCliente).findOne({ where: { id: customerId }, relations: ['cliente'] });
       if (!cuenta || !cuenta.activo) return { success: false, error: 'cuenta_invalida' };
       if (tipoPedido === TipoPedidoOnline.PICKUP && !cfg.permitePickup) {
         return { success: false, error: 'pickup_no_disponible' };
@@ -601,6 +601,9 @@ export function registerPedidosOnlinePedidosHandlers(
     pedido.cuentaCliente = (cuenta || null) as any;
     pedido.nombreCliente = (cuenta?.nombre || nombreClienteInvitado || null) as any;
     pedido.telefonoCliente = (cuenta?.telefono || cuenta?.telefonoContacto || null) as any;
+    // F8b: el cliente interno de la cuenta vinculada, fijado ahora. La mesa comparte una venta entre
+    // comensales: no se le asigna el cliente de uno solo.
+    pedido.clienteId = (!mesa && (cuenta?.cliente as any)?.id) || null;
     pedido.tipoPedido = tipoPedido;
     if (mesa) pedido.mesaId = mesa.id;
     // Sin dueño (no debería pasar) no se guarda la clave: no habría índice que la cubra.

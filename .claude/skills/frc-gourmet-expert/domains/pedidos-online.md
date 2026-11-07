@@ -479,11 +479,34 @@ pago tardío, devoluciones, avisos, eventos) y cada proveedor es un módulo en
 - **Pendiente:** validar contra el staging de Bancard con claves reales y certificar (Bancard la
   exige antes de habilitar producción). Antes del merge, cobrar de verdad en prueba.
 
+### Cuenta web ↔ Cliente (F8b fase 1, 2026-11, PLAN-tienda-f8b-credito)
+
+- **Vínculo manual, nunca automático.** `cuentas_cliente.cliente_id` lo escribe solo
+  `vincular-cuenta-tienda` (`electron/handlers/cuentas-tienda.handler.ts`), con
+  `CLIENTES_GESTIONAR`. Ver con `CLIENTES_VER` (muestra teléfonos y correos).
+- **Un cliente, una cuenta web**: índice único parcial `UQ_cuentas_cliente_cliente`. Cambiar de
+  cliente = desvincular (con motivo) + vincular: dos registros.
+- **Historial** en `cuentas_cliente_vinculos` (VINCULAR / DESVINCULAR, `created_by`, nota o
+  motivo en mayúsculas). No se borra. El vínculo vigente lleva además `vinculado_por` /
+  `vinculado_en` en la cuenta.
+- **El pedido fija su cliente al crearse** (`pedidos_online.cliente_id`, en `crear-pedido-online`)
+  y `materializarPedidoOnlineEnVenta` pone `venta.cliente` desde ahí. Desvincular después no cambia
+  pedidos viejos. MESA_QR no lleva cliente (venta compartida).
+- `mapCuenta` (API pública) **ya no devuelve `clienteId`**: el id interno no sale a la web.
+- Pantalla: Ventas → **Cuentas de la Tienda** (`list-cuentas-tienda`); la ficha del cliente
+  muestra «Cuenta web: …».
+- **Operación por agentes:** `docs/runbooks/RUNBOOK-TIENDA-VINCULAR-CUENTAS.md` (canales,
+  errores, qué cuenta como verificación, qué no puede hacer un agente).
+- Tests: `test:tienda-vinculacion` (+ `-pg`), bloque «Vínculo» de `test:tienda-online-migracion`.
+- Fase 2 (compra a cuenta, CPC al aceptar, 1 cuota a fin de mes) pendiente.
+
 ### Lo que sigue pendiente
 
 - ~~El cliente no puede cancelar su pedido.~~ Hecho en F9 (solicitud que aprueba el local).
 - **No hay aviso al cliente por WhatsApp**; el seguimiento es por poll.
-- `CuentaCliente` **nunca se vincula** al `Cliente` interno: sin crédito, sin CPC,
+- ~~`CuentaCliente` **nunca se vincula** al `Cliente` interno.~~ Vínculo manual hecho en F8b
+  fase 1 (ver «Cuenta web ↔ Cliente»). Crédito y CPC desde la tienda siguen pendientes (fase 2).
+  Antes: sin crédito, sin CPC,
   sin dashboard. Y el storefront no pide RUC en ningún lado. **El crédito en la tienda
   y esa vinculación quedaron para F8b** (decisión del propietario, 05/11): manual, con
   permiso de clientes y registro de quién vinculó; nunca automática (riesgo de fraude).

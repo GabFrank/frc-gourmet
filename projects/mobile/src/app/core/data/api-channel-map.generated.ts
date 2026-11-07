@@ -3,7 +3,7 @@
  * AUTO-GENERADO por scripts/generate-mobile-api-map.js — NO editar a mano.
  * Mapa método de window.api → canal IPC (extraído de preload.ts).
  * Regenerar tras tocar preload.ts: `node scripts/generate-mobile-api-map.js`.
- * Total: 887 métodos.
+ * Total: 892 métodos.
  */
 export const API_CHANNEL_MAP: Record<string, string> = {
   "abrirCajaDesdeConteo": "abrir-caja-desde-conteo",
@@ -309,6 +309,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "desasignarFuncionarioRegla": "desasignar-funcionario-regla",
   "desasignarReglaEquipo": "desasignar-regla-equipo",
   "deshacerConciliacionPos": "deshacer-conciliacion-pos",
+  "desvincularCuentaTienda": "desvincular-cuenta-tienda",
   "desvincularRecetaDeProducto": "desvincular-receta-de-producto",
   "downloadFaceModels": "download-face-models",
   "editCajaMayorMovimiento": "edit-caja-mayor-movimiento",
@@ -440,10 +441,12 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getCuentaPorCobrarCuotas": "get-cuenta-por-cobrar-cuotas",
   "getCuentaPorPagar": "get-cuenta-por-pagar",
   "getCuentaPorPagarCuotas": "get-cuenta-por-pagar-cuotas",
+  "getCuentaTiendaDeCliente": "get-cuenta-tienda-de-cliente",
   "getCuentasBancarias": "get-cuentas-bancarias",
   "getCuentasBancariasResumenes": "get-cuentas-bancarias-resumenes",
   "getCuentasPorCobrar": "get-cuentas-por-cobrar",
   "getCuentasPorPagar": "get-cuentas-por-pagar",
+  "getCuentasTienda": "get-cuentas-tienda",
   "getCuotasConPagoMixto": "get-cuotas-con-pago-mixto",
   "getCuotasPendientesCompras": "get-cuotas-pendientes-compras",
   "getCurrentUser": "getCurrentUser",
@@ -677,6 +680,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getVentasByDateRange": "getVentasByDateRange",
   "getVentasByEstado": "getVentasByEstado",
   "getVentasTotalByCaja": "getVentasTotalByCaja",
+  "getVinculosCuentaTienda": "get-vinculos-cuenta-tienda",
   "getZonasDeliveryAdmin": "get-zonas-delivery-admin",
   "guardarTiendaCategoria": "guardar-tienda-categoria",
   "guardarZonaDelivery": "guardar-zona-delivery",
@@ -875,6 +879,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "validateCredentials": "validate-credentials",
   "venderDiasVacacion": "vender-dias-vacacion",
   "verificarAcreditacionPos": "verificar-acreditacion-pos",
+  "vincularCuentaTienda": "vincular-cuenta-tienda",
   "vincularRecetaAProducto": "vincular-receta-a-producto",
   "vincularVentaPedidoOnline": "vincular-venta-pedido-online",
   "volverBorradorLiquidacionSueldo": "volver-borrador-liquidacion-sueldo",

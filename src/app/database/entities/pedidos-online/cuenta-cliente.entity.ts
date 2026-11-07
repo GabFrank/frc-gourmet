@@ -1,6 +1,7 @@
 import { Column, Entity, Index, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseModel } from '../base.entity';
 import { Cliente } from '../personas/cliente.entity';
+import { Usuario } from '../personas/usuario.entity';
 
 /**
  * Cuenta de CLIENTE FINAL de la web de pedidos online (auth autoservicio).
@@ -46,10 +47,21 @@ export class CuentaCliente extends BaseModel {
   @Column({ type: 'varchar', length: 150, nullable: true })
   nombre?: string;
 
-  /** Vínculo opcional al Cliente interno (historial, crédito, facturación). */
+  /**
+   * Vínculo opcional al Cliente interno (historial, crédito, facturación). Lo hace el personal a
+   * mano (F8b), nunca automático por teléfono o correo. Único: un cliente, una cuenta web.
+   */
   @ManyToOne(() => Cliente, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'cliente_id' })
-  cliente?: Cliente;
+  cliente?: Cliente | null;
+
+  /** Quién hizo el vínculo vigente (el historial completo está en `cuentas_cliente_vinculos`). */
+  @ManyToOne(() => Usuario, { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'vinculado_por' })
+  vinculadoPor?: Usuario | null;
+
+  @Column({ name: 'vinculado_en', nullable: true })
+  vinculadoEn?: Date;
 
   @Column({ type: 'boolean', default: true })
   activo!: boolean;
