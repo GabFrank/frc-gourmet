@@ -25,297 +25,327 @@ import { RepositoryService } from '../../../database/repository.service';
   ],
   template: `
     <div class="config-container">
-      <h2>Configuración de la tienda online</h2>
-      <p class="muted" *ngIf="cargando">Cargando…</p>
-
-      <mat-card class="config-card" *ngIf="!cargando">
-        <mat-slide-toggle [(ngModel)]="cfg.activa" color="primary" class="row-toggle">
-          Tienda activa (toma pedidos)
-        </mat-slide-toggle>
-        <span class="estado-chip" [class.abierta]="cfg.abiertaAhora">
-          {{ cfg.abiertaAhora ? 'Abierta ahora' : 'Cerrada ahora' }}
-        </span>
-
-        <div class="grid">
-          <mat-form-field appearance="outline">
-            <mat-label>Nombre del comercio</mat-label>
-            <input matInput [(ngModel)]="cfg.nombreComercio" maxlength="150">
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Teléfono del local</mat-label>
-            <input matInput [(ngModel)]="cfg.telefonoContacto" maxlength="30" inputmode="tel" placeholder="0981 123 456">
-            <mat-hint>El cliente lo ve en el detalle de su pedido para llamar o escribir.</mat-hint>
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Color de marca (hex)</mat-label>
-            <input matInput [(ngModel)]="cfg.colorPrimario" placeholder="#c0392b" maxlength="20">
-          </mat-form-field>
-          <mat-form-field appearance="outline" class="full">
-            <mat-label>Mensaje de bienvenida</mat-label>
-            <input matInput [(ngModel)]="cfg.mensajeBienvenida" maxlength="300">
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Prep-time (minutos)</mat-label>
-            <input matInput type="number" min="0" [(ngModel)]="cfg.prepTimeMinutos">
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Monto mínimo de pedido</mat-label>
-            <input matInput type="number" min="0" [(ngModel)]="cfg.montoMinimoPedido">
-          </mat-form-field>
+      <header class="barra">
+        <div class="barra-titulo">
+          <h2>Configuración de la tienda online</h2>
+          <p class="muted" *ngIf="cargando">Cargando…</p>
         </div>
-
-        <div class="toggles">
-          <mat-slide-toggle [(ngModel)]="cfg.permitePickup" color="primary">Permite retiro (pickup)</mat-slide-toggle>
-          <mat-slide-toggle [(ngModel)]="cfg.permiteDelivery" color="primary">Permite delivery</mat-slide-toggle>
-          <mat-slide-toggle [(ngModel)]="cfg.aceptacionAutomatica" color="warn">
-            Aceptación automática (sin revisión en el PdV)
-          </mat-slide-toggle>
-        </div>
-
-        <h3 class="sub">Cómo puede pagar el cliente al recibir o retirar</h3>
-        <p class="hint">Lo que elige se muestra en la bandeja, en el ticket del delivery y viene precargado en el cobro del PdV. El pago con tarjeta online (uPay) se configura más abajo.</p>
-        <div class="toggles">
-          <mat-slide-toggle *ngFor="let m of metodosOpciones" [(ngModel)]="m.activo" color="primary">{{ m.label }}</mat-slide-toggle>
-        </div>
-
-        <h3 class="sub">Compra a cuenta</h3>
-        <p class="hint">Solo para cuentas web vinculadas a un cliente con crédito (Ventas → Cuentas de la Tienda) y con su teléfono o correo verificado. La deuda nace al aceptar el pedido, en una cuota que vence a fin de mes, y respeta el límite de crédito sin excepción.</p>
-        <div class="toggles">
-          <mat-slide-toggle [(ngModel)]="cfg.creditoTienda" color="primary">Permitir «A cuenta» en la tienda</mat-slide-toggle>
-        </div>
-
-        <h3 class="sub">Pizzas</h3>
-        <div class="toggles">
-          <mat-slide-toggle [(ngModel)]="cfg.personalizarSabores" color="primary">
-            Personalizar cada sabor (sacar, cambiar ingredientes y adicionales por sabor)
-          </mat-slide-toggle>
-        </div>
-
-        <h3 class="sub">Pedidos en mesa (QR autoservicio)</h3>
-        <div class="toggles">
-          <mat-slide-toggle [(ngModel)]="cfg.permiteMesa" color="primary">Permite pedidos en mesa (QR)</mat-slide-toggle>
-          <mat-slide-toggle [(ngModel)]="cfg.requiereLanMesa" color="warn">
-            Exigir la red del local (WiFi) para pedir en mesa
-          </mat-slide-toggle>
-        </div>
-        <mat-form-field appearance="outline" class="lan-field" *ngIf="cfg.requiereLanMesa">
-          <mat-label>IPs / CIDR permitidos para mesa (separados por coma)</mat-label>
-          <input matInput [(ngModel)]="cfg.rangoLanMesa" placeholder="Ej: 190.10.20.30 (IP pública del local)" maxlength="255">
-          <mat-hint>Detrás de proxy en la nube: la IP pública de egreso del local. Vacío = rangos privados. Desactivá el toggle en desarrollo.</mat-hint>
-        </mat-form-field>
-
-        <h3 class="sub">Ingreso de clientes</h3>
-        <p class="ayuda">Vacío = se usan las variables de entorno del servidor. El token se guarda cifrado en el
-          servidor y nunca se vuelve a mostrar. La plantilla tiene que ser de categoría <b>Autenticación</b>, con
-          el botón «Copiar código».</p>
-        <div class="proveedor">
-          <div class="proveedor-head">
-            <span class="prov-nombre">WhatsApp (código de ingreso)</span>
-            <span class="estado-chip" [class.abierta]="ingreso.whatsappListo">
-              {{ ingreso.whatsappListo ? 'Configurado' : 'Sin configurar' }}
-            </span>
-          </div>
-          <!-- F9: dos formas de mandar el código. Si la elegida no está configurada se usa la otra. -->
-          <div class="grid">
-            <mat-form-field appearance="outline">
-              <mat-label>Enviar el código por</mat-label>
-              <mat-select [(ngModel)]="cfg.whatsappProveedor">
-                <mat-option value="META">WhatsApp Business oficial (Meta)</mat-option>
-                <mat-option value="EVOLUTION">Número del local (Evolution API)</mat-option>
-              </mat-select>
-            </mat-form-field>
-          </div>
-          <p class="ayuda" *ngIf="cfg.whatsappProveedor === 'EVOLUTION'">
-            Usa la misma conexión que las notificaciones (Configuración › Notificaciones):
-            <b>{{ ingreso.evolutionConfigurado ? 'conectada' : 'todavía sin configurar' }}</b>.
-            El mensaje sale desde el número del local; no necesita plantilla aprobada.
-          </p>
-          <p class="ayuda" *ngIf="ingreso.whatsappListo && ingreso.whatsappProveedorActivo && ingreso.whatsappProveedorActivo !== cfg.whatsappProveedor">
-            La opción elegida no está configurada: los códigos salen por
-            {{ ingreso.whatsappProveedorActivo === 'EVOLUTION' ? 'el número del local (Evolution)' : 'Meta' }}.
-          </p>
-          <div class="grid" *ngIf="cfg.whatsappProveedor !== 'EVOLUTION'">
-            <mat-form-field appearance="outline">
-              <mat-label>Phone Number ID</mat-label>
-              <input matInput [(ngModel)]="cfg.whatsappPhoneNumberId" maxlength="30" inputmode="numeric"
-                     [placeholder]="ingreso.whatsappPhoneNumberIdEnEntorno ? 'Usando el del entorno' : ''">
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Plantilla</mat-label>
-              <input matInput [(ngModel)]="cfg.whatsappPlantilla" maxlength="120" placeholder="codigo_ingreso">
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Idioma de la plantilla</mat-label>
-              <input matInput [(ngModel)]="cfg.whatsappIdioma" maxlength="16" placeholder="es">
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Token de acceso</mat-label>
-              <input matInput type="password" autocomplete="new-password" [(ngModel)]="tokenNuevo"
-                     [disabled]="!ingreso.almacenSeguroDisponible"
-                     [placeholder]="ingreso.whatsappTokenGuardado ? '•••••• guardado (escribí para cambiar)' : ''">
-              <mat-hint *ngIf="!ingreso.almacenSeguroDisponible" class="hint-error">
-                Este servidor no tiene almacén seguro: el token solo se puede poner por variable de entorno.
-              </mat-hint>
-            </mat-form-field>
-          </div>
-          <div class="fila-acciones">
-            <button mat-stroked-button *ngIf="ingreso.whatsappTokenGuardado" (click)="borrarToken()" [disabled]="guardando">
-              <mat-icon>key_off</mat-icon> Quitar token
-            </button>
-            <mat-form-field appearance="outline" class="tel-prueba" subscriptSizing="dynamic">
-              <mat-label>Teléfono de prueba</mat-label>
-              <input matInput [(ngModel)]="telefonoPrueba" placeholder="595981123456" maxlength="20" inputmode="tel">
-            </mat-form-field>
-            <button mat-stroked-button (click)="probarWhatsapp()" [disabled]="probando || !ingreso.whatsappListo">
-              <mat-icon>send</mat-icon> Probar envío
-            </button>
-          </div>
-        </div>
-        <div class="proveedor">
-          <div class="proveedor-head">
-            <span class="prov-nombre">Google</span>
-            <span class="estado-chip" [class.abierta]="ingreso.googleConfigurado">
-              {{ ingreso.googleConfigurado ? 'Configurado' : 'Sin configurar' }}
-            </span>
-          </div>
-          <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Client ID (OAuth web)</mat-label>
-            <input matInput [(ngModel)]="cfg.googleClientId" maxlength="255"
-                   placeholder="1234-abc.apps.googleusercontent.com">
-            <mat-hint>Origen autorizado en Google: la dirección pública de la tienda.</mat-hint>
-          </mat-form-field>
-        </div>
-
-        <h3 class="sub">Pago online</h3>
-        <p class="ayuda">El cliente paga con tarjeta en la página del proveedor y el pedido llega a cocina recién cuando el pago está confirmado.</p>
-        <div class="proveedor">
-          <div class="proveedor-head">
-            <mat-slide-toggle [(ngModel)]="cfg.pagoOnlineActivo">Ofrecer pago con tarjeta</mat-slide-toggle>
-            <span class="estado-chip" [class.abierta]="cfg.pagoOnlineActivo && provSelListo">
-              {{ cfg.pagoOnlineActivo && provSelListo ? 'Activo' : 'Apagado' }}
-            </span>
-          </div>
-          <div class="grid">
-            <mat-form-field appearance="outline">
-              <mat-label>Proveedor</mat-label>
-              <mat-select [(ngModel)]="provSelId" (selectionChange)="elegirProveedor()">
-                <mat-option *ngFor="let p of proveedoresPago" [value]="p.id">{{ p.nombre }}</mat-option>
-              </mat-select>
-              <mat-hint>Con este se cobran los pedidos nuevos; los ya pagados siguen con el suyo.</mat-hint>
-            </mat-form-field>
-          </div>
-          <!-- Proveedores con campos declarados (Bancard…): la lista sale del servidor. -->
-          <div class="grid" *ngIf="provSel && provSel.campos.length">
-            <ng-container *ngFor="let c of provSel.campos">
-              <mat-form-field appearance="outline" *ngIf="!c.secreto && c.opciones" [class.full]="!!c.ayuda">
-                <mat-label>{{ c.etiqueta }}</mat-label>
-                <mat-select [(ngModel)]="valoresProv[provSel.id][c.clave]">
-                  <mat-option *ngFor="let o of c.opciones" [value]="o.valor">{{ o.etiqueta }}</mat-option>
-                </mat-select>
-                <mat-hint *ngIf="c.ayuda">{{ c.ayuda }}</mat-hint>
-              </mat-form-field>
-              <mat-form-field appearance="outline" *ngIf="!c.secreto && !c.opciones" class="full">
-                <mat-label>{{ c.etiqueta }}</mat-label>
-                <input matInput [(ngModel)]="valoresProv[provSel.id][c.clave]" [maxlength]="c.maxLength || 255" autocomplete="off">
-                <mat-hint *ngIf="c.ayuda">{{ c.ayuda }}</mat-hint>
-              </mat-form-field>
-              <mat-form-field appearance="outline" *ngIf="c.secreto" class="full">
-                <mat-label>{{ c.etiqueta }}</mat-label>
-                <input matInput type="password" [(ngModel)]="secretosNuevos[provSel.id][c.clave]" [maxlength]="c.maxLength || 500"
-                       autocomplete="off" [disabled]="!ingreso.almacenSeguroDisponible"
-                       [placeholder]="provSel.secretosGuardados[c.clave] ? '•••••• guardada (escribí para cambiar)' : ''">
-                <mat-hint *ngIf="ingreso.almacenSeguroDisponible">Se guarda cifrada en este servidor y no se vuelve a mostrar.</mat-hint>
-                <mat-hint *ngIf="!ingreso.almacenSeguroDisponible" class="hint-error">Este servidor no tiene almacén seguro: no se puede guardar.</mat-hint>
-              </mat-form-field>
-            </ng-container>
-          </div>
-          <p class="aviso-prueba" *ngIf="provSel?.campos?.length && valoresProv[provSel.id]?.['entorno'] === 'PRUEBA' && cfg.pagoOnlineActivo">
-            <mat-icon>warning</mat-icon> Está en el entorno de PRUEBA: los cobros no son reales. Pasalo a producción antes de abrir la tienda.
-          </p>
-          <div class="datos-portal" *ngIf="provSel?.datosPortal?.length">
-            <div *ngFor="let d of provSel.datosPortal">
-              <span class="lbl">{{ d.etiqueta }}</span>
-              <code>{{ d.valor }}</code>
-            </div>
-          </div>
-          <div class="grid" *ngIf="provSelId === 'UPAY'">
-            <mat-form-field appearance="outline" class="full">
-              <mat-label>URL base de uPay</mat-label>
-              <input matInput [(ngModel)]="cfg.upayBaseUrl" maxlength="255" placeholder="https://…upay.com.py">
-              <mat-hint>La que da uPay (prueba o producción). Solo https y dominio de uPay.</mat-hint>
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Merchant ID</mat-label>
-              <input matInput [(ngModel)]="cfg.upayMerchantId" maxlength="64">
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Nombre del comercio</mat-label>
-              <input matInput [(ngModel)]="cfg.upayMerchantNombre" maxlength="150">
-            </mat-form-field>
-            <mat-form-field appearance="outline" class="full">
-              <mat-label>API Key de uPay</mat-label>
-              <input matInput type="password" [(ngModel)]="upayKeyNueva" maxlength="500" autocomplete="off"
-                     [disabled]="!ingreso.almacenSeguroDisponible"
-                     [placeholder]="ingreso.upayApiKeyGuardada ? '•••••• guardada (escribí para cambiar)' : ''">
-              <mat-hint *ngIf="ingreso.almacenSeguroDisponible">Se guarda cifrada en este servidor y no se vuelve a mostrar.</mat-hint>
-              <mat-hint *ngIf="!ingreso.almacenSeguroDisponible" class="hint-error">
-                Este servidor no tiene almacén seguro: no se puede guardar la API Key.
-              </mat-hint>
-            </mat-form-field>
-          </div>
-          <div class="grid">
-            <mat-form-field appearance="outline">
-              <mat-label>Aviso si está pagado y sin aceptar (min)</mat-label>
-              <input matInput type="number" min="1" max="240" [(ngModel)]="cfg.minutosAvisoPagadoSinAceptar">
-            </mat-form-field>
-          </div>
-          <div class="devolucion-auto" *ngIf="provSel?.devuelvePorApi">
-            <mat-slide-toggle [(ngModel)]="cfg.pagoDevolucionAutomatica">Devolver automáticamente</mat-slide-toggle>
-            <p class="ayuda">Al cancelar un pedido pagado con «Hay que devolverlo», se intenta devolver por {{ provSel.nombre }} en el momento. Si no se puede, queda en la cola DEVOLVER como siempre.</p>
-          </div>
-          <div class="fila-acciones">
-            <button mat-stroked-button *ngIf="provSelId === 'UPAY' && ingreso.upayApiKeyGuardada" (click)="borrarUpayKey()" [disabled]="guardando">
-              <mat-icon>delete</mat-icon> Quitar API Key
-            </button>
-            <button mat-stroked-button (click)="probarPago()" [disabled]="probando || !provSelListo">
-              <mat-icon>wifi_tethering</mat-icon> Probar conexión
-            </button>
-          </div>
-        </div>
-
-        <div class="actions">
+        <div class="barra-acciones" *ngIf="!cargando">
+          <mat-slide-toggle [(ngModel)]="cfg.activa" color="primary">Tienda activa (toma pedidos)</mat-slide-toggle>
+          <span class="estado-chip" [class.abierta]="cfg.abiertaAhora">
+            {{ cfg.abiertaAhora ? 'Abierta ahora' : 'Cerrada ahora' }}
+          </span>
           <button mat-flat-button color="primary" [disabled]="guardando" (click)="guardar()">
             <mat-icon>save</mat-icon> Guardar
           </button>
         </div>
-      </mat-card>
+      </header>
+
+      <div class="columnas" *ngIf="!cargando">
+        <!-- Columna 1: la tienda (datos, pedidos y cómo se cobra). -->
+        <div class="columna">
+          <mat-card class="bloque">
+            <h3 class="bloque-titulo"><mat-icon>storefront</mat-icon> Datos de la tienda</h3>
+            <div class="grid grid-datos">
+              <mat-form-field appearance="outline" class="span-2">
+                <mat-label>Nombre del comercio</mat-label>
+                <input matInput [(ngModel)]="cfg.nombreComercio" maxlength="150">
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Teléfono del local</mat-label>
+                <input matInput [(ngModel)]="cfg.telefonoContacto" maxlength="30" inputmode="tel" placeholder="0981 123 456">
+                <mat-hint>Lo ve el cliente en el detalle de su pedido.</mat-hint>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Color de marca (hex)</mat-label>
+                <input matInput [(ngModel)]="cfg.colorPrimario" placeholder="#c0392b" maxlength="20">
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Prep-time (minutos)</mat-label>
+                <input matInput type="number" min="0" [(ngModel)]="cfg.prepTimeMinutos">
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Monto mínimo de pedido</mat-label>
+                <input matInput type="number" min="0" [(ngModel)]="cfg.montoMinimoPedido">
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="full">
+                <mat-label>Mensaje de bienvenida</mat-label>
+                <input matInput [(ngModel)]="cfg.mensajeBienvenida" maxlength="300">
+              </mat-form-field>
+            </div>
+          </mat-card>
+
+          <mat-card class="bloque">
+            <h3 class="bloque-titulo"><mat-icon>receipt_long</mat-icon> Pedidos</h3>
+            <div class="toggles">
+              <mat-slide-toggle [(ngModel)]="cfg.permitePickup" color="primary">Permite retiro (pickup)</mat-slide-toggle>
+              <mat-slide-toggle [(ngModel)]="cfg.permiteDelivery" color="primary">Permite delivery</mat-slide-toggle>
+              <mat-slide-toggle [(ngModel)]="cfg.aceptacionAutomatica" color="warn">Aceptación automática (sin revisión en el PdV)</mat-slide-toggle>
+              <mat-slide-toggle [(ngModel)]="cfg.personalizarSabores" color="primary">Pizzas: personalizar cada sabor</mat-slide-toggle>
+            </div>
+            <h4 class="sub">Pedidos en mesa (QR autoservicio)</h4>
+            <div class="toggles">
+              <mat-slide-toggle [(ngModel)]="cfg.permiteMesa" color="primary">Permite pedidos en mesa (QR)</mat-slide-toggle>
+              <mat-slide-toggle [(ngModel)]="cfg.requiereLanMesa" color="warn">Exigir la red del local (WiFi)</mat-slide-toggle>
+            </div>
+            <mat-form-field appearance="outline" class="lan-field" *ngIf="cfg.requiereLanMesa">
+              <mat-label>IPs / CIDR permitidos para mesa (separados por coma)</mat-label>
+              <input matInput [(ngModel)]="cfg.rangoLanMesa" placeholder="Ej: 190.10.20.30 (IP pública del local)" maxlength="255">
+              <mat-hint>Detrás de proxy en la nube: la IP pública de egreso del local. Vacío = rangos privados. Desactivá el toggle en desarrollo.</mat-hint>
+            </mat-form-field>
+
+          </mat-card>
+
+          <mat-card class="bloque">
+            <h3 class="bloque-titulo"><mat-icon>payments</mat-icon> Cobro al recibir o retirar</h3>
+            <p class="hint">Lo que elige se muestra en la bandeja, en el ticket del delivery y viene precargado en el cobro del PdV.</p>
+            <div class="toggles">
+              <mat-slide-toggle *ngFor="let m of metodosOpciones" [(ngModel)]="m.activo" color="primary">{{ m.label }}</mat-slide-toggle>
+            </div>
+            <h4 class="sub">Compra a cuenta</h4>
+            <p class="hint">Solo cuentas web vinculadas a un cliente con crédito (Ventas → Cuentas de la Tienda) y con teléfono o correo verificado. La deuda nace al aceptar el pedido, en una cuota que vence a fin de mes, y respeta el límite sin excepción.</p>
+            <div class="toggles">
+              <mat-slide-toggle [(ngModel)]="cfg.creditoTienda" color="primary">Permitir «A cuenta» en la tienda</mat-slide-toggle>
+            </div>
+          </mat-card>
+        </div>
+
+        <!-- Columna 2: integraciones (ingreso de clientes y pago online). -->
+        <div class="columna">
+          <mat-card class="bloque">
+            <h3 class="bloque-titulo"><mat-icon>login</mat-icon> Ingreso de clientes</h3>
+            <p class="ayuda">Vacío = se usan las variables de entorno del servidor. El token se guarda cifrado en el
+              servidor y nunca se vuelve a mostrar. La plantilla tiene que ser de categoría <b>Autenticación</b>, con
+              el botón «Copiar código».</p>
+            <div class="proveedor">
+              <div class="proveedor-head">
+                <span class="prov-nombre">WhatsApp (código de ingreso)</span>
+                <span class="estado-chip" [class.abierta]="ingreso.whatsappListo">
+                  {{ ingreso.whatsappListo ? 'Configurado' : 'Sin configurar' }}
+                </span>
+              </div>
+              <!-- F9: dos formas de mandar el código. Si la elegida no está configurada se usa la otra. -->
+              <div class="grid">
+                <mat-form-field appearance="outline" class="full">
+                  <mat-label>Enviar el código por</mat-label>
+                  <mat-select [(ngModel)]="cfg.whatsappProveedor">
+                    <mat-option value="META">WhatsApp Business oficial (Meta)</mat-option>
+                    <mat-option value="EVOLUTION">Número del local (Evolution API)</mat-option>
+                  </mat-select>
+                </mat-form-field>
+              </div>
+              <p class="ayuda" *ngIf="cfg.whatsappProveedor === 'EVOLUTION'">
+                Usa la misma conexión que las notificaciones (Configuración › Notificaciones):
+                <b>{{ ingreso.evolutionConfigurado ? 'conectada' : 'todavía sin configurar' }}</b>.
+                El mensaje sale desde el número del local; no necesita plantilla aprobada.
+              </p>
+              <p class="ayuda" *ngIf="ingreso.whatsappListo && ingreso.whatsappProveedorActivo && ingreso.whatsappProveedorActivo !== cfg.whatsappProveedor">
+                La opción elegida no está configurada: los códigos salen por
+                {{ ingreso.whatsappProveedorActivo === 'EVOLUTION' ? 'el número del local (Evolution)' : 'Meta' }}.
+              </p>
+              <div class="grid" *ngIf="cfg.whatsappProveedor !== 'EVOLUTION'">
+                <mat-form-field appearance="outline">
+                  <mat-label>Phone Number ID</mat-label>
+                  <input matInput [(ngModel)]="cfg.whatsappPhoneNumberId" maxlength="30" inputmode="numeric"
+                         [placeholder]="ingreso.whatsappPhoneNumberIdEnEntorno ? 'Usando el del entorno' : ''">
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Plantilla</mat-label>
+                  <input matInput [(ngModel)]="cfg.whatsappPlantilla" maxlength="120" placeholder="codigo_ingreso">
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Idioma de la plantilla</mat-label>
+                  <input matInput [(ngModel)]="cfg.whatsappIdioma" maxlength="16" placeholder="es">
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Token de acceso</mat-label>
+                  <input matInput type="password" autocomplete="new-password" [(ngModel)]="tokenNuevo"
+                         [disabled]="!ingreso.almacenSeguroDisponible"
+                         [placeholder]="ingreso.whatsappTokenGuardado ? '•••••• guardado (escribí para cambiar)' : ''">
+                  <mat-hint *ngIf="!ingreso.almacenSeguroDisponible" class="hint-error">
+                    Este servidor no tiene almacén seguro: el token solo se puede poner por variable de entorno.
+                  </mat-hint>
+                </mat-form-field>
+              </div>
+              <div class="fila-acciones">
+                <button mat-stroked-button *ngIf="ingreso.whatsappTokenGuardado" (click)="borrarToken()" [disabled]="guardando">
+                  <mat-icon>key_off</mat-icon> Quitar token
+                </button>
+                <mat-form-field appearance="outline" class="tel-prueba" subscriptSizing="dynamic">
+                  <mat-label>Teléfono de prueba</mat-label>
+                  <input matInput [(ngModel)]="telefonoPrueba" placeholder="595981123456" maxlength="20" inputmode="tel">
+                </mat-form-field>
+                <button mat-stroked-button (click)="probarWhatsapp()" [disabled]="probando || !ingreso.whatsappListo">
+                  <mat-icon>send</mat-icon> Probar envío
+                </button>
+              </div>
+            </div>
+            <div class="proveedor">
+              <div class="proveedor-head">
+                <span class="prov-nombre">Google</span>
+                <span class="estado-chip" [class.abierta]="ingreso.googleConfigurado">
+                  {{ ingreso.googleConfigurado ? 'Configurado' : 'Sin configurar' }}
+                </span>
+              </div>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Client ID (OAuth web)</mat-label>
+                <input matInput [(ngModel)]="cfg.googleClientId" maxlength="255"
+                       placeholder="1234-abc.apps.googleusercontent.com">
+                <mat-hint>Origen autorizado en Google: la dirección pública de la tienda.</mat-hint>
+              </mat-form-field>
+            </div>
+
+          </mat-card>
+
+          <mat-card class="bloque">
+            <h3 class="bloque-titulo"><mat-icon>credit_card</mat-icon> Pago online</h3>
+            <p class="ayuda">El cliente paga con tarjeta en la página del proveedor y el pedido llega a cocina recién cuando el pago está confirmado.</p>
+            <div class="proveedor">
+              <div class="proveedor-head">
+                <mat-slide-toggle [(ngModel)]="cfg.pagoOnlineActivo">Ofrecer pago con tarjeta</mat-slide-toggle>
+                <span class="estado-chip" [class.abierta]="cfg.pagoOnlineActivo && provSelListo">
+                  {{ cfg.pagoOnlineActivo && provSelListo ? 'Activo' : 'Apagado' }}
+                </span>
+              </div>
+              <div class="grid">
+                <mat-form-field appearance="outline" class="full">
+                  <mat-label>Proveedor</mat-label>
+                  <mat-select [(ngModel)]="provSelId" (selectionChange)="elegirProveedor()">
+                    <mat-option *ngFor="let p of proveedoresPago" [value]="p.id">{{ p.nombre }}</mat-option>
+                  </mat-select>
+                  <mat-hint>Con este se cobran los pedidos nuevos; los ya pagados siguen con el suyo.</mat-hint>
+                </mat-form-field>
+              </div>
+              <!-- Proveedores con campos declarados (Bancard…): la lista sale del servidor. -->
+              <div class="grid" *ngIf="provSel && provSel.campos.length">
+                <ng-container *ngFor="let c of provSel.campos">
+                  <mat-form-field appearance="outline" *ngIf="!c.secreto && c.opciones" [class.full]="!!c.ayuda">
+                    <mat-label>{{ c.etiqueta }}</mat-label>
+                    <mat-select [(ngModel)]="valoresProv[provSel.id][c.clave]">
+                      <mat-option *ngFor="let o of c.opciones" [value]="o.valor">{{ o.etiqueta }}</mat-option>
+                    </mat-select>
+                    <mat-hint *ngIf="c.ayuda">{{ c.ayuda }}</mat-hint>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" *ngIf="!c.secreto && !c.opciones" class="full">
+                    <mat-label>{{ c.etiqueta }}</mat-label>
+                    <input matInput [(ngModel)]="valoresProv[provSel.id][c.clave]" [maxlength]="c.maxLength || 255" autocomplete="off">
+                    <mat-hint *ngIf="c.ayuda">{{ c.ayuda }}</mat-hint>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" *ngIf="c.secreto" class="full">
+                    <mat-label>{{ c.etiqueta }}</mat-label>
+                    <input matInput type="password" [(ngModel)]="secretosNuevos[provSel.id][c.clave]" [maxlength]="c.maxLength || 500"
+                           autocomplete="off" [disabled]="!ingreso.almacenSeguroDisponible"
+                           [placeholder]="provSel.secretosGuardados[c.clave] ? '•••••• guardada (escribí para cambiar)' : ''">
+                    <mat-hint *ngIf="ingreso.almacenSeguroDisponible">Se guarda cifrada en este servidor y no se vuelve a mostrar.</mat-hint>
+                    <mat-hint *ngIf="!ingreso.almacenSeguroDisponible" class="hint-error">Este servidor no tiene almacén seguro: no se puede guardar.</mat-hint>
+                  </mat-form-field>
+                </ng-container>
+              </div>
+              <p class="aviso-prueba" *ngIf="provSel?.campos?.length && valoresProv[provSel.id]?.['entorno'] === 'PRUEBA' && cfg.pagoOnlineActivo">
+                <mat-icon>warning</mat-icon> Está en el entorno de PRUEBA: los cobros no son reales. Pasalo a producción antes de abrir la tienda.
+              </p>
+              <div class="datos-portal" *ngIf="provSel?.datosPortal?.length">
+                <div *ngFor="let d of provSel.datosPortal">
+                  <span class="lbl">{{ d.etiqueta }}</span>
+                  <code>{{ d.valor }}</code>
+                </div>
+              </div>
+              <div class="grid" *ngIf="provSelId === 'UPAY'">
+                <mat-form-field appearance="outline" class="full">
+                  <mat-label>URL base de uPay</mat-label>
+                  <input matInput [(ngModel)]="cfg.upayBaseUrl" maxlength="255" placeholder="https://…upay.com.py">
+                  <mat-hint>La que da uPay (prueba o producción). Solo https y dominio de uPay.</mat-hint>
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Merchant ID</mat-label>
+                  <input matInput [(ngModel)]="cfg.upayMerchantId" maxlength="64">
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Nombre del comercio</mat-label>
+                  <input matInput [(ngModel)]="cfg.upayMerchantNombre" maxlength="150">
+                </mat-form-field>
+                <mat-form-field appearance="outline" class="full">
+                  <mat-label>API Key de uPay</mat-label>
+                  <input matInput type="password" [(ngModel)]="upayKeyNueva" maxlength="500" autocomplete="off"
+                         [disabled]="!ingreso.almacenSeguroDisponible"
+                         [placeholder]="ingreso.upayApiKeyGuardada ? '•••••• guardada (escribí para cambiar)' : ''">
+                  <mat-hint *ngIf="ingreso.almacenSeguroDisponible">Se guarda cifrada en este servidor y no se vuelve a mostrar.</mat-hint>
+                  <mat-hint *ngIf="!ingreso.almacenSeguroDisponible" class="hint-error">
+                    Este servidor no tiene almacén seguro: no se puede guardar la API Key.
+                  </mat-hint>
+                </mat-form-field>
+              </div>
+              <div class="grid">
+                <mat-form-field appearance="outline">
+                  <mat-label>Aviso si está pagado y sin aceptar (min)</mat-label>
+                  <input matInput type="number" min="1" max="240" [(ngModel)]="cfg.minutosAvisoPagadoSinAceptar">
+                </mat-form-field>
+              </div>
+              <div class="devolucion-auto" *ngIf="provSel?.devuelvePorApi">
+                <mat-slide-toggle [(ngModel)]="cfg.pagoDevolucionAutomatica">Devolver automáticamente</mat-slide-toggle>
+                <p class="ayuda">Al cancelar un pedido pagado con «Hay que devolverlo», se intenta devolver por {{ provSel.nombre }} en el momento. Si no se puede, queda en la cola DEVOLVER como siempre.</p>
+              </div>
+              <div class="fila-acciones">
+                <button mat-stroked-button *ngIf="provSelId === 'UPAY' && ingreso.upayApiKeyGuardada" (click)="borrarUpayKey()" [disabled]="guardando">
+                  <mat-icon>delete</mat-icon> Quitar API Key
+                </button>
+                <button mat-stroked-button (click)="probarPago()" [disabled]="probando || !provSelListo">
+                  <mat-icon>wifi_tethering</mat-icon> Probar conexión
+                </button>
+              </div>
+            </div>
+
+          </mat-card>
+        </div>
+      </div>
     </div>
   `,
   styles: [`
-    .config-container { padding: 16px; height: 100%; overflow-y: auto; box-sizing: border-box; }
-    h2 { color: var(--text-primary); margin: 0 0 16px; }
+    :host { display: block; height: 100%; }
+    .config-container { height: 100%; overflow-y: auto; box-sizing: border-box; padding: 0 16px 24px; }
     .muted { color: var(--text-secondary); }
-    .config-card { max-width: 760px; padding: 20px; }
-    .row-toggle { margin-right: 12px; }
-    .estado-chip { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; background: var(--surface-variant); color: var(--error-color); border: 1px solid var(--error-color); }
+    /* Barra fija: título, estado y Guardar siempre a mano. */
+    .barra { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; flex-wrap: wrap; padding: 14px 0 12px; background: var(--background-color); border-bottom: 1px solid var(--border-color); margin-bottom: 16px; }
+    .barra h2 { color: var(--text-primary); margin: 0; font-size: 20px; }
+    .barra-acciones { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    /* Dos columnas en pantallas anchas; una en pantallas chicas o cuadradas. */
+    .columnas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+    .columna { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+    @media (max-width: 1280px) { .columnas { grid-template-columns: minmax(0, 1fr); } }
+    .bloque { padding: 16px 18px; }
+    .bloque-titulo { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 16px; color: var(--text-primary); }
+    .bloque-titulo mat-icon { color: var(--text-secondary); }
+    .estado-chip { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; background: var(--surface-variant); color: var(--error-color); border: 1px solid var(--error-color); white-space: nowrap; }
     .estado-chip.abierta { color: var(--success-color); border-color: var(--success-color); }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0 6px; }
+    /* Los campos se acomodan solos al ancho de la tarjeta. */
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px 12px; margin: 6px 0 4px; align-items: start; }
     .grid .full { grid-column: 1 / -1; }
-    .toggles { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 18px; }
-    .sub { color: var(--text-primary); margin: 8px 0 4px; font-size: 15px; }
-    .hint { color: var(--text-secondary); font-size: 12px; margin: 0 0 6px; }
-    .lan-field { width: 100%; margin-bottom: 8px; }
-    .actions { display: flex; justify-content: flex-end; }
+    .grid mat-form-field { width: 100%; }
+    /* Datos de la tienda: 3 columnas fijas (nombre ocupa 2) para que no quede un campo suelto. */
+    .grid-datos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-datos .span-2 { grid-column: span 2; }
+    @media (max-width: 760px) {
+      .grid-datos { grid-template-columns: minmax(0, 1fr); }
+      .grid-datos .span-2 { grid-column: auto; }
+    }
+    .toggles { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 16px; margin: 6px 0 14px; }
+    .sub { color: var(--text-primary); margin: 10px 0 4px; font-size: 14px; font-weight: 600; }
+    .hint { color: var(--text-secondary); font-size: 12px; margin: 0 0 8px; }
+    .lan-field { width: 100%; margin-bottom: 4px; }
     .ayuda { color: var(--text-secondary); font-size: 13px; margin: 0 0 10px; }
-    .proveedor { border: 1px solid var(--border-color, rgba(0,0,0,.12)); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+    .proveedor { border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+    .proveedor:last-child { margin-bottom: 0; }
     .proveedor-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
     .prov-nombre { font-weight: 600; color: var(--text-primary); }
-    .proveedor .grid { margin-top: 10px; align-items: start; }
+    /* Proveedores: dos columnas fijas (sin huecos); una en pantallas chicas. */
+    .proveedor .grid { margin-top: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    @media (max-width: 760px) { .proveedor .grid { grid-template-columns: minmax(0, 1fr); } }
     /* Identificadores que distinguen mayúsculas (Client ID, plantilla): sin la mayúscula global. */
     .proveedor input { text-transform: none !important; }
     .fila-acciones { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
     .fila-acciones button { white-space: nowrap; }
-    .tel-prueba { width: 220px; }
+    .tel-prueba { width: 220px; max-width: 100%; }
     .full-width { width: 100%; margin-top: 10px; }
     .hint-error { color: var(--error-color); }
     .devolucion-auto { margin: 4px 0 8px; }
@@ -324,7 +354,6 @@ import { RepositoryService } from '../../../database/repository.service';
     .datos-portal .lbl { display: block; color: var(--text-secondary); }
     .datos-portal code { word-break: break-all; user-select: all; }
     .devolucion-auto .ayuda { margin: 4px 0 0; }
-    @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
   `],
 })
 export class TiendaOnlineConfigComponent implements OnInit {
