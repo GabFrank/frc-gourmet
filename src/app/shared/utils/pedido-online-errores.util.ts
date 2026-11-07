@@ -21,6 +21,7 @@ const TEXTOS: Record<string, string> = {
   pedido_no_aceptado: 'el pedido ya no está aceptado.',
   no_materializable: 'el pedido ya no está aceptado.',
   no_hay_devolucion_pendiente: 'ese pago ya no está pendiente de devolución.',
+  permiso_pago_no_devolver: 'no tenés permiso para marcar que el pago no entró o que no se devuelve.',
   estado_invalido: 'estado inválido para esta acción.',
 };
 

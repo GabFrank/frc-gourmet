@@ -2,8 +2,12 @@ import { Injectable } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from '../../../database/repository.service';
+import { PermissionService } from '../../../services/permission.service';
 import { DecisionPagoPayload } from '../../../database/decision-pago-online.types';
 import { DecisionPagoOnlineDialogComponent, DecisionPagoOnlineDialogData } from './decision-pago-online-dialog.component';
+
+/** Mismo código que `PERM_PAGO_NO_DEVOLVER` del servidor (decision-pago-online.utils.ts). */
+export const PERM_PAGO_NO_DEVOLVER = 'PEDIDOS_ONLINE_PAGO_NO_DEVOLVER';
 
 /** `seguir: false` = el usuario volvió atrás; no se cancela nada. */
 export interface RespuestaDecisionPago {
@@ -17,9 +21,13 @@ export interface RespuestaDecisionPago {
  */
 @Injectable({ providedIn: 'root' })
 export class DecisionPagoOnlineService {
-  constructor(private dialog: MatDialog, private repo: RepositoryService) {}
+  constructor(private dialog: MatDialog, private repo: RepositoryService, private permisos: PermissionService) {}
 
-  async preguntar(data: DecisionPagoOnlineDialogData): Promise<RespuestaDecisionPago> {
+  async preguntar(datos: DecisionPagoOnlineDialogData): Promise<RespuestaDecisionPago> {
+    const data: DecisionPagoOnlineDialogData = {
+      ...datos,
+      puedeNoDevolver: datos.puedeNoDevolver ?? this.permisos.has(PERM_PAGO_NO_DEVOLVER),
+    };
     const ref = this.dialog.open<DecisionPagoOnlineDialogComponent, DecisionPagoOnlineDialogData, DecisionPagoPayload>(
       DecisionPagoOnlineDialogComponent, { data, width: '520px', maxWidth: '95vw' });
     const r = await firstValueFrom(ref.afterClosed());

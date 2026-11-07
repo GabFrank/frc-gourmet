@@ -23,6 +23,11 @@ export interface DecisionPagoOnlineDialogData {
   modo: 'CANCELAR' | 'RESOLVER';
   /** Pedidos web pagados afectados (normalmente uno), con el nombre de su proveedor de pago. */
   pedidos: { numero: string; monto: number; proveedor?: string | null }[];
+  /**
+   * Tiene PEDIDOS_ONLINE_PAGO_NO_DEVOLVER: puede marcar «no entró» o «no se devuelve». Sin él solo
+   * ve devolver / ya devuelto (el servidor lo exige igual). Lo completa el servicio.
+   */
+  puedeNoDevolver?: boolean;
 }
 
 interface OpcionPago {
@@ -54,6 +59,8 @@ export class DecisionPagoOnlineDialogComponent {
   readonly titulo: string;
   readonly resumen: string;
   readonly montoTotal: number;
+  /** Aviso de que hay opciones ocultas por falta de permiso. */
+  readonly sinPermisoNoDevolver: boolean;
 
   seleccion: DecisionPagoOnlineTipo | null;
   motivo = '';
@@ -66,7 +73,8 @@ export class DecisionPagoOnlineDialogComponent {
   ) {
     const resolver = data.modo === 'RESOLVER';
     const prov = (data.pedidos || []).find((p) => p.proveedor)?.proveedor || 'el proveedor';
-    const todas = opciones(prov);
+    this.sinPermisoNoDevolver = data.puedeNoDevolver === false;
+    const todas = opciones(prov).filter((o) => !(this.sinPermisoNoDevolver && o.pideMotivo));
     this.opciones = resolver ? todas.filter((o) => o.valor !== 'DEVOLVER') : todas;
     this.titulo = resolver ? 'Cerrar la devolución' : '¿Qué pasa con el pago con tarjeta?';
     const numeros = (data.pedidos || []).map((p) => p.numero).join(', ');

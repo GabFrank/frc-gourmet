@@ -12,6 +12,9 @@
       <span class="opcion-detalle">{{ op.detalle }}</span>
     </mat-radio-button>
   </mat-radio-group>
+  <p *ngIf="sinPermisoNoDevolver" class="aviso-permiso">
+    Para marcar que el pago no entró o que no se devuelve hace falta el permiso PEDIDOS_ONLINE_PAGO_NO_DEVOLVER.
+  </p>
 
   <mat-form-field *ngIf="pideMotivo" appearance="outline" class="full-width">
     <mat-label>Motivo (queda registrado)</mat-label>

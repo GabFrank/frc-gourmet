@@ -44,7 +44,7 @@ import { printDeliveryTicketInternal } from './documentos-tickets.handler';
 import { getEstadoCobroVentaInternal } from './ventas.handler';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { PEDIDO_POR_ESTADO_DELIVERY, sincronizarPedidosOnline } from '../utils/pedido-online-sync.utils';
-import { normalizarDecisionPagoOError, PagoDecidido } from '../utils/decision-pago-online.utils';
+import { decisionNoDevuelve, normalizarDecisionPagoOError, PagoDecidido, PERM_PAGO_NO_DEVOLVER } from '../utils/decision-pago-online.utils';
 import { registrarDecisionesPago } from '../services/pagos-online/pagos-online.service';
 import { monedasParaResumen, resumenPago } from '../utils/pago-pedido.utils';
 import { TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
@@ -907,6 +907,7 @@ export function registerDeliveryHandlers(
     const usuarioId = getCurrentUser()?.id;
     // Qué se hace con lo cobrado online si es un pedido web pagado (auditoría post-F10).
     const decision = normalizarDecisionPagoOError(decisionPago);
+    if (decisionNoDevuelve(decision)) await ensurePermission(dataSource, getCurrentUser, PERM_PAGO_NO_DEVOLVER);
     const pagos: PagoDecidido[] = [];
 
     const motivoNormalizado = upper(motivo);

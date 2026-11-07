@@ -108,10 +108,18 @@ async function main() {
 
   const admin = await save(Usuario, { nickname: 'admin', password: 'x', activo: true });
   const role = await save(Role, { descripcion: 'ADMIN', activo: true });
-  for (const codigo of ['VENTAS_PDV', 'PEDIDOS_ONLINE_VER', 'PEDIDOS_ONLINE_GESTIONAR', 'VENTAS_DELIVERY_CANCELAR_COBRADO']) {
-    await save(RolePermission, { role, permission: await save(Permission, { codigo, descripcion: codigo, activo: true }) });
+  const BASE = ['VENTAS_PDV', 'PEDIDOS_ONLINE_VER', 'PEDIDOS_ONLINE_GESTIONAR', 'VENTAS_DELIVERY_CANCELAR_COBRADO'];
+  const permisos: Record<string, any> = {};
+  for (const codigo of [...BASE, 'PEDIDOS_ONLINE_PAGO_NO_DEVOLVER']) {
+    permisos[codigo] = await save(Permission, { codigo, descripcion: codigo, activo: true });
+    await save(RolePermission, { role, permission: permisos[codigo] });
   }
   await save(UsuarioRole, { usuario: admin, role });
+  // Cajero: puede cancelar, pero no dejar un pago online sin devolver.
+  const cajero = await save(Usuario, { nickname: 'cajero', password: 'x', activo: true });
+  const roleCajero = await save(Role, { descripcion: 'CAJERO', activo: true });
+  for (const codigo of BASE) await save(RolePermission, { role: roleCajero, permission: permisos[codigo] });
+  await save(UsuarioRole, { usuario: cajero, role: roleCajero });
   const moneda = await save(Moneda, { denominacion: 'GUARANI', simbolo: 'Gs', principal: true, activo: true, decimales: 0 });
   const tipoPrecio = await save(TipoPrecio, { descripcion: 'NORMAL', activo: true });
   const caja = await save(Caja, {
@@ -127,7 +135,8 @@ async function main() {
   await save(PrecioVenta, { valor: 45000, principal: true, activo: true, moneda, tipoPrecio, presentacion });
 
   installHandlerRegistry();
-  const getUser = () => admin;
+  let usuarioActual: any = admin;
+  const getUser = () => usuarioActual;
   const { registerVentasHandlers, materializarPedidoOnlineEnVenta } = require('../electron/handlers/ventas.handler');
   registerVentasHandlers(ds, getUser);
   require('../electron/handlers/pedidos-online-admin.handler').registerPedidosOnlineAdminHandlers(ds, getUser);
@@ -373,6 +382,31 @@ async function main() {
   ok(s.resumen === 'CANCELADO/CANCELADA/CANCELADO' && s.p?.estadoPago === 'DEVUELTO', '9g: venta cancelada en el PdV con «ya devuelto»', { s: s.resumen, pago: s.p?.estadoPago });
   ok(/MOTIVO_PAGO_REQUERIDO/.test(await lanza(() => invokeHandler('updateVenta', (s.v.id), { estado: 'CANCELADA', __decisionPagoOnline: { decision: 'NO_ENTRO' } }))),
     '9g: el historial también exige motivo');
+
+  // 9h: sin PEDIDOS_ONLINE_PAGO_NO_DEVOLVER no se puede dejar la plata sin devolver, en ninguna puerta.
+  usuarioActual = cajero;
+  const j1 = await materializado(PAGADO);
+  s = await estado(j1.id);
+  ok(/PEDIDOS_ONLINE_PAGO_NO_DEVOLVER/.test(await lanza(() => invokeHandler('delivery-cancelar', s.d.id, 'x', { decision: 'NO_ENTRO', motivo: 'M' }))),
+    '9h: delivery-cancelar «no entró» sin permiso se rechaza');
+  ok((await estado(j1.id)).resumen === 'EN_PREPARACION/ABIERTA/ABIERTO', '9h: y no cambió nada', (await estado(j1.id)).resumen);
+  ok(/PEDIDOS_ONLINE_PAGO_NO_DEVOLVER/.test(await lanza(() => invokeHandler('updateVenta', j1.ventaId, { estado: 'CANCELADA', __decisionPagoOnline: { decision: 'NO_SE_DEVUELVE', motivo: 'M' } }))),
+    '9h: updateVenta «no se devuelve» sin permiso se rechaza');
+  ok((await estado(j1.id)).resumen === 'EN_PREPARACION/ABIERTA/ABIERTO', '9h: tampoco cambió', (await estado(j1.id)).resumen);
+  ok((await invokeHandler('rechazar-pedido-online', j1.id, 'x', { decision: 'NO_SE_DEVUELVE', motivo: 'M' }) as any)?.error === 'permiso_pago_no_devolver',
+    '9h: rechazar con «no se devuelve» sin permiso se rechaza');
+  await pedirCancelar(j1.id, 'no lo quiero');
+  ok((await invokeHandler('resolver-cancelacion-pedido-online', j1.id, true, undefined, { decision: 'NO_ENTRO', motivo: 'M' }) as any)?.error === 'permiso_pago_no_devolver',
+    '9h: aprobar la cancelación con «no entró» sin permiso se rechaza');
+  ok((await estado(j1.id)).p?.estado === 'EN_PREPARACION', '9h: y el pedido sigue', (await estado(j1.id)).resumen);
+  const r9h: any = await invokeHandler('resolver-cancelacion-pedido-online', j1.id, true, undefined, { decision: 'YA_DEVUELTO' });
+  ok(r9h?.success === true && (await estado(j1.id)).p?.estadoPago === 'DEVUELTO', '9h: «ya devuelto» sí lo puede marcar', r9h);
+  const j2 = await materializado(PAGADO);
+  await invokeHandler('rechazar-pedido-online', j2.id, 'x');
+  ok((await invokeHandler('resolver-pago-pedido-online', j2.id, { decision: 'NO_SE_DEVUELVE', motivo: 'M' }) as any)?.error === 'permiso_pago_no_devolver'
+    && (await estado(j2.id)).p?.estadoPago === 'REEMBOLSO_PENDIENTE',
+    '9h: cerrar la devolución como «no se devuelve» sin permiso se rechaza y sigue pendiente');
+  usuarioActual = admin;
   setPagosOnlineDeps({ avisar: null });
 
   await cerrar();

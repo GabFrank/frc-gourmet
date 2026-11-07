@@ -1,5 +1,5 @@
 import { marcarDevuelto, registrarDecisionPago, resolverDevolucionPendiente } from '../services/pagos-online/pagos-online.service';
-import { DecisionPago, DecisionPagoError, estadoPagoPorDecision, normalizarDecisionPago } from '../utils/decision-pago-online.utils';
+import { DecisionPago, DecisionPagoError, decisionNoDevuelve, estadoPagoPorDecision, normalizarDecisionPago, PERM_PAGO_NO_DEVOLVER } from '../utils/decision-pago-online.utils';
 import { nombreProveedor } from '../services/pagos-online/proveedores';
 import { cierreSolicitudAlSalir, ESTADOS_CANCELABLES_CLIENTE, limpiarMotivo, motivoAtencion, WHERE_ATENCION, PARAMS_ATENCION } from '../utils/pedido-acciones.utils';
 
@@ -260,16 +260,22 @@ export function registerPedidosOnlineAdminHandlers(
   ];
 
   /** La decisión del pago llega del cliente; mal formada o sin motivo, se corta antes de tocar nada. */
-  const leerDecision = (raw: any): DecisionPago | { error: string } => {
-    try { return normalizarDecisionPago(raw); } catch (e) {
+  const leerDecision = async (raw: any): Promise<DecisionPago | { error: string }> => {
+    let d: DecisionPago;
+    try { d = normalizarDecisionPago(raw); } catch (e) {
       if (e instanceof DecisionPagoError) return { error: e.codigo };
       throw e;
     }
+    // Dejar la plata sin devolver es una decisión aparte de cancelar (permiso propio).
+    if (decisionNoDevuelve(d) && !(await checkPermission(dataSource, getCurrentUser, PERM_PAGO_NO_DEVOLVER)).ok) {
+      return { error: 'permiso_pago_no_devolver' };
+    }
+    return d;
   };
 
   ipcMain.handle('rechazar-pedido-online', async (_event: any, pedidoId: number, motivo: string, decisionPago?: any) => {
     await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
-    const d = leerDecision(decisionPago);
+    const d = await leerDecision(decisionPago);
     if ('error' in d) return { success: false, error: d.error };
     return cancelarPedido(pedidoId, motivo, EstadoPedidoOnline.RECHAZADO, {}, undefined, d);
   });
@@ -391,7 +397,7 @@ export function registerPedidosOnlineAdminHandlers(
   // pedirlo (para eso está el teléfono del local).
   ipcMain.handle('resolver-cancelacion-pedido-online', async (_event: any, pedidoId: number, aprobar: boolean, respuesta?: string, decisionPago?: any) => {
     await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
-    const d = leerDecision(decisionPago);
+    const d = await leerDecision(decisionPago);
     if ('error' in d) return { success: false, error: d.error };
     const pedido = await repo().findOne({ where: { id: Number(pedidoId) } });
     if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
@@ -433,7 +439,7 @@ export function registerPedidosOnlineAdminHandlers(
   // entró, o el local no lo devuelve), con motivo. Mismo diálogo en la bandeja y en el delivery.
   ipcMain.handle('resolver-pago-pedido-online', async (_event: any, pedidoId: number, decisionPago: any) => {
     await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
-    const d = leerDecision(decisionPago);
+    const d = await leerDecision(decisionPago);
     if ('error' in d) return { success: false, error: d.error };
     if (d.decision === DecisionPagoOnline.DEVOLVER) return { success: false, error: 'decision_pago_invalida' };
     const ok = await resolverDevolucionPendiente(dataSource, Number(pedidoId), d, getCurrentUser()?.id);

@@ -26,6 +26,17 @@ const ESTADO_POR_DECISION: Record<DecisionPagoOnline, EstadoPagoOnline> = {
   [DecisionPagoOnline.NO_SE_DEVUELVE]: EstadoPagoOnline.RETENIDO,
 };
 
+/**
+ * Permiso para dejar un pago online sin devolver (NO_ENTRO / NO_SE_DEVUELVE). Cancelar no alcanza:
+ * quien no lo tiene solo puede elegir DEVOLVER o YA_DEVUELTO. ADMINISTRADOR lo recibe solo.
+ */
+export const PERM_PAGO_NO_DEVOLVER = 'PEDIDOS_ONLINE_PAGO_NO_DEVOLVER';
+
+/** La decisión deja la plata sin devolver: exige `PERM_PAGO_NO_DEVOLVER`. */
+export function decisionNoDevuelve(d: DecisionPago | null | undefined): boolean {
+  return !!d && (d.decision === DecisionPagoOnline.NO_ENTRO || d.decision === DecisionPagoOnline.NO_SE_DEVUELVE);
+}
+
 export const DECISION_PAGO_DEFAULT: DecisionPago = { decision: DecisionPagoOnline.DEVOLVER, motivo: null };
 
 export class DecisionPagoError extends Error {

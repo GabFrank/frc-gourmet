@@ -77,7 +77,7 @@ import { limiteFechaSqlite } from '../utils/db-query';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { reapuntarPedidosDeVenta, sincronizarPedidosPorCierreDeVenta } from '../utils/pedido-online-sync.utils';
-import { DecisionPago, normalizarDecisionPagoOError, PagoDecidido } from '../utils/decision-pago-online.utils';
+import { DecisionPago, decisionNoDevuelve, normalizarDecisionPagoOError, PagoDecidido, PERM_PAGO_NO_DEVOLVER } from '../utils/decision-pago-online.utils';
 import { registrarDecisionesPago } from '../services/pagos-online/pagos-online.service';
 import { proveedorDelPedido } from '../services/pagos-online/proveedores';
 import { EstadoPedidoOnline, TipoPedidoOnline, EstadoPagoOnline, FORMA_PAGO_UPAY } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
@@ -1614,6 +1614,9 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       if (data && Object.prototype.hasOwnProperty.call(data, '__decisionPagoOnline')) {
         decisionPagoOnline = normalizarDecisionPagoOError(data.__decisionPagoOnline);
         delete data.__decisionPagoOnline;
+        if (decisionNoDevuelve(decisionPagoOnline)) {
+          await ensurePermission(dataSource, getCurrentUser, PERM_PAGO_NO_DEVOLVER);
+        }
       }
 
       const estadoAnterior = entity.estado;
