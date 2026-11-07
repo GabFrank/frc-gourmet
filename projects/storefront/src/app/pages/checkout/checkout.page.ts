@@ -122,7 +122,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
     this.subsPago.push(this.config.cambios$.subscribe(() => this.recalcularPago()));
     // F8b: si puede comprar a cuenta y cuánto le queda (el servidor lo vuelve a validar al pedir).
     if (!this.mesa.enMesa && this.auth.isAuthenticated) {
-      this.auth.cargarCredito().subscribe({ next: () => this.recalcularPago(), error: () => {} });
+      this.auth.cargarCredito().subscribe({ next: () => this.recalcularPago(), error: () => { this.auth.credito = null; this.recalcularPago(); } });
     }
     this.subsPago.push(this.monedas.cambios.subscribe(() => { this.monedaPago = null; this.recalcularPago(); }));
     this.menuSvc.cargar(true).subscribe({

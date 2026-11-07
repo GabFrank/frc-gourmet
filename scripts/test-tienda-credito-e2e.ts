@@ -269,6 +269,25 @@ async function main() {
   ok((await R(CuentaPorCobrar).count({ where: { ventaId: mat4.ventaId, estado: 'ACTIVO' } })) === 1 && await saldo(rico) === 45000,
     '3b: una sola deuda, la del pedido (el otro de este cliente sigue sin aceptar)', await saldo(rico));
 
+  // ═══════ [4b] Auditoría ═══════
+  console.log('\n[4b] Aceptar sin crédito, reservas en el PdV y fin de mes');
+  const sol = await cliente('SOL', { credito: true, limite_credito: 50000 });
+  const cSol = await cuentaVinculada(sol);
+  const pSol: any = await pedir(cSol);
+  await R(Cliente).update({ id: sol.id }, { credito: false } as any);
+  const ac: any = await invokeHandler('aceptar-pedido-online', (await fila(pSol.numero)).id, { cajaId: caja.id });
+  ok(ac?.error === 'credito_no_habilitado' && (await fila(pSol.numero)).estado === 'RECIBIDO', '4b: aceptar sin crédito se corta antes: el pedido sigue RECIBIDO', ac);
+  await R(Cliente).update({ id: sol.id }, { credito: true } as any);
+  // Venta común del PdV a crédito para el mismo cliente: el pedido web sin aceptar ya reserva 45.000.
+  const { Venta: V } = { Venta };
+  const vPdv = await save(V, { estado: 'ABIERTA', caja: { id: caja.id }, cliente: { id: sol.id } });
+  const aviso: any = await invokeHandler('cobrar-venta-credito', { ventaId: vPdv.id, clienteId: sol.id, montoTotal: 10000, monedaId: gs.id, cantidadCuotas: 1 });
+  ok(aviso?.requiereConfirmacion === true && /pedidos web a cuenta/.test(aviso?.message || ''), '4b: la venta a crédito del PdV cuenta lo reservado por la web', aviso);
+  const ac2: any = await invokeHandler('aceptar-pedido-online', (await fila(pSol.numero)).id, { cajaId: caja.id });
+  ok(ac2?.success === true && !!(await fila(pSol.numero)).ventaId && await saldo(sol) === 45000, '4b: con crédito, se acepta y nace la deuda', ac2);
+  const fdmUtc = finDeMes(new Date('2026-12-01T01:00:00Z'));
+  ok(fdmUtc.getMonth() === 10 && fdmUtc.getDate() === 30, '4b: aceptado el 30/11 a las 22:00 de Asunción (1/12 UTC) vence el 30/11', fdmUtc.toString());
+
   // ═══════ [5] Cancelar revierte ═══════
   console.log('\n[5] Cancelar revierte la deuda');
   const rr: any = await invokeHandler('rechazar-pedido-online', (await fila(p1.numero)).id, 'sin stock');

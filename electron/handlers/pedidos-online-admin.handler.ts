@@ -1,3 +1,5 @@
+import { estadoCreditoCliente } from '../utils/credito-tienda.utils';
+import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
 import { marcarDevuelto, registrarDecisionPago, resolverDevolucionPendiente } from '../services/pagos-online/pagos-online.service';
 import { DecisionPago, DecisionPagoError, decisionNoDevuelve, estadoPagoPorDecision, normalizarDecisionPago, PERM_PAGO_NO_DEVOLVER } from '../utils/decision-pago-online.utils';
 import { nombreProveedor } from '../services/pagos-online/proveedores';
@@ -14,7 +16,7 @@ import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zon
 import { TiendaCategoria, TiendaCategoriaProducto } from '../../src/app/database/entities/pedidos-online/tienda-categoria.entity';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
 import { Delivery, DeliveryEstado } from '../../src/app/database/entities/ventas/delivery.entity';
-import { DecisionPagoOnline, EstadoPedidoOnline, EstadoPagoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { DecisionPagoOnline, EstadoPedidoOnline, EstadoPagoOnline, MetodoPagoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { checkPermission, ensurePermission } from '../utils/auth.utils';
 import { PrecioDelivery } from '../../src/app/database/entities/ventas/precio-delivery.entity';
 import { enviosPorZonaYCanal, filtroDeRango } from './reportes-delivery.helper';
@@ -187,6 +189,17 @@ export function registerPedidosOnlineAdminHandlers(
       const caja = cajaId ? await dataSource.getRepository(Caja).findOne({ where: { id: cajaId } }) : null;
       if (!caja || caja.estado !== CajaEstado.ABIERTO) {
         return { success: false, error: 'sin_caja' };
+      }
+    }
+    // F8b: a cuenta. Si el cliente ya no tiene crédito o no le alcanza, no se acepta (si no, el
+    // pedido quedaba ACEPTADO, sin venta ni deuda, y el cliente ya avisado). La deuda en sí se
+    // vuelve a validar al materializar, con el cliente bloqueado.
+    if (pedido.metodoPago === MetodoPagoOnline.CREDITO) {
+      const cli = pedido.clienteId ? await dataSource.getRepository(Cliente).findOne({ where: { id: pedido.clienteId } }) : null;
+      const est = await estadoCreditoCliente(dataSource.manager, cli, pedido.id);
+      if (!est.habilitado) return { success: false, error: 'credito_no_habilitado' };
+      if (est.disponible !== null && Number(pedido.total) > est.disponible + 1e-9) {
+        return { success: false, error: 'credito_insuficiente', disponible: est.disponible };
       }
     }
     // Transición atómica RECIBIDO → ACEPTADO (F5, M-F2-8): un rechazo o una aceptación

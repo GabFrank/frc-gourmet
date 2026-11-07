@@ -35,7 +35,7 @@ import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
 import { assertCajaAbiertaSiVino } from '../utils/caja-abierta.utils';
 import { ajustarSaldoCliente, ajustarSaldoCuentaBancaria } from '../utils/saldo-atomico.utils';
 import { sincronizarPedidosPorCierreDeVenta } from '../utils/pedido-online-sync.utils';
-import { ventaTieneCpcActiva } from '../utils/credito-tienda.utils';
+import { clienteBloqueado, reservadoWeb, ventaTieneCpcActiva } from '../utils/credito-tienda.utils';
 
 function calcularEstadoCuota(monto: number, montoCobrado: number): CuentaPorCobrarCuotaEstado {
   if (montoCobrado >= monto) return CuentaPorCobrarCuotaEstado.COBRADO;
@@ -882,6 +882,8 @@ export function registerCuentasPorCobrarHandlers(
         contexto: 'cobrar-venta-credito',
       });
 
+      // F8b: la fila del cliente se toma (Postgres) para no cruzarse con la deuda de un pedido web.
+      await clienteBloqueado(queryRunner.manager, Number(data.clienteId));
       const cliente = await clienteRepo.findOne({ where: { id: data.clienteId } });
       if (!cliente) throw new Error(`Cliente ${data.clienteId} no encontrado`);
       if (!cliente.activo) throw new Error('El cliente está inactivo');
@@ -893,12 +895,15 @@ export function registerCuentasPorCobrarHandlers(
       // Validar límite de crédito (warning si excede, salvo que se fuerce)
       const limite = Number(cliente.limite_credito) || 0;
       const saldoAct = Number(cliente.saldoActual) || 0;
-      const saldoFinal = saldoAct + montoTotal;
+      // F8b: los pedidos web a cuenta todavía sin aceptar ya comprometieron parte del límite.
+      const reservadoTienda = await reservadoWeb(queryRunner.manager, cliente.id);
+      const saldoFinal = saldoAct + reservadoTienda + montoTotal;
       if (limite > 0 && saldoFinal > limite && !data.forzar) {
         return {
           success: false,
           requiereConfirmacion: true,
-          message: `El saldo proyectado (${saldoFinal.toFixed(2)}) excede el límite de crédito (${limite.toFixed(2)})`,
+          message: `El saldo proyectado (${saldoFinal.toFixed(2)}) excede el límite de crédito (${limite.toFixed(2)})`
+            + (reservadoTienda > 0 ? ` (incluye ${reservadoTienda.toFixed(2)} de pedidos web a cuenta sin aceptar)` : ''),
           saldoActual: saldoAct,
           saldoProyectado: saldoFinal,
           limite,

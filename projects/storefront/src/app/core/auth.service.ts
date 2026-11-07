@@ -96,10 +96,12 @@ export class AuthService {
     if (refresh) this.api.call('auth.logout', [refresh]).subscribe({ next: () => {}, error: () => {} });
     this.api.setTokens(null, null);
     this.cuenta = null;
+    this.credito = null;
   }
 
   private setSesion(res: any): void {
     this.api.setTokens(res.accessToken, res.refreshToken ?? null);
     this.cuenta = res.cuenta;
+    this.credito = null;
   }
 }

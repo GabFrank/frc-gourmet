@@ -1,5 +1,5 @@
 import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
-import { creditoHabilitadoEnTienda, estadoCreditoCliente, identidadVerificada, withClienteLock } from '../utils/credito-tienda.utils';
+import { CreditoTiendaError, creditoHabilitadoEnTienda, estadoCreditoCliente, identidadVerificada, withClienteLock } from '../utils/credito-tienda.utils';
 import { iniciarPagoPedido, procesarAvisoPago, verificarPagoPedido, VERIFICAR_MIN_MS } from '../services/pagos-online/pagos-online.service';
 import { metodosAlRecibir, monedasTienda, validarPagoPedido, ResultadoPago } from '../utils/pago-pedido.utils';
 import { accionesPedido, ESTADOS_CANCELABLES_CLIENTE, limpiarMotivo } from '../utils/pedido-acciones.utils';
@@ -730,6 +730,15 @@ export function registerPedidosOnlinePedidosHandlers(
         ventaId = mat?.ventaId ?? null;
       } catch (e) {
         console.warn('[crear-pedido-online] auto-materialización falló:', (e as any)?.message || e);
+        // F8b: un pedido a cuenta que no pudo generar su deuda no queda ACEPTADO colgado (reservando
+        // crédito y con el cliente avisado): se rechaza con el motivo y el cliente elige otro pago.
+        if (e instanceof CreditoTiendaError && saved.estado === EstadoPedidoOnline.ACEPTADO) {
+          await pedidoRepo().createQueryBuilder().update(PedidoOnline)
+            .set({ estado: EstadoPedidoOnline.RECHAZADO, motivoRechazo: 'NO SE PUDO CARGAR A TU CUENTA (CRÉDITO)' } as any)
+            .where('id = :id AND venta_id IS NULL AND estado = :e', { id: saved.id, e: EstadoPedidoOnline.ACEPTADO })
+            .execute();
+          return { success: false, error: e.codigo };
+        }
       }
     }
 

@@ -111,13 +111,30 @@ export async function estadoCreditoCuenta(ds: DataSource, cuenta: CuentaCliente 
   return estadoCreditoCliente(ds.manager, cliente);
 }
 
-/** Último día del mes de `fecha`, a medianoche local. */
-export function finDeMes(fecha: Date): Date {
-  return new Date(fecha.getFullYear(), fecha.getMonth() + 1, 0);
+/**
+ * Último día del mes de `fecha` en la hora de Paraguay (el servidor puede correr en UTC: una
+ * compra aceptada el 30/11 a las 22:00 en Asunción ya es 1/12 en UTC y vencería un mes después).
+ */
+export function finDeMes(fecha: Date, zona = 'America/Asuncion'): Date {
+  let anio = fecha.getFullYear();
+  let mes = fecha.getMonth();
+  try {
+    const partes = new Intl.DateTimeFormat('en-US', { timeZone: zona, year: 'numeric', month: 'numeric' }).formatToParts(fecha);
+    anio = Number(partes.find((p) => p.type === 'year')?.value) || anio;
+    mes = (Number(partes.find((p) => p.type === 'month')?.value) || mes + 1) - 1;
+  } catch {
+    /* sin datos de zona horaria: la del servidor */
+  }
+  return new Date(anio, mes + 1, 0);
 }
 
-/** Lee el cliente con FOR UPDATE en Postgres (sin relaciones: FOR UPDATE no va con outer joins). */
-async function clienteBloqueado(m: EntityManager, clienteId: number): Promise<Cliente | null> {
+/**
+ * Lee el cliente con FOR UPDATE en Postgres (sin relaciones: FOR UPDATE no va con outer joins).
+ * La materialización lo llama AL EMPEZAR la transacción, antes de insertar la venta con ese
+ * cliente: el insert toma un KEY SHARE sobre la fila, y bloquearla después podía cruzarse con una
+ * venta a crédito del PdV del mismo cliente (deadlock, auditoría F8b fase 2).
+ */
+export async function clienteBloqueado(m: EntityManager, clienteId: number): Promise<Cliente | null> {
   const pg = m.connection.options.type === 'postgres';
   return m.getRepository(Cliente).findOne({
     where: { id: clienteId },

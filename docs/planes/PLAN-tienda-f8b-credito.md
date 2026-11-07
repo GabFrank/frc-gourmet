@@ -16,6 +16,16 @@ cobro. `test:tienda-credito` 41/41 en SQLite y Postgres; batería 107/107; proba
 la copia: pedido a cuenta, aceptado (CPC ₲ 20.000 vence 30/11, saldo ₲ 20.000) y cancelado
 (CPC CANCELADA, saldo 0).
 
+### Pendiente conocido (auditoría fase 2)
+
+- **Editar la venta después de aceptar** (agregar/quitar ítems, descuento, cambiar el envío): la
+  deuda queda por el total del pedido. Si el total sube, la diferencia se cobra al entregar como
+  cualquier saldo; si baja, la deuda queda mayor que la venta y hay que ajustarla a mano en la
+  cuenta del cliente. Propuesta: bloquear la edición de una venta con deuda web, o resincronizar
+  la CPC. Decisión del propietario.
+- **Límite 0 = sin tope**, igual que en el PdV. Si en la web se quiere exigir un límite, se cambia
+  esa regla.
+
 ## Por qué
 
 Decisión del propietario (05/11, confirmada 07/11): la tienda tiene que poder vender a cuenta a

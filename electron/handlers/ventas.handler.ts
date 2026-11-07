@@ -81,7 +81,7 @@ import { DecisionPago, decisionNoDevuelve, normalizarDecisionPagoOError, PagoDec
 import { registrarDecisionesPago } from '../services/pagos-online/pagos-online.service';
 import { proveedorDelPedido } from '../services/pagos-online/proveedores';
 import { EstadoPedidoOnline, TipoPedidoOnline, EstadoPagoOnline, FORMA_PAGO_UPAY, MetodoPagoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
-import { cargarDeudaPedidoACuenta, withClienteLock } from '../utils/credito-tienda.utils';
+import { cargarDeudaPedidoACuenta, clienteBloqueado, withClienteLock } from '../utils/credito-tienda.utils';
 import { TiendaOnlineConfig } from '../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import { motivoNoMaterializable } from '../utils/pedido-online-materializable';
 import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
@@ -334,6 +334,8 @@ export async function materializarPedidoOnlineEnVenta(
     await qr.connect();
     await qr.startTransaction();
     try {
+    // F8b: pedido a cuenta → la fila del cliente se toma primero (ver `clienteBloqueado`).
+    if (aCuentaDe) await clienteBloqueado(qr.manager, aCuentaDe);
     // Guard DENTRO de la transacción: entre la resolución de arriba y este
     // punto la caja pudo cerrarse.
     await assertCajaAbierta(qr.manager, cajaId, { lock: 'read', contexto: 'materializarPedidoOnlineEnVenta' });
