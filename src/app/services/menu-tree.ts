@@ -171,14 +171,14 @@ export const MENU_TREE: MenuNode[] = [
       {
         id: 'grp-ventas-tienda', label: 'Tienda online', icon: 'storefront',
         children: [
-          { id: 'pedidos-online', label: 'Pedidos Online', icon: 'shopping_bag', permiso: 'VENTAS_PDV',
+          { id: 'pedidos-online', label: 'Pedidos online', icon: 'shopping_bag', permiso: 'VENTAS_PDV',
             keywords: ['pedidos', 'online', 'delivery'],
             action: { component: ListPedidosOnlineComponent, title: 'Pedidos Online', tabId: 'pedidos-online-tab', data: NAV } },
-          { id: 'mesas-qr', label: 'QR de Mesas', icon: 'qr_code_2', permiso: 'VENTAS_PDV',
+          { id: 'mesas-qr', label: 'QR de mesas', icon: 'qr_code_2', permiso: 'VENTAS_PDV',
             keywords: ['qr', 'mesa', 'mesas', 'autoservicio', 'tienda', 'lamina', 'imprimir'],
             action: { component: MesasQrComponent, title: 'QR de Mesas', tabId: 'mesas-qr-tab', data: NAV } },
-          { id: 'tienda-online-config', label: 'Config Tienda Online', icon: 'storefront', permiso: 'VENTAS_PDV', esConfig: true,
-            keywords: ['tienda', 'online', 'config'],
+          { id: 'tienda-online-config', label: 'Configuración', icon: 'storefront', permiso: 'VENTAS_PDV', esConfig: true,
+            keywords: ['tienda', 'online', 'config', 'configuracion', 'ajustes', 'config tienda online'],
             action: { component: TiendaOnlineConfigComponent, title: 'Config Tienda Online', tabId: 'tienda-online-config-tab', data: NAV } },
           { id: 'zonas-delivery', label: 'Zonas de Delivery', icon: 'pin_drop', permiso: 'VENTAS_PDV', esConfig: true,
             keywords: ['zonas', 'delivery', 'reparto'],
@@ -186,12 +186,12 @@ export const MENU_TREE: MenuNode[] = [
         ],
       },
       {
-        id: 'grp-ventas-config', label: 'Configuración del PdV', icon: 'settings',
+        id: 'grp-ventas-config', label: 'Ajustes del PdV', icon: 'settings',
         children: [
-          { id: 'config-pdv', label: 'Configuración de PdV', icon: 'tune', permiso: 'VENTAS_PDV', esConfig: true,
+          { id: 'config-pdv', label: 'General', icon: 'tune', permiso: 'VENTAS_PDV', esConfig: true,
             keywords: ['configuracion', 'pdv', 'punto', 'venta'],
             action: { mode: 'dialog', component: PdvConfigDialogComponent, title: 'Configuración de PdV', data: {}, dialogConfig: { width: '760px', maxWidth: '95vw' } } },
-          { id: 'config-atajos', label: 'Configurar Atajos', icon: 'grid_view', permiso: 'VENTAS_PDV', esConfig: true,
+          { id: 'config-atajos', label: 'Atajos', icon: 'grid_view', permiso: 'VENTAS_PDV', esConfig: true,
             keywords: ['atajos', 'accesos', 'pdv'],
             action: { mode: 'dialog', component: AtajoConfigDialogComponent, title: 'Configurar Atajos', data: {}, dialogConfig: { width: '90vw', maxWidth: '90vw', height: '80vh' } } },
           // Zonas de entrega del delivery del PdV, con su precio. Distinto de

@@ -100,9 +100,11 @@ Reorganizaciones destacadas:
   propio grupo de nivel 1.
 - **Ventas** (2026-11) dejó de mezclar todo en una lista: arriba lo del día (Dashboard, PdV,
   Historial, Buffet por kilo) y después tres subgrupos, cada uno con su configuración al lado:
-  *Cocina* (KDS, Pantallas KDS), *Tienda online* (pedidos, cuentas, QR de mesas, config de la
-  tienda, categorías, zonas de delivery) y *Configuración del PdV* (PdV, atajos, precios de
-  delivery). Los ids no cambiaron: los overrides del ADMIN siguen valiendo.
+  *Cocina* (KDS, Pantallas KDS), *Tienda online* (Pedidos online, Cuentas web, QR de mesas,
+  Configuración, Categorías, Zonas de delivery) y *Ajustes del PdV* (General,
+  Atajos, Precios de delivery). Dentro de un grupo la etiqueta no repite el nombre del grupo (el
+  título de la pestaña y las palabras del buscador sí lo dicen). Los ids no cambiaron: los
+  overrides del ADMIN siguen valiendo.
 - **Financiero** absorbió *Caja Mayor* (dashboard + cajas mayor, gastos,
   entradas varias, operaciones financieras, retiros, CPP, CPC) y *Bancos*
   (cuentas, cheques, chequeras, POS, acreditaciones) como subgrupos, más
