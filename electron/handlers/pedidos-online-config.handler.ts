@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { pagoOnlineOfrecido, proveedorPagoActivo } from '../utils/tienda-ingreso.utils';
 import { metodosAlRecibir } from '../utils/pago-pedido.utils';
+import { creditoHabilitadoEnTienda } from '../utils/credito-tienda.utils';
 import { METODOS_AL_RECIBIR, MetodoPagoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { upayConfigDe, apiKey as upayApiKeyActual } from '../services/pagos-online/pagos-online.service';
 import { upayProveedor } from '../services/pagos-online/proveedores/upay.proveedor';
@@ -101,6 +102,8 @@ function mapConfigPublic(cfg: TiendaOnlineConfig): any {
     pagoOnlineHosts: pagoOnlineOfrecido(cfg) ? proveedorPagoActivo().hosts : [],
     // F8: métodos para pagar al recibir / retirar (sin configurar = sólo efectivo).
     metodosPago: metodosAlRecibir(cfg),
+    // F8b: la tienda ofrece «A cuenta». Si ESTE cliente puede, lo dice `pub-cliente-me`.
+    compraACuenta: creditoHabilitadoEnTienda(cfg),
   };
 }
 
@@ -316,7 +319,7 @@ export function registerPedidosOnlineConfigHandlers(
     await credencialesTiendaListas();
     const cfg = await getTiendaConfig(dataSource);
     // metodosPago va como lista (en la base es JSON en texto).
-    return { ...cfg, metodosPago: metodosAlRecibir(cfg), abiertaAhora: estaAbierta(cfg), ingreso: await estadoIngreso(cfg), pago: await estadoProveedoresPago(cfg) };
+    return { ...cfg, metodosPago: metodosAlRecibir(cfg), creditoTienda: creditoHabilitadoEnTienda(cfg), abiertaAhora: estaAbierta(cfg), ingreso: await estadoIngreso(cfg), pago: await estadoProveedoresPago(cfg) };
   });
 
   // Admin: actualizar.
@@ -347,10 +350,14 @@ export function registerPedidosOnlineConfigHandlers(
     if (data.aceptacionAutomatica !== undefined) cfg.aceptacionAutomatica = !!data.aceptacionAutomatica;
     if (data.personalizarSabores !== undefined) cfg.personalizarSabores = !!data.personalizarSabores;
     // F8: métodos al recibir. Sólo los conocidos; vacío = sólo efectivo (nunca una tienda sin forma de pago).
-    if (data.metodosPago !== undefined) {
-      const lista = Array.isArray(data.metodosPago) ? data.metodosPago.map((m: any) => String(m).toUpperCase()) : [];
-      const validos = METODOS_AL_RECIBIR.filter((m) => lista.includes(m));
-      cfg.metodosPago = JSON.stringify(validos.length ? validos : [MetodoPagoOnline.EFECTIVO]);
+    // F8b: «A cuenta» viaja aparte (`creditoTienda`) pero se guarda en la misma lista.
+    if (data.metodosPago !== undefined || data.creditoTienda !== undefined) {
+      const lista = data.metodosPago !== undefined
+        ? (Array.isArray(data.metodosPago) ? data.metodosPago.map((m: any) => String(m).toUpperCase()) : [])
+        : metodosAlRecibir(cfg);
+      const validos: string[] = METODOS_AL_RECIBIR.filter((m) => lista.includes(m));
+      const credito = data.creditoTienda !== undefined ? !!data.creditoTienda : creditoHabilitadoEnTienda(cfg);
+      cfg.metodosPago = JSON.stringify([...(validos.length ? validos : [MetodoPagoOnline.EFECTIVO]), ...(credito ? [MetodoPagoOnline.CREDITO] : [])]);
     }
     if (data.horariosJson !== undefined) cfg.horariosJson = data.horariosJson || undefined;
     // Canal MESA_QR (pedidos en mesa por QR)
@@ -401,7 +408,7 @@ export function registerPedidosOnlineConfigHandlers(
     for (const x of resProv.secretos) tokenOk = (await setSecretoPago(x.prov, x.clave, x.valor)) && tokenOk;
     await cargarCredencialesTienda(dataSource);
     if (!tokenOk) return { success: false, error: 'token_no_guardado' };
-    return { success: true, config: { ...saved, metodosPago: metodosAlRecibir(saved), abiertaAhora: estaAbierta(saved), ingreso: await estadoIngreso(saved), pago: await estadoProveedoresPago(saved) } };
+    return { success: true, config: { ...saved, metodosPago: metodosAlRecibir(saved), creditoTienda: creditoHabilitadoEnTienda(saved), abiertaAhora: estaAbierta(saved), ingreso: await estadoIngreso(saved), pago: await estadoProveedoresPago(saved) } };
   });
 
   // Admin: prueba la conexión con uPay (F4) consultando una sesión que no existe: 404 = la

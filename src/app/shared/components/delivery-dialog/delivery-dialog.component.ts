@@ -1045,8 +1045,10 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     this.selloRecibo = this.selectedDelivery?.estado === 'CANCELADO' || this.selectedDelivery?.venta?.estado === 'CANCELADA' ? 'CANCELADO'
       : this.ventaCobrada ? 'PAGADO'
       : web?.estadoPago === 'PAGADO' ? 'PAGADO ONLINE'
+      // F8b: la deuda del pedido a cuenta nació al aceptarlo; el repartidor no cobra nada.
+      : web?.metodoPago === 'CREDITO' && this.selectedDelivery?.venta?.estado === 'ABIERTA' ? 'A CUENTA'
       : 'A COBRAR';
-    this.selloPagado = this.selloRecibo === 'PAGADO' || this.selloRecibo === 'PAGADO ONLINE';
+    this.selloPagado = this.selloRecibo === 'PAGADO' || this.selloRecibo === 'PAGADO ONLINE' || this.selloRecibo === 'A CUENTA';
     this.detalleCanal = (this.selectedDelivery?.venta?.canalOrigen ?? 'LOCAL') === 'LOCAL' ? 'LOCAL' : 'WEB';
     this.detalleFecha = this.selectedDelivery?.fechaAbierto
       ? new Date(this.selectedDelivery.fechaAbierto) : null;

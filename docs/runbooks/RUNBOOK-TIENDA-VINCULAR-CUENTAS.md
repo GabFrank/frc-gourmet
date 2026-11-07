@@ -93,6 +93,34 @@ Para encontrar el `clienteId`: `get-clientes` con `[{ termino: '<nombre, RUC o d
 - Desvincular **no** cambia los pedidos ya hechos: siguen a nombre del cliente que tenían.
 - La tienda (API pública y el token del cliente) nunca expone el id del cliente interno.
 
+## Compra a cuenta (fase 2)
+
+Una cuenta vinculada puede pagar sus pedidos **«A cuenta»** si se cumplen todas:
+- la tienda lo ofrece (Config Tienda Online → «Permitir A cuenta en la tienda»);
+- el cliente vinculado está activo y tiene **crédito** habilitado en su ficha;
+- la cuenta tiene identidad verificada: teléfono por código de WhatsApp o correo verificado
+  (Google). Un teléfono de contacto solo **no** alcanza;
+- le alcanza el **disponible** = límite de crédito − saldo − pedidos a cuenta todavía sin aceptar.
+  Límite 0 = sin tope. En la web el límite es duro (el cliente no puede forzarlo).
+
+Qué pasa con el pedido:
+- **Al aceptarlo** nace la deuda, en la misma operación que crea la venta: cuenta por cobrar de
+  **una cuota que vence el último día del mes**, movimiento CARGO del cliente y su saldo. La venta
+  queda saldada con un pago «CREDITO» (no mueve la caja): se entrega y se finaliza sin cobrar.
+- Si entre el pedido y la aceptación el cliente perdió el crédito o ya no le alcanza, **no se
+  puede aceptar** (`credito_no_habilitado` / `credito_insuficiente`): hablar con el cliente y
+  rechazarlo o pedirle que lo haga con otro medio.
+- **Cancelar o rechazar** revierte la deuda (CPC CANCELADA, AJUSTE_NEGATIVO, saldo). Con una cuota
+  ya cobrada no se puede cancelar: primero se anula el cobro.
+- No se puede volver a cobrar «a crédito» una venta que ya tiene su deuda.
+
+Para un agente: puede consultar el disponible y los pedidos a cuenta, y explicar por qué no se
+pudo aceptar uno. **No** cambia límites ni habilita crédito: eso lo decide una persona en la ficha
+del cliente.
+
+Errores del checkout (`pedido.crear`): `credito_no_habilitado`, `credito_insuficiente`
+(con `disponible`), `metodo_pago_no_disponible` (la tienda no lo ofrece o es un pedido de mesa).
+
 ## Autenticación de un agente
 
 Sin contraseñas: *Device Authorization Grant*.

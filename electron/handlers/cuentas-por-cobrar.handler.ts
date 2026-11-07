@@ -35,6 +35,7 @@ import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
 import { assertCajaAbiertaSiVino } from '../utils/caja-abierta.utils';
 import { ajustarSaldoCliente, ajustarSaldoCuentaBancaria } from '../utils/saldo-atomico.utils';
 import { sincronizarPedidosPorCierreDeVenta } from '../utils/pedido-online-sync.utils';
+import { ventaTieneCpcActiva } from '../utils/credito-tienda.utils';
 
 function calcularEstadoCuota(monto: number, montoCobrado: number): CuentaPorCobrarCuotaEstado {
   if (montoCobrado >= monto) return CuentaPorCobrarCuotaEstado.COBRADO;
@@ -868,6 +869,11 @@ export function registerCuentasPorCobrarHandlers(
       if (!venta) throw new Error(`Venta ${data.ventaId} no encontrada`);
       if (venta.estado === VentaEstado.CONCLUIDA) throw new Error('La venta ya está concluida');
       if (venta.estado === VentaEstado.CANCELADA) throw new Error('La venta está cancelada');
+      // F8b: un pedido web a cuenta ya generó su deuda al aceptarse. Cobrarlo otra vez a crédito
+      // duplicaría la cuenta por cobrar y el saldo del cliente.
+      if (await ventaTieneCpcActiva(queryRunner.manager, venta.id)) {
+        throw new Error('La venta ya tiene una cuenta por cobrar (pedido web a cuenta): finalizala sin cobrar de nuevo.');
+      }
       // Invariante de caja: cerrar a crédito crea el `Pago` con `caja: venta.caja`
       // (más abajo), así que esa caja tiene que estar abierta. Corre dentro de la
       // transacción del cobro, no opt-in como el gate de terminal.

@@ -289,6 +289,24 @@ Pantalla: Ventas → **Cuentas de la Tienda**. Operación por agentes:
 8. **Permisos:** con un usuario que solo tiene `CLIENTES_VER` se ve la lista pero no aparecen
    Vincular ni Desvincular; sin `CLIENTES_VER` la pantalla no está en el menú.
 
+## 15 · Compra a cuenta (F8b fase 2)
+
+Preparación: un cliente con crédito y límite (ficha del cliente), su cuenta web vinculada (§14) y
+con teléfono o correo verificado; Config Tienda Online → «Permitir A cuenta en la tienda».
+
+1. **Checkout:** con esa cuenta, «¿Cómo pagás?» muestra **A cuenta** con «Disponible: ₲ …».
+   Con otra cuenta (sin vincular o sin crédito) no aparece.
+2. **No alcanza:** con un total mayor al disponible, el texto dice «No te alcanza…» y no deja
+   confirmar.
+3. **Pedido:** confirmar → «Mis pedidos» dice «A tu cuenta del local».
+4. **Aceptar en el PdV:** en el cliente aparece una cuenta por cobrar por el total con una cuota
+   que vence el último día del mes; el saldo del cliente sube; el comprobante del diálogo de
+   delivery dice **A CUENTA** (no «A cobrar»).
+5. **Entregar:** LISTO → finalizar sin cobrar nada → ENTREGADO. La deuda sigue una sola.
+6. **Cancelar** (otro pedido aceptado): la cuenta por cobrar queda CANCELADA y el saldo vuelve.
+7. **Sin crédito al aceptar:** quitarle el crédito al cliente con un pedido pendiente → al
+   aceptarlo, no se puede (no se crea venta ni deuda).
+
 ## Qué NO se probó automáticamente
 
 - **SQLite es lo que corren los tests** (`.tmp/*.db` con todas las migraciones).

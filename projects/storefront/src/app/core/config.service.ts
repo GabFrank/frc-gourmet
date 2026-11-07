@@ -22,6 +22,8 @@ export interface TiendaConfig {
   pagoOnlineHosts?: string[];
   /** F8: métodos para pagar al recibir / retirar (sin configurar = sólo efectivo). */
   metodosPago?: string[];
+  /** F8b: la tienda ofrece «A cuenta» (si este cliente puede, lo dice `auth.me`). */
+  compraACuenta?: boolean;
   /** F9: teléfono del local (llamar / escribir desde el detalle del pedido). */
   telefonoContacto?: string | null;
 }

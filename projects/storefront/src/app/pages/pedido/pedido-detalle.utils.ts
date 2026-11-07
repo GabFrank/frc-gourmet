@@ -3,7 +3,7 @@ import { esMetodoPagoOnline } from '../../core/pago-online';
 
 const METODO: Record<string, string> = {
   EFECTIVO: 'Efectivo', TARJETA_POS: 'Tarjeta (POS)', QR: 'QR', PIX: 'PIX',
-  TRANSFERENCIA: 'Transferencia', UPAY: 'Tarjeta online', BANCARD: 'Tarjeta online', PAGOPAR: 'Pagopar',
+  TRANSFERENCIA: 'Transferencia', CREDITO: 'A cuenta', UPAY: 'Tarjeta online', BANCARD: 'Tarjeta online', PAGOPAR: 'Pagopar',
 };
 
 /** «Efectivo · pagás con US$ 20,00» / «QR al recibir» / «Tarjeta online». */
@@ -14,6 +14,8 @@ export function textoPagoCliente(
   if (!p?.metodoPago) return null;
   const metodo = METODO[p.metodoPago] || p.metodoPago;
   if (esMetodoPagoOnline(p.metodoPago) || !p.pagoModalidad) return metodo;
+  // F8b: a cuenta no se paga al retirar ni al recibir: va a la cuenta del cliente.
+  if (p.metodoPago === 'CREDITO') return 'A tu cuenta del local';
   const cuando = p.tipoPedido === 'PICKUP' ? 'al retirar' : 'al recibir';
   if (p.metodoPago !== 'EFECTIVO') return `${metodo} ${cuando}`;
   const moneda = p.pagoMonedaId != null ? monedas.find((m) => m.id === Number(p.pagoMonedaId)) : monedas.find((m) => m.principal);

@@ -120,6 +120,11 @@ export function validarPagoPedido(params: {
     // Online: no hay moneda ni vuelto (paga el total, en la principal, en el proveedor).
     return { ok: true, campos: { metodoPago, pagoModalidad: PagoModalidad.ONLINE, pagoMonedaId: null, vueltoPara: null, pagoCotizacion: null, pagoObservacion } };
   }
+  // F8b: a cuenta. Si la tienda lo ofrece y si ESTE cliente puede lo decide `crear-pedido-online`
+  // (cuenta vinculada, crédito, disponible); acá solo se normaliza: sin moneda ni vuelto.
+  if (metodoPago === MetodoPagoOnline.CREDITO) {
+    return { ok: true, campos: { metodoPago, pagoModalidad: PagoModalidad.A_CUENTA, pagoMonedaId: null, vueltoPara: null, pagoCotizacion: null, pagoObservacion } };
+  }
   if (!habilitados.includes(metodoPago)) return { ok: false, error: 'metodo_pago_no_disponible' };
   if (metodoPago !== MetodoPagoOnline.EFECTIVO) {
     return { ok: true, campos: { metodoPago, pagoModalidad: PagoModalidad.AL_RECIBIR, pagoMonedaId: null, vueltoPara: null, pagoCotizacion: null, pagoObservacion } };
@@ -163,7 +168,7 @@ export function validarPagoPedido(params: {
 
 const NOMBRE_METODO: Record<string, string> = {
   EFECTIVO: 'EFECTIVO', TARJETA_POS: 'TARJETA (POS)', QR: 'QR', PIX: 'PIX',
-  TRANSFERENCIA: 'TRANSFERENCIA', UPAY: 'TARJETA ONLINE (UPAY)', BANCARD: 'TARJETA ONLINE (BANCARD)', PAGOPAR: 'PAGOPAR',
+  TRANSFERENCIA: 'TRANSFERENCIA', CREDITO: 'A CUENTA', UPAY: 'TARJETA ONLINE (UPAY)', BANCARD: 'TARJETA ONLINE (BANCARD)', PAGOPAR: 'PAGOPAR',
 };
 
 function fmt(v: number, decimales: number): string {
@@ -182,6 +187,7 @@ export function resumenPago(p: {
 }, monedas: Pick<MonedaTienda, 'id' | 'simbolo' | 'decimales' | 'principal'>[]): string {
   const metodo = NOMBRE_METODO[String(p.metodoPago || 'EFECTIVO')] || String(p.metodoPago || 'EFECTIVO').toUpperCase();
   if (esMetodoPagoOnline(p.metodoPago)) return metodo;
+  if (p.metodoPago === MetodoPagoOnline.CREDITO) return `${metodo} DEL CLIENTE`;
   // Pedido anterior a F8 (sin modalidad): no se sabe si necesitaba vuelto; sólo el método.
   if (!p.pagoModalidad) return metodo;
   const partes = [metodo];

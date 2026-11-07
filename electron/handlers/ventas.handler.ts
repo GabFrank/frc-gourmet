@@ -80,7 +80,8 @@ import { reapuntarPedidosDeVenta, sincronizarPedidosPorCierreDeVenta } from '../
 import { DecisionPago, decisionNoDevuelve, normalizarDecisionPagoOError, PagoDecidido, PERM_PAGO_NO_DEVOLVER } from '../utils/decision-pago-online.utils';
 import { registrarDecisionesPago } from '../services/pagos-online/pagos-online.service';
 import { proveedorDelPedido } from '../services/pagos-online/proveedores';
-import { EstadoPedidoOnline, TipoPedidoOnline, EstadoPagoOnline, FORMA_PAGO_UPAY } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { EstadoPedidoOnline, TipoPedidoOnline, EstadoPagoOnline, FORMA_PAGO_UPAY, MetodoPagoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { cargarDeudaPedidoACuenta, withClienteLock } from '../utils/credito-tienda.utils';
 import { TiendaOnlineConfig } from '../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import { motivoNoMaterializable } from '../utils/pedido-online-materializable';
 import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
@@ -251,9 +252,16 @@ export async function materializarPedidoOnlineEnVenta(
   // MESA_QR se serializa por mesa (varios comensales pidiendo a la misma cuenta);
   // PICKUP/DELIVERY no tienen mesa y se serializan por pedido.
   const conMesa = !!pedidoPre.mesaId;
-  const conLock = conMesa
+  // F8b: un pedido a cuenta crea la deuda del cliente: se serializa también por cliente, con el
+  // candado tomado hasta el commit (los pedidos nuevos de ese cliente miran el disponible después).
+  const aCuentaDe = !conMesa && pedidoPre.metodoPago === MetodoPagoOnline.CREDITO && pedidoPre.clienteId
+    ? Number(pedidoPre.clienteId) : null;
+  const lockPedido = conMesa
     ? <T,>(fn: () => Promise<T>) => withMesaLock(pedidoPre.mesaId as number, fn)
     : <T,>(fn: () => Promise<T>) => withPedidoLock(pedidoId, fn);
+  const conLock = aCuentaDe
+    ? <T,>(fn: () => Promise<T>) => withClienteLock(aCuentaDe, () => lockPedido(fn))
+    : lockPedido;
 
   return conLock(async () => {
     // `zonaDelivery.precioDelivery` se carga para poder sellar la zona en el
@@ -465,6 +473,20 @@ export async function materializarPedidoOnlineEnVenta(
           formaPago: { id: fp.id } as any,
         } as any));
         venta.pago = { id: pago.id } as any;
+        venta = await ventaRepo.save(venta);
+      }
+
+      // F8b: a cuenta. La deuda nace acá, en esta misma transacción: si algo de la venta falla,
+      // tampoco queda deuda. Como el cobro online, deja la venta saldada para que el PdV la concluya.
+      if (pedido.metodoPago === MetodoPagoOnline.CREDITO) {
+        const moneda = pedido.moneda?.id
+          ? { id: pedido.moneda.id }
+          : await qr.manager.getRepository(Moneda).findOne({ where: { principal: true } });
+        if (!moneda) throw new Error('no hay moneda principal para registrar la deuda a cuenta');
+        const deuda = await cargarDeudaPedidoACuenta(qr.manager, {
+          pedido, ventaId: venta.id, cajaId: cajaId as number, monedaId: (moneda as any).id, usuarioId: userId ?? null,
+        });
+        venta.pago = { id: deuda.pagoId } as any;
         venta = await ventaRepo.save(venta);
       }
     }

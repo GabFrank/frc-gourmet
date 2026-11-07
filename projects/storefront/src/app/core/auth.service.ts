@@ -62,6 +62,17 @@ export class AuthService {
     return this.isAuthenticated && !this.cuenta?.nombre;
   }
 
+  /**
+   * F8b: crédito del cliente para el checkout. `null` = no puede comprar a cuenta. `disponible`
+   * null con `sinTope` = sin límite. Se pide al entrar al checkout; no cambia la sesión.
+   */
+  credito: { disponible: number | null; sinTope: boolean } | null = null;
+  cargarCredito(): Observable<any> {
+    return this.api.call<any>('auth.me', []).pipe(
+      tap((res) => { this.credito = res?.success ? (res.credito ?? null) : null; }),
+    );
+  }
+
   refreshMe(): void {
     this.api.call<any>('auth.me', []).subscribe({
       next: (res) => {

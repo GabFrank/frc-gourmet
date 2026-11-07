@@ -1,3 +1,4 @@
+import { estadoCreditoCuenta } from '../utils/credito-tienda.utils';
 import { ipcMain } from 'electron';
 import * as crypto from 'crypto';
 import { DataSource, MoreThan } from 'typeorm';
@@ -285,7 +286,10 @@ export function registerPedidosOnlineAuthHandlers(
     const cuenta = await cuentaRepo().findOne({ where: { id: customerId }, relations: ['cliente'] });
     // Cuenta dada de baja: no sigue operando con un token viejo (PLAN-tienda-online A1).
     if (!cuenta || !cuenta.activo) return { success: false, error: 'cuenta_no_encontrada' };
-    return { success: true, cuenta: mapCuenta(cuenta) };
+    // F8b: si puede comprar a cuenta y cuánto le queda. Nada del saldo ni del límite exactos.
+    const est = await estadoCreditoCuenta(dataSource, cuenta);
+    const credito = est.habilitado ? { disponible: est.disponible, sinTope: est.disponible === null } : null;
+    return { success: true, cuenta: mapCuenta(cuenta), credito };
   });
 
   // ============== PERFIL UPDATE (nombre/email/password) ==============

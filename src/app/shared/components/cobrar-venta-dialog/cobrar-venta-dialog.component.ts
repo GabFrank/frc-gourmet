@@ -81,6 +81,8 @@ const FORMA_PAGO_POR_METODO: Record<string, string[]> = {
   TRANSFERENCIA: ['TRANSFERENCIA'],
   UPAY: ['UPAY ONLINE'],
   BANCARD: ['BANCARD ONLINE'],
+  // F8b: a cuenta — la deuda ya se registró al aceptar; la venta llega saldada.
+  CREDITO: ['CREDITO'],
 };
 
 interface DetalleRow {

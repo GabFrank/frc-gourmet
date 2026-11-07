@@ -10,7 +10,11 @@ Fase 1 (vinculación) hecha: migración `TiendaVinculoCuentaCliente`, handlers
 `cuentas-tienda.handler.ts`, pantalla «Cuentas de la Tienda», chip en la ficha del cliente,
 pedido y venta con el cliente. Tests `test:tienda-vinculacion` 32/32 en SQLite y Postgres,
 migraciones 74/74, batería completa 105/105, AOT y Chrome. Guía para agentes:
-`docs/runbooks/RUNBOOK-TIENDA-VINCULAR-CUENTAS.md`. Fase 2 (compra a cuenta) pendiente.
+`docs/runbooks/RUNBOOK-TIENDA-VINCULAR-CUENTAS.md`. Fase 2 (compra a cuenta) hecha el mismo día: `credito-tienda.utils.ts`, checkout «A cuenta» con
+disponible, deuda al aceptar (1 cuota a fin de mes), reversa al cancelar, guardas contra doble
+cobro. `test:tienda-credito` 41/41 en SQLite y Postgres; batería 107/107; probado en Chrome contra
+la copia: pedido a cuenta, aceptado (CPC ₲ 20.000 vence 30/11, saldo ₲ 20.000) y cancelado
+(CPC CANCELADA, saldo 0).
 
 ## Por qué
 

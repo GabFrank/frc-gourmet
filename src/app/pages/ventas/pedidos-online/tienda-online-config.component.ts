@@ -78,6 +78,12 @@ import { RepositoryService } from '../../../database/repository.service';
           <mat-slide-toggle *ngFor="let m of metodosOpciones" [(ngModel)]="m.activo" color="primary">{{ m.label }}</mat-slide-toggle>
         </div>
 
+        <h3 class="sub">Compra a cuenta</h3>
+        <p class="hint">Solo para cuentas web vinculadas a un cliente con crédito (Ventas → Cuentas de la Tienda) y con su teléfono o correo verificado. La deuda nace al aceptar el pedido, en una cuota que vence a fin de mes, y respeta el límite de crédito sin excepción.</p>
+        <div class="toggles">
+          <mat-slide-toggle [(ngModel)]="cfg.creditoTienda" color="primary">Permitir «A cuenta» en la tienda</mat-slide-toggle>
+        </div>
+
         <h3 class="sub">Pizzas</h3>
         <div class="toggles">
           <mat-slide-toggle [(ngModel)]="cfg.personalizarSabores" color="primary">
@@ -442,8 +448,14 @@ export class TiendaOnlineConfigComponent implements OnInit {
     if (Object.keys(pagoSecretos).length) payload.pagoSecretos = pagoSecretos;
     // Ninguno marcado = sólo efectivo (el servidor nunca deja la tienda sin forma de pago).
     // Si la config no llegó a cargarse, no se mandan: si no, se resetearía a sólo efectivo.
-    if (this.metodosOpciones.length) payload.metodosPago = this.metodosOpciones.filter((m) => m.activo).map((m) => m.valor);
-    else delete payload.metodosPago;
+    if (this.metodosOpciones.length) {
+      payload.metodosPago = this.metodosOpciones.filter((m) => m.activo).map((m) => m.valor);
+      // F8b: «A cuenta» va aparte; mismo cuidado (sin config cargada no se toca).
+      payload.creditoTienda = !!this.cfg?.creditoTienda;
+    } else {
+      delete payload.metodosPago;
+      delete payload.creditoTienda;
+    }
     if (this.tokenNuevo.trim() && !extra.whatsappTokenBorrar) payload.whatsappToken = this.tokenNuevo.trim();
     if (this.upayKeyNueva.trim() && !extra.upayApiKeyBorrar) payload.upayApiKey = this.upayKeyNueva.trim();
     this.repo.updateTiendaOnlineConfig(payload).subscribe({

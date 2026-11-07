@@ -1,3 +1,5 @@
+import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
+import { creditoHabilitadoEnTienda, estadoCreditoCliente, identidadVerificada, withClienteLock } from '../utils/credito-tienda.utils';
 import { iniciarPagoPedido, procesarAvisoPago, verificarPagoPedido, VERIFICAR_MIN_MS } from '../services/pagos-online/pagos-online.service';
 import { metodosAlRecibir, monedasTienda, validarPagoPedido, ResultadoPago } from '../utils/pago-pedido.utils';
 import { accionesPedido, ESTADOS_CANCELABLES_CLIENTE, limpiarMotivo } from '../utils/pedido-acciones.utils';
@@ -347,7 +349,12 @@ export function registerPedidosOnlinePedidosHandlers(
     if (pagaOnline && (tipoPedido === TipoPedidoOnline.MESA_QR || !pagoOnlineOfrecido(cfg))) {
       return { success: false, error: 'metodo_pago_no_disponible' };
     }
-    if (!pagaOnline && tipoPedido !== TipoPedidoOnline.MESA_QR && !metodosAlRecibir(cfg).includes(metodoPagoIn)) {
+    // F8b: «A cuenta» no es un método al recibir: lo habilita su propio interruptor, nunca en mesa.
+    const pagaACuenta = metodoPagoIn === MetodoPagoOnline.CREDITO;
+    if (pagaACuenta && (tipoPedido === TipoPedidoOnline.MESA_QR || !creditoHabilitadoEnTienda(cfg))) {
+      return { success: false, error: 'metodo_pago_no_disponible' };
+    }
+    if (!pagaOnline && !pagaACuenta && tipoPedido !== TipoPedidoOnline.MESA_QR && !metodosAlRecibir(cfg).includes(metodoPagoIn)) {
       return { success: false, error: 'metodo_pago_no_disponible' };
     }
 
@@ -605,6 +612,13 @@ export function registerPedidosOnlinePedidosHandlers(
     // una venta entre comensales: no se le asigna el cliente de uno solo.
     const clienteVinculado: any = cuenta?.cliente;
     pedido.clienteId = (!mesa && clienteVinculado?.activo && clienteVinculado.id) || null;
+    // F8b: a cuenta solo con cuenta vinculada, identidad verificada y crédito del cliente (lo que
+    // diga el storefront no cuenta). El disponible se revisa al guardar, bajo el candado del cliente.
+    if (pagaACuenta) {
+      if (!pedido.clienteId || !identidadVerificada(cuenta)) return { success: false, error: 'credito_no_habilitado' };
+      const est = await estadoCreditoCliente(dataSource.manager, clienteVinculado);
+      if (!est.habilitado) return { success: false, error: 'credito_no_habilitado' };
+    }
     pedido.tipoPedido = tipoPedido;
     if (mesa) pedido.mesaId = mesa.id;
     // Sin dueño (no debería pasar) no se guarda la clave: no habría índice que la cubra.
@@ -654,22 +668,36 @@ export function registerPedidosOnlinePedidosHandlers(
     // El número (`count()+1`) puede colisionar con pedidos concurrentes (ej. un
     // grupo grande en una mesa mandando varios pedidos en segundos). Se reintenta
     // regenerando el número; tras N intentos se propaga el error real.
-    let saved: PedidoOnline;
-    for (let intento = 1; ; intento++) {
-      try {
-        saved = await pedidoRepo().save(pedido);
-        break;
-      } catch (e) {
-        // Reintento concurrente con la misma clave: el índice único lo frena; se
-        // devuelve el pedido que ganó la carrera en vez de duplicarlo.
-        if (pedido.idempotencyKey) {
-          const previo = await buscarPorIdemKey(pedido.idempotencyKey, cuenta, mesa);
-          if (previo) return respuestaExistenteInvitado(previo, cuenta);
+    let saved!: PedidoOnline;
+    const guardar = async (): Promise<any> => {
+      // F8b: con el candado del cliente tomado, el disponible que se mira es el definitivo: dos
+      // pedidos simultáneos no pueden gastar el mismo crédito.
+      if (pagaACuenta) {
+        const cli = await dataSource.getRepository(Cliente).findOne({ where: { id: pedido.clienteId as number } });
+        const est = await estadoCreditoCliente(dataSource.manager, cli);
+        if (!est.habilitado) return { success: false, error: 'credito_no_habilitado' };
+        if (est.disponible !== null && total > est.disponible + 1e-9) {
+          return { success: false, error: 'credito_insuficiente', disponible: est.disponible };
         }
-        if (intento >= 6) throw e;
-        pedido.numero = await siguienteNumero(pedidoRepo());
       }
-    }
+      for (let intento = 1; ; intento++) {
+        try {
+          saved = await pedidoRepo().save(pedido);
+          return null;
+        } catch (e) {
+          // Reintento concurrente con la misma clave: el índice único lo frena; se
+          // devuelve el pedido que ganó la carrera en vez de duplicarlo.
+          if (pedido.idempotencyKey) {
+            const previo = await buscarPorIdemKey(pedido.idempotencyKey, cuenta, mesa);
+            if (previo) return respuestaExistenteInvitado(previo, cuenta);
+          }
+          if (intento >= 6) throw e;
+          pedido.numero = await siguienteNumero(pedidoRepo());
+        }
+      }
+    };
+    const corte = pagaACuenta ? await withClienteLock(pedido.clienteId as number, guardar) : await guardar();
+    if (corte) return corte;
 
     // Materialización automática (auto a cocina). Dos casos:
     // - MESA_QR: siempre. El cliente ya está sentado y el gate del cajero se

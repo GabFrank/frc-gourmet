@@ -24,6 +24,8 @@ const MENSAJES: Record<string, string> = {
   monto_minimo_no_alcanzado: 'Tu pedido no llega al mínimo para tu zona.',
   monto_minimo_global: 'Tu pedido no llega al mínimo.',
   metodo_pago_no_disponible: 'Ese medio de pago no está disponible.',
+  credito_no_habilitado: 'Tu cuenta no tiene compra a cuenta habilitada. Elegí otro medio de pago.',
+  credito_insuficiente: 'No te alcanza el crédito disponible para este pedido. Elegí otro medio de pago.',
   tipo_pedido_invalido: 'Elegí si es para retirar o delivery.',
   falta_nombre: 'Ingresá tu nombre para el pedido.',
   nombre_requerido: 'Ingresá tu nombre.',

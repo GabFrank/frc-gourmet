@@ -25,6 +25,8 @@ const METODOS: Record<string, { label: string; icono: string; ayuda: string }> =
   QR: { label: 'QR', icono: 'qr', ayuda: 'Te mostramos el QR al recibir o retirar el pedido.' },
   PIX: { label: 'PIX', icono: 'qr', ayuda: 'Pagás por PIX al recibir o retirar el pedido.' },
   TRANSFERENCIA: { label: 'Transferencia', icono: 'transfer', ayuda: 'Transferís al recibir o retirar; te pasamos los datos en ese momento.' },
+  // F8b: sólo si la tienda lo ofrece y la cuenta está vinculada con crédito (lo arma `recalcularPago`).
+  CREDITO: { label: 'A cuenta', icono: 'card', ayuda: 'Se carga a tu cuenta del local y lo pagás a fin de mes.' },
 };
 
 declare const L: any;
@@ -72,6 +74,8 @@ export class CheckoutPage implements OnInit, OnDestroy {
   modalidad: 'AL_RECIBIR' | 'ONLINE' = 'AL_RECIBIR';
   metodosDisponibles: { valor: string; label: string; icono: string; ayuda: string }[] = [];
   ayudaMetodo = '';
+  /** F8b: eligió «A cuenta» y el disponible no alcanza para este total. */
+  aCuentaNoAlcanza = false;
   monedaPago: MonedaTienda | null = null;
   necesitaVuelto = false;
   vueltoPara: number | null = null;
@@ -116,6 +120,10 @@ export class CheckoutPage implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.telefonoContacto = this.auth.cuenta?.telefonoContacto || '';
     this.subsPago.push(this.config.cambios$.subscribe(() => this.recalcularPago()));
+    // F8b: si puede comprar a cuenta y cuánto le queda (el servidor lo vuelve a validar al pedir).
+    if (!this.mesa.enMesa && this.auth.isAuthenticated) {
+      this.auth.cargarCredito().subscribe({ next: () => this.recalcularPago(), error: () => {} });
+    }
     this.subsPago.push(this.monedas.cambios.subscribe(() => { this.monedaPago = null; this.recalcularPago(); }));
     this.menuSvc.cargar(true).subscribe({
       next: (m) => {
@@ -205,7 +213,8 @@ export class CheckoutPage implements OnInit, OnDestroy {
 
   /** Métodos que ofrece la tienda (config) y estado derivado del paso de pago. */
   recalcularPago(): void {
-    const ofrecidos: string[] = this.config.config?.metodosPago || ['EFECTIVO'];
+    const ofrecidos: string[] = [...(this.config.config?.metodosPago || ['EFECTIVO'])];
+    if (!this.mesa.enMesa && this.config.config?.compraACuenta && this.auth.credito) ofrecidos.push('CREDITO');
     this.metodosDisponibles = ofrecidos.filter((m) => METODOS[m]).map((m) => ({ valor: m, ...METODOS[m] }));
     if (this.modalidad === 'ONLINE' && !this.pagoOnline) this.modalidad = 'AL_RECIBIR';
     if (this.modalidad === 'AL_RECIBIR' && !this.metodosDisponibles.some((m) => m.valor === this.metodoPago)) {
@@ -213,6 +222,16 @@ export class CheckoutPage implements OnInit, OnDestroy {
     }
     if (this.modalidad === 'ONLINE') this.metodoPago = this.config.config?.pagoOnlineProveedor || 'UPAY';
     this.ayudaMetodo = METODOS[this.metodoPago]?.ayuda || '';
+    this.aCuentaNoAlcanza = false;
+    if (this.metodoPago === 'CREDITO' && this.auth.credito) {
+      const disp = this.auth.credito.disponible;
+      if (!this.auth.credito.sinTope && disp != null) {
+        this.aCuentaNoAlcanza = disp < this.total;
+        this.ayudaMetodo = this.aCuentaNoAlcanza
+          ? `No te alcanza: tenés ${guarani(disp)} disponibles a cuenta. Elegí otro medio de pago.`
+          : `${this.ayudaMetodo} Disponible: ${guarani(disp)}.`;
+      }
+    }
     // Moneda del efectivo: por defecto, la que eligió para ver la carta.
     if (!this.monedaPago || !this.monedas.monedas.some((m) => m.id === this.monedaPago!.id)) {
       this.monedaPago = this.monedas.seleccionada || this.monedas.principal;
@@ -272,6 +291,10 @@ export class CheckoutPage implements OnInit, OnDestroy {
 
   confirmar(): void {
     this.error = null;
+    if (!this.mesa.enMesa && this.modalidad === 'AL_RECIBIR' && this.metodoPago === 'CREDITO' && this.aCuentaNoAlcanza) {
+      this.error = 'No te alcanza el crédito disponible para este pedido. Elegí otro medio de pago.';
+      return;
+    }
 
     // ── Modo MESA_QR: invitado con nombre, sin dirección ni pago (paga en caja) ──
     if (this.mesa.enMesa) {

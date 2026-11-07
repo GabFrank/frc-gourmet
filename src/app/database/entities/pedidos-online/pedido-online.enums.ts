@@ -39,12 +39,16 @@ export enum MetodoPagoOnline {
   QR = 'QR',
   PIX = 'PIX',
   TRANSFERENCIA = 'TRANSFERENCIA',
+  // F8b: a cuenta del cliente vinculado (crédito). La deuda nace al aceptar el pedido.
+  CREDITO = 'CREDITO',
 }
 
 /** F8: cuándo paga el cliente. Online = antes (uPay); al recibir = en la entrega o el retiro. */
 export enum PagoModalidad {
   AL_RECIBIR = 'AL_RECIBIR',
   ONLINE = 'ONLINE',
+  /** F8b: a cuenta (crédito del cliente vinculado). */
+  A_CUENTA = 'A_CUENTA',
 }
 
 /** F8: métodos que el local puede ofrecer para pagar al recibir (interruptores en la config). */

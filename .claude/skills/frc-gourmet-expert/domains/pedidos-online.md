@@ -498,7 +498,20 @@ pago tardío, devoluciones, avisos, eventos) y cada proveedor es un módulo en
 - **Operación por agentes:** `docs/runbooks/RUNBOOK-TIENDA-VINCULAR-CUENTAS.md` (canales,
   errores, qué cuenta como verificación, qué no puede hacer un agente).
 - Tests: `test:tienda-vinculacion` (+ `-pg`), bloque «Vínculo» de `test:tienda-online-migracion`.
-- Fase 2 (compra a cuenta, CPC al aceptar, 1 cuota a fin de mes) pendiente.
+- **Fase 2, compra a cuenta** (`electron/utils/credito-tienda.utils.ts`):
+  - Método `CREDITO`, modalidad `A_CUENTA`. La tienda lo ofrece con `CREDITO` dentro de
+    `metodos_pago` (la API lo expone aparte: `creditoTienda` en admin, `compraACuenta` en la
+    pública; `metodosAlRecibir` lo excluye). `pub-cliente-me` devuelve `credito: { disponible,
+    sinTope } | null`.
+  - Requisitos al crear: cuenta vinculada + cliente activo con `credito` + identidad verificada
+    (`identidadVerificada`). Disponible = límite − saldo − `reservadoWeb` (pedidos CREDITO
+    RECIBIDO/ACEPTADO sin venta). Límite duro. Guardado bajo `withClienteLock`.
+  - **Al materializar** (`cargarDeudaPedidoACuenta`, misma tx que la venta, lock del cliente +
+    FOR UPDATE en Postgres): Pago ABIERTO + detalle `CREDITO`, CPC `CREDITO_VENTA` de 1 cuota a
+    fin de mes, MovimientoCliente CARGO, `ajustarSaldoCliente`. Revalida crédito y disponible.
+  - Cancelar → `cancelarVentaCompletaEnTx` revierte CPC + saldo. `cobrar-venta-credito` rechaza
+    una venta que ya tiene CPC activa.
+  - Tests: `test:tienda-credito` (+ `-pg`), incluye dos pedidos simultáneos.
 
 ### Lo que sigue pendiente
 
