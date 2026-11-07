@@ -98,6 +98,11 @@ Reorganizaciones destacadas:
   (3 niveles).
 - **Personas** (Personas, Usuarios, Clientes, Convenios) se separó de RRHH a su
   propio grupo de nivel 1.
+- **Ventas** (2026-11) dejó de mezclar todo en una lista: arriba lo del día (Dashboard, PdV,
+  Historial, Buffet por kilo) y después tres subgrupos, cada uno con su configuración al lado:
+  *Cocina* (KDS, Pantallas KDS), *Tienda online* (pedidos, cuentas, QR de mesas, config de la
+  tienda, categorías, zonas de delivery) y *Configuración del PdV* (PdV, atajos, precios de
+  delivery). Los ids no cambiaron: los overrides del ADMIN siguen valiendo.
 - **Financiero** absorbió *Caja Mayor* (dashboard + cajas mayor, gastos,
   entradas varias, operaciones financieras, retiros, CPP, CPC) y *Bancos*
   (cuentas, cheques, chequeras, POS, acreditaciones) como subgrupos, más

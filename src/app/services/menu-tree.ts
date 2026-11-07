@@ -143,6 +143,9 @@ export const MENU_TREE: MenuNode[] = [
   // ═══════════════════════════ VENTAS ═══════════════════════════
   {
     id: 'grp-ventas', label: 'Ventas', icon: 'shopping_cart',
+    // Ordenado por tarea (2026-11): lo del día arriba; después cocina, tienda online y la
+    // configuración del PdV, cada cosa con su configuración al lado. Los ids no cambian: los
+    // overrides del ADMIN (orden/visibilidad por id) siguen valiendo.
     children: [
       { id: 'ventas-dashboard', label: 'Dashboard', icon: 'dashboard', permiso: 'VENTAS_DASHBOARD_VER',
         keywords: ['ventas', 'dashboard'],
@@ -156,21 +159,29 @@ export const MENU_TREE: MenuNode[] = [
       { id: 'buffet-dashboard', label: 'Buffet por kilo', icon: 'scale', permiso: 'VENTAS_DASHBOARD_VER',
         keywords: ['buffet', 'kilo', 'peso'],
         action: { component: BuffetDashboardComponent, title: 'Buffet por kilo', tabId: 'buffet-dashboard-tab', data: NAV } },
-      { id: 'pedidos-online', label: 'Pedidos Online', icon: 'shopping_bag', permiso: 'VENTAS_PDV',
-        keywords: ['pedidos', 'online', 'delivery'],
-        action: { component: ListPedidosOnlineComponent, title: 'Pedidos Online', tabId: 'pedidos-online-tab', data: NAV } },
-      { id: 'cuentas-tienda', label: 'Cuentas de la Tienda', icon: 'manage_accounts', permiso: 'CLIENTES_VER',
-        keywords: ['cuentas', 'tienda', 'online', 'clientes', 'vincular', 'web', 'credito'],
-        action: { component: ListCuentasTiendaComponent, title: 'Cuentas de la Tienda', tabId: 'cuentas-tienda-tab', data: NAV } },
-      { id: 'mesas-qr', label: 'QR de Mesas', icon: 'qr_code_2', permiso: 'VENTAS_PDV',
-        keywords: ['qr', 'mesa', 'mesas', 'autoservicio', 'tienda', 'lamina', 'imprimir'],
-        action: { component: MesasQrComponent, title: 'QR de Mesas', tabId: 'mesas-qr-tab', data: NAV } },
-      { id: 'kds', label: 'KDS — Cocina', icon: 'restaurant', permiso: 'COMANDAS_KDS_VER',
-        keywords: ['kds', 'cocina', 'comandas'],
-        action: { component: KdsComponent, title: 'KDS — Cocina', tabId: 'kds-tab', data: NAV } },
       {
-        id: 'grp-ventas-config', label: 'Configuración', icon: 'settings',
+        id: 'grp-ventas-cocina', label: 'Cocina', icon: 'restaurant',
         children: [
+          { id: 'kds', label: 'KDS — Cocina', icon: 'restaurant', permiso: 'COMANDAS_KDS_VER',
+            keywords: ['kds', 'cocina', 'comandas'],
+            action: { component: KdsComponent, title: 'KDS — Cocina', tabId: 'kds-tab', data: NAV } },
+          { id: 'kds-pantallas', label: 'Pantallas KDS', icon: 'tv', permiso: 'COMANDAS_KDS_CONFIGURAR', esConfig: true,
+            keywords: ['pantallas', 'kds', 'cocina'],
+            action: { component: ListKdsPantallasComponent, title: 'Pantallas KDS', tabId: 'kds-pantallas-tab', data: NAV } },
+        ],
+      },
+      {
+        id: 'grp-ventas-tienda', label: 'Tienda online', icon: 'storefront',
+        children: [
+          { id: 'pedidos-online', label: 'Pedidos Online', icon: 'shopping_bag', permiso: 'VENTAS_PDV',
+            keywords: ['pedidos', 'online', 'delivery'],
+            action: { component: ListPedidosOnlineComponent, title: 'Pedidos Online', tabId: 'pedidos-online-tab', data: NAV } },
+          { id: 'cuentas-tienda', label: 'Cuentas de la Tienda', icon: 'manage_accounts', permiso: 'CLIENTES_VER',
+            keywords: ['cuentas', 'tienda', 'online', 'clientes', 'vincular', 'web', 'credito'],
+            action: { component: ListCuentasTiendaComponent, title: 'Cuentas de la Tienda', tabId: 'cuentas-tienda-tab', data: NAV } },
+          { id: 'mesas-qr', label: 'QR de Mesas', icon: 'qr_code_2', permiso: 'VENTAS_PDV',
+            keywords: ['qr', 'mesa', 'mesas', 'autoservicio', 'tienda', 'lamina', 'imprimir'],
+            action: { component: MesasQrComponent, title: 'QR de Mesas', tabId: 'mesas-qr-tab', data: NAV } },
           { id: 'tienda-online-config', label: 'Config Tienda Online', icon: 'storefront', permiso: 'PEDIDOS_ONLINE_CONFIGURAR', esConfig: true,
             keywords: ['tienda', 'online', 'config'],
             action: { component: TiendaOnlineConfigComponent, title: 'Config Tienda Online', tabId: 'tienda-online-config-tab', data: NAV } },
@@ -180,6 +191,17 @@ export const MENU_TREE: MenuNode[] = [
           { id: 'zonas-delivery', label: 'Zonas de Delivery', icon: 'pin_drop', permiso: 'VENTAS_PDV', esConfig: true,
             keywords: ['zonas', 'delivery', 'reparto'],
             action: { component: ZonasDeliveryComponent, title: 'Zonas de Delivery', tabId: 'zonas-delivery-tab', data: NAV } },
+        ],
+      },
+      {
+        id: 'grp-ventas-config', label: 'Configuración del PdV', icon: 'settings',
+        children: [
+          { id: 'config-pdv', label: 'Configuración de PdV', icon: 'tune', permiso: 'VENTAS_PDV', esConfig: true,
+            keywords: ['configuracion', 'pdv', 'punto', 'venta'],
+            action: { mode: 'dialog', component: PdvConfigDialogComponent, title: 'Configuración de PdV', data: {}, dialogConfig: { width: '760px', maxWidth: '95vw' } } },
+          { id: 'config-atajos', label: 'Configurar Atajos', icon: 'grid_view', permiso: 'VENTAS_PDV', esConfig: true,
+            keywords: ['atajos', 'accesos', 'pdv'],
+            action: { mode: 'dialog', component: AtajoConfigDialogComponent, title: 'Configurar Atajos', data: {}, dialogConfig: { width: '90vw', maxWidth: '90vw', height: '80vh' } } },
           // Zonas de entrega del delivery del PdV, con su precio. Distinto de
           // 'Zonas de Delivery', que es el mapa de cobertura de la tienda
           // online. Solo se alcanzaba desde una tarjeta del dashboard de
@@ -187,15 +209,6 @@ export const MENU_TREE: MenuNode[] = [
           { id: 'precios-delivery', label: 'Precios de Delivery', icon: 'local_shipping', permiso: 'VENTAS_PDV_CONFIGURAR', esConfig: true,
             keywords: ['precios', 'delivery', 'envio', 'zona', 'reparto', 'costo'],
             action: { component: ListPreciosDeliveryComponent, title: 'Precios de Delivery', tabId: 'precios-delivery-tab', data: NAV } },
-          { id: 'kds-pantallas', label: 'Pantallas KDS', icon: 'tv', permiso: 'COMANDAS_KDS_CONFIGURAR', esConfig: true,
-            keywords: ['pantallas', 'kds', 'cocina'],
-            action: { component: ListKdsPantallasComponent, title: 'Pantallas KDS', tabId: 'kds-pantallas-tab', data: NAV } },
-          { id: 'config-pdv', label: 'Configuración de PdV', icon: 'tune', permiso: 'VENTAS_PDV', esConfig: true,
-            keywords: ['configuracion', 'pdv', 'punto', 'venta'],
-            action: { mode: 'dialog', component: PdvConfigDialogComponent, title: 'Configuración de PdV', data: {}, dialogConfig: { width: '760px', maxWidth: '95vw' } } },
-          { id: 'config-atajos', label: 'Configurar Atajos', icon: 'grid_view', permiso: 'VENTAS_PDV', esConfig: true,
-            keywords: ['atajos', 'accesos', 'pdv'],
-            action: { mode: 'dialog', component: AtajoConfigDialogComponent, title: 'Configurar Atajos', data: {}, dialogConfig: { width: '90vw', maxWidth: '90vw', height: '80vh' } } },
         ],
       },
     ],
