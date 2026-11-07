@@ -3212,6 +3212,8 @@ export class PdvComponent implements OnInit, OnDestroy {
       puedeAgregarPagos: this.puedeCobrar,
       puedeFinalizar: this.puedeFinalizarVenta,
       terminalDeLaCaja: this.esTerminalDeLaCaja ? undefined : this.dispositivoCajaNombre,
+      // Mismo criterio que `total` de contar-pendientes: el badge sigue a la cola sin esperar el poll.
+      alCambiarCola: (total: number) => { this.pedidosOnlinePendientesCount = total; },
     };
 
     const dialogRef = this.dialog.open(DeliveryDialogComponent, {
@@ -3223,6 +3225,8 @@ export class PdvComponent implements OnInit, OnDestroy {
     });
 
     dialogRef.afterClosed().subscribe(async (result) => {
+      // Al cerrar, los dos badges (web y deliveries vivos) se ponen al día ya.
+      this.refrescarContadoresDelivery();
       if (result?.action === 'editItems' && result.delivery && result.venta) {
         // Cargar delivery en PdV para editar items
         this.deliveryActual = result.delivery;

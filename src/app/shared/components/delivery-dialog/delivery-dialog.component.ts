@@ -46,6 +46,11 @@ export interface DeliveryDialogData {
   puedeAgregarPagos?: boolean;
   puedeFinalizar?: boolean;
   terminalDeLaCaja?: string;
+  /**
+   * Cada vez que la cola web cambia (acción del cajero o poll), con su largo. El PdV lo usa para
+   * su badge, que si no quedaba atrasado hasta su propio poll de 15 s.
+   */
+  alCambiarCola?: (total: number) => void;
 }
 
 /*
@@ -425,6 +430,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
       .map((sec) => ({ ...sec, pedidos: this.colaWeb.filter((p) => p.motivoAtencion === sec.clave) }))
       .filter((sec) => sec.pedidos.length > 0);
     this.hayColaWeb = this.colaWeb.length > 0;
+    this.data?.alCambiarCola?.(this.colaWeb.length);
     this.actualizarPanel();
     this.avisoTooltip = this.colaWeb.length
       ? this.seccionesCola.map((sec) => `${sec.pedidos.length} ${sec.titulo.toLowerCase()}`).join(' · ')
@@ -860,6 +866,9 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
 
   private updateEstadoFlags(): void {
     const estado = this.selectedDelivery?.estado;
+    // El pedido web de la fila: los botones de la solicitud de cancelación cuelgan de esto. Se
+    // calculaba sólo al cargar el detalle, y al cancelar (fila deseleccionada) quedaban en el pie.
+    this.pedidoWebSel = this.selectedDelivery?.pedidoWeb || null;
     this.isAbierto = estado === DeliveryEstado.ABIERTO;
     this.isParaEntrega = estado === DeliveryEstado.PARA_ENTREGA;
     this.isEnCamino = estado === DeliveryEstado.EN_CAMINO;
@@ -904,8 +913,9 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     // Convertir mueve el costo del envío dentro o fuera del total, así que
     // pide la venta ABIERTA por el mismo motivo que el cambio de zona: sobre
     // una venta cerrada sería cambiar lo que ya se cobró.
-    this.labelConvertir = this.esRetiroSeleccionado ? 'A DELIVERY' : 'A RETIRO';
-    this.iconoConvertir = this.esRetiroSeleccionado ? 'delivery_dining' : 'shopping_bag';
+    // Sin selección, el botón no promete un sentido: antes quedaba «A RETIRO» del pedido anterior.
+    this.labelConvertir = !this.selectedDelivery ? 'CONVERTIR' : this.esRetiroSeleccionado ? 'A DELIVERY' : 'A RETIRO';
+    this.iconoConvertir = !this.selectedDelivery ? 'swap_horiz' : this.esRetiroSeleccionado ? 'delivery_dining' : 'shopping_bag';
     const ventaAbierta = this.selectedDelivery?.venta?.estado === 'ABIERTA';
     this.puedeConvertirModo = !!this.selectedDelivery && !this.isTerminal && ventaAbierta;
     if (!this.selectedDelivery) {
