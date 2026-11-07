@@ -76,7 +76,7 @@ export function registerPedidosOnlineAuthHandlers(
     const accessToken = await signCustomerToken({
       sub: cuenta.id,
       tel: cuenta.telefono,
-      clienteId: (cuenta.cliente as any)?.id ?? null,
+      // Sin el id del Cliente interno: el token lo lee el navegador (auditoría F8b).
     });
     const refresh = await issueCustomerRefreshToken(dataSource, cuenta);
     return {
@@ -261,7 +261,7 @@ export function registerPedidosOnlineAuthHandlers(
     const accessToken = await signCustomerToken({
       sub: cuenta.id,
       tel: cuenta.telefono,
-      clienteId: (cuenta.cliente as any)?.id ?? null,
+      // Sin el id del Cliente interno: el token lo lee el navegador (auditoría F8b).
     });
     return {
       success: true,

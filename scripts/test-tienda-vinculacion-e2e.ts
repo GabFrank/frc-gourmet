@@ -212,16 +212,20 @@ async function main() {
   ok(h.length === 2 && h[0].accion === 'DESVINCULAR' && h[0].motivo === 'LA CUENTA ERA DEL HIJO' && h[1].accion === 'VINCULAR', '3: el historial guarda las dos cosas', h);
   ok(((await R(PedidoOnline).findOne({ where: { id: p1.id } })) as any).clienteId === cliente.id, '3: el pedido ya hecho sigue a nombre del cliente');
   ok((await pedir(cuenta)).clienteId == null, '3: los pedidos nuevos ya no llevan cliente');
+  await vinc(cuenta, cliente2);
+  await R(Cliente).update({ id: cliente2.id }, { activo: false } as any);
+  ok((await pedir(cuenta)).clienteId == null, '3: un cliente dado de baja después del vínculo no recibe pedidos nuevos');
+  await R(Cliente).update({ id: cliente2.id }, { activo: true } as any);
+  await desv(cuenta, 'fin prueba baja');
   ok((await vinc(otra, cliente))?.success === true, '3: el cliente liberado se puede vincular a otra cuenta');
-  ok((await desv(cuenta, 'otra vez'))?.sinCambios === true && (await historial(cuenta)).length === 2, '3: desvincular una cuenta sin vínculo no ensucia el historial');
-  ok((await R(CuentaClienteVinculo).count()) === 3, '3: tres registros en total');
+  ok((await desv(cuenta, 'otra vez'))?.sinCambios === true && (await historial(cuenta)).length === 4, '3: desvincular una cuenta sin vínculo no ensucia el historial');
+  ok((await R(CuentaClienteVinculo).count()) === 5, '3: cinco registros en total');
 
   // ═══════ [5] API pública ═══════
   console.log('\n[5] API pública');
   const me: any = await invokeHandlerWithContext('pub-cliente-me', ctx(otra));
   ok(me?.success === true && !('clienteId' in (me.cuenta || {})) && !JSON.stringify(me).includes(String(cliente.ruc)),
     '5: «mi cuenta» no expone el cliente interno', me?.cuenta);
-
   await cerrar();
   console.log(`\n${TAG} RESULTADO: ${passed} passed, ${failed} failed.`);
   process.exit(failed === 0 ? 0 : 1);

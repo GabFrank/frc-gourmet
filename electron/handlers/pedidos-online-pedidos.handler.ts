@@ -601,9 +601,10 @@ export function registerPedidosOnlinePedidosHandlers(
     pedido.cuentaCliente = (cuenta || null) as any;
     pedido.nombreCliente = (cuenta?.nombre || nombreClienteInvitado || null) as any;
     pedido.telefonoCliente = (cuenta?.telefono || cuenta?.telefonoContacto || null) as any;
-    // F8b: el cliente interno de la cuenta vinculada, fijado ahora. La mesa comparte una venta entre
-    // comensales: no se le asigna el cliente de uno solo.
-    pedido.clienteId = (!mesa && (cuenta?.cliente as any)?.id) || null;
+    // F8b: el cliente interno de la cuenta vinculada, fijado ahora (si sigue activo). La mesa comparte
+    // una venta entre comensales: no se le asigna el cliente de uno solo.
+    const clienteVinculado: any = cuenta?.cliente;
+    pedido.clienteId = (!mesa && clienteVinculado?.activo && clienteVinculado.id) || null;
     pedido.tipoPedido = tipoPedido;
     if (mesa) pedido.mesaId = mesa.id;
     // Sin dueño (no debería pasar) no se guarda la clave: no habría índice que la cubra.

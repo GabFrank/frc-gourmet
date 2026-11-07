@@ -61,7 +61,7 @@ Todo va por `POST /api/rpc` con `{"method": "<canal>", "params": [...]}` y el JW
 
 | Canal | params | Devuelve |
 |---|---|---|
-| `get-cuentas-tienda` | `[{ texto?, vinculo?: 'TODAS'\|'VINCULADAS'\|'SIN_VINCULAR', page?: 1.., pageSize?: ≤100 }]` | `{ success, total, page, pageSize, data: [{ id, nombre, telefono, telefonoVerificado, telefonoContacto, email, emailVerificado, pedidos, ultimoLogin, cliente: { id, nombre, ruc, credito } \| null, vinculadoPor, vinculadoEn }] }` |
+| `get-cuentas-tienda` | `[{ texto?, vinculo?: 'TODAS'\|'VINCULADAS'\|'SIN_VINCULAR', page?: 1.., pageSize?: ≤100 }]` | `{ success, total, page, pageSize, data: [{ id, nombre, telefono, telefonoVerificado, telefonoContacto, email, emailVerificado, activo, createdAt, pedidos, ultimoLogin, cliente: { id, nombre, ruc, credito, activo } \| null, vinculadoPor, vinculadoEn }] }` |
 | `get-vinculos-cuenta-tienda` | `[cuentaId]` | `{ success, data: [{ accion: 'VINCULAR'\|'DESVINCULAR', cliente: { id, nombre }, usuario, fecha, motivo }] }` (más nuevo primero) |
 | `vincular-cuenta-tienda` | `[cuentaId, clienteId, nota?]` | `{ success: true }` · `{ success: true, sinCambios: true }` si ya estaba con ese cliente |
 | `desvincular-cuenta-tienda` | `[cuentaId, motivo]` | `{ success: true }` · `{ success: true, sinCambios: true }` si no tenía vínculo |
@@ -79,17 +79,19 @@ Para encontrar el `clienteId`: `get-clientes` con `[{ termino: '<nombre, RUC o d
 | `cliente_ya_tiene_cuenta` | ese cliente ya tiene otra cuenta web (un cliente, una cuenta) | revisar con el local cuál es la buena |
 | `cliente_no_disponible` | el cliente no existe o está inactivo | no vincular |
 | `cuenta_no_encontrada` | id de cuenta inválido | volver a listar |
+| `datos_invalidos` | faltan `cuentaId` o `clienteId` | revisar los parámetros |
 | `motivo_requerido` | desvincular sin motivo | pedir el motivo |
 | `cuenta_cambio_reintentar` | otra pantalla la cambió mientras tanto | volver a leer y decidir de nuevo |
-| `PERMISO REQUERIDO: …` (excepción) | el token no tiene el permiso | pedir a alguien con permiso |
+| `PERMISO REQUERIDO: …` | el token no tiene el permiso (excepción del handler; por `/api/rpc` llega como error) | pedir a alguien con permiso |
 
 ## Qué cambia cuando una cuenta está vinculada
 
 - Cada pedido **nuevo** de esa cuenta guarda el cliente (`pedidos_online.cliente_id`) al crearse,
   y su venta sale a nombre del cliente (historial, factura).
 - Los pedidos de mesa (MESA_QR) no llevan cliente: la mesa comparte una venta.
+- Si el cliente está **inactivo**, los pedidos nuevos salen sin cliente (como una cuenta sin vincular).
 - Desvincular **no** cambia los pedidos ya hechos: siguen a nombre del cliente que tenían.
-- La tienda (API pública) nunca expone el id del cliente interno.
+- La tienda (API pública y el token del cliente) nunca expone el id del cliente interno.
 
 ## Autenticación de un agente
 
