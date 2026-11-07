@@ -270,7 +270,7 @@ tienda registrada en el portal como URL de confirmación.
 
 ## 14 · Cuentas de la tienda vinculadas a un cliente (F8b fase 1)
 
-Pantalla: Ventas → **Cuentas de la Tienda**. Operación por agentes:
+Pantalla: Ventas → Tienda online → **Cuentas web**. Operación por agentes:
 `docs/runbooks/RUNBOOK-TIENDA-VINCULAR-CUENTAS.md`.
 
 1. **Lista:** aparecen las cuentas con su teléfono (verificado o «de contacto, sin verificar»),

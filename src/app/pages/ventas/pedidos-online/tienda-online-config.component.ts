@@ -103,7 +103,7 @@ import { RepositoryService } from '../../../database/repository.service';
               <mat-slide-toggle *ngFor="let m of metodosOpciones" [(ngModel)]="m.activo" color="primary">{{ m.label }}</mat-slide-toggle>
             </div>
             <h4 class="sub">Compra a cuenta</h4>
-            <p class="hint">Solo cuentas web vinculadas a un cliente con crédito (Ventas → Cuentas de la Tienda) y con teléfono o correo verificado. La deuda nace al aceptar el pedido, en una cuota que vence a fin de mes, y respeta el límite sin excepción.</p>
+            <p class="hint">Solo cuentas web vinculadas a un cliente con crédito (Ventas → Tienda online → Cuentas web) y con teléfono o correo verificado. La deuda nace al aceptar el pedido, en una cuota que vence a fin de mes, y respeta el límite sin excepción.</p>
             <div class="toggles">
               <mat-slide-toggle [(ngModel)]="cfg.creditoTienda" color="primary">Permitir «A cuenta» en la tienda</mat-slide-toggle>
             </div>

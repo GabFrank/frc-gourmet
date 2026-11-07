@@ -493,7 +493,7 @@ pago tardío, devoluciones, avisos, eventos) y cada proveedor es un módulo en
   y `materializarPedidoOnlineEnVenta` pone `venta.cliente` desde ahí. Desvincular después no cambia
   pedidos viejos. MESA_QR no lleva cliente (venta compartida).
 - `mapCuenta` (API pública) **ya no devuelve `clienteId`**: el id interno no sale a la web.
-- Pantalla: Ventas → **Cuentas de la Tienda** (`list-cuentas-tienda`); la ficha del cliente
+- Pantalla: Ventas → Tienda online → **Cuentas web** (`list-cuentas-tienda`); la ficha del cliente
   muestra «Cuenta web: …».
 - **Operación por agentes:** `docs/runbooks/RUNBOOK-TIENDA-VINCULAR-CUENTAS.md` (canales,
   errores, qué cuenta como verificación, qué no puede hacer un agente).

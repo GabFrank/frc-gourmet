@@ -45,7 +45,7 @@ permisos y el historial queda a su nombre.
 
 ## Desde la pantalla
 
-Menú **Ventas → Cuentas de la Tienda**.
+Menú **Ventas → Tienda online → Cuentas web**.
 - Filtro por nombre, correo o teléfono, y por vínculo (todas / vinculadas / sin vincular). Botón
   Buscar (no filtra en vivo).
 - ⋮ → **Vincular a un cliente**: elegir el cliente, confirmar, nota opcional («cómo se verificó»).
