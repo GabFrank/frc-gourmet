@@ -46,8 +46,9 @@
     </div>
 
     <mat-form-field appearance="outline" class="full-width">
-      <mat-label>Saldo inicial</mat-label>
+      <mat-label>{{isEditing ? 'Saldo actual' : 'Saldo inicial'}}</mat-label>
       <input matInput type="text" inputmode="decimal" formControlName="saldo" appCurrencyInput [decimals]="decimalesMoneda">
+      <mat-hint *ngIf="isEditing">Para corregirlo, cargá un ajuste con motivo en los movimientos de la cuenta.</mat-hint>
     </mat-form-field>
   </form>
 </mat-dialog-content>

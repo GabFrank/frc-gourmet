@@ -168,7 +168,12 @@ export function registerBankingHandlers(
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`CuentaBancaria ${id} no encontrada`);
 
+      // #350.1: el saldo no se edita a mano. Los ajustes van como movimiento con
+      // motivo (create-movimiento-bancario). Se ignora lo que venga del cliente.
       const updateData = { ...data };
+      delete updateData.saldo;
+      delete updateData.saldoReservado;
+      delete updateData.id;
       if (data.nombre) updateData.nombre = data.nombre.toUpperCase();
       if (data.banco) updateData.banco = data.banco.toUpperCase();
       if (data.numeroCuenta) updateData.numeroCuenta = data.numeroCuenta.toUpperCase();
@@ -176,8 +181,13 @@ export function registerBankingHandlers(
       if (data.alias) updateData.alias = data.alias.toUpperCase();
 
       Object.assign(existing, updateData);
+      // El save() no toca las columnas de saldo: así no pisa un ajuste que entró
+      // con el diálogo abierto (#190/#350).
+      (existing as any).saldo = undefined;
+      (existing as any).saldoReservado = undefined;
       await setEntityUserTracking(dataSource, existing, getCurrentUser()?.id, true);
-      return await repo.save(existing);
+      await repo.save(existing);
+      return await repo.findOne({ where: { id }, relations: ['moneda'] });
     } catch (error) {
       console.error(`Error updating cuenta bancaria ${id}:`, error);
       throw error;
@@ -191,6 +201,8 @@ export function registerBankingHandlers(
       const existing = await repo.findOne({ where: { id } });
       if (!existing) throw new Error(`CuentaBancaria ${id} no encontrada`);
       existing.activo = false;
+      (existing as any).saldo = undefined;
+      (existing as any).saldoReservado = undefined;
       await setEntityUserTracking(dataSource, existing, getCurrentUser()?.id, true);
       await repo.save(existing);
       return { success: true };

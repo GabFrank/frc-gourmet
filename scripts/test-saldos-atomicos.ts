@@ -17,6 +17,10 @@
  *   H · #350: editar/desactivar un cliente con `saldoActual = undefined` antes
  *       del `save()` no pisa un cobro que entró mientras tanto (con CONTROL: el
  *       save con el saldo leído sí lo pisa).
+ *   I · #350.1: editar/desactivar una cuenta bancaria con `saldo` y
+ *       `saldoReservado` = undefined no pisa un ajuste concurrente (CONTROL: con
+ *       el saldo leído, sí). Más la guardia estática J: update-cuenta-bancaria
+ *       descarta el saldo que manda el cliente y el diálogo no lo manda al editar.
  *
  * QUÉ REVERTIR PARA QUE FALLE: cambiar `ajustar()` de saldo-atomico.utils.ts por
  * un SELECT + UPDATE con el valor calculado en memoria (caen B, C y F). E solo
@@ -102,6 +106,28 @@ function guardiaEstatica() {
     });
   }
   ok(malos.length === 0, `G: ningún saldo de cuenta/cliente calculado en memoria (${archivos.length} archivos)`, malos);
+}
+
+/** J · #350.1: el saldo de una cuenta bancaria no se edita a mano. */
+function guardiaCuentaBancaria() {
+  const raiz = path.join(__dirname, '..');
+  const h = fs.readFileSync(path.join(raiz, 'electron/handlers/banking.handler.ts'), 'utf8');
+  const tramo = (nombre: string) => {
+    const i = h.indexOf(`'${nombre}'`);
+    return i < 0 ? '' : h.slice(i, h.indexOf('ipcMain.handle(', i + 10));
+  };
+  const upd = tramo('update-cuenta-bancaria');
+  ok(/delete updateData\.saldo;/.test(upd) && /delete updateData\.saldoReservado;/.test(upd),
+    'J: update-cuenta-bancaria descarta saldo y saldoReservado del pedido');
+  for (const n of ['update-cuenta-bancaria', 'delete-cuenta-bancaria']) {
+    const t = tramo(n);
+    ok(/\(existing as any\)\.saldo = undefined;/.test(t) && /\(existing as any\)\.saldoReservado = undefined;/.test(t),
+      `J: ${n} guarda sin tocar las columnas de saldo`);
+  }
+  const dlg = fs.readFileSync(path.join(raiz,
+    'src/app/pages/financiero/caja-mayor/bancos/create-edit-cuenta-bancaria/create-edit-cuenta-bancaria-dialog.component.ts'), 'utf8');
+  ok(/if \(this\.isEditing\) this\.form\.get\('saldo'\)!\.disable\(\);/.test(dlg) && /if \(!this\.isEditing\) data\.saldo = f\.saldo;/.test(dlg),
+    'J: el diálogo deja el saldo de solo lectura al editar y no lo manda');
 }
 
 async function crearTablas(m: EntityManager, pg: boolean) {
@@ -261,6 +287,27 @@ async function partePostgres() {
     ok(Number(hCtl.saldo_actual) === 100, `H: CONTROL — save() con el saldo leído pisa el cobro (${hCtl.saldo_actual})`);
     const hOk = await editarCliente(true);
     ok(Number(hOk.saldo_actual) === 70 && hOk.activo === false, `H: con saldoActual = undefined guarda la edición y conserva el cobro (${hOk.saldo_actual}, activo ${hOk.activo})`);
+
+    // I · #350.1: editar o desactivar una cuenta bancaria mientras entra un ajuste
+    const editarCuenta = async (sinSaldo: boolean) => {
+      await ds.query("UPDATE cuentas_bancarias SET saldo = 100, saldo_reservado = 20, nombre = 'A' WHERE id = 1");
+      const cb = await ds.manager.findOne(CuentaT, { where: { id: 1 } });
+      // otra PC acredita (+40), reserva (+5) y commitea con el diálogo abierto
+      await ds.transaction(async (m) => {
+        await ajustarSaldoCuentaBancaria(m, 1, 40);
+        await ajustarSaldoReservadoCuentaBancaria(m, 1, 5);
+      });
+      cb!.nombre = 'B';
+      if (sinSaldo) { (cb as any).saldo = undefined; (cb as any).saldoReservado = undefined; }
+      await ds.manager.save(CuentaT, cb!);
+      const [r] = await ds.query('SELECT saldo, saldo_reservado, nombre FROM cuentas_bancarias WHERE id = 1');
+      return r;
+    };
+    const iCtl = await editarCuenta(false);
+    ok(Number(iCtl.saldo) === 100, `I: CONTROL — save() con el saldo leído pisa el ajuste (${iCtl.saldo})`);
+    const iOk = await editarCuenta(true);
+    ok(Number(iOk.saldo) === 140 && Number(iOk.saldo_reservado) === 25 && iOk.nombre === 'B',
+      `I: con saldo = undefined guarda la edición y conserva los ajustes (${iOk.saldo} / ${iOk.saldo_reservado}, ${iOk.nombre})`);
   } finally {
     await ds.destroy();
     await admin.query(`DROP DATABASE IF EXISTS ${db}`);
@@ -271,6 +318,7 @@ async function partePostgres() {
 (async () => {
   console.log('Test #190 saldos atómicos');
   guardiaEstatica();
+  guardiaCuentaBancaria();
   await parteSqlite();
   await partePostgres();
   if (fallas) {
