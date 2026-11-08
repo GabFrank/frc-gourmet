@@ -124,6 +124,10 @@ function guardiaCuentaBancaria() {
     ok(/\(existing as any\)\.saldo = undefined;/.test(t) && /\(existing as any\)\.saldoReservado = undefined;/.test(t),
       `J: ${n} guarda sin tocar las columnas de saldo`);
   }
+  ok(/const \{ id: _id, saldoReservado: _reservado, \.\.\.altaData \} = data/.test(tramo('create-cuenta-bancaria')),
+    'J: create-cuenta-bancaria no acepta id ni saldoReservado del pedido');
+  ok(/El ajuste de saldo requiere un motivo/.test(tramo('create-movimiento-bancario')),
+    'J: create-movimiento-bancario exige motivo en los ajustes');
   const dlg = fs.readFileSync(path.join(raiz,
     'src/app/pages/financiero/caja-mayor/bancos/create-edit-cuenta-bancaria/create-edit-cuenta-bancaria-dialog.component.ts'), 'utf8');
   ok(/if \(this\.isEditing\) this\.form\.get\('saldo'\)!\.disable\(\);/.test(dlg) && /if \(!this\.isEditing\) data\.saldo = f\.saldo;/.test(dlg),

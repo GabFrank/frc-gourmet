@@ -144,8 +144,10 @@ export function registerBankingHandlers(
     try {
       await ensurePermission(dataSource, getCurrentUser, 'BANCOS_GESTIONAR');
       const repo = dataSource.getRepository(CuentaBancaria);
+      // #350.1: el alta nunca pisa una cuenta existente (id) ni trae reservado.
+      const { id: _id, saldoReservado: _reservado, ...altaData } = data || {};
       const entity = repo.create({
-        ...data,
+        ...altaData,
         nombre: data.nombre?.toUpperCase(),
         banco: data.banco?.toUpperCase(),
         numeroCuenta: data.numeroCuenta?.toUpperCase(),
@@ -618,6 +620,9 @@ export function registerBankingHandlers(
       const tipo = data.tipoMovimiento as MovimientoBancarioTipo;
       const monto = Number(data.monto);
       if (!cuentaBancariaId || monto <= 0) throw new Error('Datos invalidos');
+      // #350.1: un ajuste de saldo siempre lleva motivo.
+      const esAjuste = tipo === MovimientoBancarioTipo.AJUSTE_POSITIVO || tipo === MovimientoBancarioTipo.AJUSTE_NEGATIVO;
+      if (esAjuste && !String(data.observacion ?? '').trim()) throw new Error('El ajuste de saldo requiere un motivo');
 
       const cb = await cbRepo.findOne({ where: { id: cuentaBancariaId } });
       if (!cb) throw new Error(`CuentaBancaria ${cuentaBancariaId} no encontrada`);
