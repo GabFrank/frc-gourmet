@@ -18,6 +18,8 @@ export interface IcpayConfig {
   email: string;
   apiKey: string;
   password: string;
+  /** Moneda en que paga el cliente: BRL (Pix) o USDT (Tron; en staging se paga con una wallet de prueba). */
+  moneda: 'BRL' | 'USDT';
 }
 
 interface Sesion { access: string; refresh: string | null; venceEn: number }

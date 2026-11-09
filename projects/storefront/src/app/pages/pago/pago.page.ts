@@ -43,10 +43,14 @@ declare const Bancard: any;
         </ng-container>
         <!-- QR Pix (IC Pay): la imagen la arma el servidor; el código se puede copiar. -->
         <div class="qr-pago" *ngIf="qr && estadoPago === 'PENDIENTE'">
-          <p class="qr-monto">Pagás <strong>R$ {{ qrMontoTexto }}</strong> <span class="sf-muted">({{ pedido.total | guarani }})</span></p>
-          <img *ngIf="qr.imagen" [src]="qr.imagen" alt="Código QR Pix" class="qr-img" width="240" height="240">
-          <p class="sf-muted qr-ayuda">Abrí la app de tu banco de Brasil, elegí <strong>Pix › Pagar con QR</strong> y escaneá. Si estás en el mismo teléfono, copiá el código y usá <strong>Pix copia e cola</strong>.</p>
-          <button type="button" class="sf-btn sf-btn-primary qr-copiar" (click)="copiarCodigo()">{{ copiado ? '¡Código copiado!' : 'Copiar código Pix' }}</button>
+          <p class="qr-monto">Pagás <strong>{{ qrMontoTexto }}</strong> <span class="sf-muted">({{ pedido.total | guarani }})</span></p>
+          <img *ngIf="qr.imagen" [src]="qr.imagen" [attr.alt]="qrEsUsdt ? 'Dirección Tron' : 'Código QR Pix'" class="qr-img" width="240" height="240">
+          <p class="sf-muted qr-ayuda" *ngIf="!qrEsUsdt">Abrí la app de tu banco de Brasil, elegí <strong>Pix › Pagar con QR</strong> y escaneá. Si estás en el mismo teléfono, copiá el código y usá <strong>Pix copia e cola</strong>.</p>
+          <ng-container *ngIf="qrEsUsdt">
+            <p class="sf-muted qr-ayuda">Mandá <strong>exactamente {{ qrMontoTexto }}</strong> por la red <strong>Tron (TRC-20)</strong> a esta dirección. Otro monto u otra red no se acreditan.</p>
+            <code class="qr-direccion">{{ qr.payload }}</code>
+          </ng-container>
+          <button type="button" class="sf-btn sf-btn-primary qr-copiar" (click)="copiarCodigo()">{{ copiado ? '¡Copiado!' : (qrEsUsdt ? 'Copiar dirección' : 'Copiar código Pix') }}</button>
           <p class="sf-muted qr-vence" *ngIf="restanteTexto">Vence en {{ restanteTexto }}</p>
           <p class="sf-muted"><sf-icon name="clock" [size]="16"></sf-icon> Apenas pagues lo confirmamos acá solo.</p>
         </div>
@@ -90,6 +94,7 @@ declare const Bancard: any;
     .qr-ayuda { max-width: 420px; margin: 0; }
     .qr-copiar { min-width: 220px; }
     .qr-vence { margin: 0; font-variant-numeric: tabular-nums; }
+    .qr-direccion { display: block; max-width: 100%; word-break: break-all; font-size: 13px; padding: 8px 10px; border-radius: 8px; background: rgba(127,127,127,.12); user-select: all; }
   `],
 })
 export class PagoPage implements OnInit, OnDestroy {
@@ -117,6 +122,8 @@ export class PagoPage implements OnInit, OnDestroy {
   copiado = false;
   /** Lo que paga el cliente en reales, con coma (5,64). */
   qrMontoTexto = '';
+  /** Pago en USDT por Tron (modo de prueba de IC): dirección en vez de QR Pix. */
+  qrEsUsdt = false;
   restanteTexto = '';
   private reloj: any = null;
   /** Otros proveedores prendidos, para pagar con otro si este intento falló. */
@@ -210,7 +217,10 @@ export class PagoPage implements OnInit, OnDestroy {
     this.formulario = false;
     this.qr = qr;
     const m = Number(String(qr?.monto ?? '').replace(',', '.'));
-    this.qrMontoTexto = isNaN(m) ? String(qr?.monto ?? '') : m.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    this.qrEsUsdt = String(qr?.moneda || '').toUpperCase() === 'USDT';
+    this.qrMontoTexto = this.qrEsUsdt
+      ? `${isNaN(m) ? qr?.monto : m.toFixed(2)} USDT`
+      : `R$ ${isNaN(m) ? String(qr?.monto ?? '') : m.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     this.copiado = false;
     this.pararReloj();
     const vence = qr?.expiraEn ? new Date(qr.expiraEn).getTime() : NaN;

@@ -40,7 +40,7 @@ const PYG_POR_USD = 6350;
 const BRL_POR_USD = 5.6359;
 
 // ── IC simulado ──
-interface Orden { id: string; amount: string; currency: string; totalAmount: string; status: string; expiresAt: string; idem: string; body: string }
+interface Orden { id: string; amount: string; currency: string; totalAmount: string; status: string; expiresAt: string; idem: string; body: string; pendingAmount?: string; detectado?: boolean }
 const ordenes = new Map<string, Orden>();
 const porIdem = new Map<string, Orden>();
 const tokens = new Set<string>();
@@ -90,28 +90,40 @@ const fakeFetch = async (url: string, init: any = {}) => {
     if (mismaMonto) return res(201, vista(mismaMonto));
     const amount = String(body?.amount);
     const o: Orden = {
-      id: `ord-${++n}`, amount, currency: body.currency, totalAmount: (Math.round(Number(amount) * BRL_POR_USD * 100) / 100).toFixed(2),
+      id: `ord-${++n}`, amount, currency: body.currency,
+      totalAmount: body.currency === 'USDT' ? Number(amount).toFixed(2) : (Math.round(Number(amount) * BRL_POR_USD * 100) / 100).toFixed(2),
       status: 'pending', expiresAt: new Date(Date.now() + 3600_000).toISOString(), idem, body: init.body,
     };
     ordenes.set(o.id, o);
     if (idem) porIdem.set(idem, o);
     return res(201, vista(o));
   }
+  const mt = ruta.match(/^\/api\/v1\/payment\/webhook\/(.+)\/tron$/);
+  if (mt && init.method === 'POST') {
+    const o = ordenes.get(decodeURIComponent(mt[1]));
+    tronLlamadas.push(decodeURIComponent(mt[1]));
+    return o ? res(200, vista(o)) : res(404, { message: 'Payment order not found' });
+  }
   const m = ruta.match(/^\/api\/v1\/payment\/order\/(.+)$/);
   if (m) {
     const o = ordenes.get(decodeURIComponent(m[1]));
     return o ? res(200, vista(o)) : res(404, { message: 'Payment order not found' });
   }
-  if (ruta === '/api/v1/store/me') return res(200, { id: 's1', name: h['x-api-key'] === KEY2 ? 'SUCURSAL 2' : 'FRANCO EMPRENDIMIENTOS', document: '80127721-3', type: 'juridico' });
+  if (ruta === '/api/v1/store/me') return res(200, { id: 's1', name: h['x-api-key'] === KEY2 ? 'SUCURSAL 2' : 'FRANCO EMPRENDIMIENTOS', document: '80127721-3', type: 'juridico', walletAddress: WALLET });
   if (ruta === '/api/v1/account/me') return res(200, { data: { id: 'a1', currentBalance: '0.00', currency: 'USD' } });
   return res(404, {});
 };
-const vista = (o: Orden) => ({
+const WALLET = 'TULyFSsimuladaTronWallet1234yhVq';
+const vista = (o: Orden) => (o.currency === 'USDT' ? {
+  id: o.id, currency: 'USDT', payerId: null, quote: '1.00', totalAmount: o.totalAmount, amount: o.amount, pendingAmount: o.pendingAmount ?? null,
+  status: o.status, createdAt: new Date().toISOString(), providerMetadata: o.detectado ? { txId: 'tx-' + o.id } : null,
+} : {
   id: o.id, currency: o.currency, payerId: o.status === 'completed' ? '12345678900' : null, quote: String(BRL_POR_USD), totalAmount: o.totalAmount,
   amount: o.amount, pendingAmount: null, status: o.status, createdAt: new Date().toISOString(),
   qrData: { type: 'PIX_DYNAMIC', payload: `00020101021226860014br.gov.bcb.pix2564qr.example/${o.id}5204000053039865802BR6304ABCD`, expiresAt: o.expiresAt, fid: 'fid' },
   providerMetadata: o.status === 'completed' ? { payerName: 'JOAO DA SILVA', taxId: '12345678900' } : null,
 });
+const tronLlamadas: string[] = [];
 
 const avisos: string[] = [];
 
@@ -370,6 +382,35 @@ async function main() {
   console.log('Aviso de una cuenta');
   ok((await procesarAvisoPago(ds, `BANCARD-${fBan.id}`, { operation: { shop_process_id: 'x' } })).http === 400, 'aviso a la URL de una cuenta: se verifica con esa cuenta (inválido → 400)');
   ok((await procesarAvisoPago(ds, 'BANCARD-999999', {})).http === 503, 'aviso a una cuenta que no existe → no se procesa');
+
+  console.log('Modo USDT (pruebas en staging con wallet de testnet)');
+  const fUs = await crearForma({ proveedor: 'ICPAY', nombre: 'USDT (PRUEBA)', orden: 5, configJson: JSON.stringify({ baseUrl: BASE, email: EMAIL, moneda: 'USDT' }) });
+  secretos[`ICPAY#${fUs.id}.apiKey`] = async () => KEY;
+  secretos[`ICPAY#${fUs.id}.password`] = async () => PASS;
+  const pu = await nuevo(12700);
+  await repo.update({ id: pu.id }, { formaPagoOnlineId: fUs.id } as any);
+  const antesU = llamadas.length;
+  const iu: any = await iniciarPagoPedido(ds, pu.id);
+  const crearU = llamadas.slice(antesU).find((l) => l.metodo === 'POST' && l.ruta === '/api/v1/payment/order');
+  ok(iu.success && iu.tipo === 'QR' && iu.qr.payload === WALLET && iu.qr.moneda === 'USDT' && iu.qr.monto === '2.00',
+    'USDT: orden en USDT (₲12.700 = 2.00), se paga a la dirección Tron del comercio', iu);
+  ok(crearU?.body?.currency === 'USDT', 'la orden se crea con currency USDT', crearU?.body);
+  ok(!!(await leer(pu.id)).pagoExpiraEn, 'USDT no trae vencimiento: le ponemos uno');
+  const su = (await leer(pu.id)).pagoSesionId!;
+  await verificarPagoPedido(ds, pu.id);
+  ok(tronLlamadas.includes(su), 'la consulta llama a la verificación de Tron (así IC detecta el pago)');
+  ok((await leer(pu.id)).estadoPago === EstadoPagoOnline.PENDIENTE, 'sin pago → pendiente');
+  ordenes.get(su)!.status = 'underpaid'; ordenes.get(su)!.totalAmount = '1.50'; ordenes.get(su)!.pendingAmount = '0.50';
+  avisos.length = 0;
+  await repo.update({ id: pu.id }, { pagoUltimaConsulta: null } as any);
+  await verificarPagoPedido(ds, pu.id);
+  ok((await leer(pu.id)).estadoPago === EstadoPagoOnline.PENDIENTE && avisos.some((a) => /incompleto/.test(a) && /1\.50/.test(a)), 'pagó de menos → no se da por pagado y avisa cuánto pagó', avisos);
+  ordenes.get(su)!.status = 'completed'; ordenes.get(su)!.totalAmount = '2.30'; ordenes.get(su)!.pendingAmount = '0.30';
+  await repo.update({ id: pu.id }, { pagoUltimaConsulta: null } as any);
+  const vu = await verificarPagoPedido(ds, pu.id);
+  ok(vu.estadoPago === EstadoPagoOnline.PAGADO && /de más: 0\.30/.test((await leer(pu.id)).pagoDetalle || ''), 'pagó de más → PAGADO, con el excedente anotado', (await leer(pu.id)).pagoDetalle);
+  ok(interpretarOrdenIcpay({ id: 'o1', status: 'completed', currency: 'USDT', amount: '1.00' }, { sesionId: 'o1', usd: 1, ahora: new Date() }).tipo === 'INCONSISTENTE',
+    'una cuenta en reales nunca da por pagada una orden en USDT');
 
   console.log('Cambiar de medio tras un fallo');
   const p8 = await nuevo(64000, 'BANCARD');
