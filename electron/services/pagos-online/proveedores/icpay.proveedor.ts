@@ -18,7 +18,7 @@ import { TiendaOnlineConfig } from '../../../../src/app/database/entities/pedido
 import { ResultadoPago } from '../interpretar-pago';
 import { valoresCompletos } from './config-proveedor';
 import { IcpayConfig, icpayLlamar, normalizarApiKey, normalizarBaseIcpay } from './icpay-auth';
-import { ProveedorError, ProveedorPagoOnline } from './tipos';
+import { CuentaPago, ProveedorError, ProveedorPagoOnline } from './tipos';
 
 export const PROVEEDOR_ICPAY = 'ICPAY';
 
@@ -107,8 +107,8 @@ const proveedor: ProveedorPagoOnline<IcpayConfig> = {
     { clave: 'password', etiqueta: 'Contraseña', secreto: true, requerido: true, maxLength: 200 },
   ],
 
-  async credenciales(_ds: DataSource, cfg: TiendaOnlineConfig | null) {
-    const v = await valoresCompletos(cfg, proveedor);
+  async credenciales(_ds: DataSource, cfg: TiendaOnlineConfig | null, cuenta?: CuentaPago | null) {
+    const v = await valoresCompletos(cfg, proveedor, cuenta);
     if (!v) return null;
     return { baseUrl: normalizarBaseIcpay(v['baseUrl']), email: v['email'], apiKey: normalizarApiKey(v['apiKey']), password: v['password'] };
   },

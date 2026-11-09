@@ -96,6 +96,7 @@ import { registerPedidosOnlineAuthHandlers } from '../handlers/pedidos-online-au
 import { registerPedidosOnlinePedidosHandlers } from '../handlers/pedidos-online-pedidos.handler';
 import { registerPedidosOnlineAdminHandlers } from '../handlers/pedidos-online-admin.handler';
 import { registerCuentasTiendaHandlers } from '../handlers/cuentas-tienda.handler';
+import { registerFormasPagoOnlineHandlers } from '../handlers/formas-pago-online.handler';
 import { registerPedidosOnlineConfigHandlers } from '../handlers/pedidos-online-config.handler';
 import { registerMesaQrHandlers } from '../handlers/mesa-qr.handler';
 import { registerBackupHandlers } from '../handlers/backup.handler';
@@ -201,6 +202,7 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerPedidosOnlinePedidosHandlers(dataSource, getCurrentUser); // crear pedido + zonas (publico)
   registerPedidosOnlineAdminHandlers(dataSource, getCurrentUser); // bandeja de pedidos en el PdV
   registerCuentasTiendaHandlers(dataSource, getCurrentUser); // F8b: cuentas web ↔ Cliente
+  registerFormasPagoOnlineHandlers(dataSource, getCurrentUser); // cuentas de pago online (Bancard, IC Pay…)
   registerPedidosOnlineConfigHandlers(dataSource, getCurrentUser); // config de tienda online
   registerMesaQrHandlers(dataSource, getCurrentUser); // QR de mesa (MESA_QR autoservicio)
 

@@ -64,7 +64,7 @@ declare const Bancard: any;
           <button class="sf-btn sf-btn-primary" *ngIf="estadoPago === 'FALLIDO' && pedido.estado === 'PENDIENTE_PAGO'"
                   [disabled]="reintentando" (click)="reintentar()">{{ textoReintentar }}</button>
           <ng-container *ngIf="estadoPago === 'FALLIDO' && pedido.estado === 'PENDIENTE_PAGO'">
-            <button class="sf-btn" *ngFor="let o of otrosMedios" [disabled]="reintentando" (click)="pagarCon(o.id)">Pagar con {{ o.etiqueta }}</button>
+            <button class="sf-btn" *ngFor="let o of otrosMedios" [disabled]="reintentando" (click)="pagarCon(o)">Pagar con {{ o.etiqueta }}</button>
           </ng-container>
           <button class="sf-btn sf-btn-primary" *ngIf="cancelado && estadoPago === 'PENDIENTE' && pedido.estado === 'PENDIENTE_PAGO' && !formulario"
                   [disabled]="reintentando" (click)="abrirPago(false)">Pagar con tarjeta</button>
@@ -120,7 +120,7 @@ export class PagoPage implements OnInit, OnDestroy {
   restanteTexto = '';
   private reloj: any = null;
   /** Otros proveedores prendidos, para pagar con otro si este intento falló. */
-  otrosMedios: { id: string; etiqueta: string }[] = [];
+  otrosMedios: { formaId: number | null; id: string; etiqueta: string }[] = [];
   textoReintentar = 'Intentar de nuevo';
 
   get estadoPago(): string | null { return this.pedido?.estadoPago ?? null; }
@@ -171,17 +171,20 @@ export class PagoPage implements OnInit, OnDestroy {
   }
 
   /** Tras un intento fallido: pagar con otro de los proveedores prendidos. */
-  pagarCon(proveedor: string): void {
-    this.abrirPago(true, false, proveedor);
+  pagarCon(o: { formaId: number | null; id: string }): void {
+    this.abrirPago(true, false, o.id, o.formaId);
   }
 
   /** Textos y opciones que dependen del método del pedido y de los proveedores prendidos. */
   private calcularMedios(): void {
     const metodo = String(this.pedido?.metodoPago || '').toUpperCase();
     this.textoReintentar = esPagoPix(metodo) ? 'Generar otro QR Pix' : 'Intentar de nuevo con tarjeta';
+    const tipo = this.pedido?.tipoPedido;
+    const actual = this.pedido?.formaPagoOnlineId ?? null;
     this.otrosMedios = (this.config.config?.pagoOnlineProveedores || [])
-      .filter((p) => p.id !== metodo)
-      .map((p) => ({ id: p.id, etiqueta: p.etiqueta }));
+      .filter((p) => (actual != null && p.formaId != null ? p.formaId !== actual : p.id !== metodo))
+      .filter((p) => (tipo === 'DELIVERY' ? p.delivery !== false : p.pickup !== false))
+      .map((p) => ({ formaId: p.formaId ?? null, id: p.id, etiqueta: p.etiqueta }));
   }
 
   copiarCodigo(): void {
@@ -239,15 +242,16 @@ export class PagoPage implements OnInit, OnDestroy {
    * Pide el cobro (o reusa el vigente) y lleva al cliente al proveedor o arma su formulario.
    * `soloFormulario`: al entrar a la página, solo se arma el formulario; no se redirige.
    */
-  abrirPago(nuevoIntento: boolean, soloFormulario = false, proveedor?: string): void {
+  abrirPago(nuevoIntento: boolean, soloFormulario = false, proveedor?: string, formaPagoOnlineId?: number | null): void {
     this.reintentando = true;
     this.error = null;
-    this.api.call<any>('pedido.pago.iniciar', [this.numero, { nuevoIntento, ...(proveedor ? { proveedor } : {}) }]).subscribe({
+    const opciones = { nuevoIntento, ...(proveedor ? { proveedor } : {}), ...(formaPagoOnlineId ? { formaPagoOnlineId } : {}) };
+    this.api.call<any>('pedido.pago.iniciar', [this.numero, opciones]).subscribe({
       next: (r) => {
         this.reintentando = false;
         if (r?.success && r.tipo === 'QR' && r.qr?.payload) {
           this.cancelado = false;
-          if (this.pedido) this.pedido = { ...this.pedido, estadoPago: 'PENDIENTE', ...(proveedor ? { metodoPago: proveedor } : {}) };
+          if (this.pedido) this.pedido = { ...this.pedido, estadoPago: 'PENDIENTE', ...(proveedor ? { metodoPago: proveedor, formaPagoOnlineId: formaPagoOnlineId ?? null } : {}) };
           this.calcularMedios();
           if (!this.timer) this.timer = setInterval(() => this.verificar(), 5000);
           this.mostrarQr(r.qr);
@@ -260,7 +264,7 @@ export class PagoPage implements OnInit, OnDestroy {
           this.qr = null;
           this.pararReloj();
           // Intento nuevo tras un rechazo: vuelve a esperar el pago y a consultar.
-          if (this.pedido) this.pedido = { ...this.pedido, estadoPago: 'PENDIENTE', ...(proveedor ? { metodoPago: proveedor } : {}) };
+          if (this.pedido) this.pedido = { ...this.pedido, estadoPago: 'PENDIENTE', ...(proveedor ? { metodoPago: proveedor, formaPagoOnlineId: formaPagoOnlineId ?? null } : {}) };
           if (!this.timer) this.timer = setInterval(() => this.verificar(), 5000);
           this.mostrarFormulario(r.script, r.procesoId, r.proveedor);
           return;

@@ -13,7 +13,7 @@ import { TiendaOnlineConfig } from '../../../../src/app/database/entities/pedido
 import { valoresCompletos } from './config-proveedor';
 import { BANCARD_SCRIPT, BancardConfig, BancardVposClient, baseBancard, clavesError } from './bancard-vpos.client';
 import { interpretarConfirmacionBancard } from './interpretar-bancard';
-import { ProveedorError, ProveedorPagoOnline } from './tipos';
+import { CuentaPago, ProveedorError, ProveedorPagoOnline } from './tipos';
 
 export const PROVEEDOR_BANCARD = 'BANCARD';
 
@@ -55,8 +55,8 @@ const proveedor: ProveedorPagoOnline<BancardConfig> = {
     { clave: 'privateKey', etiqueta: 'Clave privada', secreto: true, requerido: true, patron: '[A-Za-z0-9._-]{8,256}', maxLength: 256 },
   ],
 
-  async credenciales(_ds: DataSource, cfg: TiendaOnlineConfig | null) {
-    const v = await valoresCompletos(cfg, proveedor);
+  async credenciales(_ds: DataSource, cfg: TiendaOnlineConfig | null, cuenta?: CuentaPago | null) {
+    const v = await valoresCompletos(cfg, proveedor, cuenta);
     if (!v) return null;
     return { publicKey: v['publicKey'], privateKey: v['privateKey'], entorno: v['entorno'] === 'PRODUCCION' ? 'PRODUCCION' : 'PRUEBA' };
   },
@@ -155,8 +155,10 @@ const proveedor: ProveedorPagoOnline<BancardConfig> = {
     }
   },
 
-  datosPortal(urlPublica: string) {
-    return [{ etiqueta: 'URL de confirmación (cargala en el portal de Bancard)', valor: `${urlPublica}/pub/pagos/bancard/aviso` }];
+  datosPortal(urlPublica: string, formaId?: number | null) {
+    // Con varias cuentas de Bancard, cada una avisa a la suya (`bancard-<id>`).
+    const ruta = formaId ? `bancard-${formaId}` : 'bancard';
+    return [{ etiqueta: 'URL de confirmación (cargala en el portal de Bancard)', valor: `${urlPublica}/pub/pagos/${ruta}/aviso` }];
   },
 };
 

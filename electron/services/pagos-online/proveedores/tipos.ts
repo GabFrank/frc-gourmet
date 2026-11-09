@@ -104,6 +104,18 @@ export interface CampoProveedor {
   porDefecto?: string;
 }
 
+/**
+ * Una cuenta de un proveedor (`formas_pago_online`), lo mínimo que necesita el proveedor para leer
+ * sus datos. `id` null = sin filas (lo de antes); `legado` = la convirtió la migración y sus secretos
+ * son los de antes.
+ */
+export interface CuentaPago {
+  id: number | null;
+  proveedor: string;
+  config: Record<string, string>;
+  legado: boolean;
+}
+
 export interface ProveedorPagoOnline<C = any> {
   /** = `MetodoPagoOnline` y `pedidos_online.pago_proveedor`. */
   id: string;
@@ -126,8 +138,11 @@ export interface ProveedorPagoOnline<C = any> {
    * antes de que existiera esta lista, sigue con sus columnas `upay_*`).
    */
   campos: CampoProveedor[];
-  /** Credenciales completas, o null si falta algo (el pago online no se ofrece). */
-  credenciales(ds: DataSource, cfg: TiendaOnlineConfig | null): Promise<C | null>;
+  /**
+   * Credenciales completas de una cuenta, o null si falta algo (no se ofrece). Sin `cuenta` = la
+   * de antes (una por proveedor, en `tienda_online_config`).
+   */
+  credenciales(ds: DataSource, cfg: TiendaOnlineConfig | null, cuenta?: CuentaPago | null): Promise<C | null>;
   iniciar(creds: C, input: CobroInput, ctx: ContextoProveedor): Promise<InicioCobro>;
   /** Pregunta al proveedor y traduce. Lanza `ProveedorError` si no se pudo saber (sigue pendiente). */
   consultar(creds: C, cobro: CobroGuardado, ctx: ContextoProveedor): Promise<{ resultado: ResultadoPago; crudo: any }>;
@@ -140,6 +155,6 @@ export interface ProveedorPagoOnline<C = any> {
    */
   procesarAviso?(creds: C, body: any, buscar: (sesionId: string) => Promise<CobroGuardado | null>):
     Promise<{ sesionId: string; resultado: ResultadoPago; crudo: any; respuesta: any }>;
-  /** Datos para cargar en el portal del proveedor (p. ej. la URL de confirmación). */
-  datosPortal?(urlPublica: string): { etiqueta: string; valor: string }[];
+  /** Datos para cargar en el portal del proveedor (p. ej. la URL de confirmación de ESA cuenta). */
+  datosPortal?(urlPublica: string, formaId?: number | null): { etiqueta: string; valor: string }[];
 }

@@ -347,10 +347,18 @@ export function registerPedidosOnlinePedidosHandlers(
     // viejo que manda 'UPAY' con Bancard activo cobra igual con Bancard).
     // Con varios proveedores prendidos el cliente elige uno; si manda uno que no está listo
     // (storefront viejo, o se apagó en el medio) se cobra con el primero de los listos.
+    // Cada opción online es una CUENTA (`formas_pago_online`); el cliente manda la suya en
+    // `formaPagoOnlineId`. Si no la manda (storefront viejo), la primera de ese proveedor; si esa
+    // tampoco está, la primera de las que admiten este tipo de pedido.
     const pagaOnline = esMetodoPagoOnline(metodoPagoPedido);
-    const elegido = pagaOnline ? proveedoresPagoListos().find((x) => x.id === String(metodoPagoPedido).toUpperCase()) : null;
+    const cuentasTipo = proveedoresPagoListos().filter((x) => (tipoPedido === TipoPedidoOnline.DELIVERY ? x.delivery : x.pickup));
+    const formaPedida = Number(data?.formaPagoOnlineId) || null;
+    const elegido = pagaOnline
+      ? (formaPedida ? cuentasTipo.find((x) => x.formaId === formaPedida) : null)
+        || (!formaPedida ? cuentasTipo.find((x) => x.id === metodoPagoPedido) || cuentasTipo[0] : null)
+      : null;
     const metodoPagoIn = (pagaOnline ? (elegido || proveedorPagoActivo()).id : metodoPagoPedido) as MetodoPagoOnline;
-    if (pagaOnline && (tipoPedido === TipoPedidoOnline.MESA_QR || !pagoOnlineOfrecido(cfg))) {
+    if (pagaOnline && (tipoPedido === TipoPedidoOnline.MESA_QR || !pagoOnlineOfrecido(cfg) || !elegido)) {
       return { success: false, error: 'metodo_pago_no_disponible' };
     }
     // F8b: «A cuenta» no es un método al recibir: lo habilita su propio interruptor, nunca en mesa.
@@ -647,6 +655,8 @@ export function registerPedidosOnlinePedidosHandlers(
     pedido.metodoPago = tipoPedido === TipoPedidoOnline.MESA_QR
       ? MetodoPagoOnline.EFECTIVO
       : metodoPagoIn;
+    // Con qué cuenta se cobra (null = la config de antes, sin cuentas cargadas).
+    if (pagaOnline && tipoPedido !== TipoPedidoOnline.MESA_QR) pedido.formaPagoOnlineId = elegido?.formaId ?? null;
     // fechaProgramada no tiene UI ni flujo: se ignora (antes se guardaba sin validar).
     pedido.subtotal = subtotal;
     pedido.costoEnvio = costoEnvio;
@@ -932,6 +942,7 @@ export function registerPedidosOnlinePedidosHandlers(
     const r = await iniciarPagoPedido(dataSource, p.id, {
       nuevoIntento: !!opciones?.nuevoIntento,
       proveedor: typeof opciones?.proveedor === 'string' ? opciones.proveedor.slice(0, 20) : null,
+      formaPagoOnlineId: Number(opciones?.formaPagoOnlineId) || null,
     });
     return conImagenQr(r);
   });
@@ -1005,6 +1016,7 @@ function mapPedido(p: PedidoOnline): any {
     numero: p.numero,
     estado: p.estado,
     tipoPedido: p.tipoPedido,
+    formaPagoOnlineId: p.formaPagoOnlineId ?? null,
     subtotal: Number(p.subtotal),
     costoEnvio: Number(p.costoEnvio),
     total: Number(p.total),

@@ -2623,6 +2623,22 @@ contextBridge.exposeInMainWorld('api', {
     return await ipcRenderer.invoke('marcar-pago-devuelto-pedido-online', pedidoId);
   },
   // F8b: cuentas de la tienda y su vínculo con el Cliente interno.
+  // Formas de pago online = cuentas de los proveedores (PLAN-tienda-pagos-multi-icpay).
+  getFormasPagoOnline: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-formas-pago-online');
+  },
+  guardarFormaPagoOnline: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('guardar-forma-pago-online', data);
+  },
+  eliminarFormaPagoOnline: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('eliminar-forma-pago-online', id);
+  },
+  moverFormaPagoOnline: async (id: number, direccion: number): Promise<any> => {
+    return await ipcRenderer.invoke('mover-forma-pago-online', id, direccion);
+  },
+  probarFormaPagoOnline: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('probar-forma-pago-online', id);
+  },
   getCuentasTienda: async (filtros?: any): Promise<any> => {
     return await ipcRenderer.invoke('get-cuentas-tienda', filtros);
   },

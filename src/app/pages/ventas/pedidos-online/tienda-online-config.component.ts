@@ -9,7 +9,10 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { RepositoryService } from '../../../database/repository.service';
+import { ConfirmationDialogComponent } from '../../../shared/components/confirmation-dialog/confirmation-dialog.component';
+import { CreateEditFormaPagoOnlineDialogComponent, ProveedorCatalogo } from './create-edit-forma-pago-online-dialog/create-edit-forma-pago-online-dialog.component';
 
 /**
  * Config de la TIENDA ONLINE (cierre MVP). Una sola fila: apertura, tipos de
@@ -21,7 +24,7 @@ import { RepositoryService } from '../../../database/repository.service';
   standalone: true,
   imports: [
     CommonModule, FormsModule, MatCardModule, MatFormFieldModule, MatInputModule,
-    MatSlideToggleModule, MatSelectModule, MatButtonModule, MatIconModule, MatSnackBarModule,
+    MatSlideToggleModule, MatSelectModule, MatButtonModule, MatIconModule, MatSnackBarModule, MatDialogModule,
   ],
   template: `
     <div class="config-container">
@@ -207,96 +210,58 @@ import { RepositoryService } from '../../../database/repository.service';
                   {{ cfg.pagoOnlineActivo && pagoOfrecidoListo ? 'Activo' : 'Apagado' }}
                 </span>
               </div>
-              <p class="ayuda">Se ofrecen: <strong>{{ resumenOfrecidos }}</strong></p>
-              <div class="grid">
-                <mat-form-field appearance="outline">
-                  <mat-label>Proveedor a configurar</mat-label>
-                  <mat-select [(ngModel)]="provSelId" (selectionChange)="elegirProveedor()">
-                    <mat-option *ngFor="let p of proveedoresPago" [value]="p.id">{{ p.nombre }}</mat-option>
-                  </mat-select>
-                  <mat-hint>Los pedidos ya pagados siguen con el suyo.</mat-hint>
-                </mat-form-field>
-                <div class="toggle-celda">
-                  <mat-slide-toggle [(ngModel)]="ofrecidos[provSelId]" (change)="armarResumenOfrecidos()">Ofrecer {{ provSel?.etiqueta || provSel?.nombre }}</mat-slide-toggle>
-                  <span class="estado-chip" [class.abierta]="provSelListo">{{ provSelListo ? 'Datos completos' : 'Faltan datos' }}</span>
-                </div>
+              <div class="formas-head">
+                <span class="sub">Formas de pago online</span>
+                <button mat-stroked-button (click)="adicionarForma()" [disabled]="cargandoFormas">
+                  <mat-icon>add</mat-icon> Adicionar
+                </button>
               </div>
-              <!-- Proveedores con campos declarados (Bancard…): la lista sale del servidor. -->
-              <div class="grid" *ngIf="provSel && provSel.campos.length">
-                <ng-container *ngFor="let c of provSel.campos">
-                  <mat-form-field appearance="outline" *ngIf="!c.secreto && c.opciones" [class.full]="!!c.ayuda">
-                    <mat-label>{{ c.etiqueta }}</mat-label>
-                    <mat-select [(ngModel)]="valoresProv[provSel.id][c.clave]">
-                      <mat-option *ngFor="let o of c.opciones" [value]="o.valor">{{ o.etiqueta }}</mat-option>
-                    </mat-select>
-                    <mat-hint *ngIf="c.ayuda">{{ c.ayuda }}</mat-hint>
-                  </mat-form-field>
-                  <mat-form-field appearance="outline" *ngIf="!c.secreto && !c.opciones" class="full">
-                    <mat-label>{{ c.etiqueta }}</mat-label>
-                    <input matInput [(ngModel)]="valoresProv[provSel.id][c.clave]" [maxlength]="c.maxLength || 255" autocomplete="off">
-                    <mat-hint *ngIf="c.ayuda">{{ c.ayuda }}</mat-hint>
-                  </mat-form-field>
-                  <mat-form-field appearance="outline" *ngIf="c.secreto" class="full">
-                    <mat-label>{{ c.etiqueta }}</mat-label>
-                    <input matInput type="password" [(ngModel)]="secretosNuevos[provSel.id][c.clave]" [maxlength]="c.maxLength || 500"
-                           autocomplete="off" [disabled]="!ingreso.almacenSeguroDisponible"
-                           [placeholder]="provSel.secretosGuardados[c.clave] ? '•••••• guardada (escribí para cambiar)' : ''">
-                    <mat-hint *ngIf="ingreso.almacenSeguroDisponible">Se guarda cifrada en este servidor y no se vuelve a mostrar.</mat-hint>
-                    <mat-hint *ngIf="!ingreso.almacenSeguroDisponible" class="hint-error">Este servidor no tiene almacén seguro: no se puede guardar.</mat-hint>
-                  </mat-form-field>
-                </ng-container>
+              <p class="ayuda" *ngIf="!formas.length && !cargandoFormas">Todavía no hay formas de pago online. Tocá «Adicionar» para cargar una cuenta (Bancard, IC Pay…).</p>
+              <div class="tabla-wrap" *ngIf="formas.length">
+                <table class="tabla-formas">
+                  <thead>
+                    <tr>
+                      <th class="col-orden">Orden</th>
+                      <th>Nombre para el cliente</th>
+                      <th>Proveedor</th>
+                      <th>Pedidos</th>
+                      <th>Estado</th>
+                      <th class="col-activa">Activa</th>
+                      <th class="col-acc"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let f of formas">
+                      <td class="col-orden">
+                        <button mat-icon-button [disabled]="f.esPrimera || moviendo" (click)="moverForma(f, -1)" aria-label="Subir"><mat-icon>arrow_upward</mat-icon></button>
+                        <button mat-icon-button [disabled]="f.esUltima || moviendo" (click)="moverForma(f, 1)" aria-label="Bajar"><mat-icon>arrow_downward</mat-icon></button>
+                      </td>
+                      <td class="nombre">{{ f.nombre }}</td>
+                      <td>{{ f.proveedorNombre }}</td>
+                      <td>{{ f.tiposTexto }}</td>
+                      <td><span class="estado-chip" [class.abierta]="f.listo">{{ f.listo ? 'Datos completos' : 'Faltan datos' }}</span></td>
+                      <td class="col-activa"><mat-slide-toggle [checked]="f.activo" (change)="cambiarActiva(f, $event.checked)" [disabled]="f.guardando"></mat-slide-toggle></td>
+                      <td class="col-acc">
+                        <button mat-icon-button (click)="editarForma(f)" aria-label="Editar"><mat-icon>edit</mat-icon></button>
+                        <button mat-icon-button (click)="probarForma(f)" [disabled]="probando || !f.listo" aria-label="Probar conexión"><mat-icon>wifi_tethering</mat-icon></button>
+                        <button mat-icon-button (click)="quitarForma(f)" aria-label="Quitar"><mat-icon>delete</mat-icon></button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-              <p class="aviso-prueba" *ngIf="provSel?.campos?.length && valoresProv[provSel.id]?.['entorno'] === 'PRUEBA' && cfg.pagoOnlineActivo">
-                <mat-icon>warning</mat-icon> Está en el entorno de PRUEBA: los cobros no son reales. Pasalo a producción antes de abrir la tienda.
+              <p class="aviso-prueba" *ngIf="cfg.pagoOnlineActivo && !pagoOfrecidoListo && formas.length">
+                <mat-icon>warning</mat-icon> Ninguna forma activa tiene sus datos completos: la tienda no ofrece pago online.
               </p>
-              <div class="datos-portal" *ngIf="provSel?.datosPortal?.length">
-                <div *ngFor="let d of provSel.datosPortal">
-                  <span class="lbl">{{ d.etiqueta }}</span>
-                  <code>{{ d.valor }}</code>
-                </div>
-              </div>
-              <div class="grid" *ngIf="provSelId === 'UPAY'">
-                <mat-form-field appearance="outline" class="full">
-                  <mat-label>URL base de uPay</mat-label>
-                  <input matInput [(ngModel)]="cfg.upayBaseUrl" maxlength="255" placeholder="https://…upay.com.py">
-                  <mat-hint>La que da uPay (prueba o producción). Solo https y dominio de uPay.</mat-hint>
-                </mat-form-field>
-                <mat-form-field appearance="outline">
-                  <mat-label>Merchant ID</mat-label>
-                  <input matInput [(ngModel)]="cfg.upayMerchantId" maxlength="64">
-                </mat-form-field>
-                <mat-form-field appearance="outline">
-                  <mat-label>Nombre del comercio</mat-label>
-                  <input matInput [(ngModel)]="cfg.upayMerchantNombre" maxlength="150">
-                </mat-form-field>
-                <mat-form-field appearance="outline" class="full">
-                  <mat-label>API Key de uPay</mat-label>
-                  <input matInput type="password" [(ngModel)]="upayKeyNueva" maxlength="500" autocomplete="off"
-                         [disabled]="!ingreso.almacenSeguroDisponible"
-                         [placeholder]="ingreso.upayApiKeyGuardada ? '•••••• guardada (escribí para cambiar)' : ''">
-                  <mat-hint *ngIf="ingreso.almacenSeguroDisponible">Se guarda cifrada en este servidor y no se vuelve a mostrar.</mat-hint>
-                  <mat-hint *ngIf="!ingreso.almacenSeguroDisponible" class="hint-error">
-                    Este servidor no tiene almacén seguro: no se puede guardar la API Key.
-                  </mat-hint>
-                </mat-form-field>
-              </div>
               <div class="grid">
                 <mat-form-field appearance="outline">
                   <mat-label>Aviso si está pagado y sin aceptar (min)</mat-label>
                   <input matInput type="number" min="1" max="240" [(ngModel)]="cfg.minutosAvisoPagadoSinAceptar">
                 </mat-form-field>
               </div>
-              <div class="devolucion-auto" *ngIf="provSel?.devuelvePorApi">
+              <div class="devolucion-auto" *ngIf="algunaDevuelve">
                 <mat-slide-toggle [(ngModel)]="cfg.pagoDevolucionAutomatica">Devolver automáticamente</mat-slide-toggle>
-                <p class="ayuda">Al cancelar un pedido pagado con «Hay que devolverlo», se intenta devolver por {{ provSel.nombre }} en el momento. Si no se puede, queda en la cola DEVOLVER como siempre.</p>
-              </div>
-              <div class="fila-acciones">
-                <button mat-stroked-button *ngIf="provSelId === 'UPAY' && ingreso.upayApiKeyGuardada" (click)="borrarUpayKey()" [disabled]="guardando">
-                  <mat-icon>delete</mat-icon> Quitar API Key
-                </button>
-                <button mat-stroked-button (click)="probarPago()" [disabled]="probando || !provSelListo">
-                  <mat-icon>wifi_tethering</mat-icon> Probar conexión
-                </button>
+                <p class="ayuda">Al cancelar un pedido pagado con «Hay que devolverlo», se intenta devolver por el proveedor en el momento (si su cuenta lo permite). Si no se puede, queda en la cola DEVOLVER como siempre.</p>
               </div>
             </div>
 
@@ -348,7 +313,14 @@ import { RepositoryService } from '../../../database/repository.service';
     @media (max-width: 760px) { .proveedor .grid { grid-template-columns: minmax(0, 1fr); } }
     /* Identificadores que distinguen mayúsculas (Client ID, plantilla): sin la mayúscula global. */
     .proveedor input { text-transform: none !important; }
-    .toggle-celda { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 56px; }
+    .formas-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0 6px; }
+    .tabla-wrap { overflow-x: auto; margin-bottom: 10px; }
+    .tabla-formas { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .tabla-formas th { text-align: left; font-weight: 500; color: var(--text-secondary); padding: 6px 8px; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+    .tabla-formas td { padding: 4px 8px; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
+    .tabla-formas .nombre { font-weight: 600; color: var(--text-primary); }
+    .tabla-formas .col-orden, .tabla-formas .col-acc { white-space: nowrap; width: 1%; }
+    .tabla-formas .col-activa { width: 1%; text-align: center; }
     .fila-acciones { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
     .fila-acciones button { white-space: nowrap; }
     .tel-prueba { width: 220px; max-width: 100%; }
@@ -365,6 +337,7 @@ import { RepositoryService } from '../../../database/repository.service';
 export class TiendaOnlineConfigComponent implements OnInit {
   private repo = inject(RepositoryService);
   private snack = inject(MatSnackBar);
+  private dialog = inject(MatDialog);
 
   cfg: any = { activa: true, permitePickup: true, permiteDelivery: true, prepTimeMinutos: 30, montoMinimoPedido: 0 };
   cargando = true;
@@ -373,22 +346,16 @@ export class TiendaOnlineConfigComponent implements OnInit {
   /** Token nuevo (solo escritura: el servidor nunca lo devuelve). */
   tokenNuevo = '';
   telefonoPrueba = '';
-  /** API Key de uPay nueva (solo escritura, F4). */
-  upayKeyNueva = '';
-  // Proveedores de pago (precalculado para el template).
-  proveedoresPago: any[] = [];
-  provSelId = 'UPAY';
-  provSel: any = null;
-  provSelListo = false;
-  /** Proveedores que se ofrecen en la tienda (varios a la vez). */
-  ofrecidos: Record<string, boolean> = {};
-  resumenOfrecidos = 'ninguno';
-  /** Algún ofrecido tiene sus datos completos. */
+  /** Formas de pago online = cuentas de los proveedores (precalculado para el template). */
+  formas: any[] = [];
+  catalogoPago: ProveedorCatalogo[] = [];
+  almacenSeguroPago = false;
+  cargandoFormas = true;
+  moviendo = false;
+  /** Alguna forma activa tiene sus datos completos. */
   pagoOfrecidoListo = false;
-  /** Valores NO secretos por proveedor, editables. */
-  valoresProv: Record<string, Record<string, string>> = {};
-  /** Secretos nuevos por proveedor (solo escritura: el servidor nunca los devuelve). */
-  secretosNuevos: Record<string, Record<string, string>> = {};
+  /** Algún proveedor cargado sabe devolver por API (muestra «Devolver automáticamente»). */
+  algunaDevuelve = false;
   ingreso: any = {};
 
   private static readonly ERRORES: Record<string, string> = {
@@ -428,32 +395,112 @@ export class TiendaOnlineConfigComponent implements OnInit {
     icpay_error: 'IC Pay respondió con un error',
     icpay_baseurl_invalido: 'La URL de IC Pay tiene que ser https',
     icpay_email_invalido: 'El usuario de IC Pay tiene que ser un email',
+    icpay_apikey_invalido: 'La API key de IC Pay es demasiado larga',
+    nombre_invalido: 'Poné el nombre que ve el cliente (hasta 80 letras)',
+    forma_sin_tipo: 'Elegí al menos retiro o delivery',
+    forma_no_encontrada: 'La forma de pago ya no existe',
+    datos_invalidos: 'Datos inválidos',
   };
 
-  /** Arma el estado de proveedores que vino del servidor. */
-  private armarProveedores(pago: any): void {
-    this.proveedoresPago = pago?.proveedores || [];
-    this.provSelId = pago?.proveedorActivo || 'UPAY';
-    const activos: string[] = pago?.proveedoresActivos || (pago?.proveedorActivo ? [pago.proveedorActivo] : []);
-    this.ofrecidos = {};
-    for (const p of this.proveedoresPago) {
-      this.valoresProv[p.id] = { ...(p.valores || {}) };
-      this.secretosNuevos[p.id] = {};
-      this.ofrecidos[p.id] = activos.includes(p.id);
-    }
-    this.elegirProveedor();
-    this.armarResumenOfrecidos();
+  /** Trae las formas de pago online y precalcula lo que muestra la tabla. */
+  cargarFormas(): void {
+    this.cargandoFormas = true;
+    this.repo.getFormasPagoOnline().subscribe({
+      next: (r) => {
+        this.cargandoFormas = false;
+        if (!r?.success) { this.snack.open(this.mensajeError(r), 'OK', { duration: 4000 }); return; }
+        this.catalogoPago = r.catalogo || [];
+        this.almacenSeguroPago = !!r.almacenSeguroDisponible;
+        const lista: any[] = r.data || [];
+        this.formas = lista.map((f, i) => ({
+          ...f,
+          esPrimera: i === 0,
+          esUltima: i === lista.length - 1,
+          tiposTexto: [f.permitePickup ? 'Retiro' : null, f.permiteDelivery ? 'Delivery' : null].filter(Boolean).join(' · '),
+          guardando: false,
+        }));
+        this.pagoOfrecidoListo = this.formas.some((f) => f.activo && f.listo);
+        const devuelven = new Set(this.catalogoPago.filter((c: any) => c.devuelvePorApi).map((c) => c.id));
+        this.algunaDevuelve = this.formas.some((f) => devuelven.has(f.proveedor));
+      },
+      error: () => { this.cargandoFormas = false; },
+    });
   }
 
-  armarResumenOfrecidos(): void {
-    const of = this.proveedoresPago.filter((p) => this.ofrecidos[p.id]);
-    this.resumenOfrecidos = of.length ? of.map((p) => p.etiqueta || p.nombre).join(', ') : 'ninguno';
-    this.pagoOfrecidoListo = of.some((p) => (p.id === 'UPAY' ? !!this.ingreso?.upayApiKeyGuardada && !!this.cfg?.upayMerchantId : !!p.listo));
+  private abrirDialogoForma(forma: any | null): void {
+    this.dialog.open(CreateEditFormaPagoOnlineDialogComponent, {
+      width: '760px',
+      maxWidth: '96vw',
+      data: { catalogo: this.catalogoPago, forma, almacenSeguroDisponible: this.almacenSeguroPago, errores: TiendaOnlineConfigComponent.ERRORES },
+    }).afterClosed().subscribe((r) => {
+      if (!r) return;
+      this.snack.open(forma ? 'Forma de pago guardada' : 'Forma de pago agregada', 'OK', { duration: 2500 });
+      this.cargarFormas();
+    });
   }
 
-  elegirProveedor(): void {
-    this.provSel = this.proveedoresPago.find((p) => p.id === this.provSelId) || null;
-    this.provSelListo = this.provSelId === 'UPAY' ? !!this.ingreso?.upayApiKeyGuardada && !!this.cfg?.upayMerchantId : !!this.provSel?.listo;
+  adicionarForma(): void {
+    this.abrirDialogoForma(null);
+  }
+
+  editarForma(f: any): void {
+    this.abrirDialogoForma(f);
+  }
+
+  cambiarActiva(f: any, activo: boolean): void {
+    f.guardando = true;
+    this.repo.guardarFormaPagoOnline({ id: f.id, activo }).subscribe({
+      next: (r) => {
+        f.guardando = false;
+        if (!r?.success) this.snack.open(this.mensajeError(r), 'OK', { duration: 4000 });
+        this.cargarFormas();
+      },
+      error: (e) => { f.guardando = false; this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 }); this.cargarFormas(); },
+    });
+  }
+
+  moverForma(f: any, direccion: number): void {
+    this.moviendo = true;
+    this.repo.moverFormaPagoOnline(f.id, direccion).subscribe({
+      next: () => { this.moviendo = false; this.cargarFormas(); },
+      error: () => { this.moviendo = false; },
+    });
+  }
+
+  quitarForma(f: any): void {
+    const conPedidos = f.pedidos > 0;
+    this.dialog.open(ConfirmationDialogComponent, {
+      width: '460px',
+      data: {
+        title: 'Quitar forma de pago online',
+        message: conPedidos
+          ? `«${f.nombre}» ya tiene ${f.pedidos} pedido(s): se desactiva (deja de ofrecerse) pero se conserva para consultar y devolver esos pedidos.`
+          : `¿Quitar «${f.nombre}»? Se borran también sus claves guardadas.`,
+        confirmText: conPedidos ? 'Desactivar' : 'Quitar',
+        cancelText: 'Volver',
+      },
+    }).afterClosed().subscribe((ok) => {
+      if (!ok) return;
+      this.repo.eliminarFormaPagoOnline(f.id).subscribe({
+        next: (r) => {
+          if (!r?.success) { this.snack.open(this.mensajeError(r), 'OK', { duration: 4000 }); return; }
+          this.snack.open(r.desactivada ? 'Forma de pago desactivada' : 'Forma de pago quitada', 'OK', { duration: 2500 });
+          this.cargarFormas();
+        },
+        error: (e) => this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 }),
+      });
+    });
+  }
+
+  probarForma(f: any): void {
+    this.probando = true;
+    this.repo.probarFormaPagoOnline(f.id).subscribe({
+      next: (res) => {
+        this.probando = false;
+        this.snack.open(res?.success ? `Conexión con ${res.proveedor || 'el proveedor'} correcta${res.detalle ? ': ' + res.detalle : ''}` : this.mensajeError(res), 'OK', { duration: 5000 });
+      },
+      error: (e) => { this.probando = false; this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 }); },
+    });
   }
 
   private mensajeError(res: any): string {
@@ -476,13 +523,13 @@ export class TiendaOnlineConfigComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.cargarFormas();
     this.repo.getTiendaOnlineConfig().subscribe({
       next: (c) => {
         this.cfg = c || this.cfg;
         if (!this.cfg.whatsappProveedor) this.cfg.whatsappProveedor = 'META';
         this.ingreso = c?.ingreso || {};
         this.armarMetodos();
-        this.armarProveedores(c?.pago);
         this.cargando = false;
       },
       error: () => { this.cargando = false; },
@@ -493,18 +540,6 @@ export class TiendaOnlineConfigComponent implements OnInit {
     this.guardando = true;
     const { ingreso, abiertaAhora, pago, ...datos } = this.cfg;
     const payload: any = { ...datos, ...extra };
-    // Los ofrecidos, en el orden de la lista (el primero es el que se elige por defecto).
-    if (this.proveedoresPago.length) payload.pagoProveedores = this.proveedoresPago.filter((p) => this.ofrecidos[p.id]).map((p) => p.id);
-    // Datos de los proveedores con campos (los de uPay van en sus columnas, como siempre).
-    const pagoConfig: Record<string, any> = {};
-    const pagoSecretos: Record<string, any> = {};
-    for (const p of this.proveedoresPago.filter((x) => x.campos?.length)) {
-      pagoConfig[p.id] = this.valoresProv[p.id] || {};
-      const nuevos = Object.entries(this.secretosNuevos[p.id] || {}).filter(([, v]) => String(v || '').trim());
-      if (nuevos.length) pagoSecretos[p.id] = Object.fromEntries(nuevos);
-    }
-    if (Object.keys(pagoConfig).length) payload.pagoConfig = pagoConfig;
-    if (Object.keys(pagoSecretos).length) payload.pagoSecretos = pagoSecretos;
     // Ninguno marcado = sólo efectivo (el servidor nunca deja la tienda sin forma de pago).
     // Si la config no llegó a cargarse, no se mandan: si no, se resetearía a sólo efectivo.
     if (this.metodosOpciones.length) {
@@ -516,7 +551,6 @@ export class TiendaOnlineConfigComponent implements OnInit {
       delete payload.creditoTienda;
     }
     if (this.tokenNuevo.trim() && !extra.whatsappTokenBorrar) payload.whatsappToken = this.tokenNuevo.trim();
-    if (this.upayKeyNueva.trim() && !extra.upayApiKeyBorrar) payload.upayApiKey = this.upayKeyNueva.trim();
     this.repo.updateTiendaOnlineConfig(payload).subscribe({
       next: (res) => {
         this.guardando = false;
@@ -524,9 +558,8 @@ export class TiendaOnlineConfigComponent implements OnInit {
           this.cfg = res.config;
           this.ingreso = res.config?.ingreso || {};
           this.armarMetodos();
-          this.armarProveedores(res.config?.pago);
           this.tokenNuevo = '';
-          this.upayKeyNueva = '';
+          this.cargarFormas();
           this.snack.open('Configuración guardada', 'OK', { duration: 2500 });
         } else {
           this.snack.open(this.mensajeError(res), 'OK', { duration: 4000 });
@@ -555,43 +588,6 @@ export class TiendaOnlineConfigComponent implements OnInit {
       },
       error: (e) => {
         this.guardando = false;
-        this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 });
-      },
-    });
-  }
-
-  borrarUpayKey(): void {
-    if (!confirm('¿Quitar la API Key de uPay? El pago con tarjeta se apaga hasta cargar otra.')) return;
-    this.upayKeyNueva = '';
-    this.guardando = true;
-    this.repo.updateTiendaOnlineConfig({ upayApiKeyBorrar: true, pagoOnlineActivo: false }).subscribe({
-      next: (res) => {
-        this.guardando = false;
-        if (res?.success) {
-          this.cfg = res.config;
-          this.ingreso = res.config?.ingreso || {};
-          this.armarProveedores(res.config?.pago);
-          this.snack.open('API Key quitada', 'OK', { duration: 2500 });
-        } else {
-          this.snack.open(this.mensajeError(res), 'OK', { duration: 4000 });
-        }
-      },
-      error: (e) => {
-        this.guardando = false;
-        this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 });
-      },
-    });
-  }
-
-  probarPago(): void {
-    this.probando = true;
-    this.repo.probarTiendaPago(this.provSelId).subscribe({
-      next: (res) => {
-        this.probando = false;
-        this.snack.open(res?.success ? `Conexión con ${res.proveedor || 'el proveedor'} correcta${res.detalle ? ': ' + res.detalle : ''}` : this.mensajeError(res), 'OK', { duration: 5000 });
-      },
-      error: (e) => {
-        this.probando = false;
         this.snack.open('Error: ' + (e?.message || ''), 'OK', { duration: 3500 });
       },
     });

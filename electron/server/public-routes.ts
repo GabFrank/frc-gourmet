@@ -82,7 +82,7 @@ export function registerPublicRoutes(fastify: FastifyInstance): void {
     { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
     async (request, reply) => {
       const proveedor = String(request.params.proveedor || '').toUpperCase();
-      if (!/^[A-Z]{2,20}$/.test(proveedor)) {
+      if (!/^[A-Z]{2,20}(-\d{1,9})?$/.test(proveedor)) {
         reply.code(404);
         return { status: 'error' };
       }

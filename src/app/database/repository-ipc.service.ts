@@ -496,6 +496,11 @@ interface ElectronAPI {
   probarTiendaUpay: () => Promise<any>;
   probarTiendaPago: (proveedorId?: string) => Promise<any>;
   marcarPagoDevueltoPedidoOnline: (pedidoId: number) => Promise<any>;
+  getFormasPagoOnline: () => Promise<any>;
+  guardarFormaPagoOnline: (data: any) => Promise<any>;
+  eliminarFormaPagoOnline: (id: number) => Promise<any>;
+  moverFormaPagoOnline: (id: number, direccion: number) => Promise<any>;
+  probarFormaPagoOnline: (id: number) => Promise<any>;
   getCuentasTienda: (filtros?: any) => Promise<any>;
   getVinculosCuentaTienda: (cuentaId: number) => Promise<any>;
   vincularCuentaTienda: (cuentaId: number, clienteId: number, motivo?: string) => Promise<any>;
@@ -2685,6 +2690,26 @@ export class RepositoryIpcService extends RepositoryService {
   }
   marcarPagoDevueltoPedidoOnline(pedidoId: number): Observable<any> {
     return from(this.api.marcarPagoDevueltoPedidoOnline(pedidoId));
+  }
+
+  getFormasPagoOnline(): Observable<any> {
+    return from(this.api.getFormasPagoOnline());
+  }
+
+  guardarFormaPagoOnline(data: any): Observable<any> {
+    return from(this.api.guardarFormaPagoOnline(data));
+  }
+
+  eliminarFormaPagoOnline(id: number): Observable<any> {
+    return from(this.api.eliminarFormaPagoOnline(id));
+  }
+
+  moverFormaPagoOnline(id: number, direccion: number): Observable<any> {
+    return from(this.api.moverFormaPagoOnline(id, direccion));
+  }
+
+  probarFormaPagoOnline(id: number): Observable<any> {
+    return from(this.api.probarFormaPagoOnline(id));
   }
 
   getCuentasTienda(filtros?: any): Observable<any> {

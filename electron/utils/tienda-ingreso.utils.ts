@@ -17,9 +17,15 @@ let googleClientIdOverride: string | null = null;
 // solo el sí/no), su id y los hosts que el storefront acepta para pagar.
 // PLAN-tienda-pagos-multi-icpay: puede haber varios prendidos; acá quedan los que tienen sus
 // credenciales completas, en el orden de la config.
-export interface ProveedorPagoPublico { id: string; nombre: string; etiqueta: string; medio: string; hosts: string[] }
+// Cada elemento es una CUENTA (`formas_pago_online`); `formaId` null = la de antes (sin filas).
+export interface ProveedorPagoPublico {
+  formaId: number | null; id: string; nombre: string; etiqueta: string; medio: string; hosts: string[];
+  pickup: boolean; delivery: boolean;
+}
 let pagoProveedoresListos: ProveedorPagoPublico[] = [];
-const PROVEEDOR_DEFECTO: ProveedorPagoPublico = { id: 'UPAY', nombre: 'uPay', etiqueta: 'Tarjeta — uPay', medio: 'TARJETA', hosts: [] };
+const PROVEEDOR_DEFECTO: ProveedorPagoPublico = {
+  formaId: null, id: 'UPAY', nombre: 'uPay', etiqueta: 'Tarjeta — uPay', medio: 'TARJETA', hosts: [], pickup: true, delivery: true,
+};
 
 /** ¿Se ofrece el pago online a pedidos nuevos? (interruptor + algún proveedor listo) */
 export function pagoOnlineOfrecido(cfg: { pagoOnlineActivo?: boolean } | null | undefined): boolean {
@@ -75,9 +81,11 @@ async function leerYAplicar(dataSource: DataSource): Promise<void> {
     nombreComercio: cfg?.nombreComercio || null,
   });
   googleClientIdOverride = cfg?.googleClientId || null;
-  const { proveedoresListos } = await import('../services/pagos-online/pagos-online.service');
-  pagoProveedoresListos = (await proveedoresListos(dataSource, cfg))
-    .map((p) => ({ id: p.id, nombre: p.nombre, etiqueta: p.etiqueta, medio: p.medio, hosts: p.hosts }));
+  const { cuentasListas } = await import('../services/pagos-online/cuentas-pago');
+  pagoProveedoresListos = (await cuentasListas(dataSource, cfg)).map((c) => ({
+    formaId: c.forma?.id ?? null, id: c.prov.id, nombre: c.prov.nombre, etiqueta: c.forma?.nombre || c.prov.etiqueta,
+    medio: c.prov.medio, hosts: c.prov.hosts, pickup: c.forma ? !!c.forma.permitePickup : true, delivery: c.forma ? !!c.forma.permiteDelivery : true,
+  }));
 }
 
 /** Claves de Evolution en `configuracion_notificaciones` (las mismas que usa `notificacion.service`). */

@@ -132,10 +132,6 @@ export class TiendaOnlineConfig extends BaseModel {
   @Column({ name: 'pago_proveedor', type: 'varchar', length: 20, nullable: true })
   pagoProveedor?: string | null;
 
-  /** Proveedores prendidos a la vez, en JSON (`["BANCARD","ICPAY"]`). Vacío = solo `pagoProveedor`. */
-  @Column({ name: 'pago_proveedores', type: 'text', nullable: true })
-  pagoProveedores?: string | null;
-
   /** Datos NO secretos por proveedor, en JSON: `{"BANCARD":{"publicKey":"…","entorno":"PRUEBA"}}`. */
   @Column({ name: 'pago_config_json', type: 'text', nullable: true })
   pagoConfigJson?: string | null;

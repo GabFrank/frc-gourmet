@@ -16,12 +16,13 @@ import { PagoOnlineEvento } from '../src/app/database/entities/pedidos-online/pa
 import { TiendaOnlineConfig } from '../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import { EstadoPagoOnline, EstadoPedidoOnline, TipoPedidoOnline, FORMAS_PAGO_ONLINE, esMetodoPagoOnline } from '../src/app/database/entities/pedidos-online/pedido-online.enums';
 import {
-  iniciarPagoPedido, verificarPagoPedido, setPagosOnlineDeps, pagoOnlineDisponible, proveedoresActivos, proveedoresListos,
+  iniciarPagoPedido, verificarPagoPedido, setPagosOnlineDeps, pagoOnlineDisponible, cuentasListas, procesarAvisoPago,
   tickPagosOnline,
 } from '../electron/services/pagos-online/pagos-online.service';
 import { icpayProveedor, interpretarOrdenIcpay, montoIcpay, usdDesdeGuaranies } from '../electron/services/pagos-online/proveedores/icpay.proveedor';
 import { normalizarApiKey, normalizarBaseIcpay, olvidarSesionesIcpay } from '../electron/services/pagos-online/proveedores/icpay-auth';
 import { cargarCredencialesTienda, proveedoresPagoListos, pagoOnlineOfrecido } from '../electron/utils/tienda-ingreso.utils';
+import { FormaPagoOnline } from '../src/app/database/entities/pedidos-online/forma-pago-online.entity';
 
 let pass = 0, fail = 0;
 function ok(c: boolean, msg: string, extra?: any) {
@@ -32,6 +33,9 @@ const BASE = 'https://stage.api.ic.com.py';
 const KEY = 'aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb';
 const EMAIL = 'tienda@ejemplo.com';
 const PASS = 'Clave-Segura-1';
+const KEY2 = 'cccccccc-4444-5555-6666-dddddddddddd';
+const EMAIL2 = 'sucursal2@ejemplo.com';
+const PASS2 = 'Otra-Clave-2';
 const PYG_POR_USD = 6350;
 const BRL_POR_USD = 5.6359;
 
@@ -56,7 +60,10 @@ const fakeFetch = async (url: string, init: any = {}) => {
   const ruta = u.pathname;
   if (ruta === '/api/v1/auth/admin/sign-in') {
     if (!h['x-api-key']) return res(400, { message: 'API Key required' });
-    if (body?.email !== EMAIL || body?.password !== PASS) return res(400, { message: 'Incorrect username or password.' });
+    const valido = (h['x-api-key'] === KEY && body?.email === EMAIL && body?.password === PASS)
+      || (h['x-api-key'] === KEY2 && body?.email === EMAIL2 && body?.password === PASS2)
+      || (body?.email === EMAIL && body?.password === PASS);
+    if (!valido) return res(400, { message: 'Incorrect username or password.' });
     if (desafio) return res(201, { challengeName: desafio, session: 'sess', email: EMAIL });
     const t = `tok-${++n}`; const r = `ref-${n}`; tokens.add(t); refreshes.add(r);
     return res(201, { accessToken: t, idToken: 'id', refreshToken: r, expiresIn, tokenType: 'Bearer' });
@@ -66,7 +73,7 @@ const fakeFetch = async (url: string, init: any = {}) => {
     const t = `tok-${++n}`; tokens.add(t);
     return res(201, { accessToken: t, idToken: 'id', expiresIn, tokenType: 'Bearer' });
   }
-  if (h['x-api-key'] !== KEY) return res(401, { message: 'Invalid API Key', statusCode: 401 });
+  if (h['x-api-key'] !== KEY && h['x-api-key'] !== KEY2) return res(401, { message: 'Invalid API Key', statusCode: 401 });
   const tok = String(h['Authorization'] || '').replace(/^Bearer /, '');
   if (!tokens.has(tok)) return res(401, { error: 'TokenExpired', message: 'Access token expired', statusCode: 401 });
   if (ruta === '/api/v1/quote') {
@@ -91,7 +98,7 @@ const fakeFetch = async (url: string, init: any = {}) => {
     const o = ordenes.get(decodeURIComponent(m[1]));
     return o ? res(200, vista(o)) : res(404, { message: 'Payment order not found' });
   }
-  if (ruta === '/api/v1/store/me') return res(200, { id: 's1', name: 'FRANCO EMPRENDIMIENTOS', document: '80127721-3', type: 'juridico' });
+  if (ruta === '/api/v1/store/me') return res(200, { id: 's1', name: h['x-api-key'] === KEY2 ? 'SUCURSAL 2' : 'FRANCO EMPRENDIMIENTOS', document: '80127721-3', type: 'juridico' });
   if (ruta === '/api/v1/account/me') return res(200, { data: { id: 'a1', currentBalance: '0.00', currency: 'USD' } });
   return res(404, {});
 };
@@ -127,7 +134,7 @@ async function main() {
   let cfg = await cfgRepo.findOne({ where: {}, order: { id: 'ASC' } });
   if (!cfg) cfg = await cfgRepo.save(cfgRepo.create({ activa: true } as any) as any) as TiendaOnlineConfig;
   const conf = (extra: any = {}) => cfgRepo.update({ id: cfg!.id }, {
-    pagoOnlineActivo: true, pagoProveedor: 'ICPAY', pagoProveedores: JSON.stringify(['ICPAY']), aceptacionAutomatica: false,
+    pagoOnlineActivo: true, pagoProveedor: 'ICPAY', aceptacionAutomatica: false,
     pagoConfigJson: JSON.stringify({ ICPAY: { baseUrl: BASE + '/api/v1/', email: EMAIL }, BANCARD: { publicKey: 'pubKeyTest123', entorno: 'PRUEBA' } }), ...extra,
   } as any);
   const leerCfg = () => cfgRepo.findOne({ where: { id: cfg!.id } });
@@ -293,39 +300,72 @@ async function main() {
   const t = await tickPagosOnline(ds, { ahora: new Date(Date.now() + 2 * 60_000) });
   ok(t.pagados >= 1 && (await leer(p7.id)).estadoPago === EstadoPagoOnline.PAGADO, 'sin webhook, el job confirma el Pix', t);
 
-  console.log('Varios proveedores a la vez');
-  await conf({ pagoProveedores: JSON.stringify(['BANCARD', 'ICPAY']), pagoProveedor: 'BANCARD' });
+  console.log('Cuentas de pago (formas_pago_online)');
+  const formaRepo = ds.getRepository(FormaPagoOnline);
+  const crearForma = (o: any) => formaRepo.save(formaRepo.create({ activo: true, permitePickup: true, permiteDelivery: true, ...o }) as any) as Promise<FormaPagoOnline>;
+  const fBan = await crearForma({ proveedor: 'BANCARD', nombre: 'TARJETA — BANCARD', orden: 1, configJson: JSON.stringify({ publicKey: 'pubKeyTest123', entorno: 'PRUEBA' }) });
+  const fIc1 = await crearForma({ proveedor: 'ICPAY', nombre: 'PIX (BRASIL)', orden: 2, configJson: JSON.stringify({ baseUrl: BASE, email: EMAIL }) });
+  const fIc2 = await crearForma({ proveedor: 'ICPAY', nombre: 'PIX SUCURSAL 2', orden: 3, permitePickup: false, configJson: JSON.stringify({ baseUrl: BASE, email: EMAIL2 }) });
+  const secretos: Record<string, () => Promise<string>> = {
+    [`BANCARD#${fBan.id}.privateKey`]: async () => 'privKeyTest456',
+    [`ICPAY#${fIc1.id}.apiKey`]: async () => KEY, [`ICPAY#${fIc1.id}.password`]: async () => PASS,
+  };
+  setPagosOnlineDeps({ secretos });
   let c = await leerCfg();
-  ok(proveedoresActivos(c).map((p) => p.id).join() === 'BANCARD,ICPAY', 'la lista de prendidos manda, en su orden');
-  ok((await proveedoresListos(ds, c)).map((p) => p.id).join() === 'BANCARD,ICPAY', 'los dos tienen datos completos → los dos se ofrecen');
+  const ids = (l: any[]) => l.map((x) => x.forma?.id ?? x.formaId).join();
+  ok(ids(await cuentasListas(ds, c)) === `${fBan.id},${fIc1.id}`, 'con cuentas cargadas mandan ellas, en su orden; la 2.ª de IC sin claves no se ofrece');
+  ok(!(await icpayProveedor.credenciales(ds, c, { id: fIc2.id, proveedor: 'ICPAY', config: { baseUrl: BASE, email: EMAIL2 }, legado: false })),
+    'una cuenta nueva NO usa las claves de otra cuenta del mismo proveedor');
+  secretos[`ICPAY#${fIc2.id}.apiKey`] = async () => KEY2;
+  secretos[`ICPAY#${fIc2.id}.password`] = async () => PASS2;
+  ok(ids(await cuentasListas(ds, c, 'DELIVERY')) === `${fBan.id},${fIc1.id},${fIc2.id}`, 'delivery: las tres (dos cuentas de IC Pay a la vez)');
+  ok(ids(await cuentasListas(ds, c, 'PICKUP')) === `${fBan.id},${fIc1.id}`, 'retiro: la cuenta «solo delivery» no aparece');
+  ok((await cuentasListas(ds, c, 'MESA_QR')).length === 0, 'mesa: nunca se paga online');
   await cargarCredencialesTienda(ds);
-  ok(pagoOnlineOfrecido(c) && proveedoresPagoListos().map((p) => `${p.id}:${p.medio}`).join() === 'BANCARD:TARJETA,ICPAY:PIX', 'la tienda publica los dos, con su medio', proveedoresPagoListos());
-  password = '';
-  await cargarCredencialesTienda(ds);
-  ok(proveedoresPagoListos().map((p) => p.id).join() === 'BANCARD', 'a IC Pay le falta la contraseña → solo Bancard');
-  password = PASS;
-  await cfgRepo.update({ id: cfg!.id }, { pagoProveedores: JSON.stringify([]) } as any);
-  c = await leerCfg();
-  ok(proveedoresActivos(c).length === 0 && !(await pagoOnlineDisponible(ds, c)), 'lista vacía → ninguno');
-  await cfgRepo.update({ id: cfg!.id }, { pagoProveedores: null, pagoProveedor: 'ICPAY' } as any);
-  c = await leerCfg();
-  ok(proveedoresActivos(c).map((p) => p.id).join() === 'ICPAY', 'sin lista (instalación vieja) → el único pago_proveedor');
-  await conf({ pagoProveedores: JSON.stringify(['BANCARD', 'ICPAY']) });
+  ok(pagoOnlineOfrecido(c) && proveedoresPagoListos().map((p) => `${p.formaId}:${p.id}:${p.etiqueta}:${p.pickup ? 'R' : ''}${p.delivery ? 'D' : ''}`).join()
+    === `${fBan.id}:BANCARD:TARJETA — BANCARD:RD,${fIc1.id}:ICPAY:PIX (BRASIL):RD,${fIc2.id}:ICPAY:PIX SUCURSAL 2:D`, 'la tienda publica cada cuenta con su nombre y tipos', proveedoresPagoListos());
+
+  console.log('Cada pedido con su cuenta');
+  const p10 = await nuevo(6350);
+  await repo.update({ id: p10.id }, { formaPagoOnlineId: fIc2.id } as any);
+  const antes10 = llamadas.length;
+  const i10: any = await iniciarPagoPedido(ds, p10.id);
+  const crear10 = llamadas.slice(antes10).find((l) => l.metodo === 'POST' && l.ruta === '/api/v1/payment/order');
+  ok(i10.success && crear10?.headers['x-api-key'] === KEY2, 'el pedido de la cuenta 2 se cobra con las claves de la cuenta 2', crear10?.headers);
+  await formaRepo.update({ id: fIc2.id }, { activo: false } as any);
+  ordenes.get((await leer(p10.id)).pagoSesionId!)!.status = 'completed';
+  const v10 = await verificarPagoPedido(ds, p10.id);
+  ok(v10.estadoPago === EstadoPagoOnline.PAGADO, 'desactivar la cuenta no deja colgados sus pedidos: se siguen consultando con ella', v10);
+  ok(ids(await cuentasListas(ds, c, 'DELIVERY')) === `${fBan.id},${fIc1.id}`, 'la cuenta desactivada ya no se ofrece');
+  const p11 = await nuevo(6350);
+  const i11: any = await iniciarPagoPedido(ds, p11.id);
+  ok(i11.success && (await leer(p11.id)).formaPagoOnlineId === fIc1.id, 'pedido sin cuenta (de antes): toma la primera cuenta lista de su proveedor y la guarda');
+
+  console.log('Cuenta convertida por la migración (_legado)');
+  const fLeg = await crearForma({ proveedor: 'ICPAY', nombre: 'PIX LEGADO', orden: 4, configJson: JSON.stringify({ baseUrl: BASE, email: EMAIL, _legado: '1' }) });
+  secretos['ICPAY.apiKey'] = async () => KEY;
+  secretos['ICPAY.password'] = async () => PASS;
+  ok(ids(await cuentasListas(ds, c)).split(',').includes(String(fLeg.id)), 'la cuenta _legado sigue usando las claves de antes (no hay que volver a cargarlas)');
+
+  console.log('Aviso de una cuenta');
+  ok((await procesarAvisoPago(ds, `BANCARD-${fBan.id}`, { operation: { shop_process_id: 'x' } })).http === 400, 'aviso a la URL de una cuenta: se verifica con esa cuenta (inválido → 400)');
+  ok((await procesarAvisoPago(ds, 'BANCARD-999999', {})).http === 503, 'aviso a una cuenta que no existe → no se procesa');
 
   console.log('Cambiar de medio tras un fallo');
   const p8 = await nuevo(64000, 'BANCARD');
-  await repo.update({ id: p8.id }, { pagoSesionId: String(p8.id * 100 + 1), pagoIntento: 1, pagoProveedor: 'BANCARD', estadoPago: EstadoPagoOnline.PENDIENTE, pagoCheckoutUrl: 'proc-x' } as any);
-  const i8a: any = await iniciarPagoPedido(ds, p8.id, { nuevoIntento: true, proveedor: 'ICPAY' });
+  await repo.update({ id: p8.id }, { formaPagoOnlineId: fBan.id, pagoSesionId: String(p8.id * 100 + 1), pagoIntento: 1, pagoProveedor: 'BANCARD', estadoPago: EstadoPagoOnline.PENDIENTE, pagoCheckoutUrl: 'proc-x' } as any);
+  const i8a: any = await iniciarPagoPedido(ds, p8.id, { nuevoIntento: true, formaPagoOnlineId: fIc1.id });
   ok(!i8a.success && i8a.error === 'pago_en_curso', 'con un intento pendiente no se cambia de medio (dos cobros vivos)', i8a);
   await repo.update({ id: p8.id }, { estadoPago: EstadoPagoOnline.FALLIDO } as any);
-  const i8: any = await iniciarPagoPedido(ds, p8.id, { nuevoIntento: true, proveedor: 'ICPAY' });
+  const i8: any = await iniciarPagoPedido(ds, p8.id, { nuevoIntento: true, formaPagoOnlineId: fIc1.id });
   q = await leer(p8.id);
-  ok(i8.success && i8.tipo === 'QR' && q.metodoPago === 'ICPAY' && q.pagoProveedor === 'ICPAY' && q.pagoIntento === 2, 'tras el rechazo de la tarjeta → paga con Pix (intento 2)', { i8, q });
+  ok(i8.success && i8.tipo === 'QR' && q.metodoPago === 'ICPAY' && q.pagoProveedor === 'ICPAY' && q.formaPagoOnlineId === fIc1.id && q.pagoIntento === 2,
+    'tras el rechazo de la tarjeta → paga con la cuenta Pix elegida (intento 2)', { i8, q });
   ok((await datosDe(p8.id))?.usd === usdDesdeGuaranies(64000, PYG_POR_USD).toFixed(2), 'el intento nuevo guarda sus datos de IC');
   const p9 = await nuevo(10000, 'ICPAY');
-  await repo.update({ id: p9.id }, { pagoSesionId: 'ord-x', pagoIntento: 1, pagoProveedor: 'ICPAY', estadoPago: EstadoPagoOnline.FALLIDO, pagoCheckoutUrl: 'qr:ord-x' } as any);
-  const i9: any = await iniciarPagoPedido(ds, p9.id, { nuevoIntento: true, proveedor: 'UPAY' });
-  ok(!i9.success && i9.error === 'pago_online_no_disponible' && (await leer(p9.id)).metodoPago === 'ICPAY', 'a un proveedor que no está prendido → no se cambia', i9);
+  await repo.update({ id: p9.id }, { formaPagoOnlineId: fIc1.id, pagoSesionId: 'ord-x', pagoIntento: 1, pagoProveedor: 'ICPAY', estadoPago: EstadoPagoOnline.FALLIDO, pagoCheckoutUrl: 'qr:ord-x' } as any);
+  const i9: any = await iniciarPagoPedido(ds, p9.id, { nuevoIntento: true, formaPagoOnlineId: fIc2.id });
+  ok(!i9.success && i9.error === 'pago_online_no_disponible' && (await leer(p9.id)).formaPagoOnlineId === fIc1.id, 'a una cuenta desactivada → no se cambia', i9);
 
   await ds.destroy();
   console.log(`\n[pagos-icpay] ${pass} ok, ${fail} fallas`);

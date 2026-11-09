@@ -165,8 +165,8 @@
 
       <ng-container *ngIf="modalidad === 'ONLINE'">
         <div class="metodos" role="radiogroup" aria-label="Medio de pago online" *ngIf="proveedoresOnline.length > 1">
-          <button type="button" class="metodo" *ngFor="let p of proveedoresOnline" [class.active]="metodoPago === p.id"
-                  [attr.aria-checked]="metodoPago === p.id" role="radio" (click)="elegirMetodo(p.id)">
+          <button type="button" class="metodo" *ngFor="let p of proveedoresOnline" [class.active]="formaOnline === p.clave"
+                  [attr.aria-checked]="formaOnline === p.clave" role="radio" (click)="elegirFormaOnline(p.clave)">
             <sf-icon [name]="p.icono" [size]="18"></sf-icon>{{ p.etiqueta }}
           </button>
         </div>

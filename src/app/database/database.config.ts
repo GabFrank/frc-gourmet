@@ -356,6 +356,7 @@ import { CuentaClienteVinculo } from './entities/pedidos-online/cuenta-cliente-v
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
 import { PedidoOnline } from './entities/pedidos-online/pedido-online.entity';
+import { FormaPagoOnline } from './entities/pedidos-online/forma-pago-online.entity';
 import { PedidoOnlineItem } from './entities/pedidos-online/pedido-online-item.entity';
 import { CustomerRefreshToken } from './entities/pedidos-online/customer-refresh-token.entity';
 import { TiendaOnlineConfig } from './entities/pedidos-online/tienda-online-config.entity';
@@ -469,6 +470,7 @@ function getEntitiesList(): any[] {
       CodigoOtp,
       ZonaDelivery,
       PedidoOnline,
+      FormaPagoOnline,
       PagoOnlineEvento,
       PedidoOnlineItem,
       CustomerRefreshToken,

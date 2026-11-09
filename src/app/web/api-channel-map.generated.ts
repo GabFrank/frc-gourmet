@@ -3,7 +3,7 @@
  * AUTO-GENERADO por scripts/generate-mobile-api-map.js — NO editar a mano.
  * Mapa método de window.api → canal IPC (extraído de preload.ts).
  * Regenerar tras tocar preload.ts: `node scripts/generate-mobile-api-map.js`.
- * Total: 892 métodos.
+ * Total: 897 métodos.
  */
 export const API_CHANNEL_MAP: Record<string, string> = {
   "abrirCajaDesdeConteo": "abrir-caja-desde-conteo",
@@ -317,6 +317,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "editGastoCaja": "edit-gasto-caja",
   "egresarFuncionario": "egresar-funcionario",
   "egresoCajaInicial": "egreso-caja-inicial",
+  "eliminarFormaPagoOnline": "eliminar-forma-pago-online",
   "eliminarItemLiquidacion": "eliminar-item-liquidacion",
   "eliminarItemLiquidacionComision": "eliminar-item-liquidacion-comision",
   "eliminarMiembroEquipo": "eliminar-miembro-equipo",
@@ -481,6 +482,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getFeriados": "get-feriados",
   "getFormaPago": "getFormaPago",
   "getFormasPago": "getFormasPago",
+  "getFormasPagoOnline": "get-formas-pago-online",
   "getFuncionario": "get-funcionario",
   "getFuncionarioDeCliente": "get-funcionario-de-cliente",
   "getFuncionarioDocumentoBase64": "get-funcionario-documento-base64",
@@ -682,6 +684,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getVentasTotalByCaja": "getVentasTotalByCaja",
   "getVinculosCuentaTienda": "get-vinculos-cuenta-tienda",
   "getZonasDeliveryAdmin": "get-zonas-delivery-admin",
+  "guardarFormaPagoOnline": "guardar-forma-pago-online",
   "guardarTiendaCategoria": "guardar-tienda-categoria",
   "guardarZonaDelivery": "guardar-zona-delivery",
   "iaConfigGet": "ia-config-get",
@@ -707,6 +710,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "marcarTodasNotificacionesLeidas": "marcar-todas-notificaciones-leidas",
   "marcarValeDescontado": "marcar-vale-descontado",
   "markOnboardingTask": "mark-onboarding-task",
+  "moverFormaPagoOnline": "mover-forma-pago-online",
   "openBase64File": "open-base64-file",
   "openFileWithSystem": "open-file-with-system",
   "pagarCompraCuota": "pagar-compra-cuota",
@@ -720,6 +724,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "pedidosOnlinePagadosDeVenta": "pedidos-online-pagados-de-venta",
   "printReceipt": "print-receipt",
   "printTestPage": "print-test-page",
+  "probarFormaPagoOnline": "probar-forma-pago-online",
   "probarTiendaPago": "probar-tienda-pago",
   "probarTiendaUpay": "probar-tienda-upay",
   "probarTiendaWhatsapp": "probar-tienda-whatsapp",

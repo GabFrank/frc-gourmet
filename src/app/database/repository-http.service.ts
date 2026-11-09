@@ -1126,6 +1126,26 @@ export class RepositoryHttpService extends RepositoryService {
     return throwError(() => new Error(`RepositoryHttpService.marcarPagoDevueltoPedidoOnline() no esta implementado todavia.`)) as any;
   }
 
+  getFormasPagoOnline(): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getFormasPagoOnline() no esta implementado todavia.`)) as any;
+  }
+
+  guardarFormaPagoOnline(_data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.guardarFormaPagoOnline() no esta implementado todavia.`)) as any;
+  }
+
+  eliminarFormaPagoOnline(_id: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.eliminarFormaPagoOnline() no esta implementado todavia.`)) as any;
+  }
+
+  moverFormaPagoOnline(_id: number, _direccion: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.moverFormaPagoOnline() no esta implementado todavia.`)) as any;
+  }
+
+  probarFormaPagoOnline(_id: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.probarFormaPagoOnline() no esta implementado todavia.`)) as any;
+  }
+
   getCuentasTienda(_filtros?: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.getCuentasTienda() no esta implementado todavia.`)) as any;
   }

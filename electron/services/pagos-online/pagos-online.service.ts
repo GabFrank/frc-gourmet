@@ -30,6 +30,9 @@ import { deps, fetchActual } from './proveedores/deps';
 import { ContextoProveedor, DatosQr, FetchLike, ProveedorError, ProveedorPagoOnline } from './proveedores/tipos';
 import { nombreProveedor, proveedorDelPedido, proveedorPorId, PROVEEDOR_UPAY } from './proveedores';
 import { upayApiKey, upayConfigDeCfg, upayProveedor } from './proveedores/upay.proveedor';
+import { cuentaDelPedido, cuentasListas, cuentasParaAviso, CuentaResuelta } from './cuentas-pago';
+
+export { cuentasListas } from './cuentas-pago';
 
 export { PROVEEDOR_UPAY };
 /** Mínimo entre consultas al proveedor por pedido desde el endpoint público. */
@@ -72,45 +75,22 @@ export async function upayConfigDe(ds: DataSource, cfg?: TiendaOnlineConfig | nu
   return upayConfigDeCfg(cfg === undefined ? await getCfg(ds) : cfg);
 }
 
-/**
- * Proveedores prendidos para pedidos NUEVOS (PLAN-tienda-pagos-multi-icpay §1), en el orden de
- * la config. `pago_proveedores` (lista) manda; vacía = el único `pago_proveedor` de antes, y vacío
- * eso también = uPay (instalaciones de antes de que se pudiera elegir).
- */
-export function proveedoresActivos(cfg: TiendaOnlineConfig | null): ProveedorPagoOnline[] {
-  const lista = cfg?.pagoProveedores ? safeParse(cfg.pagoProveedores) : null;
-  if (Array.isArray(lista)) {
-    const out: ProveedorPagoOnline[] = [];
-    for (const id of lista) {
-      const prov = proveedorPorId(String(id || ''));
-      if (prov && !out.includes(prov)) out.push(prov);
-    }
-    return out;
-  }
-  // Sin lista (o mal formada): el único proveedor de antes.
-  return [proveedorPorId(cfg?.pagoProveedor) || upayProveedor];
-}
-
 function safeParse(s: string): any {
   try { return JSON.parse(s); } catch { return null; }
 }
 
-/** El primero de los prendidos (compat: pantallas y textos que hablan de «el» proveedor). */
+/**
+ * El proveedor «principal» (compat: pantallas y textos que hablan de «el» proveedor): el de la
+ * primera cuenta lista, o el de la config de antes (vacío = uPay).
+ */
 export function proveedorActivo(cfg: TiendaOnlineConfig | null): ProveedorPagoOnline {
-  return proveedoresActivos(cfg)[0] || proveedorPorId(cfg?.pagoProveedor) || upayProveedor;
+  return proveedorPorId(cfg?.pagoProveedor) || upayProveedor;
 }
 
-/** Prendidos con sus credenciales completas: los que se ofrecen en el checkout. */
-export async function proveedoresListos(ds: DataSource, cfg: TiendaOnlineConfig | null): Promise<ProveedorPagoOnline[]> {
-  const out: ProveedorPagoOnline[] = [];
-  for (const prov of proveedoresActivos(cfg)) if (await prov.credenciales(ds, cfg)) out.push(prov);
-  return out;
-}
-
-/** ¿Se ofrece el pago online a pedidos nuevos? (interruptor + algún proveedor listo) */
+/** ¿Se ofrece el pago online a pedidos nuevos? (interruptor + alguna cuenta lista) */
 export async function pagoOnlineDisponible(ds: DataSource, cfg?: TiendaOnlineConfig | null): Promise<boolean> {
   const c = cfg === undefined ? await getCfg(ds) : cfg;
-  return !!c?.pagoOnlineActivo && (await proveedoresListos(ds, c)).length > 0;
+  return !!c?.pagoOnlineActivo && (await cuentasListas(ds, c)).length > 0;
 }
 
 /** Código de error de una excepción del proveedor (`upay_error` si no es un `ProveedorError`). */
@@ -183,13 +163,14 @@ function datosDe(json: string | null | undefined): Record<string, any> | null {
 }
 
 /**
- * `proveedor`: con `nuevoIntento` tras un intento FALLIDO, el cliente puede pagar con OTRO de los
- * proveedores prendidos (p. ej. su banco no opera con Bancard): el pedido pasa a ese método.
+ * `formaPagoOnlineId`: con `nuevoIntento` tras un intento FALLIDO, el cliente puede pagar con OTRA
+ * de las cuentas listas (p. ej. su banco no opera con Bancard): el pedido pasa a esa cuenta.
+ * `proveedor` (compat): elige la primera cuenta lista de ese proveedor.
  */
 export async function iniciarPagoPedido(
   ds: DataSource,
   pedidoId: number,
-  opts: { nuevoIntento?: boolean; urlPublica?: string; proveedor?: string | null } = {},
+  opts: { nuevoIntento?: boolean; urlPublica?: string; proveedor?: string | null; formaPagoOnlineId?: number | null } = {},
 ): Promise<InicioPagoRespuesta> {
   const repo = ds.getRepository(PedidoOnline);
   const p = await repo.findOne({
@@ -207,19 +188,29 @@ export async function iniciarPagoPedido(
     return { success: false, error: 'pedido_no_espera_pago' };
   }
   if (p.estadoPago === EstadoPagoOnline.PAGADO) return { success: false, error: 'pedido_ya_pagado' };
-  // Se cobra con el proveedor con que se creó el pedido (`metodoPago`), aunque el activo haya
-  // cambiado en el medio: así lo que vio el cliente y lo que se cobra coinciden.
+  // Se cobra con la cuenta con que se creó el pedido, aunque después cambien las cuentas
+  // prendidas: así lo que vio el cliente y lo que se cobra coinciden.
   const cfg = await getCfg(ds);
-  // Cambio de medio: solo tras un intento fallido y a otro proveedor prendido y listo.
-  const otro = opts.proveedor ? String(opts.proveedor).toUpperCase() : null;
-  const cambia = !!otro && otro !== String(p.metodoPago).toUpperCase();
-  if (cambia) {
-    if (!opts.nuevoIntento || p.estadoPago !== EstadoPagoOnline.FALLIDO) return { success: false, error: 'pago_en_curso' };
-    if (!(await proveedoresListos(ds, cfg)).some((x) => x.id === otro)) return { success: false, error: 'pago_online_no_disponible' };
+  let destino: CuentaResuelta | null = null;
+  const pideOtra = opts.formaPagoOnlineId || opts.proveedor;
+  if (pideOtra) {
+    const listas = await cuentasListas(ds, cfg, p.tipoPedido);
+    const elegida = opts.formaPagoOnlineId
+      ? listas.find((c) => c.forma?.id === Number(opts.formaPagoOnlineId))
+      : listas.find((c) => c.prov.id === String(opts.proveedor).toUpperCase());
+    const esLaMisma = elegida && (elegida.forma?.id ?? null) === (p.formaPagoOnlineId ?? null) && elegida.prov.id === String(p.metodoPago).toUpperCase();
+    if (!esLaMisma) {
+      // Cambio de medio: solo tras un intento fallido y a una cuenta lista.
+      if (!opts.nuevoIntento || p.estadoPago !== EstadoPagoOnline.FALLIDO) return { success: false, error: 'pago_en_curso' };
+      if (!elegida) return { success: false, error: 'pago_online_no_disponible' };
+      destino = elegida;
+    }
   }
-  const prov = proveedorPorId(cambia ? otro : p.metodoPago);
-  const creds = prov ? await prov.credenciales(ds, cfg) : null;
-  if (!prov || !creds) return { success: false, error: 'pago_online_no_disponible' };
+  const cambia = !!destino;
+  const actualCuenta = destino || (await cuentaDelPedido(ds, cfg, { ...p, pagoProveedor: p.metodoPago }));
+  if (!actualCuenta) return { success: false, error: 'pago_online_no_disponible' };
+  const { prov, creds } = actualCuenta;
+  const formaId = actualCuenta.forma?.id ?? null;
 
   // Sesión vigente del mismo intento: se reusa (doble clic, reintento de red).
   const vigente = p.pagoSesionId && p.pagoCheckoutUrl && p.estadoPago === EstadoPagoOnline.PENDIENTE
@@ -241,6 +232,7 @@ export async function iniciarPagoPedido(
       .set({
         pagoIntento: intento, pagoIdemKey: idem, pagoProveedor: prov.id,
         estadoPago: EstadoPagoOnline.PENDIENTE, pagoSesionId: null, pagoCheckoutUrl: null, pagoDatosJson: null,
+        formaPagoOnlineId: formaId,
         ...(cambia ? { metodoPago: prov.id } : {}),
       } as any)
       .where('id = :id AND estado_pago = :fal AND pago_sesion_id = :ses AND COALESCE(pago_intento, 1) = :prev', {
@@ -249,7 +241,7 @@ export async function iniciarPagoPedido(
       .execute();
     if (!claim.affected) return { success: false, error: 'pago_en_curso' };
   } else {
-    await repo.update({ id: p.id }, { pagoIntento: intento, pagoIdemKey: idem, pagoProveedor: prov.id } as any);
+    await repo.update({ id: p.id }, { pagoIntento: intento, pagoIdemKey: idem, pagoProveedor: prov.id, formaPagoOnlineId: formaId } as any);
   }
   p.pagoIntento = intento;
 
@@ -325,10 +317,10 @@ export async function verificarPagoPedido(
   if (opts.minIntervaloMs && p.pagoUltimaConsulta
     && ahora.getTime() - new Date(p.pagoUltimaConsulta).getTime() < opts.minIntervaloMs) return actual;
 
-  // El pedido se consulta con SU proveedor, aunque el local haya cambiado el activo.
-  const prov = proveedorDelPedido(p);
-  const creds = prov ? await prov.credenciales(ds, await getCfg(ds)) : null;
-  if (!prov || !creds) return { ...actual, error: 'pago_online_no_configurado' };
+  // El pedido se consulta con SU cuenta, aunque el local haya cambiado las prendidas.
+  const cp = await cuentaDelPedido(ds, await getCfg(ds), p);
+  if (!cp) return { ...actual, error: 'pago_online_no_configurado' };
+  const { prov, creds } = cp;
   await repo.update({ id: p.id }, { pagoUltimaConsulta: ahora } as any);
 
   let res: ResultadoPago;
@@ -365,16 +357,31 @@ export async function procesarAvisoPago(
   ds: DataSource, proveedorId: string, body: any, opts: { ahora?: Date } = {},
 ): Promise<{ http: number; respuesta: any; pedidoId?: number; resultado?: VerificacionResultado }> {
   const rechazo = { http: 400, respuesta: { status: 'error' } };
-  const prov = proveedorPorId(proveedorId);
+  // `BANCARD` o `BANCARD-7` (la cuenta 7: cada cuenta registra su propia URL en el portal).
+  const m = String(proveedorId || '').toUpperCase().match(/^([A-Z]{2,20})(?:-(\d{1,9}))?$/);
+  const prov = m ? proveedorPorId(m[1]) : null;
   if (!prov?.procesarAviso) return rechazo;
   const cfg = await getCfg(ds);
-  const creds = await prov.credenciales(ds, cfg);
-  if (!creds) return { http: 503, respuesta: { status: 'error' } };
+  const candidatas = await cuentasParaAviso(ds, cfg, prov.id, m?.[2] ? Number(m[2]) : null);
+  if (!candidatas.length) return { http: 503, respuesta: { status: 'error' } };
   const repo = ds.getRepository(PedidoOnline);
   let pedido: PedidoOnline | null = null;
   let sesionAviso: string | null = null;
   try {
-    const a = await prov.procesarAviso(creds, body, async (sesionId) => {
+    // La firma dice de qué cuenta es: se prueba con cada candidata (casi siempre una).
+    let a: Awaited<ReturnType<NonNullable<ProveedorPagoOnline['procesarAviso']>>> | null = null;
+    let ultimoError: any = null;
+    for (const cand of candidatas) {
+      try {
+        a = await prov.procesarAviso!(cand.creds, body, buscarPedido);
+        break;
+      } catch (e: any) {
+        ultimoError = e;
+        pedido = null;
+      }
+    }
+    if (!a) throw ultimoError || new ProveedorError(`${prov.id.toLowerCase()}_aviso_invalido`, 'aviso sin cuenta');
+    async function buscarPedido(sesionId: string) {
       sesionAviso = sesionId;
       pedido = await repo.findOne({ where: { pagoSesionId: sesionId, pagoProveedor: prov.id } as any });
       // Un intento anterior del mismo pedido (el cliente reintentó y después pagó en el viejo):
@@ -384,9 +391,12 @@ export async function procesarAvisoPago(
         if (cand && Number(sesionId) % 100 < Number(cand.pagoIntento ?? 1)) pedido = cand;
       }
       return pedido ? { sesionId, referencia: referencia(pedido), monto: Number(pedido.total) } : null;
-    });
+    }
     const p = pedido as PedidoOnline | null;
     if (!p) return rechazo;
+    const cp = await cuentaDelPedido(ds, cfg, p);
+    if (!cp) return { http: 200, respuesta: a.respuesta, pedidoId: p.id };
+    const creds = cp.creds;
     await registrar(ds, p, 'AVISO', a.resultado.tipo, { aviso: a.crudo });
     // La verdad la da la consulta a Bancard, no el aviso.
     let res: ResultadoPago;
@@ -594,10 +604,11 @@ export async function intentarDevolucionAutomatica(ds: DataSource, pedidoId: num
     if (!cfg?.pagoDevolucionAutomatica) return null;
     const p = await ds.getRepository(PedidoOnline).findOne({ where: { id: pedidoId } });
     if (!p || p.estadoPago !== EstadoPagoOnline.REEMBOLSO_PENDIENTE || !p.pagoSesionId) return null;
-    const prov = proveedorDelPedido(p);
-    if (!prov?.devolver) return null;
-    const creds = await prov.credenciales(ds, cfg);
-    if (!creds) return { ok: false, detalle: `${prov.nombre} no está configurado` };
+    const provP = proveedorDelPedido(p);
+    if (!provP?.devolver) return null;
+    const cp = await cuentaDelPedido(ds, cfg, p);
+    if (!cp) return { ok: false, detalle: `${provP.nombre} no está configurado` };
+    const { prov, creds } = cp;
     const repo = ds.getRepository(PedidoOnline);
     const mover = (de: EstadoPagoOnline, a: EstadoPagoOnline) => repo.createQueryBuilder().update(PedidoOnline)
       .set({ estadoPago: a } as any).where('id = :id AND estado_pago = :de', { id: p.id, de }).execute();

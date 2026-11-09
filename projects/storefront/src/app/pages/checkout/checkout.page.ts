@@ -77,7 +77,10 @@ export class CheckoutPage implements OnInit, OnDestroy {
   /** F8b: eligió «A cuenta» y el disponible no alcanza para este total. */
   aCuentaNoAlcanza = false;
   /** Proveedores online prendidos (si hay más de uno, el cliente elige). */
-  proveedoresOnline: { id: string; etiqueta: string; icono: string }[] = [];
+  /** Cada opción es una cuenta de pago online (`clave` = `formaId` o, sin cuentas, el proveedor). */
+  proveedoresOnline: { clave: string; formaId: number | null; id: string; etiqueta: string; icono: string; medio: string }[] = [];
+  /** La cuenta online elegida (se manda como `formaPagoOnlineId`). */
+  formaOnline: string | null = null;
   ayudaOnline = '';
   textoBotonOnline = 'Pagar con tarjeta · ';
   monedaPago: MonedaTienda | null = null;
@@ -224,16 +227,20 @@ export class CheckoutPage implements OnInit, OnDestroy {
     if (this.modalidad === 'AL_RECIBIR' && !this.metodosDisponibles.some((m) => m.valor === this.metodoPago)) {
       this.metodoPago = this.metodosDisponibles[0]?.valor || 'EFECTIVO';
     }
-    // Online: con varios proveedores prendidos el cliente elige; si no eligió (o el suyo se apagó),
-    // el primero. Un servidor viejo sin lista manda solo `pagoOnlineProveedor`.
+    // Online: cada opción es una cuenta; solo las que admiten este tipo de pedido, en el orden del
+    // local. Si la elegida ya no está (cambió el tipo), la primera. Un servidor viejo manda solo
+    // `pagoOnlineProveedor`.
     const lista = this.config.config?.pagoOnlineProveedores?.length
-      ? this.config.config.pagoOnlineProveedores
-      : [{ id: this.config.config?.pagoOnlineProveedor || 'UPAY', etiqueta: 'Tarjeta', medio: 'TARJETA' }];
-    this.proveedoresOnline = lista.map((p) => ({ id: p.id, etiqueta: p.etiqueta, icono: p.medio === 'PIX' ? 'qr' : 'card' }));
-    if (this.modalidad === 'ONLINE' && !this.proveedoresOnline.some((p) => p.id === this.metodoPago)) {
-      this.metodoPago = this.proveedoresOnline[0].id;
-    }
-    const pix = lista.find((p) => p.id === this.metodoPago)?.medio === 'PIX';
+      ? this.config.config.pagoOnlineProveedores.filter((p) => (this.tipo === 'DELIVERY' ? p.delivery !== false : p.pickup !== false))
+      : [{ formaId: null, id: this.config.config?.pagoOnlineProveedor || 'UPAY', etiqueta: 'Tarjeta', medio: 'TARJETA' }];
+    this.proveedoresOnline = lista.map((p) => ({
+      clave: p.formaId != null ? String(p.formaId) : p.id, formaId: p.formaId ?? null, id: p.id, etiqueta: p.etiqueta,
+      icono: p.medio === 'PIX' ? 'qr' : 'card', medio: p.medio,
+    }));
+    if (!this.proveedoresOnline.some((p) => p.clave === this.formaOnline)) this.formaOnline = this.proveedoresOnline[0]?.clave ?? null;
+    const sel = this.proveedoresOnline.find((p) => p.clave === this.formaOnline) || null;
+    if (this.modalidad === 'ONLINE' && sel) this.metodoPago = sel.id;
+    const pix = sel?.medio === 'PIX';
     this.ayudaOnline = pix
       ? 'Te mostramos un QR Pix para pagar en reales desde tu banco de Brasil. El monto exacto en reales sale de la cotización del día al generar el QR. El pedido va a la cocina cuando se confirma el pago.'
       : 'Te llevamos a la página segura de pago. El pedido va a la cocina cuando se confirma el pago.';
@@ -263,6 +270,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
 
   elegirModalidad(mod: 'AL_RECIBIR' | 'ONLINE'): void { this.modalidad = mod; this.recalcularPago(); }
   elegirMetodo(valor: string): void { this.metodoPago = valor; this.recalcularPago(); }
+  elegirFormaOnline(clave: string): void { this.formaOnline = clave; this.recalcularPago(); }
   elegirMonedaPago(m: MonedaTienda): void { this.monedaPago = m; this.vueltoPara = null; this.vueltoTexto = ''; this.recalcularPago(); }
   elegirSugerencia(v: number): void {
     this.vueltoPara = v;
@@ -380,6 +388,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
       referenciaDireccion: this.referencia.trim() || null,
       notas: this.notas.trim() || null,
       metodoPago: this.metodoPago,
+      ...(this.modalidad === 'ONLINE' && this.formaOnline && /^\d+$/.test(this.formaOnline) ? { formaPagoOnlineId: Number(this.formaOnline) } : {}),
       pagoObservacion: this.pagoObservacion.trim() || null,
     };
     if (this.metodoPago === 'EFECTIVO' && this.monedaPago) {

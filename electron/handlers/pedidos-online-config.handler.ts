@@ -7,7 +7,8 @@ import { upayConfigDe, apiKey as upayApiKeyActual } from '../services/pagos-onli
 import { upayProveedor } from '../services/pagos-online/proveedores/upay.proveedor';
 import { fetchActual } from '../services/pagos-online/proveedores/deps';
 import { listarProveedores, proveedorPorId } from '../services/pagos-online/proveedores';
-import { proveedorActivo, proveedoresActivos, urlPublicaTienda } from '../services/pagos-online/pagos-online.service';
+import { proveedorActivo, urlPublicaTienda } from '../services/pagos-online/pagos-online.service';
+import { cuentasListas, listarFormasPago } from '../services/pagos-online/cuentas-pago';
 import { leerPagoConfigJson, secretoProveedor, validarCampo, valoresProveedor } from '../services/pagos-online/proveedores/config-proveedor';
 import { setSecretoPago } from '../utils/tienda-secrets.util';
 import { evolutionConfigurado, otpWhatsappDisponible, proveedorWhatsappActivo, sendWhatsappOtp, whatsappCloudConfigurado, whatsappConfigurado } from '../utils/whatsapp-sender';
@@ -101,7 +102,7 @@ function mapConfigPublic(cfg: TiendaOnlineConfig): any {
     pagoOnlineProveedor: pagoOnlineOfrecido(cfg) ? proveedorPagoActivo().id : null,
     // Varios a la vez (Bancard, dinelco, IC Pay): el cliente elige en el checkout.
     pagoOnlineProveedores: pagoOnlineOfrecido(cfg)
-      ? proveedoresPagoListos().map((p) => ({ id: p.id, etiqueta: p.etiqueta, medio: p.medio }))
+      ? proveedoresPagoListos().map((p) => ({ formaId: p.formaId, id: p.id, etiqueta: p.etiqueta, medio: p.medio, pickup: p.pickup, delivery: p.delivery }))
       : [],
     pagoOnlineHosts: pagoOnlineOfrecido(cfg) ? Array.from(new Set(proveedoresPagoListos().flatMap((p) => p.hosts))) : [],
     // F8: métodos para pagar al recibir / retirar (sin configurar = sólo efectivo).
@@ -158,7 +159,9 @@ async function estadoProveedoresPago(cfg: TiendaOnlineConfig | null): Promise<an
       listo: !!(await prov.credenciales(null as any, cfg)),
     });
   }
-  return { proveedorActivo: proveedorActivo(cfg).id, proveedoresActivos: proveedoresActivos(cfg).map((p) => p.id), proveedores: lista };
+  // Con cuentas cargadas (`formas_pago_online`) la pantalla las maneja aparte; esto queda como
+  // catálogo de proveedores (campos) y para la config de antes.
+  return { proveedorActivo: proveedorActivo(cfg).id, proveedores: lista };
 }
 
 /**
@@ -172,19 +175,6 @@ async function aplicarProveedoresPago(
     const v = String(data.pagoProveedor ?? '').trim().toUpperCase();
     if (v && !proveedorPorId(v)) return { error: 'pago_proveedor_invalido' };
     cfg.pagoProveedor = v || null;
-  }
-  // Varios prendidos a la vez (PLAN-tienda-pagos-multi-icpay §1). `pago_proveedor` queda con el
-  // primero para quien lo lea a la vieja usanza.
-  if (data.pagoProveedores !== undefined) {
-    if (!Array.isArray(data.pagoProveedores)) return { error: 'pago_proveedor_invalido' };
-    const ids: string[] = [];
-    for (const x of data.pagoProveedores) {
-      const v = String(x ?? '').trim().toUpperCase();
-      if (!proveedorPorId(v)) return { error: 'pago_proveedor_invalido' };
-      if (!ids.includes(v)) ids.push(v);
-    }
-    cfg.pagoProveedores = JSON.stringify(ids);
-    if (ids.length) cfg.pagoProveedor = ids[0];
   }
   if (data.pagoDevolucionAutomatica !== undefined) cfg.pagoDevolucionAutomatica = !!data.pagoDevolucionAutomatica;
   const todo = leerPagoConfigJson(cfg);
@@ -395,12 +385,14 @@ export function registerPedidosOnlineConfigHandlers(
     // Proveedores de pago (activo, datos por proveedor, devolución automática).
     const resProv = await aplicarProveedoresPago(cfg, data);
     if ('error' in resProv) return { success: false, error: resProv.error };
-    if (cfg.pagoOnlineActivo) {
-      const activos = proveedoresActivos(cfg);
-      if (!activos.length) return { success: false, error: 'pago_sin_proveedor' };
-      // Cada prendido tiene que estar completo, contando lo que se está guardando ahora (los
-      // secretos todavía no se escribieron).
-      for (const activo of activos) {
+    const hayCuentas = (await listarFormasPago(dataSource)).length > 0;
+    if (cfg.pagoOnlineActivo && hayCuentas) {
+      // Con cuentas: al menos una activa y con sus datos completos.
+      if (!(await cuentasListas(dataSource, cfg)).length) return { success: false, error: 'pago_sin_proveedor' };
+    } else if (cfg.pagoOnlineActivo) {
+      // Sin cuentas (lo de antes): el proveedor elegido tiene que estar completo, contando lo que se
+      // está guardando ahora (los secretos todavía no se escribieron).
+      for (const activo of [proveedorActivo(cfg)]) {
         if (activo.id === upayProveedor.id) {
           const keyFinal = data.upayApiKeyBorrar ? '' : upayKeyNueva || (await upayApiKeyActual());
           if (!cfg.upayMerchantId || !keyFinal) return { success: false, error: 'upay_faltan_credenciales' };

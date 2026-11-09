@@ -75,8 +75,8 @@ async function main() {
   // Columnas de config de migraciones posteriores a F4 (F6b), que estos bloques bajan antes.
   // Columnas de config posteriores a F4 (F6, F8, F9 y proveedores de pago).
   // Varios proveedores + IC Pay (TiendaPagosMultiIcpay).
-  const MULTI_PEDIDO = ['pago_datos_json'];
-  const MULTI_CFG = ['pago_proveedores'];
+  const MULTI_PEDIDO = ['pago_datos_json', 'forma_pago_online_id'];
+  const MULTI_CFG: string[] = [];
   const PROV_CFG = ['pago_proveedor', 'pago_config_json', 'pago_devolucion_automatica'];
   const POST_F4_CFG = ['personalizar_sabores', 'metodos_pago', 'whatsapp_proveedor', 'telefono_contacto', ...PROV_CFG, ...MULTI_CFG];
   // Columnas de pedido de F8 (TiendaPagoMoneda), posteriores a F4.
@@ -285,17 +285,40 @@ async function main() {
   ok((await columnas()).includes('cliente_id') && await tablaVinc() === 1, 'Vínculo: up de nuevo vuelve a crear todo');
   await ds.query(`DELETE FROM cuentas_cliente WHERE email LIKE 'zt-v%'`);
 
-  // Varios proveedores + IC Pay (TiendaPagosMultiIcpay): lista de proveedores, datos del cobro, PIX ONLINE.
+  // Formas de pago online + IC Pay (TiendaPagosMultiIcpay): tabla de cuentas, cuenta y datos del
+  // cobro en el pedido, PIX ONLINE, y la conversión del proveedor elegido en la primera cuenta.
   const ultimaMulti = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
   ok(/TiendaPagosMultiIcpay/.test(String(ultimaMulti)), 'Multi: TiendaPagosMultiIcpay es la última migración', ultimaMulti);
   ok(JSON.stringify(entTodas) === JSON.stringify([...(await columnas())].sort()), 'Multi: las columnas del pedido coinciden con la entidad completa');
   ok(JSON.stringify(metaCfg.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...(await colsCfg())].sort()), 'Multi: las columnas de config coinciden con la entidad completa');
+  const metaFormas = ds.entityMetadatas.find((m) => m.tableName === 'formas_pago_online')!;
+  const colsFormas = async (): Promise<string[]> => pgDb
+    ? (await ds.query(`SELECT column_name AS c FROM information_schema.columns WHERE table_schema='public' AND table_name='formas_pago_online'`)).map((r: any) => r.c)
+    : (await ds.query(`PRAGMA table_info('formas_pago_online')`)).map((r: any) => r.name);
+  ok(JSON.stringify(metaFormas.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...(await colsFormas())].sort()), 'Multi: formas_pago_online coincide con su entidad', await colsFormas());
   const fpPix = async () => Number((await ds.query(`SELECT COUNT(*) AS n FROM formas_pago WHERE nombre = 'PIX ONLINE'`))[0].n);
   ok(await fpPix() === 1, 'Multi: siembra la forma de pago PIX ONLINE');
+  const nFormas = async () => Number((await ds.query(`SELECT COUNT(*) AS n FROM formas_pago_online`))[0].n);
+  ok(await nFormas() === 0, 'Multi: sin proveedor elegido no crea cuentas (la tienda sigue como antes)');
   await ds.undoLastMigration({ transaction: 'each' });
-  ok(!(await columnas()).includes('pago_datos_json') && !(await colsCfg()).includes('pago_proveedores') && await fpPix() === 0, 'Multi: down quita las columnas y la forma de pago sin usar');
+  ok(!(await columnas()).includes('pago_datos_json') && !(await columnas()).includes('forma_pago_online_id') && !(await colsFormas()).length && await fpPix() === 0,
+    'Multi: down quita la tabla, las columnas y la forma de pago sin usar');
+  // Conversión: con un proveedor elegido y sus datos, al subir queda como la primera cuenta.
+  const convJson = '{"ICPAY":{"baseUrl":"https://stage.api.ic.com.py","email":"x@y.com"},"BANCARD":{"entorno":"PRUEBA"}}';
+  if (Number((await ds.query(`SELECT COUNT(*) AS n FROM tienda_online_config`))[0].n)) {
+    await ds.query(`UPDATE tienda_online_config SET pago_proveedor = 'ICPAY', pago_config_json = '${convJson}'`);
+  } else {
+    await ds.query(`INSERT INTO tienda_online_config (activa, pago_proveedor, pago_config_json) VALUES (${pgDb ? 'true' : '1'}, 'ICPAY', '${convJson}')`);
+  }
   await ds.runMigrations({ transaction: 'each' });
-  ok((await columnas()).includes('pago_datos_json') && (await colsCfg()).includes('pago_proveedores') && await fpPix() === 1, 'Multi: up de nuevo vuelve a crear todo');
+  const conv = await ds.query(`SELECT proveedor, nombre, activo, orden, config_json FROM formas_pago_online`);
+  const cj = JSON.parse(conv[0]?.config_json || '{}');
+  ok(conv.length === 1 && conv[0].proveedor === 'ICPAY' && conv[0].nombre === 'PIX (BRASIL)' && !!conv[0].activo && Number(conv[0].orden) === 1
+    && cj.baseUrl === 'https://stage.api.ic.com.py' && cj.email === 'x@y.com' && cj._legado === '1',
+    'Multi: el proveedor elegido pasa a ser la primera cuenta, con sus datos y marcada _legado', conv);
+  ok((await columnas()).includes('forma_pago_online_id') && await fpPix() === 1, 'Multi: up de nuevo vuelve a crear todo');
+  await ds.query(`DELETE FROM formas_pago_online`);
+  await ds.query(`UPDATE tienda_online_config SET pago_proveedor = NULL, pago_config_json = NULL`);
 
   await ds.destroy();
   console.log(`\n[tienda-migracion] ${passed} OK, ${failed} fallas`);

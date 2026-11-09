@@ -551,6 +551,11 @@ export abstract class RepositoryService {
   abstract probarTiendaPago(proveedorId?: string): Observable<any>;
   abstract marcarPagoDevueltoPedidoOnline(pedidoId: number): Observable<any>;
   // F8b: cuentas de la tienda ↔ Cliente interno
+  abstract getFormasPagoOnline(): Observable<any>;
+  abstract guardarFormaPagoOnline(data: any): Observable<any>;
+  abstract eliminarFormaPagoOnline(id: number): Observable<any>;
+  abstract moverFormaPagoOnline(id: number, direccion: number): Observable<any>;
+  abstract probarFormaPagoOnline(id: number): Observable<any>;
   abstract getCuentasTienda(filtros?: any): Observable<any>;
   abstract getVinculosCuentaTienda(cuentaId: number): Observable<any>;
   abstract vincularCuentaTienda(cuentaId: number, clienteId: number, motivo?: string): Observable<any>;
