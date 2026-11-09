@@ -1,3 +1,5 @@
+import { cuentaDeForma, listarFormasPago } from '../services/pagos-online/cuentas-pago';
+import { proveedorPorId } from '../services/pagos-online/proveedores';
 import { estadoCreditoCliente } from '../utils/credito-tienda.utils';
 import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
 import { marcarDevuelto, registrarDecisionPago, resolverDevolucionPendiente } from '../services/pagos-online/pagos-online.service';
@@ -149,7 +151,19 @@ export function registerPedidosOnlineAdminHandlers(
     }
     const pedidos = await qb.getMany();
     const monedas = await monedasParaResumen(dataSource);
-    return pedidos.map((p) => mapPedidoAdmin(p, monedas));
+    // Nombre de la cuenta con que se cobró (PIX (BRASIL), TARJETA — BANCARD…) y su medio, para la
+    // insignia y el texto del pago (sin la cuenta, el proveedor).
+    const formas = new Map((await listarFormasPago(dataSource)).map((f) => [f.id, f]));
+    return pedidos.map((p) => {
+      const m = mapPedidoAdmin(p, monedas);
+      const f = p.formaPagoOnlineId ? formas.get(p.formaPagoOnlineId) : null;
+      const prov = proveedorPorId(p.pagoProveedor || p.metodoPago);
+      return {
+        ...m,
+        pagoCuentaNombre: f?.nombre ?? null,
+        pagoMedio: prov ? (f && prov.medioDe ? prov.medioDe(cuentaDeForma(f).config) : prov.medio) : null,
+      };
+    });
   });
 
   // ============== CONTADOR DE PENDIENTES (badge/sonido) ==============

@@ -156,7 +156,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
           // Pre-computados: el template no llama funciones.
           estadoTexto: this.estadoLabel(p.estado),
           tipoTexto: this.tipoLabel(p.tipoPedido),
-          pagoTexto: p.metodoPago && !p.pagoResumen ? this.pagoLabel(p.metodoPago) : '',
+          pagoTexto: p.metodoPago && !p.pagoResumen ? (p.pagoCuentaNombre || this.pagoLabel(p.metodoPago)) : '',
           insignia: this.pagoInsignia(p),
           mapa: this.mapaUrl(p),
           // F10: con qué números aparece en el PdV (lista de delivery, ticket, venta).
@@ -221,13 +221,13 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
   }
 
   pagoLabel(m: string): string {
-    return ({ EFECTIVO: 'Efectivo', BANCARD: 'Tarjeta online (Bancard)', UPAY: 'Tarjeta online (uPay)', PAGOPAR: 'Pagopar' } as Record<string, string>)[m] || m;
+    return ({ EFECTIVO: 'Efectivo', BANCARD: 'Tarjeta online (Bancard)', UPAY: 'Tarjeta online (uPay)', PAGOPAR: 'Pagopar', ICPAY: 'Online (IC Pay)' } as Record<string, string>)[m] || m;
   }
 
   /** Insignia del pago con tarjeta (F4); null en pedidos en efectivo. */
   pagoInsignia(p: any): { texto: string; clase: string } | null {
     switch (p?.estadoPago) {
-      case 'PAGADO': return { texto: 'Pagado con tarjeta', clase: 'ok' };
+      case 'PAGADO': return { texto: p.pagoMedio === 'PIX' ? 'Pagado con Pix' : p.pagoMedio === 'CRIPTO' ? 'Pagado con USDT' : p.pagoMedio === 'TARJETA' ? 'Pagado con tarjeta' : 'Pagado online', clase: 'ok' };
       case 'PENDIENTE': return { texto: 'Esperando pago', clase: 'espera' };
       case 'FALLIDO': return { texto: 'Pago rechazado', clase: 'mal' };
       case 'EXPIRADO': return { texto: 'Pago vencido', clase: 'mal' };
