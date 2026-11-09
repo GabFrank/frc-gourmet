@@ -34,6 +34,8 @@ export async function upayConfigDeCfg(c: TiendaOnlineConfig | null): Promise<Upa
 export const upayProveedor: ProveedorPagoOnline<UpayConfig> = {
   id: PROVEEDOR_UPAY,
   nombre: 'uPay',
+  etiqueta: 'Tarjeta — uPay',
+  medio: 'TARJETA',
   formaPago: FORMA_PAGO_UPAY,
   hosts: ['upay.com', 'upay.com.py'],
   // uPay tiene su bloque propio en la pantalla (columnas `upay_*` y su API Key, de F4).

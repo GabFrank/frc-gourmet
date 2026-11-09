@@ -15,17 +15,25 @@ import { ConfiguracionNotificacion } from '../../src/app/database/entities/notif
 let googleClientIdOverride: string | null = null;
 // F4 / proveedores: el proveedor activo tiene sus credenciales completas (nunca quedan acá,
 // solo el sí/no), su id y los hosts que el storefront acepta para pagar.
-let pagoCredencialesListas = false;
-let pagoProveedorActivo: { id: string; nombre: string; hosts: string[] } = { id: 'UPAY', nombre: 'uPay', hosts: [] };
+// PLAN-tienda-pagos-multi-icpay: puede haber varios prendidos; acá quedan los que tienen sus
+// credenciales completas, en el orden de la config.
+export interface ProveedorPagoPublico { id: string; nombre: string; etiqueta: string; medio: string; hosts: string[] }
+let pagoProveedoresListos: ProveedorPagoPublico[] = [];
+const PROVEEDOR_DEFECTO: ProveedorPagoPublico = { id: 'UPAY', nombre: 'uPay', etiqueta: 'Tarjeta — uPay', medio: 'TARJETA', hosts: [] };
 
-/** ¿Se ofrece «Pagar con tarjeta» a pedidos nuevos? (interruptor + credenciales cargadas) */
+/** ¿Se ofrece el pago online a pedidos nuevos? (interruptor + algún proveedor listo) */
 export function pagoOnlineOfrecido(cfg: { pagoOnlineActivo?: boolean } | null | undefined): boolean {
-  return !!cfg?.pagoOnlineActivo && pagoCredencialesListas;
+  return !!cfg?.pagoOnlineActivo && pagoProveedoresListos.length > 0;
 }
 
-/** Proveedor con el que se cobran los pedidos nuevos (id, nombre y hosts permitidos). */
-export function proveedorPagoActivo(): { id: string; nombre: string; hosts: string[] } {
-  return pagoProveedorActivo;
+/** Proveedores listos para pedidos nuevos (id, textos y hosts permitidos). */
+export function proveedoresPagoListos(): ProveedorPagoPublico[] {
+  return pagoProveedoresListos;
+}
+
+/** El primero de los listos (compat: un storefront viejo que pide «online» sin elegir). */
+export function proveedorPagoActivo(): ProveedorPagoPublico {
+  return pagoProveedoresListos[0] || PROVEEDOR_DEFECTO;
 }
 
 export function getGoogleClientId(): string | null {
@@ -67,10 +75,9 @@ async function leerYAplicar(dataSource: DataSource): Promise<void> {
     nombreComercio: cfg?.nombreComercio || null,
   });
   googleClientIdOverride = cfg?.googleClientId || null;
-  const { proveedorActivo } = await import('../services/pagos-online/pagos-online.service');
-  const prov = proveedorActivo(cfg);
-  pagoProveedorActivo = { id: prov.id, nombre: prov.nombre, hosts: prov.hosts };
-  pagoCredencialesListas = !!(await prov.credenciales(dataSource, cfg));
+  const { proveedoresListos } = await import('../services/pagos-online/pagos-online.service');
+  pagoProveedoresListos = (await proveedoresListos(dataSource, cfg))
+    .map((p) => ({ id: p.id, nombre: p.nombre, etiqueta: p.etiqueta, medio: p.medio, hosts: p.hosts }));
 }
 
 /** Claves de Evolution en `configuracion_notificaciones` (las mismas que usa `notificacion.service`). */

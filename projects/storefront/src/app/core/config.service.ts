@@ -20,6 +20,8 @@ export interface TiendaConfig {
   /** Proveedor con el que se cobra (`UPAY`, `BANCARD`) y hosts a los que la tienda puede ir. */
   pagoOnlineProveedor?: string | null;
   pagoOnlineHosts?: string[];
+  /** Varios proveedores prendidos a la vez: el cliente elige (tarjeta con Bancard, Pix…). */
+  pagoOnlineProveedores?: { id: string; etiqueta: string; medio: string }[];
   /** F8: métodos para pagar al recibir / retirar (sin configurar = sólo efectivo). */
   metodosPago?: string[];
   /** F8b: la tienda ofrece «A cuenta» (si este cliente puede, lo dice `auth.me`). */

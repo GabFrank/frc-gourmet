@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { pagoOnlineOfrecido, proveedorPagoActivo } from '../utils/tienda-ingreso.utils';
+import { pagoOnlineOfrecido, proveedorPagoActivo, proveedoresPagoListos } from '../utils/tienda-ingreso.utils';
 import { metodosAlRecibir } from '../utils/pago-pedido.utils';
 import { creditoHabilitadoEnTienda } from '../utils/credito-tienda.utils';
 import { METODOS_AL_RECIBIR, MetodoPagoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
@@ -7,7 +7,7 @@ import { upayConfigDe, apiKey as upayApiKeyActual } from '../services/pagos-onli
 import { upayProveedor } from '../services/pagos-online/proveedores/upay.proveedor';
 import { fetchActual } from '../services/pagos-online/proveedores/deps';
 import { listarProveedores, proveedorPorId } from '../services/pagos-online/proveedores';
-import { proveedorActivo, urlPublicaTienda } from '../services/pagos-online/pagos-online.service';
+import { proveedorActivo, proveedoresActivos, urlPublicaTienda } from '../services/pagos-online/pagos-online.service';
 import { leerPagoConfigJson, secretoProveedor, validarCampo, valoresProveedor } from '../services/pagos-online/proveedores/config-proveedor';
 import { setSecretoPago } from '../utils/tienda-secrets.util';
 import { evolutionConfigurado, otpWhatsappDisponible, proveedorWhatsappActivo, sendWhatsappOtp, whatsappCloudConfigurado, whatsappConfigurado } from '../utils/whatsapp-sender';
@@ -99,7 +99,11 @@ function mapConfigPublic(cfg: TiendaOnlineConfig): any {
     pagoOnline: pagoOnlineOfrecido(cfg),
     // Proveedores: con cuál se paga y desde qué hosts el storefront acepta ir o cargar su script.
     pagoOnlineProveedor: pagoOnlineOfrecido(cfg) ? proveedorPagoActivo().id : null,
-    pagoOnlineHosts: pagoOnlineOfrecido(cfg) ? proveedorPagoActivo().hosts : [],
+    // Varios a la vez (Bancard, dinelco, IC Pay): el cliente elige en el checkout.
+    pagoOnlineProveedores: pagoOnlineOfrecido(cfg)
+      ? proveedoresPagoListos().map((p) => ({ id: p.id, etiqueta: p.etiqueta, medio: p.medio }))
+      : [],
+    pagoOnlineHosts: pagoOnlineOfrecido(cfg) ? Array.from(new Set(proveedoresPagoListos().flatMap((p) => p.hosts))) : [],
     // F8: métodos para pagar al recibir / retirar (sin configurar = sólo efectivo).
     metodosPago: metodosAlRecibir(cfg),
     // F8b: la tienda ofrece «A cuenta». Si ESTE cliente puede, lo dice `pub-cliente-me`.
@@ -144,6 +148,7 @@ async function estadoProveedoresPago(cfg: TiendaOnlineConfig | null): Promise<an
     lista.push({
       id: prov.id,
       nombre: prov.nombre,
+      etiqueta: prov.etiqueta,
       campos: prov.campos,
       valores: valoresProveedor(cfg, prov),
       secretosGuardados,
@@ -153,7 +158,7 @@ async function estadoProveedoresPago(cfg: TiendaOnlineConfig | null): Promise<an
       listo: !!(await prov.credenciales(null as any, cfg)),
     });
   }
-  return { proveedorActivo: proveedorActivo(cfg).id, proveedores: lista };
+  return { proveedorActivo: proveedorActivo(cfg).id, proveedoresActivos: proveedoresActivos(cfg).map((p) => p.id), proveedores: lista };
 }
 
 /**
@@ -167,6 +172,19 @@ async function aplicarProveedoresPago(
     const v = String(data.pagoProveedor ?? '').trim().toUpperCase();
     if (v && !proveedorPorId(v)) return { error: 'pago_proveedor_invalido' };
     cfg.pagoProveedor = v || null;
+  }
+  // Varios prendidos a la vez (PLAN-tienda-pagos-multi-icpay §1). `pago_proveedor` queda con el
+  // primero para quien lo lea a la vieja usanza.
+  if (data.pagoProveedores !== undefined) {
+    if (!Array.isArray(data.pagoProveedores)) return { error: 'pago_proveedor_invalido' };
+    const ids: string[] = [];
+    for (const x of data.pagoProveedores) {
+      const v = String(x ?? '').trim().toUpperCase();
+      if (!proveedorPorId(v)) return { error: 'pago_proveedor_invalido' };
+      if (!ids.includes(v)) ids.push(v);
+    }
+    cfg.pagoProveedores = JSON.stringify(ids);
+    if (ids.length) cfg.pagoProveedor = ids[0];
   }
   if (data.pagoDevolucionAutomatica !== undefined) cfg.pagoDevolucionAutomatica = !!data.pagoDevolucionAutomatica;
   const todo = leerPagoConfigJson(cfg);
@@ -378,17 +396,22 @@ export function registerPedidosOnlineConfigHandlers(
     const resProv = await aplicarProveedoresPago(cfg, data);
     if ('error' in resProv) return { success: false, error: resProv.error };
     if (cfg.pagoOnlineActivo) {
-      const activo = proveedorActivo(cfg);
-      if (activo.id === upayProveedor.id) {
-        const keyFinal = data.upayApiKeyBorrar ? '' : upayKeyNueva || (await upayApiKeyActual());
-        if (!cfg.upayMerchantId || !keyFinal) return { success: false, error: 'upay_faltan_credenciales' };
-      } else {
-        // Completo contando lo que se está guardando ahora (los secretos todavía no se escribieron).
+      const activos = proveedoresActivos(cfg);
+      if (!activos.length) return { success: false, error: 'pago_sin_proveedor' };
+      // Cada prendido tiene que estar completo, contando lo que se está guardando ahora (los
+      // secretos todavía no se escribieron).
+      for (const activo of activos) {
+        if (activo.id === upayProveedor.id) {
+          const keyFinal = data.upayApiKeyBorrar ? '' : upayKeyNueva || (await upayApiKeyActual());
+          if (!cfg.upayMerchantId || !keyFinal) return { success: false, error: 'upay_faltan_credenciales' };
+          continue;
+        }
         const valores = valoresProveedor(cfg, activo);
         for (const c of activo.campos.filter((x) => x.requerido)) {
           const nuevo = resProv.secretos.find((x) => x.prov === activo.id && x.clave === c.clave);
-          const tiene = c.secreto ? (nuevo ? !!nuevo.valor : !!(await secretoProveedor(activo.id, c.clave))) : !!valores[c.clave];
-          if (!tiene) return { success: false, error: 'pago_faltan_credenciales', proveedor: activo.id };
+          const borrado = Array.isArray(data.pagoSecretosBorrar?.[activo.id]) && data.pagoSecretosBorrar[activo.id].includes(c.clave);
+          const tiene = c.secreto ? (nuevo ? !!nuevo.valor : !borrado && !!(await secretoProveedor(activo.id, c.clave))) : !!valores[c.clave];
+          if (!tiene) return { success: false, error: 'pago_faltan_credenciales', proveedor: activo.id, detalle: `${activo.nombre}: ${c.etiqueta}` };
         }
       }
     }
@@ -430,7 +453,7 @@ export function registerPedidosOnlineConfigHandlers(
     const creds = await prov.credenciales(dataSource, cfg);
     if (!creds) return { success: false, error: prov.id === upayProveedor.id ? 'upay_faltan_credenciales' : 'pago_faltan_credenciales' };
     const r = await prov.probarConexion(creds, { fetch: fetchActual() });
-    return r.ok ? { success: true, proveedor: prov.nombre } : { success: false, error: r.error, proveedor: prov.nombre, ...(r.detalle ? { detalle: r.detalle } : {}) };
+    return r.ok ? { success: true, proveedor: prov.nombre, ...(r.detalle ? { detalle: r.detalle } : {}) } : { success: false, error: r.error, proveedor: prov.nombre, ...(r.detalle ? { detalle: r.detalle } : {}) };
   });
 
   // Admin: manda un código de prueba por WhatsApp con las credenciales vigentes (F3).

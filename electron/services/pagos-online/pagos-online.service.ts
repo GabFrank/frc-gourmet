@@ -27,7 +27,7 @@ import { DecisionPago, estadoPagoPorDecision, PagoDecidido } from '../../utils/d
 import { UpayConfig } from './upay-checkout.provider';
 import { ResultadoPago } from './interpretar-pago';
 import { deps, fetchActual } from './proveedores/deps';
-import { ContextoProveedor, FetchLike, ProveedorError, ProveedorPagoOnline } from './proveedores/tipos';
+import { ContextoProveedor, DatosQr, FetchLike, ProveedorError, ProveedorPagoOnline } from './proveedores/tipos';
 import { nombreProveedor, proveedorDelPedido, proveedorPorId, PROVEEDOR_UPAY } from './proveedores';
 import { upayApiKey, upayConfigDeCfg, upayProveedor } from './proveedores/upay.proveedor';
 
@@ -72,23 +72,45 @@ export async function upayConfigDe(ds: DataSource, cfg?: TiendaOnlineConfig | nu
   return upayConfigDeCfg(cfg === undefined ? await getCfg(ds) : cfg);
 }
 
-/** El proveedor con el que se cobran los pedidos NUEVOS. */
+/**
+ * Proveedores prendidos para pedidos NUEVOS (PLAN-tienda-pagos-multi-icpay §1), en el orden de
+ * la config. `pago_proveedores` (lista) manda; vacía = el único `pago_proveedor` de antes, y vacío
+ * eso también = uPay (instalaciones de antes de que se pudiera elegir).
+ */
+export function proveedoresActivos(cfg: TiendaOnlineConfig | null): ProveedorPagoOnline[] {
+  const lista = cfg?.pagoProveedores ? safeParse(cfg.pagoProveedores) : null;
+  if (Array.isArray(lista)) {
+    const out: ProveedorPagoOnline[] = [];
+    for (const id of lista) {
+      const prov = proveedorPorId(String(id || ''));
+      if (prov && !out.includes(prov)) out.push(prov);
+    }
+    return out;
+  }
+  // Sin lista (o mal formada): el único proveedor de antes.
+  return [proveedorPorId(cfg?.pagoProveedor) || upayProveedor];
+}
+
+function safeParse(s: string): any {
+  try { return JSON.parse(s); } catch { return null; }
+}
+
+/** El primero de los prendidos (compat: pantallas y textos que hablan de «el» proveedor). */
 export function proveedorActivo(cfg: TiendaOnlineConfig | null): ProveedorPagoOnline {
-  // Vacío o desconocido = uPay (instalaciones de antes de que se pudiera elegir).
-  return proveedorPorId(cfg?.pagoProveedor) || upayProveedor;
+  return proveedoresActivos(cfg)[0] || proveedorPorId(cfg?.pagoProveedor) || upayProveedor;
 }
 
-/** Proveedor activo con sus credenciales, o null si el pago online no se puede ofrecer. */
-async function proveedorActivoListo(ds: DataSource, cfg: TiendaOnlineConfig | null): Promise<{ prov: ProveedorPagoOnline; creds: any } | null> {
-  const prov = proveedorActivo(cfg);
-  const creds = await prov.credenciales(ds, cfg);
-  return creds ? { prov, creds } : null;
+/** Prendidos con sus credenciales completas: los que se ofrecen en el checkout. */
+export async function proveedoresListos(ds: DataSource, cfg: TiendaOnlineConfig | null): Promise<ProveedorPagoOnline[]> {
+  const out: ProveedorPagoOnline[] = [];
+  for (const prov of proveedoresActivos(cfg)) if (await prov.credenciales(ds, cfg)) out.push(prov);
+  return out;
 }
 
-/** ¿Se ofrece «Pagar con tarjeta» a pedidos nuevos? */
+/** ¿Se ofrece el pago online a pedidos nuevos? (interruptor + algún proveedor listo) */
 export async function pagoOnlineDisponible(ds: DataSource, cfg?: TiendaOnlineConfig | null): Promise<boolean> {
   const c = cfg === undefined ? await getCfg(ds) : cfg;
-  return !!c?.pagoOnlineActivo && !!(await proveedorActivoListo(ds, c));
+  return !!c?.pagoOnlineActivo && (await proveedoresListos(ds, c)).length > 0;
 }
 
 /** Código de error de una excepción del proveedor (`upay_error` si no es un `ProveedorError`). */
@@ -123,13 +145,19 @@ const gs = (n: number) => '₲' + Math.round(n).toLocaleString('es-PY');
 export type InicioPagoRespuesta =
   | { success: true; checkoutUrl: string; tipo: 'REDIRECCION'; hosts: string[] }
   | { success: true; checkoutUrl: string; tipo: 'FORMULARIO'; procesoId: string; script: string; proveedor: string; hosts: string[] }
+  | { success: true; checkoutUrl: string; tipo: 'QR'; qr: DatosQr; proveedor: string; hosts: string[] }
   | { success: false; error: string };
 
 /**
  * `hosts` son los del proveedor DEL PEDIDO: el storefront valida contra estos y no contra el
  * activo, así un pedido en curso sigue pudiéndose pagar aunque el local cambie de proveedor.
  */
-function respuestaInicio(prov: ProveedorPagoOnline, creds: any, guardado: string): InicioPagoRespuesta {
+function respuestaInicio(prov: ProveedorPagoOnline, creds: any, guardado: string, datos?: Record<string, any> | null): InicioPagoRespuesta {
+  if (prov.modo === 'QR') {
+    const qr = datos?.qr as DatosQr | undefined;
+    if (!qr?.payload) return { success: false, error: 'pago_en_curso' };
+    return { success: true, checkoutUrl: guardado, tipo: 'QR', qr, proveedor: prov.id, hosts: prov.hosts };
+  }
   if (prov.modo === 'FORMULARIO') {
     return { success: true, checkoutUrl: guardado, tipo: 'FORMULARIO', procesoId: guardado, script: prov.scriptUrl ? prov.scriptUrl(creds) : '', proveedor: prov.id, hosts: prov.hosts };
   }
@@ -147,10 +175,21 @@ const MAX_INTENTOS = 99;
 function procesoNumerico(pedidoId: number, intento: number): number {
   return pedidoId * 100 + intento;
 }
+/** `pago_datos_json` parseado (o null). */
+function datosDe(json: string | null | undefined): Record<string, any> | null {
+  if (!json) return null;
+  const v = safeParse(json);
+  return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+}
+
+/**
+ * `proveedor`: con `nuevoIntento` tras un intento FALLIDO, el cliente puede pagar con OTRO de los
+ * proveedores prendidos (p. ej. su banco no opera con Bancard): el pedido pasa a ese método.
+ */
 export async function iniciarPagoPedido(
   ds: DataSource,
   pedidoId: number,
-  opts: { nuevoIntento?: boolean; urlPublica?: string } = {},
+  opts: { nuevoIntento?: boolean; urlPublica?: string; proveedor?: string | null } = {},
 ): Promise<InicioPagoRespuesta> {
   const repo = ds.getRepository(PedidoOnline);
   const p = await repo.findOne({
@@ -159,9 +198,10 @@ export async function iniciarPagoPedido(
     select: undefined as any,
   });
   if (!p) return { success: false, error: 'pedido_no_encontrado' };
-  const extra = await repo.createQueryBuilder('p').addSelect(['p.pagoIdemKey', 'p.pagoCheckoutUrl']).where('p.id = :id', { id: p.id }).getOne();
+  const extra = await repo.createQueryBuilder('p').addSelect(['p.pagoIdemKey', 'p.pagoCheckoutUrl', 'p.pagoDatosJson']).where('p.id = :id', { id: p.id }).getOne();
   p.pagoIdemKey = extra?.pagoIdemKey ?? null;
   p.pagoCheckoutUrl = extra?.pagoCheckoutUrl ?? null;
+  p.pagoDatosJson = extra?.pagoDatosJson ?? null;
 
   if (!esMetodoPagoOnline(p.metodoPago) || p.estado !== EstadoPedidoOnline.PENDIENTE_PAGO) {
     return { success: false, error: 'pedido_no_espera_pago' };
@@ -169,14 +209,22 @@ export async function iniciarPagoPedido(
   if (p.estadoPago === EstadoPagoOnline.PAGADO) return { success: false, error: 'pedido_ya_pagado' };
   // Se cobra con el proveedor con que se creó el pedido (`metodoPago`), aunque el activo haya
   // cambiado en el medio: así lo que vio el cliente y lo que se cobra coinciden.
-  const prov = proveedorPorId(p.metodoPago);
-  const creds = prov ? await prov.credenciales(ds, await getCfg(ds)) : null;
+  const cfg = await getCfg(ds);
+  // Cambio de medio: solo tras un intento fallido y a otro proveedor prendido y listo.
+  const otro = opts.proveedor ? String(opts.proveedor).toUpperCase() : null;
+  const cambia = !!otro && otro !== String(p.metodoPago).toUpperCase();
+  if (cambia) {
+    if (!opts.nuevoIntento || p.estadoPago !== EstadoPagoOnline.FALLIDO) return { success: false, error: 'pago_en_curso' };
+    if (!(await proveedoresListos(ds, cfg)).some((x) => x.id === otro)) return { success: false, error: 'pago_online_no_disponible' };
+  }
+  const prov = proveedorPorId(cambia ? otro : p.metodoPago);
+  const creds = prov ? await prov.credenciales(ds, cfg) : null;
   if (!prov || !creds) return { success: false, error: 'pago_online_no_disponible' };
 
   // Sesión vigente del mismo intento: se reusa (doble clic, reintento de red).
   const vigente = p.pagoSesionId && p.pagoCheckoutUrl && p.estadoPago === EstadoPagoOnline.PENDIENTE
     && (!p.pagoExpiraEn || new Date(p.pagoExpiraEn).getTime() > Date.now() + 60_000);
-  if (vigente && !opts.nuevoIntento) return respuestaInicio(prov, creds, p.pagoCheckoutUrl!);
+  if (vigente && !opts.nuevoIntento) return respuestaInicio(prov, creds, p.pagoCheckoutUrl!, datosDe(p.pagoDatosJson));
 
   // Hay sesión: un intento nuevo solo si la anterior FALLÓ. Con una abierta (que todavía se
   // puede pagar) no se abre otra: cobraría dos veces.
@@ -192,7 +240,8 @@ export async function iniciarPagoPedido(
     const claim = await repo.createQueryBuilder().update(PedidoOnline)
       .set({
         pagoIntento: intento, pagoIdemKey: idem, pagoProveedor: prov.id,
-        estadoPago: EstadoPagoOnline.PENDIENTE, pagoSesionId: null, pagoCheckoutUrl: null,
+        estadoPago: EstadoPagoOnline.PENDIENTE, pagoSesionId: null, pagoCheckoutUrl: null, pagoDatosJson: null,
+        ...(cambia ? { metodoPago: prov.id } : {}),
       } as any)
       .where('id = :id AND estado_pago = :fal AND pago_sesion_id = :ses AND COALESCE(pago_intento, 1) = :prev', {
         id: p.id, fal: EstadoPagoOnline.FALLIDO, ses: p.pagoSesionId, prev: p.pagoIntento ?? 1,
@@ -224,17 +273,20 @@ export async function iniciarPagoPedido(
         ...(Number(p.costoEnvio) > 0 ? [{ name: 'Envío', quantity: 1, unitPrice: Number(p.costoEnvio) }] : []),
       ],
     }, ctx());
-    // Con formulario (Bancard) no hay URL a la que redirigir: se guarda el `process_id`.
-    const urlGuardada = r.tipo === 'REDIRECCION' ? r.url : r.procesoId;
+    // Con formulario (Bancard) no hay URL a la que redirigir: se guarda el `process_id`. Con QR
+    // (IC Pay), la marca `qr:<sesión>`; el QR mismo va en `pago_datos_json`.
+    const urlGuardada = r.tipo === 'REDIRECCION' ? r.url : r.tipo === 'FORMULARIO' ? r.procesoId : `qr:${r.sesionId}`;
+    const datos = r.tipo === 'QR' ? r.datos : null;
     await repo.update({ id: p.id }, {
       pagoSesionId: r.sesionId,
       pagoCheckoutUrl: urlGuardada,
+      pagoDatosJson: datos ? JSON.stringify(datos) : null,
       pagoExpiraEn: r.expiraEn ?? new Date(Date.now() + 2 * 3600_000),
       estadoPago: EstadoPagoOnline.PENDIENTE,
       pagoDetalle: null,
     } as any);
     await registrar(ds, p, 'SESION_CREADA', null, r.crudo);
-    return respuestaInicio(prov, creds, urlGuardada);
+    return respuestaInicio(prov, creds, urlGuardada, datos);
   } catch (e: any) {
     await registrar(ds, p, 'ERROR', e instanceof ProveedorError ? e.codigo : 'error', e?.message || String(e));
     return { success: false, error: codigoError(prov, e) };
@@ -282,9 +334,10 @@ export async function verificarPagoPedido(
   let res: ResultadoPago;
   let crudo: any = null;
   try {
+    const dj = await repo.createQueryBuilder('p').addSelect('p.pagoDatosJson').where('p.id = :id', { id: p.id }).getOne();
     const c = await prov.consultar(creds, {
       sesionId: p.pagoSesionId, referencia: referencia(p), monto: Number(p.total), pagoId: p.pagoId ?? null,
-      expiraEn: p.pagoExpiraEn ?? null, ahora,
+      expiraEn: p.pagoExpiraEn ?? null, ahora, datos: datosDe(dj?.pagoDatosJson),
     }, ctx());
     res = c.resultado;
     crudo = c.crudo;

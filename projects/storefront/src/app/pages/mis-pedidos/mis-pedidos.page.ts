@@ -191,7 +191,7 @@ export class MisPedidosPage implements OnInit, OnDestroy {
 
   /** F4: estado del pago con tarjeta (null en efectivo). */
   pago(p: any): string | null {
-    return textoEstadoPago(p?.estadoPago, p?.pagoMonto ?? p?.total);
+    return textoEstadoPago(p?.estadoPago, p?.pagoMonto ?? p?.total, p?.metodoPago);
   }
 
   tipoLabel(tipo: string): string {

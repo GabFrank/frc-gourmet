@@ -1,9 +1,10 @@
 import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
 import { CreditoTiendaError, creditoHabilitadoEnTienda, estadoCreditoCliente, identidadVerificada, withClienteLock } from '../utils/credito-tienda.utils';
-import { iniciarPagoPedido, procesarAvisoPago, verificarPagoPedido, VERIFICAR_MIN_MS } from '../services/pagos-online/pagos-online.service';
+import { iniciarPagoPedido, InicioPagoRespuesta, procesarAvisoPago, verificarPagoPedido, VERIFICAR_MIN_MS } from '../services/pagos-online/pagos-online.service';
+import * as QRCode from 'qrcode';
 import { metodosAlRecibir, monedasTienda, validarPagoPedido, ResultadoPago } from '../utils/pago-pedido.utils';
 import { accionesPedido, ESTADOS_CANCELABLES_CLIENTE, limpiarMotivo } from '../utils/pedido-acciones.utils';
-import { pagoOnlineOfrecido, proveedorPagoActivo } from '../utils/tienda-ingreso.utils';
+import { pagoOnlineOfrecido, proveedorPagoActivo, proveedoresPagoListos } from '../utils/tienda-ingreso.utils';
 import { ipcMain } from 'electron';
 import { createHash, randomBytes } from 'crypto';
 import { DataSource, In, IsNull } from 'typeorm';
@@ -344,8 +345,11 @@ export function registerPedidosOnlinePedidosHandlers(
     // tienda (F8; sin configurar = sólo efectivo). MESA_QR paga siempre en caja.
     // El cliente pide «online» y el servidor decide con qué proveedor: el activo (un storefront
     // viejo que manda 'UPAY' con Bancard activo cobra igual con Bancard).
+    // Con varios proveedores prendidos el cliente elige uno; si manda uno que no está listo
+    // (storefront viejo, o se apagó en el medio) se cobra con el primero de los listos.
     const pagaOnline = esMetodoPagoOnline(metodoPagoPedido);
-    const metodoPagoIn = (pagaOnline ? proveedorPagoActivo().id : metodoPagoPedido) as MetodoPagoOnline;
+    const elegido = pagaOnline ? proveedoresPagoListos().find((x) => x.id === String(metodoPagoPedido).toUpperCase()) : null;
+    const metodoPagoIn = (pagaOnline ? (elegido || proveedorPagoActivo()).id : metodoPagoPedido) as MetodoPagoOnline;
     if (pagaOnline && (tipoPedido === TipoPedidoOnline.MESA_QR || !pagoOnlineOfrecido(cfg))) {
       return { success: false, error: 'metodo_pago_no_disponible' };
     }
@@ -910,11 +914,26 @@ export function registerPedidosOnlinePedidosHandlers(
     return { success: true, pedido: mapPedido(fresco!) };
   });
 
+  // Pago con QR (Pix): la imagen se arma acá desde el payload, así la tienda no carga nada de
+  // terceros ni suma una librería. El payload va igual (botón «Copiar código Pix»).
+  const conImagenQr = async (r: InicioPagoRespuesta): Promise<any> => {
+    if (!r.success || r.tipo !== 'QR') return r;
+    try {
+      const imagen = await QRCode.toDataURL(r.qr.payload, { margin: 1, width: 320, errorCorrectionLevel: 'M' });
+      return { ...r, qr: { ...r.qr, imagen } };
+    } catch {
+      return r;
+    }
+  };
+
   ipcMain.handle('iniciar-pago-pedido-online', async (event: any, numero: string, opciones?: any) => {
     const p = await pedidoDelCliente(event?._customerId, numero);
     if (!p) return { success: false, error: 'pedido_no_encontrado' };
-    const r = await iniciarPagoPedido(dataSource, p.id, { nuevoIntento: !!opciones?.nuevoIntento });
-    return r;
+    const r = await iniciarPagoPedido(dataSource, p.id, {
+      nuevoIntento: !!opciones?.nuevoIntento,
+      proveedor: typeof opciones?.proveedor === 'string' ? opciones.proveedor.slice(0, 20) : null,
+    });
+    return conImagenQr(r);
   });
   ipcMain.handle('verificar-pago-pedido-online', async (event: any, numero: string) => {
     const p = await pedidoDelCliente(event?._customerId, numero);

@@ -50,7 +50,24 @@ export type InicioCobro =
   /** El storefront redirige a la página del proveedor (uPay, Pagopar…). */
   | { tipo: 'REDIRECCION'; sesionId: string; url: string; expiraEn: Date | null; crudo: any }
   /** El storefront arma el formulario del proveedor en su página con su script (Bancard). */
-  | { tipo: 'FORMULARIO'; sesionId: string; procesoId: string; script: string; expiraEn: Date | null; crudo: any };
+  | { tipo: 'FORMULARIO'; sesionId: string; procesoId: string; script: string; expiraEn: Date | null; crudo: any }
+  /**
+   * El storefront dibuja un QR (y el «copia e cola») con `qr.payload` y consulta hasta que se pague
+   * (IC Pay / Pix). `datos` se guarda en el pedido (`pago_datos_json`) para mostrarlo de nuevo y
+   * para verificar el cobro.
+   */
+  | { tipo: 'QR'; sesionId: string; qr: DatosQr; expiraEn: Date | null; datos: Record<string, any>; crudo: any };
+
+/** Lo que el cliente ve para pagar con un QR (no es secreto: es lo mismo que muestra la pantalla). */
+export interface DatosQr {
+  /** Cadena EMV del QR (Pix «copia e cola»). */
+  payload: string;
+  /** Lo que paga el cliente en la moneda del proveedor (p. ej. R$ 5,64). */
+  moneda: string;
+  monto: string;
+  /** Vencimiento del QR (ISO). */
+  expiraEn: string | null;
+}
 
 /** Lo mínimo del pedido que necesita el proveedor para consultar o devolver. */
 export interface CobroGuardado {
@@ -62,6 +79,8 @@ export interface CobroGuardado {
   expiraEn?: Date | null;
   /** «Ahora» del servicio (inyectable en tests). */
   ahora?: Date;
+  /** `pago_datos_json` del intento (lo que devolvió `iniciar` en `datos`). */
+  datos?: Record<string, any> | null;
 }
 
 /**
@@ -90,12 +109,16 @@ export interface ProveedorPagoOnline<C = any> {
   id: string;
   /** Para los textos: «devolvelo en Bancard». */
   nombre: string;
+  /** Lo que ve el cliente en el checkout: «Tarjeta — Bancard», «Pix (Brasil)». */
+  etiqueta: string;
+  /** Con qué paga el cliente (para el ícono y la ayuda del checkout). */
+  medio: 'TARJETA' | 'PIX';
   /** Forma de pago del cobro anticipado en la venta (`formas_pago.nombre`). */
   formaPago: string;
   /** Hosts desde los que el storefront acepta redirigir o cargar el script del proveedor. */
   hosts: string[];
-  /** Cómo paga el cliente: lo redirigimos, o el formulario del proveedor va en nuestra página. */
-  modo: 'REDIRECCION' | 'FORMULARIO';
+  /** Cómo paga el cliente: lo redirigimos, el formulario del proveedor va en nuestra página, o un QR. */
+  modo: 'REDIRECCION' | 'FORMULARIO' | 'QR';
   /** URL del script del formulario (solo `FORMULARIO`), según el entorno de las credenciales. */
   scriptUrl?(creds: C): string;
   /**

@@ -152,6 +152,10 @@ export class PedidoOnline extends BaseModel {
   @Column({ name: 'pago_checkout_url', type: 'varchar', length: 500, nullable: true, select: false })
   pagoCheckoutUrl?: string | null;
 
+  /** Lo que el proveedor devolvió al crear el cobro y hace falta después (QR Pix, monto en USD). JSON. */
+  @Column({ name: 'pago_datos_json', type: 'text', nullable: true, select: false })
+  pagoDatosJson?: string | null;
+
   /** Id del payment del proveedor (único: un pago confirma un solo pedido). */
   @Column({ name: 'pago_id', type: 'varchar', length: 64, nullable: true })
   pagoId?: string | null;

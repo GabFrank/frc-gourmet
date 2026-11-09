@@ -199,22 +199,27 @@ import { RepositoryService } from '../../../database/repository.service';
 
           <mat-card class="bloque">
             <h3 class="bloque-titulo"><mat-icon>credit_card</mat-icon> Pago online</h3>
-            <p class="ayuda">El cliente paga con tarjeta en la página del proveedor y el pedido llega a cocina recién cuando el pago está confirmado.</p>
+            <p class="ayuda">El cliente paga antes (tarjeta o Pix) y el pedido llega a cocina recién cuando el pago está confirmado. Se pueden ofrecer varios proveedores a la vez: el cliente elige.</p>
             <div class="proveedor">
               <div class="proveedor-head">
-                <mat-slide-toggle [(ngModel)]="cfg.pagoOnlineActivo">Ofrecer pago con tarjeta</mat-slide-toggle>
-                <span class="estado-chip" [class.abierta]="cfg.pagoOnlineActivo && provSelListo">
-                  {{ cfg.pagoOnlineActivo && provSelListo ? 'Activo' : 'Apagado' }}
+                <mat-slide-toggle [(ngModel)]="cfg.pagoOnlineActivo">Ofrecer pago online</mat-slide-toggle>
+                <span class="estado-chip" [class.abierta]="cfg.pagoOnlineActivo && pagoOfrecidoListo">
+                  {{ cfg.pagoOnlineActivo && pagoOfrecidoListo ? 'Activo' : 'Apagado' }}
                 </span>
               </div>
+              <p class="ayuda">Se ofrecen: <strong>{{ resumenOfrecidos }}</strong></p>
               <div class="grid">
-                <mat-form-field appearance="outline" class="full">
-                  <mat-label>Proveedor</mat-label>
+                <mat-form-field appearance="outline">
+                  <mat-label>Proveedor a configurar</mat-label>
                   <mat-select [(ngModel)]="provSelId" (selectionChange)="elegirProveedor()">
                     <mat-option *ngFor="let p of proveedoresPago" [value]="p.id">{{ p.nombre }}</mat-option>
                   </mat-select>
-                  <mat-hint>Con este se cobran los pedidos nuevos; los ya pagados siguen con el suyo.</mat-hint>
+                  <mat-hint>Los pedidos ya pagados siguen con el suyo.</mat-hint>
                 </mat-form-field>
+                <div class="toggle-celda">
+                  <mat-slide-toggle [(ngModel)]="ofrecidos[provSelId]" (change)="armarResumenOfrecidos()">Ofrecer {{ provSel?.etiqueta || provSel?.nombre }}</mat-slide-toggle>
+                  <span class="estado-chip" [class.abierta]="provSelListo">{{ provSelListo ? 'Datos completos' : 'Faltan datos' }}</span>
+                </div>
               </div>
               <!-- Proveedores con campos declarados (Bancard…): la lista sale del servidor. -->
               <div class="grid" *ngIf="provSel && provSel.campos.length">
@@ -343,6 +348,7 @@ import { RepositoryService } from '../../../database/repository.service';
     @media (max-width: 760px) { .proveedor .grid { grid-template-columns: minmax(0, 1fr); } }
     /* Identificadores que distinguen mayúsculas (Client ID, plantilla): sin la mayúscula global. */
     .proveedor input { text-transform: none !important; }
+    .toggle-celda { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 56px; }
     .fila-acciones { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
     .fila-acciones button { white-space: nowrap; }
     .tel-prueba { width: 220px; max-width: 100%; }
@@ -374,6 +380,11 @@ export class TiendaOnlineConfigComponent implements OnInit {
   provSelId = 'UPAY';
   provSel: any = null;
   provSelListo = false;
+  /** Proveedores que se ofrecen en la tienda (varios a la vez). */
+  ofrecidos: Record<string, boolean> = {};
+  resumenOfrecidos = 'ninguno';
+  /** Algún ofrecido tiene sus datos completos. */
+  pagoOfrecidoListo = false;
   /** Valores NO secretos por proveedor, editables. */
   valoresProv: Record<string, Record<string, string>> = {};
   /** Secretos nuevos por proveedor (solo escritura: el servidor nunca los devuelve). */
@@ -402,24 +413,42 @@ export class TiendaOnlineConfigComponent implements OnInit {
     upay_sin_conexion: 'No se pudo conectar con uPay',
     upay_error: 'uPay respondió con un error',
     pago_proveedor_invalido: 'Proveedor de pago inválido',
-    pago_faltan_credenciales: 'Para activar el pago con tarjeta faltan datos del proveedor',
+    pago_faltan_credenciales: 'Para ofrecer el pago online faltan datos del proveedor',
     bancard_publickey_invalido: 'La clave pública de Bancard no tiene el formato esperado',
     bancard_privatekey_invalido: 'La clave privada de Bancard no tiene el formato esperado',
     bancard_entorno_invalido: 'Entorno de Bancard inválido',
     bancard_credenciales: 'Bancard rechazó las claves',
     bancard_sin_conexion: 'No se pudo conectar con Bancard',
     bancard_error: 'Bancard respondió con un error',
+    pago_sin_proveedor: 'Para ofrecer pago online elegí al menos un proveedor',
+    icpay_credenciales: 'IC Pay rechazó las credenciales',
+    icpay_mfa: 'El usuario de IC Pay pide MFA o cambio de contraseña: usá uno sin MFA',
+    icpay_cotizacion: 'IC Pay no devolvió una cotización válida',
+    icpay_sin_conexion: 'No se pudo conectar con IC Pay',
+    icpay_error: 'IC Pay respondió con un error',
+    icpay_baseurl_invalido: 'La URL de IC Pay tiene que ser https',
+    icpay_email_invalido: 'El usuario de IC Pay tiene que ser un email',
   };
 
   /** Arma el estado de proveedores que vino del servidor. */
   private armarProveedores(pago: any): void {
     this.proveedoresPago = pago?.proveedores || [];
     this.provSelId = pago?.proveedorActivo || 'UPAY';
+    const activos: string[] = pago?.proveedoresActivos || (pago?.proveedorActivo ? [pago.proveedorActivo] : []);
+    this.ofrecidos = {};
     for (const p of this.proveedoresPago) {
       this.valoresProv[p.id] = { ...(p.valores || {}) };
       this.secretosNuevos[p.id] = {};
+      this.ofrecidos[p.id] = activos.includes(p.id);
     }
     this.elegirProveedor();
+    this.armarResumenOfrecidos();
+  }
+
+  armarResumenOfrecidos(): void {
+    const of = this.proveedoresPago.filter((p) => this.ofrecidos[p.id]);
+    this.resumenOfrecidos = of.length ? of.map((p) => p.etiqueta || p.nombre).join(', ') : 'ninguno';
+    this.pagoOfrecidoListo = of.some((p) => (p.id === 'UPAY' ? !!this.ingreso?.upayApiKeyGuardada && !!this.cfg?.upayMerchantId : !!p.listo));
   }
 
   elegirProveedor(): void {
@@ -464,7 +493,8 @@ export class TiendaOnlineConfigComponent implements OnInit {
     this.guardando = true;
     const { ingreso, abiertaAhora, pago, ...datos } = this.cfg;
     const payload: any = { ...datos, ...extra };
-    payload.pagoProveedor = this.provSelId;
+    // Los ofrecidos, en el orden de la lista (el primero es el que se elige por defecto).
+    if (this.proveedoresPago.length) payload.pagoProveedores = this.proveedoresPago.filter((p) => this.ofrecidos[p.id]).map((p) => p.id);
     // Datos de los proveedores con campos (los de uPay van en sus columnas, como siempre).
     const pagoConfig: Record<string, any> = {};
     const pagoSecretos: Record<string, any> = {};
@@ -558,7 +588,7 @@ export class TiendaOnlineConfigComponent implements OnInit {
     this.repo.probarTiendaPago(this.provSelId).subscribe({
       next: (res) => {
         this.probando = false;
-        this.snack.open(res?.success ? `Conexión con ${res.proveedor || 'el proveedor'} correcta` : this.mensajeError(res), 'OK', { duration: 5000 });
+        this.snack.open(res?.success ? `Conexión con ${res.proveedor || 'el proveedor'} correcta${res.detalle ? ': ' + res.detalle : ''}` : this.mensajeError(res), 'OK', { duration: 5000 });
       },
       error: (e) => {
         this.probando = false;

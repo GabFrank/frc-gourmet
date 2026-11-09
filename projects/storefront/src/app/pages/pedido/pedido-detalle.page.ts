@@ -131,7 +131,7 @@ export class PedidoDetallePage implements OnInit, OnDestroy {
     this.vista = vistaEstadoPedido(p.estado, p.tipoPedido);
     this.tipoLabel = TIPOS[p.tipoPedido] || p.tipoPedido;
     this.pagoTexto = textoPagoCliente(p, this.monedas.monedas);
-    this.pagoTarjeta = textoEstadoPago(p.estadoPago, p.pagoMonto ?? p.total);
+    this.pagoTarjeta = textoEstadoPago(p.estadoPago, p.pagoMonto ?? p.total, p.metodoPago);
     this.acciones = { solicitarCancelacion: false, modificar: false, repetir: false, compartir: false, ...(p.acciones || {}) };
     this.cancelacionPendiente = !!p.cancelacionSolicitadaEn && !TERMINALES.includes(p.estado);
     this.respuestaLocal = !p.cancelacionSolicitadaEn && p.cancelacionRespuesta && !TERMINALES.includes(p.estado)

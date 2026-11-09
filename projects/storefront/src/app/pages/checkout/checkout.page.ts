@@ -76,6 +76,10 @@ export class CheckoutPage implements OnInit, OnDestroy {
   ayudaMetodo = '';
   /** F8b: eligió «A cuenta» y el disponible no alcanza para este total. */
   aCuentaNoAlcanza = false;
+  /** Proveedores online prendidos (si hay más de uno, el cliente elige). */
+  proveedoresOnline: { id: string; etiqueta: string; icono: string }[] = [];
+  ayudaOnline = '';
+  textoBotonOnline = 'Pagar con tarjeta · ';
   monedaPago: MonedaTienda | null = null;
   necesitaVuelto = false;
   vueltoPara: number | null = null;
@@ -220,7 +224,20 @@ export class CheckoutPage implements OnInit, OnDestroy {
     if (this.modalidad === 'AL_RECIBIR' && !this.metodosDisponibles.some((m) => m.valor === this.metodoPago)) {
       this.metodoPago = this.metodosDisponibles[0]?.valor || 'EFECTIVO';
     }
-    if (this.modalidad === 'ONLINE') this.metodoPago = this.config.config?.pagoOnlineProveedor || 'UPAY';
+    // Online: con varios proveedores prendidos el cliente elige; si no eligió (o el suyo se apagó),
+    // el primero. Un servidor viejo sin lista manda solo `pagoOnlineProveedor`.
+    const lista = this.config.config?.pagoOnlineProveedores?.length
+      ? this.config.config.pagoOnlineProveedores
+      : [{ id: this.config.config?.pagoOnlineProveedor || 'UPAY', etiqueta: 'Tarjeta', medio: 'TARJETA' }];
+    this.proveedoresOnline = lista.map((p) => ({ id: p.id, etiqueta: p.etiqueta, icono: p.medio === 'PIX' ? 'qr' : 'card' }));
+    if (this.modalidad === 'ONLINE' && !this.proveedoresOnline.some((p) => p.id === this.metodoPago)) {
+      this.metodoPago = this.proveedoresOnline[0].id;
+    }
+    const pix = lista.find((p) => p.id === this.metodoPago)?.medio === 'PIX';
+    this.ayudaOnline = pix
+      ? 'Te mostramos un QR Pix para pagar en reales desde tu banco de Brasil. El pedido va a la cocina cuando se confirma el pago.'
+      : 'Te llevamos a la página segura de pago. El pedido va a la cocina cuando se confirma el pago.';
+    this.textoBotonOnline = pix ? 'Pagar con Pix · ' : 'Pagar con tarjeta · ';
     this.ayudaMetodo = METODOS[this.metodoPago]?.ayuda || '';
     this.aCuentaNoAlcanza = false;
     if (this.metodoPago === 'CREDITO' && this.auth.credito) {

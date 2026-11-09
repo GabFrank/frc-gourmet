@@ -36,6 +36,8 @@ function spidDe(sesionId: string): number {
 const proveedor: ProveedorPagoOnline<BancardConfig> = {
   id: PROVEEDOR_BANCARD,
   nombre: 'Bancard',
+  etiqueta: 'Tarjeta — Bancard',
+  medio: 'TARJETA',
   formaPago: FORMA_PAGO_BANCARD,
   hosts: ['vpos.infonet.com.py'],
   modo: 'FORMULARIO',
