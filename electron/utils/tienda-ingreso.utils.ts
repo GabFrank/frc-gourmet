@@ -84,7 +84,7 @@ async function leerYAplicar(dataSource: DataSource): Promise<void> {
   const { cuentasListas } = await import('../services/pagos-online/cuentas-pago');
   pagoProveedoresListos = (await cuentasListas(dataSource, cfg)).map((c) => ({
     formaId: c.forma?.id ?? null, id: c.prov.id, nombre: c.prov.nombre, etiqueta: c.forma?.nombre || c.prov.etiqueta,
-    medio: c.prov.medio, hosts: c.prov.hosts, pickup: c.forma ? !!c.forma.permitePickup : true, delivery: c.forma ? !!c.forma.permiteDelivery : true,
+    medio: c.prov.medioDe ? c.prov.medioDe(c.cuenta.config) : c.prov.medio, hosts: c.prov.hosts, pickup: c.forma ? !!c.forma.permitePickup : true, delivery: c.forma ? !!c.forma.permiteDelivery : true,
   }));
 }
 

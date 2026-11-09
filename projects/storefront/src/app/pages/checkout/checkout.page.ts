@@ -126,6 +126,15 @@ export class CheckoutPage implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.telefonoContacto = this.auth.cuenta?.telefonoContacto || '';
+    // Recargando el checkout, la cuenta llega después: se completa cuando llega (si no lo escribió).
+    if (!this.auth.cuenta) {
+      const espera = setInterval(() => {
+        if (!this.auth.cuenta) return;
+        clearInterval(espera);
+        if (!this.telefonoContacto) this.telefonoContacto = this.auth.cuenta.telefonoContacto || '';
+      }, 300);
+      setTimeout(() => clearInterval(espera), 15_000);
+    }
     this.subsPago.push(this.config.cambios$.subscribe(() => this.recalcularPago()));
     // F8b: si puede comprar a cuenta y cuánto le queda (el servidor lo vuelve a validar al pedir).
     if (!this.mesa.enMesa && this.auth.isAuthenticated) {
@@ -235,16 +244,18 @@ export class CheckoutPage implements OnInit, OnDestroy {
       : [{ formaId: null, id: this.config.config?.pagoOnlineProveedor || 'UPAY', etiqueta: 'Tarjeta', medio: 'TARJETA' }];
     this.proveedoresOnline = lista.map((p) => ({
       clave: p.formaId != null ? String(p.formaId) : p.id, formaId: p.formaId ?? null, id: p.id, etiqueta: p.etiqueta,
-      icono: p.medio === 'PIX' ? 'qr' : 'card', medio: p.medio,
+      icono: p.medio === 'TARJETA' ? 'card' : 'qr', medio: p.medio,
     }));
     if (!this.proveedoresOnline.some((p) => p.clave === this.formaOnline)) this.formaOnline = this.proveedoresOnline[0]?.clave ?? null;
     const sel = this.proveedoresOnline.find((p) => p.clave === this.formaOnline) || null;
     if (this.modalidad === 'ONLINE' && sel) this.metodoPago = sel.id;
-    const pix = sel?.medio === 'PIX';
-    this.ayudaOnline = pix
+    const medio = sel?.medio || 'TARJETA';
+    this.ayudaOnline = medio === 'PIX'
       ? 'Te mostramos un QR Pix para pagar en reales desde tu banco de Brasil. El monto exacto en reales sale de la cotización del día al generar el QR. El pedido va a la cocina cuando se confirma el pago.'
-      : 'Te llevamos a la página segura de pago. El pedido va a la cocina cuando se confirma el pago.';
-    this.textoBotonOnline = pix ? 'Pagar con Pix · ' : 'Pagar con tarjeta · ';
+      : medio === 'CRIPTO'
+        ? 'Te mostramos la dirección y el monto exacto para pagar en USDT por la red Tron. El pedido va a la cocina cuando se confirma el pago.'
+        : 'Te llevamos a la página segura de pago. El pedido va a la cocina cuando se confirma el pago.';
+    this.textoBotonOnline = medio === 'PIX' ? 'Pagar con Pix · ' : medio === 'CRIPTO' ? 'Pagar con USDT · ' : 'Pagar con tarjeta · ';
     this.ayudaMetodo = METODOS[this.metodoPago]?.ayuda || '';
     this.aCuentaNoAlcanza = false;
     if (this.metodoPago === 'CREDITO' && this.auth.credito) {

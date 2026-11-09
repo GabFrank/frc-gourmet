@@ -185,7 +185,7 @@ export class PagoPage implements OnInit, OnDestroy {
   /** Textos y opciones que dependen del método del pedido y de los proveedores prendidos. */
   private calcularMedios(): void {
     const metodo = String(this.pedido?.metodoPago || '').toUpperCase();
-    this.textoReintentar = esPagoPix(metodo) ? 'Generar otro QR Pix' : 'Intentar de nuevo con tarjeta';
+    this.textoReintentar = esPagoPix(metodo) ? 'Generar otro pago' : 'Intentar de nuevo con tarjeta';
     const tipo = this.pedido?.tipoPedido;
     const actual = this.pedido?.formaPagoOnlineId ?? null;
     this.otrosMedios = (this.config.config?.pagoOnlineProveedores || [])

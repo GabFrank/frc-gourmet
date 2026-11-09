@@ -224,7 +224,7 @@ import { CreateEditFormaPagoOnlineDialogComponent, ProveedorCatalogo } from './c
                       <th class="col-orden">Orden</th>
                       <th>Nombre para el cliente</th>
                       <th>Proveedor</th>
-                      <th>Pedidos</th>
+                      <th>Tipos de pedido</th>
                       <th>Estado</th>
                       <th class="col-activa">Activa</th>
                       <th class="col-acc"></th>
@@ -232,20 +232,20 @@ import { CreateEditFormaPagoOnlineDialogComponent, ProveedorCatalogo } from './c
                   </thead>
                   <tbody>
                     <tr *ngFor="let f of formas">
-                      <td class="col-orden">
+                      <td class="col-orden"><div class="botones">
                         <button mat-icon-button [disabled]="f.esPrimera || moviendo" (click)="moverForma(f, -1)" aria-label="Subir"><mat-icon>arrow_upward</mat-icon></button>
                         <button mat-icon-button [disabled]="f.esUltima || moviendo" (click)="moverForma(f, 1)" aria-label="Bajar"><mat-icon>arrow_downward</mat-icon></button>
-                      </td>
+                      </div></td>
                       <td class="nombre">{{ f.nombre }}</td>
                       <td>{{ f.proveedorNombre }}</td>
                       <td>{{ f.tiposTexto }}</td>
                       <td><span class="estado-chip" [class.abierta]="f.listo">{{ f.listo ? 'Datos completos' : 'Faltan datos' }}</span></td>
                       <td class="col-activa"><mat-slide-toggle [checked]="f.activo" (change)="cambiarActiva(f, $event.checked)" [disabled]="f.guardando"></mat-slide-toggle></td>
-                      <td class="col-acc">
+                      <td class="col-acc"><div class="botones">
                         <button mat-icon-button (click)="editarForma(f)" aria-label="Editar"><mat-icon>edit</mat-icon></button>
                         <button mat-icon-button (click)="probarForma(f)" [disabled]="probando || !f.listo" aria-label="Probar conexión"><mat-icon>wifi_tethering</mat-icon></button>
                         <button mat-icon-button (click)="quitarForma(f)" aria-label="Quitar"><mat-icon>delete</mat-icon></button>
-                      </td>
+                      </div></td>
                     </tr>
                   </tbody>
                 </table>
@@ -321,6 +321,7 @@ import { CreateEditFormaPagoOnlineDialogComponent, ProveedorCatalogo } from './c
     .tabla-formas .nombre { font-weight: 600; color: var(--text-primary); }
     .tabla-formas .col-orden, .tabla-formas .col-acc { white-space: nowrap; width: 1%; }
     .tabla-formas .col-activa { width: 1%; text-align: center; }
+    .tabla-formas .botones { display: flex; align-items: center; gap: 2px; }
     .fila-acciones { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
     .fila-acciones button { white-space: nowrap; }
     .tel-prueba { width: 220px; max-width: 100%; }

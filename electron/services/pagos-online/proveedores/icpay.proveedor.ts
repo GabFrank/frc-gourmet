@@ -107,6 +107,7 @@ const proveedor: ProveedorPagoOnline<IcpayConfig> = {
   nombre: 'IC Pay',
   etiqueta: 'Pix (Brasil)',
   medio: 'PIX',
+  medioDe: (config) => (String(config['moneda'] || '').toUpperCase() === 'USDT' ? 'CRIPTO' : 'PIX'),
   formaPago: FORMA_PAGO_ICPAY,
   // El QR se dibuja en la tienda: no se redirige ni se carga nada de IC en el navegador.
   hosts: [],

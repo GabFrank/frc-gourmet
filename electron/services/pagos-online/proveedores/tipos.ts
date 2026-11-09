@@ -129,7 +129,9 @@ export interface ProveedorPagoOnline<C = any> {
   /** Lo que ve el cliente en el checkout: «Tarjeta — Bancard», «Pix (Brasil)». */
   etiqueta: string;
   /** Con qué paga el cliente (para el ícono y la ayuda del checkout). */
-  medio: 'TARJETA' | 'PIX';
+  medio: 'TARJETA' | 'PIX' | 'CRIPTO';
+  /** El medio según los datos de una cuenta (p. ej. IC Pay en USDT es CRIPTO). Sin esto, `medio`. */
+  medioDe?(config: Record<string, string>): 'TARJETA' | 'PIX' | 'CRIPTO';
   /** Forma de pago del cobro anticipado en la venta (`formas_pago.nombre`). */
   formaPago: string;
   /** Hosts desde los que el storefront acepta redirigir o cargar el script del proveedor. */
