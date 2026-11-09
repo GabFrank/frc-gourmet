@@ -4,6 +4,19 @@ Rama: `bot/ceo-frc-gourmet/feat-tienda-pagos-multi`, sale de `feat-tienda-f8b-cr
 cadena). Nada se mergea sin el OK del propietario. Toca cobro: **antes del merge se cobra de
 verdad** contra el sandbox de cada proveedor (regla de la cadena).
 
+## Estado (2026-11-09)
+
+- **Fases 1 y 2 hechas** (commit `2877053b` + arreglos de textos): varios proveedores, IC Pay,
+  modo QR, config por proveedor. `test:pagos-icpay` 62/62 y migraciones 80/80 en SQLite y PG.
+- **Fase 3 (sandbox real) parcial:** contra `stage.api.ic.com.py` funcionan sign-in, cotización
+  (₲ 6.350/USD), creación de la orden, QR Pix (dura 1 h), idempotencia y consulta; el checkout y la
+  página de pago probados en Chrome (PO-000018, PO-000019). **Un Pix real de R$ 1,01 pagado a las
+  14:25 quedó `pending`**: staging no recibe la confirmación. Consultado a IC por WhatsApp cómo
+  simular un pago; falta cerrar «pagado → bandeja» con IC real.
+- Decisiones tomadas (sin objeción del propietario): cotización de IC, sin recargo Pix, R$ grande y
+  ₲ chico.
+- Fase 4 (dinelco) espera sus claves.
+
 Base: el contrato de proveedores de `PLAN-tienda-pagos-proveedores.md`
 (`electron/services/pagos-online/proveedores/`). Este plan **no** cambia el ciclo del pago
 (PENDIENTE → PAGADO / FALLIDO / EXPIRADO, pago tardío, decisión al cancelar, cola DEVOLVER, avisos,

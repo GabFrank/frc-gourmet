@@ -43,7 +43,7 @@ declare const Bancard: any;
         </ng-container>
         <!-- QR Pix (IC Pay): la imagen la arma el servidor; el código se puede copiar. -->
         <div class="qr-pago" *ngIf="qr && estadoPago === 'PENDIENTE'">
-          <p class="qr-monto">Pagás <strong>R$ {{ qr.monto }}</strong> <span class="sf-muted">({{ pedido.total | guarani }})</span></p>
+          <p class="qr-monto">Pagás <strong>R$ {{ qrMontoTexto }}</strong> <span class="sf-muted">({{ pedido.total | guarani }})</span></p>
           <img *ngIf="qr.imagen" [src]="qr.imagen" alt="Código QR Pix" class="qr-img" width="240" height="240">
           <p class="sf-muted qr-ayuda">Abrí la app de tu banco de Brasil, elegí <strong>Pix › Pagar con QR</strong> y escaneá. Si estás en el mismo teléfono, copiá el código y usá <strong>Pix copia e cola</strong>.</p>
           <button type="button" class="sf-btn sf-btn-primary qr-copiar" (click)="copiarCodigo()">{{ copiado ? '¡Código copiado!' : 'Copiar código Pix' }}</button>
@@ -115,6 +115,8 @@ export class PagoPage implements OnInit, OnDestroy {
   /** QR Pix en pantalla (IC Pay). */
   qr: { payload: string; imagen?: string; moneda: string; monto: string; expiraEn: string | null } | null = null;
   copiado = false;
+  /** Lo que paga el cliente en reales, con coma (5,64). */
+  qrMontoTexto = '';
   restanteTexto = '';
   private reloj: any = null;
   /** Otros proveedores prendidos, para pagar con otro si este intento falló. */
@@ -204,6 +206,8 @@ export class PagoPage implements OnInit, OnDestroy {
   private mostrarQr(qr: any): void {
     this.formulario = false;
     this.qr = qr;
+    const m = Number(String(qr?.monto ?? '').replace(',', '.'));
+    this.qrMontoTexto = isNaN(m) ? String(qr?.monto ?? '') : m.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     this.copiado = false;
     this.pararReloj();
     const vence = qr?.expiraEn ? new Date(qr.expiraEn).getTime() : NaN;

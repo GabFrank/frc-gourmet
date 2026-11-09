@@ -235,7 +235,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
     }
     const pix = lista.find((p) => p.id === this.metodoPago)?.medio === 'PIX';
     this.ayudaOnline = pix
-      ? 'Te mostramos un QR Pix para pagar en reales desde tu banco de Brasil. El pedido va a la cocina cuando se confirma el pago.'
+      ? 'Te mostramos un QR Pix para pagar en reales desde tu banco de Brasil. El monto exacto en reales sale de la cotización del día al generar el QR. El pedido va a la cocina cuando se confirma el pago.'
       : 'Te llevamos a la página segura de pago. El pedido va a la cocina cuando se confirma el pago.';
     this.textoBotonOnline = pix ? 'Pagar con Pix · ' : 'Pagar con tarjeta · ';
     this.ayudaMetodo = METODOS[this.metodoPago]?.ayuda || '';

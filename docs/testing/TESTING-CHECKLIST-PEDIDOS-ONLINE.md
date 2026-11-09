@@ -307,6 +307,33 @@ con teléfono o correo verificado; Config Tienda Online → «Permitir A cuenta 
 7. **Sin crédito al aceptar:** quitarle el crédito al cliente con un pedido pendiente → al
    aceptarlo, no se puede (no se crea venta ni deuda).
 
+## 16 · Varios proveedores a la vez y Pix con IC Pay
+
+Requiere la URL de la API, el usuario (email), la API key y la contraseña de IC (usuario «store»
+sin MFA). Runbook: `docs/runbooks/RUNBOOK-TIENDA-PAGO-PIX-ICPAY.md`.
+
+1. **Config:** Config Tienda Online › Pago online › «Proveedor a configurar» = IC Pay. Cargar los
+   cuatro datos y prender «Ofrecer Pix (Brasil)». El chip pasa a «Datos completos» y arriba dice
+   «Se ofrecen: Pix (Brasil)». «Probar conexión» → «Conectado como <comercio> (cuenta en USD)».
+2. **Falta un dato:** borrar la contraseña con IC Pay prendido y guardar → no deja («faltan datos
+   del proveedor: IC Pay: Contraseña»).
+3. **Checkout con un solo proveedor:** «Online» muestra la ayuda del Pix y el botón dice
+   «Pagar con Pix · …». No aparece selector de medio.
+4. **QR:** confirmar → página de pago con el QR, «Pagás R$ X,XX (₲ …)» con coma, «Copiar código
+   Pix» (pegarlo en un bloc: empieza con `000201`) y «Vence en 59:xx» bajando.
+5. **Volver a la página** (recargar o desde «Mis pedidos»): el mismo QR, no se crea otra orden.
+6. **Pagado:** pagar el QR (ver la advertencia de staging en el runbook) → en segundos la página
+   dice «¡Pago confirmado!», el pedido aparece en la bandeja y su venta queda saldada con
+   PIX ONLINE.
+7. **Vencido:** dejar pasar la hora sin pagar → el pedido queda cancelado («no se completó a
+   tiempo»).
+8. **Dos proveedores:** prender Bancard e IC Pay. En el checkout, «Online» muestra «Tarjeta —
+   Bancard» y «Pix (Brasil)»; el botón cambia de texto según el elegido.
+9. **Cambiar de medio:** con un pago con tarjeta rechazado, la página ofrece «Intentar de nuevo
+   con tarjeta» y «Pagar con Pix (Brasil)». Elegir Pix → aparece el QR (intento 2).
+10. **Cancelar un pedido Pix pagado** eligiendo «Hay que devolverlo» → cola DEVOLVER con
+    «en IC Pay» (no hay devolución automática).
+
 ## Qué NO se probó automáticamente
 
 - **SQLite es lo que corren los tests** (`.tmp/*.db` con todas las migraciones).

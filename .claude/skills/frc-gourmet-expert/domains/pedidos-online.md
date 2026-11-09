@@ -479,6 +479,33 @@ pago tardío, devoluciones, avisos, eventos) y cada proveedor es un módulo en
 - **Pendiente:** validar contra el staging de Bancard con claves reales y certificar (Bancard la
   exige antes de habilitar producción). Antes del merge, cobrar de verdad en prueba.
 
+### Varios proveedores a la vez + Pix con IC Pay (2026-11, PLAN-tienda-pagos-multi-icpay)
+
+- **Varios prendidos:** `tienda_online_config.pago_proveedores` (JSON `["BANCARD","ICPAY"]`) manda;
+  vacía/NULL = el único `pago_proveedor` de antes. `proveedoresActivos(cfg)` /
+  `proveedoresListos(ds, cfg)` en el núcleo; la tienda los recibe en `tienda.config` →
+  `pagoOnlineProveedores [{id, etiqueta, medio}]` y el cliente elige (`metodoPago` = id).
+  `pedido.crear` cobra con el elegido si está listo; si no, con el primero listo.
+- **Cambiar de medio:** `iniciarPagoPedido(…, { nuevoIntento, proveedor })` solo tras FALLIDO y a
+  un proveedor listo: el claim del intento cambia `metodo_pago` y `pago_proveedor`.
+- **Modo QR** (tercer `InicioCobro`): `{ tipo: 'QR', qr: { payload, moneda, monto, expiraEn }, datos }`.
+  `datos` va a `pedidos_online.pago_datos_json` (select:false) y vuelve en `CobroGuardado.datos`
+  para verificar el monto; `pago_checkout_url = 'qr:<sesión>'`. La imagen del QR la arma
+  `iniciar-pago-pedido-online` con `qrcode` (servidor), la tienda no carga nada de terceros.
+- **IC Pay** (`icpay.proveedor.ts` + `icpay-auth.ts`): `x-api-key` + JWT del sign-in (email y
+  contraseña; refresh antes de 5 min del vencimiento; 401 → sign-in y un reintento;
+  `challengeName` → `icpay_mfa`). Cobro: `GET /quote PYG→USD (payment_order)` → USD redondeado
+  hacia arriba → `POST /payment/order {amount USD, currency BRL}` con `Idempotency-Key` = clave
+  del intento. **Sin webhook de órdenes** (solo de payouts) y **sin devolución por API**: la
+  verdad sale de `GET /payment/order/{id}`. PAGADO solo con `completed` + mismo id + USD igual +
+  BRL; `underpaid/duplicated/under_dispute/refunded` → INCONSISTENTE. Forma de pago `PIX ONLINE`.
+- **Gotchas reales:** la API key se copia con «x-api-key: » adelante y la URL con `/api/v1`
+  (se normalizan); **staging genera QR Pix reales pero no recibe la confirmación** (2026-11-09:
+  R$ 1,01 pagado, orden en `pending`). El espejo apaga `pagoOnlineActivo` al arrancar salvo
+  `ESPEJO_PAGO_ONLINE=1`.
+- Tests: `test:pagos-icpay` (simulador, SQLite y `TIENDA_PG`). Runbook:
+  `docs/runbooks/RUNBOOK-TIENDA-PAGO-PIX-ICPAY.md`; checklist §16.
+
 ### Cuenta web ↔ Cliente (F8b fase 1, 2026-11, PLAN-tienda-f8b-credito)
 
 - **Vínculo manual, nunca automático.** `cuentas_cliente.cliente_id` lo escribe solo
