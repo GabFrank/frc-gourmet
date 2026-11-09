@@ -2780,6 +2780,15 @@ export class PdvComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // La venta que viene del delivery (pedidos online) llega sin su cliente: se trae, así el cobro y
+    // la factura lo precargan (cuentas web vinculadas a un cliente).
+    if (!(venta as any).cliente?.id) {
+      try {
+        const completa: any = await firstValueFrom(this.repositoryService.getVenta(venta.id));
+        if (completa?.cliente?.id) (venta as any).cliente = completa.cliente;
+      } catch { /* sin cliente: se elige a mano, como antes */ }
+    }
+
     const dialogData: CobrarVentaDialogData = {
       venta,
       items: this.ventaItemsDataSource.data,
