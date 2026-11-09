@@ -13,6 +13,16 @@ verdad** contra el sandbox de cada proveedor (regla de la cadena).
   página de pago probados en Chrome (PO-000018, PO-000019). **Un Pix real de R$ 1,01 pagado a las
   14:25 quedó `pending`**: staging no recibe la confirmación. Consultado a IC por WhatsApp cómo
   simular un pago; falta cerrar «pagado → bandeja» con IC real.
+- **Fase 3 cerrada (2026-11-09, 15:24):** IC (Fede, por WhatsApp) confirma a mano en staging.
+  PO-000022 y PO-000023 → `completed` en IC → la tienda los dio por PAGADO solos (6 s con la página
+  abierta; el job en el minuto) y entraron a la bandeja. PO-000020 → `cancelled` → FALLIDO →
+  «Generar otro QR Pix» creó el intento 2. El vencido no se probó contra IC real (sí en el simulador).
+- **Hallazgo de IC:** dos órdenes del mismo monto en poco tiempo devuelven la MISMA orden
+  (`Idempotent-Replayed: true`) aunque la Idempotency-Key sea distinta. Corregido de nuestro lado:
+  si la orden ya es de otro pedido, se pide con un centavo de dólar más (commit `9731e2b5`).
+  Consultado a IC si es a propósito.
+- **Cuentas:** el pago online pasó a `formas_pago_online` (varias cuentas, también del mismo
+  proveedor; tabla + diálogo en Config Tienda Online), commit `1d703dde`.
 - Decisiones tomadas (sin objeción del propietario): cotización de IC, sin recargo Pix, R$ grande y
   ₲ chico.
 - Fase 4 (dinelco) espera sus claves.

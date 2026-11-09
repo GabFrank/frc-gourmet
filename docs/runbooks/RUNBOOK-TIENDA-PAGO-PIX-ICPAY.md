@@ -104,6 +104,10 @@ Canales (por `POST /api/rpc`, ver `RUNBOOK-TIENDA-VINCULAR-CUENTAS.md` para la a
 
 - Automático: `npm run test:pagos-icpay` (simulador de IC; `TIENDA_PG=<base vacía>` para Postgres).
 - Manual: `docs/testing/TESTING-CHECKLIST-PEDIDOS-ONLINE.md` §16.
+- **Probar en staging:** IC confirma o cancela órdenes a mano si se le pasan sus ids (grupo de
+  WhatsApp con el desarrollador de IC). Así se probó el 2026-11-09.
+- **IC repite órdenes del mismo monto:** la tienda lo detecta y pide la orden con un centavo de dólar
+  más (queda `usdCalculado` en `pago_datos_json`).
 - **Ojo con staging:** el QR del sandbox es un **Pix real**. El 2026-11-09 se pagó R$ 1,01 y la orden
   siguió `pending`: staging no recibe la confirmación. La prueba de «pagado» de punta a punta
   necesita una forma de simular de IC, o un pago chico en producción con la tienda cerrada.
