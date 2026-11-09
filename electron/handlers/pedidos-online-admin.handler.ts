@@ -149,7 +149,7 @@ export function registerPedidosOnlineAdminHandlers(
     } else if (filtros?.estados?.length) {
       qb.andWhere('p.estado IN (:...estados)', { estados: filtros.estados });
     }
-    const pedidos = await qb.getMany();
+    const pedidos = await qb.addSelect('p.pagoDatosJson').getMany();
     const monedas = await monedasParaResumen(dataSource);
     // Nombre de la cuenta con que se cobró (PIX (BRASIL), TARJETA — BANCARD…) y su medio, para la
     // insignia y el texto del pago (sin la cuenta, el proveedor).
@@ -158,10 +158,17 @@ export function registerPedidosOnlineAdminHandlers(
       const m = mapPedidoAdmin(p, monedas);
       const f = p.formaPagoOnlineId ? formas.get(p.formaPagoOnlineId) : null;
       const prov = proveedorPorId(p.pagoProveedor || p.metodoPago);
+      // El medio con que se cobró ESTE pedido (la cuenta puede haber cambiado de moneda después).
+      const monedaIntento = String(safeParse(p.pagoDatosJson || '')?.qr?.moneda || '').toUpperCase();
+      const medio = monedaIntento === 'USDT' ? 'CRIPTO' : monedaIntento === 'BRL' ? 'PIX'
+        : prov ? (f && prov.medioDe ? prov.medioDe(cuentaDeForma(f).config) : prov.medio) : null;
+      const online = !!prov && !!p.estadoPago;
       return {
         ...m,
         pagoCuentaNombre: f?.nombre ?? null,
-        pagoMedio: prov ? (f && prov.medioDe ? prov.medioDe(cuentaDeForma(f).config) : prov.medio) : null,
+        pagoMedio: medio,
+        // El resumen del pago dice con qué cuenta se pagó (PIX (BRASIL) · USDT).
+        ...(online && f ? { pagoResumen: `${f.nombre}${medio === 'CRIPTO' ? ' · USDT' : ''}` } : {}),
       };
     });
   });
