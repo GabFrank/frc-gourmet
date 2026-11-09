@@ -21,6 +21,7 @@ import {
 } from '../electron/services/pagos-online/pagos-online.service';
 import { icpayProveedor, interpretarOrdenIcpay, montoIcpay, usdDesdeGuaranies } from '../electron/services/pagos-online/proveedores/icpay.proveedor';
 import { normalizarApiKey, normalizarBaseIcpay, olvidarSesionesIcpay } from '../electron/services/pagos-online/proveedores/icpay-auth';
+import { olvidarPanoramaTron } from '../electron/services/pagos-online/proveedores/icpay-tron';
 import { cargarCredencialesTienda, proveedoresPagoListos, pagoOnlineOfrecido } from '../electron/utils/tienda-ingreso.utils';
 import { FormaPagoOnline } from '../src/app/database/entities/pedidos-online/forma-pago-online.entity';
 
@@ -51,9 +52,18 @@ let desafio: string | null = null;
 let cotizacionMala = false;
 let expiresIn = 3600;
 let repetirPorMonto = false;
+let reglaIc = false;
+let trongridCaido = false;
+let trongridConsultas = 0;
 const fakeFetch = async (url: string, init: any = {}) => {
   const res = (status: number, b: any) => ({ status, text: async () => JSON.stringify(b) });
   const u = new URL(url);
+  if (u.host === 'nile.trongrid.io') {
+    trongridConsultas++;
+    if (trongridCaido) return res(503, {});
+    const desde = Number(u.searchParams.get('min_timestamp') || 0);
+    return res(200, { data: cadena.filter((t) => t.en >= desde).map((t) => ({ transaction_id: t.txid, to: WALLET, value: String(Math.round(t.monto * 1e6)), block_timestamp: t.en, token_info: { decimals: 6, symbol: 'USDT' } })) });
+  }
   if (u.origin !== BASE) return res(404, { message: `Cannot ${init.method} ${u.pathname}` });
   const h = init.headers || {};
   const body = init.body ? JSON.parse(init.body) : null;
@@ -94,6 +104,7 @@ const fakeFetch = async (url: string, init: any = {}) => {
       totalAmount: body.currency === 'USDT' ? Number(amount).toFixed(2) : (Math.round(Number(amount) * BRL_POR_USD * 100) / 100).toFixed(2),
       status: 'pending', expiresAt: new Date(Date.now() + 3600_000).toISOString(), idem, body: init.body,
     };
+    (o as any).creada = Date.now() - 1000;
     ordenes.set(o.id, o);
     if (idem) porIdem.set(idem, o);
     return res(201, vista(o));
@@ -102,7 +113,12 @@ const fakeFetch = async (url: string, init: any = {}) => {
   if (mt && init.method === 'POST') {
     const o = ordenes.get(decodeURIComponent(mt[1]));
     tronLlamadas.push(decodeURIComponent(mt[1]));
+    if (o && o.currency === 'USDT' && reglaIc) asignarComoIc(o);
     return o ? res(200, vista(o)) : res(404, { message: 'Payment order not found' });
+  }
+  if (ruta === '/api/v1/payment/order' && (init.method || 'GET') === 'GET') {
+    const cur = u.searchParams.get('currency');
+    return res(200, { results: [...ordenes.values()].filter((o) => !cur || o.currency === cur).reverse().map(vista), meta: {} });
   }
   const m = ruta.match(/^\/api\/v1\/payment\/order\/(.+)$/);
   if (m) {
@@ -116,7 +132,7 @@ const fakeFetch = async (url: string, init: any = {}) => {
 const WALLET = 'TULyFSsimuladaTronWallet1234yhVq';
 const vista = (o: Orden) => (o.currency === 'USDT' ? {
   id: o.id, currency: 'USDT', payerId: null, quote: '1.00', totalAmount: o.totalAmount, amount: o.amount, pendingAmount: o.pendingAmount ?? null,
-  status: o.status, createdAt: new Date().toISOString(), providerMetadata: o.detectado ? { txId: 'tx-' + o.id } : null,
+  status: o.status, createdAt: new Date((o as any).creada || Date.now()).toISOString(), providerMetadata: o.detectado ? { payerId: (o as any).tx || 'tx-' + o.id, payerName: 'wallet' } : null,
 } : {
   id: o.id, currency: o.currency, payerId: o.status === 'completed' ? '12345678900' : null, quote: String(BRL_POR_USD), totalAmount: o.totalAmount,
   amount: o.amount, pendingAmount: null, status: o.status, createdAt: new Date().toISOString(),
@@ -124,6 +140,23 @@ const vista = (o: Orden) => (o.currency === 'USDT' ? {
   providerMetadata: o.status === 'completed' ? { payerName: 'JOAO DA SILVA', taxId: '12345678900' } : null,
 });
 const tronLlamadas: string[] = [];
+// Cadena simulada (TronGrid) y la regla real de IC: la verificación le asigna a la orden el pago
+// entrante MÁS RECIENTE sin orden, sin mirar el monto (observado en staging el 2026-11-09).
+interface Tx { txid: string; monto: number; en: number; orden?: string }
+const cadena: Tx[] = [];
+let ntx = 0;
+function pagarCadena(monto: number) { const t = { txid: `tx${++ntx}`, monto, en: Date.now() + ntx }; cadena.push(t); return t; }
+function asignarComoIc(o: Orden) {
+  const libre = cadena.filter((t) => !t.orden).sort((a, b) => b.en - a.en)[0];
+  if (!libre || o.status !== 'pending') return;
+  libre.orden = o.id;
+  o.detectado = true;
+  (o as any).tx = libre.txid;
+  o.totalAmount = libre.monto.toFixed(2);
+  const pedido = Number(o.amount);
+  if (libre.monto + 1e-9 >= pedido) { o.status = 'completed'; o.pendingAmount = (libre.monto - pedido).toFixed(2); }
+  else { o.status = 'underpaid'; o.pendingAmount = (pedido - libre.monto).toFixed(2); }
+}
 
 const avisos: string[] = [];
 
@@ -397,18 +430,39 @@ async function main() {
   ok(crearU?.body?.currency === 'USDT', 'la orden se crea con currency USDT', crearU?.body);
   ok(!!(await leer(pu.id)).pagoExpiraEn, 'USDT no trae vencimiento: le ponemos uno');
   const su = (await leer(pu.id)).pagoSesionId!;
-  await verificarPagoPedido(ds, pu.id);
-  ok(tronLlamadas.includes(su), 'la consulta llama a la verificación de Tron (así IC detecta el pago)');
-  ok((await leer(pu.id)).estadoPago === EstadoPagoOnline.PENDIENTE, 'sin pago → pendiente');
-  ordenes.get(su)!.status = 'underpaid'; ordenes.get(su)!.totalAmount = '1.50'; ordenes.get(su)!.pendingAmount = '0.50';
+  reglaIc = true;
+  const consulta = async (id: number) => { olvidarPanoramaTron(); await repo.update({ id }, { pagoUltimaConsulta: null } as any); return verificarPagoPedido(ds, id); };
+  await consulta(pu.id);
+  ok(!tronLlamadas.includes(su) && (await leer(pu.id)).estadoPago === EstadoPagoOnline.PENDIENTE, 'sin pago en la cadena → no se pide la verificación de Tron, sigue pendiente');
+  pagarCadena(2.30);
+  const vu = await consulta(pu.id);
+  ok(tronLlamadas.includes(su), 'con un pago en la cadena y una sola orden pendiente → se pide la verificación');
+  ok(vu.estadoPago === EstadoPagoOnline.PAGADO && /de más: 0\.30/.test((await leer(pu.id)).pagoDetalle || ''), 'pagó de más (única orden) → PAGADO con el excedente anotado', (await leer(pu.id)).pagoDetalle);
+
+  console.log('USDT: varias órdenes pendientes a la vez (la regla real de IC)');
+  const crearUsdt = async (total: number) => { const x = await nuevo(total); await repo.update({ id: x.id }, { formaPagoOnlineId: fUs.id } as any); await iniciarPagoPedido(ds, x.id); return x; };
+  const qa = await crearUsdt(12700), qb = await crearUsdt(19050), qc = await crearUsdt(25400); // 2.00, 3.00, 4.00
+  pagarCadena(2.00); pagarCadena(3.00); pagarCadena(4.00);
+  // El job las consulta de la más vieja a la más nueva (el orden que mezclaba los pagos en staging).
+  for (let vuelta = 0; vuelta < 3; vuelta++) for (const x of [qa, qb, qc]) await consulta(x.id);
+  const est = async (x: any) => (await leer(x.id)).estadoPago;
+  ok(await est(qa) === EstadoPagoOnline.PAGADO && await est(qb) === EstadoPagoOnline.PAGADO && await est(qc) === EstadoPagoOnline.PAGADO,
+    'tres órdenes y tres pagos simultáneos → cada pago en su orden, las tres PAGADO', [await est(qa), await est(qb), await est(qc)]);
+  ok(cadena.slice(-3).every((t) => { const o = ordenes.get(t.orden || ''); return o && Math.abs(Number(o.amount) - t.monto) < 0.001; }), 'IC asignó cada transferencia a la orden de su monto');
+  const qd = await crearUsdt(31750), qe = await crearUsdt(38100); // 5.00 y 6.00
+  pagarCadena(4.50); // nadie pidió 4.50
   avisos.length = 0;
-  await repo.update({ id: pu.id }, { pagoUltimaConsulta: null } as any);
-  await verificarPagoPedido(ds, pu.id);
-  ok((await leer(pu.id)).estadoPago === EstadoPagoOnline.PENDIENTE && avisos.some((a) => /incompleto/.test(a) && /1\.50/.test(a)), 'pagó de menos → no se da por pagado y avisa cuánto pagó', avisos);
-  ordenes.get(su)!.status = 'completed'; ordenes.get(su)!.totalAmount = '2.30'; ordenes.get(su)!.pendingAmount = '0.30';
-  await repo.update({ id: pu.id }, { pagoUltimaConsulta: null } as any);
-  const vu = await verificarPagoPedido(ds, pu.id);
-  ok(vu.estadoPago === EstadoPagoOnline.PAGADO && /de más: 0\.30/.test((await leer(pu.id)).pagoDetalle || ''), 'pagó de más → PAGADO, con el excedente anotado', (await leer(pu.id)).pagoDetalle);
+  await consulta(qd.id); await consulta(qe.id);
+  ok(await est(qd) === EstadoPagoOnline.PENDIENTE && await est(qe) === EstadoPagoOnline.PENDIENTE && !cadena[cadena.length - 1].orden,
+    'un pago que no coincide con ninguna (varias pendientes) → no se le asigna a nadie');
+  ok(avisos.some((t) => /no coincide con ninguna orden pendiente/.test(t)), 'y el personal recibe el aviso', avisos);
+  trongridCaido = true;
+  const tronAntesCaida = tronLlamadas.length;
+  await consulta(qe.id);
+  ok(tronLlamadas.length === tronAntesCaida, 'sin poder mirar la cadena no se pide la verificación (no se arriesga el pago de otra orden)');
+  trongridCaido = false;
+  reglaIc = false;
+
   // Un pedido de antes (en reales) de una cuenta que después pasó a USDT: no se pide Tron.
   const pb = await nuevo(6350);
   await repo.update({ id: pb.id }, { formaPagoOnlineId: fIc1.id } as any);

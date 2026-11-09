@@ -22,6 +22,7 @@ import { TiendaOnlineConfig } from '../../../../src/app/database/entities/pedido
 import { ResultadoPago } from '../interpretar-pago';
 import { valoresCompletos } from './config-proveedor';
 import { IcpayConfig, icpayLlamar, normalizarApiKey, normalizarBaseIcpay } from './icpay-auth';
+import { decidirVerificacionTron, invalidarPanoramaTron } from './icpay-tron';
 import { CuentaPago, ProveedorError, ProveedorPagoOnline } from './tipos';
 
 export const PROVEEDOR_ICPAY = 'ICPAY';
@@ -187,13 +188,31 @@ const proveedor: ProveedorPagoOnline<IcpayConfig> = {
     // no tiene que pedir la verificación de Tron sobre órdenes en reales (IC le asignaría un pago).
     let o: any = null;
     const monedaIntento = String(cobro.datos?.qr?.moneda || '').toUpperCase();
+    let aviso: string | null = null;
     if (monedaIntento === 'USDT') {
+      // Solo si el último pago sin orden es de ESTA orden (ver icpay-tron.ts): IC le asigna a la orden
+      // verificada el pago más reciente sin mirar el monto.
+      const usdIntento = montoIcpay(cobro.datos?.usd);
+      const wallet = String(cobro.datos?.qr?.payload || '');
       try {
-        const t = await icpayLlamar(creds, ctx.fetch, 'POST', `/api/v1/payment/webhook/${encodeURIComponent(cobro.sesionId)}/tron`);
-        if (t.status >= 200 && t.status < 300 && t.body?.id) o = t.body;
-      } catch { /* si falla, se consulta la orden igual */ }
+        const d = await decidirVerificacionTron(creds, ctx.fetch, wallet, cobro.sesionId, usdIntento);
+        if (d.verificar) {
+          const t = await icpayLlamar(creds, ctx.fetch, 'POST', `/api/v1/payment/webhook/${encodeURIComponent(cobro.sesionId)}/tron`);
+          invalidarPanoramaTron(creds);
+          if (t.status >= 200 && t.status < 300 && t.body?.id) o = t.body;
+        } else if (d.verificar === false && d.bloqueado) {
+          aviso = d.motivo;
+        }
+      } catch (e: any) {
+        // Sin mirar la cadena no se pide la verificación (podría llevarse el pago de otra orden).
+        aviso = null;
+      }
     }
     if (!o) o = jsonDe(await icpayLlamar(creds, ctx.fetch, 'GET', `/api/v1/payment/order/${encodeURIComponent(cobro.sesionId)}`), 'consultar la orden');
+    // Un pago que no es de ninguna orden pendiente traba la cola (no se asigna a nadie): se avisa.
+    if (aviso && String(o?.status) === 'pending') {
+      return { resultado: { tipo: 'INCONSISTENTE', paymentId: null, detalle: aviso }, crudo: { status: o.status, id: o.id, bloqueoTron: aviso } };
+    }
     const usd = cobro.datos?.usd != null ? montoIcpay(cobro.datos.usd) : null;
     const resultado = interpretarOrdenIcpay(o, {
       sesionId: cobro.sesionId, usd: usd != null && !isNaN(usd) ? usd : null, ahora: cobro.ahora ?? new Date(),
