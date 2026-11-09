@@ -183,8 +183,11 @@ const proveedor: ProveedorPagoOnline<IcpayConfig> = {
 
   async consultar(creds, cobro, ctx) {
     // USDT: la verificación de Tron es la que hace que IC detecte el pago (y devuelve la orden).
+    // Solo si ESTE intento se cobró en USDT (lo dice su `datos`): una cuenta que pasó de BRL a USDT
+    // no tiene que pedir la verificación de Tron sobre órdenes en reales (IC le asignaría un pago).
     let o: any = null;
-    if (creds.moneda === 'USDT') {
+    const monedaIntento = String(cobro.datos?.qr?.moneda || '').toUpperCase();
+    if (monedaIntento === 'USDT') {
       try {
         const t = await icpayLlamar(creds, ctx.fetch, 'POST', `/api/v1/payment/webhook/${encodeURIComponent(cobro.sesionId)}/tron`);
         if (t.status >= 200 && t.status < 300 && t.body?.id) o = t.body;
@@ -194,7 +197,7 @@ const proveedor: ProveedorPagoOnline<IcpayConfig> = {
     const usd = cobro.datos?.usd != null ? montoIcpay(cobro.datos.usd) : null;
     const resultado = interpretarOrdenIcpay(o, {
       sesionId: cobro.sesionId, usd: usd != null && !isNaN(usd) ? usd : null, ahora: cobro.ahora ?? new Date(),
-      expiraEn: cobro.expiraEn ?? null, moneda: cobro.datos?.qr?.moneda || creds.moneda,
+      expiraEn: cobro.expiraEn ?? null, moneda: monedaIntento || 'BRL',
     });
     // El servicio guarda en el pedido el monto en guaraníes: el del pedido.
     if (resultado.tipo === 'PAGADO') resultado.monto = cobro.monto;

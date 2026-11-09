@@ -409,6 +409,16 @@ async function main() {
   await repo.update({ id: pu.id }, { pagoUltimaConsulta: null } as any);
   const vu = await verificarPagoPedido(ds, pu.id);
   ok(vu.estadoPago === EstadoPagoOnline.PAGADO && /de más: 0\.30/.test((await leer(pu.id)).pagoDetalle || ''), 'pagó de más → PAGADO, con el excedente anotado', (await leer(pu.id)).pagoDetalle);
+  // Un pedido de antes (en reales) de una cuenta que después pasó a USDT: no se pide Tron.
+  const pb = await nuevo(6350);
+  await repo.update({ id: pb.id }, { formaPagoOnlineId: fIc1.id } as any);
+  await iniciarPagoPedido(ds, pb.id);
+  await formaRepo.update({ id: fIc1.id }, { configJson: JSON.stringify({ baseUrl: BASE, email: EMAIL, moneda: 'USDT' }) } as any);
+  const tronAntes = tronLlamadas.length;
+  await repo.update({ id: pb.id }, { pagoUltimaConsulta: null } as any);
+  await verificarPagoPedido(ds, pb.id);
+  ok(tronLlamadas.length === tronAntes, 'pedido cobrado en reales: aunque la cuenta pase a USDT, no se pide la verificación de Tron');
+  await formaRepo.update({ id: fIc1.id }, { configJson: JSON.stringify({ baseUrl: BASE, email: EMAIL }) } as any);
   ok(interpretarOrdenIcpay({ id: 'o1', status: 'completed', currency: 'USDT', amount: '1.00' }, { sesionId: 'o1', usd: 1, ahora: new Date() }).tipo === 'INCONSISTENTE',
     'una cuenta en reales nunca da por pagada una orden en USDT');
 
