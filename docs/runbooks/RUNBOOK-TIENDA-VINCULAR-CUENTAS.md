@@ -101,7 +101,7 @@ Una cuenta vinculada puede pagar sus pedidos **«A cuenta»** si se cumplen toda
 - la cuenta tiene identidad verificada: teléfono por código de WhatsApp o correo verificado
   (Google). Un teléfono de contacto solo **no** alcanza;
 - le alcanza el **disponible** = límite de crédito − saldo − pedidos a cuenta todavía sin aceptar.
-  Límite 0 = sin tope. En la web el límite es duro (el cliente no puede forzarlo).
+  Límite 0 = sin crédito (en la web y en el PdV, desde 2026-11-09). El límite es duro: no se puede forzar.
 
 Qué pasa con el pedido:
 - **Al aceptarlo** nace la deuda, en la misma operación que crea la venta: cuenta por cobrar de

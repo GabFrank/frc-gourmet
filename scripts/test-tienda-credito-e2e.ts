@@ -3,7 +3,7 @@
  *
  *  [1] quién puede: interruptor de la tienda, cuenta vinculada, cliente con crédito, identidad
  *      verificada; lo que mande el storefront no alcanza
- *  [2] disponible: límite − saldo − pedidos a cuenta sin aceptar; límite duro; sin tope con 0;
+ *  [2] disponible: límite − saldo − pedidos a cuenta sin aceptar; límite duro; límite 0 = sin crédito;
  *      dos pedidos simultáneos no gastan el mismo crédito
  *  [3] al aceptar nace la deuda: venta saldada con CREDITO, CPC de 1 cuota a fin de mes,
  *      MovimientoCliente CARGO, saldo; no se cobra dos veces a crédito
@@ -214,10 +214,14 @@ async function main() {
   const dos: any[] = await Promise.all([pedirSinReset(), pedirSinReset()]);
   ok(dos.filter((r) => r?.success).length === 1 && dos.some((r) => r?.error === 'credito_insuficiente'), '2: dos pedidos simultáneos no gastan el mismo crédito', dos);
 
-  const rico = await cliente('RICO', { credito: true, limite_credito: 0 });
+  // Límite 0 = sin crédito (decisión 2026-11-09, web y PdV).
+  const cero = await cliente('CERO', { credito: true, limite_credito: 0 });
+  const cCero = await cuentaVinculada(cero);
+  ok((await me(cCero)) == null, '2: límite 0 = sin crédito (no se ofrece «A cuenta»)', await me(cCero));
+  ok((await pedir(cCero, 1))?.error === 'credito_no_habilitado', '2: con límite 0 no se puede pedir a cuenta');
+  const rico = await cliente('RICO', { credito: true, limite_credito: 10000000 });
   const cRico = await cuentaVinculada(rico);
-  ok((await me(cRico))?.sinTope === true, '2: límite 0 = sin tope', await me(cRico));
-  ok((await pedir(cRico, 5))?.success === true, '2: sin tope pide lo que quiera');
+  ok((await pedir(cRico, 5))?.success === true, '2: con un límite grande pide lo que alcanza');
 
   // ═══════ [3] La deuda nace al aceptar ═══════
   console.log('\n[3] Al aceptar nace la deuda');
@@ -281,8 +285,17 @@ async function main() {
   // Venta común del PdV a crédito para el mismo cliente: el pedido web sin aceptar ya reserva 45.000.
   const { Venta: V } = { Venta };
   const vPdv = await save(V, { estado: 'ABIERTA', caja: { id: caja.id }, cliente: { id: sol.id } });
-  const aviso: any = await invokeHandler('cobrar-venta-credito', { ventaId: vPdv.id, clienteId: sol.id, montoTotal: 10000, monedaId: gs.id, cantidadCuotas: 1 });
-  ok(aviso?.requiereConfirmacion === true && /pedidos web a cuenta/.test(aviso?.message || ''), '4b: la venta a crédito del PdV cuenta lo reservado por la web', aviso);
+  const aviso: any = await invokeHandler('cobrar-venta-credito', { ventaId: vPdv.id, clienteId: sol.id, montoTotal: 10000, monedaId: gs.id, cantidadCuotas: 1 })
+    .catch((e: any) => ({ error: String(e?.message || e) }));
+  ok(/No alcanza el crédito/.test(aviso?.error || '') && /pedidos web a cuenta/.test(aviso?.error || ''), '4b: la venta a crédito del PdV cuenta lo reservado por la web y se bloquea', aviso);
+  const forzada: any = await invokeHandler('cobrar-venta-credito', { ventaId: vPdv.id, clienteId: sol.id, montoTotal: 10000, monedaId: gs.id, cantidadCuotas: 1, forzar: true })
+    .catch((e: any) => ({ error: String(e?.message || e) }));
+  ok(/No alcanza el crédito/.test(forzada?.error || ''), '4b: pasarse del límite ya no se puede «forzar»', forzada);
+  const sinLim = await cliente('SINLIMITE', { credito: true, limite_credito: 0 });
+  const vSin = await save(V, { estado: 'ABIERTA', caja: { id: caja.id }, cliente: { id: sinLim.id } });
+  const rSin: any = await invokeHandler('cobrar-venta-credito', { ventaId: vSin.id, clienteId: sinLim.id, montoTotal: 1000, monedaId: gs.id, cantidadCuotas: 1 })
+    .catch((e: any) => ({ error: String(e?.message || e) }));
+  ok(/no tiene límite de crédito/.test(rSin?.error || ''), '4b: en el PdV, límite 0 = sin crédito', rSin);
   const ac2: any = await invokeHandler('aceptar-pedido-online', (await fila(pSol.numero)).id, { cajaId: caja.id });
   ok(ac2?.success === true && !!(await fila(pSol.numero)).ventaId && await saldo(sol) === 45000, '4b: con crédito, se acepta y nace la deuda', ac2);
   const fdmUtc = finDeMes(new Date('2026-12-01T01:00:00Z'));

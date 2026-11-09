@@ -892,22 +892,20 @@ export function registerCuentasPorCobrarHandlers(
       const montoTotal = Number(data.montoTotal);
       if (!montoTotal || montoTotal <= 0) throw new Error('El monto debe ser mayor a cero');
 
-      // Validar límite de crédito (warning si excede, salvo que se fuerce)
+      // Límite de crédito (decisión 2026-11-09): se respeta siempre. Sin límite cargado no hay
+      // crédito, y pasarse no se puede aprobar «igual» (antes avisaba y se forzaba).
       const limite = Number(cliente.limite_credito) || 0;
       const saldoAct = Number(cliente.saldoActual) || 0;
+      if (limite <= 0) {
+        throw new Error('El cliente no tiene límite de crédito: cargale un límite en su ficha para vender a crédito.');
+      }
       // F8b: los pedidos web a cuenta todavía sin aceptar ya comprometieron parte del límite.
       const reservadoTienda = await reservadoWeb(queryRunner.manager, cliente.id);
       const saldoFinal = saldoAct + reservadoTienda + montoTotal;
-      if (limite > 0 && saldoFinal > limite && !data.forzar) {
-        return {
-          success: false,
-          requiereConfirmacion: true,
-          message: `El saldo proyectado (${saldoFinal.toFixed(2)}) excede el límite de crédito (${limite.toFixed(2)})`
-            + (reservadoTienda > 0 ? ` (incluye ${reservadoTienda.toFixed(2)} de pedidos web a cuenta sin aceptar)` : ''),
-          saldoActual: saldoAct,
-          saldoProyectado: saldoFinal,
-          limite,
-        };
+      if (saldoFinal > limite + 0.005) {
+        throw new Error(`No alcanza el crédito: el saldo quedaría en ${saldoFinal.toFixed(0)} y el límite es ${limite.toFixed(0)}`
+          + (reservadoTienda > 0 ? ` (incluye ${reservadoTienda.toFixed(0)} de pedidos web a cuenta sin aceptar)` : '')
+          + `. Disponible: ${Math.max(0, limite - saldoAct - reservadoTienda).toFixed(0)}.`);
       }
 
       // Get-or-create FormaPago "CREDITO" (la venta a crédito se registra con

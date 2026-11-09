@@ -107,6 +107,7 @@
           <input matInput type="text" formControlName="limite_credito"
                  appCurrencyInput [decimals]="0">
           <span matSuffix *ngIf="monedaPrincipal" class="suffix">{{ monedaPrincipal.simbolo }}</span>
+          <mat-hint>Con límite 0 no puede comprar a crédito (PdV ni tienda online).</mat-hint>
         </mat-form-field>
 
         <mat-form-field appearance="outline" *ngIf="isEditing">

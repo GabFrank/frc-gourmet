@@ -23,7 +23,7 @@ la copia: pedido a cuenta, aceptado (CPC ₲ 20.000 vence 30/11, saldo ₲ 20.00
   cualquier saldo; si baja, la deuda queda mayor que la venta y hay que ajustarla a mano en la
   cuenta del cliente. Propuesta: bloquear la edición de una venta con deuda web, o resincronizar
   la CPC. Decisión del propietario.
-- **Límite 0 = sin tope**, igual que en el PdV. Si en la web se quiere exigir un límite, se cambia
+- **Límite 0 = sin crédito** (RESUELTO 2026-11-09, web y PdV; el PdV ya no deja «forzar» pasarse). Antes: se cambia
   esa regla.
 
 ## Por qué
@@ -75,7 +75,7 @@ el teléfono de otro y comprar a su nombre.
   le alcanza el disponible. `pub-cliente-me` devuelve `credito: { disponible, limite }` (sin el
   saldo detallado). Invitados y MESA_QR no lo ven.
 - **Disponible** = `limite_credito − saldo_actual − pedidos web A_CUENTA todavía no cobrados`.
-  Límite 0 = sin tope, igual que en el PdV.
+  Límite 0 = sin crédito, igual que en el PdV (decisión 2026-11-09).
 - `pedido.crear` lo vuelve a validar en el servidor, bajo lock del cliente: en la web el límite es
   **duro** (el cliente no puede «forzar»). Error `credito_insuficiente` / `credito_no_habilitado`.
 - **Cuándo nace la cuenta por cobrar — decisión del propietario (ver abajo).**

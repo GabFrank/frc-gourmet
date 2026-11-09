@@ -96,7 +96,8 @@ export async function estadoCreditoCliente(m: EntityManager, cliente: Cliente | 
   if (!cliente.activo) return { habilitado: false, disponible: 0, limite: 0, motivo: 'cliente_inactivo' };
   if (!cliente.credito) return { habilitado: false, disponible: 0, limite: 0, motivo: 'sin_credito' };
   const limite = Number(cliente.limite_credito) || 0;
-  if (limite <= 0) return { habilitado: true, disponible: null, limite: 0 };
+  // Límite 0 = sin crédito (decisión 2026-11-09: el tope se respeta en la web y en el PdV).
+  if (limite <= 0) return { habilitado: false, disponible: 0, limite: 0, motivo: 'sin_limite' };
   const saldo = Number(cliente.saldoActual) || 0;
   const reservado = await reservadoWeb(m, cliente.id, excluirPedidoId);
   return { habilitado: true, disponible: Math.max(0, Math.round((limite - saldo - reservado) * 100) / 100), limite };
