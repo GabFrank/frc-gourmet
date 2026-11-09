@@ -26,6 +26,8 @@ export const PROVEEDOR_ICPAY = 'ICPAY';
 const GRACIA_VENCIMIENTO_MS = 15 * 60_000;
 /** Diferencia tolerada entre el USD pedido y el que informa IC (redondeo a centavos). */
 const TOLERANCIA_USD = 0.005;
+/** Cuántas veces se sube un centavo si IC devuelve una orden de otro pedido. */
+const MAX_AJUSTES_MONTO = 10;
 
 /** «5.64», «541,24», 5.64 → número; NaN si no se entiende. */
 export function montoIcpay(v: any): number {
@@ -121,10 +123,23 @@ const proveedor: ProveedorPagoOnline<IcpayConfig> = {
     const usd = usdDesdeGuaranies(input.monto, pygPorUsd);
     if (!(usd >= 0.01)) throw new ProveedorError('icpay_cotizacion', `cotización de IC inválida (${q?.data?.baseExchangeRate ?? 'sin tasa'})`);
 
-    const o = jsonDe(
-      await icpayLlamar(creds, ctx.fetch, 'POST', '/api/v1/payment/order', { amount: usd.toFixed(2), currency: 'BRL' }, { 'Idempotency-Key': input.idempotencyKey }),
-      'crear la orden',
-    );
+    // IC trata dos órdenes del mismo monto como la misma (responde la existente aunque la
+    // Idempotency-Key sea otra, 2026-11-09). Si la que devuelve ya es de otro pedido, se pide con un
+    // centavo de dólar más, hasta conseguir una propia. Sin esto, dos clientes con el mismo total
+    // compartirían el QR.
+    let usdFinal = usd;
+    let o: any = null;
+    for (let i = 0; i < MAX_AJUSTES_MONTO; i++) {
+      o = jsonDe(
+        await icpayLlamar(creds, ctx.fetch, 'POST', '/api/v1/payment/order', { amount: usdFinal.toFixed(2), currency: 'BRL' },
+          { 'Idempotency-Key': i ? `${input.idempotencyKey}:${i}` : input.idempotencyKey }),
+        'crear la orden',
+      );
+      if (!o?.id || !ctx.sesionUsada || !(await ctx.sesionUsada(String(o.id)))) break;
+      o = null;
+      usdFinal = Math.round((usdFinal + 0.01) * 100) / 100;
+    }
+    if (!o) throw new ProveedorError('icpay_orden_repetida', `IC devolvió órdenes de otros pedidos ${MAX_AJUSTES_MONTO} veces`);
     const payload = String(o?.qrData?.payload ?? '');
     if (!o?.id || !payload) throw new ProveedorError('icpay_error', 'IC creó la orden sin QR');
     const expira = o.qrData?.expiresAt ? new Date(o.qrData.expiresAt) : null;
@@ -134,8 +149,8 @@ const proveedor: ProveedorPagoOnline<IcpayConfig> = {
       sesionId: String(o.id),
       qr,
       expiraEn: expira,
-      datos: { qr, usd: usd.toFixed(2), pygPorUsd, cotizacionBrl: o.quote ?? null },
-      crudo: { status: o.status, id: o.id, amount: o.amount, totalAmount: o.totalAmount, quote: o.quote, pygPorUsd, expiresAt: o.qrData?.expiresAt ?? null },
+      datos: { qr, usd: usdFinal.toFixed(2), pygPorUsd, cotizacionBrl: o.quote ?? null, ...(usdFinal !== usd ? { usdCalculado: usd.toFixed(2) } : {}) },
+      crudo: { status: o.status, id: o.id, amount: o.amount, totalAmount: o.totalAmount, quote: o.quote, pygPorUsd, expiresAt: o.qrData?.expiresAt ?? null, ...(usdFinal !== usd ? { usdCalculado: usd.toFixed(2) } : {}) },
     };
   },
 

@@ -15,6 +15,11 @@ export type FetchLike = (url: string, init?: any) => Promise<{ status: number; t
 /** Lo que el servicio le pasa al proveedor en cada llamada (inyectable en tests). */
 export interface ContextoProveedor {
   fetch: FetchLike;
+  /**
+   * ¿Esta sesión del proveedor ya la tiene OTRO pedido? IC Pay devuelve la misma orden a dos pedidos
+   * del mismo monto (aunque la Idempotency-Key sea distinta): el proveedor tiene que pedir otra.
+   */
+  sesionUsada?: (sesionId: string) => Promise<boolean>;
 }
 
 /** Error con un código que se devuelve tal cual al llamador (`upay_credenciales`, `bancard_error`…). */

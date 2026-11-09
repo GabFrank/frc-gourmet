@@ -50,6 +50,7 @@ let n = 0;
 let desafio: string | null = null;
 let cotizacionMala = false;
 let expiresIn = 3600;
+let repetirPorMonto = false;
 const fakeFetch = async (url: string, init: any = {}) => {
   const res = (status: number, b: any) => ({ status, text: async () => JSON.stringify(b) });
   const u = new URL(url);
@@ -84,6 +85,9 @@ const fakeFetch = async (url: string, init: any = {}) => {
     const idem = h['Idempotency-Key'];
     const prev = idem ? porIdem.get(idem) : null;
     if (prev) return prev.body === init.body ? res(201, vista(prev)) : res(422, { message: 'Idempotency-Key reused with a different body' });
+    // Como el IC real (2026-11-09): una orden pendiente del mismo monto se devuelve otra vez.
+    const mismaMonto = repetirPorMonto ? [...ordenes.values()].find((o) => o.status === 'pending' && o.body === init.body) : null;
+    if (mismaMonto) return res(201, vista(mismaMonto));
     const amount = String(body?.amount);
     const o: Orden = {
       id: `ord-${++n}`, amount, currency: body.currency, totalAmount: (Math.round(Number(amount) * BRL_POR_USD * 100) / 100).toFixed(2),
@@ -256,6 +260,22 @@ async function main() {
   await repo.update({ id: p2.id }, { pagoSesionId: null, pagoCheckoutUrl: null } as any);
   await iniciarPagoPedido(ds, p2.id);
   ok(ordenes.size === before + 1 && (await leer(p2.id)).pagoSesionId === s2, 'misma Idempotency-Key → IC devuelve la misma orden, no cobra dos veces');
+
+  console.log('IC repite la orden de otro pedido del mismo monto');
+  repetirPorMonto = true;
+  const pr1 = await nuevo(7777);
+  const pr2 = await nuevo(7777);
+  await iniciarPagoPedido(ds, pr1.id);
+  const ir2: any = await iniciarPagoPedido(ds, pr2.id);
+  const sr1 = (await leer(pr1.id)).pagoSesionId, sr2 = (await leer(pr2.id)).pagoSesionId;
+  const d2 = await datosDe(pr2.id);
+  ok(ir2.success && sr1 && sr2 && sr1 !== sr2, 'dos pedidos del mismo total → órdenes de IC distintas', { sr1, sr2 });
+  ok(d2?.usd === (usdDesdeGuaranies(7777, PYG_POR_USD) + 0.01).toFixed(2) && d2?.usdCalculado === usdDesdeGuaranies(7777, PYG_POR_USD).toFixed(2),
+    'la segunda se pide con un centavo de dólar más y se anota el monto calculado', d2);
+  ordenes.get(sr2!)!.status = "completed";
+  ok((await verificarPagoPedido(ds, pr2.id)).estadoPago === EstadoPagoOnline.PAGADO && (await verificarPagoPedido(ds, pr1.id)).estadoPago === EstadoPagoOnline.PENDIENTE,
+    'pagar el QR del segundo confirma solo el segundo');
+  repetirPorMonto = false;
 
   console.log('Errores al crear');
   cotizacionMala = true;

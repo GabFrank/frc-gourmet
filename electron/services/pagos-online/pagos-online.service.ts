@@ -248,6 +248,10 @@ export async function iniciarPagoPedido(
   // F5 (M-pay3): la URL pública de vuelta se puede cambiar por entorno (otro dominio o una
   // instalación de prueba); solo https.
   const vuelta = `${urlPublicaTienda(opts.urlPublica)}/tienda/pago/${encodeURIComponent(p.numero)}`;
+  // Una sesión que ya es de otro pedido no se puede reusar (IC Pay repite órdenes del mismo monto).
+  const sesionUsada = async (sesionId: string) => !!(await repo.createQueryBuilder('o')
+    .where('o.pago_sesion_id = :s AND o.pago_proveedor = :pv AND o.id <> :id', { s: sesionId, pv: prov.id, id: p.id })
+    .getCount());
   try {
     const r = await prov.iniciar(creds, {
       referencia: referencia(p),
@@ -264,7 +268,7 @@ export async function iniciarPagoPedido(
         })),
         ...(Number(p.costoEnvio) > 0 ? [{ name: 'Envío', quantity: 1, unitPrice: Number(p.costoEnvio) }] : []),
       ],
-    }, ctx());
+    }, { ...ctx(), sesionUsada });
     // Con formulario (Bancard) no hay URL a la que redirigir: se guarda el `process_id`. Con QR
     // (IC Pay), la marca `qr:<sesión>`; el QR mismo va en `pago_datos_json`.
     const urlGuardada = r.tipo === 'REDIRECCION' ? r.url : r.tipo === 'FORMULARIO' ? r.procesoId : `qr:${r.sesionId}`;
