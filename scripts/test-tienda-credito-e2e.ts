@@ -313,6 +313,47 @@ async function main() {
   ok(await saldo(juan) === 45000, '5: recalcular el saldo desde los movimientos da lo mismo', { rec, s: await saldo(juan) });
   ok((await me(cJuan))?.disponible === 55000, '5: el disponible vuelve', await me(cJuan));
 
+  // ═══════ [6] Editar la venta a cuenta (decisión 2026-11-09: la deuda sigue al total) ═══════
+  console.log('\n[6] Editar la venta después de aceptar');
+  const { VentaItem } = E('ventas/venta-item.entity');
+  const edu = await cliente('EDU', { credito: true, limite_credito: 100000 });
+  const cEdu = await cuentaVinculada(edu);
+  const pe: any = await pedir(cEdu);
+  const ve = (await aceptar(pe.numero)).ventaId;
+  const itemE: any = await R(VentaItem).findOne({ where: { venta: { id: ve } } });
+  const cpcE = async () => R(CuentaPorCobrar).findOne({ where: { ventaId: ve }, order: { id: 'DESC' } }) as Promise<any>;
+  const cuotaE = async () => Number(((await R(CuentaPorCobrarCuota).findOne({ where: { cuentaPorCobrar: { id: (await cpcE()).id } } })) as any).monto);
+  const lineaE = async () => R(PagoDetalle).findOne({ where: { pago: { id: (await R(Venta).findOne({ where: { id: ve }, relations: ['pago'] }) as any).pago.id } }, relations: ['formaPago'] }) as Promise<any>;
+  ok(await saldo(edu) === 45000, '6: aceptado, deuda 45.000');
+  await invokeHandler('updateVentaItem', itemE.id, { cantidad: 2 });
+  ok(Number((await cpcE()).montoTotal) === 90000 && await cuotaE() === 90000 && Number((await lineaE()).valor) === 90000 && await saldo(edu) === 90000,
+    '6: dos unidades → la deuda, la cuota, el pago CREDITO y el saldo pasan a 90.000', { cpc: (await cpcE()).montoTotal, s: await saldo(edu) });
+  const ajP: any[] = await R(MovimientoCliente).find({ where: { cliente: { id: edu.id }, tipo: 'AJUSTE_POSITIVO' } });
+  ok(ajP.length === 1 && Number(ajP[0].monto) === 45000 && ajP[0].ventaId === ve, '6: con un movimiento de ajuste por la diferencia', ajP);
+  await invokeHandler('updateVentaItem', itemE.id, { cantidad: 3 });
+  ok(Number((await cpcE()).montoTotal) === 100000 && await saldo(edu) === 100000, '6: tres unidades (135.000) → la deuda sube solo hasta el límite (100.000); el resto se cobra al entregar', (await cpcE()).montoTotal);
+  await invokeHandler('updateVentaItem', itemE.id, { cantidad: 1, descuentoUnitario: 5000 });
+  ok(Number((await cpcE()).montoTotal) === 40000 && await cuotaE() === 40000 && await saldo(edu) === 40000, '6: vuelve a una unidad con descuento → la deuda baja a 40.000', (await cpcE()).montoTotal);
+  await invokeHandler('recalcular-saldo-cliente', edu.id);
+  ok(await saldo(edu) === 40000, '6: recalcular el saldo desde los movimientos da lo mismo', await saldo(edu));
+  await invokeHandler('updateVentaItem', itemE.id, { cantidad: 1, descuentoUnitario: 5000 });
+  ok((await R(MovimientoCliente).count({ where: { cliente: { id: edu.id } } })) === 4, '6: sin cambio de total no se escribe nada (CARGO + 3 ajustes)');
+  await invokeHandler('updateVentaItem', itemE.id, { estado: 'CANCELADO' });
+  const cpcCero: any = await cpcE();
+  ok(cpcCero.estado === 'CANCELADO' && await saldo(edu) === 0 && (await lineaE()).activo === false, '6: sin ítems activos → la deuda se cancela, el pago CREDITO se da de baja y el saldo vuelve a 0', { e: cpcCero.estado, s: await saldo(edu) });
+  await invokeHandler('recalcular-saldo-cliente', edu.id);
+  ok(await saldo(edu) === 0, '6: y el saldo recalculado también da 0');
+
+  const pf: any = await pedir(cEdu);
+  const vf = (await aceptar(pf.numero)).ventaId;
+  const itemF: any = await R(VentaItem).findOne({ where: { venta: { id: vf } } });
+  await R(CuentaPorCobrar).update({ ventaId: vf } as any, { montoCobrado: 1000 } as any);
+  const bloq: any = await invokeHandler('updateVentaItem', itemF.id, { cantidad: 2 }).catch((e: any) => ({ error: String(e?.message || e) }));
+  ok(/VENTA_A_CUENTA_CON_COBROS/.test(bloq?.error || ''), '6: con cobros en la deuda, la venta no se edita', bloq);
+  const bloqDel: any = await invokeHandler('deleteVentaItem', itemF.id).catch((e: any) => ({ error: String(e?.message || e) }));
+  ok(/VENTA_A_CUENTA_CON_COBROS/.test(bloqDel?.error || '') && !!(await R(VentaItem).findOne({ where: { id: itemF.id } })), '6: ni se borra un ítem', bloqDel);
+  ok(Number(((await R(VentaItem).findOne({ where: { id: itemF.id } })) as any).cantidad) === 1, '6: el ítem quedó como estaba');
+
   await cerrar();
   console.log(`\n${TAG} RESULTADO: ${passed} passed, ${failed} failed.`);
   process.exit(failed === 0 ? 0 : 1);

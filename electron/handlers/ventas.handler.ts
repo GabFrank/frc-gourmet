@@ -93,6 +93,7 @@ import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compra
 import { Pago } from '../../src/app/database/entities/compras/pago.entity';
 import { invalidarCacheJornada } from './dashboard-ventas.handler';
 import { ajustarSaldoCliente } from '../utils/saldo-atomico.utils';
+import { DeudaVentaError, trasEditarVenta, ventaIdDeItem, verificarEdicionVentaConDeuda } from '../utils/deuda-venta.utils';
 
 /**
  * M-04: mutex por-venta para serializar procesarStockVenta. El chequeo de
@@ -2087,6 +2088,9 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       await validarVariacionDelItem(dataSource, data);
+      // Venta a cuenta (pedido web) con cobros: no se edita. Sin cobros, la deuda sigue al total.
+      const ventaIdAlta = Number(data?.venta?.id ?? data?.ventaId) || null;
+      await verificarEdicionVentaConDeuda(dataSource, ventaIdAlta);
       const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
       const repo = dataSource.getRepository(VentaItem);
       const entity = repo.create(data);
@@ -2126,6 +2130,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       } catch (e) {
         console.warn('[createVentaItem] emit SSE falló:', e);
       }
+      await trasEditarVenta(dataSource, ventaIdAlta ?? (await ventaIdDeItem(dataSource, (saved as any).id)), getCurrentUser()?.id);
 
       return saved;
     } catch (error) {
@@ -2157,6 +2162,8 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // que exigirla igual que en el alta. Se pasa el ítem existente aparte
       // para que el chequeo mire el resultado final, no sólo lo que vino.
       await validarVariacionDelItem(dataSource, data, entity);
+      const ventaIdItem = await ventaIdDeItem(dataSource, id);
+      await verificarEdicionVentaConDeuda(dataSource, ventaIdItem);
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
@@ -2178,6 +2185,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       } catch (e) {
         console.warn('[updateVentaItem] emit SSE falló:', e);
       }
+      await trasEditarVenta(dataSource, ventaIdItem, getCurrentUser()?.id);
 
       return saved;
     } catch (error) {
@@ -2193,7 +2201,8 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(VentaItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
-      const ventaId = (entity as any).venta?.id ?? (entity as any).venta_id ?? (entity as any).ventaId;
+      const ventaId = (entity as any).venta?.id ?? (entity as any).venta_id ?? (entity as any).ventaId ?? (await ventaIdDeItem(dataSource, id));
+      await verificarEdicionVentaConDeuda(dataSource, ventaId);
       
       // KDS: borrar ComandaItems del item antes para no dejar FK huérfana.
       try {
@@ -2214,10 +2223,13 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           console.warn('[deleteVentaItem] emit SSE falló:', e);
         }
       }
+      await trasEditarVenta(dataSource, ventaId, getCurrentUser()?.id);
       
       return true;
     } catch (error) {
       console.error(`Error deleting venta item ID ${id}:`, error);
+      // La venta a cuenta con cobros se avisa (con `false` el PdV no sabría por qué no se borró).
+      if (error instanceof DeudaVentaError) throw error;
       return false;
     }
   });

@@ -18,7 +18,8 @@ la copia: pedido a cuenta, aceptado (CPC ₲ 20.000 vence 30/11, saldo ₲ 20.00
 
 ### Pendiente conocido (auditoría fase 2)
 
-- **Editar la venta después de aceptar** (agregar/quitar ítems, descuento, cambiar el envío): la
+- **Editar la venta después de aceptar** (RESUELTO 2026-11-10: la deuda sigue al total, con
+  tope y bloqueo si tiene cobros; ver `PLAN-tienda-deuda-editada.md`). Antes: (agregar/quitar ítems, descuento, cambiar el envío): la
   deuda queda por el total del pedido. Si el total sube, la diferencia se cobra al entregar como
   cualquier saldo; si baja, la deuda queda mayor que la venta y hay que ajustarla a mano en la
   cuenta del cliente. Propuesta: bloquear la edición de una venta con deuda web, o resincronizar

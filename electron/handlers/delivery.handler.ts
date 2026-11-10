@@ -49,6 +49,7 @@ import { registrarDecisionesPago } from '../services/pagos-online/pagos-online.s
 import { monedasParaResumen, resumenPago } from '../utils/pago-pedido.utils';
 import { TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { resumenPedidoWeb } from '../utils/pedido-acciones.utils';
+import { trasEditarVenta, ventaIdDeDelivery, verificarEdicionVentaConDeuda } from '../utils/deuda-venta.utils';
 /**
  * Columnas de la `Persona` del **`Funcionario`** repartidor que este canal publica.
  *
@@ -423,7 +424,10 @@ export function registerDeliveryHandlers(
     // conversión revertía la conversión en silencio y dejaba
     // `venta.costoDelivery` (que la conversión sí había cambiado) apuntando al
     // modo equivocado.
-    return await dataSource.transaction(async (manager) => {
+    // Venta a cuenta (pedido web): con cobros no se edita; si no, la deuda sigue al envío nuevo.
+    const ventaIdDeuda = await ventaIdDeDelivery(dataSource, id);
+    await verificarEdicionVentaConDeuda(dataSource, ventaIdDeuda);
+    const actualizado = await dataSource.transaction(async (manager) => {
       await lockDelivery(manager, dataSource, id);
 
       const delivery = await manager.getRepository(Delivery).findOne({
@@ -519,6 +523,8 @@ export function registerDeliveryHandlers(
 
       return guardado;
     });
+    await trasEditarVenta(dataSource, ventaIdDeuda, usuarioId);
+    return actualizado;
   });
 
   // ─── Máquina de estados ─────────────────────────────────────────────────
@@ -703,6 +709,8 @@ export function registerDeliveryHandlers(
       throw new Error(`Modo de pedido inválido: ${payload?.modo}. Usá DELIVERY o RETIRO.`);
     }
     const esRetiroDestino = modoDestino === DeliveryModo.RETIRO;
+    const ventaIdDeuda = await ventaIdDeDelivery(dataSource, id);
+    await verificarEdicionVentaConDeuda(dataSource, ventaIdDeuda);
 
     const resultado = await dataSource.transaction(async (manager) => {
       await lockDelivery(manager, dataSource, id);
@@ -853,6 +861,7 @@ export function registerDeliveryHandlers(
     if (resultado.sinCambios) {
       return { ...resultado, advertencia: null };
     }
+    await trasEditarVenta(dataSource, ventaIdDeuda, usuarioId);
 
     // La advertencia se calcula DESPUÉS del commit y con la función que ya usa
     // el diálogo de cobro (`getEstadoCobroVentaInternal`): dentro de la
