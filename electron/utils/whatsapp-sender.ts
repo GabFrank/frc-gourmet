@@ -21,6 +21,8 @@
  * Reemplazar/extender con Twilio/360dialog agregando otro `SenderImpl`.
  */
 
+import { AvisoWhatsapp, IDIOMA_PLANTILLAS_AVISO, PLANTILLAS_AVISO } from './avisos-plantillas';
+
 export interface OtpSendResult {
   ok: boolean;
   provider: 'whatsapp-cloud' | 'evolution' | 'dev-log' | 'ninguno';
@@ -217,14 +219,51 @@ export function nombreComercioWhatsapp(): string {
 }
 
 /**
- * Aviso del pedido (PLAN-tienda-avisos-whatsapp). Fase 1: solo Evolution (texto). Con Meta hace
- * falta una plantilla aprobada por aviso (fase 2): hasta entonces no sale y se informa.
+ * Aviso del pedido (PLAN-tienda-avisos-whatsapp). Evolution manda el texto; Meta, la plantilla
+ * aprobada del evento (`avisos-plantillas.ts`) con comercio, número y enlace.
  */
-export async function enviarAvisoWhatsapp(telefono: string, texto: string): Promise<OtpSendResult> {
+export async function enviarAvisoWhatsapp(telefono: string, aviso: AvisoWhatsapp): Promise<OtpSendResult> {
   const prov = proveedorWhatsappActivo();
-  if (prov === 'EVOLUTION') return enviarTextoEvolution(telefono, texto);
-  if (prov === 'META') return { ok: false, provider: 'whatsapp-cloud', detail: 'meta_sin_plantillas' };
+  if (prov === 'EVOLUTION') return enviarTextoEvolution(telefono, aviso.texto);
+  if (prov === 'META') {
+    const { token, phoneId } = credenciales();
+    return enviarPlantillaMeta(token, phoneId, numeroWhatsapp(telefono), {
+      name: PLANTILLAS_AVISO[aviso.plantilla].nombre,
+      language: { code: IDIOMA_PLANTILLAS_AVISO },
+      components: [{ type: 'body', parameters: aviso.parametros.map((text) => ({ type: 'text', text })) }],
+    });
+  }
   return { ok: false, provider: 'ninguno', detail: 'sin_proveedor' };
+}
+
+/**
+ * Manda una plantilla por WhatsApp Cloud. El detalle del error lleva el código de Meta
+ * (`#131026` número sin WhatsApp, `#132001` plantilla inexistente…) para decidir si reintentar.
+ */
+async function enviarPlantillaMeta(token: string, phoneId: string, to: string, template: any): Promise<OtpSendResult> {
+  try {
+    const res = await fetchImpl(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10000),
+      body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'template', template }),
+    });
+    if (!res.ok) {
+      const body = (await res.text().catch(() => '')).split(token).join('***');
+      let motivo = '';
+      try {
+        const err = JSON.parse(body)?.error;
+        motivo = `${err?.code ? `#${err.code} ` : ''}${String(err?.error_data?.details || err?.message || '')}`.trim().slice(0, 200);
+      } catch { motivo = ''; }
+      console.error(`[whatsapp-aviso] Meta falló (${res.status}): ${motivo}`);
+      return { ok: false, provider: 'whatsapp-cloud', detail: `HTTP ${res.status}${motivo ? ': ' + motivo : ''}` };
+    }
+    return { ok: true, provider: 'whatsapp-cloud' };
+  } catch (e: any) {
+    const msg = String(e?.message || e).split(token).join('***');
+    console.error('[whatsapp-aviso] Meta, error de red:', msg);
+    return { ok: false, provider: 'whatsapp-cloud', detail: msg.slice(0, 200) };
+  }
 }
 
 /** La app corre instalada (no `npm start`, ni el servidor espejo, ni tests). */

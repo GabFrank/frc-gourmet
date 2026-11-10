@@ -31,9 +31,17 @@ Cambios respecto del diseño, decididos al implementar:
 - **Teléfono de Google sin verificar:** no recibe avisos (la casilla no aparece) hasta la
   verificación por código (fase 2).
 
-Pendiente: fase 2 (Meta con plantillas; verificación del teléfono de contacto; «BAJA»; estado de
-los avisos en el detalle del pedido de la bandeja; aviso «cancelación pedida no aceptada») y la
-prueba real con Evolution al teléfono del personal.
+**Meta con plantillas (2026-11-10):** el aviso sale por Meta con la plantilla del evento
+(`electron/utils/avisos-plantillas.ts`, 6 plantillas UTILITY: cancelado con y sin devolución). Los
+nombres son fijos (no hay campo por evento en la config: un solo juego por cuenta). Se crean con
+`scripts/crear-plantillas-avisos-meta.ts`; creadas en la cuenta de prueba de Meta. Errores de Meta
+que no se arreglan reintentando (#131026, #131030, #132000, #132001, #132012) quedan FALLIDO al
+primer intento. La prueba real con Evolution no se hizo (decisión 07/11: no se usa el Evolution de
+Loom); se prueba con el número de prueba de Meta.
+
+Pendiente: fase 2 restante (verificación del teléfono de contacto; «BAJA»; estado de los avisos en
+el detalle del pedido de la bandeja; aviso «cancelación pedida no aceptada») y crear las plantillas
+en la cuenta real cuando Meta apruebe el número.
 
 ## Por qué
 

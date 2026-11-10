@@ -15,7 +15,7 @@ import { PedidoOnlineAviso } from '../src/app/database/entities/pedidos-online/p
 import { CuentaCliente } from '../src/app/database/entities/pedidos-online/cuenta-cliente.entity';
 import { TiendaOnlineConfig } from '../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import { EstadoPagoOnline, EstadoPedidoOnline, TipoPedidoOnline } from '../src/app/database/entities/pedidos-online/pedido-online.enums';
-import { eventoDe, fijarAppInstaladaEnPruebas, fijarRefrescoCanalEnPruebas, textoAviso, tickAvisosPedidos } from '../electron/services/avisos-pedido.service';
+import { avisoDe, eventoDe, fijarAppInstaladaEnPruebas, fijarRefrescoCanalEnPruebas, textoAviso, tickAvisosPedidos } from '../electron/services/avisos-pedido.service';
 import { setWhatsappFetch, setWhatsappOverrides } from '../electron/utils/whatsapp-sender';
 
 let pass = 0, fail = 0;
@@ -24,7 +24,7 @@ function ok(c: boolean, msg: string, extra?: any) {
 }
 
 const PRUEBA = '595982000111';
-interface Envio { numero: string; texto: string }
+interface Envio { numero: string; texto: string; url?: string; plantilla?: any }
 const envios: Envio[] = [];
 let respuesta: { status: number; body: any } = { status: 201, body: { key: { id: 'x' } } };
 
@@ -44,7 +44,8 @@ async function main() {
   setWhatsappOverrides({ proveedor: 'EVOLUTION', evolutionUrl: 'https://evo.ejemplo', evolutionInstancia: 'frc', evolutionApiKey: 'k-secreta', nombreComercio: 'X' });
   setWhatsappFetch(async (_url: string, init: any) => {
     const b = JSON.parse(init.body);
-    envios.push({ numero: b.number, texto: b.text });
+    // Evolution manda { number, text }; Meta, { to, template }.
+    envios.push({ numero: b.number ?? b.to, texto: b.text ?? '', url: _url, plantilla: b.template });
     return { ok: respuesta.status < 300, status: respuesta.status, text: async () => JSON.stringify(respuesta.body) };
   });
   fijarAppInstaladaEnPruebas(false);
@@ -177,11 +178,30 @@ async function main() {
   await tick();
   ok(enviadosHora >= 10 && (await de(r5))[0].estado === 'DESCARTADO' && /tope/.test((await de(r5))[0].error || '') && envios.length === n5, 'con 10 avisos en la última hora al mismo número, no sale otro', enviadosHora);
   await avisos.createQueryBuilder().update(PedidoOnlineAviso).set({ enviadoEn: new Date(Date.now() - 2 * 86400_000) } as any).where('telefono = :t', { t: PRUEBA }).execute();
-  setWhatsappOverrides({ proveedor: 'META', token: 't', phoneNumberId: '1' });
+  setWhatsappOverrides({ proveedor: 'META', token: 't-meta', phoneNumberId: '1' });
+  respuesta = { status: 200, body: { messages: [{ id: 'wamid.x' }] } };
   const r6 = await pedido(cPrueba);
   await estado(r6, EstadoPedidoOnline.ACEPTADO);
+  const n6 = envios.length;
   await tick();
-  ok((await de(r6))[0].estado === 'DESCARTADO' && /plantillas/.test((await de(r6))[0].error || ''), 'con Meta y sin plantillas no sale (fase 2); no traba nada');
+  const m6 = envios[n6];
+  const p6: string[] = (m6?.plantilla?.components?.[0]?.parameters || []).map((x: any) => x.text);
+  ok((await de(r6))[0].estado === 'ENVIADO' && /graph\.facebook\.com\/v20\.0\/1\/messages/.test(m6?.url || '')
+    && m6?.plantilla?.name === 'aviso_pedido_aceptado' && m6?.plantilla?.language?.code === 'es'
+    && p6[0] === 'LA COCINA' && p6[1] === r6.numero && String(p6[2] || '').endsWith(`/tienda/pedido/${r6.numero}`)
+    && m6?.numero === PRUEBA, 'con Meta sale la plantilla del evento con comercio, número y enlace', m6?.plantilla);
+  respuesta = { status: 400, body: { error: { code: 131030, message: 'Recipient phone number not in allowed list' } } };
+  const r6b = await pedido(cPrueba);
+  await estado(r6b, EstadoPedidoOnline.ACEPTADO);
+  await tick();
+  const a6b = (await de(r6b))[0];
+  ok(a6b.estado === 'FALLIDO' && a6b.intentos === 1 && /#131030/.test(a6b.error || ''), 'Meta: un error que no se arregla reintentando (#131030) queda FALLIDO al primer intento', a6b.error);
+  ok(!/t-meta/.test(a6b.error || ''), 'el token de Meta nunca va en el error guardado');
+  respuesta = { status: 201, body: {} };
+  const cDev = avisoDe('CANCELADO', { numero: 'PO-9', estadoPago: EstadoPagoOnline.DEVUELTO } as any, 'LA COCINA', 'https://t');
+  const cSin = avisoDe('CANCELADO', { numero: 'PO-9', estadoPago: null } as any, '', 'https://t');
+  ok(cDev.plantilla === 'CANCELADO_DEVOLUCION' && cSin.plantilla === 'CANCELADO' && cSin.parametros[0] === 'el local' && cSin.parametros[2] === 'https://t/tienda/pedido/PO-9',
+    'cancelado con el pago devuelto usa la plantilla con devolución; sin comercio cargado dice «el local»');
   setWhatsappOverrides({ proveedor: 'EVOLUTION', evolutionUrl: 'https://evo.ejemplo', evolutionInstancia: 'frc', evolutionApiKey: 'k-secreta' });
   await cfgRepo.update({ id: (cfg as any).id }, { avisosWhatsapp: false } as any);
   const r7 = await pedido(cPrueba);

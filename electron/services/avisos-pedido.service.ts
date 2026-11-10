@@ -27,6 +27,7 @@ import { EstadoPagoOnline, EstadoPedidoOnline, TipoPedidoOnline, esMetodoPagoOnl
 import { appInstalada, enviarAvisoWhatsapp, nombreComercioWhatsapp, numeroWhatsapp } from '../utils/whatsapp-sender';
 import { urlPublicaTienda } from './pagos-online/pagos-online.service';
 import { refrescarCredencialesWhatsapp } from '../utils/tienda-ingreso.utils';
+import { AvisoWhatsapp } from '../utils/avisos-plantillas';
 
 export type EventoAviso = 'ACEPTADO' | 'LISTO' | 'EN_CAMINO' | 'ENTREGADO' | 'CANCELADO';
 
@@ -37,6 +38,12 @@ const TOPE_HORA = 10;
 const TOPE_DIA = 30;
 const ENVIANDO_HUERFANO_MS = 5 * 60_000;
 const PURGA_MS = 30 * 24 * 3600_000;
+/**
+ * Errores que no se arreglan reintentando: número sin WhatsApp (Evolution `exists:false`, Meta
+ * #131026), destinatario no autorizado del número de prueba (#131030), plantilla inexistente o con
+ * parámetros que no coinciden (#132000, #132001, #132012).
+ */
+const SIN_REINTENTO = /exists"?\s*:\s*false|not.*whatsapp|no existe|#13102[6]|#131030|#13200[01]|#132012/i;
 
 /** Qué aviso corresponde al estado actual del pedido (null = ninguno). */
 export function eventoDe(p: Pick<PedidoOnline, 'estado' | 'tipoPedido' | 'estadoPago' | 'metodoPago'>): EventoAviso | null {
@@ -67,6 +74,14 @@ export function eventoDe(p: Pick<PedidoOnline, 'estado' | 'tipoPedido' | 'estado
 
 /** Texto del aviso (Evolution). Con Meta, cada evento es una plantilla con estos parámetros. */
 export function textoAviso(evento: EventoAviso, p: Pick<PedidoOnline, 'numero' | 'estadoPago'>, comercio: string, base?: string): string {
+  return avisoDe(evento, p, comercio, base).texto;
+}
+
+const devuelvePago = (p: Pick<PedidoOnline, 'estadoPago'>) =>
+  [EstadoPagoOnline.REEMBOLSO_PENDIENTE, EstadoPagoOnline.DEVOLVIENDO, EstadoPagoOnline.DEVUELTO].includes(p.estadoPago as any);
+
+/** El aviso para el sender: texto (Evolution) y plantilla con parámetros (Meta). */
+export function avisoDe(evento: EventoAviso, p: Pick<PedidoOnline, 'numero' | 'estadoPago'>, comercio: string, base?: string): AvisoWhatsapp {
   const quien = comercio || 'Tu pedido';
   const n = p.numero;
   let t: string;
@@ -76,13 +91,14 @@ export function textoAviso(evento: EventoAviso, p: Pick<PedidoOnline, 'numero' |
     case 'EN_CAMINO': t = `${quien}: tu pedido ${n} salió y va en camino. El repartidor puede llamarte a este número.`; break;
     case 'ENTREGADO': t = `${quien}: tu pedido ${n} fue entregado. ¡Gracias!`; break;
     case 'CANCELADO': {
-      const devuelve = [EstadoPagoOnline.REEMBOLSO_PENDIENTE, EstadoPagoOnline.DEVOLVIENDO, EstadoPagoOnline.DEVUELTO].includes(p.estadoPago as any);
-      t = `${quien}: tu pedido ${n} fue cancelado.${devuelve ? ' Te devolvemos el pago.' : ''}`;
+      t = `${quien}: tu pedido ${n} fue cancelado.${devuelvePago(p) ? ' Te devolvemos el pago.' : ''}`;
       break;
     }
   }
   const url = `${base ?? urlPublicaTienda()}/tienda/pedido/${encodeURIComponent(n)}`;
-  return `${t} ${url}`;
+  const plantilla = evento === 'CANCELADO' && devuelvePago(p) ? 'CANCELADO_DEVOLUCION' : evento;
+  // En la plantilla el comercio va en medio de la frase: sin nombre cargado, «el local».
+  return { texto: `${t} ${url}`, plantilla, parametros: [comercio || 'el local', n, url] };
 }
 
 let instaladaEnPruebas: boolean | null = null;
@@ -169,15 +185,15 @@ export async function enviarAvisosPendientes(ds: DataSource, ahora = new Date())
     const claim = await repo.createQueryBuilder().update(PedidoOnlineAviso).set({ estado: 'ENVIANDO' } as any)
       .where('id = :id AND estado = :e', { id: a.id, e: 'PENDIENTE' }).execute();
     if (!claim.affected) continue;
-    const r = await enviarAvisoWhatsapp(a.telefono, textoAviso(a.evento as EventoAviso, p, comercio));
+    const r = await enviarAvisoWhatsapp(a.telefono, avisoDe(a.evento as EventoAviso, p, comercio));
     const intentos = (a.intentos || 0) + 1;
     if (r.ok) {
       await marcar(a.id, { estado: 'ENVIADO', enviadoEn: ahora, intentos, error: null });
       res.enviados++;
-    } else if (r.detail === 'meta_sin_plantillas' || r.detail === 'sin_proveedor') {
-      await marcar(a.id, { estado: 'DESCARTADO', intentos, error: r.detail === 'sin_proveedor' ? 'sin proveedor de WhatsApp' : 'Meta: faltan las plantillas de avisos' });
+    } else if (r.detail === 'sin_proveedor') {
+      await marcar(a.id, { estado: 'DESCARTADO', intentos, error: 'sin proveedor de WhatsApp' });
       res.descartados++;
-    } else if (/exists"?\s*:\s*false|not.*whatsapp|no existe/i.test(r.detail || '') || intentos >= MAX_INTENTOS) {
+    } else if (SIN_REINTENTO.test(r.detail || '') || intentos >= MAX_INTENTOS) {
       await marcar(a.id, { estado: 'FALLIDO', intentos, error: String(r.detail || 'error').slice(0, 255) });
       res.fallidos++;
       console.warn(`[avisos] pedido ${a.pedidoOnlineId} ${a.evento} a ${enmascarar(a.telefono)}: falló (${String(r.detail || '').slice(0, 80)})`);
