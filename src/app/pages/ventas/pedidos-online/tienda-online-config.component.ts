@@ -201,6 +201,23 @@ import { CreateEditFormaPagoOnlineDialogComponent, ProveedorCatalogo } from './c
           </mat-card>
 
           <mat-card class="bloque">
+            <h3 class="bloque-titulo"><mat-icon>notifications_active</mat-icon> Avisos al cliente por WhatsApp</h3>
+            <mat-slide-toggle [(ngModel)]="cfg.avisosWhatsapp" color="primary">Avisar al cliente cuando su pedido cambia de estado</mat-slide-toggle>
+            <p class="ayuda">
+              Aceptado, listo para retirar, en camino, entregado y cancelado. Solo a quien marcó la casilla en el checkout y
+              con el teléfono verificado. Sale por el mismo canal que el código de ingreso; con Meta hacen falta las plantillas
+              aprobadas (hasta entonces no sale ninguno).
+            </p>
+            <div class="grid">
+              <mat-form-field appearance="outline">
+                <mat-label>Teléfono de prueba</mat-label>
+                <input matInput [(ngModel)]="cfg.avisosTelefonoPrueba" maxlength="30" inputmode="tel" placeholder="595981123456">
+                <mat-hint>Fuera de la app instalada (copias, pruebas) los avisos van solo a este número.</mat-hint>
+              </mat-form-field>
+            </div>
+          </mat-card>
+
+          <mat-card class="bloque">
             <h3 class="bloque-titulo"><mat-icon>credit_card</mat-icon> Pago online</h3>
             <p class="ayuda">El cliente paga antes (tarjeta o Pix) y el pedido llega a cocina recién cuando el pago está confirmado. Se pueden ofrecer varios proveedores a la vez: el cliente elige.</p>
             <div class="proveedor">

@@ -206,9 +206,34 @@ export async function sendWhatsappOtp(telefono: string, codigo: string): Promise
  * La API key nunca va en el detalle del error.
  */
 async function enviarPorEvolution(telefono: string, codigo: string): Promise<OtpSendResult> {
-  const { url, instancia, apiKey } = evolution();
   const comercio = String(overrides.nombreComercio || '').trim();
   const texto = `Tu código para ingresar${comercio ? ` a ${comercio}` : ''} es ${codigo}. Vence en 10 minutos. No lo compartas con nadie.`;
+  return enviarTextoEvolution(telefono, texto);
+}
+
+/** Nombre del comercio cargado en la app (para los textos). */
+export function nombreComercioWhatsapp(): string {
+  return String(overrides.nombreComercio || '').trim();
+}
+
+/**
+ * Aviso del pedido (PLAN-tienda-avisos-whatsapp). Fase 1: solo Evolution (texto). Con Meta hace
+ * falta una plantilla aprobada por aviso (fase 2): hasta entonces no sale y se informa.
+ */
+export async function enviarAvisoWhatsapp(telefono: string, texto: string): Promise<OtpSendResult> {
+  const prov = proveedorWhatsappActivo();
+  if (prov === 'EVOLUTION') return enviarTextoEvolution(telefono, texto);
+  if (prov === 'META') return { ok: false, provider: 'whatsapp-cloud', detail: 'meta_sin_plantillas' };
+  return { ok: false, provider: 'ninguno', detail: 'sin_proveedor' };
+}
+
+/** La app corre instalada (no `npm start`, ni el servidor espejo, ni tests). */
+export function appInstalada(): boolean {
+  return appEmpaquetada();
+}
+
+async function enviarTextoEvolution(telefono: string, texto: string): Promise<OtpSendResult> {
+  const { url, instancia, apiKey } = evolution();
   try {
     const res = await fetchImpl(`${url}/message/sendText/${encodeURIComponent(instancia)}`, {
       method: 'POST',
@@ -224,7 +249,9 @@ async function enviarPorEvolution(telefono: string, codigo: string): Promise<Otp
       let motivo = '';
       try {
         const j = JSON.parse(body);
-        motivo = String(j?.response?.message || j?.message || j?.error || '').slice(0, 200);
+        const m = j?.response?.message ?? j?.message ?? j?.error ?? '';
+        // Evolution responde `[{ exists: false, … }]` a un número sin WhatsApp: se guarda tal cual.
+        motivo = (typeof m === 'string' ? m : JSON.stringify(m)).slice(0, 200);
       } catch { motivo = ''; }
       return { ok: false, provider: 'evolution', detail: `HTTP ${res.status}${motivo ? ': ' + motivo : ''}` };
     }

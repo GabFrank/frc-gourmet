@@ -56,6 +56,8 @@ export class CheckoutPage implements OnInit, OnDestroy {
    * pedido por WhatsApp, y el repartidor lo puede llamar). Queda en la cuenta para la próxima.
    */
   telefonoContacto = '';
+  /** Casilla de avisos por WhatsApp (sin marcar: el consentimiento tiene que ser explícito). */
+  avisosWhatsapp = false;
   get pideTelefono(): boolean {
     return !this.mesa.enMesa && this.auth.isAuthenticated && !this.auth.cuenta?.telefono;
   }
@@ -393,6 +395,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
     this.enviando = true;
     const payload: any = {
       tipoPedido: this.tipo,
+      avisosWhatsapp: this.avisosWhatsapp,
       idempotencyKey: this.claveIntento(),
       items: this.cart.toPedidoItems(),
       direccionEntrega: this.tipo === 'DELIVERY' ? direccionFinal : null,

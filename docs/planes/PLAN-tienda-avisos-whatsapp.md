@@ -3,6 +3,38 @@
 Rama: `bot/ceo-frc-gourmet/feat-tienda-avisos-whatsapp`, sale de `feat-tienda-pagos-proveedores`
 (independiente de F8b). Nada se mergea sin el OK del propietario.
 
+## Estado (2026-11-10)
+
+Rama nueva `bot/ceo-frc-gourmet/feat-tienda-avisos-cliente`, sobre `feat-tienda-deuda-editada` (la
+cadena). La rama vieja `feat-tienda-avisos-whatsapp` (solo el plan) queda sin usar.
+
+**Fase 1 hecha:** migración `TiendaAvisosPedido` (cola `pedido_online_avisos` con único
+(pedido, evento); `pedidos_online.avisos_consentimiento_en`; `tienda_online_config.avisos_whatsapp` y
+`avisos_telefono_prueba`), `electron/services/avisos-pedido.service.ts` (tick cada 15 s en el
+servidor), casilla de consentimiento en el checkout (sin marcar), bloque «Avisos al cliente por
+WhatsApp» en Config Tienda Online. `test:avisos-pedido` 26/26 en SQLite y PG.
+
+Cambios respecto del diseño, decididos al implementar:
+
+- **Encolado por estado, no por puerta.** En vez de encolar dentro de cada transacción que mueve el
+  pedido (bandeja, PdV, delivery, ventas, pagos: muchas puertas), el tick mira el estado ya guardado
+  de los pedidos que cambiaron en las últimas 3 h y encola un aviso por (pedido, evento). Cubre
+  todas las puertas sin tocarlas; lo que se revierte nunca se ve. Si un pedido pasa por dos estados
+  entre dos ticks (15 s), sale solo el último.
+- **Fuera de producción = fuera de la app instalada.** `npm start`, el servidor espejo y los tests
+  mandan solo al teléfono de prueba; la app instalada manda a los clientes. No hace falta configurar
+  nada en producción para esto. Riesgo que queda: una app INSTALADA apuntando a una copia restaurada
+  con el interruptor prendido avisaría a clientes reales (apagar el interruptor al restaurar).
+- **Cancelación sin motivo** en el texto (con Meta el motivo libre no puede ser variable): «fue
+  cancelado» y, si el pago online se devuelve, «Te devolvemos el pago». Un pago online que nunca se
+  cobró no avisa (el cliente lo vio en la página de pago).
+- **Teléfono de Google sin verificar:** no recibe avisos (la casilla no aparece) hasta la
+  verificación por código (fase 2).
+
+Pendiente: fase 2 (Meta con plantillas; verificación del teléfono de contacto; «BAJA»; estado de
+los avisos en el detalle del pedido de la bandeja; aviso «cancelación pedida no aceptada») y la
+prueba real con Evolution al teléfono del personal.
+
 ## Por qué
 
 El checkout ya le dice al cliente que va a recibir avisos de su pedido por WhatsApp, pero hoy no

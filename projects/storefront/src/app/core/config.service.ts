@@ -28,6 +28,8 @@ export interface TiendaConfig {
   compraACuenta?: boolean;
   /** F9: teléfono del local (llamar / escribir desde el detalle del pedido). */
   telefonoContacto?: string | null;
+  /** Avisos del pedido por WhatsApp prendidos: el checkout ofrece la casilla. */
+  avisosWhatsapp?: boolean;
 }
 
 /** Carga la config pública de la tienda y aplica el branding (nombre/color). */

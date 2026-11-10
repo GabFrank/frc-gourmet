@@ -15,6 +15,7 @@
  * handlerRegistry ya este poblado al servir requests.
  */
 import { iniciarJobPagosOnline, detenerJobPagosOnline } from '../services/pagos-online/pagos-online.service';
+import { detenerJobAvisosPedidos, iniciarJobAvisosPedidos } from '../services/avisos-pedido.service';
 import { materializarTrasPago } from '../handlers/pedidos-online-pedidos.handler';
 import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
@@ -335,6 +336,8 @@ export async function startServer(opts: ServerOptions): Promise<FastifyInstance>
   // Pago online de la tienda (PLAN-tienda-online F4): el job de confirmación vive en el
   // mismo proceso que atiende la tienda. Corre aunque el pago esté apagado (pagos en curso).
   iniciarJobPagosOnline(opts.dataSource, (id) => materializarTrasPago(opts.dataSource, id));
+  // Avisos del pedido al cliente por WhatsApp (PLAN-tienda-avisos-whatsapp).
+  iniciarJobAvisosPedidos(opts.dataSource);
 
   // Listener HTTPS (opcional) — LAN-directo con cert válido (latencia baja).
   if (opts.certPath && opts.keyPath && existsSync(opts.certPath) && existsSync(opts.keyPath)) {
@@ -360,6 +363,7 @@ export async function startServer(opts: ServerOptions): Promise<FastifyInstance>
 
 export async function stopServer(): Promise<void> {
   detenerJobPagosOnline();
+  detenerJobAvisosPedidos();
   if (!instances.length) return;
   await Promise.all(instances.map((i) => i.close()));
   instances.length = 0;

@@ -40,7 +40,7 @@ async function main() {
   };
   // Sube todo y baja las migraciones de la tienda posteriores a F4 (F6 en adelante), para
   // que los bloques F2-F4 de abajo sigan encontrando a F4 como la última.
-  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda|TiendaDetallePedido|TiendaTelefonoContactoCuenta|TiendaPagoProveedores|TiendaVinculoCuentaCliente|TiendaPagosMultiIcpay/;
+  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda|TiendaDetallePedido|TiendaTelefonoContactoCuenta|TiendaPagoProveedores|TiendaVinculoCuentaCliente|TiendaPagosMultiIcpay|TiendaAvisosPedido/;
   const subirSinPosteriores = async () => {
     await ds.runMigrations({ transaction: 'each' });
     for (;;) {
@@ -284,6 +284,27 @@ async function main() {
   await ds.runMigrations({ transaction: 'each' });
   ok((await columnas()).includes('cliente_id') && await tablaVinc() === 1, 'Vínculo: up de nuevo vuelve a crear todo');
   await ds.query(`DELETE FROM cuentas_cliente WHERE email LIKE 'zt-v%'`);
+
+  // Avisos por WhatsApp (TiendaAvisosPedido): cola con único (pedido, evento), consentimiento en el
+  // pedido, interruptor y teléfono de prueba en la config. Se prueba primero y se baja, para que
+  // el bloque de IC Pay siga encontrándose última.
+  const ultimaAv = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
+  ok(/TiendaAvisosPedido/.test(String(ultimaAv)), 'Avisos: TiendaAvisosPedido es la última migración', ultimaAv);
+  ok(JSON.stringify(entTodas) === JSON.stringify([...(await columnas())].sort()), 'Avisos: las columnas del pedido coinciden con la entidad completa');
+  ok(JSON.stringify(metaCfg.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...(await colsCfg())].sort()), 'Avisos: las columnas de config coinciden con la entidad completa');
+  const metaAv = ds.entityMetadatas.find((m) => m.tableName === 'pedido_online_avisos')!;
+  const colsAv = async (): Promise<string[]> => pgDb
+    ? (await ds.query(`SELECT column_name AS c FROM information_schema.columns WHERE table_schema='public' AND table_name='pedido_online_avisos'`)).map((r: any) => r.c)
+    : (await ds.query(`PRAGMA table_info('pedido_online_avisos')`)).map((r: any) => r.name);
+  ok(JSON.stringify(metaAv.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...(await colsAv())].sort()), 'Avisos: la cola coincide con su entidad', await colsAv());
+  const insAv = () => ds.query(`INSERT INTO pedido_online_avisos (pedido_online_id, evento, telefono) VALUES (880001, 'ACEPTADO', '595981000000')`);
+  await insAv();
+  ok(await falla(insAv), 'Avisos: dos avisos del mismo evento para un pedido → rechazado');
+  await ds.undoLastMigration({ transaction: 'each' });
+  ok(!(await colsAv()).length, 'Avisos: down quita la cola');
+  await ds.runMigrations({ transaction: 'each' });
+  ok((await colsAv()).length > 0, 'Avisos: up de nuevo la vuelve a crear');
+  await bajarHasta(/TiendaPagosMultiIcpay/);
 
   // Formas de pago online + IC Pay (TiendaPagosMultiIcpay): tabla de cuentas, cuenta y datos del
   // cobro en el pedido, PIX ONLINE, y la conversión del proveedor elegido en la primera cuenta.

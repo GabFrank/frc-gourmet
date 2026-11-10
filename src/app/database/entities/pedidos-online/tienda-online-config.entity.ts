@@ -84,6 +84,14 @@ export class TiendaOnlineConfig extends BaseModel {
   whatsappProveedor?: string | null;
 
   /** F9: teléfono del local que ve el cliente (llamar / escribir desde el detalle del pedido). */
+  /** Avisar al cliente por WhatsApp cuando su pedido cambia de estado (apagado por defecto). */
+  @Column({ name: 'avisos_whatsapp', type: 'boolean', default: false })
+  avisosWhatsapp!: boolean;
+
+  /** Fuera de la app instalada (copias, desarrollo) los avisos van SOLO a este número. */
+  @Column({ name: 'avisos_telefono_prueba', type: 'varchar', length: 30, nullable: true })
+  avisosTelefonoPrueba?: string | null;
+
   @Column({ name: 'telefono_contacto', type: 'varchar', length: 30, nullable: true })
   telefonoContacto?: string | null;
 

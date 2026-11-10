@@ -215,6 +215,10 @@ export class PedidoOnline extends BaseModel {
   @Column({ name: 'cancelacion_respuesta', type: 'varchar', length: 200, nullable: true })
   cancelacionRespuesta?: string | null;
 
+  /** El cliente aceptó en el checkout recibir avisos del pedido por WhatsApp (PLAN-tienda-avisos-whatsapp). */
+  @Column({ name: 'avisos_consentimiento_en', nullable: true })
+  avisosConsentimientoEn?: Date;
+
   @OneToMany('PedidoOnlineItem', 'pedido', { cascade: true })
   items?: PedidoOnlineItem[];
 }

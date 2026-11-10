@@ -85,6 +85,8 @@ function mapConfigPublic(cfg: TiendaOnlineConfig): any {
     nombreComercio: cfg.nombreComercio ?? null,
     // F9: para «Llamar al local» / «Escribir al local» en el detalle del pedido.
     telefonoContacto: (cfg as any).telefonoContacto ?? null,
+    // Avisos del pedido por WhatsApp: el checkout muestra la casilla de consentimiento.
+    avisosWhatsapp: !!(cfg as any).avisosWhatsapp,
     mensajeBienvenida: cfg.mensajeBienvenida ?? null,
     colorPrimario: cfg.colorPrimario ?? null,
     permitePickup: cfg.permitePickup,
@@ -341,6 +343,12 @@ export function registerPedidosOnlineConfigHandlers(
       const t = data.telefonoContacto == null ? '' : String(data.telefonoContacto).trim();
       if (t && !/^\+?[0-9][0-9 \-]{5,28}$/.test(t)) return { success: false, error: 'telefono_contacto_invalido' };
       (cfg as any).telefonoContacto = t || null;
+    }
+    if (data.avisosWhatsapp !== undefined) (cfg as any).avisosWhatsapp = !!data.avisosWhatsapp;
+    if (data.avisosTelefonoPrueba !== undefined) {
+      const t = data.avisosTelefonoPrueba == null ? '' : String(data.avisosTelefonoPrueba).replace(/\D/g, '');
+      if (t && !/^[0-9]{8,15}$/.test(t)) return { success: false, error: 'telefono_prueba_invalido' };
+      (cfg as any).avisosTelefonoPrueba = t || null;
     }
     if (data.nombreComercio !== undefined) cfg.nombreComercio = data.nombreComercio ? String(data.nombreComercio).toUpperCase() : undefined;
     if (data.mensajeBienvenida !== undefined) cfg.mensajeBienvenida = data.mensajeBienvenida || undefined;
