@@ -78,6 +78,17 @@ una persona.
 | `icpay_sin_conexion` | no hubo respuesta de IC | red / URL |
 | `pago_faltan_credenciales` | se prendió un proveedor sin todos sus datos | completar (el mensaje dice cuál) |
 | `pago_sin_proveedor` | «Ofrecer pago online» sin ningún proveedor prendido | prender al menos uno |
+| `pago_ocupado` | cuenta USDT con otro pago abierto (sin vencer, 1 h): IC acepta un pago USDT por vez | el cliente espera unos minutos o paga con otro medio; nada que hacer en el local |
+
+## USDT: un pago por vez
+
+IC confirmó (Fede, 10/11) que el flujo USDT es **secuencial**: un solo pago activo por vez, y que con
+varios pagos sin asociar en la misma wallet IC los marca mal (lo están corrigiendo). Por eso la
+cuenta USDT (`unCobroPorVez` del proveedor) no abre una orden mientras otro pedido tenga su pago
+USDT abierto: al crear el pedido el checkout avisa sin crear nada, y en la página de pago el
+reintento o el cambio a USDT devuelven `pago_ocupado`. Pix no tiene turno. La verificación en la
+cadena (`icpay-tron.ts`) queda igual, por si dos clientes coinciden en el mismo instante. Cuando
+IC corrija, se quita `unCobroPorVez` del proveedor IC.
 
 ## Para un agente
 

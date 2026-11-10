@@ -29,6 +29,9 @@ export function esMetodoPagoOnline(m: string | null | undefined): boolean {
 }
 
 /** El pago online es un Pix (IC Pay): cambian los textos («tarjeta» no aplica). */
+/** Hay otro pago USDT abierto: IC acepta uno por vez (ver `unCobroPorVez` en el servidor). */
+export const MENSAJE_PAGO_OCUPADO = 'Ahora mismo hay otro pago con USDT en curso. Probá de nuevo en unos minutos o elegí otro medio de pago.';
+
 export function esPagoPix(m: string | null | undefined): boolean {
   return String(m || '').toUpperCase() === 'ICPAY';
 }

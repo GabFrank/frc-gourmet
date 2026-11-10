@@ -1,6 +1,7 @@
 import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
 import { CreditoTiendaError, creditoHabilitadoEnTienda, estadoCreditoCliente, identidadVerificada, withClienteLock } from '../utils/credito-tienda.utils';
-import { iniciarPagoPedido, InicioPagoRespuesta, procesarAvisoPago, verificarPagoPedido, VERIFICAR_MIN_MS } from '../services/pagos-online/pagos-online.service';
+import { cobroOcupado, ERROR_COBRO_OCUPADO, iniciarPagoPedido, InicioPagoRespuesta, procesarAvisoPago, verificarPagoPedido, VERIFICAR_MIN_MS } from '../services/pagos-online/pagos-online.service';
+import { cuentasListas } from '../services/pagos-online/cuentas-pago';
 import * as QRCode from 'qrcode';
 import { metodosAlRecibir, monedasTienda, validarPagoPedido, ResultadoPago } from '../utils/pago-pedido.utils';
 import { accionesPedido, ESTADOS_CANCELABLES_CLIENTE, limpiarMotivo } from '../utils/pedido-acciones.utils';
@@ -360,6 +361,13 @@ export function registerPedidosOnlinePedidosHandlers(
     const metodoPagoIn = (pagaOnline ? (elegido || proveedorPagoActivo()).id : metodoPagoPedido) as MetodoPagoOnline;
     if (pagaOnline && (tipoPedido === TipoPedidoOnline.MESA_QR || !pagoOnlineOfrecido(cfg) || !elegido)) {
       return { success: false, error: 'metodo_pago_no_disponible' };
+    }
+    // Cuenta de un cobro por vez (USDT de IC) con otro abierto: se avisa antes de crear el pedido,
+    // así el cliente elige otro medio sin perder el carrito ni dejar un pedido cancelado.
+    if (pagaOnline && elegido) {
+      const cuentaElegida = (await cuentasListas(dataSource, cfg, tipoPedido))
+        .find((c) => (c.forma?.id ?? null) === (elegido.formaId ?? null) && c.prov.id === elegido.id);
+      if (cuentaElegida && (await cobroOcupado(dataSource, cuentaElegida, null))) return { success: false, error: ERROR_COBRO_OCUPADO };
     }
     // F8b: «A cuenta» no es un método al recibir: lo habilita su propio interruptor, nunca en mesa.
     const pagaACuenta = metodoPagoIn === MetodoPagoOnline.CREDITO;

@@ -98,6 +98,32 @@ function codigoError(prov: ProveedorPagoOnline, e: any): string {
   return e instanceof ProveedorError ? e.codigo : `${prov.id.toLowerCase()}_error`;
 }
 
+/** El cliente intenta abrir un cobro en una cuenta que admite uno por vez y ya hay otro abierto. */
+export const ERROR_COBRO_OCUPADO = 'pago_ocupado';
+let sinTurnoEnPruebas = false;
+/** Solo tests: deja abrir varios cobros a la vez para probar lo que pasa si igual coinciden. */
+export function permitirCobrosSimultaneosEnPruebas(v: boolean): void {
+  sinTurnoEnPruebas = v;
+}
+
+/**
+ * ¿Otro pedido tiene un cobro abierto (sin vencer) en esta cuenta, que admite uno por vez?
+ * `pedidoId`: el propio, que no cuenta (null al crear el pedido).
+ * Dos clientes en el mismo instante pueden pasar los dos: lo cubre la verificación en la cadena
+ * (`icpay-tron.ts`), que nunca le asigna a una orden el pago de otro monto.
+ */
+export async function cobroOcupado(ds: DataSource, c: CuentaResuelta, pedidoId: number | null, ahora = new Date()): Promise<boolean> {
+  if (sinTurnoEnPruebas || !c.prov.unCobroPorVez?.(c.creds)) return false;
+  const q = ds.getRepository(PedidoOnline).createQueryBuilder('p')
+    .where('p.pago_proveedor = :pv', { pv: c.prov.id })
+    .andWhere('p.estado = :est AND p.estado_pago = :pen', { est: EstadoPedidoOnline.PENDIENTE_PAGO, pen: EstadoPagoOnline.PENDIENTE })
+    .andWhere('p.pago_sesion_id IS NOT NULL AND p.pago_expira_en > :ahora', { ahora });
+  if (c.forma) q.andWhere('p.forma_pago_online_id = :f', { f: c.forma.id });
+  else q.andWhere('p.forma_pago_online_id IS NULL');
+  if (pedidoId != null) q.andWhere('p.id <> :id', { id: pedidoId });
+  return (await q.getCount()) > 0;
+}
+
 async function registrar(ds: DataSource, p: { id: number; pagoIntento?: number | null }, tipo: string, estado: string | null, resp?: any) {
   try {
     const raw = resp == null ? null : typeof resp === 'string' ? resp : JSON.stringify(resp);
@@ -219,6 +245,10 @@ export async function iniciarPagoPedido(
 
   // Hay sesión: un intento nuevo solo si la anterior FALLÓ. Con una abierta (que todavía se
   // puede pagar) no se abre otra: cobraría dos veces.
+  // Cuenta de un cobro por vez (USDT) con otro abierto: no se abre este. El pedido queda como
+  // estaba (el cliente reintenta en unos minutos o paga con otro medio).
+  if (await cobroOcupado(ds, actualCuenta, p.id)) return { success: false, error: ERROR_COBRO_OCUPADO };
+
   let intento = p.pagoIntento ?? 1;
   let idem = p.pagoIdemKey || randomUUID(); // sin sesión todavía: reintento de red = misma clave
   if (p.pagoSesionId) {

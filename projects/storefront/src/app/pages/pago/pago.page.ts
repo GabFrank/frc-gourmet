@@ -6,7 +6,7 @@ import { AuthService } from '../../core/auth.service';
 import { ConfigService } from '../../core/config.service';
 import { GuaraniPipe } from '../../core/guarani.pipe';
 import { IconComponent } from '../../core/icon.component';
-import { esPagoPix, esUrlPagoPermitida, textoEstadoPago } from '../../core/pago-online';
+import { esPagoPix, esUrlPagoPermitida, MENSAJE_PAGO_OCUPADO, textoEstadoPago } from '../../core/pago-online';
 
 /**
  * Página de pago del pedido: /tienda/pago/<numero> (PLAN-tienda-online F4; proveedores en
@@ -279,6 +279,7 @@ export class PagoPage implements OnInit, OnDestroy {
           this.mostrarFormulario(r.script, r.procesoId, r.proveedor);
           return;
         }
+        if (r?.error === 'pago_ocupado') { this.error = MENSAJE_PAGO_OCUPADO; return; }
         if (soloFormulario) return;
         if (r?.success && esUrlPagoPermitida(r.checkoutUrl, hosts)) { window.location.href = r.checkoutUrl; return; }
         this.error = 'No pudimos abrir el pago. Probá de nuevo en un rato.';

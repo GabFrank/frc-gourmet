@@ -132,6 +132,12 @@ export interface ProveedorPagoOnline<C = any> {
   medio: 'TARJETA' | 'PIX' | 'CRIPTO';
   /** El medio según los datos de una cuenta (p. ej. IC Pay en USDT es CRIPTO). Sin esto, `medio`. */
   medioDe?(config: Record<string, string>): 'TARJETA' | 'PIX' | 'CRIPTO';
+  /**
+   * La cuenta admite UN solo cobro abierto a la vez: mientras otro pedido tenga uno sin vencer, no
+   * se abre otro (el cliente elige otro medio o espera). USDT de IC Pay: el pago llega a una
+   * dirección fija, sin referencia, y IC lo asigna por orden de llegada (2026-11-10, IC lo confirma).
+   */
+  unCobroPorVez?(creds: C): boolean;
   /** Forma de pago del cobro anticipado en la venta (`formas_pago.nombre`). */
   formaPago: string;
   /** Hosts desde los que el storefront acepta redirigir o cargar el script del proveedor. */

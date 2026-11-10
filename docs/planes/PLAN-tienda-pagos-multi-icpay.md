@@ -25,6 +25,11 @@ verdad** contra el sandbox de cada proveedor (regla de la cadena).
   proveedor; tabla + diálogo en Config Tienda Online), commit `1d703dde`.
 - Decisiones tomadas (sin objeción del propietario): cotización de IC, sin recargo Pix, R$ grande y
   ₲ chico.
+- **USDT un pago por vez (2026-11-10):** IC confirma que el flujo es secuencial y que el `underpaid`
+  con varios pagos sin asociar es un problema suyo (en corrección). La cuenta USDT no abre otra orden
+  con un pago abierto (`pago_ocupado`); Pix sin turno. `test:pagos-icpay` 94/94 SQLite y PG; staging:
+  PO-000034 abrió y se pagó solo (2.00 USDT), PO-000035 rechazado sin crear orden en IC, PO-000036
+  abrió después del pago. Se quita cuando IC corrija.
 - Fase 4 (dinelco) espera sus claves.
 
 Base: el contrato de proveedores de `PLAN-tienda-pagos-proveedores.md`

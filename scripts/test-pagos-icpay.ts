@@ -16,7 +16,7 @@ import { PagoOnlineEvento } from '../src/app/database/entities/pedidos-online/pa
 import { TiendaOnlineConfig } from '../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import { EstadoPagoOnline, EstadoPedidoOnline, TipoPedidoOnline, FORMAS_PAGO_ONLINE, esMetodoPagoOnline } from '../src/app/database/entities/pedidos-online/pedido-online.enums';
 import {
-  iniciarPagoPedido, verificarPagoPedido, setPagosOnlineDeps, pagoOnlineDisponible, cuentasListas, procesarAvisoPago,
+  iniciarPagoPedido, verificarPagoPedido, cobroOcupado, permitirCobrosSimultaneosEnPruebas, setPagosOnlineDeps, pagoOnlineDisponible, cuentasListas, procesarAvisoPago,
   tickPagosOnline,
 } from '../electron/services/pagos-online/pagos-online.service';
 import { icpayProveedor, interpretarOrdenIcpay, montoIcpay, usdDesdeGuaranies } from '../electron/services/pagos-online/proveedores/icpay.proveedor';
@@ -439,6 +439,34 @@ async function main() {
   ok(tronLlamadas.includes(su), 'con un pago en la cadena y una sola orden pendiente → se pide la verificación');
   ok(vu.estadoPago === EstadoPagoOnline.PAGADO && /de más: 0\.30/.test((await leer(pu.id)).pagoDetalle || ''), 'pagó de más (única orden) → PAGADO con el excedente anotado', (await leer(pu.id)).pagoDetalle);
 
+  console.log('USDT: un pago abierto por vez (IC, 10/11: «pensado para pagos secuenciales»)');
+  const conUsdt = async (total: number) => { const x = await nuevo(total); await repo.update({ id: x.id }, { formaPagoOnlineId: fUs.id } as any); return x; };
+  const ua = await conUsdt(12700);
+  ok(((await iniciarPagoPedido(ds, ua.id)) as any).success, 'el primero abre su pago USDT');
+  const ub = await conUsdt(19050);
+  const rb: any = await iniciarPagoPedido(ds, ub.id);
+  ok(!rb.success && rb.error === 'pago_ocupado' && !(await leer(ub.id)).pagoSesionId, 'con otro USDT abierto, el segundo no abre orden en IC (pago_ocupado)', rb);
+  const cuentaUs = (await cuentasListas(ds, (await ds.getRepository(TiendaOnlineConfig).find({ take: 1 }))[0] ?? null, 'PICKUP')).find((c) => c.forma?.id === fUs.id)!;
+  ok(await cobroOcupado(ds, cuentaUs, null), 'al crear un pedido nuevo (sin id) también se ve ocupado');
+  ok(!(await cobroOcupado(ds, cuentaUs, ua.id)), 'el propio pedido no se bloquea a sí mismo');
+  const ra2: any = await iniciarPagoPedido(ds, ua.id);
+  ok(ra2.success && ra2.qr?.moneda === 'USDT', 'el que ya tiene su pago lo sigue viendo (reabre la página)', ra2);
+  const pixMientras = await nuevo(6350);
+  await repo.update({ id: pixMientras.id }, { formaPagoOnlineId: fIc1.id } as any);
+  ok(((await iniciarPagoPedido(ds, pixMientras.id)) as any).success, 'Pix no espera turno aunque haya un USDT abierto');
+  await repo.update({ id: ua.id }, { pagoExpiraEn: new Date(Date.now() - 60_000) } as any);
+  ok(((await iniciarPagoPedido(ds, ub.id)) as any).success, 'vencido el primero, el segundo ya puede abrir su pago');
+  await repo.update({ id: ub.id }, { estadoPago: EstadoPagoOnline.PAGADO } as any);
+  const uc = await conUsdt(25400);
+  ok(((await iniciarPagoPedido(ds, uc.id)) as any).success, 'pagado el anterior, el siguiente abre el suyo');
+  await repo.update({ id: uc.id }, { estado: EstadoPedidoOnline.CANCELADO } as any);
+  ok(!(await cobroOcupado(ds, cuentaUs, null)), 'un pedido cancelado no ocupa la cuenta');
+  await repo.update({ id: ua.id }, { estado: EstadoPedidoOnline.CANCELADO } as any);
+  await repo.update({ id: pixMientras.id }, { estado: EstadoPedidoOnline.CANCELADO } as any);
+
+  // Si igual coinciden (dos clientes en el mismo instante, o el turno apagado), la verificación en
+  // la cadena sigue separando los pagos: se prueba con el turno apagado.
+  permitirCobrosSimultaneosEnPruebas(true);
   console.log('USDT: varias órdenes pendientes a la vez (la regla real de IC)');
   const crearUsdt = async (total: number) => { const x = await nuevo(total); await repo.update({ id: x.id }, { formaPagoOnlineId: fUs.id } as any); await iniciarPagoPedido(ds, x.id); return x; };
   const qa = await crearUsdt(12700), qb = await crearUsdt(19050), qc = await crearUsdt(25400); // 2.00, 3.00, 4.00
@@ -462,6 +490,7 @@ async function main() {
   ok(tronLlamadas.length === tronAntesCaida, 'sin poder mirar la cadena no se pide la verificación (no se arriesga el pago de otra orden)');
   trongridCaido = false;
   reglaIc = false;
+  permitirCobrosSimultaneosEnPruebas(false);
 
   // Un pedido de antes (en reales) de una cuenta que después pasó a USDT: no se pide Tron.
   const pb = await nuevo(6350);

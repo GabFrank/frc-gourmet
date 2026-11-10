@@ -109,6 +109,10 @@ const proveedor: ProveedorPagoOnline<IcpayConfig> = {
   etiqueta: 'Pix (Brasil)',
   medio: 'PIX',
   medioDe: (config) => (String(config['moneda'] || '').toUpperCase() === 'USDT' ? 'CRIPTO' : 'PIX'),
+  // IC (Fede, 10/11): «el flujo de USDT está pensado para pagos secuenciales», y con varios pagos
+  // sin asociar en la misma wallet IC los marca mal (lo están corrigiendo). Hasta que lo corrijan,
+  // un pago USDT abierto por vez. Pix trae su propio QR: no hace falta.
+  unCobroPorVez: (c) => c.moneda === 'USDT',
   formaPago: FORMA_PAGO_ICPAY,
   // El QR se dibuja en la tienda: no se redirige ni se carga nada de IC en el navegador.
   hosts: [],

@@ -87,7 +87,7 @@ export interface EstadoCredito {
   /** null = sin tope (límite 0). */
   disponible: number | null;
   limite: number;
-  motivo?: 'sin_vinculo' | 'cliente_inactivo' | 'sin_credito' | 'identidad_no_verificada';
+  motivo?: 'sin_vinculo' | 'cliente_inactivo' | 'sin_credito' | 'identidad_no_verificada' | 'sin_limite';
 }
 
 /** Lo que puede gastar a cuenta este cliente hoy, descontando lo ya reservado en la web. */

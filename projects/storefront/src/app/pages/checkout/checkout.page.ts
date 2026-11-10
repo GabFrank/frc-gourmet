@@ -14,7 +14,7 @@ import { TipoPedido } from '../../core/models';
 import { GuaraniPipe, guarani } from '../../core/guarani.pipe';
 import { PrecioPipe } from '../../core/precio.pipe';
 import { mensajeError } from '../../core/errores';
-import { esUrlPagoPermitida } from '../../core/pago-online';
+import { esUrlPagoPermitida, MENSAJE_PAGO_OCUPADO } from '../../core/pago-online';
 import { MonedasService } from '../../core/monedas.service';
 import { MonedaTienda, convertir, formatear, parsearMonto, sugerenciasVuelto } from '../../core/moneda-tienda';
 
@@ -516,7 +516,10 @@ export class CheckoutPage implements OnInit, OnDestroy {
       case 'vuelto_insuficiente': return 'El monto para el vuelto tiene que ser mayor que el total.';
       case 'vuelto_invalido': return 'Revisá el monto para el vuelto.';
       case 'moneda_no_disponible': return 'Esa moneda ya no se acepta. Elegí otra.';
-      case 'pago_no_iniciado': return 'No pudimos abrir el pago con tarjeta. Probá de nuevo o elegí efectivo.';
+      case 'pago_ocupado': return MENSAJE_PAGO_OCUPADO;
+      case 'pago_no_iniciado':
+        if (res?.detalle === 'pago_ocupado') return MENSAJE_PAGO_OCUPADO;
+        return 'No pudimos abrir el pago con tarjeta. Probá de nuevo o elegí efectivo.';
       default: return mensajeError(res?.error, 'No se pudo crear el pedido. Probá de nuevo.');
     }
   }
