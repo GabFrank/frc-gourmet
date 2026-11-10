@@ -40,6 +40,10 @@ export class Producto extends BaseModel {
   @Column({ type: 'boolean', default: true, comment: 'Indica si se controla el stock del producto.' })
   controlaStock!: boolean;
 
+  /** Clase de ítem de compra (CompraItemClase). Null: hereda la de su subfamilia. */
+  @Column({ name: 'clase_id', type: 'int', nullable: true })
+  claseId?: number | null;
+
   @Column({ type: 'boolean', default: false, comment: 'Indica si el producto puede ser usado como ingrediente en recetas.' })
   esIngrediente!: boolean;
 

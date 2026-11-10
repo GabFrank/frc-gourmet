@@ -36,6 +36,7 @@ import { registerProductoSectoresHandlers } from '../handlers/producto-sectores.
 import { registerProductosHandlers } from '../handlers/productos.handler';
 import { registerFinancieroHandlers } from '../handlers/financiero.handler';
 import { registerComprasHandlers } from '../handlers/compras.handler';
+import { registerCompraClasesHandlers } from '../handlers/compra-clases.handler';
 import { registerSystemHandlers } from '../handlers/system.handler';
 import { registerRemoteTunnelHandlers } from '../handlers/remote-tunnel.handler';
 import { registerVentasHandlers } from '../handlers/ventas.handler';
@@ -138,6 +139,7 @@ export function registerAllAppHandlers(opts: RegisterAllOptions): void {
   registerProductosHandlers(dataSource, getCurrentUser);
   registerFinancieroHandlers(dataSource, getCurrentUser);
   registerComprasHandlers(dataSource, getCurrentUser);
+  registerCompraClasesHandlers(dataSource, getCurrentUser);
   registerSystemHandlers(); // system handler doesn't need dataSource or user
   registerRemoteTunnelHandlers(); // acceso remoto via cloudflare quick tunnel
   registerVentasHandlers(dataSource, getCurrentUser);

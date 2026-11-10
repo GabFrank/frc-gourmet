@@ -11,6 +11,10 @@ export class Subfamilia extends BaseModel {
   @Column({ type: 'boolean', default: true })
   activo!: boolean;
 
+  /** Clase de ítem de compra por defecto de sus productos (CompraItemClase). */
+  @Column({ name: 'clase_id', type: 'int', nullable: true })
+  claseId?: number | null;
+
   // Relationships
   @ManyToOne(() => Familia, familia => familia.subfamilias)
   @JoinColumn({ name: 'familia_id' })
