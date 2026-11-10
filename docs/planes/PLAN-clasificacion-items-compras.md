@@ -70,3 +70,13 @@ Vuelta atrás: revert del squash-merge por PR (con OK). Las columnas nuevas qued
 ## 9. Entrega
 
 PR `feat(compras): clasificación de ítems de compra por clase y destino`, con capturas. Antes del merge: mostrar resultado al propietario y pedir su OK. Después: avisar al Gerente Don Franco las reglas de clasificación por línea para la carga por foto (orden: alias → genérico → palabra clave → encuesta) y actualizar la página `gourmet-api-guia`.
+
+## 10. Ajustes por la auditoría del plan (10/11, aprobada con observaciones)
+
+- **Conciliación del reporte:** el monto de cada línea es su `subtotal` (IVA incluido, como en la factura). Si la cabecera tiene descuento/recargo, se prorratea por subtotal para el reporte. El RPC devuelve además `totalCompras` del período (suma de `compra.total` no anuladas) y la diferencia; test que exige diferencia 0 en una compra mixta y en una simplificada.
+- **Permisos:** `get-compra-item-clases` y `get-alias-productos-proveedor` con el permiso de ver compras (`COMPRAS_VER` o el que use `get-compras`); `get-reporte-compras-por-clase` con el permiso de reportes de compras/dashboard que use hoy el dashboard de compras; `upsert-alias-producto` y ABM de clases con `COMPRAS_GESTIONAR`. Se confirman contra el código al implementar y se listan en el PR.
+- **Vuelta atrás del esquema:** el código anterior ignora columnas que no mapea (TypeORM con `synchronize:false`), así que un revert tolera filas con `clase_id`/`alias_id` cargados. La migración tiene `down()` que borra tabla y columnas (Postgres; SQLite con recreación de tabla), solo para uso manual. Antes de instalar se verifica que el backup pre-migración automático exista en Don Franco (log de `DatabaseService.initialize`).
+- **Clase desactivada:** no se ofrece para nuevas asignaciones, pero las líneas/productos que la tienen la conservan y el reporte la sigue mostrando (marcada «inactiva»).
+- **Unicidad del alias:** se mantiene la actual (proveedor + texto + producto); `codigo_proveedor` es informativo, sin unique.
+- **`controla_stock_por_defecto`:** solo sugiere el valor de `controlaStock` al crear un producto con esa clase (pantalla y bot); no cambia nada solo.
+- **Etapa 0:** se crean primero solo las 4 familias + subfamilia GENERAL. Los genéricos se listan uno por uno (nombre, presentación, controlaStock) y se cargan recién con esa lista aprobada.
