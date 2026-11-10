@@ -15,7 +15,7 @@ import { PedidoOnlineAviso } from '../src/app/database/entities/pedidos-online/p
 import { CuentaCliente } from '../src/app/database/entities/pedidos-online/cuenta-cliente.entity';
 import { TiendaOnlineConfig } from '../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import { EstadoPagoOnline, EstadoPedidoOnline, TipoPedidoOnline } from '../src/app/database/entities/pedidos-online/pedido-online.enums';
-import { eventoDe, fijarAppInstaladaEnPruebas, textoAviso, tickAvisosPedidos } from '../electron/services/avisos-pedido.service';
+import { eventoDe, fijarAppInstaladaEnPruebas, fijarRefrescoCanalEnPruebas, textoAviso, tickAvisosPedidos } from '../electron/services/avisos-pedido.service';
 import { setWhatsappFetch, setWhatsappOverrides } from '../electron/utils/whatsapp-sender';
 
 let pass = 0, fail = 0;
@@ -48,6 +48,7 @@ async function main() {
     return { ok: respuesta.status < 300, status: respuesta.status, text: async () => JSON.stringify(respuesta.body) };
   });
   fijarAppInstaladaEnPruebas(false);
+  fijarRefrescoCanalEnPruebas(false);
 
   const cfgRepo = ds.getRepository(TiendaOnlineConfig);
   const cfg = (await cfgRepo.find({ take: 1 }))[0] || await cfgRepo.save(cfgRepo.create({ activa: true, permitePickup: true, permiteDelivery: true, prepTimeMinutos: 30 } as any) as any);

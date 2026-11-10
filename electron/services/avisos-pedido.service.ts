@@ -26,6 +26,7 @@ import { TiendaOnlineConfig } from '../../src/app/database/entities/pedidos-onli
 import { EstadoPagoOnline, EstadoPedidoOnline, TipoPedidoOnline, esMetodoPagoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { appInstalada, enviarAvisoWhatsapp, nombreComercioWhatsapp, numeroWhatsapp } from '../utils/whatsapp-sender';
 import { urlPublicaTienda } from './pagos-online/pagos-online.service';
+import { refrescarCredencialesWhatsapp } from '../utils/tienda-ingreso.utils';
 
 export type EventoAviso = 'ACEPTADO' | 'LISTO' | 'EN_CAMINO' | 'ENTREGADO' | 'CANCELADO';
 
@@ -88,6 +89,11 @@ let instaladaEnPruebas: boolean | null = null;
 /** Solo tests: simula la app instalada (producción) o no. */
 export function fijarAppInstaladaEnPruebas(v: boolean | null): void {
   instaladaEnPruebas = v;
+}
+let refrescarCanal = true;
+/** Solo tests: no releer el canal de la base (el test lo inyecta). */
+export function fijarRefrescoCanalEnPruebas(v: boolean): void {
+  refrescarCanal = v;
 }
 const instalada = () => (instaladaEnPruebas ?? appInstalada());
 
@@ -185,6 +191,8 @@ export async function enviarAvisosPendientes(ds: DataSource, ahora = new Date())
 /** Un ciclo: encolar, mandar y purgar lo viejo. */
 export async function tickAvisosPedidos(ds: DataSource, ahora = new Date()): Promise<{ encolados: number } & ResultadoEnvio> {
   const cfg = await config(ds);
+  // El canal (Meta / Evolution) se puede cambiar en la config: se relee como el código de ingreso.
+  if (refrescarCanal) await refrescarCredencialesWhatsapp(ds).catch(() => undefined);
   const encolados = cfg?.avisosWhatsapp ? await encolarAvisos(ds, ahora) : 0;
   const envio = await enviarAvisosPendientes(ds, ahora);
   await ds.getRepository(PedidoOnlineAviso).createQueryBuilder().delete()
