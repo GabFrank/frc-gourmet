@@ -6,7 +6,7 @@
       <span class="dashboard-subtitle">Panel de control</span>
     </div>
     <div class="dashboard-header-actions">
-      <button mat-icon-button (click)="cargarKpis()" [disabled]="loading" matTooltip="Actualizar">
+      <button mat-icon-button (click)="cargarKpis(); cargarReporteClases()" [disabled]="loading" matTooltip="Actualizar">
         <mat-icon>refresh</mat-icon>
       </button>
     </div>
