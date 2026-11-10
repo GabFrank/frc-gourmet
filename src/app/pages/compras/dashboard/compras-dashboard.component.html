@@ -106,6 +106,40 @@
     </div>
 
     <div class="dashboard-col-right">
+      <div class="dashboard-card compras-por-clase">
+        <app-dash-section-header icon="category" title="Compras por clase"></app-dash-section-header>
+        <mat-divider></mat-divider>
+        <div class="clase-toolbar">
+          <label>Mes
+            <input type="month" [value]="mesClase" (change)="onMesClase($any($event.target).value)">
+          </label>
+        </div>
+        <div *ngIf="cargandoClases" class="dashboard-empty-state"><mat-spinner diameter="24"></mat-spinner></div>
+        <div *ngIf="!cargandoClases && errorClases" class="dashboard-empty-state">
+          <mat-icon>error_outline</mat-icon><span>{{ errorClases }}</span>
+        </div>
+        <div *ngIf="!cargandoClases && !errorClases && reporteClases.length === 0" class="dashboard-empty-state">
+          <mat-icon>info_outline</mat-icon><span>Sin compras en el mes</span>
+        </div>
+        <div *ngFor="let m of reporteClases" class="clase-moneda">
+          <table class="clase-tabla">
+            <thead><tr><th>Destino</th><th>Clase</th><th class="num">Monto</th><th class="num">%</th></tr></thead>
+            <tbody>
+              <tr *ngFor="let f of m.filas">
+                <td>{{ f.destino }}</td>
+                <td>{{ f.clase }}<span *ngIf="f.inactiva" class="muted"> (inactiva)</span></td>
+                <td class="num">{{ f.montoTexto }}</td>
+                <td class="num">{{ f.porcentaje }}</td>
+              </tr>
+            </tbody>
+            <tfoot><tr><td colspan="2">Total compras</td><td class="num">{{ m.totalTexto }}</td><td></td></tr></tfoot>
+          </table>
+          <div *ngIf="m.diferenciaTexto" class="clase-nota warn">Diferencia con el total: {{ m.diferenciaTexto }}</div>
+        </div>
+        <div class="clase-nota">Solo compras: los gastos de caja no entran (evita contarlos dos veces).</div>
+        <div *ngIf="borradoresTexto" class="clase-nota">{{ borradoresTexto }}</div>
+      </div>
+
       <app-dash-ranking
         [title]="tituloTopProveedores"
         icon="emoji_events"

@@ -120,6 +120,19 @@
           </mat-slide-toggle>
         </div>
         
+        <div class="form-row" *ngIf="informacionPrincipalForm.get('esComprable')?.value">
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Clase de compra</mat-label>
+            <mat-select formControlName="claseId" (selectionChange)="onClaseCambiada($event.value)">
+              <mat-option [value]="null">Según subfamilia</mat-option>
+              <mat-option *ngFor="let c of clases" [value]="c.id" [disabled]="!c.activo && c.id !== informacionPrincipalForm.get('claseId')?.value">
+                {{ c.nombre }} · {{ c.destino === 'CMV' ? 'CMV' : c.destino === 'REVENTA' ? 'Reventa' : 'Gasto operativo' }}
+              </mat-option>
+            </mat-select>
+            <mat-hint>A dónde va su costo en las compras (CMV, reventa o gasto operativo).</mat-hint>
+          </mat-form-field>
+        </div>
+
         <div class="toggles-container">
           <mat-slide-toggle
             *ngIf="controlaStockHabilitado"

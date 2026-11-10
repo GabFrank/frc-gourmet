@@ -3352,6 +3352,25 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // Compra Categorias
+  // Clasificación de ítems de compra (PLAN-clasificacion-items-compras)
+  getCompraItemClases: async (opts?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-compra-item-clases', opts);
+  },
+  createCompraItemClase: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('create-compra-item-clase', data);
+  },
+  updateCompraItemClase: async (id: number, data: any): Promise<any> => {
+    return await ipcRenderer.invoke('update-compra-item-clase', id, data);
+  },
+  getAliasProductosProveedor: async (proveedorId: number, opts?: any): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-alias-productos-proveedor', proveedorId, opts);
+  },
+  upsertAliasProducto: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('upsert-alias-producto', data);
+  },
+  getReporteComprasPorClase: async (params: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-reporte-compras-por-clase', params);
+  },
   getCompraCategorias: async (): Promise<any[]> => {
     return await ipcRenderer.invoke('get-compra-categorias');
   },

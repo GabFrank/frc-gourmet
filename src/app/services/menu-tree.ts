@@ -74,6 +74,7 @@ import { ListCajasMayorComponent } from 'src/app/pages/financiero/caja-mayor/lis
 import { ListChequerasComponent } from 'src/app/pages/financiero/caja-mayor/cheques/list-chequeras/list-chequeras.component';
 import { ListChequesComponent } from 'src/app/pages/financiero/caja-mayor/cheques/list-cheques/list-cheques.component';
 import { ListCompraCategoriasComponent } from 'src/app/pages/compras/categorias/list-compra-categorias.component';
+import { ListCompraItemClasesComponent } from 'src/app/pages/compras/clases-item/list-compra-item-clases.component';
 import { ListCuentasBancariasComponent } from 'src/app/pages/financiero/caja-mayor/bancos/list-cuentas-bancarias/list-cuentas-bancarias.component';
 import { ListCuentasPorPagarComponent } from 'src/app/pages/financiero/caja-mayor/cuentas-por-pagar/list-cuentas-por-pagar/list-cuentas-por-pagar.component';
 import { ListEntradasVariasComponent } from 'src/app/pages/financiero/caja-mayor/entradas-varias/list-entradas-varias/list-entradas-varias.component';
@@ -215,6 +216,9 @@ export const MENU_TREE: MenuNode[] = [
           { id: 'compra-categorias', label: 'Categorías de Compra', icon: 'category', permiso: 'COMPRAS_VER', esConfig: true,
             keywords: ['categoria', 'compra', 'compras'],
             action: { component: ListCompraCategoriasComponent, title: 'Categorias de Compra', tabId: 'compra-categorias-tab', data: {} } },
+          { id: 'compra-item-clases', label: 'Clases de ítem', icon: 'label', permiso: 'COMPRAS_VER', esConfig: true,
+            keywords: ['clase', 'clasificacion', 'cmv', 'gasto', 'reventa', 'compra'],
+            action: { component: ListCompraItemClasesComponent, title: 'Clases de ítem de compra', tabId: 'compra-item-clases-tab', data: {} } },
         ],
       },
     ],

@@ -92,6 +92,20 @@ export class ComprasDashboardComponent implements OnInit {
   chartData: ChartData<'line'> = { labels: [], datasets: [] };
   chartOptions: ChartConfiguration<'line'>['options'] = getDashboardChartOptions('line');
 
+  // --- Compras por clase (PLAN-clasificacion-items-compras) ---
+  mesClase = new Date().toISOString().slice(0, 7); // AAAA-MM
+  cargandoClases = false;
+  errorClases = '';
+  /** Precomputado por moneda: filas destino → clase → monto. */
+  reporteClases: {
+    moneda: string;
+    totalTexto: string;
+    diferenciaTexto: string;
+    filas: { destino: string; clase: string; montoTexto: string; porcentaje: number; inactiva: boolean }[];
+  }[] = [];
+  borradoresTexto = '';
+  private monedas: any[] = [];
+
   constructor(
     private tabsService: TabsService,
     private repository: RepositoryService,
@@ -99,6 +113,51 @@ export class ComprasDashboardComponent implements OnInit {
 
   ngOnInit(): void {
     this.cargarKpis();
+    this.cargarReporteClases();
+  }
+
+  onMesClase(valor: string): void {
+    if (!/^\d{4}-\d{2}$/.test(valor || '')) return;
+    this.mesClase = valor;
+    this.cargarReporteClases();
+  }
+
+  async cargarReporteClases(): Promise<void> {
+    this.cargandoClases = true;
+    this.errorClases = '';
+    try {
+      if (!this.monedas.length) this.monedas = (await firstValueFrom(this.repository.getMonedas())) as any[] || [];
+      const [a, m] = this.mesClase.split('-').map(Number);
+      const ultimo = new Date(a, m, 0).getDate();
+      const r: any = await firstValueFrom(this.repository.getReporteComprasPorClase({
+        desde: `${this.mesClase}-01`, hasta: `${this.mesClase}-${String(ultimo).padStart(2, '0')}`,
+      }));
+      const destinoLabel: Record<string, string> = {
+        CMV: 'CMV', REVENTA: 'Reventa', GASTO_OPERATIVO: 'Gasto operativo',
+        SIN_CLASIFICAR: 'Sin clasificar', SIN_DETALLE: 'Sin detalle',
+      };
+      const simbolo = (id: number | null) => this.monedas.find((x) => x.id === id)?.simbolo || '';
+      const fmt = (v: number, id: number | null) => `${(v || 0).toLocaleString('es-PY', { maximumFractionDigits: 2 })} ${simbolo(id)}`;
+      this.reporteClases = (r?.porMoneda || []).map((pm: any) => ({
+        moneda: simbolo(pm.monedaId),
+        totalTexto: fmt(pm.totalCompras, pm.monedaId),
+        diferenciaTexto: pm.diferencia ? fmt(pm.diferencia, pm.monedaId) : '',
+        filas: (r.filas || []).filter((f: any) => f.monedaId === pm.monedaId).map((f: any) => ({
+          destino: destinoLabel[f.destino] || f.destino,
+          clase: f.clase,
+          montoTexto: fmt(f.monto, f.monedaId),
+          porcentaje: pm.totalCompras ? Math.round((f.monto / pm.totalCompras) * 1000) / 10 : 0,
+          inactiva: !f.claseActiva,
+        })),
+      }));
+      const b = (r?.borradores || []).reduce((s: number, x: any) => s + x.cantidad, 0);
+      this.borradoresTexto = b ? `${b} compra(s) en borrador no entran en el reporte.` : '';
+    } catch (e: any) {
+      this.errorClases = e?.message || 'No se pudo cargar el reporte.';
+      this.reporteClases = [];
+    } finally {
+      this.cargandoClases = false;
+    }
   }
 
   setData(_data: any): void {}

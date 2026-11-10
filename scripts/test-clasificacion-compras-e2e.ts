@@ -11,7 +11,7 @@
  *   «Sin clasificar», «Sin detalle» (simplificada), excluye anuladas, borradores aparte,
  *   clase desactivada sigue saliendo marcada.
  *
- * Uso: npm run test:clasificacion-compras
+ * Uso: npm run test:clasificacion-compras  (Postgres: CLASIF_PG=<base vacía> npm run test:clasificacion-compras)
  */
 import 'reflect-metadata';
 import './_electron-mock';
@@ -23,6 +23,7 @@ import { invokeHandler } from '../electron/utils/handler-registry';
 import { getDataSourceOptions } from '../src/app/database/database.config';
 import { registerComprasHandlers } from '../electron/handlers/compras.handler';
 import { registerCompraClasesHandlers } from '../electron/handlers/compra-clases.handler';
+import { registerFacturaImportHandlers } from '../electron/handlers/factura-import.handler';
 import { resolverClaseLinea, agruparReporteCompras } from '../electron/utils/compra-clase.utils';
 import { ClasificacionItemsCompra1794356000000 } from '../src/app/database/migrations/1794356000000-ClasificacionItemsCompra';
 
@@ -57,8 +58,12 @@ async function main() {
   if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
   const dbFile = path.join(tmpDir, 'test-clasificacion-compras.db');
   if (fs.existsSync(dbFile)) fs.unlinkSync(dbFile);
-  const base = getDataSourceOptions(tmpDir);
-  const ds = new DataSource({ ...(base as any), database: dbFile, synchronize: false, migrationsRun: false });
+  // CLASIF_PG=<base vacía> corre lo mismo en Postgres (127.0.0.1, PGUSER o postgres).
+  const pgDb = process.env['CLASIF_PG'];
+  const ds = pgDb
+    ? new DataSource({ ...(getDataSourceOptions(tmpDir, { type: 'postgres', host: process.env['PGHOST'] || '127.0.0.1', database: pgDb, username: process.env['PGUSER'] || 'postgres', password: process.env['PGPASSWORD'] || '' } as any) as any), synchronize: false, migrationsRun: false })
+    : new DataSource({ ...(getDataSourceOptions(tmpDir) as any), database: dbFile, synchronize: false, migrationsRun: false });
+  console.log(`[clasif] ${pgDb ? 'postgres' : 'sqlite'}`);
   await ds.initialize();
   await ds.runMigrations({ transaction: 'each' });
   console.log('[clasif] Migraciones OK.');
@@ -90,7 +95,7 @@ async function main() {
 
   const admin: any = await save(Usuario, { nickname: 'admin', password: 'x', activo: true });
   const role: any = await save(Role, { descripcion: 'ADMIN', activo: true });
-  for (const cod of ['COMPRAS_GESTIONAR', 'COMPRAS_VER', 'COMPRAS_DASHBOARD_VER']) {
+  for (const cod of ['COMPRAS_GESTIONAR', 'COMPRAS_VER', 'COMPRAS_DASHBOARD_VER', 'COMPRAS_IMPORTAR_FACTURA']) {
     const perm: any = await save(Permission, { codigo: cod, descripcion: cod, activo: true });
     await save(RolePermission, { role, permission: perm });
   }
@@ -99,6 +104,7 @@ async function main() {
   let actual: any = admin;
   registerComprasHandlers(ds, () => actual);
   registerCompraClasesHandlers(ds, () => actual);
+  registerFacturaImportHandlers(ds, () => actual);
 
   const pyg: any = await save(Moneda, { denominacion: 'GUARANI', simbolo: 'Gs', principal: true, decimales: 0, activo: true });
   const usd: any = await save(Moneda, { denominacion: 'DOLAR', simbolo: 'US$', principal: false, decimales: 2, activo: true });
@@ -192,6 +198,30 @@ async function main() {
   lista = await invokeHandler('get-alias-productos-proveedor', prov.id);
   ok(lista.length === 1, 'alias desactivado no se lista');
   await esperaError(() => invokeHandler('upsert-alias-producto', { proveedorId: prov.id }), /necesita/, 'alias incompleto se rechaza');
+
+  // ---- Importación de factura: clase, texto original, alias con marca ----
+  console.log('[clasif] Confirmar factura importada');
+  const { DocumentoCompraImportado } = E('compras/documento-compra-importado.entity');
+  const doc: any = await save(DocumentoCompraImportado, { archivoUrl: 'x.png', archivoNombre: 'x.png', archivoTipo: 'IMAGE', estado: 'REQUIERE_REVISION', intentos: 1 });
+  const conf: any = await invokeHandler('factura-import-confirm', {
+    documentoId: doc.id,
+    datosCompra: { numeroNota: '001-001-0000123', fechaCompra: hoy, monedaId: pyg.id, tipoBoleta: 'COMUN' },
+    itemsVinculados: [
+      { indice: 0, productoId: lavandina.id, presentacionId: pLav.id, cantidad: 2, costoUnitario: 9000, descripcionOcr: 'LAVANDINA SANITOL 1L', omitir: false, marca: 'Sanitol', contenido: '1 L' },
+      { indice: 1, productoId: harina.id, presentacionId: pHar.id, cantidad: 1, costoUnitario: 10000, descripcionOcr: 'BOLSA PAPEL KRAFT', omitir: false, claseId: PACK },
+    ],
+    aliasProveedor: { textoOcr: 'EMBALACLEAN SA', rucOcr: null, proveedorId: prov.id },
+  });
+  const cImp: any = await invokeHandler('getCompra', conf.compraId);
+  const dLav = cImp.detalles.find((d: any) => d.producto.id === lavandina.id);
+  const dBol = cImp.detalles.find((d: any) => d.producto.id === harina.id);
+  ok(dLav.claseId === LIMPIEZA && dLav.textoOriginal === 'LAVANDINA SANITOL 1L', 'importación hereda la clase y guarda el texto de la factura', dLav);
+  ok(dBol.claseId === PACK, 'importación respeta la clase elegida en la línea');
+  const aliasSanitol = (await invokeHandler('get-alias-productos-proveedor', prov.id)).find((a: any) => a.textoOcr === 'LAVANDINA SANITOL 1L');
+  ok(dLav.aliasId === aliasSanitol?.id, 'la línea queda vinculada a su alias', { aliasId: dLav.aliasId, alias: aliasSanitol?.id });
+  ok(aliasSanitol?.marca === 'Sanitol' && aliasSanitol?.vecesUsado === 2, 'la importación refuerza el alias y conserva la marca', aliasSanitol);
+  await invokeHandler('anular-compra', conf.compraId, 'solo prueba de importación').catch(() => null);
+  await ds.getRepository(Compra).update(conf.compraId, { estado: 'CANCELADO' });
 
   // ---- Reporte ----
   console.log('[clasif] Reporte por clase');

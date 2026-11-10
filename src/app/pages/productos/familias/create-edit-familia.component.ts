@@ -6,6 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatSelectModule } from '@angular/material/select';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -37,6 +38,7 @@ interface DialogData {
     MatButtonModule,
     MatIconModule,
     MatCheckboxModule,
+    MatSelectModule,
     MatSnackBarModule,
     MatProgressBarModule,
     MatExpansionModule,
@@ -59,7 +61,7 @@ export class CreateEditFamiliaComponent implements OnInit {
   // Subfamilias management
   subfamilias: Subfamilia[] = [];
   subfamiliaDataSource = new MatTableDataSource<Subfamilia>();
-  subfamiliaDisplayedColumns: string[] = ['nombre', 'activo', 'actions'];
+  subfamiliaDisplayedColumns: string[] = ['nombre', 'clase', 'activo', 'actions'];
   isAddingSubfamilia = false;
   editingSubfamiliaId: number | null = null;
   
@@ -84,11 +86,24 @@ export class CreateEditFamiliaComponent implements OnInit {
 
     this.subfamiliaForm = this.fb.group({
       nombre: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(255)]],
-      activo: [true]
+      activo: [true],
+      claseId: [null as number | null],
     });
   }
 
+  /** Clases de ítem de compra: la subfamilia define la clase por defecto de sus productos. */
+  clases: any[] = [];
+
+  claseNombre(id: number | null | undefined): string {
+    const c = this.clases.find((x) => x.id === id);
+    return c ? c.nombre : '—';
+  }
+
   ngOnInit(): void {
+    this.repositoryService.getCompraItemClases({ incluirInactivas: true }).subscribe({
+      next: (c) => (this.clases = c || []),
+      error: () => (this.clases = []),
+    });
     if (this.data.isEdit && this.data.familia) {
       this.currentFamilia = this.data.familia;
       this.familiaForm.patchValue({
@@ -128,7 +143,8 @@ export class CreateEditFamiliaComponent implements OnInit {
     this.editingSubfamiliaId = null;
     this.subfamiliaForm.reset({
       nombre: '',
-      activo: true
+      activo: true,
+      claseId: null,
     });
   }
 
@@ -145,7 +161,8 @@ export class CreateEditFamiliaComponent implements OnInit {
     this.editingSubfamiliaId = subfamilia.id!;
     this.subfamiliaForm.patchValue({
       nombre: subfamilia.nombre,
-      activo: subfamilia.activo
+      activo: subfamilia.activo,
+      claseId: subfamilia.claseId ?? null,
     });
   }
 
