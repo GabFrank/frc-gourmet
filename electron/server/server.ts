@@ -14,6 +14,8 @@
  * El servidor se arranca despues de los `register*Handlers` para que el
  * handlerRegistry ya este poblado al servir requests.
  */
+import { iniciarJobPagosOnline, detenerJobPagosOnline } from '../services/pagos-online/pagos-online.service';
+import { materializarTrasPago } from '../handlers/pedidos-online-pedidos.handler';
 import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
@@ -31,6 +33,7 @@ import { registerFileRoutes } from './file-routes';
 import { registerKdsSseRoutes } from './kds-sse-routes';
 import { registerMusicaSseRoutes } from './musica-sse-routes';
 import { registerMesaSseRoutes } from './mesa-sse-routes';
+import { clientIpDe } from '../utils/client-ip.util';
 import { registerPublicRoutes } from './public-routes';
 import { registerQrUploadRoutes } from './qr-upload-routes';
 import { registerAuthPlugin } from './auth-middleware';
@@ -144,6 +147,9 @@ async function buildInstance(
       return false;
     },
     keyGenerator: (request) => {
+      // /pub: IP real detrás del túnel (cf-connecting-ip), si no todos los
+      // clientes de internet comparten el bucket de 127.0.0.1 (PLAN-tienda-online C3).
+      if (request.url.startsWith('/pub/')) return `pub:${clientIpDe(request).ip}`;
       const authHeader = request.headers['authorization'];
       if (!authHeader || !authHeader.startsWith('Bearer ')) return request.ip;
 
@@ -326,6 +332,10 @@ export async function startServer(opts: ServerOptions): Promise<FastifyInstance>
   instances.push(httpFastify);
   console.log(`[server] Fastify escuchando en http://${host}:${opts.port}`);
 
+  // Pago online de la tienda (PLAN-tienda-online F4): el job de confirmación vive en el
+  // mismo proceso que atiende la tienda. Corre aunque el pago esté apagado (pagos en curso).
+  iniciarJobPagosOnline(opts.dataSource, (id) => materializarTrasPago(opts.dataSource, id));
+
   // Listener HTTPS (opcional) — LAN-directo con cert válido (latencia baja).
   if (opts.certPath && opts.keyPath && existsSync(opts.certPath) && existsSync(opts.keyPath)) {
     try {
@@ -349,6 +359,7 @@ export async function startServer(opts: ServerOptions): Promise<FastifyInstance>
 }
 
 export async function stopServer(): Promise<void> {
+  detenerJobPagosOnline();
   if (!instances.length) return;
   await Promise.all(instances.map((i) => i.close()));
   instances.length = 0;
