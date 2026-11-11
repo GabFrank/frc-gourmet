@@ -1,11 +1,5 @@
-// Material Icons Font (Local fallback)
-@font-face {
-  font-family: 'Material Icons';
-  font-style: normal;
-  font-weight: 400;
-  src: url(https://fonts.gstatic.com/s/materialicons/v139/flUhRq6tzZclQEJ-Vdg-IuiaDsNcIhQ8tQ.woff2) format('woff2');
-}
-
+// Material Icons y Roboto se empaquetan con la app (angular.json → styles),
+// así funcionan sin internet. Acá solo la clase.
 .material-icons {
   font-family: 'Material Icons';
   font-weight: normal;
