@@ -13,6 +13,7 @@
  *   `pagoOnlineActivo` esté apagado: apagarlo solo deja de ofrecer el pago a pedidos nuevos.
  */
 import { randomUUID } from 'crypto';
+import { totalEnReales } from '../../utils/pago-pedido.utils';
 import { Brackets, DataSource, IsNull } from 'typeorm';
 import { PedidoOnline } from '../../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { PagoOnlineEvento } from '../../../src/app/database/entities/pedidos-online/pago-online-evento.entity';
@@ -288,6 +289,7 @@ export async function iniciarPagoPedido(
       procesoNumerico: procesoNumerico(p.id, intento),
       idempotencyKey: idem,
       monto: Number(p.total),
+      montoReales: await totalEnReales(ds, Number(p.total)).catch(() => null),
       urlVuelta: vuelta,
       descripcion: `Pedido ${p.numero}`,
       items: [

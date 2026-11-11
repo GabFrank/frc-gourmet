@@ -19,7 +19,7 @@ import {
   iniciarPagoPedido, verificarPagoPedido, cobroOcupado, permitirCobrosSimultaneosEnPruebas, setPagosOnlineDeps, pagoOnlineDisponible, cuentasListas, procesarAvisoPago,
   tickPagosOnline,
 } from '../electron/services/pagos-online/pagos-online.service';
-import { icpayProveedor, interpretarOrdenIcpay, montoIcpay, usdDesdeGuaranies } from '../electron/services/pagos-online/proveedores/icpay.proveedor';
+import { icpayProveedor, interpretarOrdenIcpay, montoIcpay, usdDesdeGuaranies, usdDesdeReales } from '../electron/services/pagos-online/proveedores/icpay.proveedor';
 import { normalizarApiKey, normalizarBaseIcpay, olvidarSesionesIcpay } from '../electron/services/pagos-online/proveedores/icpay-auth';
 import { olvidarPanoramaTron } from '../electron/services/pagos-online/proveedores/icpay-tron';
 import { cargarCredencialesTienda, proveedoresPagoListos, pagoOnlineOfrecido } from '../electron/utils/tienda-ingreso.utils';
@@ -87,6 +87,9 @@ const fakeFetch = async (url: string, init: any = {}) => {
   if (h['x-api-key'] !== KEY && h['x-api-key'] !== KEY2) return res(401, { message: 'Invalid API Key', statusCode: 401 });
   const tok = String(h['Authorization'] || '').replace(/^Bearer /, '');
   if (!tokens.has(tok)) return res(401, { error: 'TokenExpired', message: 'Access token expired', statusCode: 401 });
+  if (ruta === '/api/v1/quote' && u.searchParams.get('fromCurrency') === 'USD' && u.searchParams.get('toCurrency') === 'BRL') {
+    return res(200, { success: true, data: { fromCurrency: 'USD', toCurrency: 'BRL', baseExchangeRate: String(BRL_POR_USD), targetExchangeRate: String(1 / BRL_POR_USD) } });
+  }
   if (ruta === '/api/v1/quote') {
     if (cotizacionMala) return res(200, { success: true, data: { fromCurrency: 'PYG', toCurrency: 'USD', baseExchangeRate: '0', targetExchangeRate: '0' } });
     return res(200, { success: true, data: { fromCurrency: 'PYG', toCurrency: 'USD', baseExchangeRate: String(PYG_POR_USD), targetExchangeRate: String(1 / PYG_POR_USD) } });
@@ -192,6 +195,7 @@ async function main() {
   ok(usdDesdeGuaranies(6350, 6350) === 1 && usdDesdeGuaranies(112000, 6350) === 17.64 && usdDesdeGuaranies(6351, 6350) === 1.01,
     'guaraníes → USD redondeando hacia arriba a centavos', [usdDesdeGuaranies(112000, 6350), usdDesdeGuaranies(6351, 6350)]);
   ok(isNaN(usdDesdeGuaranies(1000, 0)) && isNaN(usdDesdeGuaranies(0, 6350)), 'sin tasa o sin monto → NaN');
+  ok(usdDesdeReales(7, 5.6991) === 1.23 && usdDesdeReales(5.6991, 5.6991) === 1 && isNaN(usdDesdeReales(7, 0)), 'reales → USD hacia arriba a centavos (R$ 7 a 5,6991 → US$ 1,23)');
   ok(montoIcpay('5.64') === 5.64 && montoIcpay('541,24') === 541.24 && montoIcpay('1.234,56') === 1234.56 && isNaN(montoIcpay('x')), 'montos de IC con punto o coma');
   ok(normalizarBaseIcpay('https://stage.api.ic.com.py/api/v1/') === BASE && normalizarBaseIcpay(BASE) === BASE, 'URL base sin el prefijo /api/v1');
   ok(normalizarApiKey(`x-api-key: ${KEY}`) === KEY && normalizarApiKey(`  ${KEY} `) === KEY, 'API key copiada con el nombre de la cabecera');
@@ -294,6 +298,29 @@ async function main() {
   const crudos = (await eventos(p1.id)).map((e) => e.respuesta || '').join(' ');
   ok(crudos.includes('JOAO DA SILVA') && !crudos.includes('12345678900'), 'el historial guarda el nombre del pagador, no su CPF');
   ok(!/tok-\d|ref-\d/.test(crudos) && !crudos.includes(PASS) && !crudos.includes(KEY), 'el historial no guarda tokens, contraseña ni API key');
+
+  console.log('Pix en los reales que mostró la tienda');
+  {
+    const { Moneda } = require('../src/app/database/entities/financiero/moneda.entity');
+    const { MonedaCambio } = require('../src/app/database/entities/financiero/moneda-cambio.entity');
+    const mr = (e: any) => ds.getRepository(e);
+    const gs: any = await mr(Moneda).save(mr(Moneda).create({ denominacion: 'GUARANI', simbolo: '₲', principal: true, activo: true, decimales: 0 } as any));
+    const real: any = await mr(Moneda).save(mr(Moneda).create({ denominacion: 'REAL', simbolo: 'R$', countryCode: 'BR', principal: false, activo: true, decimales: 2 } as any));
+    const cambio: any = await mr(MonedaCambio).save(mr(MonedaCambio).create({ monedaOrigen: { id: real.id }, monedaDestino: { id: gs.id }, compraOficial: 1000, ventaOficial: 1000, compraLocal: 1000, ventaLocal: 1000, activo: true } as any));
+    const pr = await nuevo(7000);
+    const ir: any = await iniciarPagoPedido(ds, pr.id);
+    const cr = llamadas.filter((l) => l.metodo === 'POST' && l.ruta === '/api/v1/payment/order').pop();
+    const esperadoUsd = usdDesdeReales(7, BRL_POR_USD);
+    ok(ir.success && cr?.body.amount === esperadoUsd.toFixed(2), `₲ 7.000 a ₲ 1.000 el real = R$ 7,00 → US$ ${esperadoUsd.toFixed(2)} (no los US$ de convertir los guaraníes)`, cr?.body);
+    const brl = Number(ir.qr?.monto);
+    ok(brl >= 7 && brl < 7 + BRL_POR_USD / 100 + 0.001, 'el cliente paga los R$ 7,00 que vio (o unos centavos más, nunca menos)', ir.qr);
+    const dr = await datosDe(pr.id);
+    ok(dr?.realesTienda === '7.00' && Number(dr?.brlPorUsdPedido) === BRL_POR_USD, 'guarda los reales de la tienda y la cotización de IC', dr);
+    // Sin real configurado: como antes, desde los guaraníes.
+    await mr(MonedaCambio).delete({ id: cambio.id });
+    await mr(Moneda).delete({ id: real.id });
+    await mr(Moneda).delete({ id: gs.id });
+  }
 
   console.log('Idempotencia');
   const p2 = await nuevo(6350);

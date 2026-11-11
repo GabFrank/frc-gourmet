@@ -44,6 +44,11 @@ export interface CobroInput {
   idempotencyKey: string;
   /** Guaraníes enteros. */
   monto: number;
+  /**
+   * El mismo total en reales, con la cotización de la tienda: lo que el cliente vio en la carta y el
+   * checkout. Un proveedor que cobra en reales (IC Pay, Pix) cobra esto y no una conversión propia.
+   */
+  montoReales?: number | null;
   /** Página de vuelta del storefront (`…/tienda/pago/<numero>`), sin parámetros. */
   urlVuelta: string;
   descripcion: string;

@@ -40,6 +40,21 @@ export function metodosAlRecibir(cfg: { metodosPago?: string | null } | null | u
 }
 
 /** Monedas activas con cotización vigente a la principal (las que no tienen, no se ofrecen). */
+/**
+ * El total en reales como lo muestra la tienda (misma cotización y mismo redondeo hacia arriba que
+ * `convertir` del storefront). null si la tienda no tiene el real activo con cotización.
+ */
+export async function totalEnReales(ds: DataSource, guaranies: number): Promise<number | null> {
+  const real = (await ds.getRepository(Moneda).find({ where: { activo: true } as any }) as any[])
+    .find((m) => !m.principal && (String(m.countryCode || '').toUpperCase() === 'BR' || String(m.simbolo || '').trim() === 'R$'));
+  if (!real) return null;
+  const lista = await monedasTienda(ds);
+  const m = lista.find((x) => x.id === real.id);
+  if (!m || !(m.cotizacion > 0) || !(guaranies > 0)) return null;
+  const f = Math.pow(10, Math.max(0, m.decimales));
+  return Math.ceil((guaranies / m.cotizacion) * f - 1e-9) / f;
+}
+
 export async function monedasTienda(ds: DataSource): Promise<MonedaTienda[]> {
   const monedas = await ds.getRepository(Moneda).find({ where: { activo: true } as any, order: { id: 'ASC' } as any });
   const principal = monedas.find((m: any) => m.principal);

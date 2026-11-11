@@ -46,6 +46,12 @@ export function montoIcpay(v: any): number {
   return /^\d+(\.\d+)?$/.test(s) ? Number(s) : NaN;
 }
 
+/** Reales → USD con la tasa «reales por dólar», hacia arriba a centavos (IC no cobra de menos). */
+export function usdDesdeReales(reales: number, brlPorUsd: number): number {
+  if (!(reales > 0) || !(brlPorUsd > 0)) return NaN;
+  return Math.ceil(Math.round((reales / brlPorUsd) * 1e6) / 1e4) / 100;
+}
+
 /** Guaraníes → USD con la tasa «guaraníes por dólar», redondeado hacia arriba a centavos. */
 export function usdDesdeGuaranies(guaranies: number, pygPorUsd: number): number {
   if (!(guaranies > 0) || !(pygPorUsd > 0)) return NaN;
@@ -146,7 +152,20 @@ const proveedor: ProveedorPagoOnline<IcpayConfig> = {
     const base = Number(q?.data?.baseExchangeRate);
     const inv = Number(q?.data?.targetExchangeRate);
     const pygPorUsd = base > 0 ? base : inv > 0 ? 1 / inv : NaN;
-    const usd = usdDesdeGuaranies(input.monto, pygPorUsd);
+    let usd = usdDesdeGuaranies(input.monto, pygPorUsd);
+    // Pix: el cliente vio el total en reales con la cotización de la tienda y eso es lo que se le
+    // cobra. IC solo acepta órdenes en dólares y convierte con su cotización: se le piden los
+    // dólares que, a su cotización, dan esos reales (hacia arriba: unos centavos de más, nunca de
+    // menos). Sin el real configurado en la tienda, se sigue convirtiendo desde los guaraníes.
+    let brlPorUsd: number | null = null;
+    if (creds.moneda === 'BRL' && Number(input.montoReales) > 0) {
+      const qb = jsonDe(await icpayLlamar(creds, ctx.fetch, 'GET', '/api/v1/quote?fromCurrency=USD&toCurrency=BRL&context=payment_order'), 'cotizar en reales');
+      const b = Number(qb?.data?.baseExchangeRate);
+      const t = Number(qb?.data?.targetExchangeRate);
+      brlPorUsd = b > 0 ? b : t > 0 ? 1 / t : null;
+      if (!(brlPorUsd && brlPorUsd > 0)) throw new ProveedorError('icpay_cotizacion', `cotización de IC dólar→real inválida (${qb?.data?.baseExchangeRate ?? 'sin tasa'})`);
+      usd = usdDesdeReales(Number(input.montoReales), brlPorUsd);
+    }
     if (!(usd >= 0.01)) throw new ProveedorError('icpay_cotizacion', `cotización de IC inválida (${q?.data?.baseExchangeRate ?? 'sin tasa'})`);
 
     // IC trata dos órdenes del mismo monto como la misma (responde la existente aunque la
@@ -181,7 +200,7 @@ const proveedor: ProveedorPagoOnline<IcpayConfig> = {
       sesionId: String(o.id),
       qr,
       expiraEn: expira,
-      datos: { qr, usd: usdFinal.toFixed(2), pygPorUsd, cotizacionBrl: o.quote ?? null, ...(usdFinal !== usd ? { usdCalculado: usd.toFixed(2) } : {}) },
+      datos: { qr, usd: usdFinal.toFixed(2), pygPorUsd, cotizacionBrl: o.quote ?? null, ...(brlPorUsd ? { realesTienda: Number(input.montoReales).toFixed(2), brlPorUsdPedido: brlPorUsd } : {}), ...(usdFinal !== usd ? { usdCalculado: usd.toFixed(2) } : {}) },
       crudo: { status: o.status, id: o.id, amount: o.amount, totalAmount: o.totalAmount, quote: o.quote, pygPorUsd, expiresAt: o.qrData?.expiresAt ?? null, ...(usdFinal !== usd ? { usdCalculado: usd.toFixed(2) } : {}) },
     };
   },
