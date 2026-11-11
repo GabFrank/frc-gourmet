@@ -34,6 +34,8 @@ export class ProductoDetallePage implements OnInit {
   cantidad = 1;
 
   ngOnInit(): void {
+    // El detalle abre siempre desde arriba (la foto entera), venga de donde venga en la carta.
+    window.scrollTo({ top: 0 });
     const id = Number(this.route.snapshot.paramMap.get('id'));
     this.menuSvc.cargar().subscribe({
       next: () => {

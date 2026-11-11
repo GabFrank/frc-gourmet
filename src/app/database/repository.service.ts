@@ -550,6 +550,10 @@ export abstract class RepositoryService {
   abstract getZonasDeliveryAdmin(): Observable<any[]>;
   abstract guardarZonaDelivery(data: any): Observable<any>;
   abstract eliminarZonaDelivery(zonaId: number): Observable<any>;
+  abstract getTiendaCategoriasAdmin(): Observable<any[]>;
+  abstract guardarTiendaCategoria(data: any): Observable<any>;
+  abstract eliminarTiendaCategoria(categoriaId: number): Observable<any>;
+  abstract reordenarTiendaCategorias(ids: number[]): Observable<any>;
   // Producción de buffet (cargar cubas)
   abstract crearProduccion(data: any): Observable<any>;
   abstract getProducciones(filtros?: any): Observable<any[]>;

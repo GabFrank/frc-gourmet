@@ -46,6 +46,8 @@ export class PizzaDetallePage implements OnInit {
   cantidad = 1;
 
   ngOnInit(): void {
+    // El detalle abre siempre desde arriba (la foto entera), venga de donde venga en la carta.
+    window.scrollTo({ top: 0 });
     const productoId = Number(this.route.snapshot.paramMap.get('productoId'));
     const saborId = Number(this.route.snapshot.paramMap.get('saborId'));
     this.menuSvc.cargar().subscribe({

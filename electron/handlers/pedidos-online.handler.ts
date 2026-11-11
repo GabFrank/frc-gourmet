@@ -8,6 +8,8 @@ import { RecetaAdicionalVinculacion } from '../../src/app/database/entities/prod
 import { ProductoObservacion } from '../../src/app/database/entities/productos/producto-observacion.entity';
 import { getPizzaConfig } from './pedidos-online-config.handler';
 import { registerPublicOperation } from '../server/public-routes';
+import { TiendaCategoria } from '../../src/app/database/entities/pedidos-online/tienda-categoria.entity';
+import { armarCategoriasTienda } from '../utils/tienda-categorias.utils';
 
 /**
  * Handlers de PEDIDOS ONLINE — menú publicable (carta) para el storefront.
@@ -260,8 +262,27 @@ export function registerPedidosOnlineHandlers(
       });
     }
 
+    // F6: si el local armó categorías propias para la tienda, la carta se muestra con esas.
+    const categoriasTienda = await dataSource.getRepository(TiendaCategoria).find({
+      where: { activo: true },
+      relations: ['productos', 'productos.producto'],
+    });
+    const categorias = armarCategoriasTienda(
+      Array.from(categoriasMap.values()),
+      items.map((i) => i.id),
+      (categoriasTienda as any[]).map((c) => ({
+        id: c.id,
+        nombre: c.nombre,
+        orden: c.orden,
+        activo: c.activo,
+        productos: (c.productos || [])
+          .filter((cp: any) => cp.producto)
+          .map((cp: any) => ({ productoId: cp.producto.id, orden: cp.orden })),
+      })),
+    );
+
     return {
-      categorias: Array.from(categoriasMap.values()),
+      categorias,
       productos: items,
       total: items.length,
       publicadoEn: new Date().toISOString(),

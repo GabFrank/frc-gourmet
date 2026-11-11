@@ -4,6 +4,7 @@
    El acento (--sf-primary) es override-able por local vía TiendaOnlineConfig.
    ============================================================================ */
 :root {
+  color-scheme: only light;
   /* Acento (rojo cálido iFood) — configurable por local */
   --sf-primary: #EA1D2C;
   --sf-primary-hover: #C8101E;
@@ -50,7 +51,7 @@
   /* Medidas */
   --sf-header-h: 56px;
   --sf-btn-h: 50px;
-  --sf-item-photo: 92px;
+  --sf-item-photo: 80px;
 
   --sf-max: 720px; /* ancho máximo del contenido (mobile-first centrado) */
 }
