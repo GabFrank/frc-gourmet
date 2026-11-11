@@ -175,12 +175,14 @@ export class CheckoutPage implements OnInit, OnDestroy {
         tipoPedido: 'MESA_QR',
         mesaToken: this.mesa.token,
         nombreCliente: nombre,
+        idempotencyKey: this.claveIntento(),
         items: this.cart.toPedidoItems(),
         notas: this.notas.trim() || null,
       };
       this.api.call<any>('pedido.crear', [payloadMesa]).subscribe({
         next: (res) => {
           this.enviando = false;
+          this.idemKey = null;
           if (res?.success) {
             this.cart.limpiar();
             this.router.navigate(['/mis-pedidos'], { queryParams: { nuevo: res.numero } });
@@ -216,6 +218,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
     this.enviando = true;
     const payload: any = {
       tipoPedido: this.tipo,
+      idempotencyKey: this.claveIntento(),
       items: this.cart.toPedidoItems(),
       direccionEntrega: this.tipo === 'DELIVERY' ? direccionFinal : null,
       referenciaDireccion: this.referencia.trim() || null,
@@ -228,11 +231,31 @@ export class CheckoutPage implements OnInit, OnDestroy {
     this.api.call<any>('pedido.crear', [payload]).subscribe({
       next: (res) => {
         this.enviando = false;
+        this.idemKey = null;
         if (res?.success) { this.cart.limpiar(); this.router.navigate(['/mis-pedidos'], { queryParams: { nuevo: res.numero } }); }
         else this.error = this.mensajeError(res);
       },
       error: (e) => { this.enviando = false; this.error = 'No se pudo enviar el pedido. ' + (e?.message || ''); },
     });
+  }
+
+  /**
+   * Clave de idempotencia del intento: se mantiene mientras el envío falle por red (el
+   * server pudo haberlo guardado y el reintento devuelve ese mismo pedido) y se descarta
+   * cuando el server contesta, con éxito o con un error de negocio (no se guardó nada).
+   */
+  private idemKey: string | null = null;
+  private claveIntento(): string {
+    if (!this.idemKey) {
+      const c: any = (globalThis as any).crypto;
+      this.idemKey = typeof c?.randomUUID === 'function'
+        ? c.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+          const r = (Math.random() * 16) | 0;
+          return (ch === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+        });
+    }
+    return this.idemKey!;
   }
 
   private mensajeError(res: any): string {
@@ -243,10 +266,10 @@ export class CheckoutPage implements OnInit, OnDestroy {
       case 'falta_direccion': return 'Ingresá la dirección.';
       case 'falta_ubicacion_mapa': return 'Marcá en el mapa dónde entregamos.';
       case 'fuera_de_cobertura': return 'Todavía no llegamos a esa zona. Podés elegir Retiro, o escribirnos.';
+      case 'delivery_no_disponible': return 'Por ahora no hacemos delivery por la tienda. Podés elegir Retiro.';
       case 'monto_minimo_global': return `El pedido mínimo es ${res.montoMinimo}. Tu subtotal es ${res.subtotal}.`;
       case 'tienda_cerrada': return 'La tienda está cerrada en este momento.';
       case 'pickup_no_disponible': return 'El retiro no está disponible.';
-      case 'delivery_no_disponible': return 'El delivery no está disponible.';
       case 'mesa_no_disponible': return 'Los pedidos en mesa no están habilitados.';
       case 'mesa_invalida': return 'El código de la mesa no es válido. Escaneá de nuevo el QR.';
       case 'mesa_no_habilitada': return 'La mesa no está habilitada. Pedile al mozo que active el autoservicio.';
