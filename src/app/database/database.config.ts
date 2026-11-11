@@ -338,6 +338,9 @@ import { AcreditacionesPosReglas1793110000000 } from './migrations/1793110000000
 import { FichasCantina1793299117857 } from './migrations/1793299117857-FichasCantina';
 import { CajaMayorMontosAmplios1793302813170 } from './migrations/1793302813170-CajaMayorMontosAmplios';
 import { PdvTiposVenta1793381465964 } from './migrations/1793381465964-PdvTiposVenta';
+import { TiendaOnlineSeguridad1793727680955 } from './migrations/1793727680955-TiendaOnlineSeguridad';
+import { TiendaSeguimientoMesa1793727681955 } from './migrations/1793727681955-TiendaSeguimientoMesa';
+import { TiendaIngresoClientes1793727682955 } from './migrations/1793727682955-TiendaIngresoClientes';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -816,6 +819,9 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     CajaMayorMontosAmplios1793302813170,
     // PdV: tipos de venta habilitados (mesas, comandas, venta rápida), global
     PdvTiposVenta1793381465964,
+    TiendaOnlineSeguridad1793727680955,
+    TiendaSeguimientoMesa1793727681955,
+    TiendaIngresoClientes1793727682955,
   ];
 }
 

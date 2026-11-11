@@ -8,11 +8,12 @@ import { ConfigService } from '../../core/config.service';
 import { AppImgPipe } from '../../core/app-img.pipe';
 import { IconComponent } from '../../core/icon.component';
 import { MenuProducto, MenuOpcion, MenuAdicional, MenuObservacion } from '../../core/models';
+import { GuaraniPipe } from '../../core/guarani.pipe';
 
 @Component({
   selector: 'sf-producto-detalle',
   standalone: true,
-  imports: [CommonModule, FormsModule, AppImgPipe, IconComponent],
+  imports: [GuaraniPipe, CommonModule, FormsModule, AppImgPipe, IconComponent],
   templateUrl: './producto-detalle.page.html',
   styleUrls: ['./producto-detalle.page.scss'],
 })
