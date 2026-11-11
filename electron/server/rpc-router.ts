@@ -32,6 +32,13 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 // negocio; esto cierra los canales de infraestructura.
 const BLOCKED_CHANNELS = new Set<string>([
   'set-current-user',  // current user es session local del Electron, no del cliente HTTP
+  // #357: tocan la sesión global de la consola del servidor (setCurrentUser).
+  // La PWA / modo cliente cierra sesión por /api/auth/logout.
+  // `login` además reemplaza la consola con el usuario que se loguea y evita el
+  // límite de pedidos de /api/auth/login (la PWA lo desvía allá).
+  'login',
+  'logout',
+  'restoreSession',
   'reset-database',
   'restart-app',
 
@@ -149,14 +156,30 @@ export function registerRpcRoute(fastify: FastifyInstance, dataSource?: DataSour
       // antes de invocar el handler. Sin esto, `checkPermission` leeria del
       // `getCurrentUser()` global del main process (que es el operador del
       // server, no el cliente HTTP que hizo este request).
+      //
+      // #357: fail-closed. Si no se puede resolver un usuario ACTIVO del JWT
+      // (token sin id, usuario borrado o inactivo, o la consulta falla), NO
+      // se cae al operador de la consola: se corta con 401/503. Todos los
+      // emisores de JWT de staff (auth-routes, device-auth-routes, login IPC)
+      // ponen `id`; el token de cliente de la tienda usa otro secreto.
       let requestUser: Usuario | null = null;
-      if (userId != null && dataSource) {
+      if (dataSource) {
+        if (userId == null) {
+          reply.code(401);
+          return { error: 'NO AUTENTICADO: token sin usuario' };
+        }
         try {
           requestUser = await dataSource.getRepository(Usuario).findOne({
             where: { id: userId },
           });
         } catch (e) {
           console.warn('[rpc] no se pudo cargar usuario del JWT para autorizacion:', e);
+          reply.code(503);
+          return { error: 'NO SE PUDO VERIFICAR EL USUARIO, REINTENTE' };
+        }
+        if (!requestUser || !requestUser.activo) {
+          reply.code(401);
+          return { error: 'NO AUTENTICADO: usuario inexistente o inactivo' };
         }
       }
 
