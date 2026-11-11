@@ -276,6 +276,19 @@ async function main() {
     const v2: any = await invokeHandlerWithContext('pub-cliente-google-vincular', ctx(intruso), 'dueno@gmail.com');
     ok(v2?.error === 'google_en_otra_cuenta' && (await R(CuentaCliente).findOne({ where: { id: dueno.id } }))?.email === 'dueno@gmail.com',
       '7: no se puede vincular un Gmail verificado de otra cuenta', v2);
+    // La misma persona con una cuenta de teléfono y otra solo de Google: se unen.
+    const soloGoogle = await save(CuentaCliente, { email: 'doble@gmail.com', emailVerificado: true, telefonoContacto: '595981000999', nombre: 'DOBLE', activo: true });
+    const pedG = await save(PedidoOnline, { numero: 'PO-UNION-1', cuentaCliente: soloGoogle, tipoPedido: 'PICKUP', estado: 'ENTREGADO', subtotal: 1, total: 1, metodoPago: 'EFECTIVO' } as any);
+    const porTel = await save(CuentaCliente, { telefono: '595981000888', telefonoVerificado: true, activo: true });
+    const v3: any = await invokeHandlerWithContext('pub-cliente-google-vincular', ctx(porTel), 'doble@gmail.com');
+    const sg = await R(CuentaCliente).findOne({ where: { id: soloGoogle.id } });
+    const pt = await R(CuentaCliente).findOne({ where: { id: porTel.id } });
+    const pg2: any = await R(PedidoOnline).findOne({ where: { id: pedG.id }, relations: ['cuentaCliente'] });
+    ok(v3?.success === true && pt?.email === 'doble@gmail.com' && pt?.emailVerificado === true && pt?.nombre === 'DOBLE',
+      '7: con una cuenta solo de Google del mismo Gmail, se unen en la de teléfono', v3);
+    ok(sg?.activo === false && !sg?.email && pg2?.cuentaCliente?.id === porTel.id, '7: la de Google se cierra y sus pedidos pasan a la de teléfono', { sg, ped: pg2?.cuentaCliente?.id });
+    const g3: any = await invokeHandler('pub-cliente-google', 'doble@gmail.com');
+    ok(g3?.success === true && g3.cuenta?.id === porTel.id, '7: Google entra a la cuenta unida', g3?.cuenta);
     const sinSesion: any = await invokeHandler('pub-cliente-google-vincular', 'x@gmail.com');
     ok(sinSesion?.error === 'no_autenticado', '7: vincular exige sesión', sinSesion);
   } finally {

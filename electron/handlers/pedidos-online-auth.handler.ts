@@ -461,7 +461,7 @@ export function registerPedidosOnlineAuthHandlers(
   // ---- Registrar en la superficie pública ----
   // ============== VINCULAR GOOGLE (cuenta ya abierta) ==============
   // La cuenta abierta (por teléfono, típicamente) suma su Gmail verificado: desde ahí, «Continuar
-  // con Google» entra a esta misma cuenta.
+  // con Google» entra a esta misma cuenta. Si ese Gmail ya tenía una cuenta solo de Google, se unen.
   ipcMain.handle('pub-cliente-google-vincular', async (event: any, idToken: string) => {
     const customerId = event?._customerId;
     if (!customerId) return { success: false, error: 'no_autenticado' };
@@ -471,16 +471,32 @@ export function registerPedidosOnlineAuthHandlers(
       const g = await emailDeGoogle(idToken);
       if ('error' in g) return { success: false, error: g.error };
       const otra = await cuentaRepo().createQueryBuilder('c')
+        .leftJoinAndSelect('c.cliente', 'cliente')
         .where('LOWER(c.email) = :email', { email: g.email })
         .andWhere('c.id != :id', { id: cuenta.id })
         .getOne();
-      // Con el email verificado en otra cuenta, esa es del dueño: no se mueve sola.
-      if (otra && otra.emailVerificado) return { success: false, error: 'google_en_otra_cuenta' };
-      // Sin verificar, quien lo anotó no demostró ser el dueño: se le saca.
-      if (otra) await cuentaRepo().update({ id: otra.id }, { email: null } as any);
-      cuenta.email = g.email;
-      cuenta.emailVerificado = true;
-      await cuentaRepo().save(cuenta);
+      // Con el email verificado en otra cuenta que tiene su propio teléfono o un cliente del local
+      // vinculado, unirlas no es algo que el cliente decida solo: no se mueve.
+      if (otra && otra.emailVerificado && (otra.telefono || (otra as any).cliente)) {
+        return { success: false, error: 'google_en_otra_cuenta' };
+      }
+      await dataSource.transaction(async (m) => {
+        if (otra && otra.emailVerificado) {
+          // La otra es solo de Google y quien vincula acaba de demostrar que es el dueño del Gmail:
+          // es la misma persona con dos cuentas. Sus pedidos pasan a esta y la otra se cierra.
+          await m.query(`UPDATE "pedidos_online" SET "cuenta_cliente_id" = ${m.connection.options.type === 'postgres' ? '$1' : '?'} WHERE "cuenta_cliente_id" = ${m.connection.options.type === 'postgres' ? '$2' : '?'}`, [cuenta.id, otra.id]);
+          await m.getRepository(CuentaCliente).update({ id: otra.id }, { email: null, emailVerificado: false, activo: false, passwordHash: null } as any);
+          if (!cuenta.nombre && otra.nombre) cuenta.nombre = otra.nombre;
+          if (!cuenta.telefonoContacto && otra.telefonoContacto) cuenta.telefonoContacto = otra.telefonoContacto;
+        } else if (otra) {
+          // Sin verificar, quien lo anotó no demostró ser el dueño: se le saca.
+          await m.getRepository(CuentaCliente).update({ id: otra.id }, { email: null } as any);
+        }
+        cuenta.email = g.email;
+        cuenta.emailVerificado = true;
+        await m.getRepository(CuentaCliente).save(cuenta);
+      });
+      if (otra && otra.emailVerificado) await revokeAllCustomerRefreshTokens(dataSource, otra.id);
       return { success: true, cuenta: mapCuenta(cuenta) };
     } catch (e: any) {
       console.error('[pub-cliente-google-vincular] error:', e?.message || e);
