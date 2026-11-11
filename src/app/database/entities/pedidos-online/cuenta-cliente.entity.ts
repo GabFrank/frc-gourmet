@@ -33,6 +33,13 @@ export class CuentaCliente extends BaseModel {
   @Column({ name: 'telefono_contacto', type: 'varchar', length: 30, nullable: true })
   telefonoContacto?: string | null;
 
+  /**
+   * Avisos del pedido por WhatsApp. NULL: no eligió (manda la casilla del checkout). TRUE/FALSE:
+   * lo eligió en «Mi cuenta» o en el último checkout, y vale también para los pedidos en curso.
+   */
+  @Column({ name: 'avisos_whatsapp', type: 'boolean', nullable: true })
+  avisosWhatsapp?: boolean | null;
+
   @Column({ type: 'varchar', length: 150, nullable: true })
   email?: string;
 

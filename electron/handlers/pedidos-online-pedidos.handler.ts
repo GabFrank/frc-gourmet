@@ -630,6 +630,13 @@ export function registerPedidosOnlinePedidosHandlers(
     pedido.telefonoCliente = (cuenta?.telefono || cuenta?.telefonoContacto || null) as any;
     // Avisos por WhatsApp: solo con la casilla marcada (consentimiento explícito, con fecha).
     if (data?.avisosWhatsapp === true && (cfg as any).avisosWhatsapp && tipoPedido !== TipoPedidoOnline.MESA_QR) pedido.avisosConsentimientoEn = new Date();
+    // La casilla queda como preferencia de la cuenta (la precarga el próximo checkout y «Mi cuenta»).
+    // Solo si el checkout la mostró: avisos prendidos, teléfono verificado y fuera de la mesa.
+    if (cuenta && typeof data?.avisosWhatsapp === 'boolean' && (cfg as any).avisosWhatsapp && tipoPedido !== TipoPedidoOnline.MESA_QR
+      && cuenta.telefono && cuenta.telefonoVerificado && cuenta.avisosWhatsapp !== data.avisosWhatsapp) {
+      cuenta.avisosWhatsapp = data.avisosWhatsapp;
+      await dataSource.getRepository(CuentaCliente).update({ id: cuenta.id }, { avisosWhatsapp: data.avisosWhatsapp } as any);
+    }
     // F8b: el cliente interno de la cuenta vinculada, fijado ahora (si sigue activo). La mesa comparte
     // una venta entre comensales: no se le asigna el cliente de uno solo.
     const clienteVinculado: any = cuenta?.cliente;

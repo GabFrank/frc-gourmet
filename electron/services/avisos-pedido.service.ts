@@ -124,7 +124,8 @@ export async function encolarAvisos(ds: DataSource, ahora = new Date()): Promise
   const repo = ds.getRepository(PedidoOnline);
   const pedidos = await repo.createQueryBuilder('p')
     .leftJoinAndSelect('p.cuentaCliente', 'c')
-    .where('p.avisos_consentimiento_en IS NOT NULL')
+    // Con la casilla de ese pedido, o con los avisos prendidos en «Mi cuenta».
+    .where('(p.avisos_consentimiento_en IS NOT NULL OR c.avisos_whatsapp = :si)', { si: true })
     .andWhere('p.updated_at > :desde', { desde: new Date(ahora.getTime() - VENTANA_MS) })
     .andWhere('p.tipo_pedido <> :mesa', { mesa: TipoPedidoOnline.MESA_QR })
     .getMany();
@@ -135,6 +136,7 @@ export async function encolarAvisos(ds: DataSource, ahora = new Date()): Promise
     const evento = eventoDe(p);
     const c: any = p.cuentaCliente;
     if (!evento || !c?.telefono || !c?.telefonoVerificado) continue;
+    if (c.avisosWhatsapp === false) continue; // los apagó en «Mi cuenta»
     if (await avisos.count({ where: { pedidoOnlineId: p.id, evento } })) continue;
     const tel = numeroWhatsapp(String(c.telefono));
     const r = await ds.query(
@@ -176,8 +178,9 @@ export async function enviarAvisosPendientes(ds: DataSource, ahora = new Date())
     if (!cfg?.avisosWhatsapp) { await descartar('avisos apagados'); continue; }
     if (ahora.getTime() - new Date(a.createdAt).getTime() > CADUCA_MS) { await descartar('caducó (llegaría tarde)'); continue; }
     if (!instalada() && (!prueba || a.telefono !== prueba)) { await descartar('fuera de producción: solo sale al teléfono de prueba'); continue; }
-    const p = await ds.getRepository(PedidoOnline).findOne({ where: { id: a.pedidoOnlineId } });
+    const p = await ds.getRepository(PedidoOnline).findOne({ where: { id: a.pedidoOnlineId }, relations: ['cuentaCliente'] });
     if (!p || eventoDe(p) !== a.evento) { await descartar('el pedido ya avanzó'); continue; }
+    if ((p.cuentaCliente as any)?.avisosWhatsapp === false) { await descartar('el cliente apagó los avisos'); continue; }
     const enviadosDesde = (ms: number) => repo.createQueryBuilder('x')
       .where('x.telefono = :t AND x.estado = :e AND x.enviado_en > :d', { t: a.telefono, e: 'ENVIADO', d: new Date(ahora.getTime() - ms) }).getCount();
     if ((await enviadosDesde(3600_000)) >= TOPE_HORA || (await enviadosDesde(24 * 3600_000)) >= TOPE_DIA) { await descartar('tope de avisos del número'); continue; }

@@ -83,7 +83,16 @@ export class AuthService {
     });
   }
 
-  actualizarPerfil(data: { nombre?: string; email?: string; password?: string; telefonoContacto?: string }): Observable<any> {
+  /** Suma a la cuenta abierta el Gmail verificado por Google. */
+  vincularGoogle(idToken: string): Observable<any> {
+    return this.api.call<any>('auth.google.vincular', [idToken]).pipe(
+      tap((res) => {
+        if (res?.success) this.cuenta = res.cuenta;
+      }),
+    );
+  }
+
+  actualizarPerfil(data: { nombre?: string; email?: string; password?: string; telefonoContacto?: string; avisosWhatsapp?: boolean }): Observable<any> {
     return this.api.call<any>('auth.perfil.update', [data]).pipe(
       tap((res) => {
         if (res?.success) this.cuenta = res.cuenta;

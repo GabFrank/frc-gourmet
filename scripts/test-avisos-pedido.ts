@@ -15,7 +15,7 @@ import { PedidoOnlineAviso } from '../src/app/database/entities/pedidos-online/p
 import { CuentaCliente } from '../src/app/database/entities/pedidos-online/cuenta-cliente.entity';
 import { TiendaOnlineConfig } from '../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import { EstadoPagoOnline, EstadoPedidoOnline, TipoPedidoOnline } from '../src/app/database/entities/pedidos-online/pedido-online.enums';
-import { avisoDe, eventoDe, fijarAppInstaladaEnPruebas, fijarRefrescoCanalEnPruebas, textoAviso, tickAvisosPedidos } from '../electron/services/avisos-pedido.service';
+import { encolarAvisos, avisoDe, eventoDe, fijarAppInstaladaEnPruebas, fijarRefrescoCanalEnPruebas, textoAviso, tickAvisosPedidos } from '../electron/services/avisos-pedido.service';
 import { setWhatsappFetch, setWhatsappOverrides } from '../electron/utils/whatsapp-sender';
 
 let pass = 0, fail = 0;
@@ -122,6 +122,31 @@ async function main() {
   await estado(otro2, EstadoPedidoOnline.ACEPTADO);
   await tick();
   ok((await de(otro2))[0]?.estado === 'ENVIADO' && envios[envios.length - 1].numero === '595981555333', 'en la app instalada sí, al número normalizado (0981… → 595981…)');
+  fijarAppInstaladaEnPruebas(false);
+
+  console.log('Preferencia de la cuenta («Mi cuenta»)');
+  fijarAppInstaladaEnPruebas(true);
+  const conPref = await cuenta('595981222111');
+  await cuentas.update({ id: conPref.id }, { avisosWhatsapp: true } as any);
+  const pp1 = await pedido(conPref, { avisosConsentimientoEn: null });
+  await estado(pp1, EstadoPedidoOnline.ACEPTADO);
+  await tick();
+  ok((await de(pp1))[0]?.estado === 'ENVIADO', 'con los avisos prendidos en la cuenta sale aunque ese checkout no tildara la casilla');
+  const sinPref = await cuenta('595981222000');
+  await cuentas.update({ id: sinPref.id }, { avisosWhatsapp: false } as any);
+  const pp2 = await pedido(sinPref);
+  await estado(pp2, EstadoPedidoOnline.ACEPTADO);
+  await tick();
+  ok((await de(pp2)).length === 0, 'apagados en la cuenta: no se encola aunque el pedido tenga la casilla');
+  const tarde = await cuenta('595981222333');
+  const pp3 = await pedido(tarde);
+  await estado(pp3, EstadoPedidoOnline.ACEPTADO);
+  await encolarAvisos(ds);
+  await cuentas.update({ id: tarde.id }, { avisosWhatsapp: false } as any);
+  const nPrev = envios.length;
+  await tick();
+  const ap3 = await de(pp3);
+  ok(ap3[0]?.estado === 'DESCARTADO' && /apagó/.test(ap3[0]?.error || '') && envios.length === nPrev, 'apagarlos con un aviso pendiente lo descarta', ap3);
   fijarAppInstaladaEnPruebas(false);
 
   console.log('Cancelaciones');

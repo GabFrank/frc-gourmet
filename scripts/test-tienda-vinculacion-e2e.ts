@@ -249,6 +249,50 @@ async function main() {
   const busq: any = await invokeHandler('get-cuentas-tienda', { texto: '0981 777' });
   ok(JSON.stringify(busq).includes('595981777888'), '6: el admin encuentra 595981… buscando 0981…', busq);
 
+  // ═══════ [7] Google: vincular y no tomar cuentas ajenas ═══════
+  console.log('\n[7] Google');
+  process.env['GOOGLE_CLIENT_ID'] = 'test.apps.googleusercontent.com';
+  const fetchOrig = (globalThis as any).fetch;
+  (globalThis as any).fetch = async (url: any, init?: any) => {
+    const u = String(url);
+    if (!u.startsWith('https://oauth2.googleapis.com/tokeninfo')) return fetchOrig(url, init);
+    const email = decodeURIComponent(u.split('id_token=')[1] || '');
+    return { ok: true, json: async () => ({ aud: 'test.apps.googleusercontent.com', iss: 'accounts.google.com', email, email_verified: 'true', name: 'X' }) } as any;
+  };
+  try {
+    // Alguien con teléfono se anota un Gmail ajeno sin verificarlo.
+    const intruso = await save(CuentaCliente, { telefono: '595981444555', telefonoVerificado: true, email: 'victima@gmail.com', emailVerificado: false, nombre: 'INTRUSO', activo: true });
+    const g1: any = await invokeHandler('pub-cliente-google', 'victima@gmail.com');
+    ok(g1?.success === true && g1.cuenta?.id !== intruso.id, '7: Google no entra a la cuenta de teléfono que se anotó el email sin verificarlo', g1?.cuenta);
+    ok(!(await R(CuentaCliente).findOne({ where: { id: intruso.id } }))?.email, '7: a esa cuenta se le saca el email');
+    // Vincular: la cuenta de teléfono suma su Gmail verificado.
+    const dueno = await save(CuentaCliente, { telefono: '595981666777', telefonoVerificado: true, nombre: 'DUENO', activo: true });
+    const v1: any = await invokeHandlerWithContext('pub-cliente-google-vincular', ctx(dueno), 'dueno@gmail.com');
+    const d1 = await R(CuentaCliente).findOne({ where: { id: dueno.id } });
+    ok(v1?.success === true && d1?.email === 'dueno@gmail.com' && d1?.emailVerificado === true, '7: vincular deja el Gmail verificado en la cuenta', v1);
+    const g2: any = await invokeHandler('pub-cliente-google', 'dueno@gmail.com');
+    ok(g2?.success === true && g2.cuenta?.id === dueno.id, '7: después, Google entra a esa misma cuenta', g2?.cuenta);
+    // Un Gmail ya verificado en otra cuenta no se mueve.
+    const v2: any = await invokeHandlerWithContext('pub-cliente-google-vincular', ctx(intruso), 'dueno@gmail.com');
+    ok(v2?.error === 'google_en_otra_cuenta' && (await R(CuentaCliente).findOne({ where: { id: dueno.id } }))?.email === 'dueno@gmail.com',
+      '7: no se puede vincular un Gmail verificado de otra cuenta', v2);
+    const sinSesion: any = await invokeHandler('pub-cliente-google-vincular', 'x@gmail.com');
+    ok(sinSesion?.error === 'no_autenticado', '7: vincular exige sesión', sinSesion);
+  } finally {
+    (globalThis as any).fetch = fetchOrig;
+    delete process.env['GOOGLE_CLIENT_ID'];
+  }
+
+  // ═══════ [8] Preferencia de avisos ═══════
+  console.log('\n[8] Avisos en «Mi cuenta»');
+  const pa: any = await invokeHandlerWithContext('pub-cliente-perfil-update', ctx(cuenta), { avisosWhatsapp: true });
+  ok(pa?.success === true && pa.cuenta?.avisosWhatsapp === true && (await R(CuentaCliente).findOne({ where: { id: cuenta.id } }))?.avisosWhatsapp === true,
+    '8: se prende desde «Mi cuenta»', pa?.cuenta);
+  const pb: any = await invokeHandlerWithContext('pub-cliente-perfil-update', ctx(cuenta), { avisosWhatsapp: false });
+  ok(pb?.success === true && (await R(CuentaCliente).findOne({ where: { id: cuenta.id } }))?.avisosWhatsapp === false, '8: y se apaga');
+  const pc: any = await invokeHandlerWithContext('pub-cliente-perfil-update', ctx(cuenta), { nombre: 'CLIENTE UNO' });
+  ok(pc?.success === true && (await R(CuentaCliente).findOne({ where: { id: cuenta.id } }))?.avisosWhatsapp === false, '8: guardar otro dato no la toca');
+
   await cerrar();
   console.log(`\n${TAG} RESULTADO: ${passed} passed, ${failed} failed.`);
   process.exit(failed === 0 ? 0 : 1);

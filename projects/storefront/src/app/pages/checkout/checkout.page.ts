@@ -134,6 +134,8 @@ export class CheckoutPage implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.telefonoContacto = this.auth.cuenta?.telefonoContacto || '';
     this.tel = analizarGuardado(this.telefonoContacto);
+    // La casilla de avisos viene como la dejó la última vez (o en «Mi cuenta»).
+    this.avisosWhatsapp = this.auth.cuenta?.avisosWhatsapp === true;
     // Recargando el checkout, la cuenta llega después: se completa cuando llega (si no lo escribió).
     if (!this.auth.cuenta) {
       const espera = setInterval(() => {
@@ -143,6 +145,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
           this.telefonoContacto = this.auth.cuenta.telefonoContacto || '';
           this.tel = analizarGuardado(this.telefonoContacto);
         }
+        this.avisosWhatsapp = this.auth.cuenta.avisosWhatsapp === true;
       }, 300);
       setTimeout(() => clearInterval(espera), 15_000);
     }

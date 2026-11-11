@@ -130,6 +130,10 @@ export interface CuentaCliente {
   /** Contacto sin verificar (cuentas de Google o email). No sirve para ingresar. */
   telefonoContacto?: string | null;
   email: string | null;
+  /** El email lo verificó Google: «Continuar con Google» entra a esta cuenta. */
+  emailVerificado?: boolean;
+  /** Avisos del pedido por WhatsApp. null: todavía no eligió. */
+  avisosWhatsapp?: boolean | null;
   nombre: string | null;
 }
 

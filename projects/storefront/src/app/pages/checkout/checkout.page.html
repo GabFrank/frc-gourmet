@@ -178,7 +178,7 @@
     <!-- Avisos del pedido por WhatsApp: consentimiento explícito, solo a un teléfono verificado. -->
     <label class="sf-card avisos-wa" *ngIf="config.config.avisosWhatsapp && !mesa.enMesa && auth.cuenta?.telefonoVerificado">
       <input type="checkbox" [(ngModel)]="avisosWhatsapp">
-      <span>Quiero recibir por WhatsApp los avisos de este pedido (aceptado, listo, en camino).</span>
+      <span>Quiero recibir por WhatsApp los avisos de mis pedidos (aceptado, listo, en camino). Lo podés cambiar cuando quieras en «Mi cuenta».</span>
     </label>
     <p class="sf-error" role="alert" *ngIf="error">{{ error }}</p>
   </ng-container>

@@ -57,6 +57,8 @@ function mapCuenta(c: CuentaCliente): any {
     // Contacto sin verificar (Google/email): el checkout lo pide si no hay `telefono`.
     telefonoContacto: c.telefonoContacto ?? null,
     email: c.email ?? null,
+    emailVerificado: !!c.emailVerificado,
+    avisosWhatsapp: c.avisosWhatsapp ?? null,
     nombre: c.nombre ?? null,
     // El id del Cliente interno no sale a la web (auditoría F8b): es un dato del local.
     // Sólo si tiene contraseña, nunca el hash: la UI necesita saber si pedir la
@@ -308,6 +310,7 @@ export function registerPedidosOnlineAuthHandlers(
     // Cuenta dada de baja: no sigue operando con un token viejo (PLAN-tienda-online A1).
     if (!cuenta || !cuenta.activo) return { success: false, error: 'cuenta_no_encontrada' };
 
+    if (typeof data?.avisosWhatsapp === 'boolean') cuenta.avisosWhatsapp = data.avisosWhatsapp;
     if (data?.nombre !== undefined) cuenta.nombre = data.nombre ? String(data.nombre).toUpperCase() : undefined;
     // Teléfono de contacto (sin verificar). Vacío lo borra; el de ingreso (`telefono`) no se toca acá.
     if (data?.telefonoContacto !== undefined) {
@@ -386,27 +389,32 @@ export function registerPedidosOnlineAuthHandlers(
   });
 
   // ============== LOGIN CON GOOGLE (credential-ready) ==============
-  ipcMain.handle('pub-cliente-google', async (_event: any, idToken: string) => {
+  /** Verifica un ID token de Google y devuelve el email verificado, o el código de error. */
+  const emailDeGoogle = async (idToken: string): Promise<{ email: string; nombre: string | null } | { error: string }> => {
     const clientId = getGoogleClientId();
-    if (!clientId) return { success: false, error: 'google_no_configurado' };
-    if (!idToken) return { success: false, error: 'token_faltante' };
+    if (!clientId) return { error: 'google_no_configurado' };
+    if (!idToken) return { error: 'token_faltante' };
+    // Verificación vía endpoint tokeninfo de Google (sin dependencia extra).
+    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+      { signal: AbortSignal.timeout(10_000), redirect: 'error' });
+    if (!res.ok) return { error: 'google_token_invalido' };
+    const info: any = await res.json();
+    if (info.aud !== clientId) return { error: 'google_aud_mismatch' };
+    if (info.iss !== 'accounts.google.com' && info.iss !== 'https://accounts.google.com') return { error: 'google_token_invalido' };
+    const email = String(info.email || '').trim().toLowerCase();
+    // `email_verified` llega como string desde tokeninfo. Comparar contra
+    // 'false' fallaba ABIERTO: undefined, un booleano nativo o el campo
+    // ausente pasaban como verificados. Se exige el 'true' explícito.
+    if (!email || String(info.email_verified) !== 'true') return { error: 'google_email_no_verificado' };
+    return { email, nombre: info.name ? String(info.name) : null };
+  };
+
+  ipcMain.handle('pub-cliente-google', async (_event: any, idToken: string) => {
     try {
-      // Verificación vía endpoint tokeninfo de Google (sin dependencia extra).
-      const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
-        { signal: AbortSignal.timeout(10_000), redirect: 'error' });
-      if (!res.ok) return { success: false, error: 'google_token_invalido' };
-      const info: any = await res.json();
-      if (info.aud !== clientId) return { success: false, error: 'google_aud_mismatch' };
-      if (info.iss !== 'accounts.google.com' && info.iss !== 'https://accounts.google.com') {
-        return { success: false, error: 'google_token_invalido' };
-      }
-      const email = String(info.email || '').trim().toLowerCase();
-      // `email_verified` llega como string desde tokeninfo. Comparar contra
-      // 'false' fallaba ABIERTO: undefined, un booleano nativo o el campo
-      // ausente pasaban como verificados. Se exige el 'true' explícito.
-      if (!email || String(info.email_verified) !== 'true') {
-        return { success: false, error: 'google_email_no_verificado' };
-      }
+      const g = await emailDeGoogle(idToken);
+      if ('error' in g) return { success: false, error: g.error };
+      const { email } = g;
+      const info = { name: g.nombre };
 
       let cuenta = await cuentaRepo()
         .createQueryBuilder('c')
@@ -414,6 +422,15 @@ export function registerPedidosOnlineAuthHandlers(
         .where('LOWER(c.email) = :email', { email })
         .getOne();
       if (cuenta && !cuenta.activo) return { success: false, error: 'cuenta_invalida' };
+      // Una cuenta de teléfono que se anotó este email sin verificarlo no es del dueño del Gmail:
+      // cualquiera puede escribir un email ajeno en «Mi cuenta». Entrar ahí le daría al dueño del
+      // Gmail la cuenta de otro, y al otro (que sigue entrando por teléfono) los pedidos y
+      // direcciones del dueño. Se le saca el email y el dueño del Gmail entra a una cuenta propia.
+      // Para unir las dos, la cuenta de teléfono usa «Vincular Google», que sí lo verifica.
+      if (cuenta && !cuenta.emailVerificado && cuenta.telefono) {
+        await cuentaRepo().update({ id: cuenta.id }, { email: null } as any);
+        cuenta = null;
+      }
       // Cuenta con ese email que nunca lo verificó y tiene contraseña: quien la creó no
       // demostró ser dueño del email. Google sí lo demuestra: se queda el dueño real, se
       // borra la contraseña ajena y se cierran sus sesiones (PLAN-tienda-online A1).
@@ -442,7 +459,37 @@ export function registerPedidosOnlineAuthHandlers(
   });
 
   // ---- Registrar en la superficie pública ----
+  // ============== VINCULAR GOOGLE (cuenta ya abierta) ==============
+  // La cuenta abierta (por teléfono, típicamente) suma su Gmail verificado: desde ahí, «Continuar
+  // con Google» entra a esta misma cuenta.
+  ipcMain.handle('pub-cliente-google-vincular', async (event: any, idToken: string) => {
+    const customerId = event?._customerId;
+    if (!customerId) return { success: false, error: 'no_autenticado' };
+    try {
+      const cuenta = await cuentaRepo().findOne({ where: { id: customerId }, relations: ['cliente'] });
+      if (!cuenta || !cuenta.activo) return { success: false, error: 'cuenta_no_encontrada' };
+      const g = await emailDeGoogle(idToken);
+      if ('error' in g) return { success: false, error: g.error };
+      const otra = await cuentaRepo().createQueryBuilder('c')
+        .where('LOWER(c.email) = :email', { email: g.email })
+        .andWhere('c.id != :id', { id: cuenta.id })
+        .getOne();
+      // Con el email verificado en otra cuenta, esa es del dueño: no se mueve sola.
+      if (otra && otra.emailVerificado) return { success: false, error: 'google_en_otra_cuenta' };
+      // Sin verificar, quien lo anotó no demostró ser el dueño: se le saca.
+      if (otra) await cuentaRepo().update({ id: otra.id }, { email: null } as any);
+      cuenta.email = g.email;
+      cuenta.emailVerificado = true;
+      await cuentaRepo().save(cuenta);
+      return { success: true, cuenta: mapCuenta(cuenta) };
+    } catch (e: any) {
+      console.error('[pub-cliente-google-vincular] error:', e?.message || e);
+      return { success: false, error: 'google_error' };
+    }
+  });
+
   registerPublicOperation('auth.registrar', { channel: 'pub-cliente-registrar', requiresAuth: false, description: 'Registro por email + password.' });
+  registerPublicOperation('auth.google.vincular', { channel: 'pub-cliente-google-vincular', requiresAuth: true, description: 'Suma el Gmail verificado a la cuenta abierta.' });
   registerPublicOperation('auth.google', { channel: 'pub-cliente-google', requiresAuth: false, description: 'Login con Google (ID token).' });
   registerPublicOperation('auth.otp.request', { channel: 'pub-otp-request', requiresAuth: false, description: 'Solicitar OTP por WhatsApp.' });
   registerPublicOperation('auth.otp.verify', { channel: 'pub-otp-verify', requiresAuth: false, description: 'Verificar OTP y emitir JWT de cliente.' });
