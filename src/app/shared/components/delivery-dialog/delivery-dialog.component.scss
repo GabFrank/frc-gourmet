@@ -29,10 +29,23 @@
   padding: 0 16px 8px 16px;
   border-bottom: 1px solid var(--divider-color, rgba(255,255,255,0.12));
 
-  .filtro-estado { width: 160px; }
-
   // El aviso de pedidos web se va al extremo derecho de la fila.
   .aviso-pedidos { margin-left: auto; }
+}
+
+// Fila de filtros: una sola línea (envuelve sólo si el diálogo es angosto)
+.delivery-filtros {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--divider-color, rgba(255,255,255,0.12));
+
+  .f-texto { flex: 1 1 200px; min-width: 180px; max-width: 280px; }
+  .f-estado { flex: 1 1 190px; min-width: 170px; max-width: 240px; }
+  .f-entregador { flex: 1 1 160px; min-width: 150px; max-width: 220px; }
+  .f-hora { width: 110px; }
 }
 
 // Content

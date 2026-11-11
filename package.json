@@ -88,6 +88,7 @@
     "test:fichaje-facial": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-fichaje-facial.ts",
     "test:delivery-impresora": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-impresora-ruteo.ts",
     "test:delivery": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-e2e.ts",
+    "test:delivery-pg": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-e2e.ts --pg",
     "test:fichas": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-fichas-e2e.ts",
     "test:alta-inicial": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-alta-inicial-e2e.ts",
     "test:delivery-conversion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-delivery-conversion-e2e.ts",

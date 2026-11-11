@@ -22,7 +22,7 @@
  */
 
 import { ipcMain } from 'electron';
-import { DataSource, EntityManager, In } from 'typeorm';
+import { Brackets, DataSource, EntityManager, In } from 'typeorm';
 
 import { Delivery, DeliveryEstado, DeliveryModo } from '../../src/app/database/entities/ventas/delivery.entity';
 import { PrecioDelivery } from '../../src/app/database/entities/ventas/precio-delivery.entity';
@@ -241,9 +241,47 @@ export function registerDeliveryHandlers(
       qb.where('venta.caja_id = :cajaId', { cajaId });
     }
 
-    if (filtros?.estado) {
+    // Estado: `estados` (varios) tiene prioridad; `estado` (uno solo) sigue aceptándose.
+    const estadosFiltro: string[] = Array.isArray(filtros?.estados)
+      ? filtros.estados.map((e: any) => String(e).trim().toUpperCase()).filter(Boolean)
+      : [];
+    if (estadosFiltro.length) {
+      qb.andWhere('delivery.estado IN (:...estadosFiltro)', { estadosFiltro });
+    } else if (filtros?.estado) {
       qb.andWhere('delivery.estado = :estado', { estado: filtros.estado });
     }
+
+    // Texto libre: número del delivery (N° 8 / 8), número del pedido web (PO-000040),
+    // nombre o teléfono del reparto, o nombre/apellido de la persona del cliente.
+    const texto = String(filtros?.texto ?? '').trim().toUpperCase();
+    if (texto) {
+      const like = `%${texto.replace(/[\\%_]/g, (c) => '\\' + c)}%`;
+      const soloDigitos = texto.replace(/^N?°?\s*/, '');
+      const idNumerico = /^\d+$/.test(soloDigitos) ? Number(soloDigitos) : null;
+      qb.andWhere(
+        new Brackets((w) => {
+          w.where("UPPER(COALESCE(delivery.nombre, '')) LIKE :txt ESCAPE '\\'", { txt: like })
+            .orWhere("UPPER(COALESCE(delivery.telefono, '')) LIKE :txt ESCAPE '\\'")
+            .orWhere("UPPER(COALESCE(persona.nombre, '')) LIKE :txt ESCAPE '\\'")
+            .orWhere("UPPER(COALESCE(persona.apellido, '')) LIKE :txt ESCAPE '\\'")
+            .orWhere(
+              `EXISTS (SELECT 1 FROM pedidos_online po WHERE po.delivery_id = delivery.id AND UPPER(po.numero) LIKE :txt ESCAPE '\\')`,
+            );
+          if (idNumerico != null) w.orWhere('delivery.id = :txtId', { txtId: idNumerico });
+        }),
+      );
+    }
+
+    const entregadorId = Number(filtros?.entregadorId);
+    if (Number.isFinite(entregadorId) && entregadorId > 0) {
+      qb.andWhere('repartidor.id = :entregadorId', { entregadorId });
+    }
+
+    // Rango de hora de apertura del delivery (fechas completas ISO; el diálogo las ancla a la caja).
+    const desde = filtros?.desde ? new Date(filtros.desde) : null;
+    if (desde && !isNaN(desde.getTime())) qb.andWhere('delivery.fechaAbierto >= :desde', { desde });
+    const hasta = filtros?.hasta ? new Date(filtros.hasta) : null;
+    if (hasta && !isNaN(hasta.getTime())) qb.andWhere('delivery.fechaAbierto <= :hasta', { hasta });
 
     // Propiedad de la entidad, no nombre de columna: con `skip`/`take` TypeORM
     // reescribe el ORDER BY contra el mapa de columnas y con el nombre crudo

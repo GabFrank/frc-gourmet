@@ -13,13 +13,6 @@
 
   <!-- Sub-header con filtro y nuevo -->
   <div class="delivery-subheader">
-    <mat-form-field appearance="outline" class="filtro-estado">
-      <mat-label>ESTADO</mat-label>
-      <mat-select [(value)]="estadoFiltro" (selectionChange)="onFiltroChange()">
-        <mat-option value="">TODOS</mat-option>
-        <mat-option *ngFor="let e of estados" [value]="e">{{ e }}</mat-option>
-      </mat-select>
-    </mat-form-field>
     <button mat-raised-button color="primary" (click)="nuevoDelivery()">
       <mat-icon>add</mat-icon> NUEVO DELIVERY
     </button>
@@ -38,6 +31,41 @@
     >
       <mat-icon>storefront</mat-icon>
       {{ colaWeb.length }} WEB PARA ATENDER
+    </button>
+  </div>
+
+  <!-- Filtros: se aplican con BUSCAR (o Enter), nunca mientras se escribe -->
+  <div class="delivery-filtros">
+    <mat-form-field appearance="outline" class="f-texto" subscriptSizing="dynamic">
+      <mat-label>N°, CLIENTE O TELÉFONO</mat-label>
+      <input matInput [(ngModel)]="textoFiltro" (keydown.enter)="onFiltroChange()" placeholder="Ej: PO-000040" />
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="f-estado" subscriptSizing="dynamic">
+      <mat-label>ESTADO</mat-label>
+      <mat-select multiple [(ngModel)]="estadosFiltro">
+        <mat-option *ngFor="let e of estados" [value]="e">{{ e }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="f-entregador" subscriptSizing="dynamic">
+      <mat-label>ENTREGADOR</mat-label>
+      <mat-select [(ngModel)]="entregadorFiltro">
+        <mat-option [value]="null">TODOS</mat-option>
+        <mat-option *ngFor="let r of repartidoresFiltro" [value]="r.id">{{ r.nombre }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="f-hora" subscriptSizing="dynamic">
+      <mat-label>DESDE</mat-label>
+      <input matInput type="time" [(ngModel)]="horaDesde" (keydown.enter)="onFiltroChange()" />
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="f-hora" subscriptSizing="dynamic">
+      <mat-label>HASTA</mat-label>
+      <input matInput type="time" [(ngModel)]="horaHasta" (keydown.enter)="onFiltroChange()" />
+    </mat-form-field>
+    <button mat-flat-button color="primary" (click)="onFiltroChange()">
+      <mat-icon>search</mat-icon> BUSCAR
+    </button>
+    <button mat-stroked-button (click)="limpiarFiltros()" matTooltip="Restaura los filtros por defecto">
+      <mat-icon>filter_alt_off</mat-icon> LIMPIAR
     </button>
   </div>
 

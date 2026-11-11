@@ -194,8 +194,17 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   /** F10: el pedido web de la fila seleccionada (para responder su cancelación desde el footer). */
   pedidoWebSel: any = null;
   selectedPagoDetalles: any[] = [];
-  estadoFiltro = '';
   estados = Object.values(DeliveryEstado);
+  /** Estados que se ven por defecto: los terminales (ENTREGADO, CANCELADO) ensucian la lista. */
+  private static readonly ESTADOS_POR_DEFECTO: string[] = Object.values(DeliveryEstado)
+    .filter((e) => e !== DeliveryEstado.ENTREGADO && e !== DeliveryEstado.CANCELADO);
+  // Filtros: se aplican sólo con el botón BUSCAR (o Enter en los campos de texto).
+  estadosFiltro: string[] = [...DeliveryDialogComponent.ESTADOS_POR_DEFECTO];
+  textoFiltro = '';
+  entregadorFiltro: number | null = null;
+  horaDesde = '';
+  horaHasta = '';
+  repartidoresFiltro: { id: number; nombre: string }[] = [];
   displayedColumns = ['numero', 'telefono', 'nombre', 'estado', 'espera', 'valorDelivery', 'total', 'entregador', 'observacion'];
 
   // Paginación
@@ -276,6 +285,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   ) {}
 
   async ngOnInit(): Promise<void> {
+    void this.cargarRepartidoresFiltro();
     // Si esta terminal no puede ni registrar pagos ni finalizar, el botón PAGO
     // no tiene nada que ofrecer. Se computa antes de la primera carga para que
     // `recomputarEstadoBotones` ya lo tenga en cuenta.
@@ -647,9 +657,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
 
   async loadDeliveries(): Promise<void> {
     try {
-      const filtros: any = { page: this.pageIndex + 1, pageSize: this.pageSize };
-      if (this.estadoFiltro) filtros.estado = this.estadoFiltro;
-
+      const filtros = this.construirFiltros();
       const result = await firstValueFrom(this.repositoryService.deliveryListarPdv(this.data.caja.id, filtros));
       this.totalDeliveries = result.total;
       this.deliveryRows = result.data.map((d: any) => this.mapDeliveryRow(d));
@@ -669,8 +677,7 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
     const sel = this.selectedDelivery;
     const antes = sel ? this.firmaFila(sel) : null;
     try {
-      const filtros: any = { page: this.pageIndex + 1, pageSize: this.pageSize };
-      if (this.estadoFiltro) filtros.estado = this.estadoFiltro;
+      const filtros = this.construirFiltros();
       const result = await firstValueFrom(this.repositoryService.deliveryListarPdv(this.data.caja.id, filtros));
       this.totalDeliveries = result.total;
       this.deliveryRows = result.data.map((d: any) => this.mapDeliveryRow(d));
@@ -1098,6 +1105,59 @@ export class DeliveryDialogComponent implements OnInit, OnDestroy {
   onFiltroChange(): void {
     this.pageIndex = 0;
     this.loadDeliveries();
+  }
+
+  /** Restaura los filtros por defecto y busca. */
+  limpiarFiltros(): void {
+    this.estadosFiltro = [...DeliveryDialogComponent.ESTADOS_POR_DEFECTO];
+    this.textoFiltro = '';
+    this.entregadorFiltro = null;
+    this.horaDesde = '';
+    this.horaHasta = '';
+    this.onFiltroChange();
+  }
+
+  /** Arma el filtro para el backend a partir del estado de la pantalla. */
+  private construirFiltros(): any {
+    const filtros: any = { page: this.pageIndex + 1, pageSize: this.pageSize };
+    // Todos marcados o ninguno = sin filtro de estado.
+    if (this.estadosFiltro.length && this.estadosFiltro.length < this.estados.length) {
+      filtros.estados = this.estadosFiltro;
+    }
+    const texto = this.textoFiltro.trim();
+    if (texto) filtros.texto = texto;
+    if (this.entregadorFiltro) filtros.entregadorId = this.entregadorFiltro;
+    const desde = this.horaAFecha(this.horaDesde, null);
+    if (desde) filtros.desde = desde.toISOString();
+    const hasta = this.horaAFecha(this.horaHasta, desde);
+    if (hasta) {
+      hasta.setSeconds(59, 999);
+      filtros.hasta = hasta.toISOString();
+    }
+    return filtros;
+  }
+
+  /**
+   * «HH:mm» -> fecha dentro del turno de la caja: la primera vez que esa hora ocurre
+   * a partir de la apertura (o del `minimo`, para que «hasta» no quede antes de «desde»).
+   */
+  private horaAFecha(hhmm: string, minimo: Date | null): Date | null {
+    const m = /^(\d{1,2}):(\d{2})$/.exec((hhmm || '').trim());
+    if (!m) return null;
+    const apertura = this.data.caja?.fechaApertura ? new Date(this.data.caja.fechaApertura) : new Date();
+    const base = minimo ?? (isNaN(apertura.getTime()) ? new Date() : apertura);
+    const f = new Date(base);
+    f.setHours(Number(m[1]), Number(m[2]), 0, 0);
+    if (f.getTime() < base.getTime()) f.setDate(f.getDate() + 1);
+    return f;
+  }
+
+  private async cargarRepartidoresFiltro(): Promise<void> {
+    try {
+      this.repartidoresFiltro = await firstValueFrom(this.repositoryService.deliveryListarRepartidores());
+    } catch (e) {
+      console.warn('No se pudo cargar la lista de repartidores para el filtro:', e);
+    }
   }
 
   nuevoDelivery(): void {
