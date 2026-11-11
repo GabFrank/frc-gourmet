@@ -187,7 +187,7 @@ async function main() {
   const m6 = envios[n6];
   const p6: string[] = (m6?.plantilla?.components?.[0]?.parameters || []).map((x: any) => x.text);
   ok((await de(r6))[0].estado === 'ENVIADO' && /graph\.facebook\.com\/v20\.0\/1\/messages/.test(m6?.url || '')
-    && m6?.plantilla?.name === 'aviso_pedido_aceptado' && m6?.plantilla?.language?.code === 'es'
+    && m6?.plantilla?.name === 'aviso_pedido_aceptado_v2' && m6?.plantilla?.language?.code === 'es'
     && p6[0] === 'LA COCINA' && p6[1] === r6.numero && String(p6[2] || '').endsWith(`/tienda/pedido/${r6.numero}`)
     && m6?.numero === PRUEBA, 'con Meta sale la plantilla del evento con comercio, número y enlace', m6?.plantilla);
   respuesta = { status: 400, body: { error: { code: 131030, message: 'Recipient phone number not in allowed list' } } };
