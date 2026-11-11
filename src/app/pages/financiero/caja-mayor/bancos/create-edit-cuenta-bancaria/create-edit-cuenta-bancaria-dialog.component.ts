@@ -63,6 +63,9 @@ export class CreateEditCuentaBancariaDialogComponent implements OnInit {
       activo: [true],
     });
 
+    // #350.1: al editar, el saldo es solo lectura; los ajustes van como movimiento con motivo.
+    if (this.isEditing) this.form.get('saldo')!.disable();
+
     this.loadLookups();
     this.form.get('monedaId')!.valueChanges.subscribe(() => this.recalcDecimalesMoneda());
   }
@@ -113,9 +116,9 @@ export class CreateEditCuentaBancariaDialogComponent implements OnInit {
         moneda: { id: f.monedaId },
         titular: f.titular || null,
         alias: f.alias || null,
-        saldo: f.saldo,
         activo: f.activo,
       };
+      if (!this.isEditing) data.saldo = f.saldo;
       if (this.isEditing && this.cuentaId) {
         await firstValueFrom(this.repositoryService.updateCuentaBancaria(this.cuentaId, data));
         this.snackBar.open('Cuenta actualizada', 'Cerrar', { duration: 3000 });
