@@ -21,6 +21,7 @@
  */
 import { DataSource } from 'typeorm';
 import type { Usuario } from '../../src/app/database/entities/personas/usuario.entity';
+import { getEffectiveUser } from './auth.utils';
 
 import { registerPrinterHandlers } from '../handlers/printers.handler';
 import { registerPersonasHandlers } from '../handlers/personas.handler';
@@ -117,7 +118,12 @@ export interface RegisterAllOptions {
  * cargan en producción. Idéntico para la app real (main.ts) y los tests E2E.
  */
 export function registerAllAppHandlers(opts: RegisterAllOptions): void {
-  const { dataSource, getCurrentUser, setCurrentUser } = opts;
+  const { dataSource, getCurrentUser: rawGetCurrentUser, setCurrentUser } = opts;
+  // #341: por /api/rpc el usuario es el del request (AsyncLocalStorage), no el
+  // operador logueado en la consola del servidor. Todos los handlers reciben
+  // este getter, así ninguno lee el global dentro de un request. Fuera de un
+  // request (IPC local, standalone, schedulers) devuelve el global como antes.
+  const getCurrentUser = () => getEffectiveUser(rawGetCurrentUser);
 
   registerPrinterHandlers(dataSource, getCurrentUser);
   registerPersonasHandlers(dataSource, getCurrentUser);
