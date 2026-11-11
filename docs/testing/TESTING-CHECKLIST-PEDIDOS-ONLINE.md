@@ -334,6 +334,66 @@ sin MFA). Runbook: `docs/runbooks/RUNBOOK-TIENDA-PAGO-PIX-ICPAY.md`.
 10. **Cancelar un pedido Pix pagado** eligiendo «Hay que devolverlo» → cola DEVOLVER con
     «en IC Pay» (no hay devolución automática).
 
+## 17 · USDT: un pago abierto por vez (IC Pay)
+
+Mientras IC corrige la asignación de pagos USDT, la tienda deja **un solo pago USDT abierto a la
+vez** por cuenta de IC (`docs/runbooks/RUNBOOK-TIENDA-PAGO-PIX-ICPAY.md`, «USDT: un pago por vez»).
+
+1. **Config:** la cuenta de IC Pay en moneda USDT. El checkout ofrece «USDT (Tron)».
+2. **Primer pedido:** confirmar → página de pago con dirección, monto en USDT y vencimiento.
+3. **Segundo pedido mientras el primero está abierto** (otra pestaña u otra cuenta): no se crea
+   el pago. El checkout dice «Ahora mismo hay otro pago con USDT en curso. Probá de nuevo en unos
+   minutos o elegí otro medio de pago». No queda ninguna orden en IC.
+4. **Pagar el primero** (en staging, desde la billetera de prueba de la red Nile): en segundos
+   «¡Pago confirmado!» y el pedido entra a la bandeja.
+5. **Ahora sí el segundo:** confirmar de nuevo → se crea el pago.
+6. **Vencido:** dejar vencer un pago abierto → el siguiente pedido ya puede pagar con USDT.
+
+## 18 · Venta a cuenta editada después de aceptada
+
+Preparación: un pedido **A cuenta** (§15) aceptado, con su venta ABIERTA en el PdV. Anotar el saldo
+del cliente y el monto de la cuenta por cobrar antes de cada paso (ficha del cliente → cuentas).
+
+| # | Paso | Qué tiene que pasar |
+|---|---|---|
+| 18.1 | En el PdV, **agregar** un ítem a esa venta | La deuda sube por el precio del ítem; el saldo del cliente sube lo mismo; en sus movimientos aparece un **AJUSTE POSITIVO** «VENTA #… EDITADA» |
+| 18.2 | **Cancelar** o **quitar** un ítem | La deuda baja; **AJUSTE NEGATIVO** |
+| 18.3 | Cambiar la **cantidad** o poner un **descuento** a un ítem | La deuda sigue al nuevo total |
+| 18.4 | Delivery: **cambiar el costo de envío** o pasar a retiro | La deuda sigue al total |
+| 18.5 | Agregar ítems hasta **pasar el límite** del cliente | La deuda queda en el tope; la diferencia aparece como **saldo de la venta** y se cobra al entregar |
+| 18.6 | Cancelar todos los ítems (total 0) | La cuenta por cobrar queda **CANCELADA** y el saldo vuelve a como estaba |
+| 18.7 | Con otra venta a cuenta: **cobrar una parte** de la deuda desde caja (cobro de CPC), y después intentar agregar, quitar, cancelar, editar o personalizar un ítem | **No deja**, antes de cambiar nada, con el mensaje «Esta venta tiene una deuda a cuenta con cobros y no se puede modificar…». El ítem queda como estaba, **incluidas sus personalizaciones** |
+| 18.8 | Cobrar y **facturar** la venta editada al entregar | La factura sale por el total nuevo; la deuda queda en la cuenta del cliente |
+
+## 19 · Avisos del pedido por WhatsApp (Meta)
+
+Preparación: Config Tienda Online → «Avisos al cliente por WhatsApp» prendido, «Teléfono de prueba»
+= tu número, canal Meta con token vigente y las plantillas `aviso_pedido_*` APROBADAS
+(`docs/runbooks/RUNBOOK-TIENDA-AVISOS-WHATSAPP.md`). Fuera de la app instalada **solo salen al
+teléfono de prueba**: la cuenta del cliente tiene que tener ese número verificado.
+
+| # | Paso | Qué tiene que pasar |
+|---|---|---|
+| 19.1 | Checkout con la cuenta de teléfono verificado | Aparece la casilla «Quiero recibir por WhatsApp los avisos de este pedido», **destildada** |
+| 19.2 | Retiro con la casilla tildada → aceptar → LISTO → entregar | Llegan 3 mensajes del número de Meta: aceptado, listo para retirar, entregado; cada uno con el enlace al pedido |
+| 19.3 | Delivery con casilla → aceptar → EN_CAMINO → entregar | aceptado, **en camino** («el repartidor puede llamarte»), entregado. «Listo» **no** se avisa en delivery |
+| 19.4 | Cancelar un pedido aceptado (pago al recibir) | «fue cancelado» (sin devolución) |
+| 19.5 | Cancelar un pedido Pix pagado eligiendo devolverlo | «fue cancelado. Te devolvemos el pago» |
+| 19.6 | Pedido **sin** tildar la casilla | No llega nada |
+| 19.7 | Un pago online que vence sin pagarse | No llega «cancelado» (el cliente ya lo vio en la página de pago) |
+| 19.8 | Pedido por QR de mesa | No hay casilla ni avisos |
+| 19.9 | Apagar el interruptor con un aviso pendiente | No sale |
+| 19.10 | Dos cambios de estado seguidos (aceptar y en camino en menos de 15 s) | Sale solo el último |
+
+## 20 · Ingreso con código por WhatsApp (Meta)
+
+1. «Ingresar» → teléfono → llega el código del número de Meta, con botón «Copiar código».
+2. Código equivocado → no entra; el correcto → entra y la cuenta queda con el teléfono verificado.
+3. Con el número de **prueba** de Meta el código solo llega a destinatarios autorizados en el panel;
+   a otro número falla («no se pudo enviar el código»). En producción, con el número real, llega a
+   cualquiera.
+4. Token vencido (el temporal dura ~24 h): no llegan ni códigos ni avisos. Cargar uno nuevo.
+
 ## Qué NO se probó automáticamente
 
 - **SQLite es lo que corren los tests** (`.tmp/*.db` con todas las migraciones).
