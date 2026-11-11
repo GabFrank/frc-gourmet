@@ -8,6 +8,8 @@ import { MenuService } from '../../core/menu.service';
 import { AppImgPipe } from '../../core/app-img.pipe';
 import { IconComponent } from '../../core/icon.component';
 import { MenuSnapshot, MenuProducto, MenuCategoria } from '../../core/models';
+import { GuaraniPipe } from '../../core/guarani.pipe';
+import { mensajeError } from '../../core/errores';
 
 /** Tarjeta del menú. Una pizza se expande en una tarjeta POR SABOR (tipo iFood). */
 interface MenuCard {
@@ -30,7 +32,7 @@ interface CatView {
 @Component({
   selector: 'sf-menu',
   standalone: true,
-  imports: [CommonModule, FormsModule, AppImgPipe, IconComponent],
+  imports: [GuaraniPipe, CommonModule, FormsModule, AppImgPipe, IconComponent],
   templateUrl: './menu.page.html',
   styleUrls: ['./menu.page.scss'],
 })
@@ -63,7 +65,7 @@ export class MenuPage implements OnInit, AfterViewInit, OnDestroy {
         setTimeout(() => this.setupScrollSpy(), 0);
       },
       error: (e) => {
-        this.error = 'No se pudo cargar la carta. ' + (e?.message || '');
+        this.error = mensajeError(e, 'No se pudo cargar la carta. Probá de nuevo.');
         this.cargando = false;
       },
     });
