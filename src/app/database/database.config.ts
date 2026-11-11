@@ -220,6 +220,7 @@ import { FormasPago } from './entities/compras/forma-pago.entity';
 import { DocumentoCompraImportado } from './entities/compras/documento-compra-importado.entity';
 import { OcrAliasProveedor } from './entities/compras/ocr-alias-proveedor.entity';
 import { OcrAliasProducto } from './entities/compras/ocr-alias-producto.entity';
+import { CompraItemClase } from './entities/compras/compra-item-clase.entity';
 
 // IA Prompt config
 import { IaPromptConfig } from './entities/ia/ia-prompt-config.entity';
@@ -338,6 +339,7 @@ import { AcreditacionesPosReglas1793110000000 } from './migrations/1793110000000
 import { FichasCantina1793299117857 } from './migrations/1793299117857-FichasCantina';
 import { CajaMayorMontosAmplios1793302813170 } from './migrations/1793302813170-CajaMayorMontosAmplios';
 import { PdvTiposVenta1793381465964 } from './migrations/1793381465964-PdvTiposVenta';
+import { ClasificacionItemsCompra1794356000000 } from './migrations/1794356000000-ClasificacionItemsCompra';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -646,6 +648,7 @@ function getEntitiesList(): any[] {
       DocumentoCompraImportado,
       OcrAliasProveedor,
       OcrAliasProducto,
+      CompraItemClase,
       // IA Prompt config + sugerencias
       IaPromptConfig,
       IaPromptSugerencia,
@@ -816,6 +819,8 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     CajaMayorMontosAmplios1793302813170,
     // PdV: tipos de venta habilitados (mesas, comandas, venta rápida), global
     PdvTiposVenta1793381465964,
+    // Compras: clase de ítem (CMV / gasto operativo / reventa) y alias con marca
+    ClasificacionItemsCompra1794356000000,
   ];
 }
 

@@ -3,7 +3,7 @@
  * AUTO-GENERADO por scripts/generate-mobile-api-map.js — NO editar a mano.
  * Mapa método de window.api → canal IPC (extraído de preload.ts).
  * Regenerar tras tocar preload.ts: `node scripts/generate-mobile-api-map.js`.
- * Total: 875 métodos.
+ * Total: 881 métodos.
  */
 export const API_CHANNEL_MAP: Record<string, string> = {
   "abrirCajaDesdeConteo": "abrir-caja-desde-conteo",
@@ -123,6 +123,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "createCompraBorrador": "create-compra-borrador",
   "createCompraCategoria": "create-compra-categoria",
   "createCompraDetalle": "createCompraDetalle",
+  "createCompraItemClase": "create-compra-item-clase",
   "createConfiguracionMonetaria": "create-configuracion-monetaria",
   "createConfiguracionRrhh": "create-configuracion-rrhh",
   "createConteo": "create-conteo",
@@ -366,6 +367,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getAdjuntoById": "get-adjunto-by-id",
   "getAdjuntos": "get-adjuntos",
   "getAguinaldos": "get-aguinaldos",
+  "getAliasProductosProveedor": "get-alias-productos-proveedor",
   "getAllPermissions": "get-all-permissions",
   "getAllSabores": "get-all-sabores",
   "getAsistencia": "get-asistencia",
@@ -416,6 +418,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getCompraCategorias": "get-compra-categorias",
   "getCompraCuotas": "get-compra-cuotas",
   "getCompraDetalles": "getCompraDetalles",
+  "getCompraItemClases": "get-compra-item-clases",
   "getCompras": "getCompras",
   "getComprasPaginado": "get-compras-paginado",
   "getConciliacionesPos": "get-conciliaciones-pos",
@@ -609,6 +612,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getReporteAguinaldoAnualData": "get-reporte-aguinaldo-anual-data",
   "getReporteAsistenciaMesData": "get-reporte-asistencia-mes-data",
   "getReporteComisionesMesData": "get-reporte-comisiones-mes-data",
+  "getReporteComprasPorClase": "get-reporte-compras-por-clase",
   "getReporteFinanzasCierre": "get-reporte-finanzas-cierre",
   "getReporteLiquidacionesMesData": "get-reporte-liquidaciones-mes-data",
   "getReportePrestamosActivosData": "get-reporte-prestamos-activos-data",
@@ -781,6 +785,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "updateCompraBorrador": "update-compra-borrador",
   "updateCompraCategoria": "update-compra-categoria",
   "updateCompraDetalle": "updateCompraDetalle",
+  "updateCompraItemClase": "update-compra-item-clase",
   "updateConfiguracionMonetaria": "update-configuracion-monetaria",
   "updateConfiguracionRrhh": "update-configuracion-rrhh",
   "updateConteo": "update-conteo",
@@ -859,6 +864,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "updateVenta": "updateVenta",
   "updateVentaItem": "updateVentaItem",
   "uploadFuncionarioDocumento": "upload-funcionario-documento",
+  "upsertAliasProducto": "upsert-alias-producto",
   "validarStockIngrediente": "validar-stock-ingrediente",
   "validateCredentials": "validate-credentials",
   "venderDiasVacacion": "vender-dias-vacacion",

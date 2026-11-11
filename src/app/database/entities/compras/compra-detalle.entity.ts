@@ -21,6 +21,18 @@ export class CompraDetalle extends BaseModel {
   @Column({ default: true })
   activo!: boolean;
 
+  /** Clase guardada al crear la línea (override o heredada). Null: «Sin clasificar». */
+  @Column({ name: 'clase_id', type: 'int', nullable: true })
+  claseId?: number | null;
+
+  /** Alias del proveedor con el que se reconoció la línea (marca/contenido comprados). */
+  @Column({ name: 'alias_id', type: 'int', nullable: true })
+  aliasId?: number | null;
+
+  /** Texto tal como venía en la factura del proveedor. */
+  @Column({ name: 'texto_original', type: 'varchar', length: 500, nullable: true })
+  textoOriginal?: string | null;
+
   @ManyToOne('Compra', 'detalles', {
     createForeignKeyConstraints: false
   })

@@ -839,6 +839,12 @@ export abstract class RepositoryService {
   abstract verificarAcreditacionPos(id: number, montoAcreditado: number): Observable<any>;
   abstract getAcreditacionesPendientes(): Observable<any[]>;
   abstract acreditarTransferenciaBancaria(payload: any): Observable<any>;
+  abstract getCompraItemClases(opts?: { incluirInactivas?: boolean }): Observable<any[]>;
+  abstract createCompraItemClase(data: any): Observable<any>;
+  abstract updateCompraItemClase(id: number, data: any): Observable<any>;
+  abstract getAliasProductosProveedor(proveedorId: number, opts?: { incluirInactivos?: boolean }): Observable<any[]>;
+  abstract upsertAliasProducto(data: any): Observable<any>;
+  abstract getReporteComprasPorClase(params: { desde: string; hasta: string; monedaId?: number }): Observable<any>;
   abstract getCompraCategorias(): Observable<any[]>;
   abstract createCompraCategoria(data: any): Observable<any>;
   abstract updateCompraCategoria(id: number, data: any): Observable<any>;

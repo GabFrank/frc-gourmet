@@ -23,4 +23,18 @@ export class OcrAliasProducto extends BaseModel {
 
   @Column({ name: 'veces_usado', type: 'int', default: 1 })
   vecesUsado!: number;
+
+  /** Marca y contenido comprados (el producto es genérico: no se crea uno por marca). */
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  marca?: string | null;
+
+  @Column({ type: 'varchar', length: 120, nullable: true })
+  contenido?: string | null;
+
+  /** Código del ítem en el sistema del proveedor. Informativo, sin unique. */
+  @Column({ name: 'codigo_proveedor', type: 'varchar', length: 60, nullable: true })
+  codigoProveedor?: string | null;
+
+  @Column({ type: 'boolean', default: true })
+  activo!: boolean;
 }

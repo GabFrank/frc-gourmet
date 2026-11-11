@@ -131,6 +131,9 @@
   .col-prod { width: 360px; }
   .col-desc { width: 200px; min-width: 180px; }
   .col-pres { width: 180px; }
+  .col-clase { width: 190px; }
+  .marca-row { display: flex; gap: 4px; margin-top: 2px; }
+  .mini-input { width: 50%; min-width: 0; font-size: 12px; padding: 3px 4px; color: inherit; background: transparent; border: 1px solid rgba(128,128,128,.4); border-radius: 4px; }
   .col-cant { width: 110px; }
   .col-precio { width: 130px; }
   .col-sub { width: 130px; }

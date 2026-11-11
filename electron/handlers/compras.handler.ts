@@ -32,8 +32,19 @@ import { enTransaccionSiPostgres } from '../utils/tx.utils';
 import { Venta } from '../../src/app/database/entities/ventas/venta.entity';
 import { dispararEventoFt } from '../services/funciones-tareas/eventos';
 import { FtEvento } from '../../src/app/database/entities/rrhh/funciones-tareas/ft.enums';
+import { claseParaLineaNueva } from './compra-clases.handler';
 
 // ===== Helpers internos =====
+
+// Clasificación de la línea (PLAN-clasificacion-items-compras): clase (override o
+// heredada, guardada fija), alias del proveedor y texto original de la factura.
+async function camposClasificacionLinea(manager: any, d: any) {
+  return {
+    claseId: await claseParaLineaNueva(manager, d.claseId, d.productoId),
+    aliasId: d.aliasId ? Number(d.aliasId) : null,
+    textoOriginal: d.textoOriginal ? String(d.textoOriginal).trim().slice(0, 500) || null : null,
+  };
+}
 
 // Stock actual en unidad base = SUMA(movimientos activos) con signo segun tipo
 async function getStockActualUnidadBase(qr: any, productoId: number): Promise<number> {
@@ -500,6 +511,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
           subtotal,
           cantidadUnidadBase: cantidadUB,
           activo: true,
+          ...(await camposClasificacionLinea(qr.manager, d)),
         });
         await setEntityUserTracking(dataSource, det, userId, false);
         await qr.manager.save(CompraDetalle, det);
@@ -581,6 +593,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
             subtotal,
             cantidadUnidadBase: cantidadUB,
             activo: true,
+            ...(await camposClasificacionLinea(qr.manager, d)),
           });
           await setEntityUserTracking(dataSource, det, userId, false);
           await qr.manager.save(CompraDetalle, det);
@@ -1030,7 +1043,8 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   ipcMain.handle('createCompraDetalle', async (_event: any, data: any) => {
     await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const repo = dataSource.getRepository(CompraDetalle);
-    const entity = repo.create(data);
+    const productoId = data?.productoId ?? data?.producto?.id;
+    const entity = repo.create({ ...data, claseId: await claseParaLineaNueva(dataSource.manager, data?.claseId, productoId) });
     return await repo.save(entity);
   });
 
