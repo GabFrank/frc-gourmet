@@ -1,5 +1,13 @@
 import { ipcMain } from 'electron';
+import { pagoOnlineOfrecido } from '../utils/tienda-ingreso.utils';
+import { upayConfigDe, apiKey as upayApiKeyActual } from '../services/pagos-online/pagos-online.service';
+import { UpayCheckoutProvider } from '../services/pagos-online/upay-checkout.provider';
+import { otpWhatsappDisponible, sendWhatsappOtp, whatsappCloudConfigurado } from '../utils/whatsapp-sender';
+import { cargarCredencialesTienda, credencialesTiendaListas, getGoogleClientId } from '../utils/tienda-ingreso.utils';
+import { almacenSeguroDisponible, getWhatsappToken, setWhatsappToken, getUpayApiKey, setUpayApiKey } from '../utils/tienda-secrets.util';
+import { randomInt } from 'crypto';
 import { DataSource } from 'typeorm';
+import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zona-delivery.entity';
 import { TiendaOnlineConfig } from '../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
 import { Producto } from '../../src/app/database/entities/productos/producto.entity';
 import { getVariacionConfig } from '../utils/variacion-config.utils';
@@ -73,25 +81,133 @@ function mapConfigPublic(cfg: TiendaOnlineConfig): any {
     permiteMesa: cfg.permiteMesa,
     prepTimeMinutos: cfg.prepTimeMinutos,
     montoMinimoPedido: Number(cfg.montoMinimoPedido),
-    // Client ID de Google OAuth (env). Si está, el storefront muestra el botón.
-    googleClientId: process.env['GOOGLE_CLIENT_ID'] || null,
+    // Client ID de Google OAuth (pantalla > env). Si está, el storefront muestra el botón.
+    googleClientId: getGoogleClientId(),
+    // Login por código de WhatsApp: solo si hay un canal real de envío.
+    otpWhatsappDisponible: otpWhatsappDisponible(),
+    // F4: «Pagar con tarjeta» (uPay) solo con el interruptor y las credenciales cargadas.
+    pagoOnline: pagoOnlineOfrecido(cfg),
   };
+}
+
+/**
+ * Estado del ingreso de clientes para la pantalla (F3). Nunca devuelve el token: solo si
+ * está cargado y de dónde sale cada valor.
+ */
+async function estadoIngreso(): Promise<any> {
+  const tokenGuardado = !!(await getWhatsappToken());
+  return {
+    almacenSeguroDisponible: almacenSeguroDisponible(),
+    whatsappTokenGuardado: tokenGuardado,
+    whatsappTokenEnEntorno: !!process.env['WHATSAPP_CLOUD_TOKEN'],
+    whatsappPhoneNumberIdEnEntorno: !!process.env['WHATSAPP_PHONE_NUMBER_ID'],
+    whatsappConfigurado: whatsappCloudConfigurado(),
+    googleClientIdEnEntorno: !!process.env['GOOGLE_CLIENT_ID'],
+    googleConfigurado: !!getGoogleClientId(),
+    // F4: solo si la API Key de uPay está guardada (nunca su valor).
+    upayApiKeyGuardada: !!(await getUpayApiKey()),
+  };
+}
+
+/** F4: URL base de uPay: https y dominio de uPay (STG o la de producción que den al certificar). */
+function esUrlBaseUpay(v: string): boolean {
+  try {
+    const u = new URL(v);
+    const h = u.hostname.toLowerCase();
+    return u.protocol === 'https:' && (h === 'upay.com.py' || h.endsWith('.upay.com.py') || h === 'upay.com' || h.endsWith('.upay.com'));
+  } catch {
+    return false;
+  }
+}
+
+/** Valida y aplica los campos de pago online (F4). Devuelve el código de error o null. */
+function aplicarPagoOnline(cfg: TiendaOnlineConfig, data: any): string | null {
+  const campo = (v: any) => String(v ?? '').trim();
+  if (data.upayBaseUrl !== undefined) {
+    const v = campo(data.upayBaseUrl);
+    if (v && !esUrlBaseUpay(v)) return 'upay_url_invalida';
+    cfg.upayBaseUrl = v || null;
+  }
+  if (data.upayMerchantId !== undefined) {
+    const v = campo(data.upayMerchantId);
+    if (v && !/^[\w-]{1,64}$/.test(v)) return 'upay_merchant_invalido';
+    cfg.upayMerchantId = v || null;
+  }
+  if (data.upayMerchantNombre !== undefined) cfg.upayMerchantNombre = campo(data.upayMerchantNombre).slice(0, 150) || null;
+  if (data.minutosAvisoPagadoSinAceptar !== undefined) {
+    const n = Math.round(Number(data.minutosAvisoPagadoSinAceptar));
+    if (!Number.isFinite(n) || n < 1 || n > 240) return 'minutos_aviso_invalido';
+    cfg.minutosAvisoPagadoSinAceptar = n;
+  }
+  if (data.pagoOnlineActivo !== undefined) cfg.pagoOnlineActivo = !!data.pagoOnlineActivo;
+  return null;
+}
+
+const RE_PHONE_ID = /^\d{6,30}$/;
+const RE_PLANTILLA = /^[a-z0-9_]{1,120}$/;
+const RE_IDIOMA = /^[a-z]{2,3}(_[A-Z]{2})?$/;
+const RE_GOOGLE_ID = /^[\w-]+\.apps\.googleusercontent\.com$/i;
+
+/**
+ * Valida y aplica los campos de ingreso de clientes. Vacío = se borra el valor y vuelve a
+ * regir la variable de entorno. Devuelve el código de error o null.
+ */
+function aplicarIngreso(cfg: TiendaOnlineConfig, data: any): string | null {
+  const campo = (v: any) => String(v ?? '').trim();
+  if (data.whatsappPhoneNumberId !== undefined) {
+    const v = campo(data.whatsappPhoneNumberId);
+    if (v && !RE_PHONE_ID.test(v)) return 'whatsapp_phone_id_invalido';
+    cfg.whatsappPhoneNumberId = v || (null as any);
+  }
+  if (data.whatsappPlantilla !== undefined) {
+    const v = campo(data.whatsappPlantilla);
+    if (v && !RE_PLANTILLA.test(v)) return 'whatsapp_plantilla_invalida';
+    cfg.whatsappPlantilla = v || (null as any);
+  }
+  if (data.whatsappIdioma !== undefined) {
+    const v = campo(data.whatsappIdioma);
+    if (v && !RE_IDIOMA.test(v)) return 'whatsapp_idioma_invalido';
+    cfg.whatsappIdioma = v || (null as any);
+  }
+  if (data.googleClientId !== undefined) {
+    const v = campo(data.googleClientId);
+    if (v && !RE_GOOGLE_ID.test(v)) return 'google_client_id_invalido';
+    cfg.googleClientId = v || (null as any);
+  }
+  return null;
 }
 
 export function registerPedidosOnlineConfigHandlers(
   dataSource: DataSource,
   getCurrentUser: () => any,
 ): void {
+  // Credenciales de ingreso cargadas en la app (F3): prioridad sobre las de entorno.
+  // Los handlers que dependen de ellas esperan esta carga (credencialesTiendaListas).
+  cargarCredencialesTienda(dataSource).catch(() => undefined);
+
+  // «Probar envío» manda una plantilla paga de Meta: como mucho 1 por minuto por teléfono y
+  // 5 por hora en total (en memoria; alcanza para probar y corta un uso en bucle).
+  const pruebasEnviadas: Array<{ telefono: string; en: number }> = [];
+
   // Público: el storefront lee la config.
   ipcMain.handle('get-tienda-online-config-public', async () => {
-    return mapConfigPublic(await getTiendaConfig(dataSource));
+    await credencialesTiendaListas();
+    const pub = mapConfigPublic(await getTiendaConfig(dataSource));
+    // Delivery solo si hay alguna zona activa dibujada: sin zona no se puede
+    // cobrar el envío (PLAN-tienda-online A3).
+    if (pub.permiteDelivery) {
+      const zonas = await dataSource.getRepository(ZonaDelivery).find({ where: { activa: true } });
+      pub.permiteDelivery = zonas.some((z) => !!z.poligono);
+    }
+    return pub;
   });
 
   // Admin: leer la config completa (para la pantalla).
   ipcMain.handle('get-tienda-online-config', async () => {
     await ensurePermission(dataSource, getCurrentUser, PERM);
+    await credencialesTiendaListas();
     const cfg = await getTiendaConfig(dataSource);
-    return { ...cfg, abiertaAhora: estaAbierta(cfg) };
+    return { ...cfg, abiertaAhora: estaAbierta(cfg), ingreso: await estadoIngreso() };
   });
 
   // Admin: actualizar.
@@ -119,8 +235,71 @@ export function registerPedidosOnlineConfigHandlers(
     if (data.permiteMesa !== undefined) cfg.permiteMesa = !!data.permiteMesa;
     if (data.requiereLanMesa !== undefined) cfg.requiereLanMesa = !!data.requiereLanMesa;
     if (data.rangoLanMesa !== undefined) cfg.rangoLanMesa = data.rangoLanMesa ? String(data.rangoLanMesa).trim() : undefined;
+    // Ingreso de clientes (F3)
+    const errIngreso = aplicarIngreso(cfg, data);
+    if (errIngreso) return { success: false, error: errIngreso };
+    // Pago online (F4). La API Key, como el token: solo escritura y al almacén seguro.
+    const errPago = aplicarPagoOnline(cfg, data);
+    if (errPago) return { success: false, error: errPago };
+    const upayKeyNueva = data.upayApiKey !== undefined ? String(data.upayApiKey).trim() : '';
+    if (upayKeyNueva && !data.upayApiKeyBorrar && !almacenSeguroDisponible()) {
+      return { success: false, error: 'almacen_seguro_no_disponible' };
+    }
+    if (cfg.pagoOnlineActivo) {
+      const keyFinal = data.upayApiKeyBorrar ? '' : upayKeyNueva || (await upayApiKeyActual());
+      if (!cfg.upayMerchantId || !keyFinal) return { success: false, error: 'upay_faltan_credenciales' };
+    }
+    // Token: solo escritura. Se manda para cambiarlo; `whatsappTokenBorrar` lo quita.
+    // Se valida antes y se escribe en el keychain después de guardar la fila, así un error
+    // al guardar no deja el token cambiado.
+    const tokenNuevo = data.whatsappToken !== undefined ? String(data.whatsappToken).trim() : '';
+    if (tokenNuevo && !data.whatsappTokenBorrar && !almacenSeguroDisponible()) {
+      return { success: false, error: 'almacen_seguro_no_disponible' };
+    }
     const saved = await repo.save(cfg);
-    return { success: true, config: { ...saved, abiertaAhora: estaAbierta(saved) } };
+    let tokenOk = true;
+    if (data.whatsappTokenBorrar) tokenOk = await setWhatsappToken('');
+    else if (tokenNuevo) tokenOk = await setWhatsappToken(tokenNuevo);
+    if (data.upayApiKeyBorrar) tokenOk = (await setUpayApiKey('')) && tokenOk;
+    else if (upayKeyNueva) tokenOk = (await setUpayApiKey(upayKeyNueva)) && tokenOk;
+    await cargarCredencialesTienda(dataSource);
+    if (!tokenOk) return { success: false, error: 'token_no_guardado' };
+    return { success: true, config: { ...saved, abiertaAhora: estaAbierta(saved), ingreso: await estadoIngreso() } };
+  });
+
+  // Admin: prueba la conexión con uPay (F4) consultando una sesión que no existe: 404 = la
+  // API Key es válida; 401/403 = rechazada. No crea nada ni cobra.
+  ipcMain.handle('probar-tienda-upay', async () => {
+    await ensurePermission(dataSource, getCurrentUser, PERM);
+    const u = await upayConfigDe(dataSource);
+    if (!u) return { success: false, error: 'upay_faltan_credenciales' };
+    try {
+      const r = await new UpayCheckoutProvider(u).consultarSesion('00000000-0000-4000-8000-000000000000');
+      if (r.status === 401 || r.status === 403) return { success: false, error: 'upay_credenciales' };
+      if (r.status === 404 || (r.status >= 200 && r.status < 300)) return { success: true };
+      return { success: false, error: 'upay_error', detalle: `HTTP ${r.status}` };
+    } catch (e: any) {
+      return { success: false, error: 'upay_sin_conexion', detalle: e?.message || String(e) };
+    }
+  });
+
+  // Admin: manda un código de prueba por WhatsApp con las credenciales vigentes (F3).
+  // Solo canal real: sin credenciales no usa el fallback de desarrollo.
+  ipcMain.handle('probar-tienda-whatsapp', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM);
+    if (!whatsappCloudConfigurado()) return { success: false, error: 'whatsapp_no_configurado' };
+    const telefono = String(data?.telefono ?? '').replace(/\D/g, '');
+    if (telefono.length < 8 || telefono.length > 15) return { success: false, error: 'telefono_invalido' };
+    const ahora = Date.now();
+    while (pruebasEnviadas.length && ahora - pruebasEnviadas[0].en > 3_600_000) pruebasEnviadas.shift();
+    if (pruebasEnviadas.length >= 5 || pruebasEnviadas.some((p) => p.telefono === telefono && ahora - p.en < 60_000)) {
+      return { success: false, error: 'demasiadas_pruebas' };
+    }
+    pruebasEnviadas.push({ telefono, en: ahora });
+    const codigo = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    const envio = await sendWhatsappOtp(telefono, codigo);
+    if (!envio.ok) return { success: false, error: 'envio_fallido', detalle: envio.detail || null };
+    return { success: true };
   });
 
   registerPublicOperation('tienda.config', {
