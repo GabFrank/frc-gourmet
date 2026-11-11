@@ -28,6 +28,8 @@ import { cancelarCuotasAbiertasDeCpc } from './cpc-cuotas.utils';
 import { clienteBloqueado, estadoCreditoCliente, FORMA_PAGO_CREDITO, withClienteLock } from './credito-tienda.utils';
 
 export const ERROR_VENTA_DEUDA_COBRADA = 'VENTA_A_CUENTA_CON_COBROS';
+/** Lo que ve el personal. Para corregirla, primero se anula el cobro de la cuenta por cobrar. */
+export const MENSAJE_VENTA_DEUDA_COBRADA = 'Esta venta tiene una deuda a cuenta con cobros y no se puede modificar. Para corregirla, anulá primero el cobro de la cuenta por cobrar.';
 
 export class DeudaVentaError extends Error {
   constructor(public codigo: string, mensaje: string) {
@@ -82,7 +84,7 @@ export async function verificarEdicionVentaConDeuda(ds: DataSource, ventaId: num
   const cpc = await cpcActivaDeVenta(ds.manager, ventaId);
   if (cpc && Number(cpc.montoCobrado) > 0.005) {
     throw new DeudaVentaError(ERROR_VENTA_DEUDA_COBRADA,
-      `${ERROR_VENTA_DEUDA_COBRADA}: la venta tiene una deuda a cuenta con cobros; no se puede modificar`);
+      `${ERROR_VENTA_DEUDA_COBRADA}: ${MENSAJE_VENTA_DEUDA_COBRADA}`);
   }
 }
 

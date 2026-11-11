@@ -711,6 +711,10 @@ export class RepositoryHttpService extends RepositoryService {
   deleteVentaItemObservacion(id: number): Observable<boolean> {
     return throwError(() => new Error(`RepositoryHttpService.deleteVentaItemObservacion() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getEstadoDeudaVenta(_ventaId: number): Observable<{ bloqueada: boolean; codigo?: string }> {
+    return throwError(() => new Error(`RepositoryHttpService.getEstadoDeudaVenta() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+
   getVentaItemAdicionales(ventaItemId: number): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getVentaItemAdicionales() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

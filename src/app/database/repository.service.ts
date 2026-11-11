@@ -401,6 +401,8 @@ export abstract class RepositoryService {
   abstract createVentaItemObservacion(data: any): Observable<any>;
   abstract deleteVentaItemObservacion(id: number): Observable<boolean>;
   abstract getVentaItemAdicionales(ventaItemId: number): Observable<any[]>;
+  /** ¿La venta tiene una deuda a cuenta con cobros? Entonces sus ítems no se tocan. */
+  abstract getEstadoDeudaVenta(ventaId: number): Observable<{ bloqueada: boolean; codigo?: string }>;
   abstract createVentaItemAdicional(data: any): Observable<any>;
   abstract deleteVentaItemAdicional(id: number): Observable<boolean>;
   abstract getVentaItemIngredienteModificaciones(ventaItemId: number): Observable<any[]>;

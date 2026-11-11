@@ -44,7 +44,16 @@ rechaza un origen con CPC activa y una venta web no tiene mesa ni comanda para s
 Si recalcular falla, el cambio ya hecho no se revierte: queda en el log y el PdV muestra la
 diferencia como saldo.
 
+**El PdV pregunta antes (2026-11-10).** Canal `venta-deuda-estado` (`{ bloqueada, codigo }`): antes
+de agregar, quitar, cancelar, editar o personalizar un ítem, el PdV consulta y, si la venta tiene
+cobros, avisa «Esta venta tiene una deuda a cuenta con cobros…» sin tocar nada. Hacía falta porque
+personalizar borra adicionales y observaciones antes de actualizar el ítem: el rechazo del servidor
+llegaba con el ítem ya sin sus personalizaciones. Si la consulta falla (modo cliente, red) el PdV
+sigue y el servidor frena igual. De paso: cancelar un ítem rechazado vuelve a mostrarlo como estaba,
+y quitar, editar, personalizar y agregar por peso muestran el error en vez de callarlo.
+
 ## Pruebas
 
 `test:tienda-credito` (SQLite y PG), sección [6]: sube, tope, baja con descuento, sin cambio no
-escribe, en cero se cancela, saldo recalculado igual, con cobros no se edita ni se borra.
+escribe, en cero se cancela, saldo recalculado igual, con cobros no se edita ni se borra, y
+`venta-deuda-estado` responde bloqueada con cobros y no bloqueada sin deuda activa.
