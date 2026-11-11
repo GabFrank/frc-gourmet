@@ -133,7 +133,12 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
     }
     this.repo.getPedidosOnlineAdmin(filtros).subscribe({
       next: (res) => {
-        this.pedidos = res || [];
+        // El detalle de cada ítem se calcula acá: el template no llama funciones.
+        this.pedidos = (res || []).map((p: any) => ({
+          ...p,
+          siguiente: this.siguienteEstado(p),
+          items: (p.items || []).map((it: any) => ({ ...it, ...this.detalleItem(it) })),
+        }));
         this.cargando = false;
       },
       error: () => {
@@ -220,16 +225,34 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
   }
 
   /** Sabores, adicionales, preferencias y nota de la línea (lo que cocina tiene que ver). */
-  detalleItem(it: any): string {
+  /**
+   * Lo que el cocinero tiene que leer de un ítem: la línea general (adicionales de la pizza,
+   * observaciones, nota) y, si algún sabor se personalizó (F6b), una línea por sabor con lo
+   * que se sacó, cambió y agregó.
+   */
+  private detalleItem(it: any): { detalle: string; detalleSabores: string[] } {
     let p = it?.personalizacion;
     if (typeof p === 'string') { try { p = JSON.parse(p); } catch { p = null; } }
-    if (!p) return '';
+    if (!p) return { detalle: '', detalleSabores: [] };
+    const sabores: any[] = Array.isArray(p.sabores) ? p.sabores : [];
+    const detalleSabores = sabores
+      .filter((s: any) => s?.personalizacion)
+      .map((s: any) => {
+        const ps = s.personalizacion;
+        const partes = [
+          ...(ps.quitados || []).map((q: any) => `SIN ${q.nombre}`),
+          ...(ps.cambios || []).map((c: any) => `${c.nombre} → ${c.reemplazoNombre}`),
+          ...(ps.adicionales || []).map((a: any) => `+ ${a.nombre}`),
+        ].filter(Boolean);
+        return partes.length ? `${s.nombre}: ${partes.join(', ')}` : '';
+      })
+      .filter(Boolean);
     const parts: string[] = [];
-    if (Array.isArray(p.sabores) && p.sabores.length > 1) parts.push(p.sabores.map((s: any) => s.nombre).join(' / '));
+    if (sabores.length > 1) parts.push(sabores.map((s: any) => s.nombre).join(' / '));
     for (const a of p.adicionales || []) parts.push(`+ ${a.nombre}`);
     for (const o of p.observaciones || []) parts.push(typeof o === 'string' ? o : o?.descripcion);
     if (p.notaLibre) parts.push(`"${p.notaLibre}"`);
-    return parts.filter(Boolean).join(' · ');
+    return { detalle: parts.filter(Boolean).join(' · '), detalleSabores };
   }
 
   mapaUrl(p: any): string | null {
@@ -282,7 +305,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
   }
 
   /** Próximo estado sugerido según el estado actual y el tipo de pedido. */
-  siguienteEstado(p: any): { estado: string; label: string } | null {
+  private siguienteEstado(p: any): { estado: string; label: string } | null {
     switch (p.estado) {
       case 'ACEPTADO':
         // F5 (C2): sin venta, el camino es «Enviar a cocina» (que crea la venta).

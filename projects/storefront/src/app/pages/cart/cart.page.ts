@@ -46,6 +46,10 @@ import { GuaraniPipe } from '../../core/guarani.pipe';
         </div>
       </div>
 
+      <a routerLink="/" class="seguir" *ngIf="cart.items.length > 0">
+        <sf-icon name="plus" [size]="18"></sf-icon> Agregar más productos
+      </a>
+
       <div class="resumen sf-card" *ngIf="cart.items.length > 0">
         <div class="row"><span>Subtotal</span><strong>{{ cart.subtotal | guarani }}</strong></div>
       </div>
@@ -72,6 +76,7 @@ import { GuaraniPipe } from '../../core/guarani.pipe';
     .line-bottom { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
     .sf-stepper.sm button { width: 32px; height: 32px; font-size: 18px; }
     .line-total { font-weight: 700; font-size: 15px; }
+    .seguir { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 12px; margin: 2px 0 10px; color: var(--sf-primary); font-weight: 600; text-decoration: none; border: 1px dashed var(--sf-divider); border-radius: var(--sf-radius); }
     .resumen { margin-top: 6px; }
     .resumen .row { display: flex; justify-content: space-between; font-size: 16px; }
   `],

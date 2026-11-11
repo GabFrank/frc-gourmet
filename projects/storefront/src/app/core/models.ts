@@ -36,6 +36,24 @@ export interface MenuSaborPrecio {
   presentacionId: number;
   precio: number;
   recetaPresentacionId: number;
+  /** F6b: receta de este sabor × tamaño (clave de `MenuSnapshot.personalizacionPorReceta`). */
+  recetaId?: number | null;
+}
+
+/** F6b: lo que se puede personalizar de una receta (sabor × tamaño). */
+export interface PersonalizacionReceta {
+  quitables: { id: number; nombre: string }[];
+  cambiables: { id: number; nombre: string; opciones: { productoId: number; nombre: string }[] }[];
+  adicionales: MenuAdicional[];
+}
+
+/** F6b: lo que el cliente eligió para un sabor. */
+export interface PersonalizacionSabor {
+  saborId: number;
+  nombreSabor?: string;
+  quitar: { id: number; nombre: string }[];
+  cambios: { recetaIngredienteId: number; nombre: string; productoId: number; reemplazoNombre: string }[];
+  adicionales: MenuAdicional[];
 }
 
 /** Pizza: un sabor con sus precios por tamaño. */
@@ -94,6 +112,8 @@ export interface MenuSnapshot {
   productos: MenuProducto[];
   total: number;
   publicadoEn: string;
+  /** F6b: solo con «Personalizar sabores» prendido en la tienda. */
+  personalizacionPorReceta?: Record<string, PersonalizacionReceta> | null;
 }
 
 export interface ZonaDelivery {
@@ -119,6 +139,7 @@ export interface CartOpcion {
   presentacionId?: number;
   recetaId?: number;
   saborIds?: number[];         // pizza: 1..maxSabores (mitad y mitad)
+  personalizacionSabores?: PersonalizacionSabor[]; // F6b: sacar / cambiar / adicionales por sabor
 }
 
 /** Ítem del carrito con su personalización. */

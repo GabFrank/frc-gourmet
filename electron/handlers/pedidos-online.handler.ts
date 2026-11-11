@@ -6,7 +6,8 @@ import { Receta } from '../../src/app/database/entities/productos/receta.entity'
 import { RecetaPresentacion } from '../../src/app/database/entities/productos/receta-presentacion.entity';
 import { RecetaAdicionalVinculacion } from '../../src/app/database/entities/productos/receta-adicional-vinculacion.entity';
 import { ProductoObservacion } from '../../src/app/database/entities/productos/producto-observacion.entity';
-import { getPizzaConfig } from './pedidos-online-config.handler';
+import { getPizzaConfig, getTiendaConfig } from './pedidos-online-config.handler';
+import { buildPersonalizacionPorReceta } from '../utils/tienda-personalizacion-sabor.utils';
 import { registerPublicOperation } from '../server/public-routes';
 import { TiendaCategoria } from '../../src/app/database/entities/pedidos-online/tienda-categoria.entity';
 import { armarCategoriasTienda } from '../utils/tienda-categorias.utils';
@@ -143,6 +144,8 @@ export function registerPedidosOnlineHandlers(
                 presentacionId: rp.presentacion.id,
                 precio: Number(precio.valor),
                 recetaPresentacionId: rp.id,
+                // F6b: receta de este sabor × tamaño (índice de personalizacionPorReceta).
+                recetaId: rp.receta?.id ?? null,
               });
               if (!monedaPizza) monedaPizza = mapMoneda(precio.moneda);
               if (rp.receta?.id) baseRecetaIds.add(rp.receta.id);
@@ -281,9 +284,19 @@ export function registerPedidosOnlineHandlers(
       })),
     );
 
+    // F6b: personalizar cada sabor (sacar / cambiar / adicionales), solo con el interruptor prendido.
+    const cfgTienda = await getTiendaConfig(dataSource);
+    const personalizacionPorReceta = cfgTienda.personalizarSabores
+      ? await buildPersonalizacionPorReceta(
+          dataSource,
+          items.flatMap((i) => (i.sabores || []).flatMap((s: any) => s.precios.map((pr: any) => pr.recetaId))),
+        )
+      : null;
+
     return {
       categorias,
       productos: items,
+      personalizacionPorReceta,
       total: items.length,
       publicadoEn: new Date().toISOString(),
     };

@@ -34,6 +34,7 @@ import { bloquearSiPagoConsolidado } from './pago-consolidado-guard';
 import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
 import { assertCajaAbiertaSiVino } from '../utils/caja-abierta.utils';
 import { ajustarSaldoCliente, ajustarSaldoCuentaBancaria } from '../utils/saldo-atomico.utils';
+import { sincronizarPedidosPorCierreDeVenta } from '../utils/pedido-online-sync.utils';
 
 function calcularEstadoCuota(monto: number, montoCobrado: number): CuentaPorCobrarCuotaEstado {
   if (montoCobrado >= monto) return CuentaPorCobrarCuotaEstado.COBRADO;
@@ -952,6 +953,8 @@ export function registerCuentasPorCobrarHandlers(
       venta.fechaCierre = new Date();
       await setEntityUserTracking(dataSource, venta, cu?.id, true);
       await queryRunner.manager.save(Venta, venta);
+      // Mesa de la tienda cobrada a crédito: sus pedidos online quedan entregados.
+      await sincronizarPedidosPorCierreDeVenta(queryRunner.manager, venta.id, VentaEstado.CONCLUIDA);
 
       // Cerrar la cuenta de una mesa cambia su ocupacion. Este handler NO pasa
       // por `updateVenta`, asi que tiene que resincronizar el cache

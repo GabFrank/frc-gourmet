@@ -25,6 +25,7 @@ import { resolverZonaPorPunto } from '../utils/geo.utils';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
 import { pedidoMesaPermitido } from '../utils/tienda-limites';
 import { ipPermitidaMesa } from '../utils/ip-lan.util';
+import { resolvePersonalizacionSabores, PersonalizacionInvalidaError } from '../utils/tienda-personalizacion-sabor.utils';
 
 /**
  * Pedidos online — Fase 3: creación de pedido + zonas de delivery (superficie pública).
@@ -64,7 +65,7 @@ async function resolveOpcion(
   presentacionId?: number;
   recetaId?: number;
   recetaIds?: number[];
-  sabores?: { saborId: number; nombre: string; proporcion: number; recetaPresentacionId: number; precioReferencia: number }[];
+  sabores?: { saborId: number; nombre: string; proporcion: number; recetaPresentacionId: number; precioReferencia: number; recetaId?: number | null }[];
   error?: string;
 } | null> {
   const pvRepo = dataSource.getRepository(PrecioVenta);
@@ -140,6 +141,8 @@ async function resolveOpcion(
           proporcion,
           recetaPresentacionId: rp.id,
           precioReferencia: Number(precio.valor),
+          // F6b: receta de este sabor × tamaño, sobre la que se personaliza (como el PdV).
+          recetaId: rp.receta?.id ?? null,
         };
       });
       const label = uniqueSabores.length > 1
@@ -423,6 +426,21 @@ export function registerPedidosOnlinePedidosHandlers(
         throw e;
       }
 
+      // F6b: personalización de cada sabor (sacar / cambiar / adicionales por sabor), validada
+      // contra la receta de ese sabor × tamaño. Con el interruptor apagado se rechaza.
+      let persSabores: Awaited<ReturnType<typeof resolvePersonalizacionSabores>> = null;
+      try {
+        persSabores = await resolvePersonalizacionSabores(
+          dataSource,
+          opcion.sabores ?? [],
+          it.opcion?.personalizacionSabores,
+          !!cfg.personalizarSabores,
+        );
+      } catch (e) {
+        if (e instanceof PersonalizacionInvalidaError) return { success: false, error: `${e.message}:${producto.nombre}` };
+        throw e;
+      }
+
       // Observaciones predefinidas elegidas (solo se guardan como snapshot).
       const observaciones: string[] = Array.isArray(it.observaciones)
         ? it.observaciones.map((o: any) => String(o)).slice(0, 20)
@@ -431,14 +449,18 @@ export function registerPedidosOnlinePedidosHandlers(
 
       // Cantidad entera ≥ 1 (no se venden fracciones online).
       const cantidad = Math.max(1, Math.floor(Number(it.cantidad) || 1));
-      const precioUnitario = opcion.valor + adic.total;
+      const precioUnitario = opcion.valor + adic.total + (persSabores?.total ?? 0);
       const itemSubtotal = precioUnitario * cantidad;
       subtotal += itemSubtotal;
 
       const personalizacion = {
         opcion: { label: opcion.label, tipo: it.opcion?.tipo ?? 'PRESENTACION' },
         // Desglose de sabores (pizza mitad y mitad) para la bandeja del PdV.
-        sabores: opcion.sabores ?? null,
+        sabores: opcion.sabores
+          ? opcion.sabores.map((s) => (persSabores?.porSabor.get(s.saborId)
+            ? { ...s, personalizacion: persSabores.porSabor.get(s.saborId) }
+            : s))
+          : null,
         adicionales: adic.detalle,
         observaciones,
         notaLibre,

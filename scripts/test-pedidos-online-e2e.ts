@@ -219,6 +219,7 @@ async function seed(dataSource: DataSource): Promise<any> {
   return {
     admin, producto, presentacion, zona, elaborado, receta, adicional,
     pizza, presGrande, presMediana, saborCalabresa, saborBacon, saborMussarela,
+    recCalabresa, recBacon,
   };
 }
 
@@ -766,6 +767,137 @@ async function main() {
   const itMitad = pedMitad?.items?.[0];
   ok(itMitad?.personalizacion?.sabores?.length === 2 && Math.abs(itMitad.personalizacion.sabores[0].proporcion - 0.5) < 1e-6,
     'PIZZA mitad: snapshot con 2 sabores y proporción 0.5', itMitad?.personalizacion?.sabores);
+
+  console.log('\n[e2e] === F6b: PERSONALIZAR CADA SABOR ===');
+  {
+    const R = (n: string) => dataSource.getRepository(n);
+    const ing = async (nombre: string) => R('Producto').save(R('Producto').create({ nombre, tipo: 'RETAIL_INGREDIENTE', activo: true, esVendible: false, esIngrediente: true, iva: 10 } as any));
+    const cebolla: any = await ing('CEBOLLA');
+    const aceituna: any = await ing('ACEITUNA');
+    const morron: any = await ing('MORRON');
+    const queso: any = await ing('QUESO');
+    const ri = (receta: any, ingrediente: any, extra: any) => R('RecetaIngrediente').save(R('RecetaIngrediente').create({ receta, ingrediente, cantidad: 1, unidad: 'GRAMOS', activo: true, ...extra } as any));
+    const riCebolla: any = await ri(seeded.recCalabresa, cebolla, { esOpcional: true });
+    const riAceituna: any = await ri(seeded.recCalabresa, aceituna, { esCambiable: true });
+    const riQueso: any = await ri(seeded.recCalabresa, queso, {});
+    const riCebollaBacon: any = await ri(seeded.recBacon, cebolla, { esOpcional: true });
+    const riInactivo: any = await ri(seeded.recCalabresa, morron, { esOpcional: true, activo: false });
+    await R('RecetaIngredienteIntercambiable').save(R('RecetaIngredienteIntercambiable').create({ recetaIngrediente: riAceituna, ingredienteOpcion: morron, activo: true } as any));
+    const borde: any = await R('Adicional').save(R('Adicional').create({ nombre: 'BORDE CHEDDAR', precio: 9000, activo: true } as any));
+    const apagado: any = await R('Adicional').save(R('Adicional').create({ nombre: 'APAGADO', precio: 1000, activo: false } as any));
+    await R('RecetaAdicionalVinculacion').save(R('RecetaAdicionalVinculacion').create({ receta: seeded.recCalabresa, adicional: borde, precioAdicional: 10000, activo: true } as any));
+    await R('RecetaAdicionalVinculacion').save(R('RecetaAdicionalVinculacion').create({ receta: seeded.recCalabresa, adicional: apagado, precioAdicional: 1000, activo: true } as any));
+
+    const G = seeded.presGrande.id, CAL = seeded.saborCalabresa.id, BAC = seeded.saborBacon.id;
+    const pedir = (pers: any, saborIds = [CAL, BAC]) => pub('pedido.crear', [{
+      tipoPedido: 'PICKUP',
+      items: [{ productoId: seeded.pizza.id, opcion: { tipo: 'PIZZA', presentacionId: G, saborIds, personalizacionSabores: pers }, cantidad: 1 }],
+    }], token2);
+    const persOk = [{ saborId: CAL, quitarIds: [riCebolla.id], cambios: [{ recetaIngredienteId: riAceituna.id, productoId: morron.id }], adicionalIds: [borde.id] }];
+
+    // Interruptor apagado (por defecto): el menú no publica y el alta rechaza.
+    const menuOff: any = await pub('menu.get', [], token2);
+    ok(menuOff.result?.personalizacionPorReceta == null, 'F6b: interruptor apagado → el menú no publica personalización', menuOff.result?.personalizacionPorReceta);
+    const off = await pedir(persOk);
+    ok(String(off.result?.error || '').startsWith('personalizacion_invalida:deshabilitada'), 'F6b: interruptor apagado → alta rechaza personalización', off.result?.error);
+
+    await R('TiendaOnlineConfig').update({}, { personalizarSabores: true });
+    const menuOn: any = await pub('menu.get', [], token2);
+    const pz = menuOn.result?.productos?.find((x: any) => x.id === seeded.pizza.id);
+    const recIdCal = pz?.sabores?.find((x: any) => x.saborId === CAL)?.precios?.find((x: any) => x.presentacionId === G)?.recetaId;
+    const opc = menuOn.result?.personalizacionPorReceta?.[String(recIdCal)];
+    ok(recIdCal === seeded.recCalabresa.id && !!opc, 'F6b: el menú publica la receta de cada sabor × tamaño', [recIdCal, opc]);
+    ok(opc?.quitables?.map((q: any) => q.nombre).join() === 'CEBOLLA', 'F6b: quitables solo opcionales activos (no el inactivo ni el fijo)', opc?.quitables);
+    ok(opc?.cambiables?.[0]?.opciones?.[0]?.nombre === 'MORRON', 'F6b: cambiables con sus opciones', opc?.cambiables);
+    ok(opc?.adicionales?.length === 1 && opc.adicionales[0].precio === 10000, 'F6b: adicionales activos de la receta, precio de vinculación', opc?.adicionales);
+    ok(!JSON.stringify(opc).includes('costo') && !JSON.stringify(opc).includes('cantidad'), 'F6b: sin costos ni cantidades en el menú');
+
+    // Precio: 70000 (mayor) + 10000 × 1/2 = 75000.
+    const bien = await pedir(persOk);
+    ok(bien.result?.success === true && bien.result?.total === 75000, 'F6b: mitad y mitad con borde en una mitad = 70000 + 5000', bien.result?.total ?? bien.result?.error);
+    const entera = await pedir([{ saborId: CAL, adicionalIds: [borde.id] }], [CAL]);
+    ok(entera.result?.total === 70000, 'F6b: pizza entera CALABRESA 60000 + borde 10000', entera.result?.total ?? entera.result?.error);
+
+    const rechazos: [string, any, string][] = [
+      ['sabor que no está en saborIds', [{ saborId: seeded.saborMussarela.id, quitarIds: [riCebolla.id] }], 'sabor_no_elegido'],
+      ['sabor repetido', [{ saborId: CAL, quitarIds: [riCebolla.id] }, { saborId: CAL }], 'sabor_repetido'],
+      ['id repetido en quitar', [{ saborId: CAL, quitarIds: [riCebolla.id, riCebolla.id] }], 'quitar_repetido'],
+      ['adicional repetido', [{ saborId: CAL, adicionalIds: [borde.id, borde.id] }], 'adicionales_repetido'],
+      ['quitado y cambiado', [{ saborId: CAL, quitarIds: [riAceituna.id], cambios: [{ recetaIngredienteId: riAceituna.id, productoId: morron.id }] }], 'quitado_y_cambiado'],
+      ['ingrediente de otra receta', [{ saborId: CAL, quitarIds: [riCebollaBacon.id] }], 'ingrediente_no_quitable'],
+      ['ingrediente fijo', [{ saborId: CAL, quitarIds: [riQueso.id] }], 'ingrediente_no_quitable'],
+      ['ingrediente inactivo', [{ saborId: CAL, quitarIds: [riInactivo.id] }], 'ingrediente_no_quitable'],
+      ['cambiar uno no cambiable', [{ saborId: CAL, cambios: [{ recetaIngredienteId: riCebolla.id, productoId: morron.id }] }], 'ingrediente_no_cambiable'],
+      ['opción de cambio ajena', [{ saborId: CAL, cambios: [{ recetaIngredienteId: riAceituna.id, productoId: queso.id }] }], 'opcion_de_cambio_invalida'],
+      ['adicional de otra receta', [{ saborId: BAC, adicionalIds: [borde.id] }], 'adicional_invalido'],
+      ['adicional inactivo', [{ saborId: CAL, adicionalIds: [apagado.id] }], 'adicional_invalido'],
+      ['más de 20', [{ saborId: CAL, quitarIds: Array.from({ length: 21 }, (_, i) => i + 1) }], 'quitar_demasiados'],
+    ];
+    for (const [nombre, pers, motivo] of rechazos) {
+      const r = await pedir(pers);
+      ok(String(r.result?.error || '').startsWith(`personalizacion_invalida:${motivo}`), `F6b: rechaza ${nombre}`, r.result?.error);
+    }
+
+    // Snapshot por sabor y materialización en venta (caja abierta del flujo anterior).
+    const lista: any = await invokeHandlerWithContext('get-pedidos-online-admin', undefined, {});
+    const ped: any = (lista || []).find((p: any) => p.numero === bien.result?.numero);
+    const sCal = ped?.items?.[0]?.personalizacion?.sabores?.find((x: any) => x.saborId === CAL);
+    ok(sCal?.personalizacion?.quitados?.[0]?.nombre === 'CEBOLLA' && sCal?.personalizacion?.cambios?.[0]?.reemplazoNombre === 'MORRON'
+      && sCal?.personalizacion?.adicionales?.[0]?.precio === 10000, 'F6b: snapshot con la personalización de cada sabor', sCal);
+    const { materializarPedidoOnlineEnVenta } = require('../electron/handlers/ventas.handler');
+    // Caja abierta y pedido aceptado, como en el local.
+    const disp: any = await R('Dispositivo').save(R('Dispositivo').create({ nombre: 'TERMINAL F6B', activo: true } as any));
+    const conteo: any = await R('Conteo').save(R('Conteo').create({ activo: true, tipo: 'APERTURA', fecha: new Date() } as any));
+    await R('Caja').save(R('Caja').create({ estado: 'ABIERTO', activo: true, fechaApertura: new Date(), conteoApertura: { id: conteo.id }, dispositivo: { id: disp.id } } as any));
+    await R('PedidoOnline').update({ id: ped.id }, { estado: 'ACEPTADO' });
+    let mat: any = null;
+    try { mat = await materializarPedidoOnlineEnVenta(dataSource, ped.id); } catch (e: any) { mat = { error: e?.message }; }
+    if (mat?.ventaId) {
+      const vi: any = await R('VentaItem').findOne({ where: { venta: { id: mat.ventaId } } });
+      const mods: any[] = await R('VentaItemIngredienteModificacion').find({ where: { ventaItem: { id: vi.id } }, relations: ['ventaItemSabor', 'recetaIngrediente', 'ingredienteReemplazo'] });
+      const ads: any[] = await R('VentaItemAdicional').find({ where: { ventaItem: { id: vi.id } }, relations: ['ventaItemSabor'] });
+      ok(Number(vi.precioVentaUnitario) + Number(vi.precioAdicionales) === 75000 && Number(vi.precioAdicionales) === 5000,
+        'F6b: venta = pedido (base 70000 + adicionales 5000)', [vi.precioVentaUnitario, vi.precioAdicionales]);
+      ok(mods.length === 2 && mods.every((m) => !!m.ventaItemSabor) && mods.some((m) => m.tipoModificacion === 'REMOVIDO' && m.recetaIngrediente?.id === riCebolla.id)
+        && mods.some((m) => m.tipoModificacion === 'INTERCAMBIADO' && m.ingredienteReemplazo?.id === morron.id), 'F6b: modificaciones con su sabor (como el PdV)', mods.map((m) => m.tipoModificacion));
+      ok(ads.length === 1 && !!ads[0].ventaItemSabor && Number(ads[0].precioCobrado) === 10000, 'F6b: adicional con su sabor, precioCobrado de lista (como el PdV)', ads);
+      // Lo que la caja cobra (mismas funciones que el panel de cobro y los reportes) = total del pedido.
+      const { getEstadoCobroVentaInternal } = require('../electron/handlers/ventas.handler');
+      const { getTotalesPorVenta } = require('../electron/utils/venta-total.utils');
+      const est: any = await getEstadoCobroVentaInternal(dataSource, mat.ventaId);
+      const tot = (await getTotalesPorVenta(dataSource, [mat.ventaId])).get(mat.ventaId);
+      const pedTotal = Number((await R('PedidoOnline').findOne({ where: { id: ped.id } }) as any)?.total);
+      ok(Math.abs(Number(est.deudaBruta) - pedTotal) < 0.5 && Math.abs(Number(est.pendienteBruto) - pedTotal) < 0.5,
+        'F6b: la caja cobra lo mismo que el pedido (deuda = total del pedido)', [est.deudaBruta, est.pendienteBruto, pedTotal]);
+      ok(Math.abs(Number(tot) - pedTotal) < 0.5, 'F6b: el total de la venta en reportes = total del pedido', [tot, pedTotal]);
+      // Igual que el PdV (pdv.component: precioAdicionales = Σ precioAdicionalTotal × proporción, base = mayor precio).
+      const pdvAdic = 10000 * 0.5;
+      ok(Number(vi.precioAdicionales) === pdvAdic && Number(vi.precioVentaUnitario) === 70000, 'F6b: mismo desglose que la misma pizza cargada en el PdV', [vi.precioVentaUnitario, vi.precioAdicionales]);
+
+      // Stock (objeción de la auditoría): el descargo es el mismo `procesarStockVenta` del PdV.
+      // Mitad CALABRESA sin cebolla y aceituna → morrón; mitad BACON sin tocar (su cebolla sí baja).
+      const { registerVentasHandlers, stopRetryComandaWorker } = require('../electron/handlers/ventas.handler');
+      registerVentasHandlers(dataSource, getCurrentUser);
+      stopRetryComandaWorker();
+      // El descargo corre al concluir la venta (después del cobro), como en el PdV.
+      await R('Venta').update({ id: mat.ventaId }, { estado: 'CONCLUIDA' });
+      let stockErr: any = null;
+      try {
+        const r: any = await invokeHandlerWithContext('procesarStockVenta', undefined, mat.ventaId);
+        if (!r?.success) stockErr = r?.message;
+      } catch (e: any) { stockErr = e?.message; }
+      const movs: any[] = await R('StockMovimiento').find({ where: { referencia: mat.ventaId, tipoReferencia: 'VENTA', activo: true }, relations: ['producto'] });
+      const baja = (prod: any) => movs.filter((m) => m.producto?.id === prod.id).reduce((s, m) => s + Number(m.cantidad), 0);
+      const stock = { cebolla: baja(cebolla), aceituna: baja(aceituna), morron: baja(morron), queso: baja(queso) };
+      ok(!stockErr && movs.length > 0, 'F6b: el stock de la venta se procesa', stockErr ?? movs.length);
+      ok(stock.aceituna === 0 && stock.morron === 0.5, 'F6b stock: el reemplazo baja (½ morrón) y el reemplazado no (aceituna 0)', stock);
+      ok(stock.cebolla === 0.5, 'F6b stock: la cebolla sacada en CALABRESA no baja; la de BACON sí (½)', stock);
+      ok(stock.queso === 0.5, 'F6b stock: el resto de la receta baja por la proporción del sabor (½ queso)', stock);
+    } else {
+      ok(false, 'F6b: materializar pedido personalizado', mat);
+    }
+    await R('TiendaOnlineConfig').update({}, { personalizarSabores: false });
+  }
 
   // 39. idempotencia (PLAN-tienda-online A2.4): mismo uuid del mismo dueño → mismo pedido.
   const idemBody = (key: string) => [{

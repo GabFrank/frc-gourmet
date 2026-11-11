@@ -10,21 +10,11 @@ import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { tokensSeguimiento, quitarSeguimiento } from '../../core/seguimiento';
 import { textoEstadoPago } from '../../core/pago-online';
+import { vistaEstadoPedido } from '../../core/estado-pedido';
 
 /** Estados en los que ya no hay nada más que esperar. */
 const TERMINALES = ['ENTREGADO', 'RECHAZADO', 'CANCELADO'];
 
-const ESTADO_LABEL: Record<string, string> = {
-  PENDIENTE_PAGO: 'Esperando pago',
-  RECIBIDO: 'Recibido',
-  ACEPTADO: 'Aceptado',
-  EN_PREPARACION: 'En preparación',
-  LISTO: 'Listo',
-  EN_CAMINO: 'En camino',
-  ENTREGADO: 'Entregado',
-  RECHAZADO: 'Rechazado',
-  CANCELADO: 'Cancelado',
-};
 
 @Component({
   selector: 'sf-mis-pedidos',
@@ -35,7 +25,7 @@ const ESTADO_LABEL: Record<string, string> = {
       <h1 class="sf-title">Mis pedidos</h1>
 
       <div class="sf-ok" *ngIf="nuevo">
-        <sf-icon name="check" [size]="16"></sf-icon> ¡Pedido {{ nuevo }} recibido! Te avisamos cuando lo confirmen.
+        <sf-icon name="check" [size]="16"></sf-icon> ¡Pedido {{ nuevo }} enviado! Te avisamos cuando el local lo confirme.
       </div>
 
       <p class="sf-muted" *ngIf="!auth.isAuthenticated && !invitado">
@@ -53,9 +43,16 @@ const ESTADO_LABEL: Record<string, string> = {
       <div class="sf-card sf-pedido" *ngFor="let p of pedidos">
         <div class="sf-pedido-head">
           <strong>{{ p.numero }}</strong>
-          <span class="sf-estado" [attr.data-estado]="p.estado">{{ label(p.estado) }}</span>
+          <span class="sf-estado" [attr.data-tono]="p.vista.tono">{{ p.vista.chip }}</span>
         </div>
         <div class="sf-muted sf-pedido-sub">{{ tipoLabel(p.tipoPedido) }} · {{ p.createdAt | date:'dd/MM HH:mm' }}</div>
+        <div class="sf-ayuda" *ngIf="p.vista.ayuda">{{ p.vista.ayuda }}</div>
+        <ol class="sf-pasos" *ngIf="p.vista.pasos as pasos" [attr.aria-label]="'Estado: ' + p.vista.chip">
+          <li *ngFor="let paso of pasos" [class.hecho]="paso.hecho" [class.actual]="paso.actual"
+              [attr.aria-current]="paso.actual ? 'step' : null">
+            <span class="dot"></span><span class="txt">{{ paso.label }}</span>
+          </li>
+        </ol>
         <div class="sf-pedido-item" *ngFor="let it of p.items">
           {{ it.cantidad }}× {{ it.nombreProducto }}
           <span class="sf-muted" *ngIf="it.nombrePresentacion">({{ it.nombrePresentacion }})</span>
@@ -77,8 +74,23 @@ const ESTADO_LABEL: Record<string, string> = {
     .sf-pedido { margin-bottom: 12px; }
     .sf-pedido-head { display: flex; justify-content: space-between; align-items: center; }
     .sf-estado { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; background: var(--sf-border); }
-    .sf-estado[data-estado="ENTREGADO"] { background: var(--sf-success-bg); color: var(--sf-success); }
-    .sf-estado[data-estado="RECHAZADO"], .sf-estado[data-estado="CANCELADO"] { background: var(--sf-error-bg); color: var(--sf-error); }
+    .sf-estado { white-space: nowrap; }
+    .sf-estado[data-tono="espera"] { background: var(--sf-warning-bg); color: var(--sf-warning); }
+    .sf-estado[data-tono="curso"] { background: var(--sf-primary-surface); color: var(--sf-primary); }
+    .sf-estado[data-tono="ok"] { background: var(--sf-success-bg); color: var(--sf-success); }
+    .sf-estado[data-tono="error"] { background: var(--sf-error-bg); color: var(--sf-error); }
+    .sf-ayuda { font-size: 13px; margin: -2px 0 10px; color: var(--sf-text); }
+    .sf-pasos { list-style: none; display: flex; margin: 0 0 12px; padding: 0; }
+    .sf-pasos li { flex: 1; position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
+    .sf-pasos li::before { content: ''; position: absolute; top: 6px; right: 50%; width: 100%; height: 3px; background: var(--sf-border); }
+    .sf-pasos li:first-child::before { display: none; }
+    .sf-pasos li.hecho::before, .sf-pasos li.actual::before { background: var(--sf-primary); }
+    .sf-pasos .dot { position: relative; z-index: 1; width: 15px; height: 15px; border-radius: 50%; background: var(--sf-surface); border: 3px solid var(--sf-border); box-sizing: border-box; }
+    .sf-pasos li.hecho .dot { background: var(--sf-primary); border-color: var(--sf-primary); }
+    .sf-pasos li.actual .dot { border-color: var(--sf-primary); box-shadow: 0 0 0 4px var(--sf-primary-surface); }
+    .sf-pasos .txt { font-size: 11px; line-height: 1.25; margin-top: 6px; padding: 0 2px; color: var(--sf-text-muted); }
+    .sf-pasos li.hecho .txt { color: var(--sf-text); }
+    .sf-pasos li.actual .txt { color: var(--sf-primary); font-weight: 700; }
     .sf-pedido-sub { font-size: 12px; margin: 4px 0 8px; }
     .sf-pedido-item { font-size: 14px; padding: 2px 0; }
     .sf-pedido-perso { font-size: 12px; margin: 2px 0 0 18px; line-height: 1.4; }
@@ -96,7 +108,7 @@ export class MisPedidosPage implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   auth = inject(AuthService);
 
-  pedidos: PedidoResumen[] = [];
+  pedidos: (PedidoResumen & { vista: ReturnType<typeof vistaEstadoPedido> })[] = [];
   invitado = false;
   cargando = false;
   nuevo: string | null = null;
@@ -128,7 +140,7 @@ export class MisPedidosPage implements OnInit, OnDestroy {
       next: (res) => {
         this.cargando = false;
         if (res?.success) {
-          this.pedidos = res.pedidos || [];
+          this.pedidos = conVista(res.pedidos || []);
           this.actualizado = new Date();
           // Cuando ya no queda nada en curso no hay nada que mirar: se corta el
           // poll para no golpear el server desde una pestaña abierta y olvidada.
@@ -149,7 +161,7 @@ export class MisPedidosPage implements OnInit, OnDestroy {
         if (r?.success) pedidos.push(r.pedido);
         else if (r && (r.error === 'pedido_no_encontrado' || r.error === 'seguimiento_vencido')) quitarSeguimiento(tokens[i]);
       });
-      this.pedidos = pedidos;
+      this.pedidos = conVista(pedidos);
       this.actualizado = new Date();
       const enCurso = pedidos.some((p: any) => !TERMINALES.includes(p.estado));
       if (!enCurso && this.poll) { clearInterval(this.poll); this.poll = null; }
@@ -159,10 +171,6 @@ export class MisPedidosPage implements OnInit, OnDestroy {
   /** F4: estado del pago con tarjeta (null en efectivo). */
   pago(p: any): string | null {
     return textoEstadoPago(p?.estadoPago, p?.pagoMonto ?? p?.total);
-  }
-
-  label(estado: string): string {
-    return ESTADO_LABEL[estado] || estado;
   }
 
   tipoLabel(tipo: string): string {
@@ -180,4 +188,9 @@ export class MisPedidosPage implements OnInit, OnDestroy {
     if (p.notaLibre) parts.push(`"${p.notaLibre}"`);
     return parts.filter(Boolean).join(' · ');
   }
+}
+
+/** El estado que ve el cliente se calcula al cargar: el template no llama funciones. */
+function conVista(pedidos: PedidoResumen[]) {
+  return pedidos.map((p: any) => ({ ...p, vista: vistaEstadoPedido(p.estado, p.tipoPedido) }));
 }
