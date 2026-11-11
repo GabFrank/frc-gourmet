@@ -1,3 +1,4 @@
+import { acreditarCobroOnline } from '../utils/acreditacion-pago-online.utils';
 import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { PrecioDelivery } from '../../src/app/database/entities/ventas/precio-delivery.entity';
@@ -718,6 +719,14 @@ export async function materializarPedidoOnlineEnVenta(
   } finally {
     await qr.release();
   }
+
+  // Post-commit: lo cobrado online se acredita en el banco de la máquina POS de su forma de pago.
+  // No frena la aceptación: si falla, se avisa y se carga a mano en Bancos.
+  try {
+    const ac = await acreditarCobroOnline(dataSource, pedidoId, ventaId, userId ?? null);
+    if (ac.creada) console.log(`[materializar-pedido-online] acreditación ${ac.id}: ${ac.moneda} ${ac.monto}`);
+    else if (ac.creada === false && ac.motivo !== 'sin cobro online' && ac.motivo !== 'ya acreditado') console.warn(`[materializar-pedido-online] cobro online sin acreditar (pedido ${pedidoId}): ${ac.motivo}`);
+  } catch (e) { console.warn('[materializar-pedido-online] acreditar el cobro online falló:', e); }
 
   // Post-commit: disparar KDS + impresión (leen por dataSource, ya visible).
   for (const itemId of createdItemIds) {

@@ -22,6 +22,17 @@
     <mat-checkbox [(ngModel)]="permiteDelivery">Delivery</mat-checkbox>
   </div>
 
+  <div class="grid">
+    <mat-form-field appearance="outline" class="full">
+      <mat-label>Máquina POS donde se acredita</mat-label>
+      <mat-select [(ngModel)]="maquinaPosId">
+        <mat-option [value]="null">Sin acreditar (no entra a Bancos)</mat-option>
+        <mat-option *ngFor="let m of maquinas" [value]="m.id">{{ m.etiqueta }}</mat-option>
+      </mat-select>
+      <mat-hint>Al aceptar el pedido, lo cobrado se acredita en la cuenta de esta máquina, con su comisión y su plazo.</mat-hint>
+    </mat-form-field>
+  </div>
+
   <p class="ayuda" *ngIf="soloDatosBasicos">Esta cuenta es de un proveedor dado de baja: solo se pueden cambiar el nombre, si está activa y los tipos de pedido.</p>
 
   <ng-container *ngIf="!soloDatosBasicos">

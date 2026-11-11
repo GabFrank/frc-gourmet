@@ -20,6 +20,7 @@ import { listarProveedores, proveedorPorId, PROVEEDOR_UPAY } from '../services/p
 import { secretoProveedor, validarCampo, valoresProveedor } from '../services/pagos-online/proveedores/config-proveedor';
 import { fetchActual } from '../services/pagos-online/proveedores/deps';
 import { ensurePermission } from '../utils/auth.utils';
+import { MaquinaPos } from '../../src/app/database/entities/financiero/maquina-pos.entity';
 import { cargarCredencialesTienda } from '../utils/tienda-ingreso.utils';
 import { almacenSeguroDisponible, setSecretoPago } from '../utils/tienda-secrets.util';
 
@@ -39,6 +40,8 @@ interface FormaInput {
   secretos?: Record<string, string>;
   /** Secretos a borrar. */
   secretosBorrar?: string[];
+  /** Máquina POS donde se acredita lo cobrado (null la quita; sin el campo no se toca). */
+  maquinaPosId?: number | null;
 }
 
 /** Proveedores que se pueden adicionar (uPay no: se dio de baja y se configura con sus columnas viejas). */
@@ -68,6 +71,7 @@ export function registerFormasPagoOnlineHandlers(dataSource: DataSource, getCurr
       orden: f.orden,
       permitePickup: !!f.permitePickup,
       permiteDelivery: !!f.permiteDelivery,
+      maquinaPosId: f.maquinaPosId ?? null,
       valores: prov ? valoresProveedor(cfg, prov, cuenta) : {},
       secretosGuardados,
       listo: !!(await resolverForma(dataSource, cfg, f)),
@@ -132,6 +136,14 @@ export function registerFormasPagoOnlineHandlers(dataSource: DataSource, getCurr
     f.activo = input.activo ?? existente?.activo ?? true;
     f.permitePickup = !!pickup;
     f.permiteDelivery = !!delivery;
+    if (input.maquinaPosId !== undefined) {
+      const mpId = input.maquinaPosId == null || input.maquinaPosId === ('' as any) ? null : Number(input.maquinaPosId);
+      if (mpId != null) {
+        const mp = await dataSource.getRepository(MaquinaPos).findOne({ where: { id: mpId } });
+        if (!mp || !mp.activo) return { success: false, error: 'maquina_pos_invalida' };
+      }
+      f.maquinaPosId = mpId;
+    }
     f.configJson = JSON.stringify(config);
     if (!existente) {
       const ult = await repo().createQueryBuilder('f').select('MAX(f.orden)', 'm').getRawOne();

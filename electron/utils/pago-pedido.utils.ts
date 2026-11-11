@@ -198,10 +198,12 @@ function fmt(v: number, decimales: number): string {
  */
 export function resumenPago(p: {
   metodoPago?: string | null; pagoModalidad?: string | null; pagoMonedaId?: number | null;
-  vueltoPara?: any; pagoCotizacion?: any; total?: any;
+  vueltoPara?: any; pagoCotizacion?: any; total?: any; estadoPago?: string | null; pagoDetalle?: string | null;
 }, monedas: Pick<MonedaTienda, 'id' | 'simbolo' | 'decimales' | 'principal'>[]): string {
   const metodo = NOMBRE_METODO[String(p.metodoPago || 'EFECTIVO')] || String(p.metodoPago || 'EFECTIVO').toUpperCase();
-  if (esMetodoPagoOnline(p.metodoPago)) return metodo;
+  // Cobrado: lo que cobró de verdad el proveedor («PIX COBRADO POR IC: R$ 7.01 (US$ 1.23)»), que
+  // no tiene por qué coincidir con el total convertido a la cotización del local.
+  if (esMetodoPagoOnline(p.metodoPago)) return p.estadoPago === 'PAGADO' && p.pagoDetalle ? `${metodo} · ${String(p.pagoDetalle).toUpperCase()}` : metodo;
   if (p.metodoPago === MetodoPagoOnline.CREDITO) return `${metodo} DEL CLIENTE`;
   // Pedido anterior a F8 (sin modalidad): no se sabe si necesitaba vuelto; sólo el método.
   if (!p.pagoModalidad) return metodo;

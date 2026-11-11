@@ -63,6 +63,9 @@ export class CreateEditFormaPagoOnlineDialogComponent {
   datosPortal: { etiqueta: string; valor: string }[] = [];
   guardando = false;
   error: string | null = null;
+  /** Máquinas POS activas, para acreditar lo cobrado (con su cuenta y moneda). */
+  maquinas: { id: number; etiqueta: string }[] = [];
+  maquinaPosId: number | null = null;
 
   constructor(
     private ref: MatDialogRef<CreateEditFormaPagoOnlineDialogComponent>,
@@ -80,10 +83,22 @@ export class CreateEditFormaPagoOnlineDialogComponent {
       this.valores = { ...(f.valores || {}) };
       this.secretosGuardados = { ...(f.secretosGuardados || {}) };
       this.datosPortal = f.datosPortal || [];
+      this.maquinaPosId = f.maquinaPosId ?? null;
     } else if (data.catalogo.length) {
       this.proveedorId = data.catalogo[0].id;
     }
     this.elegirProveedor(!f);
+    this.repo.getMaquinasPos().subscribe({
+      next: (lista: any[]) => {
+        this.maquinas = (lista || [])
+          .filter((m) => m.activo || m.id === this.maquinaPosId)
+          .map((m) => ({
+            id: m.id,
+            etiqueta: `${m.nombre}${m.cuentaBancaria ? ' → ' + m.cuentaBancaria.nombre : ''}${m.cuentaBancaria?.moneda ? ' (' + m.cuentaBancaria.moneda.denominacion + ')' : ''}`,
+          }));
+      },
+      error: () => { this.maquinas = []; },
+    });
   }
 
   /** Arma los campos del proveedor elegido. `nuevo`: completa el nombre y los valores por defecto. */
@@ -120,6 +135,7 @@ export class CreateEditFormaPagoOnlineDialogComponent {
       activo: this.activo,
       permitePickup: this.permitePickup,
       permiteDelivery: this.permiteDelivery,
+      maquinaPosId: this.maquinaPosId,
       valores: this.soloDatosBasicos ? undefined : this.valores,
       secretos: this.soloDatosBasicos ? undefined : secretos,
     };

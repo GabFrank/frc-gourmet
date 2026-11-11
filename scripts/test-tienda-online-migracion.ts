@@ -40,7 +40,7 @@ async function main() {
   };
   // Sube todo y baja las migraciones de la tienda posteriores a F4 (F6 en adelante), para
   // que los bloques F2-F4 de abajo sigan encontrando a F4 como la última.
-  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda|TiendaDetallePedido|TiendaTelefonoContactoCuenta|TiendaPagoProveedores|TiendaVinculoCuentaCliente|TiendaPagosMultiIcpay|TiendaAvisosPedido|TiendaAvisosPreferenciaCuenta/;
+  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda|TiendaDetallePedido|TiendaTelefonoContactoCuenta|TiendaPagoProveedores|TiendaVinculoCuentaCliente|TiendaPagosMultiIcpay|TiendaAvisosPedido|TiendaAvisosPreferenciaCuenta|TiendaFormaPagoOnlinePos/;
   const subirSinPosteriores = async () => {
     await ds.runMigrations({ transaction: 'each' });
     for (;;) {
@@ -287,6 +287,17 @@ async function main() {
   ok((await columnas()).includes('cliente_id') && await tablaVinc() === 1, 'Vínculo: up de nuevo vuelve a crear todo');
   await ds.query(`DELETE FROM cuentas_cliente WHERE email LIKE 'zt-v%'`);
 
+  // Máquina POS de la forma de pago online (TiendaFormaPagoOnlinePos): una columna nullable.
+  const colsFp = async (): Promise<string[]> => pgDb
+    ? (await ds.query(`SELECT column_name AS c FROM information_schema.columns WHERE table_schema='public' AND table_name='formas_pago_online'`)).map((r: any) => r.c)
+    : (await ds.query(`PRAGMA table_info('formas_pago_online')`)).map((r: any) => r.name);
+  const ultimaPos = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
+  ok(/TiendaFormaPagoOnlinePos/.test(String(ultimaPos)), 'POS online: es la última migración', ultimaPos);
+  const metaFp = ds.entityMetadatas.find((m) => m.tableName === 'formas_pago_online')!;
+  ok(JSON.stringify(metaFp.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...(await colsFp())].sort()), 'POS online: las columnas coinciden con la entidad', await colsFp());
+  await ds.undoLastMigration({ transaction: 'each' });
+  ok(!(await colsFp()).includes('maquina_pos_id'), 'POS online: down quita la columna');
+
   // Preferencia de avisos de la cuenta (TiendaAvisosPreferenciaCuenta): una columna nullable. Se baja
   // primero para que el bloque de TiendaAvisosPedido siga encontrándose última.
   const ultimaPref = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
@@ -330,7 +341,7 @@ async function main() {
   const colsFormas = async (): Promise<string[]> => pgDb
     ? (await ds.query(`SELECT column_name AS c FROM information_schema.columns WHERE table_schema='public' AND table_name='formas_pago_online'`)).map((r: any) => r.c)
     : (await ds.query(`PRAGMA table_info('formas_pago_online')`)).map((r: any) => r.name);
-  ok(JSON.stringify(metaFormas.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...(await colsFormas())].sort()), 'Multi: formas_pago_online coincide con su entidad', await colsFormas());
+  ok(JSON.stringify(metaFormas.columns.map((c) => c.databaseName).filter((c) => c !== 'maquina_pos_id').sort()) === JSON.stringify([...(await colsFormas())].sort()), 'Multi: formas_pago_online coincide con su entidad (sin la máquina POS)', await colsFormas());
   const fpPix = async () => Number((await ds.query(`SELECT COUNT(*) AS n FROM formas_pago WHERE nombre = 'PIX ONLINE'`))[0].n);
   ok(await fpPix() === 1, 'Multi: siembra la forma de pago PIX ONLINE');
   const nFormas = async () => Number((await ds.query(`SELECT COUNT(*) AS n FROM formas_pago_online`))[0].n);

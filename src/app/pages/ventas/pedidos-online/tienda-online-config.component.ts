@@ -377,6 +377,7 @@ export class TiendaOnlineConfigComponent implements OnInit {
   ingreso: any = {};
 
   private static readonly ERRORES: Record<string, string> = {
+    maquina_pos_invalida: 'La máquina POS elegida no existe o está inactiva',
     whatsapp_phone_id_invalido: 'El Phone Number ID son solo números',
     whatsapp_plantilla_invalida: 'La plantilla va en minúsculas, números y _',
     whatsapp_idioma_invalido: 'Idioma inválido (ej.: es, es_AR)',

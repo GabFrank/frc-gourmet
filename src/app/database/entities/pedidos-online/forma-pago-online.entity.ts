@@ -33,4 +33,11 @@ export class FormaPagoOnline extends BaseModel {
 
   @Column({ name: 'config_json', type: 'text', nullable: true })
   configJson?: string | null;
+
+  /**
+   * Máquina POS donde se acredita lo cobrado por esta cuenta (su cuenta bancaria, moneda, comisión y
+   * plazo). Sin máquina, el cobro online no se acredita en Bancos.
+   */
+  @Column({ name: 'maquina_pos_id', type: 'int', nullable: true })
+  maquinaPosId?: number | null;
 }

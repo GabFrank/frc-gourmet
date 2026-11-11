@@ -352,6 +352,7 @@ import { TiendaVinculoCuentaCliente1794069224523 } from './migrations/1794069224
 import { TiendaPagosMultiIcpay1794242488018 } from './migrations/1794242488018-TiendaPagosMultiIcpay';
 import { TiendaAvisosPedido1794318252364 } from './migrations/1794318252364-TiendaAvisosPedido';
 import { TiendaAvisosPreferenciaCuenta1794424012805 } from './migrations/1794424012805-TiendaAvisosPreferenciaCuenta';
+import { TiendaFormaPagoOnlinePos1794427578823 } from './migrations/1794427578823-TiendaFormaPagoOnlinePos';
 import { PedidoOnlineAviso } from './entities/pedidos-online/pedido-online-aviso.entity';
 import { PagoOnlineEvento } from './entities/pedidos-online/pago-online-evento.entity';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
@@ -855,6 +856,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     TiendaPagosMultiIcpay1794242488018,
     TiendaAvisosPedido1794318252364,
     TiendaAvisosPreferenciaCuenta1794424012805,
+    TiendaFormaPagoOnlinePos1794427578823,
   ];
 }
 
