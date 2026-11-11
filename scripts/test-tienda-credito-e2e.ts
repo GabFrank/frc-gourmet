@@ -353,6 +353,11 @@ async function main() {
   const bloqDel: any = await invokeHandler('deleteVentaItem', itemF.id).catch((e: any) => ({ error: String(e?.message || e) }));
   ok(/VENTA_A_CUENTA_CON_COBROS/.test(bloqDel?.error || '') && !!(await R(VentaItem).findOne({ where: { id: itemF.id } })), '6: ni se borra un ítem', bloqDel);
   ok(Number(((await R(VentaItem).findOne({ where: { id: itemF.id } })) as any).cantidad) === 1, '6: el ítem quedó como estaba');
+  const estF: any = await invokeHandler('venta-deuda-estado', vf);
+  const estE: any = await invokeHandler('venta-deuda-estado', ve);
+  ok(estF?.bloqueada === true && estF?.codigo === 'VENTA_A_CUENTA_CON_COBROS' && estE?.bloqueada === false,
+    '6: el PdV puede preguntar antes de editar: con cobros dice bloqueada; sin deuda activa, no', { estF, estE });
+  ok(/no se puede modificar/.test(bloq?.error || ''), '6: el error trae el texto para el personal', bloq?.error);
 
   await cerrar();
   console.log(`\n${TAG} RESULTADO: ${passed} passed, ${failed} failed.`);

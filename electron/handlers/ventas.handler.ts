@@ -2084,6 +2084,19 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     }
   });
 
+  // Antes de tocar los ítems: ¿la venta tiene una deuda a cuenta con cobros? (PLAN-tienda-deuda-editada).
+  // El PdV pregunta primero para avisar sin romper nada a medias (personalizar borra y vuelve a crear);
+  // los handlers de ítems lo siguen frenando igual.
+  ipcMain.handle('venta-deuda-estado', async (_event: any, ventaId: number) => {
+    try {
+      await verificarEdicionVentaConDeuda(dataSource, Number(ventaId) || null);
+      return { bloqueada: false };
+    } catch (e: any) {
+      if (e instanceof DeudaVentaError) return { bloqueada: true, codigo: e.codigo };
+      throw e;
+    }
+  });
+
   ipcMain.handle('createVentaItem', async (_event: any, data: any) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');

@@ -2133,6 +2133,10 @@ export class RepositoryIpcService extends RepositoryService {
   }
 
   // VentaItemAdicional
+  getEstadoDeudaVenta(ventaId: number): Observable<{ bloqueada: boolean; codigo?: string }> {
+    return from(this.api.callIpc('venta-deuda-estado', ventaId));
+  }
+
   getVentaItemAdicionales(ventaItemId: number): Observable<any[]> {
     return from(this.api.getVentaItemAdicionales(ventaItemId));
   }

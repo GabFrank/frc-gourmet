@@ -1605,6 +1605,33 @@ export class PdvComponent implements OnInit, OnDestroy {
     return false;
   }
 
+  /** El mismo texto que manda el servidor (deuda-venta.utils, MENSAJE_VENTA_DEUDA_COBRADA). */
+  private static readonly MENSAJE_DEUDA_COBRADA =
+    'Esta venta tiene una deuda a cuenta con cobros y no se puede modificar. Para corregirla, anulá primero el cobro de la cuenta por cobrar.';
+
+  private ventaIdDe(item?: VentaItem | null): number | null {
+    const v: any = (item as any)?.venta || this.ventaRapidaActual || this.selectedComanda?.venta || this.selectedMesa?.venta;
+    return Number(v?.id) || null;
+  }
+
+  /**
+   * Una venta a cuenta cuya deuda ya tiene cobros no se edita (PLAN-tienda-deuda-editada). Se
+   * pregunta ANTES de tocar nada: personalizar borra y vuelve a crear, y un rechazo a mitad de
+   * camino dejaba el ítem sin sus personalizaciones. Si no se puede saber (modo cliente, error de
+   * red) se deja seguir: el servidor lo frena igual.
+   */
+  private async bloqueadaPorDeuda(ventaId: number | null): Promise<boolean> {
+    if (!ventaId) return false;
+    try {
+      const r = await firstValueFrom(this.repositoryService.getEstadoDeudaVenta(ventaId));
+      if (!r?.bloqueada) return false;
+    } catch {
+      return false;
+    }
+    this.snackBar.open(PdvComponent.MENSAJE_DEUDA_COBRADA, 'CERRAR', { duration: 8000, panelClass: 'error-snackbar' });
+    return true;
+  }
+
   private async cerrarComandaActual(): Promise<void> {
     if (!this.selectedComanda) return;
     try {
@@ -1872,19 +1899,24 @@ export class PdvComponent implements OnInit, OnDestroy {
   }
 
   // Remove item from cart
-  removeItem(item: VentaItem): void {
+  async removeItem(item: VentaItem): Promise<void> {
+    if (await this.bloqueadaPorDeuda(this.ventaIdDe(item))) return;
     //perform delete from database, if success then remove from ventaItems
-    this.repositoryService.deleteVentaItem(item.id!).subscribe((success) => {
-      if (success) {
-        this.ventaItemsDataSource.data = this.ventaItemsDataSource.data.filter(i => i.id !== item.id);
-        this.calculateTotals();
-      }
+    this.repositoryService.deleteVentaItem(item.id!).subscribe({
+      next: (success) => {
+        if (success) {
+          this.ventaItemsDataSource.data = this.ventaItemsDataSource.data.filter(i => i.id !== item.id);
+          this.calculateTotals();
+        }
+      },
+      error: (error) => this.mostrarErrorItem(error, 'NO SE PUDO QUITAR EL ITEM'),
     });
   }
 
   // Edit item from cart
   async personalizarItem(item: VentaItem): Promise<void> {
     if (this.bloqueadoPorCobro(item, 'personalizar')) return;
+    if (await this.bloqueadaPorDeuda(this.ventaIdDe(item))) return;
     const recetaId = (item.producto as any)?.receta?.id;
     if (!recetaId) {
       // Si no tiene receta, buscar el producto completo con relación receta
@@ -1974,11 +2006,13 @@ export class PdvComponent implements OnInit, OnDestroy {
       this.calculateTotals();
     } catch (error) {
       console.error('Error al personalizar item:', error);
+      this.mostrarErrorItem(error, 'NO SE PUDO PERSONALIZAR EL ITEM');
     }
   }
 
-  editItem(item: VentaItem): void {
+  async editItem(item: VentaItem): Promise<void> {
     if (this.bloqueadoPorCobro(item, 'editar')) return;
+    if (await this.bloqueadaPorDeuda(this.ventaIdDe(item))) return;
     const dialogRef = this.dialog.open(EditVentaItemDialogComponent, {
       width: '400px',
       data: { ventaItem: item },
@@ -2054,22 +2088,33 @@ export class PdvComponent implements OnInit, OnDestroy {
           this.calculateTotals();
         } catch (error) {
           console.error('Error al editar item:', error);
+          this.mostrarErrorItem(error, 'NO SE PUDO EDITAR EL ITEM');
         }
       }
     });
   }
 
   // Cancel item from cart
-  cancelItem(item: VentaItem): void {
+  async cancelItem(item: VentaItem): Promise<void> {
     if (this.bloqueadoPorCobro(item, 'cancelar')) return;
+    if (await this.bloqueadaPorDeuda(this.ventaIdDe(item))) return;
     // update item with estado = CANCELADO, cancelado_por = current user, cancelado_fecha = current date,
+    const antes = { estado: item.estado, canceladoPor: item.canceladoPor, horaCancelado: item.horaCancelado };
     item.estado = EstadoVentaItem.CANCELADO;
     item.canceladoPor = this.authService.currentUser;
     item.horaCancelado = new Date();
-    this.repositoryService.updateVentaItem(item.id!, item).subscribe((success) => {
-      if (success) {
+    this.repositoryService.updateVentaItem(item.id!, item).subscribe({
+      next: (success) => {
+        if (success) {
+          this.calculateTotals();
+        }
+      },
+      error: (error) => {
+        // El servidor no lo canceló: la pantalla vuelve a mostrar el ítem como estaba.
+        Object.assign(item, antes);
         this.calculateTotals();
-      }
+        this.mostrarErrorItem(error, 'NO SE PUDO CANCELAR EL ITEM');
+      },
     });
   }
 
@@ -2262,6 +2307,7 @@ export class PdvComponent implements OnInit, OnDestroy {
       this.ventaItemsDataSource.data = auxList;
     } catch (error) {
       console.error('Error al guardar el item de buffet:', error);
+      this.mostrarErrorItem(error, 'NO SE PUDO AGREGAR EL ITEM');
     }
 
     this.calculateTotals();
@@ -2389,7 +2435,8 @@ export class PdvComponent implements OnInit, OnDestroy {
     // `CAJA_CERRADA` tiene su propio tratamiento: además del mensaje hay que
     // soltar la caja en memoria y volver a elegir una.
     if (this.manejarErrorCajaCerrada(error)) return;
-    this.snackBar.open(mensajeDeError(error, fallback), 'CERRAR', {
+    const msg = mensajeDeError(error, fallback);
+    this.snackBar.open(/VENTA_A_CUENTA_CON_COBROS/.test(msg) ? PdvComponent.MENSAJE_DEUDA_COBRADA : msg, 'CERRAR', {
       duration: 6000,
       panelClass: 'error-snackbar',
     });
@@ -2551,7 +2598,10 @@ export class PdvComponent implements OnInit, OnDestroy {
    */
   private async getVentaONada(): Promise<Venta | null> {
     try {
-      return await this.getVenta();
+      const venta = await this.getVenta();
+      // Solo la usan los caminos que agregan ítems: una venta a cuenta con cobros no suma nada.
+      if (venta?.id && (await this.bloqueadaPorDeuda(venta.id))) return null;
+      return venta;
     } catch (e: any) {
       if (String(e?.message || e).includes(PdvComponent.SIN_CAJA)) return null;
       throw e;
