@@ -8,6 +8,7 @@ import {
   issueRefreshToken,
   rotateRefreshToken,
   revokeRefreshToken,
+  revokeAllForUser,
 } from '../utils/refresh-token.utils';
 import { invokeHandler } from '../utils/handler-registry';
 
@@ -169,6 +170,14 @@ export function registerAuthRoutes(fastify: FastifyInstance, dataSource: DataSou
       return { error: 'refresh_rotado_pero_sin_usuario' };
     }
     const usuario = fresh.usuario;
+    // #357: un usuario desactivado no renueva. Se revocan sus refresh tokens y
+    // el cliente vuelve al login (sin esto, /api/rpc le da 401 en cada llamada
+    // y la sesión queda rota en vez de cerrarse).
+    if (!usuario.activo) {
+      await revokeAllForUser(dataSource, usuario.id);
+      reply.code(401);
+      return { error: 'refresh_invalido_o_expirado' };
+    }
 
     // Re-validar el deviceId que vino del cliente (mismo flujo que /login).
     let resolvedDeviceId: number | null = null;
