@@ -40,6 +40,13 @@ export class PizzaDetallePage implements OnInit {
   cargando = true;
 
   tamanos: MenuTamano[] = [];
+  /** Cabecera de la pantalla: sigue a los sabores elegidos (el de entrada se puede quitar). */
+  tituloCab = '';
+  descCab = '';
+  imagenCab: string | null = null;
+  /** Sabores del mitad y mitad: todos los que tienen precio en el tamaño elegido. */
+  saboresMitad: MenuSaborPizza[] = [];
+  soloUnSabor = false;
   presSel: number | null = null;
   saboresSel: MenuSaborPizza[] = [];
   montarMitad = false;
@@ -65,17 +72,43 @@ export class PizzaDetallePage implements OnInit {
         if (p && p.esPizza && p.sabores?.length) {
           this.producto = p;
           this.saborEntrada = p.sabores.find((s) => s.saborId === saborId) || p.sabores[0];
-          // Tamaños que el sabor de entrada realmente tiene cotizados.
-          this.tamanos = (p.tamanos || []).filter((t) =>
-            this.saborEntrada!.precios.some((pr) => pr.presentacionId === t.presentacionId),
-          );
-          this.presSel = this.tamanos[0]?.presentacionId ?? null;
           this.saboresSel = this.saborEntrada ? [this.saborEntrada] : [];
+          this.recalcularTamanos();
+          this.presSel = this.tamanos[0]?.presentacionId ?? null;
+          this.actualizarVista();
         }
         this.cargando = false;
       },
       error: () => (this.cargando = false),
     });
+  }
+
+  /** Tamaños que el primer sabor elegido tiene cotizados (todos los elegidos tienen precio en el tamaño actual). */
+  private recalcularTamanos(): void {
+    const ref = this.saboresSel[0];
+    this.tamanos = ref
+      ? (this.producto?.tamanos || []).filter((t) => ref.precios.some((pr) => pr.presentacionId === t.presentacionId))
+      : [];
+  }
+
+  /** Recalcula lo que depende de los sabores elegidos y del tamaño (cabecera y lista de mitad y mitad). */
+  private actualizarVista(): void {
+    const p = this.producto;
+    const primero = this.saboresSel[0] || null;
+    if (!p || !primero) return;
+    const entradaPrimero = primero.saborId === this.saborEntrada?.saborId;
+    if (this.saboresSel.length > 1 && !entradaPrimero) {
+      this.tituloCab = p.nombre;
+      this.descCab = this.resumenSabores;
+    } else {
+      this.tituloCab = `${p.nombre} ${primero.nombre}`;
+      this.descCab = primero.descripcion || '';
+    }
+    this.imagenCab = primero.imageUrl || p.imageUrl || null;
+    this.soloUnSabor = this.saboresSel.length <= 1;
+    this.saboresMitad = this.presSel == null
+      ? []
+      : (p.sabores || []).filter((s) => s.precios.some((pr) => pr.presentacionId === this.presSel));
   }
 
   get maxSabores(): number {
@@ -86,20 +119,6 @@ export class PizzaDetallePage implements OnInit {
     return this.maxSabores > 1;
   }
 
-  /** Sabores hermanos que se pueden sumar (tienen precio en el tamaño elegido y no están ya elegidos). */
-  get saboresParaSumar(): MenuSaborPizza[] {
-    if (!this.producto || this.presSel == null) return [];
-    return (this.producto.sabores || []).filter(
-      (s) =>
-        !this.saboresSel.some((x) => x.saborId === s.saborId) &&
-        s.precios.some((pr) => pr.presentacionId === this.presSel),
-    );
-  }
-
-  get puedeSumarMas(): boolean {
-    return this.saboresSel.length < this.maxSabores && this.saboresParaSumar.length > 0;
-  }
-
   private precioDe(s: MenuSaborPizza, presId: number | null): number | null {
     if (presId == null) return null;
     const pr = s.precios.find((x) => x.presentacionId === presId);
@@ -107,8 +126,8 @@ export class PizzaDetallePage implements OnInit {
   }
 
   precioTamano(t: MenuTamano): number | null {
-    // Precio del sabor de entrada para ese tamaño (referencia del selector).
-    return this.saborEntrada ? this.precioDe(this.saborEntrada, t.presentacionId) : null;
+    // Precio del primer sabor elegido para ese tamaño (referencia del selector).
+    return this.saboresSel[0] ? this.precioDe(this.saboresSel[0], t.presentacionId) : null;
   }
 
   setTamano(t: MenuTamano): void {
@@ -118,20 +137,24 @@ export class PizzaDetallePage implements OnInit {
       this.avisoPers = 'Cambiaste el tamaño: volvé a personalizar los sabores.';
     }
     this.presSel = t.presentacionId;
-    // Quitar sabores extra que no tengan precio en el nuevo tamaño (el de entrada se conserva).
+    // Quitar sabores que no tengan precio en el nuevo tamaño (el primero siempre lo tiene: define los tamaños).
     this.saboresSel = this.saboresSel.filter(
       (s, i) => i === 0 || this.precioDe(s, this.presSel) != null,
     );
+    this.actualizarVista();
   }
 
   toggleSaborExtra(s: MenuSaborPizza): void {
     const idx = this.saboresSel.findIndex((x) => x.saborId === s.saborId);
-    if (idx > 0) {
-      this.saboresSel.splice(idx, 1); // quitar (nunca el de entrada, índice 0)
+    if (idx >= 0) {
+      if (this.saboresSel.length <= 1) return; // siempre queda al menos un sabor
+      this.saboresSel.splice(idx, 1);
       this.persSabores.delete(s.saborId);
-    } else if (idx < 0 && this.saboresSel.length < this.maxSabores) {
+      this.recalcularTamanos();
+    } else if (this.saboresSel.length < this.maxSabores) {
       this.saboresSel.push(s);
     }
+    this.actualizarVista();
   }
 
   esSaborElegido(s: MenuSaborPizza): boolean {
@@ -295,7 +318,7 @@ export class PizzaDetallePage implements OnInit {
     this.cart.agregar({
       productoId: this.producto.id,
       nombreProducto: this.producto.nombre,
-      imageUrl: this.saborEntrada?.imageUrl || this.producto.imageUrl,
+      imageUrl: this.saboresSel[0]?.imageUrl || this.producto.imageUrl,
       opcion: {
         tipo: 'PIZZA',
         label,

@@ -1,13 +1,13 @@
 <div class="pd-wrap" *ngIf="!cargando && producto as p">
   <!-- Foto + volver -->
-  <div class="pd-hero" [class.no-photo]="!(saborEntrada?.imageUrl || p.imageUrl | appImg)">
-    <div class="pd-photo" *ngIf="(saborEntrada?.imageUrl || p.imageUrl) | appImg as img" [style.background-image]="'url(' + img + ')'"></div>
+  <div class="pd-hero" [class.no-photo]="!(imagenCab | appImg)">
+    <div class="pd-photo" *ngIf="imagenCab | appImg as img" [style.background-image]="'url(' + img + ')'"></div>
     <button class="pd-back" (click)="volver()" aria-label="Volver"><sf-icon name="back" [size]="20"></sf-icon></button>
   </div>
 
   <div class="sf-container pd-body">
-    <h1 class="pd-nombre">{{ p.nombre }} {{ saborEntrada?.nombre }}</h1>
-    <p class="pd-desc" *ngIf="saborEntrada?.descripcion">{{ saborEntrada?.descripcion }}</p>
+    <h1 class="pd-nombre">{{ tituloCab }}</h1>
+    <p class="pd-desc" *ngIf="descCab">{{ descCab }}</p>
 
     <!-- Tamaño -->
     <div class="pd-group" *ngIf="tamanos.length">
@@ -34,13 +34,14 @@
         {{ resumenSabores }} · el precio toma
         {{ p.pizzaConfig?.estrategia === 'PROMEDIO' ? 'el promedio' : 'el sabor más caro' }}.
       </p>
-      <label class="pd-check" *ngFor="let s of saboresParaSumar" [class.sel]="esSaborElegido(s)">
+      <label class="pd-check" *ngFor="let s of saboresMitad" [class.sel]="esSaborElegido(s)">
         <span class="pd-check-l">
-          <input type="checkbox" [checked]="esSaborElegido(s)" [disabled]="!esSaborElegido(s) && saboresSel.length >= maxSabores"
+          <input type="checkbox" [checked]="esSaborElegido(s)" [disabled]="esSaborElegido(s) ? soloUnSabor : saboresSel.length >= maxSabores"
                  (change)="toggleSaborExtra(s)" />
           <span>{{ s.nombre }}</span>
         </span>
       </label>
+      <p class="sf-muted pd-mitad-max" *ngIf="soloUnSabor">Tiene que quedar al menos un sabor.</p>
       <p class="sf-muted pd-mitad-max" *ngIf="saboresSel.length >= maxSabores">Alcanzaste el máximo de sabores.</p>
     </div>
 
