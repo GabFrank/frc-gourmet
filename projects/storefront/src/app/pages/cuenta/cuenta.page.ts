@@ -4,11 +4,13 @@ import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { mensajeError } from '../../core/errores';
+import { TelefonoInputComponent } from '../../core/telefono-input.component';
+import { AnalisisTelefono, analizarGuardado, telefonoLegible } from '../../core/telefono';
 
 @Component({
   selector: 'sf-cuenta',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TelefonoInputComponent],
   template: `
     <div class="sf-container narrow">
       <h1 class="title">{{ completar ? '¡Bienvenido/a!' : 'Mi cuenta' }}</h1>
@@ -21,13 +23,12 @@ import { mensajeError } from '../../core/errores';
         <div class="sf-card">
           <div class="field" *ngIf="c.telefono">
             <div class="sf-muted lbl">Teléfono</div>
-            <div class="val">{{ c.telefono }}</div>
+            <div class="val">{{ telefonoIngreso }}</div>
           </div>
 
           <ng-container *ngIf="!c.telefono">
             <label class="lbl">Teléfono de contacto</label>
-            <input class="sf-input" [(ngModel)]="telefonoContacto" placeholder="Ej: 0981123456" inputmode="tel"
-                   maxlength="20" autocomplete="tel" />
+            <sf-telefono-input [valor]="telefonoInicial" [forzarError]="intentoGuardar" (cambio)="tel = $event"></sf-telefono-input>
             <p class="sf-muted ayuda">Para los avisos del pedido por WhatsApp y para que el repartidor te contacte.</p>
           </ng-container>
 
@@ -76,7 +77,11 @@ export class CuentaPage implements OnInit {
 
   nombre = this.auth.cuenta?.nombre || '';
   email = this.auth.cuenta?.email || '';
-  telefonoContacto = this.auth.cuenta?.telefonoContacto || '';
+  /** Lo guardado, para precargar el campo. */
+  telefonoInicial = this.auth.cuenta?.telefonoContacto || '';
+  tel: AnalisisTelefono = analizarGuardado(this.telefonoInicial);
+  telefonoIngreso = telefonoLegible(this.auth.cuenta?.telefono);
+  intentoGuardar = false;
   password = '';
   passwordActual = '';
   /** Si ya tiene contraseña, para cambiarla hay que confirmar la actual. */
@@ -108,9 +113,18 @@ export class CuentaPage implements OnInit {
   }
 
   guardar(): void {
-    this.ok = false; this.error = null; this.guardando = true;
+    this.ok = false; this.error = null;
     const data: any = { nombre: this.nombre, email: this.email };
-    if (!this.auth.cuenta?.telefono) data.telefonoContacto = this.telefonoContacto;
+    if (!this.auth.cuenta?.telefono) {
+      // Vacío lo borra; escrito a medias o mal, no se guarda.
+      if (this.tel.estado !== 'vacio' && this.tel.estado !== 'valido') {
+        this.intentoGuardar = true;
+        this.error = 'Revisá el teléfono de contacto.';
+        return;
+      }
+      data.telefonoContacto = this.tel.e164;
+    }
+    this.guardando = true;
     if (this.password) {
       data.password = this.password;
       if (this.tienePassword) data.passwordActual = this.passwordActual;
@@ -119,6 +133,7 @@ export class CuentaPage implements OnInit {
       next: (res) => {
         this.guardando = false;
         if (res?.success) {
+          if (data.telefonoContacto !== undefined && this.auth.cuenta) this.auth.cuenta.telefonoContacto = data.telefonoContacto || null;
           this.ok = true; this.password = ''; this.passwordActual = ''; this.tienePassword = true;
           if (this.completar) this.router.navigateByUrl(this.volver);
         } else {

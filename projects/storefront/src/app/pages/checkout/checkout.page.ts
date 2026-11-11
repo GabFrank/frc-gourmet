@@ -16,6 +16,8 @@ import { PrecioPipe } from '../../core/precio.pipe';
 import { mensajeError } from '../../core/errores';
 import { esUrlPagoPermitida, MENSAJE_PAGO_OCUPADO } from '../../core/pago-online';
 import { MonedasService } from '../../core/monedas.service';
+import { TelefonoInputComponent } from '../../core/telefono-input.component';
+import { AnalisisTelefono, analizarGuardado } from '../../core/telefono';
 import { MonedaTienda, convertir, formatear, parsearMonto, sugerenciasVuelto } from '../../core/moneda-tienda';
 
 /** F8: métodos para pagar al recibir / retirar (el local elige cuáles ofrece). */
@@ -36,7 +38,7 @@ const IDEM_STORAGE = 'sf-pedido-idem';
 @Component({
   selector: 'sf-checkout',
   standalone: true,
-  imports: [GuaraniPipe, PrecioPipe, CommonModule, FormsModule, IconComponent],
+  imports: [GuaraniPipe, PrecioPipe, CommonModule, FormsModule, IconComponent, TelefonoInputComponent],
   templateUrl: './checkout.page.html',
   styleUrls: ['./checkout.page.scss'],
 })
@@ -55,7 +57,10 @@ export class CheckoutPage implements OnInit, OnDestroy {
    * La cuenta entró con Google o email y no tiene teléfono: se pide uno de contacto (avisos del
    * pedido por WhatsApp, y el repartidor lo puede llamar). Queda en la cuenta para la próxima.
    */
+  /** Lo guardado en la cuenta, para precargar el campo; lo escrito llega en `tel`. */
   telefonoContacto = '';
+  tel: AnalisisTelefono = analizarGuardado('');
+  intentoTelefono = false;
   /** Casilla de avisos por WhatsApp (sin marcar: el consentimiento tiene que ser explícito). */
   avisosWhatsapp = false;
   get pideTelefono(): boolean {
@@ -128,12 +133,16 @@ export class CheckoutPage implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.telefonoContacto = this.auth.cuenta?.telefonoContacto || '';
+    this.tel = analizarGuardado(this.telefonoContacto);
     // Recargando el checkout, la cuenta llega después: se completa cuando llega (si no lo escribió).
     if (!this.auth.cuenta) {
       const espera = setInterval(() => {
         if (!this.auth.cuenta) return;
         clearInterval(espera);
-        if (!this.telefonoContacto) this.telefonoContacto = this.auth.cuenta.telefonoContacto || '';
+        if (!this.telefonoContacto && this.tel.estado === 'vacio') {
+          this.telefonoContacto = this.auth.cuenta.telefonoContacto || '';
+          this.tel = analizarGuardado(this.telefonoContacto);
+        }
       }, 300);
       setTimeout(() => clearInterval(espera), 15_000);
     }
@@ -425,13 +434,13 @@ export class CheckoutPage implements OnInit, OnDestroy {
       payload.nombreCliente = nombre;
     }
     if (this.pideTelefono) {
-      const digitos = this.telefonoContacto.replace(/\D+/g, '');
-      if (digitos.length < 8 || digitos.length > 15) {
+      if (this.tel.estado !== 'valido') {
         this.enviando = false;
+        this.intentoTelefono = true;
         this.error = 'Ingresá un teléfono válido para que podamos avisarte y contactarte.';
         return;
       }
-      payload.telefonoContacto = this.telefonoContacto;
+      payload.telefonoContacto = this.tel.e164;
     }
     if (this.tipo === 'DELIVERY' && coords) {
       payload.latitud = this.lat; payload.longitud = this.lng;
@@ -442,7 +451,7 @@ export class CheckoutPage implements OnInit, OnDestroy {
         this.idemKey = null;
         if (res?.success) {
           if (this.faltaNombreCuenta && this.auth.cuenta) this.auth.cuenta.nombre = this.nombreCuenta.trim().toUpperCase();
-          if (this.pideTelefono && this.auth.cuenta) this.auth.cuenta.telefonoContacto = this.telefonoContacto.replace(/\D+/g, '');
+          if (this.pideTelefono && this.auth.cuenta) this.auth.cuenta.telefonoContacto = this.tel.e164;
           this.cart.limpiar();
           // Tarjeta: a la página del proveedor (solo si la dirección es de un host suyo). Si el
           // proveedor arma su formulario en nuestra página (Bancard), va a /pago/<numero>.

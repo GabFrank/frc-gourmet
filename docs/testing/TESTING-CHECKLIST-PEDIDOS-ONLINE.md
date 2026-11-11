@@ -406,3 +406,19 @@ teléfono de prueba**: la cuenta del cliente tiene que tener ese número verific
 - **El mapa** (dibujo de zonas, dashboard de zonas y pin del checkout) necesita
   internet: los mosaicos vienen de OpenStreetMap (CARTO dejó de servirlos sin
   clave en 2026-11) y la dirección en texto de Nominatim.
+
+## 21 · Campo de teléfono con país
+
+El ingreso por código, «Mi cuenta» y el checkout usan el mismo campo: país (Paraguay por defecto)
+y número, validado mientras se escribe. Se guarda internacional, solo dígitos (595981123456).
+Reglas en `projects/storefront/src/app/core/telefono.ts`; test `npm run test:telefono`.
+
+| # | Paso | Qué tiene que pasar |
+|---|---|---|
+| 21.1 | Escribir `0981 123 456` y también `981123456` | Los dos quedan válidos, con tilde verde y «+595 981 123 456» debajo |
+| 21.2 | Escribir a medias (`09811`) | Pista gris «Faltan N dígitos»; recién al salir del campo pasa a error rojo |
+| 21.3 | En el ingreso, escribir un fijo (`021 123 456`) | Error «Tiene que ser un celular con WhatsApp». En «Mi cuenta» y el checkout el fijo sí vale |
+| 21.4 | Pegar `+55 11 91234 5678` | El país cambia solo a Brasil |
+| 21.5 | «Otro país» y `+44 7400 123456` | Válido. Un número con 0 adelante pide el código de país |
+| 21.6 | Cuenta vieja guardada como `0981…` | Al ingresar con código entra a **la misma** cuenta (no crea otra) y pasa a guardarse `595981…` |
+| 21.7 | En el admin, Cuentas de la tienda, buscar `0981…` | Encuentra la cuenta guardada `595981…` |

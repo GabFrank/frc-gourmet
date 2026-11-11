@@ -226,6 +226,29 @@ async function main() {
   const me: any = await invokeHandlerWithContext('pub-cliente-me', ctx(otra));
   ok(me?.success === true && !('clienteId' in (me.cuenta || {})) && !JSON.stringify(me).includes(String(cliente.ruc)),
     '5: «mi cuenta» no expone el cliente interno', me?.cuenta);
+  // ═══════ [6] Teléfono internacional ═══════
+  // Desde 2026-11 el storefront manda 595…; las cuentas viejas se guardaron con el número local.
+  console.log('\n[6] Teléfono internacional');
+  const { CodigoOtp } = E('pedidos-online/codigo-otp.entity');
+  const { hashPassword } = require('../electron/utils/password.utils');
+  const vieja = await save(CuentaCliente, { telefono: '0981777888', telefonoVerificado: true, nombre: 'CUENTA VIEJA', activo: true });
+  await save(CodigoOtp, { telefono: '595981777888', codigoHash: await hashPassword('123456'), canal: 'WHATSAPP', expiresAt: new Date(Date.now() + 60_000), intentos: 0, usado: false });
+  const v: any = await invokeHandler('pub-otp-verify', '+595 981 777 888', '123456');
+  const tras = await R(CuentaCliente).findOne({ where: { id: vieja.id } });
+  ok(v?.success === true && v.cuenta?.id === vieja.id, '6: el código entra a la cuenta vieja guardada como 0981…', v);
+  ok(tras?.telefono === '595981777888', '6: la cuenta vieja pasa a guardarse internacional', tras?.telefono);
+  ok((await R(CuentaCliente).count({ where: { nombre: 'CUENTA VIEJA' } })) === 1
+    && (await R(CuentaCliente).count({ where: { telefono: '595981777888' } })) === 1, '6: no se duplicó la cuenta');
+  await save(CodigoOtp, { telefono: '595981999000', codigoHash: await hashPassword('654321'), canal: 'WHATSAPP', expiresAt: new Date(Date.now() + 60_000), intentos: 0, usado: false });
+  const nueva: any = await invokeHandler('pub-otp-verify', '0981 999 000', '654321');
+  ok(nueva?.success === true && (await R(CuentaCliente).findOne({ where: { id: nueva.cuenta?.id } }))?.telefono === '595981999000',
+    '6: un número local de un cliente nuevo se guarda internacional', nueva);
+  const perfil: any = await invokeHandlerWithContext('pub-cliente-perfil-update', ctx(otra), { telefonoContacto: '0982 123 456' });
+  ok(perfil?.success === true && (await R(CuentaCliente).findOne({ where: { id: otra.id } }))?.telefonoContacto === '595982123456',
+    '6: el teléfono de contacto local se guarda internacional', perfil);
+  const busq: any = await invokeHandler('get-cuentas-tienda', { texto: '0981 777' });
+  ok(JSON.stringify(busq).includes('595981777888'), '6: el admin encuentra 595981… buscando 0981…', busq);
+
   await cerrar();
   console.log(`\n${TAG} RESULTADO: ${passed} passed, ${failed} failed.`);
   process.exit(failed === 0 ? 0 : 1);

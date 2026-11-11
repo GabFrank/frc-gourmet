@@ -7,13 +7,15 @@ import { AuthService } from '../../core/auth.service';
 import { ConfigService } from '../../core/config.service';
 import { mensajeError } from '../../core/errores';
 import { IconComponent } from '../../core/icon.component';
+import { TelefonoInputComponent } from '../../core/telefono-input.component';
+import { AnalisisTelefono, analizarGuardado } from '../../core/telefono';
 
 declare const google: any;
 
 @Component({
   selector: 'sf-login',
   standalone: true,
-  imports: [IconComponent, CommonModule, FormsModule],
+  imports: [IconComponent, CommonModule, FormsModule, TelefonoInputComponent],
   templateUrl: './login.page.html',
   styleUrls: ['./login.page.scss'],
 })
@@ -29,7 +31,10 @@ export class LoginPage implements AfterViewInit, OnDestroy {
   metodo: 'telefono' | 'email' = 'telefono';
   // OTP
   paso: 'telefono' | 'codigo' = 'telefono';
+  /** Número al que se pidió el código (internacional); precarga el campo al volver. */
   telefono = '';
+  tel: AnalisisTelefono = analizarGuardado('');
+  intentoTelefono = false;
   codigo = '';
   devHint = false;
   devCodigo: string | null = null;
@@ -95,7 +100,8 @@ export class LoginPage implements AfterViewInit, OnDestroy {
   // ---- OTP ----
   pedirCodigo(): void {
     this.error = null;
-    if (this.telefono.replace(/\D+/g, '').length < 6) { this.error = 'Ingresá un número válido.'; return; }
+    if (this.tel.estado !== 'valido') { this.intentoTelefono = true; this.error = 'Revisá el número.'; return; }
+    this.telefono = this.tel.e164;
     this.enviando = true;
     this.auth.solicitarOtp(this.telefono).subscribe({
       next: (res) => {

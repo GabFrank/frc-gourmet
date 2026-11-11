@@ -44,6 +44,7 @@
     "test:pagos-online": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pagos-online.ts",
     "test:pagos-bancard": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pagos-bancard.ts",
     "test:avisos-pedido": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-avisos-pedido.ts",
+    "test:telefono": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-telefono.ts",
     "test:pagos-icpay": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pagos-icpay.ts",
     "test:pedidos-online": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pedidos-online-e2e.ts",
     "test:dashboard-zonas": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-dashboard-zonas-delivery-e2e.ts",

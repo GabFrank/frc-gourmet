@@ -85,7 +85,8 @@ export function registerCuentasTiendaHandlers(dataSource: DataSource, getCurrent
     const texto = String(filtros.texto || '').trim();
     if (texto) {
       const t = `%${texto.toUpperCase()}%`;
-      const digitos = texto.replace(/\D/g, '');
+      // Sin el 0 inicial: «0981…» encuentra la cuenta guardada como «595981…» (y la vieja «0981…»).
+      const digitos = texto.replace(/\D/g, '').replace(/^0+/, '');
       qb.andWhere(
         `(UPPER(COALESCE(c.nombre, '')) LIKE :t OR UPPER(COALESCE(c.email, '')) LIKE :t`
         + (digitos ? ` OR COALESCE(c.telefono, '') LIKE :d OR COALESCE(c.telefono_contacto, '') LIKE :d` : '')

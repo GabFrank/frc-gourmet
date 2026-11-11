@@ -1,9 +1,9 @@
 import { estadoCreditoCuenta } from '../utils/credito-tienda.utils';
 import { ipcMain } from 'electron';
 import * as crypto from 'crypto';
-import { DataSource, MoreThan } from 'typeorm';
+import { DataSource, In, MoreThan } from 'typeorm';
 import { CuentaCliente } from '../../src/app/database/entities/pedidos-online/cuenta-cliente.entity';
-import { normalizarTelefonoContacto } from '../utils/telefono-contacto.utils';
+import { normalizarTelefonoContacto, telefonoInternacional, variantesTelefono } from '../utils/telefono-contacto.utils';
 import { CodigoOtp } from '../../src/app/database/entities/pedidos-online/codigo-otp.entity';
 import { hashPassword, verifyPassword } from '../utils/password.utils';
 import { sendWhatsappOtp, otpWhatsappDisponible } from '../utils/whatsapp-sender';
@@ -39,9 +39,9 @@ const OTP_MAX_POR_DIA_TELEFONO = 10;
 const otpMaxGlobalDia = (): number => Number(process.env['FRC_OTP_MAX_GLOBAL_DIA']) || 300;
 const OTP_MAX_POR_MINUTO = 3;
 
-/** Normaliza a solo dígitos (código de país incluido). */
+/** Solo dígitos, internacional: un número local de Paraguay (0981…) se completa con 595. */
 function normalizarTelefono(t: string): string {
-  return String(t || '').replace(/\D+/g, '');
+  return telefonoInternacional(t);
 }
 
 function generarCodigoOtp(): string {
@@ -70,6 +70,11 @@ export function registerPedidosOnlineAuthHandlers(
   _getCurrentUser: () => any,
 ): void {
   const cuentaRepo = () => dataSource.getRepository(CuentaCliente);
+  /** La cuenta de ese número (internacional); si no hay, la guardada con el número local viejo. */
+  const buscarCuentaPorTelefono = async (telefono: string): Promise<CuentaCliente | null> => {
+    const encontradas = await cuentaRepo().find({ where: { telefono: In(variantesTelefono(telefono)) }, relations: ['cliente'] });
+    return encontradas.find((c) => c.telefono === telefono) ?? encontradas[0] ?? null;
+  };
   const otpRepo = () => dataSource.getRepository(CodigoOtp);
 
   // Emite access + refresh token para una cuenta ya autenticada.
@@ -209,10 +214,13 @@ export function registerPedidosOnlineAuthHandlers(
       .execute();
     if (!consumo.affected) return { success: false, error: 'otp_no_encontrado_o_expirado' };
 
-    // Get-or-create de la cuenta.
-    let cuenta = await cuentaRepo().findOne({ where: { telefono }, relations: ['cliente'] });
+    // Get-or-create de la cuenta. Una cuenta vieja guardada con el número local (0981…) es la
+    // misma persona: se la encuentra y se le pasa el número al formato internacional.
+    let cuenta = await buscarCuentaPorTelefono(telefono);
     if (!cuenta) {
       cuenta = cuentaRepo().create({ telefono, telefonoVerificado: true, activo: true });
+    } else if (cuenta.telefono !== telefono) {
+      cuenta.telefono = telefono;
     }
     cuenta.telefonoVerificado = true;
     cuenta.ultimoLogin = new Date();
@@ -232,7 +240,7 @@ export function registerPedidosOnlineAuthHandlers(
     const esEmail = idRaw.includes('@');
     const cuenta = esEmail
       ? await cuentaRepo().findOne({ where: { email: idRaw.toLowerCase() }, relations: ['cliente'] })
-      : await cuentaRepo().findOne({ where: { telefono }, relations: ['cliente'] });
+      : await buscarCuentaPorTelefono(telefono);
 
     // Anti fuerza bruta (PLAN-tienda-online A1.3): por cuenta+IP y por IP.
     // F5 (A-auth2): el intento se reserva (cuenta como fallo) ANTES de la verificación asíncrona.

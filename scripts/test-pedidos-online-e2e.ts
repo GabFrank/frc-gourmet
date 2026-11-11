@@ -364,7 +364,7 @@ async function main() {
 
   // 4. me
   const me = await pub('auth.me', [], token);
-  ok(me.result?.success === true && me.result?.cuenta?.telefono === '0981123456', 'auth.me devuelve la cuenta');
+  ok(me.result?.success === true && me.result?.cuenta?.telefono === '595981123456', 'auth.me devuelve la cuenta (número local → internacional)');
 
   // 4b. F2 (M5): cuenta sin nombre → el pedido exige nombre (antes quedaba sin nombre en la bandeja).
   const sinNombre = await pub('pedido.crear', [{ tipoPedido: 'PICKUP', items: [{ productoId: 1, cantidad: 1 }] }], token);
@@ -594,21 +594,21 @@ async function main() {
   const conTel = await pub('pedido.crear', [{ tipoPedido: 'PICKUP', items: itemsTel, metodoPago: 'EFECTIVO', telefonoContacto: '0981 777 888' }], tokEmail);
   ok(conTel.result?.success === true, 'con teléfono de contacto el pedido se crea', conTel.result);
   const cuentaTel: any = await dataSource.getRepository('CuentaCliente').findOne({ where: { email: 'cliente@mail.com' } });
-  ok(cuentaTel?.telefonoContacto === '0981777888' && !cuentaTel?.telefono,
-    'queda como contacto de la cuenta (solo dígitos), no como teléfono de ingreso', { c: cuentaTel?.telefonoContacto, t: cuentaTel?.telefono });
+  ok(cuentaTel?.telefonoContacto === '595981777888' && !cuentaTel?.telefono,
+    'queda como contacto de la cuenta (internacional, solo dígitos), no como teléfono de ingreso', { c: cuentaTel?.telefonoContacto, t: cuentaTel?.telefono });
   const pedTel: any = await dataSource.getRepository('PedidoOnline').findOne({ where: { numero: conTel.result?.numero } });
-  ok(pedTel?.telefonoCliente === '0981777888', 'el pedido lleva el teléfono para el local', pedTel?.telefonoCliente);
+  ok(pedTel?.telefonoCliente === '595981777888', 'el pedido lleva el teléfono para el local', pedTel?.telefonoCliente);
   const otroPed = await pub('pedido.crear', [{ tipoPedido: 'PICKUP', items: itemsTel, metodoPago: 'EFECTIVO' }], tokEmail);
   ok(otroPed.result?.success === true, 'el siguiente pedido ya no lo pide (lo recuerda la cuenta)', otroPed.result);
   const meTel = await pub('auth.me', [], tokEmail);
-  ok(meTel.result?.cuenta?.telefonoContacto === '0981777888', 'auth.me lo devuelve para precargar el checkout', meTel.result?.cuenta);
+  ok(meTel.result?.cuenta?.telefonoContacto === '595981777888', 'auth.me lo devuelve para precargar el checkout', meTel.result?.cuenta);
   const perfMalo = await pub('auth.perfil.update', [{ telefonoContacto: 'abc' }], tokEmail);
   ok(perfMalo.result?.error === 'telefono_invalido', 'perfil: teléfono inválido rechazado', perfMalo.result);
   const perfOk = await pub('auth.perfil.update', [{ telefonoContacto: '+595 981 222 333' }], tokEmail);
   ok(perfOk.result?.success === true && perfOk.result?.cuenta?.telefonoContacto === '595981222333', 'perfil: se cambia el contacto', perfOk.result?.cuenta);
   // Anotar el número de otra cuenta como contacto no da acceso a esa cuenta ni la pisa.
   const ajeno = await pub('auth.perfil.update', [{ telefonoContacto: '0981123456' }], tokEmail);
-  const cuentaOtp: any = await dataSource.getRepository('CuentaCliente').findOne({ where: { telefono: '0981123456' } });
+  const cuentaOtp: any = await dataSource.getRepository('CuentaCliente').findOne({ where: { telefono: '595981123456' } });
   ok(ajeno.result?.success === true && cuentaOtp && cuentaOtp.email !== 'cliente@mail.com',
     'un contacto igual al teléfono de otra cuenta no la toca (no es dato de ingreso)', ajeno.result);
 
