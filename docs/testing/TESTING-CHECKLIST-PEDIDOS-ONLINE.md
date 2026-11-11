@@ -422,3 +422,16 @@ Reglas en `projects/storefront/src/app/core/telefono.ts`; test `npm run test:tel
 | 21.5 | «Otro país» y `+44 7400 123456` | Válido. Un número con 0 adelante pide el código de país |
 | 21.6 | Cuenta vieja guardada como `0981…` | Al ingresar con código entra a **la misma** cuenta (no crea otra) y pasa a guardarse `595981…` |
 | 21.7 | En el admin, Cuentas de la tienda, buscar `0981…` | Encuentra la cuenta guardada `595981…` |
+
+## 22 · Feedback del 11/11
+
+| # | Paso | Qué tiene que pasar |
+|---|---|---|
+| 22.1 | Cuenta de teléfono → «Mi cuenta» → «Entrar también con Google» | Queda «email · verificado con Google». Después «Continuar con Google» entra a **esa** cuenta |
+| 22.2 | Lo mismo con un Gmail que ya tenía cuenta solo de Google | Se unen: los pedidos de la de Google pasan a la de teléfono y la de Google se cierra |
+| 22.3 | Escribir un Gmail ajeno en el campo Email de una cuenta de teléfono y entrar con Google con ese Gmail | Entra a una cuenta **nueva**, no a la de teléfono |
+| 22.4 | «Mi cuenta» → interruptor de avisos apagado, con un pedido en curso | No llegan más avisos de ese pedido |
+| 22.5 | Interruptor prendido → checkout | La casilla de avisos viene tildada |
+| 22.6 | Pizza con mitad y mitad: elegir otro sabor y destildar el primero | Se puede; el título cambia al sabor que queda. Con un solo sabor, no se puede destildar |
+| 22.7 | PdV → Lista de delivery | Por defecto sin entregados ni cancelados; varios estados a la vez; buscar por N°, PO-…, nombre, teléfono, entregador y hora con «Buscar» |
+| 22.8 | Mensajes de WhatsApp | Textos v2 (más cálidos), plantillas `aviso_pedido_*_v2` |

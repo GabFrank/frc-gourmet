@@ -40,7 +40,7 @@ async function main() {
   };
   // Sube todo y baja las migraciones de la tienda posteriores a F4 (F6 en adelante), para
   // que los bloques F2-F4 de abajo sigan encontrando a F4 como la última.
-  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda|TiendaDetallePedido|TiendaTelefonoContactoCuenta|TiendaPagoProveedores|TiendaVinculoCuentaCliente|TiendaPagosMultiIcpay|TiendaAvisosPedido/;
+  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda|TiendaDetallePedido|TiendaTelefonoContactoCuenta|TiendaPagoProveedores|TiendaVinculoCuentaCliente|TiendaPagosMultiIcpay|TiendaAvisosPedido|TiendaAvisosPreferenciaCuenta/;
   const subirSinPosteriores = async () => {
     await ds.runMigrations({ transaction: 'each' });
     for (;;) {
@@ -88,6 +88,8 @@ async function main() {
   // F8b fase 1 (TiendaVinculoCuentaCliente): cliente del pedido y quién vinculó la cuenta.
   const VINC_PEDIDO = ['cliente_id'];
   const VINC_CUENTA = ['vinculado_por', 'vinculado_en'];
+  /** Columnas de la cuenta de migraciones posteriores al vínculo (se prueban en su bloque). */
+  const POST_VINC_CUENTA = ['avisos_whatsapp'];
   const POSTERIORES = ['seguimiento_token_hash', ...F4_PEDIDO, ...F8_PEDIDO, ...F9_PEDIDO, ...VINC_PEDIDO, ...MULTI_PEDIDO];
   const entTodas = meta.columns.map((c) => c.databaseName).sort();
   const ent = entTodas.filter((c) => !POSTERIORES.includes(c));
@@ -223,7 +225,7 @@ async function main() {
   const ultimaTel = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
   ok(/TiendaTelefonoContactoCuenta/.test(String(ultimaTel)), 'Contacto: TiendaTelefonoContactoCuenta es la última migración', ultimaTel);
   const metaCuenta = ds.entityMetadatas.find((m) => m.tableName === 'cuentas_cliente')!;
-  ok(JSON.stringify(metaCuenta.columns.map((c) => c.databaseName).filter((c) => !VINC_CUENTA.includes(c)).sort()) === JSON.stringify([...(await colsCuenta())].sort()),
+  ok(JSON.stringify(metaCuenta.columns.map((c) => c.databaseName).filter((c) => !VINC_CUENTA.includes(c) && !POST_VINC_CUENTA.includes(c)).sort()) === JSON.stringify([...(await colsCuenta())].sort()),
     'Contacto: las columnas de la cuenta coinciden con la entidad (sin el vínculo F8b)');
   await ds.query(`INSERT INTO cuentas_cliente (email, telefono_contacto, activo, telefono_verificado, email_verificado) VALUES ('zt-tel@x.com', '0981000111', ${pgDb ? 'true, false, false' : '1, 0, 0'})`);
   await ds.undoLastMigration({ transaction: 'each' });
@@ -258,8 +260,8 @@ async function main() {
   const ultimaVinc = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
   ok(/TiendaVinculoCuentaCliente/.test(String(ultimaVinc)), 'Vínculo: TiendaVinculoCuentaCliente es la última migración', ultimaVinc);
   ok(JSON.stringify(entTodas.filter((c) => !MULTI_PEDIDO.includes(c))) === JSON.stringify([...(await columnas())].sort()), 'Vínculo: las columnas del pedido coinciden con la entidad (sin los datos del proveedor)');
-  ok(JSON.stringify(metaCuenta.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...(await colsCuenta())].sort()),
-    'Vínculo: las columnas de la cuenta coinciden con la entidad completa');
+  ok(JSON.stringify(metaCuenta.columns.map((c) => c.databaseName).filter((c) => !POST_VINC_CUENTA.includes(c)).sort()) === JSON.stringify([...(await colsCuenta())].sort()),
+    'Vínculo: las columnas de la cuenta coinciden con la entidad (sin la preferencia de avisos)');
   const tablaVinc = async () => Number((await ds.query(pgDb
     ? `SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema='public' AND table_name='cuentas_cliente_vinculos'`
     : `SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='cuentas_cliente_vinculos'`))[0].n);
@@ -284,6 +286,18 @@ async function main() {
   await ds.runMigrations({ transaction: 'each' });
   ok((await columnas()).includes('cliente_id') && await tablaVinc() === 1, 'Vínculo: up de nuevo vuelve a crear todo');
   await ds.query(`DELETE FROM cuentas_cliente WHERE email LIKE 'zt-v%'`);
+
+  // Preferencia de avisos de la cuenta (TiendaAvisosPreferenciaCuenta): una columna nullable. Se baja
+  // primero para que el bloque de TiendaAvisosPedido siga encontrándose última.
+  const ultimaPref = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
+  ok(/TiendaAvisosPreferenciaCuenta/.test(String(ultimaPref)), 'Avisos (cuenta): es la última migración', ultimaPref);
+  const metaCta = ds.entityMetadatas.find((m) => m.tableName === 'cuentas_cliente')!;
+  ok(JSON.stringify(metaCta.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...(await colsCuenta())].sort()), 'Avisos (cuenta): las columnas coinciden con la entidad', await colsCuenta());
+  await ds.query(`INSERT INTO cuentas_cliente (email, activo, avisos_whatsapp) VALUES ('zt-pref@x.com', ${pgDb ? 'true' : '1'}, NULL)`);
+  await ds.undoLastMigration({ transaction: 'each' });
+  ok(!(await colsCuenta()).includes('avisos_whatsapp'), 'Avisos (cuenta): down quita la columna');
+  ok(Number((await ds.query(`SELECT COUNT(*) AS n FROM cuentas_cliente WHERE email = 'zt-pref@x.com'`))[0].n) === 1, 'Avisos (cuenta): down conserva la cuenta');
+  await ds.query(`DELETE FROM cuentas_cliente WHERE email = 'zt-pref@x.com'`);
 
   // Avisos por WhatsApp (TiendaAvisosPedido): cola con único (pedido, evento), consentimiento en el
   // pedido, interruptor y teléfono de prueba en la config. Se prueba primero y se baja, para que
