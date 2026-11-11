@@ -14,7 +14,7 @@ Regla: lo que toca cobro, factura o PdV se prueba **cobrando y facturando de ver
 |---|---|
 | Servidor | Espejo en `:8000` desde la punta de `feat-tienda-avisos-cliente`, contra la copia. Tienda: `http://localhost:8000/tienda/` (celular: la IP de la Mac en el wifi). Admin y PdV: `http://localhost:8000/admin/` |
 | Caja | Abrir una caja en el PdV de la copia |
-| Token de Meta | El temporal dura ~24 h. Si no llegan códigos ni avisos, cargar uno nuevo (Meta → WhatsApp → Configuración de la API → «Generar token») |
+| Token de Meta | El temporal dura ~24 h. **Sin token, «Ingresar» muestra solo email y Google**: la pestaña «Teléfono» aparece únicamente si el servidor puede mandar el código. Si no está, o no llegan códigos ni avisos, cargar uno nuevo (Meta → WhatsApp → Configuración de la API → «Generar token») |
 | Avisos | Config Tienda Online: avisos prendidos, teléfono de prueba = el tuyo (§19) |
 | Cliente a cuenta | Un cliente con crédito y límite, vinculado a tu cuenta web (§14) |
 | Zonas | Al menos una zona dibujada (§0.2) |
