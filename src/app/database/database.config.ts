@@ -340,6 +340,7 @@ import { FichasCantina1793299117857 } from './migrations/1793299117857-FichasCan
 import { CajaMayorMontosAmplios1793302813170 } from './migrations/1793302813170-CajaMayorMontosAmplios';
 import { PdvTiposVenta1793381465964 } from './migrations/1793381465964-PdvTiposVenta';
 import { ClasificacionItemsCompra1794356000000 } from './migrations/1794356000000-ClasificacionItemsCompra';
+import { CompraDetalleSnapshotCosto1794700000000 } from './migrations/1794700000000-CompraDetalleSnapshotCosto';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
@@ -821,6 +822,8 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     PdvTiposVenta1793381465964,
     // Compras: clase de ítem (CMV / gasto operativo / reventa) y alias con marca
     ClasificacionItemsCompra1794356000000,
+    // Compras: snapshot del costo por línea para revertirlo al anular (#189)
+    CompraDetalleSnapshotCosto1794700000000,
   ];
 }
 

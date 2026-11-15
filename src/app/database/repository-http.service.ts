@@ -480,7 +480,7 @@ export class RepositoryHttpService extends RepositoryService {
   crearCompraSimplificada(payload: any): Observable<Compra> {
     return throwError(() => new Error(`RepositoryHttpService.crearCompraSimplificada() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  anularCompra(id: number, motivo: string): Observable<{ success: boolean }> {
+  anularCompra(id: number, motivo: string): Observable<{ success: boolean; costos?: any[] }> {
     return throwError(() => new Error(`RepositoryHttpService.anularCompra() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getCompraDetalles(compraId: number): Observable<CompraDetalle[]> {

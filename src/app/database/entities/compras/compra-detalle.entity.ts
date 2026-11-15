@@ -33,6 +33,14 @@ export class CompraDetalle extends BaseModel {
   @Column({ name: 'texto_original', type: 'varchar', length: 500, nullable: true })
   textoOriginal?: string | null;
 
+  /** #189: precio_costo que creó esta línea al finalizar la compra. */
+  @Column({ name: 'precio_costo_id', type: 'int', nullable: true })
+  precioCostoId?: number | null;
+
+  /** #189: precio_costo activo justo antes de finalizar (null si el producto no tenía costo). */
+  @Column({ name: 'precio_costo_previo_id', type: 'int', nullable: true })
+  precioCostoPrevioId?: number | null;
+
   @ManyToOne('Compra', 'detalles', {
     createForeignKeyConstraints: false
   })

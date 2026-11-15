@@ -229,7 +229,7 @@ interface ElectronAPI {
   updateCompraBorrador: (id: number, data: any) => Promise<Compra>;
   finalizarCompra: (id: number, payload: any) => Promise<Compra>;
   crearCompraSimplificada: (payload: any) => Promise<Compra>;
-  anularCompra: (id: number, motivo: string) => Promise<{ success: boolean }>;
+  anularCompra: (id: number, motivo: string) => Promise<{ success: boolean; costos?: any[] }>;
   // Add CompraDetalle operations
   getCompraDetalles: (compraId: number) => Promise<CompraDetalle[]>;
   getCompraDetalle: (compraDetalleId: number) => Promise<CompraDetalle>;
@@ -1794,7 +1794,7 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.crearCompraSimplificada(payload));
   }
 
-  anularCompra(id: number, motivo: string): Observable<{ success: boolean }> {
+  anularCompra(id: number, motivo: string): Observable<{ success: boolean; costos?: any[] }> {
     return from(this.api.anularCompra(id, motivo));
   }
 
