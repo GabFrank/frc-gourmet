@@ -36,6 +36,8 @@ interface ItemSeed {
   presentaciones: any[];
   cantidad: number;
   costoUnitarioPresentacion: number;
+  /** Clase de la línea. Null: la hereda del producto / subfamilia al guardar. */
+  claseId?: number | null;
 }
 
 @Component({
@@ -89,6 +91,8 @@ export class CreateEditCompraComponent implements OnInit {
   proveedorControl = new FormControl<any | string | null>(null);
   selectedProveedor: any | null = null;
   categorias: any[] = [];
+  /** Clases de ítem de compra (todas: las inactivas solo se muestran si una línea ya la tiene). */
+  clases: any[] = [];
   monedas: any[] = [];
   formasPago: any[] = [];
 
@@ -100,7 +104,16 @@ export class CreateEditCompraComponent implements OnInit {
   }
 
   tipoBoletaOptions = ['LEGAL', 'COMUN', 'OTRO', 'SIN_COMPROBANTE'];
-  displayedColumns = ['producto', 'presentacion', 'cantidad', 'costoUnitario', 'subtotal', 'actions'];
+  displayedColumns = ['producto', 'presentacion', 'clase', 'cantidad', 'costoUnitario', 'subtotal', 'actions'];
+
+  /** Clases que se ofrecen en una línea: las activas y la que ya tiene (aunque esté inactiva). */
+  clasesParaLinea(claseId: number | null): any[] {
+    return this.clases.filter((c) => c.activo || c.id === claseId);
+  }
+
+  destinoLabel(destino: string): string {
+    return destino === 'CMV' ? 'CMV' : destino === 'REVENTA' ? 'Reventa' : 'Gasto operativo';
+  }
 
   loading = false;
   saving = false;
@@ -161,12 +174,14 @@ export class CreateEditCompraComponent implements OnInit {
 
   async loadCatalogos(): Promise<void> {
     try {
-      const [provs, cats, monedas, fps] = await Promise.all([
+      const [provs, cats, monedas, fps, clases] = await Promise.all([
         firstValueFrom(this.repo.getProveedores()),
         firstValueFrom(this.repo.getCompraCategorias()),
         firstValueFrom(this.repo.getMonedas()),
         firstValueFrom(this.repo.getFormasPago()),
+        firstValueFrom(this.repo.getCompraItemClases({ incluirInactivas: true })).catch(() => []),
       ]);
+      this.clases = (clases as any[]) || [];
       this.proveedores = (provs as any[]) || [];
       this.filteredProveedores = this.proveedores.slice(0, 50);
       this.setupProveedorAutocomplete();
@@ -257,6 +272,7 @@ export class CreateEditCompraComponent implements OnInit {
           presentaciones,
           cantidad: Number(det.cantidad),
           costoUnitarioPresentacion: Number(det.costoUnitarioPresentacion),
+          claseId: det.claseId ?? null,
         }), { emitEvent: false });
       }
       this.refreshDataSource();
@@ -286,6 +302,7 @@ export class CreateEditCompraComponent implements OnInit {
       cantidad: [cant, [Validators.required, Validators.min(0.001)]],
       costoUnitarioPresentacion: [costoUnit, [Validators.min(0)]],
       subtotal: [subInicial, [Validators.min(0)]],
+      claseId: [seed.claseId ?? null],
     });
 
     // Bidirectional sync entre cantidad / costo unit / subtotal:
@@ -440,6 +457,7 @@ export class CreateEditCompraComponent implements OnInit {
         presentacionId: it.presentacionId || null,
         cantidad: Number(it.cantidad) || 0,
         costoUnitarioPresentacion: Number(it.costoUnitarioPresentacion) || 0,
+        ...(it.claseId ? { claseId: Number(it.claseId) } : {}),
       })),
     };
   }

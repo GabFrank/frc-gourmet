@@ -230,7 +230,7 @@ interface ElectronAPI {
   updateCompraBorrador: (id: number, data: any) => Promise<Compra>;
   finalizarCompra: (id: number, payload: any) => Promise<Compra>;
   crearCompraSimplificada: (payload: any) => Promise<Compra>;
-  anularCompra: (id: number, motivo: string) => Promise<{ success: boolean }>;
+  anularCompra: (id: number, motivo: string) => Promise<{ success: boolean; costos?: any[] }>;
   // Add CompraDetalle operations
   getCompraDetalles: (compraId: number) => Promise<CompraDetalle[]>;
   getCompraDetalle: (compraDetalleId: number) => Promise<CompraDetalle>;
@@ -823,6 +823,12 @@ interface ElectronAPI {
   acreditarTransferenciaBancaria: (payload: any) => Promise<any>;
 
   // Compra Categorias (Fase 3)
+  getCompraItemClases: (opts?: any) => Promise<any[]>;
+  createCompraItemClase: (data: any) => Promise<any>;
+  updateCompraItemClase: (id: number, data: any) => Promise<any>;
+  getAliasProductosProveedor: (proveedorId: number, opts?: any) => Promise<any[]>;
+  upsertAliasProducto: (data: any) => Promise<any>;
+  getReporteComprasPorClase: (params: any) => Promise<any>;
   getCompraCategorias: () => Promise<any[]>;
   createCompraCategoria: (data: any) => Promise<any>;
   updateCompraCategoria: (id: number, data: any) => Promise<any>;
@@ -1811,7 +1817,7 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.crearCompraSimplificada(payload));
   }
 
-  anularCompra(id: number, motivo: string): Observable<{ success: boolean }> {
+  anularCompra(id: number, motivo: string): Observable<{ success: boolean; costos?: any[] }> {
     return from(this.api.anularCompra(id, motivo));
   }
 
@@ -3642,6 +3648,24 @@ export class RepositoryIpcService extends RepositoryService {
   }
 
   // ===================== CUENTAS POR PAGAR (FASE 3) =====================
+  getCompraItemClases(opts?: { incluirInactivas?: boolean }): Observable<any[]> {
+    return from(this.api.getCompraItemClases(opts));
+  }
+  createCompraItemClase(data: any): Observable<any> {
+    return from(this.api.createCompraItemClase(data));
+  }
+  updateCompraItemClase(id: number, data: any): Observable<any> {
+    return from(this.api.updateCompraItemClase(id, data));
+  }
+  getAliasProductosProveedor(proveedorId: number, opts?: { incluirInactivos?: boolean }): Observable<any[]> {
+    return from(this.api.getAliasProductosProveedor(proveedorId, opts));
+  }
+  upsertAliasProducto(data: any): Observable<any> {
+    return from(this.api.upsertAliasProducto(data));
+  }
+  getReporteComprasPorClase(params: { desde: string; hasta: string; monedaId?: number }): Observable<any> {
+    return from(this.api.getReporteComprasPorClase(params));
+  }
   getCompraCategorias(): Observable<any[]> {
     return from(this.api.getCompraCategorias());
   }

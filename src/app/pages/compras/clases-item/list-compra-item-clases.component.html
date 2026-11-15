@@ -1,0 +1,45 @@
+<div class="clases-page">
+  <div class="header">
+    <div>
+      <h2>Clases de ítem de compra</h2>
+      <p class="hint">Cada línea de compra hereda la clase de su producto o subfamilia, y se puede cambiar en la línea. El destino decide a dónde va el costo en el reporte.</p>
+    </div>
+    <button mat-raised-button color="primary" (click)="nueva()"><mat-icon>add</mat-icon> Nueva clase</button>
+  </div>
+
+  <table class="clases-tabla">
+    <thead>
+      <tr><th>Nombre</th><th>Destino</th><th>Controla stock (sugerido)</th><th>Orden</th><th>Activa</th><th></th></tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let f of filas" [class.inactiva]="!f.activo">
+        <td>
+          <mat-form-field appearance="outline" class="cell">
+            <input matInput [(ngModel)]="f.nombre" maxlength="100" placeholder="Nombre">
+          </mat-form-field>
+        </td>
+        <td>
+          <mat-form-field appearance="outline" class="cell">
+            <mat-select [(ngModel)]="f.destino">
+              <mat-option *ngFor="let d of destinos" [value]="d.value">{{ d.label }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+        </td>
+        <td><mat-slide-toggle [(ngModel)]="f.controlaStockPorDefecto" color="primary"></mat-slide-toggle></td>
+        <td>
+          <mat-form-field appearance="outline" class="cell orden">
+            <input matInput type="number" [(ngModel)]="f.orden">
+          </mat-form-field>
+        </td>
+        <td><mat-slide-toggle [(ngModel)]="f.activo" color="primary"></mat-slide-toggle></td>
+        <td>
+          <button mat-stroked-button color="primary" (click)="guardar(f)" [disabled]="f.guardando">
+            <mat-icon>save</mat-icon> Guardar
+          </button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <div *ngIf="!cargando && filas.length === 0" class="hint">No hay clases cargadas.</div>
+  <p class="hint">«Controla stock» solo se sugiere al crear un producto de esa clase; no cambia productos existentes. Una clase desactivada se conserva en las compras que ya la tienen.</p>
+</div>

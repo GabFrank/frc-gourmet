@@ -69,7 +69,24 @@ export class ProductoInformacionGeneralComponent implements OnInit, OnDestroy {
     this.unidadBaseList = this.productoService.unidadBaseList;
   }
 
+  /** Clases de ítem de compra (PLAN-clasificacion-items-compras). */
+  clases: any[] = [];
+
+  /**
+   * Al elegir una clase en un producto NUEVO, sugiere su «controla stock por defecto»
+   * (p. ej. limpieza no controla stock). Solo sugiere: el usuario lo puede cambiar.
+   */
+  onClaseCambiada(claseId: number | null): void {
+    if (this.productoService.enEdicion || claseId == null) return;
+    const clase = this.clases.find((c) => c.id === claseId);
+    const ctrl = this.informacionPrincipalForm.get('controlaStock');
+    if (clase && ctrl?.enabled) ctrl.setValue(!!clase.controlaStockPorDefecto);
+  }
+
   ngOnInit(): void {
+    this.repositoryService.getCompraItemClases({ incluirInactivas: true })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({ next: (c) => (this.clases = c || []), error: () => (this.clases = []) });
     // Suscribirse a cambios en el tipo de producto
     this.informacionPrincipalForm.get('tipo')?.valueChanges
       .pipe(takeUntil(this.destroy$))

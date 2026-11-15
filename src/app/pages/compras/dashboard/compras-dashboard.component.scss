@@ -1,1 +1,17 @@
 // Estilos especificos del dashboard de Compras (lo comun esta en _dashboard.scss).
+
+.compras-por-clase {
+  margin-bottom: 16px;
+  > :not(app-dash-section-header):not(mat-divider) { padding-left: 16px; padding-right: 16px; }
+  .clase-nota:last-child { padding-bottom: 12px; }
+  .clase-toolbar { padding: 8px 16px !important; input { margin-left: 8px; padding: 4px 6px; color: inherit; background: transparent; border: 1px solid var(--mat-sys-outline-variant, rgba(128,128,128,.5)); border-radius: 4px; } }
+  .clase-tabla { width: 100%; border-collapse: collapse; font-size: 13px;
+    th, td { padding: 4px 6px; text-align: left; border-bottom: 1px solid var(--mat-sys-outline-variant, rgba(128,128,128,.25)); }
+    th { font-weight: 600; opacity: .8; }
+    .num { text-align: right; white-space: nowrap; }
+    tfoot td { font-weight: 600; border-bottom: none; }
+  }
+  .clase-moneda { margin-bottom: 8px; }
+  .clase-nota { font-size: 12px; opacity: .7; margin-top: 4px; &.warn { color: #f57c00; opacity: 1; } }
+  .muted { opacity: .6; }
+}

@@ -56,6 +56,10 @@ interface ItemVm extends MatchItem {
   rowClass: string;
   selectedProductoId: number | null;
   selectedPresentacionId: number | null;
+  /** Clase de la línea (null: la hereda del producto al confirmar) y marca/contenido para el alias. */
+  claseId?: number | null;
+  marca?: string;
+  contenido?: string;
   /** Última presentación válida seleccionada (para restaurar tras el centinela "Crear presentación"). */
   presentacionPrevId: number | null;
   presentacionesDisponibles: { id: number; nombre: string; cantidad: number; principal: boolean }[];
@@ -138,7 +142,9 @@ export class RevisarFacturaComponent implements OnInit {
 
   proveedorValidado = false;
 
-  itemsColumns = ['estado', 'producto', 'descripcion', 'presentacion', 'cantidad', 'precio', 'subtotal', 'acciones'];
+  itemsColumns = ['estado', 'producto', 'descripcion', 'presentacion', 'clase', 'cantidad', 'precio', 'subtotal', 'acciones'];
+  /** Clases de ítem de compra activas (PLAN-clasificacion-items-compras). */
+  clases: any[] = [];
 
   constructor(
     private service: FacturaImportService,
@@ -155,6 +161,7 @@ export class RevisarFacturaComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.repo.getCompraItemClases().subscribe({ next: (c) => (this.clases = c || []), error: () => (this.clases = []) });
     if (this.documentoId) this.cargar();
   }
 
@@ -646,6 +653,9 @@ export class RevisarFacturaComponent implements OnInit {
           costoUnitario: Number(v.costoUnitario),
           descripcionOcr: v.lineaOcr.descripcion,
           omitir: v.omitir,
+          claseId: v.claseId ?? null,
+          marca: v.marca?.trim() || null,
+          contenido: v.contenido?.trim() || null,
         })),
         aliasProveedor: {
           textoOcr: this.matchResult.proveedor.textoOcr,

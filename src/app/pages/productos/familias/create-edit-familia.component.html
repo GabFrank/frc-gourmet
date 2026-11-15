@@ -114,6 +114,14 @@
                 </mat-error>
               </mat-form-field>
 
+              <mat-form-field appearance="outline" class="subfamilia-clase-field">
+                <mat-label>Clase de compra</mat-label>
+                <mat-select formControlName="claseId">
+                  <mat-option [value]="null">Sin clase</mat-option>
+                  <mat-option *ngFor="let c of clases" [value]="c.id" [disabled]="!c.activo && c.id !== subfamiliaForm.value.claseId">{{ c.nombre }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+
               <mat-checkbox formControlName="activo" color="primary" class="subfamilia-checkbox">
                 Activa
               </mat-checkbox>
@@ -143,6 +151,11 @@
             <ng-container matColumnDef="nombre">
               <th mat-header-cell *matHeaderCellDef>Nombre</th>
               <td mat-cell *matCellDef="let subfamilia">{{ subfamilia.nombre }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="clase">
+              <th mat-header-cell *matHeaderCellDef>Clase de compra</th>
+              <td mat-cell *matCellDef="let subfamilia">{{ claseNombre(subfamilia.claseId) }}</td>
             </ng-container>
 
             <!-- Status Column -->

@@ -238,7 +238,8 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       const subfamilia = subfamiliaRepository.create({
         nombre: subfamiliaData.nombre,
         familia: familia,
-        activo: subfamiliaData.activo !== undefined ? subfamiliaData.activo : true
+        activo: subfamiliaData.activo !== undefined ? subfamiliaData.activo : true,
+        claseId: subfamiliaData.claseId ? Number(subfamiliaData.claseId) : null,
       });
 
       await setEntityUserTracking(dataSource, subfamilia, currentUser?.id, false);
@@ -277,6 +278,9 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       }
       if (subfamiliaData.activo !== undefined) {
         subfamilia.activo = subfamiliaData.activo;
+      }
+      if (subfamiliaData.claseId !== undefined) {
+        subfamilia.claseId = subfamiliaData.claseId ? Number(subfamiliaData.claseId) : null;
       }
 
       await setEntityUserTracking(dataSource, subfamilia, currentUser?.id, true);
@@ -568,6 +572,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
         esVendible: productoData.esVendible !== undefined ? productoData.esVendible : true,
         esComprable: productoData.esComprable !== undefined ? productoData.esComprable : false,
         controlaStock: productoData.controlaStock !== undefined ? productoData.controlaStock : true,
+        claseId: productoData.claseId ? Number(productoData.claseId) : null,
         esIngrediente: productoData.esIngrediente !== undefined ? productoData.esIngrediente : false,
         disponibleOnline: productoData.disponibleOnline === true,
         pausadoOnline: productoData.pausadoOnline === true,
@@ -624,6 +629,7 @@ export function registerProductosHandlers(dataSource: DataSource, getCurrentUser
       if (productoData.esVendible !== undefined) producto.esVendible = productoData.esVendible;
       if (productoData.esComprable !== undefined) producto.esComprable = productoData.esComprable;
       if (productoData.controlaStock !== undefined) producto.controlaStock = productoData.controlaStock;
+      if (productoData.claseId !== undefined) producto.claseId = productoData.claseId ? Number(productoData.claseId) : null;
       if (productoData.esIngrediente !== undefined) producto.esIngrediente = productoData.esIngrediente;
 
       // Pedidos online (web app): disponibilidad y pausa (86ing) por canal.

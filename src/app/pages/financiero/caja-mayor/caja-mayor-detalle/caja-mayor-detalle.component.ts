@@ -792,13 +792,15 @@ export class CajaMayorDetalleComponent implements OnInit {
     const result = await firstValueFrom(dialogRef.afterClosed());
     if (result) {
       try {
-        await firstValueFrom(this.repositoryService.updateCajaMayor(this.cajaMayor.id, { estado: 'CERRADA', fechaCierre: new Date() }));
+        const cerrada: any = await firstValueFrom(this.repositoryService.cerrarCajaMayor(this.cajaMayor.id));
         this.cajaMayor.estado = 'CERRADA';
-        this.cajaMayor.fechaCierre = new Date();
+        this.cajaMayor.fechaCierre = cerrada?.fechaCierre ?? new Date();
         this.snackBar.open('Caja mayor cerrada correctamente', 'Cerrar', { duration: 3000 });
       } catch (error) {
         console.error('Error closing caja mayor:', error);
-        this.snackBar.open('Error al cerrar caja mayor', 'Cerrar', { duration: 3000 });
+        const msg = (this.extraerMensajeError(error) || 'Error al cerrar caja mayor').replace(/^[A-Z_]+:\s*/, '');
+        this.snackBar.open(msg, 'Cerrar', { duration: 5000 });
+        this.loadData();
       }
     }
   }

@@ -322,7 +322,7 @@ export abstract class RepositoryService {
   abstract updateCompraBorrador(id: number, data: any): Observable<Compra>;
   abstract finalizarCompra(id: number, payload: any): Observable<Compra>;
   abstract crearCompraSimplificada(payload: any): Observable<Compra>;
-  abstract anularCompra(id: number, motivo: string): Observable<{ success: boolean }>;
+  abstract anularCompra(id: number, motivo: string): Observable<{ success: boolean; costos?: any[] }>;
   abstract getCompraDetalles(compraId: number): Observable<CompraDetalle[]>;
   abstract getCompraDetalle(compraDetalleId: number): Observable<CompraDetalle>;
   abstract createCompraDetalle(compraDetalleData: Partial<CompraDetalle>): Observable<CompraDetalle>;
@@ -865,6 +865,12 @@ export abstract class RepositoryService {
   abstract verificarAcreditacionPos(id: number, montoAcreditado: number): Observable<any>;
   abstract getAcreditacionesPendientes(): Observable<any[]>;
   abstract acreditarTransferenciaBancaria(payload: any): Observable<any>;
+  abstract getCompraItemClases(opts?: { incluirInactivas?: boolean }): Observable<any[]>;
+  abstract createCompraItemClase(data: any): Observable<any>;
+  abstract updateCompraItemClase(id: number, data: any): Observable<any>;
+  abstract getAliasProductosProveedor(proveedorId: number, opts?: { incluirInactivos?: boolean }): Observable<any[]>;
+  abstract upsertAliasProducto(data: any): Observable<any>;
+  abstract getReporteComprasPorClase(params: { desde: string; hasta: string; monedaId?: number }): Observable<any>;
   abstract getCompraCategorias(): Observable<any[]>;
   abstract createCompraCategoria(data: any): Observable<any>;
   abstract updateCompraCategoria(id: number, data: any): Observable<any>;

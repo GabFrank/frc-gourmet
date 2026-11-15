@@ -16,6 +16,7 @@ import { Presentacion } from '../../src/app/database/entities/productos/presenta
 import { CodigoBarra } from '../../src/app/database/entities/productos/codigo-barra.entity';
 import { Compra } from '../../src/app/database/entities/compras/compra.entity';
 import { CompraDetalle } from '../../src/app/database/entities/compras/compra-detalle.entity';
+import { claseParaLineaNueva } from './compra-clases.handler';
 import { CompraEstado } from '../../src/app/database/entities/compras/estado.enum';
 import { setEntityUserTracking } from '../utils/entity.utils';
 import { parseLocalDate } from '../utils/date.utils';
@@ -456,6 +457,7 @@ export function registerFacturaImportHandlers(
       .leftJoinAndSelect('a.proveedor', 'pr')
       .leftJoinAndSelect('a.producto', 'p')
       .leftJoinAndSelect('a.presentacion', 'pres')
+      .where('a.activo = :act', { act: true })
       .getMany();
 
     return buildMatchResult({
@@ -481,6 +483,9 @@ export function registerFacturaImportHandlers(
       costoUnitario: number;
       descripcionOcr: string;
       omitir: boolean;
+      claseId?: number | null;
+      marca?: string | null;
+      contenido?: string | null;
     }>;
     aliasProveedor: { textoOcr: string; rucOcr: string | null; proveedorId: number };
   }) => {
@@ -515,6 +520,7 @@ export function registerFacturaImportHandlers(
       const savedCompra = await qr.manager.save(Compra, compra);
 
       let total = 0;
+      const detallePorItem = new Map<any, number>();
       const itemsValidos = payload.itemsVinculados.filter(i => !i.omitir && i.productoId && i.presentacionId);
       for (const it of itemsValidos) {
         let factor = 1;
@@ -536,9 +542,12 @@ export function registerFacturaImportHandlers(
           subtotal,
           cantidadUnidadBase: cantidadUB,
           activo: true,
+          claseId: await claseParaLineaNueva(qr.manager, it.claseId, it.productoId),
+          textoOriginal: it.descripcionOcr ? String(it.descripcionOcr).trim().slice(0, 500) || null : null,
         });
         await setEntityUserTracking(dataSource, det, userId, false);
-        await qr.manager.save(CompraDetalle, det);
+        const savedDet = await qr.manager.save(CompraDetalle, det);
+        detallePorItem.set(it, savedDet.id);
       }
       await qr.manager
         .getRepository(Compra)
@@ -586,11 +595,17 @@ export function registerFacturaImportHandlers(
           },
           relations: ['producto', 'proveedor'],
         });
+        // Marca/contenido: se conservan los que ya tenía el alias si no vienen nuevos.
+        const marca = it.marca ? String(it.marca).trim().slice(0, 120) : null;
+        const contenido = it.contenido ? String(it.contenido).trim().slice(0, 120) : null;
+        let aliasId: number;
         if (existing) {
           existing.vecesUsado = (existing.vecesUsado || 0) + 1;
           if (it.presentacionId) existing.presentacion = { id: it.presentacionId } as any;
+          if (marca) existing.marca = marca;
+          if (contenido) existing.contenido = contenido;
           await setEntityUserTracking(dataSource, existing, userId, true);
-          await aliasProdRepo.save(existing);
+          aliasId = (await aliasProdRepo.save(existing)).id;
         } else {
           const nuevo = aliasProdRepo.create({
             textoOcr: texto,
@@ -598,9 +613,17 @@ export function registerFacturaImportHandlers(
             producto: { id: it.productoId } as any,
             presentacion: it.presentacionId ? { id: it.presentacionId } as any : undefined,
             vecesUsado: 1,
+            marca,
+            contenido,
+            activo: true,
           });
           await setEntityUserTracking(dataSource, nuevo, userId, false);
-          await aliasProdRepo.save(nuevo);
+          aliasId = (await aliasProdRepo.save(nuevo)).id;
+        }
+        const detId = detallePorItem.get(it);
+        if (detId) {
+          await qr.manager.getRepository(CompraDetalle).createQueryBuilder()
+            .update(CompraDetalle).set({ aliasId }).where('id = :id', { id: detId }).execute();
         }
       }
 

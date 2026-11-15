@@ -481,7 +481,7 @@ export class RepositoryHttpService extends RepositoryService {
   crearCompraSimplificada(payload: any): Observable<Compra> {
     return throwError(() => new Error(`RepositoryHttpService.crearCompraSimplificada() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
-  anularCompra(id: number, motivo: string): Observable<{ success: boolean }> {
+  anularCompra(id: number, motivo: string): Observable<{ success: boolean; costos?: any[] }> {
     return throwError(() => new Error(`RepositoryHttpService.anularCompra() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getCompraDetalles(compraId: number): Observable<CompraDetalle[]> {
@@ -1921,6 +1921,24 @@ export class RepositoryHttpService extends RepositoryService {
   }
   acreditarTransferenciaBancaria(payload: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.acreditarTransferenciaBancaria() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getCompraItemClases(_opts?: any): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getCompraItemClases() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  createCompraItemClase(_data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.createCompraItemClase() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  updateCompraItemClase(_id: number, _data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.updateCompraItemClase() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getAliasProductosProveedor(_proveedorId: number, _opts?: any): Observable<any[]> {
+    return throwError(() => new Error(`RepositoryHttpService.getAliasProductosProveedor() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  upsertAliasProducto(_data: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.upsertAliasProducto() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  getReporteComprasPorClase(_params: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getReporteComprasPorClase() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
   getCompraCategorias(): Observable<any[]> {
     return throwError(() => new Error(`RepositoryHttpService.getCompraCategorias() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;

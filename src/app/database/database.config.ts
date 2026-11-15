@@ -220,6 +220,7 @@ import { FormasPago } from './entities/compras/forma-pago.entity';
 import { DocumentoCompraImportado } from './entities/compras/documento-compra-importado.entity';
 import { OcrAliasProveedor } from './entities/compras/ocr-alias-proveedor.entity';
 import { OcrAliasProducto } from './entities/compras/ocr-alias-producto.entity';
+import { CompraItemClase } from './entities/compras/compra-item-clase.entity';
 
 // IA Prompt config
 import { IaPromptConfig } from './entities/ia/ia-prompt-config.entity';
@@ -355,6 +356,8 @@ import { TiendaAvisosPreferenciaCuenta1794424012805 } from './migrations/1794424
 import { TiendaFormaPagoOnlinePos1794427578823 } from './migrations/1794427578823-TiendaFormaPagoOnlinePos';
 import { PedidoOnlineAviso } from './entities/pedidos-online/pedido-online-aviso.entity';
 import { PagoOnlineEvento } from './entities/pedidos-online/pago-online-evento.entity';
+import { ClasificacionItemsCompra1794356000000 } from './migrations/1794356000000-ClasificacionItemsCompra';
+import { CompraDetalleSnapshotCosto1794700000000 } from './migrations/1794700000000-CompraDetalleSnapshotCosto';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CuentaClienteVinculo } from './entities/pedidos-online/cuenta-cliente-vinculo.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
@@ -672,6 +675,7 @@ function getEntitiesList(): any[] {
       DocumentoCompraImportado,
       OcrAliasProveedor,
       OcrAliasProducto,
+      CompraItemClase,
       // IA Prompt config + sugerencias
       IaPromptConfig,
       IaPromptSugerencia,
@@ -857,6 +861,10 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     TiendaAvisosPedido1794318252364,
     TiendaAvisosPreferenciaCuenta1794424012805,
     TiendaFormaPagoOnlinePos1794427578823,
+    // Compras: clase de ítem (CMV / gasto operativo / reventa) y alias con marca
+    ClasificacionItemsCompra1794356000000,
+    // Compras: snapshot del costo por línea para revertirlo al anular (#189)
+    CompraDetalleSnapshotCosto1794700000000,
   ];
 }
 

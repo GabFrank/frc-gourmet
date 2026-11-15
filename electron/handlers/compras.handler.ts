@@ -33,8 +33,20 @@ import { Venta } from '../../src/app/database/entities/ventas/venta.entity';
 import { dispararEventoFt } from '../services/funciones-tareas/eventos';
 import { FtEvento } from '../../src/app/database/entities/rrhh/funciones-tareas/ft.enums';
 import { pagoIdDeDetalle, trasEditarVenta, ventaIdDePago } from '../utils/deuda-venta.utils';
+import { claseParaLineaNueva } from './compra-clases.handler';
+import { revertirCostoAlAnularCompra, ReversionCosto, bloquearProductosParaCosto } from '../utils/costo-compra.utils';
 
 // ===== Helpers internos =====
+
+// Clasificación de la línea (PLAN-clasificacion-items-compras): clase (override o
+// heredada, guardada fija), alias del proveedor y texto original de la factura.
+async function camposClasificacionLinea(manager: any, d: any) {
+  return {
+    claseId: await claseParaLineaNueva(manager, d.claseId, d.productoId),
+    aliasId: d.aliasId ? Number(d.aliasId) : null,
+    textoOriginal: d.textoOriginal ? String(d.textoOriginal).trim().slice(0, 500) || null : null,
+  };
+}
 
 // Stock actual en unidad base = SUMA(movimientos activos) con signo segun tipo
 async function getStockActualUnidadBase(qr: any, productoId: number): Promise<number> {
@@ -87,9 +99,13 @@ async function aplicarCostoPromedioPonderado(
   monedaId: number,
   fecha: Date,
   userId: number | undefined,
-): Promise<void> {
+): Promise<{ previoId: number | null; nuevoId: number }> {
   const stockActual = await getStockActualUnidadBase(qr, productoId);
   const costoActual = await getCostoActivoActual(qr, productoId);
+  // #189: snapshot del costo activo previo, para poder volver exacto al anular.
+  const previo = await qr.manager.getRepository(PrecioCosto).createQueryBuilder('pc')
+    .select('pc.id').where('pc.producto_id = :pid', { pid: productoId }).andWhere('pc.activo = true')
+    .orderBy('pc.id', 'DESC').getOne();
 
   let nuevoCosto: number;
   if (stockActual <= 0 || costoActual === null) {
@@ -120,7 +136,8 @@ async function aplicarCostoPromedioPonderado(
     moneda: { id: monedaId } as any,
   });
   await setEntityUserTracking(qr.connection, pc, userId, false);
-  await qr.manager.save(PrecioCosto, pc);
+  const guardado = await qr.manager.save(PrecioCosto, pc);
+  return { previoId: previo?.id ?? null, nuevoId: guardado.id };
 }
 
 // Upsert ProveedorProducto (proveedor+producto) actualizando ultimo costo y fecha
@@ -501,6 +518,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
           subtotal,
           cantidadUnidadBase: cantidadUB,
           activo: true,
+          ...(await camposClasificacionLinea(qr.manager, d)),
         });
         await setEntityUserTracking(dataSource, det, userId, false);
         await qr.manager.save(CompraDetalle, det);
@@ -582,6 +600,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
             subtotal,
             cantidadUnidadBase: cantidadUB,
             activo: true,
+            ...(await camposClasificacionLinea(qr.manager, d)),
           });
           await setEntityUserTracking(dataSource, det, userId, false);
           await qr.manager.save(CompraDetalle, det);
@@ -654,7 +673,10 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       const ahora = new Date();
       const monedaId = compra.moneda.id;
 
-      // 1. Por cada detalle: stock + costo promedio + ProveedorProducto upsert
+      // 1. Por cada detalle: stock + costo promedio + ProveedorProducto upsert.
+      // En orden de id (el snapshot de costo de #189 cuenta con ese orden) y con los productos bloqueados en PG.
+      compra.detalles.sort((a: any, b: any) => a.id - b.id);
+      await bloquearProductosParaCosto(qr, compra.detalles.map((d: any) => d.producto?.id));
       for (const det of compra.detalles) {
         const productoId = det.producto.id;
         const cantidadUB = Number(det.cantidadUnidadBase);
@@ -666,7 +688,11 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
         // IMPORTANTE: el costo promedio ponderado debe calcularse ANTES de persistir
         // el StockMovimiento. Si no, getStockActualUnidadBase devuelve el stock con la
         // cantidad nueva ya sumada y la formula la cuenta dos veces (denominador inflado).
-        await aplicarCostoPromedioPonderado(qr, productoId, cantidadUB, +costoUnitarioUB.toFixed(2), monedaId, fechaBoleta, userId);
+        const snap = await aplicarCostoPromedioPonderado(qr, productoId, cantidadUB, +costoUnitarioUB.toFixed(2), monedaId, fechaBoleta, userId);
+        await qr.manager.getRepository(CompraDetalle).update(det.id, {
+          precioCostoId: snap.nuevoId,
+          precioCostoPrevioId: snap.previoId,
+        });
 
         // Stock movement (solo si producto controla stock)
         if (det.producto.controlaStock) {
@@ -849,14 +875,16 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       const compraRepo = qr.manager.getRepository(Compra);
       const compra = await compraRepo.findOne({
         where: { id },
-        relations: ['proveedor', 'moneda', 'formaPago', 'detalles', 'detalles.producto', 'cuentaPorPagar'],
+        relations: ['proveedor', 'moneda', 'formaPago', 'detalles', 'detalles.producto', 'detalles.presentacion', 'cuentaPorPagar'],
       });
       if (!compra) throw new Error(`Compra ID ${id} not found`);
       if (compra.estado === CompraEstado.CANCELADO) throw new Error('La compra ya esta anulada.');
 
       const eraFinalizada = compra.estado === CompraEstado.FINALIZADO;
+      let costos: ReversionCosto[] = [];
 
       if (eraFinalizada) {
+        await bloquearProductosParaCosto(qr, (compra.detalles || []).map((d: any) => d.producto?.id));
         // A-03: no permitir anular si parte del stock comprado ya fue
         // consumido/vendido — revertirlo dejaría el stock en negativo. Se chequea
         // ANTES de cualquier escritura para que la anulación falle limpia.
@@ -941,13 +969,6 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
         }
 
         // Revertir stock por cada detalle (solo los que controlan stock).
-        // NOTA (A-03): el COSTO promedio ponderado NO se revierte aquí. Es
-        // dependiente del camino: si hubo compras/ventas posteriores, el aporte
-        // de esta compra al promedio no es recuperable por resta simple, y no se
-        // guarda un snapshot del costo previo al finalizar. Revertirlo requiere
-        // persistir el (stock, costo) previos al aplicar el promedio (cambio de
-        // esquema) — queda como follow-up. El guard de arriba evita al menos que
-        // el stock quede negativo.
         for (const det of compra.detalles || []) {
           if (!det.producto?.controlaStock) continue;
           const sm = qr.manager.create(StockMovimiento, {
@@ -963,6 +984,9 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
           await setEntityUserTracking(dataSource, sm, userId, false);
           await qr.manager.save(StockMovimiento, sm);
         }
+
+        // #189: revertir el costo promedio (exacto si es la última compra; si no, recalculado).
+        costos = await revertirCostoAlAnularCompra(qr, id, compra.detalles || [], compra.moneda?.id, userId);
       }
 
       compra.estado = CompraEstado.CANCELADO;
@@ -971,7 +995,7 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
       await qr.manager.save(Compra, compra);
 
       await qr.commitTransaction();
-      return { success: true };
+      return { success: true, costos };
     } catch (e) {
       await qr.rollbackTransaction();
       throw e;
@@ -1031,7 +1055,8 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
   ipcMain.handle('createCompraDetalle', async (_event: any, data: any) => {
     await ensurePermission(dataSource, getCurrentUser, 'COMPRAS_GESTIONAR');
     const repo = dataSource.getRepository(CompraDetalle);
-    const entity = repo.create(data);
+    const productoId = data?.productoId ?? data?.producto?.id;
+    const entity = repo.create({ ...data, claseId: await claseParaLineaNueva(dataSource.manager, data?.claseId, productoId) });
     return await repo.save(entity);
   });
 

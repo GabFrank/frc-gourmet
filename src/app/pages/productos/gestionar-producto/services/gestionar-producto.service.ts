@@ -19,6 +19,7 @@ export class GestionarProductoService {
   // Subjects para estado reactivo
   private _isEditMode = new BehaviorSubject<boolean>(false);
   isEditMode$ = this._isEditMode.asObservable();
+  get enEdicion(): boolean { return this._isEditMode.value; }
 
   private _isLoading = new BehaviorSubject<boolean>(true);
   isLoading$ = this._isLoading.asObservable();
@@ -431,6 +432,7 @@ export class GestionarProductoService {
           esVendible: producto.esVendible,
           esComprable: producto.esComprable,
           controlaStock: producto.controlaStock,
+          claseId: (producto as any).claseId ?? null,
           esIngrediente: producto.esIngrediente,
           disponibleOnline: (producto as any).disponibleOnline ?? false,
           pausadoOnline: (producto as any).pausadoOnline ?? false,
@@ -508,6 +510,8 @@ export class GestionarProductoService {
         esVendible: [true],
         esComprable: [true],
         controlaStock: [true],
+        // Clase de ítem de compra; null = hereda la de la subfamilia
+        claseId: [null as number | null],
         esIngrediente: [false],
         // Pedidos online (web app)
         disponibleOnline: [false],
@@ -794,6 +798,7 @@ export class GestionarProductoService {
       esVendible: productoData.esVendible,
       esComprable: productoData.esComprable,
       controlaStock: productoData.controlaStock,
+      claseId: productoData.claseId ?? null,
       esIngrediente: productoData.esIngrediente,
       disponibleOnline: productoData.disponibleOnline ?? false,
       pausadoOnline: productoData.pausadoOnline ?? false,
