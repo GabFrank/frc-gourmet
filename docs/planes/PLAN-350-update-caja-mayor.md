@@ -17,7 +17,8 @@ Decisión del propietario (14/11/2026, opción A): «solo se pueden editar los c
    - Inexistente → error; `activo=false` → `CAJA_MAYOR_INACTIVA`; ya `CERRADA` → `CAJA_MAYOR_YA_CERRADA`.
    - Cierre atómico: `UPDATE caja_mayor SET estado='CERRADA', fecha_cierre, updated_by WHERE id=:id AND estado='ABIERTA'`; si `affected=0` → `CAJA_MAYOR_YA_CERRADA` (otro cierre ganó). Notificación y FT solo si este cierre fue el que cambió el estado.
 3. Las dos pantallas cierran con `cerrarCajaMayor(id)` y muestran el mensaje del error (ya cerrada / inactiva) en el snackbar.
-4. `create-caja-mayor`: toma solo `nombre`, `descripcion`, `responsable` de `data` (ignora `id`, `estado`, fechas, `activo`, saldos).
+4. `create-caja-mayor`: toma solo `nombre` (obligatorio, mayúsculas, ≤100), `descripcion` y `responsable` (solo si el usuario existe; lo usa el runbook de carga inicial) de `data` (ignora `id`, `estado`, fechas, `activo`, saldos).
+6. Clientes de versiones anteriores que cierran con `update({estado:'CERRADA', fechaCierre})` pasan por el cierre validado (auditoría B del plan). Las pantallas muestran el motivo sin el código técnico y el detalle recarga si el cierre falla.
 5. `RepositoryHttpService.updateCajaMayor/cerrarCajaMayor` quedan como están (stubs; el modo cliente usa el canal genérico). No se toca.
 
 ## Fuera de alcance

@@ -70,7 +70,9 @@ async function main() {
   ok(c2.estado === 'ABIERTA' && !c2.fechaCierre && c2.activo !== false, 'create ignora estado/fechaCierre/activo', c2);
   const c2r = await leer(c2.id);
   const c5: any = await invokeHandler('create-caja-mayor', { nombre: 'CINCO', responsable: { id: otro.id } });
-  ok((await leer(c5.id)).responsable == null && c2r.id === c2.id, 'create ignora responsable que mandan');
+  ok((await leer(c5.id)).responsable?.id === otro.id && c2r.id === c2.id, 'create guarda responsable si el usuario existe');
+  ok(!!(await falla(invokeHandler('create-caja-mayor', { nombre: 'SEIS', responsable: { id: 99999 } }), /no existe/)), 'create con responsable inexistente → error');
+  ok(!!(await falla(invokeHandler('create-caja-mayor', { nombre: '  ' }), /obligatorio/)), 'create sin nombre → error');
 
   // update permitido
   console.log('[caja-mayor] update');

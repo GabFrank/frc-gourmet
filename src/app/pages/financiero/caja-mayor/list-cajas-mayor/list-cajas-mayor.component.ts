@@ -129,7 +129,7 @@ export class ListCajasMayorComponent implements OnInit {
         console.error('Error closing caja mayor:', error);
         const raw = (error as any)?.message || '';
         const match = raw.match(/Error:\s*([^]*)$/);
-        const msg = (match ? match[1] : raw).trim() || 'Error al cerrar caja mayor';
+        const msg = (match ? match[1] : raw).trim().replace(/^[A-Z_]+:\s*/, '') || 'Error al cerrar caja mayor';
         this.snackBar.open(msg, 'Cerrar', { duration: 5000 });
         this.loadData();
       }

@@ -798,8 +798,9 @@ export class CajaMayorDetalleComponent implements OnInit {
         this.snackBar.open('Caja mayor cerrada correctamente', 'Cerrar', { duration: 3000 });
       } catch (error) {
         console.error('Error closing caja mayor:', error);
-        const msg = this.extraerMensajeError(error) || 'Error al cerrar caja mayor';
+        const msg = (this.extraerMensajeError(error) || 'Error al cerrar caja mayor').replace(/^[A-Z_]+:\s*/, '');
         this.snackBar.open(msg, 'Cerrar', { duration: 5000 });
+        this.loadData();
       }
     }
   }

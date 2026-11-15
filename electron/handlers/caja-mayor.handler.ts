@@ -266,9 +266,18 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(CajaMayor);
       // #350: solo los campos de alta; id, estado, fechas, activo y saldos los pone el sistema.
+      const nombre = String(data?.nombre ?? '').trim().toUpperCase();
+      if (!nombre) throw new Error('El nombre de la caja mayor es obligatorio');
+      if (nombre.length > 100) throw new Error('El nombre de la caja mayor admite hasta 100 caracteres');
+      let responsable: Usuario | null = null;
+      if (data?.responsable?.id != null) {
+        responsable = await dataSource.getRepository(Usuario).findOneBy({ id: Number(data.responsable.id) });
+        if (!responsable) throw new Error(`Usuario responsable ID ${data.responsable.id} no existe`);
+      }
       const entity = repo.create({
-        nombre: data?.nombre,
-        descripcion: data?.descripcion ?? null,
+        nombre,
+        descripcion: data?.descripcion ? String(data.descripcion).trim().toUpperCase() : null,
+        ...(responsable ? { responsable } : {}),
         fechaApertura: new Date(),
         estado: CajaMayorEstado.ABIERTA,
       } as any);
