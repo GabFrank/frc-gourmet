@@ -139,7 +139,8 @@
     "test:backup-http": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-backup-http-e2e.ts",
     "test:usuario-efectivo": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-usuario-efectivo-e2e.ts",
     "test:clasificacion-compras": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-clasificacion-compras-e2e.ts",
-    "test:costo-anular-compra": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-costo-anular-compra.ts"
+    "test:costo-anular-compra": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-costo-anular-compra.ts",
+    "test:caja-mayor-update": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-caja-mayor-update.ts"
   },
   "private": true,
   "dependencies": {

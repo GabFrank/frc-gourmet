@@ -114,6 +114,11 @@ async function notificarCierreCajaMayor(dataSource: DataSource, cajaId: number):
   }
 }
 
+// #350: campos que update-caja-mayor no acepta (tienen su propio flujo o los pone el sistema).
+const CAJA_MAYOR_CAMPOS_NO_EDITABLES = [
+  'estado', 'fechaApertura', 'fechaCierre', 'responsable', 'activo', 'saldos', 'movimientos',
+];
+
 export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser: () => Usuario | null) {
 
   // Anula una operacion financiera completa DENTRO de una transaccion ya abierta:
@@ -260,11 +265,13 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
     try {
       await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
       const repo = dataSource.getRepository(CajaMayor);
+      // #350: solo los campos de alta; id, estado, fechas, activo y saldos los pone el sistema.
       const entity = repo.create({
-        ...data,
+        nombre: data?.nombre,
+        descripcion: data?.descripcion ?? null,
         fechaApertura: new Date(),
         estado: CajaMayorEstado.ABIERTA,
-      });
+      } as any);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, false);
       const saved: any = await repo.save(entity);
       // Funciones y Tareas: post-commit, nunca lanza ni demora la apertura.
@@ -282,30 +289,78 @@ export function registerCajaMayorHandlers(dataSource: DataSource, getCurrentUser
       const repo = dataSource.getRepository(CajaMayor);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Caja Mayor ID ${id} not found`);
-      repo.merge(entity, data);
-      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      return await repo.save(entity);
+      // #350: solo nombre y descripcion. Estado, fechas, responsable y saldos tienen su propio flujo
+      // (el cierre va por cerrar-caja-mayor, con validacion).
+      // Clientes de versiones anteriores cerraban con update({estado:'CERRADA', fechaCierre}):
+      // ese caso exacto pasa por el cierre validado (con la hora del servidor).
+      const claves = Object.keys(data || {}).filter((k) => data[k] !== undefined);
+      if (data?.estado === CajaMayorEstado.CERRADA && claves.every((k) => k === 'estado' || k === 'fechaCierre')) {
+        console.warn(`[caja-mayor] cierre por update-caja-mayor (cliente viejo) → cierre validado, caja ${id}`);
+        return await cerrarCajaMayorValidado(id);
+      }
+      const prohibidos = CAJA_MAYOR_CAMPOS_NO_EDITABLES.filter((k) => data && data[k] !== undefined);
+      if (data && data.id !== undefined && Number(data.id) !== Number(id)) prohibidos.push('id');
+      if (prohibidos.length) {
+        throw new Error(`CAMPO_NO_EDITABLE: ${prohibidos.join(', ')}. Para cerrar la caja mayor use «Cerrar caja mayor».`);
+      }
+      const cambios: any = {};
+      if (data && data.nombre !== undefined) {
+        const nombre = String(data.nombre ?? '').trim().toUpperCase();
+        if (!nombre) throw new Error('El nombre de la caja mayor es obligatorio');
+        if (nombre.length > 100) throw new Error('El nombre de la caja mayor admite hasta 100 caracteres');
+        cambios.nombre = nombre;
+      }
+      if (data && data.descripcion !== undefined) {
+        const descripcion = data.descripcion == null ? '' : String(data.descripcion).trim().toUpperCase();
+        if (descripcion.length > 255) throw new Error('La descripcion de la caja mayor admite hasta 255 caracteres');
+        cambios.descripcion = descripcion || null;
+      }
+      if (!Object.keys(cambios).length) return entity;
+      const usuarioId = getEffectiveUser(getCurrentUser)?.id;
+      if (usuarioId) cambios.updatedBy = { id: usuarioId };
+      await repo.update(id, cambios);
+      return await repo.findOneBy({ id });
     } catch (error) {
       console.error(`Error updating caja mayor ID ${id}:`, error);
       throw error;
     }
   });
 
+  // #350: el cierre se valida y es atomico (solo una ABIERTA y activa pasa a CERRADA, una sola vez).
+  const cerrarCajaMayorValidado = async (id: number) => {
+    const repo = dataSource.getRepository(CajaMayor);
+    const entity = await repo.findOneBy({ id });
+    if (!entity) throw new Error(`Caja Mayor ID ${id} not found`);
+    const motivo = (c: CajaMayor) => c.activo === false
+      ? 'CAJA_MAYOR_INACTIVA: la caja mayor esta desactivada'
+      : 'CAJA_MAYOR_YA_CERRADA: la caja mayor ya esta cerrada';
+    if (entity.activo === false || entity.estado !== CajaMayorEstado.ABIERTA) throw new Error(motivo(entity));
+    const usuarioId = getEffectiveUser(getCurrentUser)?.id;
+    const res = await dataSource.createQueryBuilder()
+      .update(CajaMayor)
+      .set({
+        estado: CajaMayorEstado.CERRADA,
+        fechaCierre: new Date(),
+        ...(usuarioId ? { updatedBy: { id: usuarioId } } : {}),
+      } as any)
+      .where({ id, estado: CajaMayorEstado.ABIERTA, activo: true })
+      .execute();
+    if (!res.affected) {
+      const ahora = await repo.findOneBy({ id });
+      throw new Error(motivo(ahora || entity));
+    }
+    const saved = await repo.findOneBy({ id });
+    // Notificar el cierre (no bloquea ni rompe el cierre si falla el envio).
+    notificarCierreCajaMayor(dataSource, id).catch(() => undefined);
+    // Funciones y Tareas: post-commit, nunca lanza ni demora el cierre.
+    dispararEventoFt(dataSource, FtEvento.CAJA_CERRADA, id, FtEventoCaja.MAYOR, usuarioId);
+    return saved;
+  };
+
   ipcMain.handle('cerrar-caja-mayor', async (_event: any, id: number) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'FINANCIERO_CAJA_GESTIONAR');
-      const repo = dataSource.getRepository(CajaMayor);
-      const entity = await repo.findOneBy({ id });
-      if (!entity) throw new Error(`Caja Mayor ID ${id} not found`);
-      entity.estado = CajaMayorEstado.CERRADA;
-      entity.fechaCierre = new Date();
-      await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
-      const saved = await repo.save(entity);
-      // Notificar el cierre (no bloquea ni rompe el cierre si falla el envio).
-      notificarCierreCajaMayor(dataSource, id).catch(() => undefined);
-      // Funciones y Tareas: post-commit, nunca lanza ni demora el cierre.
-      dispararEventoFt(dataSource, FtEvento.CAJA_CERRADA, id, FtEventoCaja.MAYOR, getCurrentUser()?.id);
-      return saved;
+      return await cerrarCajaMayorValidado(id);
     } catch (error) {
       console.error(`Error cerrando caja mayor ID ${id}:`, error);
       throw error;
