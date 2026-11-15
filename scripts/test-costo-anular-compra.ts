@@ -166,6 +166,9 @@ async function main() {
   ok(cerca(await costo(p3), 166.67), '+ B 300 → 166,67');
   await anular(a3);
   ok(cerca(await costo(p3), 175), 'sin A: (10×50 + 10×300)/20 = 175', await costo(p3));
+  const b3 = (await ds.query(`SELECT MAX(compra_id) AS id FROM compras_detalles WHERE producto_id = ${p3.p.id}`))[0].id;
+  await anular(Number(b3));
+  ok(cerca(await costo(p3), 50) && (await activos(p3)).length === 1, 'anular también B: vuelve el costo manual 50 (no queda sin costo)', await activos(p3));
 
   // 5) Costo MANUAL posterior: no se pisa; los de la compra se apagan
   console.log('[costo] manual posterior');

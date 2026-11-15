@@ -321,7 +321,7 @@ export abstract class RepositoryService {
   abstract updateCompraBorrador(id: number, data: any): Observable<Compra>;
   abstract finalizarCompra(id: number, payload: any): Observable<Compra>;
   abstract crearCompraSimplificada(payload: any): Observable<Compra>;
-  abstract anularCompra(id: number, motivo: string): Observable<{ success: boolean }>;
+  abstract anularCompra(id: number, motivo: string): Observable<{ success: boolean; costos?: any[] }>;
   abstract getCompraDetalles(compraId: number): Observable<CompraDetalle[]>;
   abstract getCompraDetalle(compraDetalleId: number): Observable<CompraDetalle>;
   abstract createCompraDetalle(compraDetalleData: Partial<CompraDetalle>): Observable<CompraDetalle>;

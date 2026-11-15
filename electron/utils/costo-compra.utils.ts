@@ -89,12 +89,15 @@ function esAjusteDeAnulacion(m: any): boolean {
     /^ANULACION COMPRA #/i.test(m.observaciones || '');
 }
 
-/** PG: serializa finalizar/anular sobre los mismos productos (READ COMMITTED no alcanza). */
+/**
+ * PG: serializa finalizar/anular sobre los mismos productos (READ COMMITTED no alcanza).
+ * NO KEY UPDATE: no choca con el lock compartido que toman las FKs al insertar ventas.
+ */
 export async function bloquearProductosParaCosto(qr: any, productoIds: number[]): Promise<void> {
   if (qr.connection?.options?.type !== 'postgres') return;
   const ids = [...new Set(productoIds.filter((x) => x != null))].sort((a, b) => a - b);
   if (!ids.length) return;
-  await qr.query(`SELECT "id" FROM "producto" WHERE "id" = ANY($1) ORDER BY "id" FOR UPDATE`, [ids]);
+  await qr.query(`SELECT "id" FROM "producto" WHERE "id" = ANY($1) ORDER BY "id" FOR NO KEY UPDATE`, [ids]);
 }
 
 function costoUnidadBase(det: any): number {
@@ -161,6 +164,7 @@ export async function revertirCostoAlAnularCompra(
   monedaId: number,
   userId: number | undefined,
 ): Promise<ReversionCosto[]> {
+  compraId = Number(compraId);
   const porProducto = new Map<number, any[]>();
   for (const d of detalles || []) {
     if (!d.producto?.id) continue;
@@ -181,8 +185,11 @@ export async function revertirCostoAlAnularCompra(
     const ultima = porCosto[porCosto.length - 1];
 
     // Exacto: nadie movió el costo después de esta compra.
-    if (conSnapshot && activo && activo.id === ultima.precioCostoId) {
-      const previo = await previoReactivable(qr, primera.precioCostoPrevioId, compraId);
+    const previoExacto = conSnapshot ? await previoReactivable(qr, primera.precioCostoPrevioId, compraId) : null;
+    // Si había previo pero ya no vale (lo dejó una compra cancelada), se recalcula.
+    const exactoValido = primera?.precioCostoPrevioId == null || !!previoExacto;
+    if (conSnapshot && exactoValido && activo && activo.id === ultima.precioCostoId) {
+      const previo = previoExacto;
       await activarSolo(qr, productoId, previo?.id ?? null);
       out.push({
         productoId, modo: 'EXACTO', costoAnterior, costoNuevo: previo ? Number(previo.valor) : null,
@@ -267,11 +274,23 @@ export async function revertirCostoAlAnularCompra(
     }
 
     if (recalculado === null) {
-      const previo = conSnapshot ? await previoReactivable(qr, primera.precioCostoPrevioId, compraId) : null;
+      // Sin compras vigentes: el costo previo si vale; si no, el último cargado a mano o por receta.
+      let previo = conSnapshot ? await previoReactivable(qr, primera.precioCostoPrevioId, compraId) : null;
+      if (!previo) {
+        previo = await qr.manager.getRepository(PrecioCosto).createQueryBuilder('pc')
+          .where('pc.producto_id = :pid', { pid: productoId })
+          .andWhere('pc.fuente <> :f', { f: FuenteCosto.COMPRA })
+          .orderBy('pc.id', 'DESC')
+          .getOne();
+      }
       await activarSolo(qr, productoId, previo?.id ?? null);
       out.push({
         productoId, modo: 'RECALCULADO', costoAnterior, costoNuevo: previo ? Number(previo.valor) : null,
-        ...(previo ? {} : { aviso: 'No quedan compras vigentes del producto: queda sin costo de compra.' }),
+        ...(previo ? {} : {
+          aviso: vigentes.length
+            ? 'Las compras vigentes no tienen movimiento de stock: queda sin costo de compra.'
+            : 'No quedan compras vigentes del producto: queda sin costo de compra.',
+        }),
       });
       continue;
     }
