@@ -30,6 +30,14 @@ async function main() {
   if (pgDb && process.env['TIENDA_PG_VACIAR'] === '1') { await ds.query('DROP SCHEMA public CASCADE'); await ds.query('CREATE SCHEMA public'); }
   console.log(`[tienda-migracion] ${pgDb ? 'postgres ' + pgDb : 'sqlite'}`);
 
+  // Este test razona sobre la cola de la cadena (qué migración de la tienda es la última). Las
+  // migraciones de otros módulos con timestamp posterior a la primera de la tienda (p. ej. las de
+  // compras que vinieron de develop) se sacan: no tocan estas tablas y romperían esa cuenta.
+  const nombreMig = (m: any): string => m.name || m.constructor.name;
+  const tsMig = (m: any): number => Number((nombreMig(m).match(/(\d{13})$/) || [])[1] || 0);
+  const tsTienda = tsMig(ds.migrations.find((m: any) => /TiendaOnlineSeguridad/.test(nombreMig(m))));
+  (ds as any).migrations = ds.migrations.filter((m: any) => /^Tienda/.test(nombreMig(m)) || tsMig(m) < tsTienda);
+
   const migs = ds.migrations.map((m: any) => m.name || m.constructor.name);
   const nombre = migs.find((n) => /TiendaOnlineSeguridad/.test(n));
   ok(!!nombre, 'la migración está registrada');
