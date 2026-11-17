@@ -43,6 +43,14 @@ export class MovimientoCliente extends BaseModel {
   @Column({ name: 'pago_consolidado_id', type: 'int', nullable: true })
   pagoConsolidadoId?: number;
 
+  /**
+   * Ítem de liquidación de sueldo que originó este cobro: el CPC_CUOTA descontado
+   * al pagar la liquidación, o el descuento manual contra el que se cerró la cuota
+   * con `cobrar-cpc-por-liquidacion`. La anulación y la reversa lo buscan por acá.
+   */
+  @Column({ name: 'liquidacion_item_id', type: 'int', nullable: true })
+  liquidacionItemId?: number;
+
   // Si el cobro se acreditó a una cuenta bancaria (en vez de Caja Mayor), se
   // guarda aquí para revertir el saldo al anular. Cuando está seteada, no hay
   // cajaMayorMovimientoId asociado al cobro.
