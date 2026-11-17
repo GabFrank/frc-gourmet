@@ -4106,6 +4106,9 @@ contextBridge.exposeInMainWorld('api', {
   cancelarCuentaPorCobrar: async (payload: any): Promise<any> => {
     return await ipcRenderer.invoke('cancelar-cuenta-por-cobrar', payload);
   },
+  cancelarCpcLote: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('cancelar-cpc-lote', payload);
+  },
   getCuentaPorCobrarCuotas: async (cpcId: number): Promise<any[]> => {
     return await ipcRenderer.invoke('get-cuenta-por-cobrar-cuotas', cpcId);
   },
