@@ -30,3 +30,11 @@ Por qué no puede loguearse: `activo=false` → `/api/auth/login`, `login` IPC y
 
 ## Al instalar
 La primera operación pública crea el usuario «SISTEMA_ONLINE» (inactivo). Aparece en la lista de usuarios como inactivo: no hay que activarlo ni darle roles.
+
+## Auditoría (17/11) — A y B: APROBADO C/OBS, aplicadas
+- SQLite: la creación usa `enTransaccionSiPostgres` (una sola conexión, sin transacción propia).
+- Fail-closed: si el usuario no se resuelve → 503 `servicio_no_disponible` (nunca correr con la consola de fondo); reintento cada 30 s, no en cada request; `op` desconocida no resuelve usuario.
+- Autosaneo: si lo encuentran activo o con roles, se desactiva y se le quitan los roles (log de aviso).
+- Tests: el rechazo de permiso compara el mensaje; el login se prueba con una clave conocida (rechaza por inactivo); caso de autosaneo.
+- Pendiente al rebasar la tienda (#323…#354 y ramas de pagos): envolver con `comoSistemaOnline` el webhook `/pub/pagos/:proveedor/aviso` y el callback del job de pagos online (corren fuera de `/pub/rpc`).
+- Bajo, a avisar en la entrega: «SISTEMA / ONLINE» aparece en el top/reporte de meseros y en `get-usuarios` (filtros, responsable de caja mayor) como inactivo. Antes esas ventas quedaban sin autor.

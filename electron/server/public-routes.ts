@@ -69,17 +69,24 @@ async function resolveCustomer(request: FastifyRequest): Promise<VerifiedCustome
 /**
  * #357 punto 3: corre la operación pública a nombre del usuario «Sistema / Online»
  * (sin roles, inactivo). Así lo que crea un comensal o un cliente online no queda
- * a nombre del operador de la consola ni hereda sus permisos. Si el usuario no se
- * puede resolver, la operación sigue igual (sin autor) para no cortar la tienda.
+ * a nombre del operador de la consola ni hereda sus permisos. Fail-closed: si el
+ * usuario no se puede resolver, 503 (nunca correr con la consola de fondo).
  */
-async function comoSistemaOnline<T>(dataSource: DataSource | undefined, fn: () => Promise<T>): Promise<T> {
-  if (!dataSource) return fn();
+async function comoSistemaOnline<T>(
+  dataSource: DataSource | undefined,
+  op: string | undefined,
+  reply: FastifyReply,
+  fn: () => Promise<T>,
+): Promise<T | { error: string }> {
+  // Operación desconocida: no hace falta usuario (fn responde 403).
+  if (!dataSource || !op || !PUBLIC_OPERATIONS.has(op)) return fn();
   let sistema;
   try {
     sistema = await getUsuarioSistemaOnline(dataSource);
   } catch (err) {
     console.error('[pub] no se pudo resolver el usuario Sistema / Online:', err);
-    return fn();
+    reply.code(503);
+    return { error: 'servicio_no_disponible' };
   }
   return withRequestUser(sistema, fn);
 }
@@ -115,7 +122,7 @@ export function registerPublicRoutes(fastify: FastifyInstance, dataSource?: Data
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { op: string; params?: any[] } }>, reply: FastifyReply) => comoSistemaOnline(dataSource, async () => {
+    async (request: FastifyRequest<{ Body: { op: string; params?: any[] } }>, reply: FastifyReply) => comoSistemaOnline(dataSource, request.body?.op, reply, async () => {
       const { op, params } = request.body;
 
       const def = PUBLIC_OPERATIONS.get(op);

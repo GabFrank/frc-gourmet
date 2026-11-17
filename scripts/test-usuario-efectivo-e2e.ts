@@ -267,8 +267,12 @@ async function main() {
     return { requestUserId: getRequestUser()?.id ?? null, createdById: guardada.createdBy?.id ?? null };
   });
   handlerRegistry.set('test-pub-permiso', async () => {
-    await ensurePermission(dataSource, () => consola, 'VENTAS_PDV');
-    return 'paso';
+    try {
+      await ensurePermission(dataSource, () => consola, 'VENTAS_PDV');
+      return 'paso';
+    } catch (e: any) {
+      return `rechazo: ${e?.message}`;
+    }
   });
   registerPublicOperation('test.quien', { channel: 'test-pub-quien', requiresAuth: false });
   registerPublicOperation('test.permiso', { channel: 'test-pub-permiso', requiresAuth: false });
@@ -306,7 +310,7 @@ async function main() {
   }
 
   const qp = await pub('test.permiso');
-  if (qp.status === 500 && qp.body?.result === undefined) pass('pub no hereda los permisos de la consola (ensurePermission falla)');
+  if (qp.status === 200 && /^rechazo: PERMISO REQUERIDO/.test(String(qp.body?.result))) pass('pub no hereda los permisos de la consola (ensurePermission falla)');
   else fail('pub sin permisos de la consola', `status=${qp.status} ${JSON.stringify(qp.body).slice(0, 200)}`);
 
   const qc = await pub('tienda.config');
@@ -321,9 +325,22 @@ async function main() {
   } else fail('reusa el mismo usuario', `id=${otra.id} vs ${sistema?.id}`);
 
   // No puede iniciar sesión ni usar /api/rpc.
-  const loginSis = await pubFastify.inject({ method: 'POST', url: '/api/auth/login', payload: { nickname: NICKNAME_SISTEMA_ONLINE, password: 'x' } });
-  if (loginSis.statusCode >= 400) pass('Sistema / Online no puede iniciar sesión');
-  else fail('Sistema / Online sin login', `status=${loginSis.statusCode}`);
+  // Con una clave conocida igual rechaza: por inactivo, no por la clave.
+  await userRepo.update({ id: sistema!.id }, { password: await hashPassword('conocida') } as any);
+  const loginSis = await pubFastify.inject({ method: 'POST', url: '/api/auth/login', payload: { nickname: NICKNAME_SISTEMA_ONLINE, password: 'conocida' } });
+  if (loginSis.statusCode >= 400 && /inactivo/.test(loginSis.body)) pass('Sistema / Online no puede iniciar sesión (inactivo)');
+  else fail('Sistema / Online sin login', `status=${loginSis.statusCode} ${loginSis.body.slice(0, 120)}`);
+
+  // Si alguien lo activa y le da un rol, al resolverlo se vuelve a sanear.
+  const rolAdmin = await dataSource.getRepository(Role).findOne({ where: {} as any, order: { id: 'ASC' } as any });
+  await userRepo.update({ id: sistema!.id }, { activo: true } as any);
+  if (rolAdmin) await dataSource.getRepository(UsuarioRole).save({ usuario: { id: sistema!.id }, role: rolAdmin } as any);
+  resetUsuarioSistemaOnlineCache();
+  await getUsuarioSistemaOnline(dataSource);
+  const saneado = await userRepo.findOne({ where: { id: sistema!.id } });
+  const rolesTras = await dataSource.getRepository(UsuarioRole).count({ where: { usuario: { id: sistema!.id } } });
+  if (rolAdmin && saneado?.activo === false && rolesTras === 0) pass('si lo activan y le dan un rol, vuelve a inactivo y sin roles');
+  else fail('saneo de Sistema / Online', `rol=${!!rolAdmin} activo=${saneado?.activo} roles=${rolesTras}`);
   const tokSis = (pubFastify as any).jwt.sign({ id: sistema?.id, nickname: NICKNAME_SISTEMA_ONLINE, device_id: null });
   const rpcSis = await pubFastify.inject({
     method: 'POST', url: '/api/rpc', headers: { authorization: `Bearer ${tokSis}` }, payload: { method: 'getCurrentUser', params: [] },
