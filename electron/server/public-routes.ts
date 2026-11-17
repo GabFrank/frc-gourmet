@@ -17,6 +17,9 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { invokeHandlerWithContext } from '../utils/handler-registry';
 import { verifyCustomerToken, VerifiedCustomer } from '../utils/customer-jwt.utils';
+import { DataSource } from 'typeorm';
+import { withRequestUser } from '../utils/auth.utils';
+import { getUsuarioSistemaOnline } from '../utils/usuario-sistema.utils';
 
 /** Una operación pública mapea una clave estable → un channel IPC existente. */
 export interface PublicOperation {
@@ -63,7 +66,25 @@ async function resolveCustomer(request: FastifyRequest): Promise<VerifiedCustome
   }
 }
 
-export function registerPublicRoutes(fastify: FastifyInstance): void {
+/**
+ * #357 punto 3: corre la operación pública a nombre del usuario «Sistema / Online»
+ * (sin roles, inactivo). Así lo que crea un comensal o un cliente online no queda
+ * a nombre del operador de la consola ni hereda sus permisos. Si el usuario no se
+ * puede resolver, la operación sigue igual (sin autor) para no cortar la tienda.
+ */
+async function comoSistemaOnline<T>(dataSource: DataSource | undefined, fn: () => Promise<T>): Promise<T> {
+  if (!dataSource) return fn();
+  let sistema;
+  try {
+    sistema = await getUsuarioSistemaOnline(dataSource);
+  } catch (err) {
+    console.error('[pub] no se pudo resolver el usuario Sistema / Online:', err);
+    return fn();
+  }
+  return withRequestUser(sistema, fn);
+}
+
+export function registerPublicRoutes(fastify: FastifyInstance, dataSource?: DataSource): void {
   // ---- Health público (sin auth) — ping del namespace de pedidos online.
   fastify.get('/pub/health', async () => ({
     ok: true,
@@ -94,7 +115,7 @@ export function registerPublicRoutes(fastify: FastifyInstance): void {
         },
       },
     },
-    async (request: FastifyRequest<{ Body: { op: string; params?: any[] } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Body: { op: string; params?: any[] } }>, reply: FastifyReply) => comoSistemaOnline(dataSource, async () => {
       const { op, params } = request.body;
 
       const def = PUBLIC_OPERATIONS.get(op);
@@ -134,6 +155,6 @@ export function registerPublicRoutes(fastify: FastifyInstance): void {
         reply.code(500);
         return { error: 'error_interno' };
       }
-    },
+    }),
   );
 }
