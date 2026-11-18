@@ -32,6 +32,12 @@ import { registerAuthPlugin } from '../electron/server/auth-middleware';
 import { registerRpcRoute } from '../electron/server/rpc-router';
 import { registerAuthRoutes } from '../electron/server/auth-routes';
 import rateLimit from '@fastify/rate-limit';
+import { registerPublicRoutes, registerPublicOperation } from '../electron/server/public-routes';
+import { getRequestUser, ensurePermission } from '../electron/utils/auth.utils';
+import { setEntityUserTracking } from '../electron/utils/entity.utils';
+import {
+  getUsuarioSistemaOnline, resetUsuarioSistemaOnlineCache, NICKNAME_SISTEMA_ONLINE,
+} from '../electron/utils/usuario-sistema.utils';
 
 const results: { name: string; ok: boolean; detail?: string }[] = [];
 
@@ -250,6 +256,100 @@ async function main() {
     await userRepo.update({ id: cajero.id }, { activo: true } as any);
   }
   await fastify.close();
+
+  // 8. #357 punto 3: /api/pub corre a nombre de «Sistema / Online», no de la consola.
+  console.log('\n=== #357.3 rutas públicas a nombre de Sistema / Online ===\n');
+  consola = admin;
+  handlerRegistry.set('test-pub-quien', async () => {
+    const p = dataSource.getRepository(Persona).create({ nombre: 'CREADA POR PUB' } as any);
+    await setEntityUserTracking(dataSource, p, (consola as Usuario)?.id, false);
+    const guardada: any = await dataSource.getRepository(Persona).save(p);
+    return { requestUserId: getRequestUser()?.id ?? null, createdById: guardada.createdBy?.id ?? null };
+  });
+  handlerRegistry.set('test-pub-permiso', async () => {
+    try {
+      await ensurePermission(dataSource, () => consola, 'VENTAS_PDV');
+      return 'paso';
+    } catch (e: any) {
+      return `rechazo: ${e?.message}`;
+    }
+  });
+  registerPublicOperation('test.quien', { channel: 'test-pub-quien', requiresAuth: false });
+  registerPublicOperation('test.permiso', { channel: 'test-pub-permiso', requiresAuth: false });
+  resetUsuarioSistemaOnlineCache();
+  const pubFastify: FastifyInstance = Fastify({ logger: false });
+  await pubFastify.register(rateLimit, { max: 1000, timeWindow: '1 minute' });
+  await registerAuthPlugin(pubFastify);
+  registerAuthRoutes(pubFastify, dataSource);
+  registerRpcRoute(pubFastify, dataSource);
+  registerPublicRoutes(pubFastify, dataSource);
+  await pubFastify.ready();
+  const pub = async (op: string, params: any[] = []) => {
+    const res = await pubFastify.inject({ method: 'POST', url: '/pub/rpc', payload: { op, params } });
+    let body: any; try { body = JSON.parse(res.body); } catch { body = res.body; }
+    return { status: res.statusCode, body };
+  };
+
+  // Dos requests a la vez la primera vez: se crea un solo usuario.
+  const [q1, q2] = await Promise.all([pub('test.quien'), pub('test.quien')]);
+  const sistemas = await userRepo.find({ where: { nickname: NICKNAME_SISTEMA_ONLINE } });
+  if (sistemas.length === 1) pass('se crea un solo usuario Sistema / Online (requests concurrentes)');
+  else fail('un solo usuario Sistema / Online', `hay ${sistemas.length}`);
+  const sistema = sistemas[0];
+  if (sistema && sistema.activo === false) pass('Sistema / Online queda inactivo');
+  else fail('Sistema / Online inactivo', `activo=${sistema?.activo}`);
+  const rolesSistema = sistema ? await dataSource.getRepository(UsuarioRole).count({ where: { usuario: { id: sistema.id } } }) : -1;
+  if (rolesSistema === 0) pass('Sistema / Online no tiene roles');
+  else fail('Sistema / Online sin roles', `roles=${rolesSistema}`);
+  for (const [i, q] of [q1, q2].entries()) {
+    if (q.status === 200 && q.body?.result?.requestUserId === sistema?.id && q.body?.result?.createdById === sistema?.id) {
+      pass(`pub #${i + 1}: el handler ve a Sistema / Online y la autoría queda a su nombre`);
+    } else {
+      fail(`pub #${i + 1} a nombre de Sistema / Online`, `status=${q.status} ${JSON.stringify(q.body).slice(0, 200)} sistema=${sistema?.id} consola=${admin.id}`);
+    }
+  }
+
+  const qp = await pub('test.permiso');
+  if (qp.status === 200 && /^rechazo: PERMISO REQUERIDO/.test(String(qp.body?.result))) pass('pub no hereda los permisos de la consola (ensurePermission falla)');
+  else fail('pub sin permisos de la consola', `status=${qp.status} ${JSON.stringify(qp.body).slice(0, 200)}`);
+
+  const qc = await pub('tienda.config');
+  if (qc.status === 200 && qc.body?.result !== undefined) pass('operación pública real (tienda.config) sigue andando → 200');
+  else fail('tienda.config → 200', `status=${qc.status} ${JSON.stringify(qc.body).slice(0, 200)}`);
+
+  // Reinicio (cache vacío): reusa el mismo usuario.
+  resetUsuarioSistemaOnlineCache();
+  const otra = await getUsuarioSistemaOnline(dataSource);
+  if (otra.id === sistema?.id && (await userRepo.count({ where: { nickname: NICKNAME_SISTEMA_ONLINE } })) === 1) {
+    pass('tras reiniciar reusa el mismo usuario (idempotente)');
+  } else fail('reusa el mismo usuario', `id=${otra.id} vs ${sistema?.id}`);
+
+  // No puede iniciar sesión ni usar /api/rpc.
+  // Con una clave conocida igual rechaza: por inactivo, no por la clave.
+  await userRepo.update({ id: sistema!.id }, { password: await hashPassword('conocida') } as any);
+  const loginSis = await pubFastify.inject({ method: 'POST', url: '/api/auth/login', payload: { nickname: NICKNAME_SISTEMA_ONLINE, password: 'conocida' } });
+  if (loginSis.statusCode >= 400 && /inactivo/.test(loginSis.body)) pass('Sistema / Online no puede iniciar sesión (inactivo)');
+  else fail('Sistema / Online sin login', `status=${loginSis.statusCode} ${loginSis.body.slice(0, 120)}`);
+
+  // Si alguien lo activa y le da un rol, al resolverlo se vuelve a sanear.
+  const rolAdmin = await dataSource.getRepository(Role).findOne({ where: {} as any, order: { id: 'ASC' } as any });
+  await userRepo.update({ id: sistema!.id }, { activo: true } as any);
+  if (rolAdmin) await dataSource.getRepository(UsuarioRole).save({ usuario: { id: sistema!.id }, role: rolAdmin } as any);
+  resetUsuarioSistemaOnlineCache();
+  await getUsuarioSistemaOnline(dataSource);
+  const saneado = await userRepo.findOne({ where: { id: sistema!.id } });
+  const rolesTras = await dataSource.getRepository(UsuarioRole).count({ where: { usuario: { id: sistema!.id } } });
+  if (rolAdmin && saneado?.activo === false && rolesTras === 0) pass('si lo activan y le dan un rol, vuelve a inactivo y sin roles');
+  else fail('saneo de Sistema / Online', `rol=${!!rolAdmin} activo=${saneado?.activo} roles=${rolesTras}`);
+  const tokSis = (pubFastify as any).jwt.sign({ id: sistema?.id, nickname: NICKNAME_SISTEMA_ONLINE, device_id: null });
+  const rpcSis = await pubFastify.inject({
+    method: 'POST', url: '/api/rpc', headers: { authorization: `Bearer ${tokSis}` }, payload: { method: 'getCurrentUser', params: [] },
+  });
+  if (rpcSis.statusCode === 401) pass('token de Sistema / Online en /api/rpc → 401');
+  else fail('Sistema / Online en /api/rpc → 401', `status=${rpcSis.statusCode}`);
+  if (consola && (consola as Usuario).id === admin.id) pass('la consola sigue con su usuario tras las rutas públicas');
+  else fail('consola intacta tras pub', `consola=${JSON.stringify(consola)?.slice(0, 80)}`);
+  await pubFastify.close();
 
   await dataSource.destroy();
   const fallas = results.filter((r) => !r.ok);
