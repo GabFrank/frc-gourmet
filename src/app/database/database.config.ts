@@ -358,6 +358,7 @@ import { PedidoOnlineAviso } from './entities/pedidos-online/pedido-online-aviso
 import { PagoOnlineEvento } from './entities/pedidos-online/pago-online-evento.entity';
 import { ClasificacionItemsCompra1794356000000 } from './migrations/1794356000000-ClasificacionItemsCompra';
 import { CompraDetalleSnapshotCosto1794700000000 } from './migrations/1794700000000-CompraDetalleSnapshotCosto';
+import { MovimientoClienteLiquidacionItem1794800000000 } from './migrations/1794800000000-MovimientoClienteLiquidacionItem';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CuentaClienteVinculo } from './entities/pedidos-online/cuenta-cliente-vinculo.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
@@ -865,6 +866,8 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     ClasificacionItemsCompra1794356000000,
     // Compras: snapshot del costo por línea para revertirlo al anular (#189)
     CompraDetalleSnapshotCosto1794700000000,
+    // Liquidación: cobro de CPC enlazado al ítem que lo descontó
+    MovimientoClienteLiquidacionItem1794800000000,
   ];
 }
 

@@ -3971,6 +3971,15 @@ contextBridge.exposeInMainWorld('api', {
   agregarItemLiquidacion: async (liquidacionId: number, data: any): Promise<any> => {
     return await ipcRenderer.invoke('agregar-item-liquidacion', liquidacionId, data);
   },
+  getCpcCuotasAbiertasFuncionario: async (funcionarioId: number, liquidacionId?: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cpc-cuotas-abiertas-funcionario', funcionarioId, liquidacionId);
+  },
+  cobrarCpcPorLiquidacion: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('cobrar-cpc-por-liquidacion', payload);
+  },
+  revertirCobroCpcPorLiquidacion: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('revertir-cobro-cpc-por-liquidacion', payload);
+  },
   eliminarItemLiquidacion: async (itemId: number): Promise<any> => {
     return await ipcRenderer.invoke('eliminar-item-liquidacion', itemId);
   },
@@ -4165,6 +4174,9 @@ contextBridge.exposeInMainWorld('api', {
   },
   cancelarCuentaPorCobrar: async (payload: any): Promise<any> => {
     return await ipcRenderer.invoke('cancelar-cuenta-por-cobrar', payload);
+  },
+  cancelarCpcLote: async (payload: any): Promise<any> => {
+    return await ipcRenderer.invoke('cancelar-cpc-lote', payload);
   },
   getCuentaPorCobrarCuotas: async (cpcId: number): Promise<any[]> => {
     return await ipcRenderer.invoke('get-cuenta-por-cobrar-cuotas', cpcId);

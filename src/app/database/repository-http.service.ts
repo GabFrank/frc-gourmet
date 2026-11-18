@@ -2393,6 +2393,15 @@ export class RepositoryHttpService extends RepositoryService {
   agregarItemLiquidacion(liquidacionId: number, data: any): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.agregarItemLiquidacion() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }
+  getCpcCuotasAbiertasFuncionario(funcionarioId: number, liquidacionId?: number): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.getCpcCuotasAbiertasFuncionario() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  cobrarCpcPorLiquidacion(payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.cobrarCpcPorLiquidacion() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
+  revertirCobroCpcPorLiquidacion(payload: any): Observable<any> {
+    return throwError(() => new Error(`RepositoryHttpService.revertirCobroCpcPorLiquidacion() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
+  }
   eliminarItemLiquidacion(itemId: number): Observable<any> {
     return throwError(() => new Error(`RepositoryHttpService.eliminarItemLiquidacion() no esta implementado todavia. F4 (modo cliente) traera la impl HTTP real.`)) as any;
   }

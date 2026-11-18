@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { DataSource, IsNull } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull } from 'typeorm';
 import { CuentaPorCobrar } from '../../src/app/database/entities/financiero/cuenta-por-cobrar.entity';
 import { cancelarCuotasAbiertasDeCpc } from '../utils/cpc-cuotas.utils';
 import { CuentaPorCobrarCuota } from '../../src/app/database/entities/financiero/cuenta-por-cobrar-cuota.entity';
@@ -44,6 +44,51 @@ function calcularEstadoCuota(monto: number, montoCobrado: number): CuentaPorCobr
 }
 
 const round2 = (v: number) => +Number(v).toFixed(2);
+
+/**
+ * Cancela una CPC sin cobrar, dentro de la transacción del llamador: estado
+ * CANCELADO, cuotas abiertas a CANCELADO (#322/#347), baja `saldoActual` del
+ * cliente y deja un `MovimientoCliente` AJUSTE_NEGATIVO. No toca caja ni banco.
+ * La usan `cancelar-cuenta-por-cobrar` (de a una) y `cancelar-cpc-lote`.
+ * El llamador ya validó que `montoCobrado = 0`.
+ */
+async function cancelarCpcEnTx(manager: EntityManager, cpc: CuentaPorCobrar, motivo: string, cu: Usuario | null | undefined): Promise<void> {
+  const id = cpc.id;
+  const montoOriginal = Number(cpc.montoTotal);
+  cpc.estado = CuentaPorCobrarEstado.CANCELADO;
+  cpc.fechaCancelacion = new Date();
+  cpc.motivoCancelacion = motivo;
+  await setEntityUserTracking(manager.connection, cpc, cu?.id, true);
+  await manager.save(CuentaPorCobrar, cpc);
+
+  // #322: las cuotas abiertas pasan a CANCELADO para que no sigan sumando
+  // en resúmenes y vencidas (no hay cobros: se validó montoCobrado = 0).
+  await cancelarCuotasAbiertasDeCpc(manager, id);
+
+  const clienteId = cpc.cliente?.id;
+  if (clienteId) {
+    await ajustarSaldoCliente(manager, clienteId, -montoOriginal);
+    const movRepo = manager.getRepository(MovimientoCliente);
+    const mov = movRepo.create({
+      cliente: { id: clienteId } as any,
+      tipo: MovimientoClienteTipo.AJUSTE_NEGATIVO,
+      monto: montoOriginal,
+      fecha: new Date(),
+      cuentaPorCobrarId: id,
+      observacion: `CANCELACION CPC #${id} - ${motivo}`,
+      registradoPor: cu || undefined,
+    });
+    await setEntityUserTracking(manager.connection, mov, cu?.id, false);
+    await manager.save(MovimientoCliente, mov);
+  }
+}
+
+const CPC_LOTE_TOPE = 2000;
+
+/** Señal interna para deshacer la transacción de una simulación. */
+class SimulacionCpcLote extends Error {
+  constructor(public resultado: any) { super('SIMULACION'); }
+}
 
 /**
  * Aplica un cobro a una cuota de CPC dentro de un cobro consolidado.
@@ -391,51 +436,136 @@ export function registerCuentasPorCobrarHandlers(
       const cu = getCurrentUser();
 
       const cpcRepo = queryRunner.manager.getRepository(CuentaPorCobrar);
-      const clienteRepo = queryRunner.manager.getRepository(Cliente);
-      const movRepo = queryRunner.manager.getRepository(MovimientoCliente);
 
       const cpc = await cpcRepo.findOne({ where: { id }, relations: ['cliente'] });
       if (!cpc) throw new Error(`CuentaPorCobrar ${id} no encontrada`);
       if (Number(cpc.montoCobrado) > 0) throw new Error('No se puede cancelar una cuenta con cobros registrados');
 
-      const montoOriginal = Number(cpc.montoTotal);
-      cpc.estado = CuentaPorCobrarEstado.CANCELADO;
-      cpc.fechaCancelacion = new Date();
-      cpc.motivoCancelacion = motivo;
-      await setEntityUserTracking(dataSource, cpc, cu?.id, true);
-      await queryRunner.manager.save(CuentaPorCobrar, cpc);
-
-      // #322: las cuotas abiertas pasan a CANCELADO para que no sigan sumando
-      // en resúmenes y vencidas (no hay cobros: se validó montoCobrado = 0).
-      await cancelarCuotasAbiertasDeCpc(queryRunner.manager, id);
-
-      // Revertir saldoActual del cliente
-      const clienteId = cpc.cliente?.id;
-      if (clienteId) {
-        const cliente = await clienteRepo.findOne({ where: { id: clienteId } });
-        if (cliente) {
-          cliente.saldoActual = await ajustarSaldoCliente(queryRunner.manager, cliente.id, -montoOriginal);
-        }
-
-        // Crear MovimientoCliente AJUSTE_NEGATIVO
-        const mov = movRepo.create({
-          cliente: { id: clienteId } as any,
-          tipo: MovimientoClienteTipo.AJUSTE_NEGATIVO,
-          monto: montoOriginal,
-          fecha: new Date(),
-          cuentaPorCobrarId: id,
-          observacion: `CANCELACION CPC #${id} - ${motivo}`,
-          registradoPor: cu || undefined,
-        });
-        await setEntityUserTracking(dataSource, mov, cu?.id, false);
-        await queryRunner.manager.save(MovimientoCliente, mov);
-      }
+      await cancelarCpcEnTx(queryRunner.manager, cpc, motivo, cu);
 
       await queryRunner.commitTransaction();
       return { success: true };
     } catch (error) {
       await queryRunner.rollbackTransaction();
       console.error('Error cancelando cuenta por cobrar:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  });
+
+  /**
+   * Cancela en lote, sin cobrar y sin mover caja ni banco, las CPC ACTIVAS de
+   * los clientes o ids indicados. Una sola transacción: si falla una, no queda
+   * ninguna. Con `simular: true` corre lo mismo y deshace todo al final.
+   * La real exige `esperado: { cantidad, total }` igual a lo que mostró la
+   * simulación (total = suma de montos de las canceladas); si no coincide, aborta.
+   */
+  ipcMain.handle('cancelar-cpc-lote', async (_event, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CPC_CANCELAR');
+    const p = payload || {};
+    const motivo = String(p.motivo || '').trim().toUpperCase();
+    if (!motivo) throw new Error('Falta el motivo de la cancelación');
+    const aIds = (v: any): number[] => (Array.isArray(v) ? v : []).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+    const clienteIds = aIds(p.clienteIds);
+    const ids = aIds(p.ids);
+    if (!clienteIds.length && !ids.length) throw new Error('Indicá clienteIds o ids');
+    const simular = p.simular === true;
+    if (!simular) {
+      const e = p.esperado;
+      if (!e || !Number.isFinite(Number(e.cantidad)) || !Number.isFinite(Number(e.total))) {
+        throw new Error('Falta esperado: { cantidad, total } de la simulación');
+      }
+    }
+    const cu = getCurrentUser();
+
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const m = queryRunner.manager;
+      const porId = new Map<number, CuentaPorCobrar>();
+      if (clienteIds.length) {
+        for (const c of await m.find(CuentaPorCobrar, {
+          where: { cliente: { id: In(clienteIds) }, estado: CuentaPorCobrarEstado.ACTIVO },
+          relations: ['cliente', 'cliente.persona', 'moneda'], order: { id: 'ASC' },
+        })) porId.set(c.id, c);
+      }
+      const saltadas: any[] = [];
+      if (ids.length) {
+        const encontradas = await m.find(CuentaPorCobrar, {
+          where: { id: In(ids) }, relations: ['cliente', 'cliente.persona', 'moneda'],
+        });
+        const mapa = new Map(encontradas.map((c) => [c.id, c]));
+        for (const id of ids) {
+          const c = mapa.get(id);
+          if (!c) saltadas.push({ id, clienteId: null, monto: 0, razon: 'NO_EXISTE' });
+          else if (c.estado !== CuentaPorCobrarEstado.ACTIVO) saltadas.push({ id, clienteId: c.cliente?.id, monto: Number(c.montoTotal), razon: 'NO_ACTIVA' });
+          else porId.set(c.id, c);
+        }
+      }
+      // En Postgres se bloquean las filas y se releen estado y cobrado: si alguien
+      // cobró o canceló mientras tanto, esa CPC va a saltadas.
+      if (dataSource.options.type === 'postgres' && porId.size) {
+        const filas: any[] = await m.query('SELECT id, estado, monto_cobrado FROM cuentas_por_cobrar WHERE id = ANY($1) FOR UPDATE', [[...porId.keys()]]);
+        for (const f of filas) {
+          const c = porId.get(Number(f.id))!;
+          c.montoCobrado = Number(f.monto_cobrado);
+          if (f.estado !== CuentaPorCobrarEstado.ACTIVO) {
+            porId.delete(c.id);
+            saltadas.push({ id: c.id, clienteId: c.cliente?.id, monto: Number(c.montoTotal), razon: 'NO_ACTIVA' });
+          }
+        }
+      }
+      const candidatas: CuentaPorCobrar[] = [];
+      for (const c of [...porId.values()].sort((a, b) => a.id - b.id)) {
+        if (Number(c.montoCobrado) > 0) saltadas.push({ id: c.id, clienteId: c.cliente?.id, monto: Number(c.montoTotal), montoCobrado: Number(c.montoCobrado), razon: 'CON_COBROS' });
+        else candidatas.push(c);
+      }
+      if (candidatas.length > CPC_LOTE_TOPE) throw new Error(`Son ${candidatas.length} CPC: el tope por llamada es ${CPC_LOTE_TOPE}`);
+
+      const total = round2(candidatas.reduce((s, c) => s + Number(c.montoTotal), 0));
+      if (!simular && (Number(p.esperado.cantidad) !== candidatas.length || round2(Number(p.esperado.total)) !== total)) {
+        throw new Error(`No coincide con la simulación: hoy son ${candidatas.length} CPC por ${total}, se esperaba ${p.esperado.cantidad} por ${p.esperado.total}. Volvé a simular.`);
+      }
+
+      const nombre = (c: CuentaPorCobrar) => {
+        const pe: any = (c.cliente as any)?.persona;
+        return pe ? [pe.nombre, pe.apellido].filter(Boolean).join(' ') : null;
+      };
+      const saldoDe = async (clienteId: number) => Number((await m.findOne(Cliente, { where: { id: clienteId } }))?.saldoActual ?? 0);
+      const porCliente = new Map<number, any>();
+      for (const c of candidatas) {
+        const cid = c.cliente?.id;
+        if (cid && !porCliente.has(cid)) porCliente.set(cid, { clienteId: cid, cliente: nombre(c), cantidad: 0, total: 0, saldoAntes: await saldoDe(cid), saldoDespues: 0 });
+      }
+      const porMoneda = new Map<number, any>();
+      const canceladas: any[] = [];
+      for (const c of candidatas) {
+        await cancelarCpcEnTx(m, c, motivo, cu);
+        const monto = Number(c.montoTotal);
+        const monedaId = (c.moneda as any)?.id ?? null;
+        canceladas.push({ id: c.id, clienteId: c.cliente?.id, cliente: nombre(c), monedaId, monto, descripcion: c.descripcion, fechaInicio: c.fechaInicio, ventaId: c.ventaId ?? null });
+        const pc = porCliente.get(c.cliente?.id);
+        if (pc) { pc.cantidad++; pc.total = round2(pc.total + monto); }
+        const pm = porMoneda.get(monedaId) || { monedaId, total: 0, cantidad: 0 };
+        pm.cantidad++; pm.total = round2(pm.total + monto);
+        porMoneda.set(monedaId, pm);
+      }
+      for (const pc of porCliente.values()) pc.saldoDespues = await saldoDe(pc.clienteId);
+
+      const resultado = {
+        simulado: simular, motivo, cantidadCanceladas: canceladas.length, total,
+        totalPorMoneda: [...porMoneda.values()], porCliente: [...porCliente.values()],
+        canceladas, saltadas,
+      };
+      if (simular) throw new SimulacionCpcLote(resultado);
+      await queryRunner.commitTransaction();
+      return resultado;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      if (error instanceof SimulacionCpcLote) return error.resultado;
+      console.error('Error en cancelar-cpc-lote:', error);
       throw error;
     } finally {
       await queryRunner.release();

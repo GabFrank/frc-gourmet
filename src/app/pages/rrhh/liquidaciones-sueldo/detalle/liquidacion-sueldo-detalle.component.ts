@@ -13,6 +13,7 @@ import { firstValueFrom } from 'rxjs';
 import { RepositoryService } from 'src/app/database/repository.service';
 import { DocumentoService } from 'src/app/services/documento.service';
 import { AgregarItemDialogComponent } from '../agregar-item-dialog/agregar-item-dialog.component';
+import { ConsumosCreditoDialogComponent } from '../consumos-credito-dialog/consumos-credito-dialog.component';
 import { ConfirmationDialogComponent } from 'src/app/shared/components/confirmation-dialog/confirmation-dialog.component';
 import { HasPermissionDirective } from 'src/app/shared/directives/has-permission.directive';
 
@@ -65,6 +66,9 @@ import { HasPermissionDirective } from 'src/app/shared/directives/has-permission
               </ng-container>
               <button mat-stroked-button color="primary" (click)="agregarItem()" *ngIf="puedeEditar()">
                 <mat-icon>add</mat-icon> Item manual
+              </button>
+              <button mat-stroked-button color="primary" (click)="agregarConsumos()" *ngIf="puedeEditar()">
+                <mat-icon>receipt_long</mat-icon> Consumos a crédito
               </button>
               <button mat-flat-button color="primary" [matMenuTriggerFor]="menu">
                 <mat-icon>more_vert</mat-icon> Acciones
@@ -232,11 +236,12 @@ export class LiquidacionSueldoDetalleComponent implements OnInit {
   async regenerar(): Promise<void> {
     if (!this.liquidacion) return;
     try {
-      await firstValueFrom(this.repositoryService.generarLiquidacionBorrador({
+      const liq: any = await firstValueFrom(this.repositoryService.generarLiquidacionBorrador({
         funcionarioId: this.liquidacion.funcionario.id,
         periodo: this.liquidacion.periodo,
       }));
-      this.snackBar.open('Liquidacion regenerada', 'Cerrar', { duration: 2500 });
+      const adv: string[] = liq?.advertencias || [];
+      this.snackBar.open(adv.length ? 'Regenerada. ' + adv.join(' ') : 'Liquidacion regenerada', 'Cerrar', { duration: adv.length ? 15000 : 2500 });
       this.load();
     } catch (e: any) {
       console.error(e);
@@ -249,6 +254,18 @@ export class LiquidacionSueldoDetalleComponent implements OnInit {
     const ref = this.dialog.open(AgregarItemDialogComponent, {
       width: '700px',
       data: { liquidacionId: this.liquidacionId },
+    });
+    ref.afterClosed().subscribe((res) => { if (res?.saved) this.load(); });
+  }
+
+  agregarConsumos(): void {
+    if (!this.liquidacionId || !this.liquidacion) return;
+    const cuotasEnLiquidacion = (this.liquidacion.items || [])
+      .filter((i: any) => i.referenciaTipo === 'CPC_CUOTA' && i.referenciaId)
+      .map((i: any) => i.referenciaId);
+    const ref = this.dialog.open(ConsumosCreditoDialogComponent, {
+      width: '760px',
+      data: { liquidacionId: this.liquidacionId, funcionarioId: this.liquidacion.funcionario.id, cuotasEnLiquidacion },
     });
     ref.afterClosed().subscribe((res) => { if (res?.saved) this.load(); });
   }

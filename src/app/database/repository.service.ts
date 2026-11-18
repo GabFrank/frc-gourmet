@@ -1026,6 +1026,9 @@ export abstract class RepositoryService {
   abstract getLiquidacionSueldo(id: number): Observable<any>;
   abstract generarLiquidacionBorrador(payload: any): Observable<any>;
   abstract agregarItemLiquidacion(liquidacionId: number, data: any): Observable<any>;
+  abstract getCpcCuotasAbiertasFuncionario(funcionarioId: number, liquidacionId?: number): Observable<any>;
+  abstract cobrarCpcPorLiquidacion(payload: any): Observable<any>;
+  abstract revertirCobroCpcPorLiquidacion(payload: any): Observable<any>;
   abstract eliminarItemLiquidacion(itemId: number): Observable<any>;
   abstract aprobarLiquidacionSueldo(id: number): Observable<any>;
   abstract volverBorradorLiquidacionSueldo(id: number): Observable<any>;
