@@ -1004,6 +1004,9 @@ interface ElectronAPI {
   getLiquidacionSueldo: (id: number) => Promise<any>;
   generarLiquidacionBorrador: (payload: any) => Promise<any>;
   agregarItemLiquidacion: (liquidacionId: number, data: any) => Promise<any>;
+  getCpcCuotasAbiertasFuncionario: (funcionarioId: number, liquidacionId?: number) => Promise<any>;
+  cobrarCpcPorLiquidacion: (payload: any) => Promise<any>;
+  revertirCobroCpcPorLiquidacion: (payload: any) => Promise<any>;
   eliminarItemLiquidacion: (itemId: number) => Promise<any>;
   aprobarLiquidacionSueldo: (id: number) => Promise<any>;
   volverBorradorLiquidacionSueldo: (id: number) => Promise<any>;
@@ -4063,6 +4066,15 @@ export class RepositoryIpcService extends RepositoryService {
   }
   agregarItemLiquidacion(liquidacionId: number, data: any): Observable<any> {
     return from(this.api.agregarItemLiquidacion(liquidacionId, data));
+  }
+  getCpcCuotasAbiertasFuncionario(funcionarioId: number, liquidacionId?: number): Observable<any> {
+    return from(this.api.getCpcCuotasAbiertasFuncionario(funcionarioId, liquidacionId));
+  }
+  cobrarCpcPorLiquidacion(payload: any): Observable<any> {
+    return from(this.api.cobrarCpcPorLiquidacion(payload));
+  }
+  revertirCobroCpcPorLiquidacion(payload: any): Observable<any> {
+    return from(this.api.revertirCobroCpcPorLiquidacion(payload));
   }
   eliminarItemLiquidacion(itemId: number): Observable<any> {
     return from(this.api.eliminarItemLiquidacion(itemId));

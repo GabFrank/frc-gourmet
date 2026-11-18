@@ -102,7 +102,8 @@ export class GenerarLiquidacionDialogComponent implements OnInit {
     this.saving = true;
     try {
       const liq = await firstValueFrom(this.repositoryService.generarLiquidacionBorrador(this.form.value));
-      this.snackBar.open('Liquidacion BORRADOR generada', 'Cerrar', { duration: 3000 });
+      const adv: string[] = (liq as any)?.advertencias || [];
+      this.snackBar.open(adv.length ? 'BORRADOR generado. ' + adv.join(' ') : 'Liquidacion BORRADOR generada', 'Cerrar', { duration: adv.length ? 15000 : 3000 });
       this.dialogRef.close({ saved: true, liquidacion: liq });
     } catch (e: any) {
       console.error(e);

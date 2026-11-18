@@ -88,7 +88,10 @@ export class AgregarItemDialogComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
-      this.conceptos = await firstValueFrom(this.repositoryService.getLiquidacionConceptos());
+      // Los consumos a crédito se eligen por cuota (botón «Consumos a crédito»):
+      // cargados a mano no cobran la cuota y se vuelven a descontar.
+      this.conceptos = ((await firstValueFrom(this.repositoryService.getLiquidacionConceptos())) || [])
+        .filter((c: any) => c.codigo !== 'CREDITO_CONSUMO');
     } catch (e) {
       console.error(e);
     }

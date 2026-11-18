@@ -3,7 +3,7 @@
  * AUTO-GENERADO por scripts/generate-mobile-api-map.js — NO editar a mano.
  * Mapa método de window.api → canal IPC (extraído de preload.ts).
  * Regenerar tras tocar preload.ts: `node scripts/generate-mobile-api-map.js`.
- * Total: 881 métodos.
+ * Total: 884 métodos.
  */
 export const API_CHANNEL_MAP: Record<string, string> = {
   "abrirCajaDesdeConteo": "abrir-caja-desde-conteo",
@@ -90,6 +90,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "checkRecetaDependencies": "check-receta-dependencies",
   "cobrarCheque": "cobrar-cheque",
   "cobrarCpcCuota": "cobrar-cpc-cuota",
+  "cobrarCpcPorLiquidacion": "cobrar-cpc-por-liquidacion",
   "cobrarVentaCredito": "cobrar-venta-credito",
   "conciliarAcreditacionesPos": "conciliar-acreditaciones-pos",
   "confirmarVale": "confirmar-vale",
@@ -436,6 +437,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "getCostosPorProducto": "getCostosPorProducto",
   "getCostosPorProductoByProducto": "getCostosPorProductoByProducto",
   "getCotizacionMercado": "get-cotizacion-mercado",
+  "getCpcCuotasAbiertasFuncionario": "get-cpc-cuotas-abiertas-funcionario",
   "getCuentaBancaria": "get-cuenta-bancaria",
   "getCuentaBancariaResumen": "get-cuenta-bancaria-resumen",
   "getCuentaPorCobrar": "get-cuenta-por-cobrar",
@@ -741,6 +743,7 @@ export const API_CHANNEL_MAP: Record<string, string> = {
   "reorderRecetaFases": "reorder-receta-fases",
   "repararRecetasCompartidas": "reparar-recetas-compartidas",
   "restoreSession": "restoreSession",
+  "revertirCobroCpcPorLiquidacion": "revertir-cobro-cpc-por-liquidacion",
   "revertirStockVenta": "revertirStockVenta",
   "saveCajaMayorConfiguracion": "save-caja-mayor-configuracion",
   "saveCajasMonedas": "save-cajas-monedas",
