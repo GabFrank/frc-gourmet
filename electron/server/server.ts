@@ -205,7 +205,7 @@ async function buildInstance(
   // Pedidos online: namespace público `/pub/*` con whitelist + JWT de cliente.
   // Separado de `/api/rpc` (staff). Se registra ANTES del static/SPA fallback
   // para que sus rutas explícitas matcheen primero.
-  registerPublicRoutes(fastify);
+  registerPublicRoutes(fastify, opts.dataSource);
 
   // Imágenes de producto públicas para la carta online (`app://producto-images/X`
   // → `/pub/producto-image/X`). Sólo fotos de menú (no sensible). @fastify/static
