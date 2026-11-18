@@ -136,7 +136,7 @@ async function main() {
   registerAuthRoutes(fastify, dataSource);
   registerRpcRoute(fastify, dataSource);
   registerFileRoutes(fastify, dataSource);
-  try { require('../electron/server/public-routes').registerPublicRoutes(fastify); } catch (e) { console.warn('[vista] sin rutas públicas', e); }
+  try { require('../electron/server/public-routes').registerPublicRoutes(fastify, dataSource); } catch (e) { console.warn('[vista] sin rutas públicas', e); }
   if (fs.existsSync(path.join(SEMILLA_DIR, 'fotos'))) await fastify.register(fastifyStatic, { root: path.join(SEMILLA_DIR, 'fotos'), prefix: '/pub/producto-image/', decorateReply: false, wildcard: false });
   const adminRoot = path.resolve(__dirname, '../dist/frc-gourmet-web');
   const mobileRoot = path.resolve(__dirname, '../dist/mobile');

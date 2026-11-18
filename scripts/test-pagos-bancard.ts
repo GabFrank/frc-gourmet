@@ -355,7 +355,7 @@ async function main() {
   require('../electron/handlers/pedidos-online-pedidos.handler').registerPedidosOnlinePedidosHandlers(ds, () => null);
   const { registerPublicRoutes } = require('../electron/server/public-routes');
   const app = Fastify();
-  registerPublicRoutes(app);
+  registerPublicRoutes(app, ds);
   await app.ready();
   const p11 = await nuevo(9000);
   await iniciarPagoPedido(ds, p11.id);

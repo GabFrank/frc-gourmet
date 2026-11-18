@@ -253,7 +253,7 @@ async function main() {
   await fastify.register(cors, { origin: true });
   await fastify.register(rateLimit, { max: 10000, timeWindow: '1 minute' });
   await registerAuthPlugin(fastify);
-  registerPublicRoutes(fastify);
+  registerPublicRoutes(fastify, dataSource);
   await fastify.listen({ port: PORT, host: '127.0.0.1' });
 
   // Captura del OTP dev-log
