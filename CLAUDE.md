@@ -21,6 +21,7 @@ FRC Gourmet is a restaurant management app built with **Angular 15 + Electron 24
 - **Package desktop app:** `npm run electron:build`
 - **Lint:** `npm run lint`
 - **Test:** `npm run test`
+- **Domain test battery:** `npm run test:all -- --jobs 3` (parallel; run it **once**, with the change finished, in the foreground). While coding, run only the suites you touched (`npm run test:<domain>`). Rules to keep the cycle fast: [docs/testing/CICLO-RAPIDO.md](docs/testing/CICLO-RAPIDO.md).
 
 ## Architecture
 
