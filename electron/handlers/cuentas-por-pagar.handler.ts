@@ -64,7 +64,8 @@ async function sumarSaldoCajaMayor(
 // una cuota de 1.136.452,7 se paga con 1.136.453 (no existe la fraccion) y no
 // puede quedar PARCIAL por centavos que nadie puede pagar.
 function calcularEstadoCuota(monto: number, montoPagado: number, tol = 0): CuotaEstado {
-  if (montoPagado >= monto - tol) return CuotaEstado.PAGADA;
+  // Sin ningun pago no se da por saldada una cuota de monto > 0 aunque entre en la tolerancia.
+  if (montoPagado >= monto - tol && (montoPagado > 0 || monto <= 0)) return CuotaEstado.PAGADA;
   if (montoPagado > 0) return CuotaEstado.PARCIAL;
   return CuotaEstado.PENDIENTE;
 }
