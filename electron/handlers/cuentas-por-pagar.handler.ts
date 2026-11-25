@@ -23,6 +23,7 @@ import { Usuario } from '../../src/app/database/entities/personas/usuario.entity
 import { ensurePermission } from '../utils/auth.utils';
 import { actualizarSaldoCajaMayor } from './caja-mayor-utils';
 import { ajustarSaldoCuentaBancaria } from '../utils/saldo-atomico.utils';
+import { decimalesDeMoneda, toleranciaDe } from '../utils/pago-consolidado.util';
 
 /**
  * Saldo de Caja Mayor: se delega en el helper canonico de `caja-mayor-utils`.
@@ -59,10 +60,19 @@ async function sumarSaldoCajaMayor(
   );
 }
 
-function calcularEstadoCuota(monto: number, montoPagado: number): CuotaEstado {
-  if (montoPagado >= monto) return CuotaEstado.PAGADA;
+// `tol`: diferencia que se da por saldada. En guaranies es media unidad (0.5):
+// una cuota de 1.136.452,7 se paga con 1.136.453 (no existe la fraccion) y no
+// puede quedar PARCIAL por centavos que nadie puede pagar.
+function calcularEstadoCuota(monto: number, montoPagado: number, tol = 0): CuotaEstado {
+  if (montoPagado >= monto - tol) return CuotaEstado.PAGADA;
   if (montoPagado > 0) return CuotaEstado.PARCIAL;
   return CuotaEstado.PENDIENTE;
+}
+
+// Tolerancia de la moneda de la CPP: 0.5 en guaranies, 0.005 con 2 decimales.
+// Sin moneda cargada se asume 2 decimales (la tolerancia de siempre).
+function toleranciaCuota(cuota: CuentaPorPagarCuota): number {
+  return toleranciaDe(decimalesDeMoneda((cuota.cuentaPorPagar as any)?.moneda));
 }
 
 // Aplica SOLO el estado de dominio del pago de una cuota (cuota + CPP), sin
@@ -80,19 +90,22 @@ export async function aplicarEstadoPagoCuota(
   const cppRepo = queryRunner.manager.getRepository(CuentaPorPagar);
   const cuota = await cuotaRepo.findOne({
     where: { id: cuotaId },
-    relations: ['cuentaPorPagar'],
+    relations: ['cuentaPorPagar', 'cuentaPorPagar.moneda'],
   });
   if (!cuota) throw new Error(`CuentaPorPagarCuota ${cuotaId} no encontrada`);
   if (cuota.estado === CuotaEstado.PAGADA) throw new Error(`Cuota #${cuota.numero} ya pagada`);
   if (cuota.estado === CuotaEstado.CANCELADA) throw new Error(`Cuota #${cuota.numero} esta anulada`);
 
-  const restante = Number(cuota.monto) - Number(cuota.montoPagado);
-  if (monto <= 0 || monto > restante + 0.005) {
+  const tol = toleranciaCuota(cuota);
+  const restante = +(Number(cuota.monto) - Number(cuota.montoPagado)).toFixed(2);
+  if (monto <= 0 || monto > restante + tol) {
     throw new Error(`Monto invalido para cuota #${cuota.numero} (restante: ${restante})`);
   }
 
+  // Se guarda lo realmente pagado (puede pasar al monto por la fraccion
+  // redondeada): la plata que salio del banco o la caja es esa.
   cuota.montoPagado = +(Number(cuota.montoPagado) + monto).toFixed(2);
-  cuota.estado = calcularEstadoCuota(Number(cuota.monto), Number(cuota.montoPagado));
+  cuota.estado = calcularEstadoCuota(Number(cuota.monto), Number(cuota.montoPagado), tol);
   if (cuota.estado === CuotaEstado.PAGADA) {
     cuota.fechaPago = new Date();
   }
@@ -107,7 +120,7 @@ export async function aplicarEstadoPagoCuota(
     // cpp.cuotas se lee recién ahora, después de guardar la cuota actual, así que
     // la suma ya incluye este pago y es la fuente de verdad. Idempotente.
     cpp.montoPagado = +(cpp.cuotas || []).reduce((s: number, c: any) => s + Number(c.montoPagado), 0).toFixed(2);
-    const todasPagadas = (cpp.cuotas || []).every((c: any) => Number(c.montoPagado) >= Number(c.monto) - 0.005);
+    const todasPagadas = (cpp.cuotas || []).every((c: any) => Number(c.montoPagado) >= Number(c.monto) - tol);
     if (todasPagadas) cpp.estado = CuentaPorPagarEstado.PAGADO;
     await queryRunner.manager.save(CuentaPorPagar, cpp);
   }
@@ -129,14 +142,15 @@ export async function revertirEstadoPagoCuota(
   const cppRepo = queryRunner.manager.getRepository(CuentaPorPagar);
   const cuota = await cuotaRepo.findOne({
     where: { id: cuotaId },
-    relations: ['cuentaPorPagar'],
+    relations: ['cuentaPorPagar', 'cuentaPorPagar.moneda'],
   });
   if (!cuota) throw new Error(`CuentaPorPagarCuota ${cuotaId} no encontrada`);
   if (cuota.estado === CuotaEstado.CANCELADA) throw new Error(`Cuota #${cuota.numero} esta anulada`);
 
+  const tol = toleranciaCuota(cuota);
   const nuevoPagado = +(Number(cuota.montoPagado) - Number(monto)).toFixed(2);
   cuota.montoPagado = nuevoPagado < 0 ? 0 : nuevoPagado;
-  cuota.estado = calcularEstadoCuota(Number(cuota.monto), Number(cuota.montoPagado));
+  cuota.estado = calcularEstadoCuota(Number(cuota.monto), Number(cuota.montoPagado), tol);
   if (cuota.estado !== CuotaEstado.PAGADA) {
     cuota.fechaPago = null as any;
   }
@@ -147,7 +161,7 @@ export async function revertirEstadoPagoCuota(
   if (cpp) {
     cpp.montoPagado = +(cpp.cuotas || []).reduce((s: number, c: any) => s + Number(c.montoPagado), 0).toFixed(2);
     const todasPagadas = (cpp.cuotas || []).length > 0
-      && (cpp.cuotas || []).every((c: any) => Number(c.montoPagado) >= Number(c.monto) - 0.005);
+      && (cpp.cuotas || []).every((c: any) => Number(c.montoPagado) >= Number(c.monto) - tol);
     cpp.estado = todasPagadas ? CuentaPorPagarEstado.PAGADO : CuentaPorPagarEstado.ACTIVO;
     await queryRunner.manager.save(CuentaPorPagar, cpp);
   }
