@@ -13,7 +13,7 @@ import { TarjetaGuardada } from '../../../src/app/database/entities/pedidos-onli
 import { cuentasListas, CuentaResuelta } from './cuentas-pago';
 import { fetchActual } from './proveedores/deps';
 import {
-  consultarCatastro, crearSesionCatastro, DinelcoConfig, interpretarCatastroDinelco, PROVEEDOR_DINELCO, REF_REGISTRO,
+  consultarCatastro, crearSesionCatastro, DinelcoConfig, PROVEEDOR_DINELCO, REF_REGISTRO,
   referenciaRegistro, ResultadoCatastro,
 } from './proveedores/dinelco.proveedor';
 import { ProveedorError } from './proveedores/tipos';
@@ -146,8 +146,9 @@ export function esAvisoCatastro(body: any): boolean {
 }
 
 /**
- * Callback del catastro (`/pub/pagos/dinelco[-<cuenta>]/aviso`). Sin firma: solo completa un
- * catastro PENDIENTE de esa referencia, de la misma cuenta DINELCO, abierto hace menos de 30 min.
+ * Callback del catastro (`/pub/pagos/dinelco[-<cuenta>]/aviso`). Sin firma: no decide nada, solo
+ * reconfirma contra dinelco un catastro PENDIENTE de esa referencia, de la misma cuenta DINELCO,
+ * abierto hace menos de 30 min.
  */
 export async function avisoCatastro(ds: DataSource, proveedorRuta: string, body: any, ahora = new Date()): Promise<{ http: number; respuesta: any }> {
   const ref = String(body?.clientReferenceId ?? '');
@@ -157,7 +158,14 @@ export async function avisoCatastro(ds: DataSource, proveedorRuta: string, body:
   const formaRuta = m?.[1] ? Number(m[1]) : null;
   const vigente = fila && fila.estado === 'PENDIENTE' && ahora.getTime() - new Date(fila.createdAt).getTime() <= VIGENCIA_REGISTRO_MS;
   if (!m || !fila || !vigente || (fila.formaPagoOnlineId ?? null) !== formaRuta) return { http: 400, respuesta: { status: 'error' } };
-  await aplicarCatastro(ds, fila, interpretarCatastroDinelco(body, ref));
+  // El aviso no trae firma: solo dispara la consulta a dinelco. Lo que diga el cuerpo no se usa.
+  const c = await cuentaTarjetas(ds);
+  if (c && (c.forma?.id ?? null) === (fila.formaPagoOnlineId ?? null)) {
+    try {
+      const r = await consultarCatastro(c.creds as DinelcoConfig, ref, fila.registroSesionId ?? null, ctx());
+      await aplicarCatastro(ds, fila, r.resultado);
+    } catch { /* sin respuesta: sigue PENDIENTE; el storefront vuelve a consultar */ }
+  }
   return { http: 200, respuesta: { recibido: true } };
 }
 

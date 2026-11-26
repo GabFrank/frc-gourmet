@@ -486,8 +486,14 @@ const proveedor: ProveedorPagoOnline<DinelcoConfig> = {
     try {
       const r = await llamar(creds, ctx.fetch, 'GET', `/checkout-session?clientReferenceId=${encodeURIComponent('FRCG-0-' + randomBytes(4).toString('hex'))}`);
       if (r.status === 401 || r.status === 403) return { ok: false, error: 'dinelco_credenciales', detalle: mensaje(r.body) || undefined };
-      if (r.status === 404 || (r.status >= 200 && r.status < 300)) return { ok: true };
-      return { ok: false, error: 'dinelco_error', detalle: mensaje(r.body) || `HTTP ${r.status}` };
+      if (!(r.status === 404 || (r.status >= 200 && r.status < 300))) return { ok: false, error: 'dinelco_error', detalle: mensaje(r.body) || `HTTP ${r.status}` };
+      if (!creds.tarjetaGuardada) return { ok: true };
+      // Con «guardar tarjetas»: la clave tiene que poder usar /v3/payment (permiso payment:create).
+      const v = await llamar(creds, ctx.fetch, 'GET', `/payment/${encodeURIComponent('FRCG-0-' + randomBytes(4).toString('hex'))}`, undefined, true);
+      if (v.status === 401 || v.status === 403) {
+        return { ok: false, error: 'dinelco_sin_permiso_tarjeta', detalle: 'la clave no tiene el permiso payment:create: pedíselo a dinelco o apagá «guardar tarjetas»' };
+      }
+      return { ok: true };
     } catch (e: any) {
       return { ok: false, error: 'dinelco_sin_conexion', detalle: e?.message || String(e) };
     }

@@ -81,7 +81,7 @@ Tabla nueva `tienda_tarjetas_guardadas`:
 
 ## 6. Puntos abiertos (se resuelven en la implementación, antes de pedir el OK de merge)
 
-1. ¿`GET /checkout-session/{sessionId}` o por `clientReferenceId` devuelve el resultado de una sesión de **catastro** con `tokenId`? Se prueba en sandbox. Si no, la confirmación usa el callback recibido (guardado por `registro_ref`) y el front espera hasta 30 s; documentado.
+1. ¿`GET /checkout-session/{sessionId}` o por `clientReferenceId` devuelve el resultado de una sesión de **catastro** con `tokenId`? Se prueba en sandbox. El callback (sin firma) **no decide**: solo dispara esa consulta. Si el sandbox muestra que la consulta no trae el `tokenId`, el catastro no se puede confirmar de forma segura y se vuelve a planificar antes del merge (no se acepta el cuerpo del callback).
 2. ¿La reversa por `operationNumber` funciona con cobros con token? Se prueba en sandbox.
 3. Pedirle a dinelco: permiso `payment:create` en la clave de pruebas y en la de producción, y cómo borrar un token (si existe API). El propietario se lo pide junto con lo del QR y la IP.
 
@@ -93,3 +93,20 @@ Tabla nueva `tienda_tarjetas_guardadas`:
 ## 8. Entrega
 
 PR `feat(tienda): guardar tarjeta y pagar con un toque (dinelco)`, en borrador, apilado sobre el #372. Merge solo con OK del propietario, después del #370 y el #372, con CI verde y todas las pruebas de §4 hechas.
+
+## 9. Ajustes hechos en la implementación (auditoría del 26/11)
+
+Controles agregados (no cambian el qué; reducen el riesgo de cobrar sin formulario):
+- Tope por pedido del pago con un toque: ₲ 300.000 por defecto, configurable en la cuenta DINELCO. Por encima, formulario con 3DS.
+- Máximo de pagos con un toque en las últimas 24 h por cliente (3 por defecto, configurable); cuenta solo los pedidos pagados con un toque.
+- Delivery con un toque solo a una dirección ya entregada antes (mismo texto o a 150 m o menos); si no, formulario.
+- Máximo 5 catastros por hora por cliente.
+
+Desvíos de diseño:
+- El interruptor y los topes van en la configuración de la cuenta DINELCO (`config_json`), no en columnas.
+- `tarjetas_guardadas.estado` es texto (PENDIENTE, ACTIVA, FALLIDA, QUITADA) en vez de `activa` booleano.
+- «Quitar» deja la fila QUITADA y además borra el `token_id` de nuestra base.
+- El callback del catastro solo reconsulta a dinelco (§6.1).
+- «Probar conexión», con «guardar tarjetas» encendido, consulta `GET /v3/payment/<ref inexistente>` y avisa si da 401/403 (falta `payment:create`).
+
+Pendiente que bloquea el merge: la prueba en el sandbox real de §4.5 y los puntos 1 a 3 de §6. Depende de que dinelco habilite `payment:create` en la clave de pruebas y de llegar al sandbox (IP bloqueada; puente por el celular del propietario).

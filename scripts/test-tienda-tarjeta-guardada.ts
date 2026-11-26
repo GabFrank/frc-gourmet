@@ -87,6 +87,7 @@ const fakeFetch = async (url: string, init: any = {}) => {
   }
   const g = ruta.match(/^\/v3\/payment\/(.+)$/);
   if (g && init.method !== 'POST') {
+    if (modoCobro === 'SIN_PERMISO') return res(403, { message: 'Forbidden', errorCode: 'FORBIDDEN' });
     const c = cobros.get(decodeURIComponent(g[1]));
     return c ? res(200, c.resp) : res(404, { message: 'payment not found' });
   }
@@ -198,9 +199,18 @@ async function main() {
   ok((await confirmarCatastro(ds, beto.id, a2.ref)).estado === 'PENDIENTE', 'sin resultado en la consulta → espera el callback');
   const w0 = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco-77/aviso', payload: callbackCatastro(reg2) });
   ok(w0.statusCode === 400 && (await confirmarCatastro(ds, beto.id, a2.ref)).estado === 'PENDIENTE', 'callback por la ruta de otra cuenta → no vale', w0.body);
-  const w1 = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', payload: callbackCatastro(reg2) });
+  // Sin firma: el callback no decide; si la consulta no trae el resultado, sigue PENDIENTE.
+  const falso = { ...callbackCatastro(reg2), registryInfo: { status: 'SUCCESSFUL', paymentMethodInfo: { paymentMethodType: 'CARD', tokenId: 'tk-inyectado', paymentMethodPayload: { cardBrand: 'VSA', cardNumber: '411111******1111', cardType: 'C' } } } };
+  const w1 = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', payload: falso });
+  ok(w1.statusCode === 200 && (await confirmarCatastro(ds, beto.id, a2.ref)).estado === 'PENDIENTE', 'callback sin respaldo en la consulta → sigue PENDIENTE', w1.body);
+  const tok = async (ref: string) => (await tarjetas.createQueryBuilder('t').addSelect('t.tokenId').where('t.registroRef = :r', { r: ref }).getOne())?.tokenId;
+  ok(!(await tok(a2.ref)), 'el tokenId del cuerpo del callback no se usa');
+  // Cuando dinelco ya lo informa en la consulta, el callback dispara la reconfirmación.
+  consultaTraeCatastro = true;
+  const w1b = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', payload: falso });
   const c2: any = await confirmarCatastro(ds, beto.id, a2.ref);
-  ok(w1.statusCode === 200 && c2.estado === 'ACTIVA', 'callback del catastro → ACTIVA', { w: w1.body, c2 });
+  const tk2 = await tok(a2.ref);
+  ok(w1b.statusCode === 200 && c2.estado === 'ACTIVA' && tk2 === reg2.tokenId && tk2 !== 'tk-inyectado', 'callback → reconsulta a dinelco → ACTIVA con el tokenId de dinelco', { c2, tk2 });
   const w2 = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', payload: callbackCatastro(reg2) });
   ok(w2.statusCode === 400, 'callback repetido (ya no está PENDIENTE) → 400');
   await app.close();
@@ -288,7 +298,14 @@ async function main() {
   const p5 = await nuevo(ana, 20000);
   await pagarConTarjetaGuardada(ds, p5.id, ana.id, tAna);
   ok((await leer(p5.id)).estadoPago === EstadoPagoOnline.FALLIDO, 'clave sin payment:create → FALLIDO, sin cobro');
+  // «Probar conexión» avisa si la clave no tiene payment:create (solo con «guardar tarjetas»).
+  const { dinelcoProveedor } = require('../electron/services/pagos-online/proveedores/dinelco.proveedor');
+  const credsT = { apiKey: KEY, entorno: 'PRUEBA', tarjetaGuardada: true } as any;
+  const pc1 = await dinelcoProveedor.probarConexion(credsT, { fetch: fakeFetch });
+  ok(!pc1.ok && pc1.error === 'dinelco_sin_permiso_tarjeta', 'Probar conexión: sin payment:create → lo avisa', pc1);
+  ok((await dinelcoProveedor.probarConexion({ ...credsT, tarjetaGuardada: false }, { fetch: fakeFetch })).ok, 'Probar conexión sin guardar tarjetas → no mira payment:create');
   modoCobro = 'APROBAR';
+  ok((await dinelcoProveedor.probarConexion(credsT, { fetch: fakeFetch })).ok, 'Probar conexión con payment:create → ok');
 
   // Con un iframe abierto sin pagar: el toque usa el mismo intento y la sesión queda en previas.
   const p6 = await nuevo(beto, 30000);
