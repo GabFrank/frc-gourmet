@@ -48,7 +48,7 @@ async function main() {
   };
   // Sube todo y baja las migraciones de la tienda posteriores a F4 (F6 en adelante), para
   // que los bloques F2-F4 de abajo sigan encontrando a F4 como la última.
-  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda|TiendaDetallePedido|TiendaTelefonoContactoCuenta|TiendaPagoProveedores|TiendaVinculoCuentaCliente|TiendaPagosMultiIcpay|TiendaAvisosPedido|TiendaAvisosPreferenciaCuenta|TiendaFormaPagoOnlinePos/;
+  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda|TiendaDetallePedido|TiendaTelefonoContactoCuenta|TiendaPagoProveedores|TiendaVinculoCuentaCliente|TiendaPagosMultiIcpay|TiendaAvisosPedido|TiendaAvisosPreferenciaCuenta|TiendaFormaPagoOnlinePos|TiendaPagoDinelco/;
   const subirSinPosteriores = async () => {
     await ds.runMigrations({ transaction: 'each' });
     for (;;) {
@@ -294,6 +294,19 @@ async function main() {
   await ds.runMigrations({ transaction: 'each' });
   ok((await columnas()).includes('cliente_id') && await tablaVinc() === 1, 'Vínculo: up de nuevo vuelve a crear todo');
   await ds.query(`DELETE FROM cuentas_cliente WHERE email LIKE 'zt-v%'`);
+
+  // dinelco (TiendaPagoDinelco): solo siembra la forma de pago «DINELCO ONLINE», inactiva. Se baja
+  // primero para que el bloque de la máquina POS siga encontrándose última.
+  const ultimaDn = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
+  ok(/TiendaPagoDinelco/.test(String(ultimaDn)), 'dinelco: es la última migración', ultimaDn);
+  const fpDn = async () => ds.query(`SELECT activo FROM formas_pago WHERE nombre = 'DINELCO ONLINE'`);
+  const dn = await fpDn();
+  ok(dn.length === 1 && !dn[0].activo, 'dinelco: siembra DINELCO ONLINE inactiva', dn);
+  await ds.undoLastMigration({ transaction: 'each' });
+  ok((await fpDn()).length === 0, 'dinelco: down quita la forma de pago sin usar');
+  await ds.runMigrations({ transaction: 'each' });
+  ok((await fpDn()).length === 1, 'dinelco: up de nuevo la vuelve a sembrar una sola vez');
+  await ds.undoLastMigration({ transaction: 'each' });
 
   // Máquina POS de la forma de pago online (TiendaFormaPagoOnlinePos): una columna nullable.
   const colsFp = async (): Promise<string[]> => pgDb
