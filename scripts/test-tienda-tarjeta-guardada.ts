@@ -42,6 +42,7 @@ let modoCobro: 'APROBAR' | 'RECHAZAR' | 'RED' | 'SIN_PERMISO' = 'APROBAR';
 /** La consulta de una sesión de catastro trae el resultado (si no, solo el callback lo dice). */
 let consultaTraeCatastro = true;
 let reversaOk = true;
+let consultaCae = false;
 const fakeFetch = async (url: string, init: any = {}) => {
   const res = (status: number, b: any) => ({ status, text: async () => (b == null ? '' : JSON.stringify(b)) });
   const u = new URL(url);
@@ -63,6 +64,7 @@ const fakeFetch = async (url: string, init: any = {}) => {
   if (ruta === '/v1/checkout-session' && u.searchParams.get('clientReferenceId')) return res(404, { message: 'checkout session is not found' });
   const m = ruta.match(/^\/v1\/checkout-session\/(\d+)$/);
   if (m && init.method !== 'POST') {
+    if (consultaCae) throw new Error('connect ETIMEDOUT');
     const r = registros.get(Number(m[1]));
     if (!r) return res(200, { sessionId: Number(m[1]), sessionStatus: 'REQUIRES_PAYMENT' });
     return res(200, {
@@ -211,6 +213,14 @@ async function main() {
   ok(w1.statusCode === 403 && (await confirmarCatastro(ds, beto.id, a2.ref)).estado === 'PENDIENTE', 'callback desde una IP que no es de dinelco → 403, sigue PENDIENTE', w1.body);
   const wp = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', headers: { 'cf-connecting-ip': '190.128.216.67' }, payload: callbackCatastro(reg2) });
   ok(wp.statusCode === 403, 'IP de dinelco de producción con una cuenta de PRUEBA → 403', wp.body);
+  // IP correcta pero referencia que no es de un catastro abierto → no vale.
+  const wr = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', headers: QA, payload: { ...callbackCatastro(reg2), clientReferenceId: 'FRCR-999-abcdefabcdef' } });
+  ok(wr.statusCode === 400 && (await confirmarCatastro(ds, beto.id, a2.ref)).estado === 'PENDIENTE', 'IP de dinelco con una referencia que no es de un catastro abierto → 400', wr.body);
+  // dinelco no responde la consulta → sigue PENDIENTE, sin token.
+  consultaCae = true;
+  const wc = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', headers: QA, payload: callbackCatastro(reg2) });
+  consultaCae = false;
+  ok(wc.statusCode === 200 && !(await tok(a2.ref)) && (await tarjetas.findOne({ where: { registroRef: a2.ref } }))?.estado === 'PENDIENTE', 'consulta caída → sigue PENDIENTE y sin token', wc.body);
   // Los tres controles: ACTIVA con el token del aviso.
   const w1b = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', headers: QA, payload: callbackCatastro(reg2) });
   const c2: any = await confirmarCatastro(ds, beto.id, a2.ref);
