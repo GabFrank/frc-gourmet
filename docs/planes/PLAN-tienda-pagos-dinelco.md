@@ -131,6 +131,31 @@ Mismo contrato de proveedores (`electron/services/pagos-online/proveedores/`); e
   pedidos en curso. **Con release:** revert del PR; la migración es aditiva (una forma de pago
   inactiva) y su `down` la borra solo si no tiene ventas.
 
+## Ajustes por la auditoría del plan (2026-11-25, aprobada con observaciones)
+
+1. **Referencia:** `FRCG-<pedido.id>-<intento>-<6 hex al azar>` (guardado en `pago_datos_json`): no
+   choca con 100+ intentos ni con la copia u otros entornos que comparten el comercio de prueba.
+2. **Una sola sesión viva por pedido:** si el intento actual tiene token sin vencer, se reusa (otra
+   pestaña ve el mismo formulario); recién con el token vencido y la sesión sin pago se abre otra.
+   Test: dos sesiones del mismo pedido aprobadas → la segunda va a la cola DEVOLVER. Se le pregunta
+   a dinelco si un formulario ya cargado puede pagar después de que vence el token.
+3. **Aviso:** responde **200 siempre** con el mismo cuerpo (no deja sondear referencias) y usa el
+   límite de la ruta pública (`/pub/pagos/:proveedor/aviso`, 120/min). Los sobres de pago y de
+   reversa se prueban con los ejemplos de la documentación; el real se valida en la prueba de humo
+   de producción (queda en el historial del pedido).
+4. **CSP:** si la tienda manda Content-Security-Policy, `frame-src` y `form-action` llevan
+   exactamente los hosts del proveedor (`test-checkout` / `checkout.dinelco.com.py`).
+5. **Clave rechazada (401/403):** los pedidos siguen PENDIENTE y el job reintenta hasta vencer;
+   «Probar conexión» muestra el error y el evento queda en el historial del pedido. La reversa es
+   solo total: una devolución parcial se hace a mano en dinelco.
+6. **Factura en la copia:** la copia de Don Franco no transmite a la SET (sin facturación
+   electrónica real); se verifica en su configuración antes de facturar.
+7. **Salida a producción** (después del merge, con OK): dinelco registra `https://app.frc-gourmet.com`
+   en la credencial de producción (ya pedido), el local carga la clave en Config Tienda Online y se
+   hace una prueba de humo con un pago chico real y su reversa, antes de prender dinelco para clientes.
+8. **Plan B si dinelco no habilita el dominio de prueba:** pedirles el dominio de prueba que
+   ofrecieron («les indicaremos un dominio de prueba»). Sin pago real en sandbox no se mergea.
+
 ## Bloqueos y pendientes con dinelco
 
 - **Bloqueante para la fase 3:** que dinelco habilite `https://app.frc-gourmet.com` como
