@@ -117,6 +117,20 @@ Mismo contrato de proveedores (`electron/services/pagos-online/proveedores/`); e
 - 401 → credenciales; 404 en probar conexión → ok.
 - Varios proveedores prendidos (Bancard + dinelco): el checkout ofrece los dos.
 
+## Riesgos y vuelta atrás
+
+- **Cobrar sin registrar:** el aviso no tiene firma ni reintentos; por eso la verdad sale siempre de
+  la consulta (job cada minuto + `verificar` desde la página). Un pago que llega con el pedido ya
+  cancelado entra a la cola DEVOLVER (reversa automática dentro de 24 h; después, a mano en dinelco).
+- **Cobrar dos veces:** una referencia por intento; no se abre otra sesión si la actual tiene un
+  pago APPROVED o PROCESSING.
+- **Clave expuesta:** la clave va al almacén seguro (campo `secreto`), nunca al storefront, a los
+  eventos ni al repo. El token del iframe dura 10 min y no se registra.
+- **Vuelta atrás sin release:** dinelco queda apagado hasta que el local carga su clave y prende la
+  forma de pago; apagarlo en Config Tienda Online lo saca del checkout al momento, sin tocar los
+  pedidos en curso. **Con release:** revert del PR; la migración es aditiva (una forma de pago
+  inactiva) y su `down` la borra solo si no tiene ventas.
+
 ## Bloqueos y pendientes con dinelco
 
 - **Bloqueante para la fase 3:** que dinelco habilite `https://app.frc-gourmet.com` como
