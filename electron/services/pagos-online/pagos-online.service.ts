@@ -28,6 +28,8 @@ import { DecisionPago, estadoPagoPorDecision, PagoDecidido } from '../../utils/d
 import { UpayConfig } from './upay-checkout.provider';
 import { ResultadoPago } from './interpretar-pago';
 import { deps, fetchActual } from './proveedores/deps';
+import { withRequestUser } from '../../utils/auth.utils';
+import { getUsuarioSistemaOnline } from '../../utils/usuario-sistema.utils';
 import { ContextoProveedor, DatosQr, FetchLike, ProveedorError, ProveedorPagoOnline } from './proveedores/tipos';
 import { nombreProveedor, proveedorDelPedido, proveedorPorId, PROVEEDOR_UPAY } from './proveedores';
 import { upayApiKey, upayConfigDeCfg, upayProveedor } from './proveedores/upay.proveedor';
@@ -903,6 +905,36 @@ export async function tickPagosOnline(
   return { consultados, pagados };
 }
 
+/**
+ * Un ciclo del job, a nombre de «Sistema / Online» (#357.3): lo que crea —pago, venta
+ * materializada— no queda a nombre de la consola ni con sus permisos. Sin ese usuario se
+ * saltea el ciclo y se avisa (dedupe por día): nunca corre con la consola de fondo.
+ * Devuelve false si se salteó.
+ */
+export async function cicloJobPagosOnline(
+  ds: DataSource,
+  alPagar: (pedidoId: number) => Promise<void>,
+  resolverUsuario: (ds: DataSource) => Promise<any> = getUsuarioSistemaOnline,
+): Promise<boolean> {
+  let sistema;
+  try {
+    sistema = await resolverUsuario(ds);
+  } catch (e: any) {
+    console.error('[pagos-online] job salteado: sin usuario Sistema / Online:', e?.message || e);
+    try {
+      const { dispatchEvento } = await import('../notificacion.service');
+      await dispatchEvento('TIENDA_PAGO_ONLINE', {
+        asunto: 'Tienda online: pagos sin revisar',
+        texto: 'No se pudo resolver el usuario «Sistema / Online»: los pagos online no se están revisando. Revisá Usuarios.',
+        dedupeKey: 'job-sin-sistema-online',
+      });
+    } catch { /* el aviso es best-effort */ }
+    return false;
+  }
+  await withRequestUser(sistema, () => tickPagosOnline(ds, { alPagar }));
+  return true;
+}
+
 let timer: NodeJS.Timeout | null = null;
 /** Arranca el job (proceso principal del servidor). Revisa primero los atrasados. */
 export function iniciarJobPagosOnline(ds: DataSource, alPagar: (pedidoId: number) => Promise<void>): void {
@@ -912,7 +944,7 @@ export function iniciarJobPagosOnline(ds: DataSource, alPagar: (pedidoId: number
     if (corriendo || !ds.isInitialized) return;
     corriendo = true;
     try {
-      await tickPagosOnline(ds, { alPagar });
+      await cicloJobPagosOnline(ds, alPagar);
     } catch (e: any) {
       console.warn('[pagos-online] job:', e?.message || e);
     } finally {

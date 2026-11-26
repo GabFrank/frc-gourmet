@@ -117,7 +117,20 @@ export function registerPublicRoutes(fastify: FastifyInstance, dataSource?: Data
       try {
         const ipInfo = clientIpDe(request);
         const ctx = { userId: null, deviceId: null, customerId: null, clientIp: ipInfo.ip, viaTunel: ipInfo.viaTunel };
-        const r: any = await invokeHandlerWithContext('pub-pago-aviso', ctx, proveedor, request.body ?? null);
+        // #357.3: el aviso corre a nombre de «Sistema / Online», no de la consola. Fail-closed:
+        // sin ese usuario, 503 (el proveedor reintenta y el job consulta el pago igual).
+        let sistema;
+        try {
+          sistema = dataSource ? await getUsuarioSistemaOnline(dataSource) : null;
+        } catch (err) {
+          console.error('[pub] aviso de pago sin usuario Sistema / Online:', err);
+        }
+        if (!sistema) {
+          reply.code(503);
+          return { status: 'error' };
+        }
+        const r: any = await withRequestUser(sistema, () =>
+          invokeHandlerWithContext('pub-pago-aviso', ctx, proveedor, request.body ?? null));
         reply.code(Number(r?.http) || 200);
         return r?.respuesta ?? { status: 'error' };
       } catch (err: any) {
