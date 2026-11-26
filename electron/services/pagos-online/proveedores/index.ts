@@ -6,8 +6,9 @@ import { ProveedorPagoOnline } from './tipos';
 import { upayProveedor, PROVEEDOR_UPAY } from './upay.proveedor';
 import { bancardProveedor } from './bancard.proveedor';
 import { icpayProveedor } from './icpay.proveedor';
+import { dinelcoProveedor } from './dinelco.proveedor';
 
-const PROVEEDORES: ProveedorPagoOnline[] = [upayProveedor, bancardProveedor, icpayProveedor];
+const PROVEEDORES: ProveedorPagoOnline[] = [upayProveedor, bancardProveedor, icpayProveedor, dinelcoProveedor];
 
 export { PROVEEDOR_UPAY };
 

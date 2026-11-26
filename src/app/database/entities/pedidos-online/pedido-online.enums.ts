@@ -35,6 +35,8 @@ export enum MetodoPagoOnline {
   UPAY = 'UPAY',
   /** IC Pay: Pix de Brasil cobrado online (PLAN-tienda-pagos-multi-icpay). */
   ICPAY = 'ICPAY',
+  /** dinelco Checkout embebido: tarjeta en un iframe de dinelco (PLAN-tienda-pagos-dinelco). */
+  DINELCO = 'DINELCO',
   PAGOPAR = 'PAGOPAR',
   // F8: se pagan al recibir / retirar (el repartidor o la caja los cobran).
   TARJETA_POS = 'TARJETA_POS',
@@ -96,10 +98,12 @@ export const FORMA_PAGO_UPAY = 'UPAY ONLINE';
 export const FORMA_PAGO_BANCARD = 'BANCARD ONLINE';
 /** Forma de pago del cobro Pix online con IC Pay. La siembra TiendaPagosMultiIcpay. */
 export const FORMA_PAGO_ICPAY = 'PIX ONLINE';
+/** Forma de pago del cobro con tarjeta por dinelco Checkout. La siembra TiendaPagoDinelco. */
+export const FORMA_PAGO_DINELCO = 'DINELCO ONLINE';
 /** Métodos que son un PROVEEDOR de pago online (el cliente paga antes, en su página/formulario). */
-export const METODOS_PAGO_ONLINE: string[] = ['UPAY', 'BANCARD', 'ICPAY'];
+export const METODOS_PAGO_ONLINE: string[] = ['UPAY', 'BANCARD', 'ICPAY', 'DINELCO'];
 export function esMetodoPagoOnline(m: string | null | undefined): boolean {
   return METODOS_PAGO_ONLINE.includes(String(m || '').toUpperCase());
 }
 /** Formas de pago de los cobros online (no se ofrecen a mano en el PdV). */
-export const FORMAS_PAGO_ONLINE: string[] = [FORMA_PAGO_UPAY, FORMA_PAGO_BANCARD, FORMA_PAGO_ICPAY];
+export const FORMAS_PAGO_ONLINE: string[] = [FORMA_PAGO_UPAY, FORMA_PAGO_BANCARD, FORMA_PAGO_ICPAY, FORMA_PAGO_DINELCO];

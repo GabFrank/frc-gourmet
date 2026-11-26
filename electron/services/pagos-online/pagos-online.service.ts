@@ -30,7 +30,7 @@ import { ResultadoPago } from './interpretar-pago';
 import { deps, fetchActual } from './proveedores/deps';
 import { withRequestUser } from '../../utils/auth.utils';
 import { getUsuarioSistemaOnline } from '../../utils/usuario-sistema.utils';
-import { ContextoProveedor, DatosQr, FetchLike, ProveedorError, ProveedorPagoOnline } from './proveedores/tipos';
+import { CobroInput, ContextoProveedor, DatosQr, FetchLike, InicioCobro, ProveedorError, ProveedorPagoOnline } from './proveedores/tipos';
 import { nombreProveedor, proveedorDelPedido, proveedorPorId, PROVEEDOR_UPAY } from './proveedores';
 import { upayApiKey, upayConfigDeCfg, upayProveedor } from './proveedores/upay.proveedor';
 import { cuentaDelPedido, cuentasListas, cuentasParaAviso, CuentaResuelta } from './cuentas-pago';
@@ -155,6 +155,7 @@ export type InicioPagoRespuesta =
   | { success: true; checkoutUrl: string; tipo: 'REDIRECCION'; hosts: string[] }
   | { success: true; checkoutUrl: string; tipo: 'FORMULARIO'; procesoId: string; script: string; proveedor: string; hosts: string[] }
   | { success: true; checkoutUrl: string; tipo: 'QR'; qr: DatosQr; proveedor: string; hosts: string[] }
+  | { success: true; checkoutUrl: string; tipo: 'IFRAME'; token: string; validarUrl: string; proveedor: string; hosts: string[] }
   | { success: false; error: string };
 
 /**
@@ -166,6 +167,11 @@ function respuestaInicio(prov: ProveedorPagoOnline, creds: any, guardado: string
     const qr = datos?.qr as DatosQr | undefined;
     if (!qr?.payload) return { success: false, error: 'pago_en_curso' };
     return { success: true, checkoutUrl: guardado, tipo: 'QR', qr, proveedor: prov.id, hosts: prov.hosts };
+  }
+  if (prov.modo === 'IFRAME') {
+    // dinelco: el token viaja al storefront (no es la clave: sirve solo para ESTA sesión, ~10 min).
+    if (!datos?.['token'] || !datos?.['validarUrl']) return { success: false, error: 'pago_en_curso' };
+    return { success: true, checkoutUrl: guardado, tipo: 'IFRAME', token: String(datos['token']), validarUrl: String(datos['validarUrl']), proveedor: prov.id, hosts: prov.hosts };
   }
   if (prov.modo === 'FORMULARIO') {
     return { success: true, checkoutUrl: guardado, tipo: 'FORMULARIO', procesoId: guardado, script: prov.scriptUrl ? prov.scriptUrl(creds) : '', proveedor: prov.id, hosts: prov.hosts };
@@ -189,6 +195,63 @@ function datosDe(json: string | null | undefined): Record<string, any> | null {
   if (!json) return null;
   const v = safeParse(json);
   return v && typeof v === 'object' && !Array.isArray(v) ? v : null;
+}
+
+function urlGuardadaDe(r: InicioCobro): string {
+  return r.tipo === 'REDIRECCION' ? r.url : r.tipo === 'FORMULARIO' ? r.procesoId : r.tipo === 'IFRAME' ? `iframe:${r.sesionId}` : `qr:${r.sesionId}`;
+}
+
+/** Lo que el proveedor necesita para cobrar este intento. */
+async function entradaCobro(
+  ds: DataSource, p: PedidoOnline, intento: number, idem: string, vuelta: string, formaId: number | null, prov: ProveedorPagoOnline,
+): Promise<CobroInput> {
+  const ruta = formaId ? `${prov.id.toLowerCase()}-${formaId}` : prov.id.toLowerCase();
+  return {
+    referencia: referencia(p),
+    procesoNumerico: procesoNumerico(p.id, intento),
+    idempotencyKey: idem,
+    monto: Number(p.total),
+    montoReales: await totalEnReales(ds, Number(p.total)).catch(() => null),
+    urlVuelta: vuelta,
+    urlAviso: `${new URL(vuelta).origin}/pub/pagos/${ruta}/aviso`,
+    descripcion: `Pedido ${p.numero}`,
+    items: [
+      ...(p.items || []).map((it) => ({
+        name: [it.nombreProducto, it.nombrePresentacion].filter(Boolean).join(' '),
+        quantity: Number(it.cantidad),
+        unitPrice: Number(it.subtotal) / Math.max(1, Number(it.cantidad)),
+      })),
+      ...(Number(p.costoEnvio) > 0 ? [{ name: 'Envío', quantity: 1, unitPrice: Number(p.costoEnvio) }] : []),
+    ],
+  };
+}
+
+/**
+ * IFRAME con el token vencido y el intento todavía PENDIENTE: otra sesión del MISMO intento (el
+ * proveedor mira antes que la actual no tenga un pago aprobado o en proceso). Se guarda con un
+ * UPDATE condicionado a la sesión que había: dos recargas a la vez no abren dos.
+ */
+async function renovarSesionIframe(
+  ds: DataSource, p: PedidoOnline, prov: ProveedorPagoOnline, creds: any, formaId: number | null, datos: Record<string, any> | null,
+): Promise<InicioPagoRespuesta> {
+  const repo = ds.getRepository(PedidoOnline);
+  const intento = p.pagoIntento ?? 1;
+  try {
+    const vuelta = `${urlPublicaTienda()}/tienda/pago/${encodeURIComponent(p.numero)}`;
+    const cobro = { sesionId: p.pagoSesionId!, referencia: referencia(p), monto: Number(p.total), pagoId: p.pagoId ?? null, expiraEn: p.pagoExpiraEn ?? null, datos };
+    const r = await prov.renovar!(creds, cobro, await entradaCobro(ds, p, intento, p.pagoIdemKey || randomUUID(), vuelta, formaId, prov), ctx());
+    if (r.tipo !== 'IFRAME') return { success: false, error: 'pago_en_curso' };
+    const u = await repo.createQueryBuilder().update(PedidoOnline)
+      .set({ pagoDatosJson: JSON.stringify(r.datos) } as any)
+      .where('id = :id AND estado_pago = :pen AND pago_sesion_id = :ses', { id: p.id, pen: EstadoPagoOnline.PENDIENTE, ses: p.pagoSesionId })
+      .execute();
+    if (!u.affected) return { success: false, error: 'pago_en_curso' };
+    await registrar(ds, p, 'SESION_CREADA', 'token renovado', r.crudo);
+    return respuestaInicio(prov, creds, p.pagoCheckoutUrl!, r.datos);
+  } catch (e: any) {
+    await registrar(ds, p, 'ERROR', e instanceof ProveedorError ? e.codigo : 'error', e?.message || String(e));
+    return { success: false, error: e instanceof ProveedorError && e.codigo === 'pago_en_curso' ? 'pago_en_curso' : codigoError(prov, e) };
+  }
 }
 
 /**
@@ -244,7 +307,14 @@ export async function iniciarPagoPedido(
   // Sesión vigente del mismo intento: se reusa (doble clic, reintento de red).
   const vigente = p.pagoSesionId && p.pagoCheckoutUrl && p.estadoPago === EstadoPagoOnline.PENDIENTE
     && (!p.pagoExpiraEn || new Date(p.pagoExpiraEn).getTime() > Date.now() + 60_000);
-  if (vigente && !opts.nuevoIntento) return respuestaInicio(prov, creds, p.pagoCheckoutUrl!, datosDe(p.pagoDatosJson));
+  if (vigente && !opts.nuevoIntento) {
+    const datosVig = datosDe(p.pagoDatosJson);
+    // IFRAME (dinelco): el token vence antes que el intento; con el cliente de vuelta se renueva.
+    if (prov.modo === 'IFRAME' && prov.renovar && prov.tokenVencido?.(datosVig, new Date())) {
+      return renovarSesionIframe(ds, p, prov, creds, formaId, datosVig);
+    }
+    return respuestaInicio(prov, creds, p.pagoCheckoutUrl!, datosVig);
+  }
 
   // Hay sesión: un intento nuevo solo si la anterior FALLÓ. Con una abierta (que todavía se
   // puede pagar) no se abre otra: cobraría dos veces.
@@ -286,27 +356,12 @@ export async function iniciarPagoPedido(
     .where('o.pago_sesion_id = :s AND o.pago_proveedor = :pv AND o.id <> :id', { s: sesionId, pv: prov.id, id: p.id })
     .getCount());
   try {
-    const r = await prov.iniciar(creds, {
-      referencia: referencia(p),
-      procesoNumerico: procesoNumerico(p.id, intento),
-      idempotencyKey: idem,
-      monto: Number(p.total),
-      montoReales: await totalEnReales(ds, Number(p.total)).catch(() => null),
-      urlVuelta: vuelta,
-      descripcion: `Pedido ${p.numero}`,
-      items: [
-        ...(p.items || []).map((it) => ({
-          name: [it.nombreProducto, it.nombrePresentacion].filter(Boolean).join(' '),
-          quantity: Number(it.cantidad),
-          unitPrice: Number(it.subtotal) / Math.max(1, Number(it.cantidad)),
-        })),
-        ...(Number(p.costoEnvio) > 0 ? [{ name: 'Envío', quantity: 1, unitPrice: Number(p.costoEnvio) }] : []),
-      ],
-    }, { ...ctx(), sesionUsada });
+    const r = await prov.iniciar(creds, await entradaCobro(ds, p, intento, idem, vuelta, formaId, prov), { ...ctx(), sesionUsada });
     // Con formulario (Bancard) no hay URL a la que redirigir: se guarda el `process_id`. Con QR
-    // (IC Pay), la marca `qr:<sesión>`; el QR mismo va en `pago_datos_json`.
-    const urlGuardada = r.tipo === 'REDIRECCION' ? r.url : r.tipo === 'FORMULARIO' ? r.procesoId : `qr:${r.sesionId}`;
-    const datos = r.tipo === 'QR' ? r.datos : null;
+    // (IC Pay), la marca `qr:<sesión>`; el QR mismo va en `pago_datos_json`. Con iframe (dinelco),
+    // `iframe:<sesión>`; el token va en `pago_datos_json`.
+    const urlGuardada = urlGuardadaDe(r);
+    const datos = r.tipo === 'QR' || r.tipo === 'IFRAME' ? r.datos : null;
     await repo.update({ id: p.id }, {
       pagoSesionId: r.sesionId,
       pagoCheckoutUrl: urlGuardada,
@@ -399,6 +454,9 @@ export async function procesarAvisoPago(
   const m = String(proveedorId || '').toUpperCase().match(/^([A-Z]{2,20})(?:-(\d{1,9}))?$/);
   const prov = m ? proveedorPorId(m[1]) : null;
   if (!prov?.procesarAviso) return rechazo;
+  // dinelco no firma ni reintenta: a un aviso que no es nuestro se le responde igual que a uno
+  // bueno, así no sirve para averiguar qué referencias existen.
+  const noEs = prov.modo === 'IFRAME' ? { http: 200, respuesta: { recibido: true } } : rechazo;
   const cfg = await getCfg(ds);
   const candidatas = await cuentasParaAviso(ds, cfg, prov.id, m?.[2] ? Number(m[2]) : null);
   if (!candidatas.length) return { http: 503, respuesta: { status: 'error' } };
@@ -431,7 +489,7 @@ export async function procesarAvisoPago(
       return pedido ? { sesionId, referencia: referencia(pedido), monto: Number(pedido.total) } : null;
     }
     const p = pedido as PedidoOnline | null;
-    if (!p) return rechazo;
+    if (!p) return noEs;
     const cp = await cuentaDelPedido(ds, cfg, p);
     if (!cp) return { http: 200, respuesta: a.respuesta, pedidoId: p.id };
     const creds = cp.creds;
@@ -441,7 +499,7 @@ export async function procesarAvisoPago(
     try {
       const c = await prov.consultar(creds, {
         sesionId: a.sesionId, referencia: referencia(p), monto: Number(p.total), pagoId: p.pagoId ?? null,
-        expiraEn: p.pagoExpiraEn ?? null, ahora: opts.ahora,
+        expiraEn: p.pagoExpiraEn ?? null, ahora: opts.ahora, datos: a.datos ?? null,
       }, ctx());
       res = c.resultado;
       await registrar(ds, p, 'CONSULTA', res.tipo, { ...c.crudo, resultado: res, porAviso: true });
@@ -456,7 +514,7 @@ export async function procesarAvisoPago(
   } catch (e: any) {
     // Firma inválida, proceso desconocido o aviso mal formado: no se guarda nada del cuerpo.
     console.warn(`[pagos-online] aviso de ${prov.nombre} rechazado (${e instanceof ProveedorError ? e.codigo : 'error'}):`, e?.message || e);
-    return rechazo;
+    return noEs;
   }
 }
 
@@ -656,7 +714,8 @@ export async function intentarDevolucionAutomatica(ds: DataSource, pedidoId: num
     if (!claim.affected) return null;
     let r: { ok: boolean; detalle: string; crudo?: any; incierto?: boolean };
     try {
-      r = await prov.devolver(creds, { sesionId: p.pagoSesionId, referencia: referencia(p), monto: Number(p.total), pagoId: p.pagoId ?? null }, ctx());
+      const dj = await repo.createQueryBuilder('p').addSelect('p.pagoDatosJson').where('p.id = :id', { id: p.id }).getOne();
+      r = await prov.devolver(creds, { sesionId: p.pagoSesionId, referencia: referencia(p), monto: Number(p.total), pagoId: p.pagoId ?? null, datos: datosDe(dj?.pagoDatosJson) }, ctx());
     } catch (e: any) {
       // Sin respuesta (tiempo, red): no se sabe si el proveedor lo anuló. Vuelve a la cola, pero
       // el aviso pide verificarlo en el proveedor antes de devolver a mano (no devolver dos veces).

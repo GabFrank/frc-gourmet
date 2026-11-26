@@ -25,7 +25,7 @@ export function esUrlCheckoutUpay(url: string): boolean {
 
 /** Métodos que son un proveedor de pago online (el cliente pagó antes). */
 export function esMetodoPagoOnline(m: string | null | undefined): boolean {
-  return ['UPAY', 'BANCARD', 'ICPAY'].includes(String(m || '').toUpperCase());
+  return ['UPAY', 'BANCARD', 'ICPAY', 'DINELCO'].includes(String(m || '').toUpperCase());
 }
 
 /** El pago online es un Pix (IC Pay): cambian los textos («tarjeta» no aplica). */

@@ -221,7 +221,7 @@ export class ListPedidosOnlineComponent implements OnInit, OnDestroy {
   }
 
   pagoLabel(m: string): string {
-    return ({ EFECTIVO: 'Efectivo', BANCARD: 'Tarjeta online (Bancard)', UPAY: 'Tarjeta online (uPay)', PAGOPAR: 'Pagopar', ICPAY: 'Online (IC Pay)' } as Record<string, string>)[m] || m;
+    return ({ EFECTIVO: 'Efectivo', BANCARD: 'Tarjeta online (Bancard)', UPAY: 'Tarjeta online (uPay)', PAGOPAR: 'Pagopar', ICPAY: 'Online (IC Pay)', DINELCO: 'Tarjeta online (dinelco)' } as Record<string, string>)[m] || m;
   }
 
   /** Insignia del pago con tarjeta (F4); null en pedidos en efectivo. */

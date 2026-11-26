@@ -51,6 +51,8 @@ export interface CobroInput {
   montoReales?: number | null;
   /** Página de vuelta del storefront (`…/tienda/pago/<numero>`), sin parámetros. */
   urlVuelta: string;
+  /** URL pública a la que el proveedor avisa de ESTA cuenta (`…/pub/pagos/<prov>[-<cuenta>]/aviso`). */
+  urlAviso?: string;
   descripcion: string;
   items: ItemCobro[];
 }
@@ -66,7 +68,13 @@ export type InicioCobro =
    * (IC Pay / Pix). `datos` se guarda en el pedido (`pago_datos_json`) para mostrarlo de nuevo y
    * para verificar el cobro.
    */
-  | { tipo: 'QR'; sesionId: string; qr: DatosQr; expiraEn: Date | null; datos: Record<string, any>; crudo: any };
+  | { tipo: 'QR'; sesionId: string; qr: DatosQr; expiraEn: Date | null; datos: Record<string, any>; crudo: any }
+  /**
+   * El storefront dibuja el iframe del proveedor y le manda `token` con un formulario oculto a
+   * `validarUrl` (dinelco). `datos` se guarda en el pedido (`pago_datos_json`) con el token, para
+   * volver a mostrarlo si el cliente recarga; `crudo` va al historial y NO lleva el token.
+   */
+  | { tipo: 'IFRAME'; sesionId: string; token: string; validarUrl: string; expiraEn: Date | null; datos: Record<string, any>; crudo: any };
 
 /** Lo que el cliente ve para pagar con un QR (no es secreto: es lo mismo que muestra la pantalla). */
 export interface DatosQr {
@@ -148,7 +156,7 @@ export interface ProveedorPagoOnline<C = any> {
   /** Hosts desde los que el storefront acepta redirigir o cargar el script del proveedor. */
   hosts: string[];
   /** Cómo paga el cliente: lo redirigimos, el formulario del proveedor va en nuestra página, o un QR. */
-  modo: 'REDIRECCION' | 'FORMULARIO' | 'QR';
+  modo: 'REDIRECCION' | 'FORMULARIO' | 'QR' | 'IFRAME';
   /** URL del script del formulario (solo `FORMULARIO`), según el entorno de las credenciales. */
   scriptUrl?(creds: C): string;
   /**
@@ -172,7 +180,15 @@ export interface ProveedorPagoOnline<C = any> {
    * qué cobro es y qué significa. Lanza `ProveedorError` si la firma no es válida.
    */
   procesarAviso?(creds: C, body: any, buscar: (sesionId: string) => Promise<CobroGuardado | null>):
-    Promise<{ sesionId: string; resultado: ResultadoPago; crudo: any; respuesta: any }>;
+    Promise<{ sesionId: string; resultado: ResultadoPago; crudo: any; respuesta: any; datos?: Record<string, any> }>;
+  /**
+   * Solo `IFRAME`: el token del formulario vence antes que el intento (dinelco: ~10 min). Con el
+   * cliente de vuelta en la página y el token vencido, abre otra sesión del MISMO intento (lanza
+   * `ProveedorError('pago_en_curso')` si la actual ya tiene un pago aprobado o en proceso).
+   */
+  renovar?(creds: C, cobro: CobroGuardado, input: CobroInput, ctx: ContextoProveedor): Promise<InicioCobro>;
+  /** Solo `IFRAME`: el token guardado en `datos` venció (o está por vencer). */
+  tokenVencido?(datos: Record<string, any> | null, ahora: Date): boolean;
   /** Datos para cargar en el portal del proveedor (p. ej. la URL de confirmación de ESA cuenta). */
   datosPortal?(urlPublica: string, formaId?: number | null): { etiqueta: string; valor: string }[];
 }

@@ -17,6 +17,9 @@ import { esPagoPix, esUrlPagoPermitida, MENSAJE_PAGO_OCUPADO, textoEstadoPago } 
  *   del proveedor (solo de sus hosts), y Bancard vuelve a esta misma página al terminar.
  * - Proveedor con QR (IC Pay, Pix): se muestra el QR que arma el servidor y el «copia e cola»,
  *   con lo que paga el cliente en reales y la cuenta regresiva (PLAN-tienda-pagos-multi-icpay §2).
+ * - Proveedor con iframe (dinelco): el servidor crea la sesión y devuelve un token; acá se arma el
+ *   iframe `dinelcoCheckout` y un formulario oculto que le manda el token a dinelco. Los eventos
+ *   del iframe (`postMessage`) solo disparan una consulta: decide siempre el servidor.
  * - Si el intento falla y hay otros proveedores prendidos, el cliente puede pagar con otro.
  *
  * El resultado lo decide SIEMPRE el servidor consultando al proveedor (nunca el ?r=ok de la URL):
@@ -41,6 +44,11 @@ declare const Bancard: any;
           <p class="sf-muted">Ingresá los datos de tu tarjeta. Son de {{ formularioProveedor }}: la tienda no los ve.</p>
           <div id="sf-formulario-pago" class="formulario-pago"></div>
         </ng-container>
+        <!-- Checkout de dinelco: la tarjeta se carga en su iframe, embebido. -->
+        <ng-container *ngIf="iframePago">
+          <p class="sf-muted">Ingresá los datos de tu tarjeta. Son de dinelco: la tienda no los ve.</p>
+          <div id="sf-iframe-pago" class="iframe-pago"></div>
+        </ng-container>
         <!-- QR Pix (IC Pay): la imagen la arma el servidor; el código se puede copiar. -->
         <div class="qr-pago" *ngIf="qr && estadoPago === 'PENDIENTE'">
           <p class="qr-monto">Pagás <strong>{{ qrMontoTexto }}</strong> <span class="sf-muted">({{ pedido.total | guarani }})</span></p>
@@ -54,10 +62,10 @@ declare const Bancard: any;
           <p class="sf-muted qr-vence" *ngIf="restanteTexto">Vence en {{ restanteTexto }}</p>
           <p class="sf-muted"><sf-icon name="clock" [size]="16"></sf-icon> Apenas pagues lo confirmamos acá solo.</p>
         </div>
-        <p class="sf-muted" *ngIf="cancelado && estadoPago === 'PENDIENTE' && !formulario">
+        <p class="sf-muted" *ngIf="cancelado && estadoPago === 'PENDIENTE' && !formulario && !iframePago">
           Cancelaste el pago. Tu pedido sigue esperando el pago con tarjeta.
         </p>
-        <p *ngIf="estadoPago === 'PENDIENTE' && !formulario && !cancelado && !qr" class="sf-muted">
+        <p *ngIf="estadoPago === 'PENDIENTE' && !formulario && !iframePago && !cancelado && !qr" class="sf-muted">
           <sf-icon name="clock" [size]="16"></sf-icon> Confirmando tu pago… Esto puede tardar unos minutos.
         </p>
         <div class="sf-ok" *ngIf="estadoPago === 'PAGADO'">
@@ -70,7 +78,7 @@ declare const Bancard: any;
           <ng-container *ngIf="estadoPago === 'FALLIDO' && pedido.estado === 'PENDIENTE_PAGO'">
             <button class="sf-btn" *ngFor="let o of otrosMedios" [disabled]="reintentando" (click)="pagarCon(o)">Pagar con {{ o.etiqueta }}</button>
           </ng-container>
-          <button class="sf-btn sf-btn-primary" *ngIf="cancelado && estadoPago === 'PENDIENTE' && pedido.estado === 'PENDIENTE_PAGO' && !formulario"
+          <button class="sf-btn sf-btn-primary" *ngIf="cancelado && estadoPago === 'PENDIENTE' && pedido.estado === 'PENDIENTE_PAGO' && !formulario && !iframePago"
                   [disabled]="reintentando" (click)="abrirPago(false)">Pagar con tarjeta</button>
           <a class="sf-btn" routerLink="/mis-pedidos">Ver mis pedidos</a>
           <a class="sf-btn" routerLink="/" *ngIf="estadoPago === 'EXPIRADO' || estadoPago === 'FALLIDO'">Volver a la carta</a>
@@ -87,6 +95,9 @@ declare const Bancard: any;
     .sf-acciones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
     .sf-acciones .sf-btn { text-decoration: none; }
     .formulario-pago { min-height: 360px; margin: 8px 0 12px; }
+    .iframe-pago { margin: 8px 0 12px; }
+    .iframe-pago iframe { width: 100%; height: 680px; border: 0; border-radius: 8px; background: #fff; }
+    @media (max-width: 768px) { .iframe-pago iframe { height: 600px; } }
     .qr-pago { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; margin: 4px 0 12px; }
     .qr-monto { font-size: 1.15rem; margin: 0; }
     .qr-monto strong { font-size: 1.5rem; }
@@ -117,6 +128,11 @@ export class PagoPage implements OnInit, OnDestroy {
   /** Ya se pidió el formulario en esta visita (no se vuelve a pedir en cada consulta). */
   private formularioPedido = false;
   private scriptPago: HTMLScriptElement | null = null;
+  /** Iframe de dinelco en pantalla. */
+  iframePago = false;
+  /** Orígenes de los que se aceptan eventos del iframe (los hosts del proveedor del pedido). */
+  private origenesIframe: string[] = [];
+  private escuchaIframe = (ev: MessageEvent) => this.alMensajeIframe(ev);
   /** QR Pix en pantalla (IC Pay). */
   qr: { payload: string; imagen?: string; moneda: string; monto: string; expiraEn: string | null } | null = null;
   copiado = false;
@@ -145,6 +161,7 @@ export class PagoPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    window.removeEventListener('message', this.escuchaIframe);
     if (this.timer) clearInterval(this.timer);
     if (this.reloj) clearInterval(this.reloj);
   }
@@ -156,7 +173,7 @@ export class PagoPage implements OnInit, OnDestroy {
         if (r?.success && r.pedido) {
           this.pedido = r.pedido;
           if (this.estadoPago !== 'PENDIENTE' && this.timer) { clearInterval(this.timer); this.timer = null; }
-          if (this.estadoPago !== 'PENDIENTE') { this.formulario = false; this.qr = null; this.pararReloj(); }
+          if (this.estadoPago !== 'PENDIENTE') { this.formulario = false; this.qr = null; this.quitarIframe(); this.pararReloj(); }
           this.calcularMedios();
           // Proveedor de formulario (Bancard): se arma acá. Con uno de redirección (uPay) esta es la
           // página de vuelta: nunca se manda al cliente de nuevo al proveedor sin que lo pida (si
@@ -279,6 +296,15 @@ export class PagoPage implements OnInit, OnDestroy {
           this.mostrarFormulario(r.script, r.procesoId, r.proveedor);
           return;
         }
+        if (r?.success && r.tipo === 'IFRAME' && r.token && esUrlPagoPermitida(r.validarUrl, hosts)) {
+          this.cancelado = false;
+          this.qr = null;
+          this.pararReloj();
+          if (this.pedido) this.pedido = { ...this.pedido, estadoPago: 'PENDIENTE', ...(proveedor ? { metodoPago: proveedor, formaPagoOnlineId: formaPagoOnlineId ?? null } : {}) };
+          if (!this.timer) this.timer = setInterval(() => this.verificar(), 5000);
+          this.mostrarIframe(r.validarUrl, r.token, hosts || []);
+          return;
+        }
         if (r?.error === 'pago_ocupado') { this.error = MENSAJE_PAGO_OCUPADO; return; }
         if (soloFormulario) return;
         if (r?.success && esUrlPagoPermitida(r.checkoutUrl, hosts)) { window.location.href = r.checkoutUrl; return; }
@@ -286,6 +312,60 @@ export class PagoPage implements OnInit, OnDestroy {
       },
       error: () => { this.reintentando = false; this.error = 'No pudimos abrir el pago.'; },
     });
+  }
+
+  /**
+   * Arma el iframe de dinelco y le manda el token con un formulario oculto (POST, así el token no
+   * viaja en la URL). Los nombres los exige dinelco: iframe `dinelcoCheckout`, input `JWT`.
+   */
+  private mostrarIframe(validarUrl: string, token: string, hosts: string[]): void {
+    this.origenesIframe = hosts.map((h) => 'https://' + h);
+    window.removeEventListener('message', this.escuchaIframe);
+    window.addEventListener('message', this.escuchaIframe);
+    this.iframePago = true;
+    setTimeout(() => {
+      const cont = document.getElementById('sf-iframe-pago');
+      if (!cont) { this.iframePago = false; this.error = 'No pudimos mostrar el formulario de pago. Probá de nuevo en un rato.'; return; }
+      cont.innerHTML = '';
+      const iframe = document.createElement('iframe');
+      iframe.id = 'dinelcoCheckout';
+      iframe.name = 'dinelcoCheckout';
+      iframe.title = 'Pago con tarjeta (dinelco)';
+      iframe.setAttribute('allow', 'payment');
+      const form = document.createElement('form');
+      form.id = 'checkoutForm';
+      form.method = 'POST';
+      form.target = 'dinelcoCheckout';
+      form.action = validarUrl;
+      form.style.display = 'none';
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'JWT';
+      input.id = 'integrityToken';
+      input.value = token;
+      form.appendChild(input);
+      cont.appendChild(iframe);
+      cont.appendChild(form);
+      form.submit();
+    });
+  }
+
+  /** Evento del iframe: solo de los hosts de dinelco. Éxito o rechazo → se consulta ya. */
+  private alMensajeIframe(ev: MessageEvent): void {
+    if (!this.origenesIframe.includes(ev.origin)) return;
+    const st = (ev.data && typeof ev.data === 'object') ? String((ev.data as any).paymentStatus || '') : '';
+    if (st !== 'payment.success' && st !== 'payment.failed') return;
+    // Tras un rechazo dinelco deja reintentar en el mismo iframe; acá se saca: el cliente elige
+    // reintentar (otra sesión) o pagar con otro medio, como con los demás proveedores.
+    if (st === 'payment.failed') this.quitarIframe();
+    this.verificar();
+  }
+
+  private quitarIframe(): void {
+    if (!this.iframePago) return;
+    this.iframePago = false;
+    const cont = document.getElementById('sf-iframe-pago');
+    if (cont) cont.innerHTML = '';
   }
 
   /** Carga el script del proveedor (una vez) y arma su formulario en la página. */
