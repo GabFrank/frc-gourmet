@@ -48,7 +48,7 @@ async function main() {
   };
   // Sube todo y baja las migraciones de la tienda posteriores a F4 (F6 en adelante), para
   // que los bloques F2-F4 de abajo sigan encontrando a F4 como la última.
-  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda|TiendaDetallePedido|TiendaTelefonoContactoCuenta|TiendaPagoProveedores|TiendaVinculoCuentaCliente|TiendaPagosMultiIcpay|TiendaAvisosPedido|TiendaAvisosPreferenciaCuenta|TiendaFormaPagoOnlinePos|TiendaPagoDinelco/;
+  const POSTERIORES_A_F4 = /TiendaCategorias|TiendaPersonalizarSabores|TiendaPagoMoneda|TiendaDetallePedido|TiendaTelefonoContactoCuenta|TiendaPagoProveedores|TiendaVinculoCuentaCliente|TiendaPagosMultiIcpay|TiendaAvisosPedido|TiendaAvisosPreferenciaCuenta|TiendaFormaPagoOnlinePos|TiendaPagoDinelco|TiendaTarjetaGuardada/;
   const subirSinPosteriores = async () => {
     await ds.runMigrations({ transaction: 'each' });
     for (;;) {
@@ -295,6 +295,25 @@ async function main() {
   ok((await columnas()).includes('cliente_id') && await tablaVinc() === 1, 'Vínculo: up de nuevo vuelve a crear todo');
   await ds.query(`DELETE FROM cuentas_cliente WHERE email LIKE 'zt-v%'`);
 
+  // Tarjeta guardada (TiendaTarjetaGuardada): tabla nueva. Se baja primero para que el bloque de
+  // dinelco siga encontrándose último.
+  const ultimaTg = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
+  ok(/TiendaTarjetaGuardada/.test(String(ultimaTg)), 'Tarjeta guardada: es la última migración', ultimaTg);
+  const colsTg = async (): Promise<string[]> => pgDb
+    ? (await ds.query(`SELECT column_name AS c FROM information_schema.columns WHERE table_schema='public' AND table_name='tienda_tarjetas_guardadas'`)).map((r: any) => r.c)
+    : (await ds.query(`PRAGMA table_info('tienda_tarjetas_guardadas')`)).map((r: any) => r.name);
+  const metaTg = ds.entityMetadatas.find((m) => m.tableName === 'tienda_tarjetas_guardadas')!;
+  ok(!!metaTg && JSON.stringify(metaTg.columns.map((c) => c.databaseName).sort()) === JSON.stringify([...(await colsTg())].sort()), 'Tarjeta guardada: las columnas coinciden con la entidad', await colsTg());
+  await ds.query(`INSERT INTO tienda_tarjetas_guardadas (cuenta_cliente_id, registro_ref) VALUES (1, 'FRCR-1-zt')`);
+  ok(await falla(() => ds.query(`INSERT INTO tienda_tarjetas_guardadas (cuenta_cliente_id, registro_ref) VALUES (2, 'FRCR-1-zt')`)), 'Tarjeta guardada: la referencia del catastro es única');
+  const tg = await ds.query(`SELECT estado FROM tienda_tarjetas_guardadas WHERE registro_ref = 'FRCR-1-zt'`);
+  ok(tg[0]?.estado === 'PENDIENTE', 'Tarjeta guardada: nace PENDIENTE', tg);
+  await ds.undoLastMigration({ transaction: 'each' });
+  ok((await colsTg()).length === 0, 'Tarjeta guardada: down quita la tabla');
+  await ds.runMigrations({ transaction: 'each' });
+  ok((await colsTg()).length > 0, 'Tarjeta guardada: up de nuevo la crea');
+  await ds.undoLastMigration({ transaction: 'each' });
+
   // dinelco (TiendaPagoDinelco): solo siembra la forma de pago «DINELCO ONLINE», inactiva. Se baja
   // primero para que el bloque de la máquina POS siga encontrándose última.
   const ultimaDn = (await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name;
@@ -306,6 +325,10 @@ async function main() {
   ok((await fpDn()).length === 0, 'dinelco: down quita la forma de pago sin usar');
   await ds.runMigrations({ transaction: 'each' });
   ok((await fpDn()).length === 1, 'dinelco: up de nuevo la vuelve a sembrar una sola vez');
+  // El up de nuevo también volvió a aplicar las posteriores (TiendaTarjetaGuardada): se bajan primero.
+  while (!/TiendaPagoDinelco/.test(String((await ds.query(`SELECT name FROM typeorm_migrations ORDER BY id DESC LIMIT 1`))[0]?.name))) {
+    await ds.undoLastMigration({ transaction: 'each' });
+  }
   await ds.undoLastMigration({ transaction: 'each' });
 
   // Máquina POS de la forma de pago online (TiendaFormaPagoOnlinePos): una columna nullable.

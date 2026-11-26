@@ -1,7 +1,8 @@
 import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
 import { CreditoTiendaError, creditoHabilitadoEnTienda, estadoCreditoCliente, identidadVerificada, withClienteLock } from '../utils/credito-tienda.utils';
-import { cobroOcupado, ERROR_COBRO_OCUPADO, iniciarPagoPedido, InicioPagoRespuesta, procesarAvisoPago, verificarPagoPedido, VERIFICAR_MIN_MS } from '../services/pagos-online/pagos-online.service';
+import { cobroOcupado, ERROR_COBRO_OCUPADO, iniciarPagoPedido, InicioPagoRespuesta, pagarConTarjetaGuardada, procesarAvisoPago, verificarPagoPedido, VERIFICAR_MIN_MS } from '../services/pagos-online/pagos-online.service';
 import { cuentasListas } from '../services/pagos-online/cuentas-pago';
+import { abrirCatastro, avisoCatastro, confirmarCatastro, esAvisoCatastro, listarTarjetas, quitarTarjeta } from '../services/pagos-online/tarjetas-guardadas.service';
 import * as QRCode from 'qrcode';
 import { metodosAlRecibir, monedasTienda, validarPagoPedido, ResultadoPago } from '../utils/pago-pedido.utils';
 import { accionesPedido, ESTADOS_CANCELABLES_CLIENTE, limpiarMotivo } from '../utils/pedido-acciones.utils';
@@ -972,10 +973,43 @@ export function registerPedidosOnlinePedidosHandlers(
     return { success: true, pedido: q ? mapPedido(q) : null };
   });
 
+  // ====== «Guardar mi tarjeta» y pago con un toque (PLAN-tienda-tarjeta-guardada) ======
+  ipcMain.handle('get-tarjetas-guardadas-online', async (event: any) => {
+    const customerId = event?._customerId;
+    if (!customerId || !(await cuentaActiva(customerId))) return { success: false, error: 'no_autenticado' };
+    return { success: true, ...(await listarTarjetas(dataSource, customerId)) };
+  });
+  ipcMain.handle('abrir-registro-tarjeta-online', async (event: any, opciones?: any) => {
+    const customerId = event?._customerId;
+    if (!customerId || !(await cuentaActiva(customerId))) return { success: false, error: 'no_autenticado' };
+    return abrirCatastro(dataSource, customerId, { consentimiento: opciones?.consentimiento === true });
+  });
+  ipcMain.handle('confirmar-registro-tarjeta-online', async (event: any, ref: string) => {
+    const customerId = event?._customerId;
+    if (!customerId || !(await cuentaActiva(customerId))) return { success: false, error: 'no_autenticado' };
+    return confirmarCatastro(dataSource, customerId, String(ref || '').slice(0, 60));
+  });
+  ipcMain.handle('quitar-tarjeta-guardada-online', async (event: any, id: number) => {
+    const customerId = event?._customerId;
+    if (!customerId || !(await cuentaActiva(customerId))) return { success: false, error: 'no_autenticado' };
+    return quitarTarjeta(dataSource, customerId, Number(id));
+  });
+  ipcMain.handle('pagar-pedido-tarjeta-guardada-online', async (event: any, numero: string, tarjetaId: number) => {
+    const p = await pedidoDelCliente(event?._customerId, numero);
+    if (!p) return { success: false, error: 'pedido_no_encontrado' };
+    const r = await pagarConTarjetaGuardada(dataSource, p.id, Number(event._customerId), Number(tarjetaId) || 0);
+    if (r.recienPagado && r.aceptadoAutomatico) await materializarTrasPago(dataSource, p.id);
+    if (!r.success) return { success: false, error: r.error };
+    const q = await pedidoRepo().findOne({ where: { id: p.id }, relations: ['items'] });
+    return { success: true, pendiente: !!r.pendiente, pedido: q ? mapPedido(q) : null };
+  });
+
   // Aviso firmado del proveedor de pago (webhook). Lo llama la ruta `/pub/pagos/:proveedor/aviso`
   // (no va por /pub/rpc: el proveedor manda su propio formato a una URL fija). Si el pago quedó
   // confirmado y la tienda acepta sola, se manda a cocina igual que con la consulta.
   ipcMain.handle('pub-pago-aviso', async (_event: any, proveedorId: string, body: any) => {
+    // Callback del catastro de dinelco (referencia `FRCR-…`): no es de un pedido.
+    if (esAvisoCatastro(body)) return avisoCatastro(dataSource, String(proveedorId || ''), body);
     const r = await procesarAvisoPago(dataSource, String(proveedorId || ''), body);
     if (r.pedidoId && r.resultado?.recienPagado && r.resultado.aceptadoAutomatico) await materializarTrasPago(dataSource, r.pedidoId);
     return { http: r.http, respuesta: r.respuesta };
@@ -993,6 +1027,11 @@ export function registerPedidosOnlinePedidosHandlers(
   registerPublicOperation('pedido.seguimiento', { channel: 'get-pedido-online-seguimiento', requiresAuth: false, description: 'Estado del pedido del invitado de mesa por su token de seguimiento.' });
   registerPublicOperation('pedido.pago.iniciar', { channel: 'iniciar-pago-pedido-online', requiresAuth: true, description: 'Iniciar o reintentar el pago con tarjeta de un pedido propio.' });
   registerPublicOperation('pedido.pago.verificar', { channel: 'verificar-pago-pedido-online', requiresAuth: true, description: 'Consultar al proveedor el pago de un pedido propio.' });
+  registerPublicOperation('tarjetas.listar', { channel: 'get-tarjetas-guardadas-online', requiresAuth: true, description: 'Mis tarjetas guardadas (sin datos de la tarjeta, solo marca y últimos dígitos).' });
+  registerPublicOperation('tarjetas.registro.abrir', { channel: 'abrir-registro-tarjeta-online', requiresAuth: true, description: 'Abrir el catastro de dinelco para guardar una tarjeta.' });
+  registerPublicOperation('tarjetas.registro.confirmar', { channel: 'confirmar-registro-tarjeta-online', requiresAuth: true, description: 'Confirmar con dinelco un catastro propio.' });
+  registerPublicOperation('tarjetas.quitar', { channel: 'quitar-tarjeta-guardada-online', requiresAuth: true, description: 'Quitar una tarjeta guardada propia.' });
+  registerPublicOperation('pedido.pago.tarjeta', { channel: 'pagar-pedido-tarjeta-guardada-online', requiresAuth: true, description: 'Pagar un pedido propio con una tarjeta guardada (un toque).' });
   registerPublicOperation('pedido.estado', { channel: 'get-pedido-online-estado', requiresAuth: true, description: 'Estado de un pedido por número.' });
   registerPublicOperation('pedido.cancelacion.solicitar', { channel: 'solicitar-cancelacion-pedido-online', requiresAuth: true, description: 'Pedir al local que cancele un pedido propio (F9).' });
   registerPublicOperation('pedido.modificar', { channel: 'modificar-pedido-online', requiresAuth: true, description: 'Cancelar un pedido propio sin confirmar para volver a armarlo (F9).' });

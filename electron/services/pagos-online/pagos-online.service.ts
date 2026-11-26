@@ -69,7 +69,7 @@ async function avisarPersonal(texto: string, dedupe: string): Promise<void> {
   }
 }
 
-async function getCfg(ds: DataSource): Promise<TiendaOnlineConfig | null> {
+export async function getCfg(ds: DataSource): Promise<TiendaOnlineConfig | null> {
   return ds.getRepository(TiendaOnlineConfig).findOne({ where: {}, order: { id: 'ASC' } });
 }
 
@@ -376,6 +376,144 @@ export async function iniciarPagoPedido(
     await registrar(ds, p, 'ERROR', e instanceof ProveedorError ? e.codigo : 'error', e?.message || String(e));
     return { success: false, error: codigoError(prov, e) };
   }
+}
+
+/** Distancia en metros (para «dirección nueva» del pago con un toque). */
+function metrosEntre(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371000, rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const normDir = (s: any) => String(s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+/**
+ * ¿Este pedido se puede pagar con un toque? (PLAN-tienda-tarjeta-guardada §5.1). Sin la
+ * verificación del banco en cada cobro, se limita: tope por pedido, cantidad por día (24 h) y, en
+ * delivery, solo a una dirección a la que ya se entregó un pedido de esa cuenta.
+ */
+export async function limiteTarjetaGuardada(
+  ds: DataSource, p: PedidoOnline, cuentaClienteId: number, creds: { topeTarjetaGuardada?: number; maxDiaTarjetaGuardada?: number }, ahora = new Date(),
+): Promise<string | null> {
+  const tope = Number(creds.topeTarjetaGuardada ?? 0);
+  if (!(tope > 0) || Number(p.total) > tope) return 'tarjeta_tope';
+  const max = Number(creds.maxDiaTarjetaGuardada ?? 0);
+  const desde = new Date(ahora.getTime() - 24 * 3600_000);
+  // Las fechas se comparan acá y no en SQL (SQLite las guarda como texto en otro formato).
+  const recientes = await ds.getRepository(PedidoOnline).createQueryBuilder('o')
+    .select(['o.id', 'o.createdAt'])
+    .where('o.cuenta_cliente_id = :c AND o.id <> :id', { c: cuentaClienteId, id: p.id })
+    .andWhere("o.pago_checkout_url LIKE 'token:%'")
+    .orderBy('o.id', 'DESC').take(Math.max(1, max) + 5).getMany();
+  const hoy = recientes.filter((o) => new Date(o.createdAt).getTime() >= desde.getTime()).length;
+  if (!(max > 0) || hoy >= max) return 'tarjeta_limite_dia';
+  if (String(p.tipoPedido) === 'DELIVERY') {
+    const previos = await ds.getRepository(PedidoOnline).createQueryBuilder('o')
+      .select(['o.id', 'o.direccionEntrega', 'o.latitud', 'o.longitud'])
+      .where('o.cuenta_cliente_id = :c AND o.id <> :id AND o.estado = :ent AND o.tipo_pedido = :del', { c: cuentaClienteId, id: p.id, ent: EstadoPedidoOnline.ENTREGADO, del: 'DELIVERY' })
+      .orderBy('o.id', 'DESC').take(50).getMany();
+    const dir = normDir(p.direccionEntrega);
+    const conGps = p.latitud != null && p.longitud != null;
+    const conocida = previos.some((o) => (dir && normDir(o.direccionEntrega) === dir)
+      || (conGps && o.latitud != null && o.longitud != null
+        && metrosEntre({ lat: Number(p.latitud), lng: Number(p.longitud) }, { lat: Number(o.latitud), lng: Number(o.longitud) }) <= 150));
+    if (!conocida) return 'tarjeta_direccion_nueva';
+  }
+  return null;
+}
+
+/**
+ * Pago con un toque con una tarjeta guardada en dinelco (PLAN-tienda-tarjeta-guardada §3.2).
+ * La tarjeta tiene que ser de ESTA cuenta de cliente y de la cuenta DINELCO del pedido; el monto
+ * sale del pedido (nunca del storefront). La referencia se guarda ANTES de cobrar: sin respuesta,
+ * queda PENDIENTE y el job consulta `GET /v3/payment/{ref}`; nunca se cobra de nuevo sin consultar.
+ * Un intento con token PENDIENTE no admite otro cobro con token.
+ */
+export async function pagarConTarjetaGuardada(
+  ds: DataSource, pedidoId: number, cuentaClienteId: number, tarjetaId: number, opts: { ahora?: Date } = {},
+): Promise<VerificacionResultado & { pendiente?: boolean }> {
+  const { TarjetaGuardada } = await import('../../../src/app/database/entities/pedidos-online/tarjeta-guardada.entity');
+  const dinelco = await import('./proveedores/dinelco.proveedor');
+  const ahora = opts.ahora ?? new Date();
+  const repo = ds.getRepository(PedidoOnline);
+  const p = await repo.createQueryBuilder('p').addSelect(['p.pagoIdemKey', 'p.pagoCheckoutUrl', 'p.pagoDatosJson'])
+    .where('p.id = :id', { id: pedidoId }).getOne();
+  if (!p) return { success: false, error: 'pedido_no_encontrado' };
+  if (!esMetodoPagoOnline(p.metodoPago) || p.estado !== EstadoPedidoOnline.PENDIENTE_PAGO) return { success: false, error: 'pedido_no_espera_pago' };
+  if (p.estadoPago === EstadoPagoOnline.PAGADO) return { success: false, error: 'pedido_ya_pagado' };
+  const cfg = await getCfg(ds);
+  const cp = await cuentaDelPedido(ds, cfg, { ...p, pagoProveedor: p.metodoPago });
+  if (!cp || cp.prov.id !== dinelco.PROVEEDOR_DINELCO || !cp.creds?.tarjetaGuardada) return { success: false, error: 'tarjeta_no_disponible' };
+  const formaId = cp.forma?.id ?? null;
+  const tarjeta = await ds.getRepository(TarjetaGuardada).createQueryBuilder('t').addSelect('t.tokenId')
+    .where('t.id = :id AND t.cuenta_cliente_id = :c AND t.estado = :a', { id: tarjetaId, c: cuentaClienteId, a: 'ACTIVA' })
+    .getOne();
+  if (!tarjeta || !tarjeta.tokenId) return { success: false, error: 'tarjeta_no_encontrada' };
+  if ((tarjeta.formaPagoOnlineId ?? null) !== formaId) return { success: false, error: 'tarjeta_no_disponible' };
+  const limite = await limiteTarjetaGuardada(ds, p, cuentaClienteId, cp.creds, ahora);
+  if (limite) return { success: false, error: limite };
+
+  // Qué intento se usa: sin sesión, el actual; tras un FALLIDO, uno nuevo; con un iframe abierto,
+  // el mismo (su sesión queda en `previas`: un aprobado tardío del iframe se detecta como doble).
+  const datosAntes = datosDe(p.pagoDatosJson);
+  const urlAntes = p.pagoCheckoutUrl ?? '';
+  let intento = p.pagoIntento ?? 1;
+  let previas: any[] = [];
+  if (p.pagoSesionId) {
+    if (urlAntes.startsWith('token:') && p.estadoPago === EstadoPagoOnline.PENDIENTE) return { success: false, error: 'pago_en_curso' };
+    if (p.estadoPago === EstadoPagoOnline.FALLIDO) {
+      intento += 1;
+      if (intento > MAX_INTENTOS) return { success: false, error: 'demasiados_intentos' };
+    } else if (p.estadoPago === EstadoPagoOnline.PENDIENTE) {
+      try {
+        if (await dinelco.pagoEnCursoDinelco(cp.creds, datosAntes, ctx())) return { success: false, error: 'pago_en_curso' };
+      } catch (e: any) {
+        return { success: false, error: codigoError(cp.prov, e) };
+      }
+      previas = [...dinelco.previaDe(datosAntes), ...(Array.isArray(datosAntes?.['previas']) ? datosAntes!['previas'] : [])].slice(0, dinelco.MAX_PREVIAS_DINELCO);
+    } else {
+      return { success: false, error: 'pago_en_curso' };
+    }
+  }
+  const proceso = procesoNumerico(p.id, intento);
+  const ref = dinelco.referenciaDinelco(proceso);
+  const datos = { ref, modo: 'TOKEN', tarjetaId: tarjeta.id, previas };
+  // Se reclama el intento con un UPDATE condicionado a lo que se leyó: dos toques a la vez no
+  // cobran dos veces (el segundo no encuentra la fila como estaba).
+  const claim = await repo.createQueryBuilder().update(PedidoOnline)
+    .set({
+      pagoIntento: intento, pagoIdemKey: randomUUID(), pagoProveedor: cp.prov.id, formaPagoOnlineId: formaId,
+      estadoPago: EstadoPagoOnline.PENDIENTE, pagoSesionId: String(proceso), pagoCheckoutUrl: `token:${proceso}`,
+      pagoDatosJson: JSON.stringify(datos), pagoExpiraEn: new Date(ahora.getTime() + 2 * 3600_000), pagoDetalle: null,
+    } as any)
+    .where('id = :id AND estado = :est AND COALESCE(estado_pago, \'\') = :ep AND COALESCE(pago_sesion_id, \'\') = :ses AND COALESCE(pago_checkout_url, \'\') = :url AND COALESCE(pago_intento, 1) = :prev', {
+      id: p.id, est: EstadoPedidoOnline.PENDIENTE_PAGO, ep: p.estadoPago ?? '', ses: p.pagoSesionId ?? '', url: urlAntes, prev: p.pagoIntento ?? 1,
+    })
+    .execute();
+  if (!claim.affected) return { success: false, error: 'pago_en_curso' };
+  const pi = { id: p.id, pagoIntento: intento };
+  await registrar(ds, pi, 'SESION_CREADA', 'cobro con tarjeta guardada', { ref, tarjeta: `${tarjeta.marca ?? ''} ${tarjeta.enmascarada ?? ''}`.trim(), previas: previas.length });
+
+  let res: ResultadoPago;
+  try {
+    const r = await dinelco.cobrarConToken(cp.creds, { ref, monto: Number(p.total), tokenId: tarjeta.tokenId, pedido: p.numero, intento }, ctx());
+    res = dinelco.interpretarSesionDinelco(r.sesion, { referencia: ref, monto: Number(p.total), ahora });
+    await registrar(ds, pi, 'CONSULTA', res.tipo, { ...r.crudo, resultado: res });
+  } catch (e: any) {
+    await registrar(ds, pi, 'ERROR', e instanceof ProveedorError ? e.codigo : 'error', e?.crudo ?? (e?.message || String(e)));
+    // 401/403: dinelco no procesó nada (sin permiso payment:create): el cliente paga con el formulario.
+    if (e instanceof ProveedorError && e.codigo === 'dinelco_credenciales') {
+      res = { tipo: 'FALLIDO', paymentId: null, detalle: 'dinelco no permite cobrar con tarjeta guardada con esta clave' } as ResultadoPago;
+    } else {
+      // Sin respuesta: no se sabe si cobró. Queda PENDIENTE y el job consulta.
+      const g = await estadoGuardado(ds, p.id);
+      return { ...g, pendiente: true };
+    }
+  }
+  const fresco = await repo.findOne({ where: { id: p.id } });
+  const v = await aplicarResultado(ds, fresco || p, res, ahora);
+  if (res.tipo === 'PAGADO') await ds.getRepository(TarjetaGuardada).update({ id: tarjeta.id }, { ultimoUsoEn: ahora } as any);
+  return v;
 }
 
 export interface VerificacionResultado {

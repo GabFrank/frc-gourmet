@@ -7,6 +7,7 @@ import { AuthService } from '../../core/auth.service';
 import { mensajeError } from '../../core/errores';
 import { ConfigService } from '../../core/config.service';
 import { TelefonoInputComponent } from '../../core/telefono-input.component';
+import { MisTarjetasComponent } from '../../core/tarjetas-guardadas.component';
 import { AnalisisTelefono, analizarGuardado, telefonoLegible } from '../../core/telefono';
 
 declare const google: any;
@@ -14,7 +15,7 @@ declare const google: any;
 @Component({
   selector: 'sf-cuenta',
   standalone: true,
-  imports: [CommonModule, FormsModule, TelefonoInputComponent],
+  imports: [CommonModule, FormsModule, TelefonoInputComponent, MisTarjetasComponent],
   template: `
     <div class="sf-container narrow">
       <h1 class="title">{{ completar ? '¡Bienvenido/a!' : 'Mi cuenta' }}</h1>
@@ -73,6 +74,9 @@ declare const google: any;
           </label>
           <p class="ok" *ngIf="avisosOk">{{ avisosOk }}</p>
         </div>
+
+        <!-- «Guardar mi tarjeta» (dinelco): solo si la tienda lo ofrece y el teléfono está verificado. -->
+        <sf-mis-tarjetas *ngIf="!completar && c.telefonoVerificado"></sf-mis-tarjetas>
 
         <!-- Vincular Google: desde ahí «Continuar con Google» entra a esta misma cuenta. -->
         <div class="sf-card mt" [hidden]="!mostrarGoogle">

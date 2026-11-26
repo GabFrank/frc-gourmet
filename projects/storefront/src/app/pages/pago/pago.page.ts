@@ -7,6 +7,7 @@ import { ConfigService } from '../../core/config.service';
 import { GuaraniPipe } from '../../core/guarani.pipe';
 import { IconComponent } from '../../core/icon.component';
 import { esPagoPix, esUrlPagoPermitida, MENSAJE_PAGO_OCUPADO, textoEstadoPago } from '../../core/pago-online';
+import { MENSAJES_TARJETA, nombreTarjeta, RegistroTarjetaComponent, TarjetaGuardadaVista } from '../../core/tarjetas-guardadas.component';
 
 /**
  * Página de pago del pedido: /tienda/pago/<numero> (PLAN-tienda-online F4; proveedores en
@@ -29,7 +30,7 @@ declare const Bancard: any;
 @Component({
   selector: 'sf-pago',
   standalone: true,
-  imports: [CommonModule, RouterLink, GuaraniPipe, IconComponent],
+  imports: [CommonModule, RouterLink, GuaraniPipe, IconComponent, RegistroTarjetaComponent],
   template: `
     <div class="sf-container">
       <h1 class="sf-title">Pago del pedido <span class="nowrap">{{ numero }}</span></h1>
@@ -44,10 +45,22 @@ declare const Bancard: any;
           <p class="sf-muted">Ingresá los datos de tu tarjeta. Son de {{ formularioProveedor }}: la tienda no los ve.</p>
           <div id="sf-formulario-pago" class="formulario-pago"></div>
         </ng-container>
-        <!-- Checkout de dinelco: la tarjeta se carga en su iframe, embebido. -->
+        <!-- Tarjetas guardadas en dinelco: pago con un toque (PLAN-tienda-tarjeta-guardada). -->
+        <div class="toque" *ngIf="estadoPago === 'PENDIENTE' && pedido.estado === 'PENDIENTE_PAGO' && tarjetas.length && !registrando">
+          <button type="button" class="sf-btn sf-btn-primary toque-btn" *ngFor="let t of tarjetas" [disabled]="pagandoToque"
+                  (click)="pagarConTarjeta(t)">Pagar {{ pedido.total | guarani }} con {{ nombre(t) }}</button>
+          <p class="sf-muted" *ngIf="pagandoToque">Cobrando con tu tarjeta guardada…</p>
+          <p class="sf-error" *ngIf="errorToque">{{ errorToque }}</p>
+          <p class="sf-muted toque-o">O pagá con otra tarjeta u otro medio:</p>
+        </div>
+        <ng-container *ngIf="tarjetasDisponible && !tarjetas.length && iframePago && estadoPago === 'PENDIENTE'">
+          <button type="button" class="sf-btn guardar-link" *ngIf="!registrando" (click)="registrando = true">Guardar una tarjeta para pagar con un toque</button>
+          <sf-registro-tarjeta *ngIf="registrando" (guardada)="alGuardarTarjeta()" (cerrar)="registrando = false"></sf-registro-tarjeta>
+        </ng-container>
+        <!-- Checkout de dinelco: tarjeta, QR u otro medio en su iframe, embebido. -->
         <ng-container *ngIf="iframePago">
-          <p class="sf-muted">Ingresá los datos de tu tarjeta. Son de dinelco: la tienda no los ve.</p>
-          <div id="sf-iframe-pago" class="iframe-pago"></div>
+          <p class="sf-muted" [hidden]="registrando">Elegí cómo pagar. Los datos son de dinelco: la tienda no los ve.</p>
+          <div id="sf-iframe-pago" class="iframe-pago" [hidden]="registrando"></div>
         </ng-container>
         <!-- QR Pix (IC Pay): la imagen la arma el servidor; el código se puede copiar. -->
         <div class="qr-pago" *ngIf="qr && estadoPago === 'PENDIENTE'">
@@ -96,6 +109,10 @@ declare const Bancard: any;
     .sf-acciones .sf-btn { text-decoration: none; }
     .formulario-pago { min-height: 360px; margin: 8px 0 12px; }
     .iframe-pago { margin: 8px 0 12px; }
+    .toque { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 12px; }
+    .toque-btn { width: 100%; }
+    .toque-o { margin: 6px 0 0; }
+    .guardar-link { margin: 0 0 8px; }
     /* El iframe se crea a mano (no lo dibuja Angular): sin ::ng-deep, el estilo encapsulado no le llega. */
     .iframe-pago ::ng-deep iframe { display: block; width: 100%; height: 680px; border: 0; border-radius: 8px; background: #fff; }
     @media (max-width: 768px) { .iframe-pago ::ng-deep iframe { height: 600px; } }
@@ -145,6 +162,14 @@ export class PagoPage implements OnInit, OnDestroy {
   private reloj: any = null;
   /** Otros proveedores prendidos, para pagar con otro si este intento falló. */
   otrosMedios: { formaId: number | null; id: string; etiqueta: string }[] = [];
+  /** «Guardar mi tarjeta»: la tienda lo ofrece, las guardadas y si se está guardando una. */
+  tarjetasDisponible = false;
+  tarjetas: TarjetaGuardadaVista[] = [];
+  registrando = false;
+  pagandoToque = false;
+  errorToque: string | null = null;
+  private tarjetasCargadas = false;
+  nombre = nombreTarjeta;
   textoReintentar = 'Intentar de nuevo';
 
   get estadoPago(): string | null { return this.pedido?.estadoPago ?? null; }
@@ -176,6 +201,10 @@ export class PagoPage implements OnInit, OnDestroy {
           if (this.estadoPago !== 'PENDIENTE' && this.timer) { clearInterval(this.timer); this.timer = null; }
           if (this.estadoPago !== 'PENDIENTE') { this.formulario = false; this.qr = null; this.quitarIframe(); this.pararReloj(); }
           this.calcularMedios();
+          if (!this.tarjetasCargadas && this.estadoPago === 'PENDIENTE' && String(this.pedido.metodoPago || '').toUpperCase() === 'DINELCO') {
+            this.tarjetasCargadas = true;
+            this.cargarTarjetas();
+          }
           // Proveedor de formulario (Bancard): se arma acá. Con uno de redirección (uPay) esta es la
           // página de vuelta: nunca se manda al cliente de nuevo al proveedor sin que lo pida (si
           // no, «Atrás» desde uPay rebotaba otra vez a uPay).
@@ -188,6 +217,40 @@ export class PagoPage implements OnInit, OnDestroy {
         }
       },
       error: () => { this.cargando = false; },
+    });
+  }
+
+  private cargarTarjetas(): void {
+    this.api.call<any>('tarjetas.listar', []).subscribe({
+      next: (r) => { this.tarjetasDisponible = !!r?.disponible; this.tarjetas = r?.tarjetas || []; },
+      error: () => { this.tarjetasDisponible = false; },
+    });
+  }
+
+  alGuardarTarjeta(): void {
+    this.registrando = false;
+    this.cargarTarjetas();
+  }
+
+  /** Pago con un toque: el monto lo pone el servidor (el del pedido) y decide con la respuesta de dinelco. */
+  pagarConTarjeta(t: TarjetaGuardadaVista): void {
+    if (this.pagandoToque) return;
+    this.pagandoToque = true;
+    this.errorToque = null;
+    this.api.call<any>('pedido.pago.tarjeta', [this.numero, t.id]).subscribe({
+      next: (r) => {
+        this.pagandoToque = false;
+        if (r?.success && r.pedido) {
+          this.pedido = r.pedido;
+          if (this.estadoPago !== 'PENDIENTE') { this.quitarIframe(); if (this.timer) { clearInterval(this.timer); this.timer = null; } }
+          else if (!this.timer) this.timer = setInterval(() => this.verificar(), 5000);
+          if (this.estadoPago === 'FALLIDO') this.errorToque = null;
+          return;
+        }
+        this.errorToque = MENSAJES_TARJETA[r?.error] || 'No pudimos cobrar con la tarjeta guardada. Pagá con el formulario de abajo.';
+        if (r?.error === 'tarjeta_no_encontrada') this.cargarTarjetas();
+      },
+      error: () => { this.pagandoToque = false; this.errorToque = 'No pudimos cobrar con la tarjeta guardada. Pagá con el formulario de abajo.'; },
     });
   }
 

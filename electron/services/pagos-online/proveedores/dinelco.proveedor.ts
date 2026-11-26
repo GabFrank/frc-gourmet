@@ -43,20 +43,33 @@ const REF = /^FRCG-(\d{1,15})-([0-9a-f]{6,32})$/;
 export interface DinelcoConfig {
   apiKey: string;
   entorno: 'PRUEBA' | 'PRODUCCION';
+  /** «Guardar mi tarjeta» (PLAN-tienda-tarjeta-guardada): apagado por defecto. */
+  tarjetaGuardada?: boolean;
+  /** Tope por pedido del pago con un toque (₲); por encima se paga con el formulario y 3DS. */
+  topeTarjetaGuardada?: number;
+  /** Pagos con un toque por cliente por día; el siguiente va con el formulario. */
+  maxDiaTarjetaGuardada?: number;
 }
+
+export const TOPE_TARJETA_GUARDADA_DEF = 300_000;
+export const MAX_DIA_TARJETA_GUARDADA_DEF = 3;
 
 export function hostDinelco(c: { entorno: string }): string {
   return c.entorno === 'PRODUCCION' ? HOST_DINELCO_PRODUCCION : HOST_DINELCO_PRUEBA;
 }
 const api = (c: DinelcoConfig) => `https://${hostDinelco(c)}/dinelco-checkout/api/v1`;
+const apiV3 = (c: DinelcoConfig) => `https://${hostDinelco(c)}/dinelco-checkout/api/v3`;
 export const validarUrlDinelco = (c: DinelcoConfig) => `https://${hostDinelco(c)}/d/api/checkout-session/validate`;
+export const validarRegistroUrlDinelco = (c: DinelcoConfig) => `https://${hostDinelco(c)}/d/api/registry/validate`;
+/** Referencia de un catastro: `FRCR-<cuenta de cliente>-<hex>`. */
+export const REF_REGISTRO = /^FRCR-(\d{1,12})-([0-9a-f]{6,32})$/;
 
 export function referenciaDinelco(proceso: number, sufijo = randomBytes(3).toString('hex')): string {
   return `FRCG-${proceso}-${sufijo}`;
 }
 
-async function llamar(c: DinelcoConfig, f: FetchLike, metodo: 'GET' | 'POST', ruta: string, body?: any): Promise<{ status: number; body: any; raw: string }> {
-  const r = await f(api(c) + ruta, {
+async function llamar(c: DinelcoConfig, f: FetchLike, metodo: 'GET' | 'POST', ruta: string, body?: any, v3 = false): Promise<{ status: number; body: any; raw: string }> {
+  const r = await f((v3 ? apiV3(c) : api(c)) + ruta, {
     method: metodo,
     headers: { Authorization: `Bearer ${c.apiKey}`, 'Content-Type': 'application/json', Accept: 'application/json' },
     ...(body ? { body: JSON.stringify(body) } : {}),
@@ -140,17 +153,131 @@ export function interpretarSesionDinelco(
   }
 }
 
-async function consultarRef(c: DinelcoConfig, f: FetchLike, ref: string, sessionId?: number | null): Promise<{ status: number; body: any }> {
-  const r = sessionId
-    ? await llamar(c, f, 'GET', `/checkout-session/${encodeURIComponent(String(sessionId))}`)
-    : await llamar(c, f, 'GET', `/checkout-session?clientReferenceId=${encodeURIComponent(ref)}`);
+async function consultarRef(c: DinelcoConfig, f: FetchLike, ref: string, sessionId?: number | null, token = false): Promise<{ status: number; body: any }> {
+  const r = token
+    ? await llamar(c, f, 'GET', `/payment/${encodeURIComponent(ref)}`, undefined, true)
+    : sessionId
+      ? await llamar(c, f, 'GET', `/checkout-session/${encodeURIComponent(String(sessionId))}`)
+      : await llamar(c, f, 'GET', `/checkout-session?clientReferenceId=${encodeURIComponent(ref)}`);
   const cred = credencialesRechazadas(r, 'consultar');
   if (cred) throw Object.assign(cred, { crudo: { status: r.status, body: r.body } });
   if (r.status === 404) return { status: 404, body: null };
   if (r.status < 200 || r.status >= 300 || !r.body || typeof r.body !== 'object') {
     throw Object.assign(new ProveedorError('dinelco_error', `dinelco respondió HTTP ${r.status}${mensaje(r.body) ? ' · ' + mensaje(r.body) : ''}`, r.status), { crudo: { status: r.status, body: r.body } });
   }
-  return { status: r.status, body: r.body };
+  return { status: r.status, body: token ? sesionDeCobroToken(r.body) : r.body };
+}
+
+/**
+ * El pago con token (`/v3/payment`) responde plano; se lleva a la forma de una sesión para
+ * interpretarlo con las mismas reglas que el iframe (APPROVED + PYG + monto exacto).
+ */
+export function sesionDeCobroToken(b: any): any {
+  if (!b || typeof b !== 'object') return b;
+  return {
+    clientReferenceId: b.clientReferenceId ?? null,
+    payment: {
+      id: b.id ?? null, status: b.status ?? null, message: b.message ?? null, extendedMessage: b.responseCode ? `código ${b.responseCode}` : null,
+      operationNumber: b.operationNumber ?? null, authorizationCode: b.authorizationCode ?? null,
+      amount: b.amount ?? null, currency: b.currency ?? null, transactionDate: b.transactionDate ?? null,
+    },
+    paymentInfo: { paymentMethodType: b.paymentMethod?.type ?? null, paymentMethodPayload: { cardBrand: b.paymentMethod?.cardBrand ?? null, cardNumber: b.paymentMethod?.cardNumber ?? null } },
+  };
+}
+
+// ======================= «Guardar mi tarjeta» (catastro + pago con token) =======================
+
+/** Resultado del catastro, sacado del callback o de la consulta de la sesión (función pura). */
+export type ResultadoCatastro =
+  | { tipo: 'ACTIVA'; tokenId: string; marca: string | null; enmascarada: string | null; tipoTarjeta: string | null }
+  | { tipo: 'FALLIDA'; detalle: string }
+  | { tipo: 'PENDIENTE'; detalle: string };
+
+export function interpretarCatastroDinelco(b: any, refEsperada: string): ResultadoCatastro {
+  if (!b || typeof b !== 'object') return { tipo: 'PENDIENTE', detalle: 'dinelco todavía no tiene el catastro' };
+  const ref = String(b.clientReferenceId ?? '');
+  if (ref && ref !== refEsperada) return { tipo: 'PENDIENTE', detalle: `dinelco devolvió otro catastro (${ref})` };
+  const info = b.registryInfo ?? b.registry ?? null;
+  const st = String(info?.status ?? b.registryStatus ?? '').toUpperCase();
+  const pm = info?.paymentMethodInfo ?? null;
+  const tokenId = pm?.tokenId != null ? String(pm.tokenId) : '';
+  if (st === 'SUCCESSFUL') {
+    if (!tokenId || tokenId.length > 80) return { tipo: 'FALLIDA', detalle: 'dinelco confirmó el catastro sin identificador de tarjeta' };
+    const pl = pm?.paymentMethodPayload ?? {};
+    const corto = (x: any, n: number) => (x == null ? null : String(x).slice(0, n));
+    return { tipo: 'ACTIVA', tokenId, marca: corto(pl.cardBrand, 10), enmascarada: corto(pl.cardNumber, 30), tipoTarjeta: corto(pl.cardType, 2) };
+  }
+  if (st === 'FAILED') return { tipo: 'FALLIDA', detalle: String(b.message || 'dinelco no pudo guardar la tarjeta').slice(0, 250) };
+  return { tipo: 'PENDIENTE', detalle: st ? `estado de catastro no reconocido: ${st}` : 'dinelco todavía no tiene el catastro' };
+}
+
+export function referenciaRegistro(cuentaClienteId: number, sufijo = randomBytes(6).toString('hex')): string {
+  return `FRCR-${cuentaClienteId}-${sufijo}`;
+}
+
+/** Abre la sesión del catastro embebido (no cobra: monto 0). */
+export async function crearSesionCatastro(
+  creds: DinelcoConfig, input: { ref: string; targetOrigin: string; urlAviso?: string; urlVuelta?: string }, ctx: ContextoProveedor,
+): Promise<{ sessionId: string; token: string; validarUrl: string; expiraEn: string | null }> {
+  const r = await llamar(creds, ctx.fetch, 'POST', '/checkout-session/registry', {
+    clientReferenceId: input.ref,
+    amount: 0,
+    currency: 'PYG',
+    targetOrigin: input.targetOrigin,
+    ...(input.urlAviso ? { callbackUrl: input.urlAviso } : {}),
+    ...(input.urlVuelta ? { returnUrl: input.urlVuelta } : {}),
+    // Sin `customer`: no mandamos datos personales que no hacen falta.
+  });
+  const cred = credencialesRechazadas(r, 'guardar la tarjeta');
+  if (cred) throw cred;
+  const b = r.body;
+  if (r.status < 200 || r.status >= 300 || !b?.integrityToken || !b?.sessionId) {
+    throw new ProveedorError('dinelco_error', `dinelco no abrió el catastro (HTTP ${r.status}${mensaje(b) ? ' · ' + mensaje(b) : ''})`, r.status);
+  }
+  return { sessionId: String(b.sessionId), token: String(b.integrityToken), validarUrl: validarRegistroUrlDinelco(creds), expiraEn: b.expirationDate ?? null };
+}
+
+/**
+ * Consulta la sesión del catastro. dinelco no documenta si `GET /checkout-session/{id}` trae el
+ * resultado de un catastro (PLAN §6.1): si no lo trae, queda PENDIENTE y manda el callback.
+ */
+export async function consultarCatastro(creds: DinelcoConfig, ref: string, sessionId: string | null, ctx: ContextoProveedor): Promise<{ resultado: ResultadoCatastro; crudo: any }> {
+  const c = await consultarRef(creds, ctx.fetch, ref, sessionId ? Number(sessionId) || null : null);
+  const resultado = interpretarCatastroDinelco(c.body, ref);
+  // Al registro va sin el token.
+  const b = c.body || {};
+  return { resultado, crudo: { status: c.status, sessionStatus: b.sessionStatus ?? null, registro: b.registryInfo?.status ?? null } };
+}
+
+/**
+ * Cobra con la tarjeta guardada (`POST /v3/payment`, permiso `payment:create`). La referencia
+ * tiene que estar guardada ANTES de llamar: si no hay respuesta, se consulta con ella y nunca se
+ * cobra de nuevo sin consultar.
+ */
+export async function cobrarConToken(
+  creds: DinelcoConfig, input: { ref: string; monto: number; tokenId: string; pedido: string; intento: number }, ctx: ContextoProveedor,
+): Promise<{ sesion: any; crudo: any }> {
+  const r = await llamar(creds, ctx.fetch, 'POST', '/payment', {
+    clientReferenceId: input.ref,
+    amount: Math.round(input.monto),
+    currency: 'PYG',
+    paymentMethod: { tokenId: input.tokenId },
+    paymentOptions: {},
+    metadata: { pedido: input.pedido.slice(0, 40), intento: String(input.intento) },
+  }, true);
+  const cred = credencialesRechazadas(r, 'cobrar con la tarjeta guardada');
+  if (cred) throw Object.assign(cred, { crudo: { status: r.status, body: r.body } });
+  const b = r.body;
+  if (r.status >= 200 && r.status < 300 && b && typeof b === 'object' && b.status) {
+    const sesion = sesionDeCobroToken(b);
+    return { sesion, crudo: resumenPago(sesion) };
+  }
+  // Rechazo de validación (400/422) con el estado en el cuerpo: se interpreta igual.
+  if (b && typeof b === 'object' && /^(APPROVED|REJECTED)$/i.test(String(b.status ?? ''))) {
+    const sesion = sesionDeCobroToken(b);
+    return { sesion, crudo: resumenPago(sesion) };
+  }
+  throw Object.assign(new ProveedorError('dinelco_error', `dinelco no respondió el cobro (HTTP ${r.status}${mensaje(b) ? ' · ' + mensaje(b) : ''})`, r.status), { crudo: { status: r.status, body: b } });
 }
 
 async function crearSesion(creds: DinelcoConfig, input: CobroInput, ctx: ContextoProveedor): Promise<InicioCobro> {
@@ -187,15 +314,33 @@ async function crearSesion(creds: DinelcoConfig, input: CobroInput, ctx: Context
   };
 }
 
-/** Referencias del intento a mirar: la actual y las de tokens renovados. */
-function referenciasDe(cobro: CobroGuardado): { ref: string; sessionId: number | null }[] {
+/** Referencias del intento a mirar: la actual y las de tokens renovados (o del cobro con un toque). */
+function referenciasDe(cobro: CobroGuardado): { ref: string; sessionId: number | null; token: boolean }[] {
   const d = cobro.datos || {};
-  const out: { ref: string; sessionId: number | null }[] = [];
-  if (typeof d['ref'] === 'string' && REF.test(d['ref'])) out.push({ ref: d['ref'], sessionId: Number(d['sessionId']) || null });
+  const out: { ref: string; sessionId: number | null; token: boolean }[] = [];
+  if (typeof d['ref'] === 'string' && REF.test(d['ref'])) out.push({ ref: d['ref'], sessionId: Number(d['sessionId']) || null, token: d['modo'] === 'TOKEN' });
   for (const p of Array.isArray(d['previas']) ? d['previas'] : []) {
-    if (p && typeof p.ref === 'string' && REF.test(p.ref)) out.push({ ref: p.ref, sessionId: Number(p.sessionId) || null });
+    if (p && typeof p.ref === 'string' && REF.test(p.ref)) out.push({ ref: p.ref, sessionId: Number(p.sessionId) || null, token: p.token === true });
   }
   return out;
+}
+
+/** La referencia actual del intento como entrada de `previas` (para no perderla al cambiar de sesión). */
+export function previaDe(datos: Record<string, any> | null | undefined): { ref: string; sessionId: number | null; token?: true }[] {
+  const d = datos || {};
+  return typeof d['ref'] === 'string'
+    ? [{ ref: d['ref'], sessionId: d['sessionId'] ?? null, ...(d['modo'] === 'TOKEN' ? { token: true as const } : {}) }]
+    : [];
+}
+
+/** ¿Alguna sesión del intento tiene un pago aprobado o en proceso? (antes de abrir otra o cobrar con token). */
+export async function pagoEnCursoDinelco(creds: DinelcoConfig, datos: Record<string, any> | null, ctx: ContextoProveedor): Promise<string | null> {
+  for (const r of referenciasDe({ sesionId: '', referencia: '', monto: 0, datos })) {
+    const c = await consultarRef(creds, ctx.fetch, r.ref, r.sessionId, r.token);
+    const st = String(c.body?.payment?.status ?? '').toUpperCase();
+    if (st === 'APPROVED' || st === 'PROCESSING') return `la sesión ${r.ref} tiene un pago ${st}`;
+  }
+  return null;
 }
 
 const proveedor: ProveedorPagoOnline<DinelcoConfig> = {
@@ -217,12 +362,33 @@ const proveedor: ProveedorPagoOnline<DinelcoConfig> = {
       patron: 'di_sk_[A-Za-z0-9_]{20,200}', maxLength: 210,
       ayuda: 'La entrega dinelco. Para anular pagos de pedidos cancelados tiene que tener el permiso payment:reversal.',
     },
+    {
+      clave: 'tarjetaGuardada', etiqueta: 'Permitir guardar tarjetas (pago con un toque)', porDefecto: 'NO',
+      opciones: [{ valor: 'NO', etiqueta: 'No' }, { valor: 'SI', etiqueta: 'Sí' }],
+      ayuda: 'El cliente guarda su tarjeta en dinelco y paga los próximos pedidos con un toque. La clave necesita el permiso payment:create.',
+    },
+    {
+      clave: 'topeTarjetaGuardada', etiqueta: 'Tope por pedido con un toque (₲)', porDefecto: String(TOPE_TARJETA_GUARDADA_DEF),
+      patron: '\\d{1,9}', maxLength: 9,
+      ayuda: 'Más que esto, o a una dirección nueva, se paga con el formulario y la verificación del banco.',
+    },
+    {
+      clave: 'maxDiaTarjetaGuardada', etiqueta: 'Pagos con un toque por cliente por día', porDefecto: String(MAX_DIA_TARJETA_GUARDADA_DEF),
+      patron: '\\d{1,3}', maxLength: 3,
+    },
   ],
 
   async credenciales(_ds: DataSource, cfg: TiendaOnlineConfig | null, cuenta?: CuentaPago | null) {
     const v = await valoresCompletos(cfg, proveedor, cuenta);
     if (!v) return null;
-    return { apiKey: v['apiKey'], entorno: v['entorno'] === 'PRODUCCION' ? 'PRODUCCION' : 'PRUEBA' };
+    const entero = (x: string | undefined, def: number) => (/^\d{1,9}$/.test(String(x ?? '')) ? Number(x) : def);
+    return {
+      apiKey: v['apiKey'],
+      entorno: v['entorno'] === 'PRODUCCION' ? 'PRODUCCION' : 'PRUEBA',
+      tarjetaGuardada: v['tarjetaGuardada'] === 'SI',
+      topeTarjetaGuardada: entero(v['topeTarjetaGuardada'], TOPE_TARJETA_GUARDADA_DEF),
+      maxDiaTarjetaGuardada: entero(v['maxDiaTarjetaGuardada'], MAX_DIA_TARJETA_GUARDADA_DEF),
+    };
   },
 
   iniciar: crearSesion,
@@ -234,18 +400,12 @@ const proveedor: ProveedorPagoOnline<DinelcoConfig> = {
 
   async renovar(creds, cobro, input, ctx) {
     // Antes de abrir otra sesión se mira la actual: con un pago aprobado o en proceso, no.
-    for (const r of referenciasDe(cobro)) {
-      const c = await consultarRef(creds, ctx.fetch, r.ref, r.sessionId);
-      const st = String(c.body?.payment?.status ?? '').toUpperCase();
-      if (st === 'APPROVED' || st === 'PROCESSING') throw new ProveedorError('pago_en_curso', `la sesión ${r.ref} tiene un pago ${st}`);
-    }
+    const enCurso = await pagoEnCursoDinelco(creds, cobro.datos ?? null, ctx);
+    if (enCurso) throw new ProveedorError('pago_en_curso', enCurso);
     const nueva = await crearSesion(creds, input, ctx);
     if (nueva.tipo !== 'IFRAME') return nueva;
     const d = cobro.datos || {};
-    const previas = [
-      ...(typeof d['ref'] === 'string' ? [{ ref: d['ref'], sessionId: d['sessionId'] ?? null }] : []),
-      ...(Array.isArray(d['previas']) ? d['previas'] : []),
-    ].slice(0, MAX_PREVIAS);
+    const previas = [...previaDe(d), ...(Array.isArray(d['previas']) ? d['previas'] : [])].slice(0, MAX_PREVIAS);
     return { ...nueva, datos: { ...nueva.datos, previas } };
   },
 
@@ -257,7 +417,7 @@ const proveedor: ProveedorPagoOnline<DinelcoConfig> = {
     const aprobados: { ref: string; res: ResultadoPago }[] = [];
     let actual: ResultadoPago | null = null;
     for (const [i, r] of refs.entries()) {
-      const c = await consultarRef(creds, ctx.fetch, r.ref, r.sessionId);
+      const c = await consultarRef(creds, ctx.fetch, r.ref, r.sessionId, r.token);
       if (!c.body) {
         vistos.push({ ref: r.ref, status: 404 });
         if (i === 0) actual = { tipo: 'PENDIENTE', detalle: 'dinelco no encuentra la sesión todavía' };
@@ -314,7 +474,7 @@ const proveedor: ProveedorPagoOnline<DinelcoConfig> = {
     if (/ya ha sido revertido/i.test(msg) && ref) {
       // «No encontrado o ya revertido»: se confirma consultando.
       try {
-        const c = await consultarRef(creds, ctx.fetch, ref, Number(cobro.datos?.['sessionId']) || null);
+        const c = await consultarRef(creds, ctx.fetch, ref, Number(cobro.datos?.['sessionId']) || null, cobro.datos?.['modo'] === 'TOKEN');
         if (String(c.body?.payment?.status ?? '').toUpperCase() === 'VOIDED') return { ok: true, detalle: 'ya estaba anulado en dinelco', crudo: b };
       } catch { /* sigue: no ok */ }
     }
@@ -340,3 +500,4 @@ const proveedor: ProveedorPagoOnline<DinelcoConfig> = {
 };
 
 export const dinelcoProveedor = proveedor;
+export { MAX_PREVIAS as MAX_PREVIAS_DINELCO };

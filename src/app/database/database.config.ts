@@ -356,10 +356,12 @@ import { TiendaAvisosPreferenciaCuenta1794424012805 } from './migrations/1794424
 import { TiendaFormaPagoOnlinePos1794427578823 } from './migrations/1794427578823-TiendaFormaPagoOnlinePos';
 import { PedidoOnlineAviso } from './entities/pedidos-online/pedido-online-aviso.entity';
 import { PagoOnlineEvento } from './entities/pedidos-online/pago-online-evento.entity';
+import { TarjetaGuardada } from './entities/pedidos-online/tarjeta-guardada.entity';
 import { ClasificacionItemsCompra1794356000000 } from './migrations/1794356000000-ClasificacionItemsCompra';
 import { CompraDetalleSnapshotCosto1794700000000 } from './migrations/1794700000000-CompraDetalleSnapshotCosto';
 import { MovimientoClienteLiquidacionItem1794800000000 } from './migrations/1794800000000-MovimientoClienteLiquidacionItem';
 import { TiendaPagoDinelco1794900000000 } from './migrations/1794900000000-TiendaPagoDinelco';
+import { TiendaTarjetaGuardada1795000000000 } from './migrations/1795000000000-TiendaTarjetaGuardada';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
 import { CuentaClienteVinculo } from './entities/pedidos-online/cuenta-cliente-vinculo.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
@@ -482,6 +484,7 @@ function getEntitiesList(): any[] {
       FormaPagoOnline,
       PedidoOnlineAviso,
       PagoOnlineEvento,
+      TarjetaGuardada,
       PedidoOnlineItem,
       CustomerRefreshToken,
       TiendaOnlineConfig,
@@ -870,6 +873,7 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     // Liquidación: cobro de CPC enlazado al ítem que lo descontó
     MovimientoClienteLiquidacionItem1794800000000,
     TiendaPagoDinelco1794900000000,
+    TiendaTarjetaGuardada1795000000000,
   ];
 }
 
