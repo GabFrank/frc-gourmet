@@ -43,6 +43,7 @@
     "test:tienda-online-migracion": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-tienda-online-migracion.ts",
     "test:pagos-online": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pagos-online.ts",
     "test:pagos-bancard": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pagos-bancard.ts",
+    "test:pagos-dinelco": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-pagos-dinelco.ts",
     "test:avisos-pedido": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-avisos-pedido.ts",
     "test:acreditacion-pago-online": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-acreditacion-pago-online.ts",
     "test:acreditacion-pago-online-pg": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-acreditacion-pago-online.ts --pg",
