@@ -61,7 +61,7 @@ Tabla nueva `tienda_tarjetas_guardadas`:
 | Riesgo | Cobertura |
 |---|---|
 | Doble cobro por reintento | Referencia única por intento + consulta `GET /v3/payment/{ref}` antes de cualquier reintento; el job nunca crea un cobro nuevo. |
-| Callback sin reintentos | No se depende de él: confirmación activa del front + consulta; el callback solo dispara reconfirmación. |
+| Callback sin reintentos ni firma | El token solo llega por el callback (§10). Se acepta con tres controles: IP de dinelco, catastro PENDIENTE < 30 min de esa cuenta y consulta de la sesión `SUCCESS`. Si no llega, el catastro vence PENDIENTE y el cliente lo repite; ningún pedido queda trabado. |
 | Cobrar con la tarjeta de otro cliente | El backend valida dueño (`cuenta_cliente_id`) y cuenta DINELCO; el `tokenId` solo sirve con nuestra clave; botón con el monto visible. |
 | Cuenta de cliente robada | Solo teléfono verificado; el cobro va únicamente a Don Franco (pedido visible en cocina/PdV) y se puede anular dentro de 24 h. |
 | 3DS sin fricción impide catastrar | Mensaje claro y pago normal; no bloquea el pedido. |
@@ -81,7 +81,7 @@ Tabla nueva `tienda_tarjetas_guardadas`:
 
 ## 6. Puntos abiertos (se resuelven en la implementación, antes de pedir el OK de merge)
 
-1. ¿`GET /checkout-session/{sessionId}` o por `clientReferenceId` devuelve el resultado de una sesión de **catastro** con `tokenId`? Se prueba en sandbox. El callback (sin firma) **no decide**: solo dispara esa consulta. Si el sandbox muestra que la consulta no trae el `tokenId`, el catastro no se puede confirmar de forma segura y se vuelve a planificar antes del merge (no se acepta el cuerpo del callback).
+1. **Resuelto el 26/11 (§10): no lo devuelve.** ¿`GET /checkout-session/{sessionId}` o por `clientReferenceId` devuelve el resultado de una sesión de **catastro** con `tokenId`? Se prueba en sandbox. El callback (sin firma) **no decide**: solo dispara esa consulta. Si el sandbox muestra que la consulta no trae el `tokenId`, el catastro no se puede confirmar de forma segura y se vuelve a planificar antes del merge (no se acepta el cuerpo del callback).
 2. ¿La reversa por `operationNumber` funciona con cobros con token? Se prueba en sandbox.
 3. Pedirle a dinelco: permiso `payment:create` en la clave de pruebas y en la de producción, y cómo borrar un token (si existe API). El propietario se lo pide junto con lo del QR y la IP.
 
@@ -106,7 +106,26 @@ Desvíos de diseño:
 - El interruptor y los topes van en la configuración de la cuenta DINELCO (`config_json`), no en columnas.
 - `tarjetas_guardadas.estado` es texto (PENDIENTE, ACTIVA, FALLIDA, QUITADA) en vez de `activa` booleano.
 - «Quitar» deja la fila QUITADA y además borra el `token_id` de nuestra base.
-- El callback del catastro solo reconsulta a dinelco (§6.1).
+- El callback del catastro: ver §10 (reemplaza a «solo reconsulta»).
 - «Probar conexión», con «guardar tarjetas» encendido, consulta `GET /v3/payment/<ref inexistente>` y avisa si da 401/403 (falta `payment:create`).
 
 Pendiente que bloquea el merge: la prueba en el sandbox real de §4.5 y los puntos 1 a 3 de §6. Depende de que dinelco habilite `payment:create` en la clave de pruebas y de llegar al sandbox (IP bloqueada; puente por el celular del propietario).
+
+## 10. Cambio de diseño: el token del catastro llega por el callback (decisión del propietario, 26/11)
+
+**Qué mostró el sandbox real** (26/11 13:05, por el puente del celular; `/estacion/notas/dinelco.md`): el catastro con Visa …1096 + OTP 1234 terminó bien (sesión 17176, `sessionStatus: SUCCESS`), pero `GET /v1/checkout-session/17176` y la consulta por `clientReferenceId` **no traen `registryInfo` ni `tokenId`**. La documentación lo confirma: el token llega solo en la notificación del catastro, que no tiene firma ni reintentos. Con el diseño de §6.1 ninguna tarjeta llegaría a ACTIVA.
+
+**Decisión del propietario** (panel, 26/11 13:05: «Aceptar el aviso con los 3 controles»): el `tokenId` se toma del callback solo si se cumplen los tres:
+1. **IP de dinelco**: la IP real del aviso (detrás del túnel, `cf-connecting-ip`; directo, la del socket) está en la lista del entorno de la cuenta: PRODUCCION 190.128.216.66/.67, PRUEBA 190.128.216.70 (las informó dinelco el 25/11). Si no, 403 y no se consulta nada.
+2. **Catastro PENDIENTE** de esa referencia (`FRCR-<cuenta>-<rand>`), de la misma cuenta DINELCO de la ruta, abierto hace 30 min o menos (ya existía).
+3. **Consulta a dinelco**: la sesión de ese catastro (`registro_sesion_id`, misma referencia) da `sessionStatus: SUCCESS`.
+
+Si la consulta llega a traer el resultado con token (dinelco lo agrega algún día), manda la consulta y el cuerpo del aviso no se usa. Si dinelco no responde, sigue PENDIENTE y vence. El token del aviso no vuelve nunca al storefront ni al registro (igual que antes).
+
+**Qué cubre y qué no:** alguien que no es dinelco no puede inyectar un token (IP + sesión que dinelco confirma como terminada + ventana de 30 min de un catastro que abrió ese cliente). Lo que queda: una IP de dinelco falsificada junto con la ref aleatoria de un catastro en curso de otro cliente: haría falta conocer la ref (48 bits al azar, solo la ve el cliente) y además el token falso solo sirve con nuestra clave, contra dinelco, que lo rechaza. Detrás de Cloudflare, `cf-connecting-ip` solo se cree si la conexión viene del túnel local (`clientIpDe`).
+
+**Código** (commit sobre el #373): `dinelco.proveedor.ts` (`IPS_AVISO_DINELCO`, `ipAvisoDinelco`, `consultarCatastro` devuelve `exitosa`), `tarjetas-guardadas.service.ts` (`avisoCatastro` con los tres controles), `pedidos-online-pedidos.handler.ts` (pasa la IP del aviso).
+
+**Pruebas** (`test:tienda-tarjeta-guardada`, dinelco simulado con la forma real de la consulta: `SUCCESS` sin `registryInfo`): sesión sin terminar → PENDIENTE; ruta de otra cuenta → 400; IP ajena → 403; IP de producción con cuenta de PRUEBA → 403; los tres controles → ACTIVA con el token del aviso; repetido → 400; vencido (> 30 min) → 400; consulta con resultado → manda la consulta.
+
+**Lo que sigue sin poder probarse en sandbox y bloquea el merge (§4.5):** recibir el callback real y cobrar con token + su reversa. El callback va a la `callbackUrl` de la sesión, pero la copia no es alcanzable desde dinelco con una IP suya, y la clave de pruebas no tiene `payment:create`. Salidas, a decidir por el propietario antes del merge: (a) pedirle a dinelco `payment:create` en la clave de pruebas y el `tokenId` de la sesión 17176 (o una URL de prueba alcanzable) y hacer cobro + reversa en sandbox; o (b) mergear con «Permitir guardar tarjetas» apagado y prenderlo en producción solo después de un catastro real, un pago chico con un toque y su reversa.

@@ -211,6 +211,17 @@ export function interpretarCatastroDinelco(b: any, refEsperada: string): Resulta
   return { tipo: 'PENDIENTE', detalle: st ? `estado de catastro no reconocido: ${st}` : 'dinelco todavía no tiene el catastro' };
 }
 
+/** IPs desde las que dinelco manda los avisos (las informó dinelco el 25/11/2026). */
+export const IPS_AVISO_DINELCO: Record<'PRUEBA' | 'PRODUCCION', string[]> = {
+  PRODUCCION: ['190.128.216.66', '190.128.216.67'],
+  PRUEBA: ['190.128.216.70'],
+};
+
+export function ipAvisoDinelco(entorno: string, ip: string): boolean {
+  const lista = IPS_AVISO_DINELCO[entorno === 'PRODUCCION' ? 'PRODUCCION' : 'PRUEBA'];
+  return lista.includes(String(ip || '').replace(/^::ffff:/i, ''));
+}
+
 export function referenciaRegistro(cuentaClienteId: number, sufijo = randomBytes(6).toString('hex')): string {
   return `FRCR-${cuentaClienteId}-${sufijo}`;
 }
@@ -238,15 +249,22 @@ export async function crearSesionCatastro(
 }
 
 /**
- * Consulta la sesión del catastro. dinelco no documenta si `GET /checkout-session/{id}` trae el
- * resultado de un catastro (PLAN §6.1): si no lo trae, queda PENDIENTE y manda el callback.
+ * Consulta la sesión del catastro. `GET /checkout-session/{id}` no trae el token de la tarjeta
+ * (PLAN §6.1, probado): `exitosa` dice si dinelco da esa sesión por terminada bien, para el callback.
  */
-export async function consultarCatastro(creds: DinelcoConfig, ref: string, sessionId: string | null, ctx: ContextoProveedor): Promise<{ resultado: ResultadoCatastro; crudo: any }> {
+export async function consultarCatastro(
+  creds: DinelcoConfig, ref: string, sessionId: string | null, ctx: ContextoProveedor,
+): Promise<{ resultado: ResultadoCatastro; exitosa: boolean; crudo: any }> {
   const c = await consultarRef(creds, ctx.fetch, ref, sessionId ? Number(sessionId) || null : null);
   const resultado = interpretarCatastroDinelco(c.body, ref);
   // Al registro va sin el token.
   const b = c.body || {};
-  return { resultado, crudo: { status: c.status, sessionStatus: b.sessionStatus ?? null, registro: b.registryInfo?.status ?? null } };
+  // dinelco no devuelve el token por consulta (probado en su sandbox el 26/11): sí confirma que la
+  // sesión de ESE catastro terminó bien (`sessionStatus: SUCCESS`). Con eso se acepta el callback.
+  const mismaRef = !b.clientReferenceId || String(b.clientReferenceId) === ref;
+  const mismaSesion = !sessionId || b.sessionId == null || String(b.sessionId) === String(sessionId);
+  const exitosa = c.status >= 200 && c.status < 300 && mismaRef && mismaSesion && String(b.sessionStatus ?? '').toUpperCase() === 'SUCCESS';
+  return { resultado, exitosa, crudo: { status: c.status, sessionStatus: b.sessionStatus ?? null, registro: b.registryInfo?.status ?? null } };
 }
 
 /**

@@ -66,7 +66,7 @@ const fakeFetch = async (url: string, init: any = {}) => {
     const r = registros.get(Number(m[1]));
     if (!r) return res(200, { sessionId: Number(m[1]), sessionStatus: 'REQUIRES_PAYMENT' });
     return res(200, {
-      sessionId: r.sessionId, clientReferenceId: r.ref, sessionStatus: r.resultado ? 'COMPLETED' : 'OPEN',
+      sessionId: r.sessionId, clientReferenceId: r.ref, sessionStatus: r.resultado === 'SUCCESSFUL' ? 'SUCCESS' : r.resultado ? 'FAILED' : 'REQUIRES_PAYMENT',
       ...(consultaTraeCatastro && r.resultado ? { registryInfo: infoCatastro(r) } : {}),
     });
   }
@@ -195,24 +195,34 @@ async function main() {
   registerPublicRoutes(app, ds);
   await app.ready();
   const a2: any = await abrirCatastro(ds, beto.id, { consentimiento: true });
-  const reg2 = catastrar(a2.ref);
-  ok((await confirmarCatastro(ds, beto.id, a2.ref)).estado === 'PENDIENTE', 'sin resultado en la consulta → espera el callback');
-  const w0 = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco-77/aviso', payload: callbackCatastro(reg2) });
-  ok(w0.statusCode === 400 && (await confirmarCatastro(ds, beto.id, a2.ref)).estado === 'PENDIENTE', 'callback por la ruta de otra cuenta → no vale', w0.body);
-  // Sin firma: el callback no decide; si la consulta no trae el resultado, sigue PENDIENTE.
-  const falso = { ...callbackCatastro(reg2), registryInfo: { status: 'SUCCESSFUL', paymentMethodInfo: { paymentMethodType: 'CARD', tokenId: 'tk-inyectado', paymentMethodPayload: { cardBrand: 'VSA', cardNumber: '411111******1111', cardType: 'C' } } } };
-  const w1 = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', payload: falso });
-  ok(w1.statusCode === 200 && (await confirmarCatastro(ds, beto.id, a2.ref)).estado === 'PENDIENTE', 'callback sin respaldo en la consulta → sigue PENDIENTE', w1.body);
+  const reg2 = [...registros.values()].find((x) => x.ref === a2.ref)!;
+  const QA = { 'cf-connecting-ip': '190.128.216.70' };
   const tok = async (ref: string) => (await tarjetas.createQueryBuilder('t').addSelect('t.tokenId').where('t.registroRef = :r', { r: ref }).getOne())?.tokenId;
-  ok(!(await tok(a2.ref)), 'el tokenId del cuerpo del callback no se usa');
-  // Cuando dinelco ya lo informa en la consulta, el callback dispara la reconfirmación.
-  consultaTraeCatastro = true;
-  const w1b = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', payload: falso });
+  const falso = { message: 'Catastro exitoso', clientReferenceId: a2.ref, merchantCustomer: {}, registryInfo: { status: 'SUCCESSFUL', paymentMethodInfo: { paymentMethodType: 'CARD', tokenId: 'tk-inyectado', paymentMethodPayload: { cardBrand: 'VSA', cardNumber: '411111******1111', cardType: 'C' } } } };
+  // Control 3: con la IP de dinelco pero la sesión sin terminar en dinelco → no vale.
+  const wa = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', headers: QA, payload: falso });
+  ok(wa.statusCode === 200 && (await confirmarCatastro(ds, beto.id, a2.ref)).estado === 'PENDIENTE' && !(await tok(a2.ref)), 'callback de una sesión que dinelco no dio por terminada → sigue PENDIENTE', wa.body);
+  catastrar(a2.ref);
+  ok((await confirmarCatastro(ds, beto.id, a2.ref)).estado === 'PENDIENTE', 'la consulta no trae el token → espera el callback');
+  const w0 = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco-77/aviso', headers: QA, payload: callbackCatastro(reg2) });
+  ok(w0.statusCode === 400 && (await confirmarCatastro(ds, beto.id, a2.ref)).estado === 'PENDIENTE', 'callback por la ruta de otra cuenta → no vale', w0.body);
+  // Control 1: la IP.
+  const w1 = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', payload: callbackCatastro(reg2) });
+  ok(w1.statusCode === 403 && (await confirmarCatastro(ds, beto.id, a2.ref)).estado === 'PENDIENTE', 'callback desde una IP que no es de dinelco → 403, sigue PENDIENTE', w1.body);
+  const wp = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', headers: { 'cf-connecting-ip': '190.128.216.67' }, payload: callbackCatastro(reg2) });
+  ok(wp.statusCode === 403, 'IP de dinelco de producción con una cuenta de PRUEBA → 403', wp.body);
+  // Los tres controles: ACTIVA con el token del aviso.
+  const w1b = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', headers: QA, payload: callbackCatastro(reg2) });
   const c2: any = await confirmarCatastro(ds, beto.id, a2.ref);
-  const tk2 = await tok(a2.ref);
-  ok(w1b.statusCode === 200 && c2.estado === 'ACTIVA' && tk2 === reg2.tokenId && tk2 !== 'tk-inyectado', 'callback → reconsulta a dinelco → ACTIVA con el tokenId de dinelco', { c2, tk2 });
-  const w2 = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', payload: callbackCatastro(reg2) });
+  ok(w1b.statusCode === 200 && c2.estado === 'ACTIVA' && (await tok(a2.ref)) === reg2.tokenId && c2.tarjeta?.enmascarada === '540692******1096', 'IP de dinelco + catastro pendiente + sesión SUCCESS → ACTIVA con el token del aviso', { c2 });
+  const w2 = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', headers: QA, payload: callbackCatastro(reg2) });
   ok(w2.statusCode === 400, 'callback repetido (ya no está PENDIENTE) → 400');
+  // Si la consulta ya trae el resultado, manda la consulta (el cuerpo del aviso no se usa).
+  consultaTraeCatastro = true;
+  const a2b: any = await abrirCatastro(ds, beto.id, { consentimiento: true });
+  const reg2b = catastrar(a2b.ref);
+  const w3 = await app.inject({ method: 'POST', url: '/pub/pagos/dinelco/aviso', headers: QA, payload: { ...falso, clientReferenceId: a2b.ref } });
+  ok(w3.statusCode === 200 && (await tok(a2b.ref)) === reg2b.tokenId, 'consulta con el resultado → manda la consulta, no el aviso', w3.body);
   await app.close();
   consultaTraeCatastro = true;
 

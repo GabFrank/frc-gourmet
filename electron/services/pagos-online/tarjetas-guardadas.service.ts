@@ -2,9 +2,8 @@
  * «Guardar mi tarjeta» en la tienda (PLAN-tienda-tarjeta-guardada): catastro de dinelco.
  *
  * El cliente (con teléfono verificado y casilla de consentimiento marcada) abre el catastro; la
- * tarjeta queda ACTIVA solo si dinelco lo confirma: consultando la sesión o, si la consulta no trae
- * el resultado, con el callback del catastro, que sin firma solo vale para un catastro PENDIENTE de
- * esa misma referencia abierto hace menos de 30 minutos. El cobro con un toque está en
+ * tarjeta queda ACTIVA solo si dinelco lo confirma: con la consulta de la sesión o, como la consulta
+ * no trae el token, con el callback del catastro y sus tres controles (ver `avisoCatastro`). El cobro con un toque está en
  * `pagos-online.service.ts` (`pagarConTarjetaGuardada`).
  */
 import { DataSource } from 'typeorm';
@@ -13,7 +12,7 @@ import { TarjetaGuardada } from '../../../src/app/database/entities/pedidos-onli
 import { cuentasListas, CuentaResuelta } from './cuentas-pago';
 import { fetchActual } from './proveedores/deps';
 import {
-  consultarCatastro, crearSesionCatastro, DinelcoConfig, PROVEEDOR_DINELCO, REF_REGISTRO,
+  consultarCatastro, crearSesionCatastro, DinelcoConfig, interpretarCatastroDinelco, ipAvisoDinelco, PROVEEDOR_DINELCO, REF_REGISTRO,
   referenciaRegistro, ResultadoCatastro,
 } from './proveedores/dinelco.proveedor';
 import { ProveedorError } from './proveedores/tipos';
@@ -146,11 +145,17 @@ export function esAvisoCatastro(body: any): boolean {
 }
 
 /**
- * Callback del catastro (`/pub/pagos/dinelco[-<cuenta>]/aviso`). Sin firma: no decide nada, solo
- * reconfirma contra dinelco un catastro PENDIENTE de esa referencia, de la misma cuenta DINELCO,
- * abierto hace menos de 30 min.
+ * Callback del catastro (`/pub/pagos/dinelco[-<cuenta>]/aviso`). dinelco solo manda el token de la
+ * tarjeta en este aviso, que viene sin firma y no se reintenta (la consulta no lo trae: probado en su
+ * sandbox el 26/11). Se acepta solo si se cumplen los tres controles (decisión del propietario, 26/11):
+ *   1. llega desde una IP de dinelco del entorno de la cuenta;
+ *   2. es de un catastro PENDIENTE de esa referencia y de esa cuenta DINELCO, abierto hace < 30 min;
+ *   3. la consulta a dinelco de ESA sesión dice que terminó bien (`sessionStatus: SUCCESS`).
+ * Si la consulta ya trae el resultado, manda la consulta y el cuerpo del aviso no se usa.
  */
-export async function avisoCatastro(ds: DataSource, proveedorRuta: string, body: any, ahora = new Date()): Promise<{ http: number; respuesta: any }> {
+export async function avisoCatastro(
+  ds: DataSource, proveedorRuta: string, body: any, ahora = new Date(), ip = '',
+): Promise<{ http: number; respuesta: any }> {
   const ref = String(body?.clientReferenceId ?? '');
   const repo = ds.getRepository(TarjetaGuardada);
   const fila = REF_REGISTRO.test(ref) ? await repo.findOne({ where: { registroRef: ref } }) : null;
@@ -158,14 +163,24 @@ export async function avisoCatastro(ds: DataSource, proveedorRuta: string, body:
   const formaRuta = m?.[1] ? Number(m[1]) : null;
   const vigente = fila && fila.estado === 'PENDIENTE' && ahora.getTime() - new Date(fila.createdAt).getTime() <= VIGENCIA_REGISTRO_MS;
   if (!m || !fila || !vigente || (fila.formaPagoOnlineId ?? null) !== formaRuta) return { http: 400, respuesta: { status: 'error' } };
-  // El aviso no trae firma: solo dispara la consulta a dinelco. Lo que diga el cuerpo no se usa.
   const c = await cuentaTarjetas(ds);
-  if (c && (c.forma?.id ?? null) === (fila.formaPagoOnlineId ?? null)) {
-    try {
-      const r = await consultarCatastro(c.creds as DinelcoConfig, ref, fila.registroSesionId ?? null, ctx());
-      await aplicarCatastro(ds, fila, r.resultado);
-    } catch { /* sin respuesta: sigue PENDIENTE; el storefront vuelve a consultar */ }
+  if (!c || (c.forma?.id ?? null) !== (fila.formaPagoOnlineId ?? null)) return { http: 400, respuesta: { status: 'error' } };
+  const creds = c.creds as DinelcoConfig;
+  // Control 1: antes de consultar nada, que venga de dinelco.
+  if (!ipAvisoDinelco(creds.entorno, ip)) {
+    console.warn(`[dinelco] aviso de catastro ${ref} desde una IP que no es de dinelco (${ip || 'sin IP'}): no se usa`);
+    return { http: 403, respuesta: { status: 'error' } };
   }
+  try {
+    const r = await consultarCatastro(creds, ref, fila.registroSesionId ?? null, ctx());
+    if (r.resultado.tipo !== 'PENDIENTE') {
+      await aplicarCatastro(ds, fila, r.resultado);
+    } else if (r.exitosa) {
+      // Control 3: dinelco confirma esa sesión; el token sale del aviso.
+      const delAviso = interpretarCatastroDinelco(body, ref);
+      if (delAviso.tipo === 'ACTIVA') await aplicarCatastro(ds, fila, delAviso);
+    }
+  } catch { /* sin respuesta de dinelco: sigue PENDIENTE (el aviso no se reintenta: el cliente vuelve a guardarla) */ }
   return { http: 200, respuesta: { recibido: true } };
 }
 

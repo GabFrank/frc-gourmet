@@ -1009,7 +1009,7 @@ export function registerPedidosOnlinePedidosHandlers(
   // confirmado y la tienda acepta sola, se manda a cocina igual que con la consulta.
   ipcMain.handle('pub-pago-aviso', async (_event: any, proveedorId: string, body: any) => {
     // Callback del catastro de dinelco (referencia `FRCR-…`): no es de un pedido.
-    if (esAvisoCatastro(body)) return avisoCatastro(dataSource, String(proveedorId || ''), body);
+    if (esAvisoCatastro(body)) return avisoCatastro(dataSource, String(proveedorId || ''), body, new Date(), String(_event?._clientIp || ''));
     const r = await procesarAvisoPago(dataSource, String(proveedorId || ''), body);
     if (r.pedidoId && r.resultado?.recienPagado && r.resultado.aceptadoAutomatico) await materializarTrasPago(dataSource, r.pedidoId);
     return { http: r.http, respuesta: r.respuesta };
