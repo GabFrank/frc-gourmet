@@ -96,8 +96,9 @@ declare const Bancard: any;
     .sf-acciones .sf-btn { text-decoration: none; }
     .formulario-pago { min-height: 360px; margin: 8px 0 12px; }
     .iframe-pago { margin: 8px 0 12px; }
-    .iframe-pago iframe { width: 100%; height: 680px; border: 0; border-radius: 8px; background: #fff; }
-    @media (max-width: 768px) { .iframe-pago iframe { height: 600px; } }
+    /* El iframe se crea a mano (no lo dibuja Angular): sin ::ng-deep, el estilo encapsulado no le llega. */
+    .iframe-pago ::ng-deep iframe { display: block; width: 100%; height: 680px; border: 0; border-radius: 8px; background: #fff; }
+    @media (max-width: 768px) { .iframe-pago ::ng-deep iframe { height: 600px; } }
     .qr-pago { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; margin: 4px 0 12px; }
     .qr-monto { font-size: 1.15rem; margin: 0; }
     .qr-monto strong { font-size: 1.5rem; }
