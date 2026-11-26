@@ -29,6 +29,7 @@ import { FormasPago } from './entities/compras/forma-pago.entity';
 import { PrecioDelivery } from './entities/ventas/precio-delivery.entity';
 import { Delivery, DeliveryEstado } from './entities/ventas/delivery.entity';
 import { ConvertirModoDeliveryPayload } from './convertir-modo-delivery.types';
+import { DecisionPagoPayload } from './decision-pago-online.types';
 import { Venta, VentaEstado } from './entities/ventas/venta.entity';
 import { VentaItem } from './entities/ventas/venta-item.entity';
 import { PdvGrupoCategoria } from './entities/ventas/pdv-grupo-categoria.entity';
@@ -284,7 +285,7 @@ interface ElectronAPI {
   deliveryActualizarDatos: (deliveryId: number, payload: any) => Promise<any>;
   deliveryCambiarEstado: (deliveryId: number, nuevoEstado: string, opts?: any) => Promise<any>;
   deliveryAsignarRepartidor: (deliveryId: number, funcionarioId: number | null) => Promise<any>;
-  deliveryCancelar: (deliveryId: number, motivo: string) => Promise<any>;
+  deliveryCancelar: (deliveryId: number, motivo: string, decisionPago?: DecisionPagoPayload) => Promise<any>;
   deliveryConvertirModo: (deliveryId: number, payload: any) => Promise<any>;
   deliveryImprimirTicket: (deliveryId: number, printerId?: number) => Promise<any>;
   getDeliveriesByCaja: (cajaId: number, filtros?: any) => Promise<{ data: any[], total: number }>;
@@ -484,15 +485,37 @@ interface ElectronAPI {
   getPedidosOnlineAdmin: (filtros?: any) => Promise<any[]>;
   contarPedidosOnlinePendientes: () => Promise<any>;
   aceptarPedidoOnline: (pedidoId: number, data?: any) => Promise<any>;
-  rechazarPedidoOnline: (pedidoId: number, motivo: string) => Promise<any>;
+  rechazarPedidoOnline: (pedidoId: number, motivo: string, decisionPago?: DecisionPagoPayload) => Promise<any>;
+  resolverCancelacionPedidoOnline: (pedidoId: number, aprobar: boolean, respuesta?: string, decisionPago?: DecisionPagoPayload) => Promise<any>;
   avanzarEstadoPedidoOnline: (pedidoId: number, nuevoEstado: string) => Promise<any>;
   vincularVentaPedidoOnline: (pedidoId: number, ventaId: number) => Promise<any>;
   getDetalleVariacionItems: (itemIds: number[]) => Promise<any>;
   getTiendaOnlineConfig: () => Promise<any>;
   updateTiendaOnlineConfig: (data: any) => Promise<any>;
+  probarTiendaWhatsapp: (data: { telefono: string }) => Promise<any>;
+  probarTiendaUpay: () => Promise<any>;
+  probarTiendaPago: (proveedorId?: string) => Promise<any>;
+  marcarPagoDevueltoPedidoOnline: (pedidoId: number) => Promise<any>;
+  getFormasPagoOnline: () => Promise<any>;
+  guardarFormaPagoOnline: (data: any) => Promise<any>;
+  eliminarFormaPagoOnline: (id: number) => Promise<any>;
+  moverFormaPagoOnline: (id: number, direccion: number) => Promise<any>;
+  probarFormaPagoOnline: (id: number) => Promise<any>;
+  getCuentasTienda: (filtros?: any) => Promise<any>;
+  getVinculosCuentaTienda: (cuentaId: number) => Promise<any>;
+  vincularCuentaTienda: (cuentaId: number, clienteId: number, motivo?: string) => Promise<any>;
+  desvincularCuentaTienda: (cuentaId: number, motivo: string) => Promise<any>;
+  getCuentaTiendaDeCliente: (clienteId: number) => Promise<any>;
+  resolverPagoPedidoOnline: (pedidoId: number, decisionPago: DecisionPagoPayload) => Promise<any>;
+  pedidosOnlinePagadosDeVenta: (ventaId: number) => Promise<any>;
   getZonasDeliveryAdmin: () => Promise<any[]>;
+  getDashboardZonasDelivery: (params?: { rango?: string }) => Promise<any>;
   guardarZonaDelivery: (data: any) => Promise<any>;
   eliminarZonaDelivery: (zonaId: number) => Promise<any>;
+  getTiendaCategoriasAdmin: () => Promise<any[]>;
+  guardarTiendaCategoria: (data: any) => Promise<any>;
+  eliminarTiendaCategoria: (categoriaId: number) => Promise<any>;
+  reordenarTiendaCategorias: (ids: number[]) => Promise<any>;
   crearProduccion: (data: any) => Promise<any>;
   getProducciones: (filtros?: any) => Promise<any[]>;
   // Presentacion methods
@@ -2007,8 +2030,8 @@ export class RepositoryIpcService extends RepositoryService {
     return from(this.api.deliveryAsignarRepartidor(deliveryId, funcionarioId));
   }
 
-  deliveryCancelar(deliveryId: number, motivo: string): Observable<any> {
-    return from(this.api.deliveryCancelar(deliveryId, motivo));
+  deliveryCancelar(deliveryId: number, motivo: string, decisionPago?: DecisionPagoPayload): Observable<any> {
+    return from(this.api.deliveryCancelar(deliveryId, motivo, decisionPago));
   }
 
   deliveryConvertirModo(deliveryId: number, payload: ConvertirModoDeliveryPayload): Observable<any> {
@@ -2119,6 +2142,10 @@ export class RepositoryIpcService extends RepositoryService {
   }
 
   // VentaItemAdicional
+  getEstadoDeudaVenta(ventaId: number): Observable<{ bloqueada: boolean; codigo?: string }> {
+    return from(this.api.callIpc('venta-deuda-estado', ventaId));
+  }
+
   getVentaItemAdicionales(ventaItemId: number): Observable<any[]> {
     return from(this.api.getVentaItemAdicionales(ventaItemId));
   }
@@ -2642,8 +2669,12 @@ export class RepositoryIpcService extends RepositoryService {
   aceptarPedidoOnline(pedidoId: number, data?: any): Observable<any> {
     return from(this.api.aceptarPedidoOnline(pedidoId, data));
   }
-  rechazarPedidoOnline(pedidoId: number, motivo: string): Observable<any> {
-    return from(this.api.rechazarPedidoOnline(pedidoId, motivo));
+  rechazarPedidoOnline(pedidoId: number, motivo: string, decisionPago?: DecisionPagoPayload): Observable<any> {
+    return from(this.api.rechazarPedidoOnline(pedidoId, motivo, decisionPago));
+  }
+
+  resolverCancelacionPedidoOnline(pedidoId: number, aprobar: boolean, respuesta?: string, decisionPago?: DecisionPagoPayload): Observable<any> {
+    return from(this.api.resolverCancelacionPedidoOnline(pedidoId, aprobar, respuesta, decisionPago));
   }
   avanzarEstadoPedidoOnline(pedidoId: number, nuevoEstado: string): Observable<any> {
     return from(this.api.avanzarEstadoPedidoOnline(pedidoId, nuevoEstado));
@@ -2660,14 +2691,85 @@ export class RepositoryIpcService extends RepositoryService {
   updateTiendaOnlineConfig(data: any): Observable<any> {
     return from(this.api.updateTiendaOnlineConfig(data));
   }
+  probarTiendaWhatsapp(data: { telefono: string }): Observable<any> {
+    return from(this.api.probarTiendaWhatsapp(data));
+  }
+  probarTiendaUpay(): Observable<any> {
+    return from(this.api.probarTiendaUpay());
+  }
+
+  probarTiendaPago(proveedorId?: string): Observable<any> {
+    return from(this.api.probarTiendaPago(proveedorId));
+  }
+  marcarPagoDevueltoPedidoOnline(pedidoId: number): Observable<any> {
+    return from(this.api.marcarPagoDevueltoPedidoOnline(pedidoId));
+  }
+
+  getFormasPagoOnline(): Observable<any> {
+    return from(this.api.getFormasPagoOnline());
+  }
+
+  guardarFormaPagoOnline(data: any): Observable<any> {
+    return from(this.api.guardarFormaPagoOnline(data));
+  }
+
+  eliminarFormaPagoOnline(id: number): Observable<any> {
+    return from(this.api.eliminarFormaPagoOnline(id));
+  }
+
+  moverFormaPagoOnline(id: number, direccion: number): Observable<any> {
+    return from(this.api.moverFormaPagoOnline(id, direccion));
+  }
+
+  probarFormaPagoOnline(id: number): Observable<any> {
+    return from(this.api.probarFormaPagoOnline(id));
+  }
+
+  getCuentasTienda(filtros?: any): Observable<any> {
+    return from(this.api.getCuentasTienda(filtros));
+  }
+  getVinculosCuentaTienda(cuentaId: number): Observable<any> {
+    return from(this.api.getVinculosCuentaTienda(cuentaId));
+  }
+  vincularCuentaTienda(cuentaId: number, clienteId: number, motivo?: string): Observable<any> {
+    return from(this.api.vincularCuentaTienda(cuentaId, clienteId, motivo));
+  }
+  desvincularCuentaTienda(cuentaId: number, motivo: string): Observable<any> {
+    return from(this.api.desvincularCuentaTienda(cuentaId, motivo));
+  }
+  getCuentaTiendaDeCliente(clienteId: number): Observable<any> {
+    return from(this.api.getCuentaTiendaDeCliente(clienteId));
+  }
+  resolverPagoPedidoOnline(pedidoId: number, decisionPago: DecisionPagoPayload): Observable<any> {
+    return from(this.api.resolverPagoPedidoOnline(pedidoId, decisionPago));
+  }
+
+  pedidosOnlinePagadosDeVenta(ventaId: number): Observable<any> {
+    return from(this.api.pedidosOnlinePagadosDeVenta(ventaId));
+  }
   getZonasDeliveryAdmin(): Observable<any[]> {
     return from(this.api.getZonasDeliveryAdmin());
+  }
+  getDashboardZonasDelivery(params?: { rango?: string }): Observable<any> {
+    return from(this.api.getDashboardZonasDelivery(params));
   }
   guardarZonaDelivery(data: any): Observable<any> {
     return from(this.api.guardarZonaDelivery(data));
   }
   eliminarZonaDelivery(zonaId: number): Observable<any> {
     return from(this.api.eliminarZonaDelivery(zonaId));
+  }
+  getTiendaCategoriasAdmin(): Observable<any[]> {
+    return from(this.api.getTiendaCategoriasAdmin());
+  }
+  guardarTiendaCategoria(data: any): Observable<any> {
+    return from(this.api.guardarTiendaCategoria(data));
+  }
+  eliminarTiendaCategoria(categoriaId: number): Observable<any> {
+    return from(this.api.eliminarTiendaCategoria(categoriaId));
+  }
+  reordenarTiendaCategorias(ids: number[]): Observable<any> {
+    return from(this.api.reordenarTiendaCategorias(ids));
   }
 
   crearProduccion(data: any): Observable<any> {

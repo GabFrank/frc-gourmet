@@ -36,6 +36,24 @@ export interface MenuSaborPrecio {
   presentacionId: number;
   precio: number;
   recetaPresentacionId: number;
+  /** F6b: receta de este sabor × tamaño (clave de `MenuSnapshot.personalizacionPorReceta`). */
+  recetaId?: number | null;
+}
+
+/** F6b: lo que se puede personalizar de una receta (sabor × tamaño). */
+export interface PersonalizacionReceta {
+  quitables: { id: number; nombre: string }[];
+  cambiables: { id: number; nombre: string; opciones: { productoId: number; nombre: string }[] }[];
+  adicionales: MenuAdicional[];
+}
+
+/** F6b: lo que el cliente eligió para un sabor. */
+export interface PersonalizacionSabor {
+  saborId: number;
+  nombreSabor?: string;
+  quitar: { id: number; nombre: string }[];
+  cambios: { recetaIngredienteId: number; nombre: string; productoId: number; reemplazoNombre: string }[];
+  adicionales: MenuAdicional[];
 }
 
 /** Pizza: un sabor con sus precios por tamaño. */
@@ -82,6 +100,11 @@ export interface MenuProducto {
 export interface MenuCategoria {
   id: number | string;
   nombre: string;
+  /**
+   * Categoría de la tienda armada a mano en «Config Tienda Online»: sus productos, en orden.
+   * Un producto puede estar en varias. Sin esto, la categoría agrupa por `MenuProducto.categoriaId`.
+   */
+  productoIds?: number[];
 }
 
 export interface MenuSnapshot {
@@ -89,6 +112,8 @@ export interface MenuSnapshot {
   productos: MenuProducto[];
   total: number;
   publicadoEn: string;
+  /** F6b: solo con «Personalizar sabores» prendido en la tienda. */
+  personalizacionPorReceta?: Record<string, PersonalizacionReceta> | null;
 }
 
 export interface ZonaDelivery {
@@ -102,9 +127,14 @@ export interface CuentaCliente {
   id: number;
   telefono: string;
   telefonoVerificado: boolean;
+  /** Contacto sin verificar (cuentas de Google o email). No sirve para ingresar. */
+  telefonoContacto?: string | null;
   email: string | null;
+  /** El email lo verificó Google: «Continuar con Google» entra a esta cuenta. */
+  emailVerificado?: boolean;
+  /** Avisos del pedido por WhatsApp. null: todavía no eligió. */
+  avisosWhatsapp?: boolean | null;
   nombre: string | null;
-  clienteId: number | null;
 }
 
 /** Opción elegida de una línea (cubre todos los tipos, incluida pizza). */
@@ -114,6 +144,7 @@ export interface CartOpcion {
   presentacionId?: number;
   recetaId?: number;
   saborIds?: number[];         // pizza: 1..maxSabores (mitad y mitad)
+  personalizacionSabores?: PersonalizacionSabor[]; // F6b: sacar / cambiar / adicionales por sabor
 }
 
 /** Ítem del carrito con su personalización. */
@@ -150,12 +181,33 @@ export interface PedidoResumen {
   total: number;
   direccionEntrega: string | null;
   notas: string | null;
+  motivoRechazo?: string | null;
+  /** F4: pago con tarjeta (uPay). */
+  metodoPago?: string;
+  estadoPago?: string | null;
+  pagoMonto?: number | null;
   createdAt: string;
+  /** F9: solicitud de cancelación y acciones disponibles (las decide el servidor). */
+  cancelacionSolicitadaEn?: string | null;
+  cancelacionMotivo?: string | null;
+  cancelacionRespuesta?: string | null;
+  acciones?: { solicitarCancelacion: boolean; modificar: boolean; repetir: boolean; compartir: boolean };
+  /** F8: cómo dijo que iba a pagar. */
+  pagoModalidad?: string | null;
+  pagoMonedaId?: number | null;
+  vueltoPara?: number | null;
+  pagoObservacion?: string | null;
+  fechaAceptado?: string | null;
+  fechaListo?: string | null;
+  fechaEntregado?: string | null;
   items: {
+    productoId?: number;
+    presentacionId?: number | null;
     nombreProducto: string;
     nombrePresentacion: string | null;
     cantidad: number;
     precioUnitario: number;
     subtotal: number;
+    personalizacion?: any;
   }[];
 }

@@ -106,3 +106,14 @@ export function ipEnRangosLan(rawIp: string, rangosCsv?: string | null): boolean
     : RANGOS_PRIVADOS;
   return rangos.some((r) => matchCidr(ip, r));
 }
+
+/**
+ * Regla de MESA_QR con `requiereLanMesa` (PLAN-tienda-online C2). Por el túnel
+ * (internet) solo vale una IP pública cargada a mano en `rangosCsv` (la de
+ * egreso del local); los rangos privados por defecto nunca, aunque el valor
+ * parezca privado.
+ */
+export function ipPermitidaMesa(rawIp: string, viaTunel: boolean, rangosCsv?: string | null): boolean {
+  if (viaTunel && (!String(rangosCsv || '').trim() || ipEnRangosLan(rawIp, null))) return false;
+  return ipEnRangosLan(rawIp, rangosCsv);
+}

@@ -2058,8 +2058,8 @@ contextBridge.exposeInMainWorld('api', {
   deliveryAsignarRepartidor: async (deliveryId: number, funcionarioId: number | null): Promise<any> => {
     return await ipcRenderer.invoke('delivery-asignar-repartidor', deliveryId, funcionarioId);
   },
-  deliveryCancelar: async (deliveryId: number, motivo: string): Promise<any> => {
-    return await ipcRenderer.invoke('delivery-cancelar', deliveryId, motivo);
+  deliveryCancelar: async (deliveryId: number, motivo: string, decisionPago?: any): Promise<any> => {
+    return await ipcRenderer.invoke('delivery-cancelar', deliveryId, motivo, decisionPago);
   },
   deliveryConvertirModo: async (deliveryId: number, payload: any): Promise<any> => {
     return await ipcRenderer.invoke('delivery-convertir-modo', deliveryId, payload);
@@ -2589,8 +2589,11 @@ contextBridge.exposeInMainWorld('api', {
   aceptarPedidoOnline: async (pedidoId: number, data?: any): Promise<any> => {
     return await ipcRenderer.invoke('aceptar-pedido-online', pedidoId, data);
   },
-  rechazarPedidoOnline: async (pedidoId: number, motivo: string): Promise<any> => {
-    return await ipcRenderer.invoke('rechazar-pedido-online', pedidoId, motivo);
+  rechazarPedidoOnline: async (pedidoId: number, motivo: string, decisionPago?: any): Promise<any> => {
+    return await ipcRenderer.invoke('rechazar-pedido-online', pedidoId, motivo, decisionPago);
+  },
+  resolverCancelacionPedidoOnline: async (pedidoId: number, aprobar: boolean, respuesta?: string, decisionPago?: any): Promise<any> => {
+    return await ipcRenderer.invoke('resolver-cancelacion-pedido-online', pedidoId, aprobar, respuesta, decisionPago);
   },
   avanzarEstadoPedidoOnline: async (pedidoId: number, nuevoEstado: string): Promise<any> => {
     return await ipcRenderer.invoke('avanzar-estado-pedido-online', pedidoId, nuevoEstado);
@@ -2607,14 +2610,80 @@ contextBridge.exposeInMainWorld('api', {
   updateTiendaOnlineConfig: async (data: any): Promise<any> => {
     return await ipcRenderer.invoke('update-tienda-online-config', data);
   },
+  probarTiendaWhatsapp: async (data: { telefono: string }): Promise<any> => {
+    return await ipcRenderer.invoke('probar-tienda-whatsapp', data);
+  },
+  probarTiendaUpay: async (): Promise<any> => {
+    return await ipcRenderer.invoke('probar-tienda-upay');
+  },
+  probarTiendaPago: async (proveedorId?: string): Promise<any> => {
+    return await ipcRenderer.invoke('probar-tienda-pago', proveedorId);
+  },
+  marcarPagoDevueltoPedidoOnline: async (pedidoId: number): Promise<any> => {
+    return await ipcRenderer.invoke('marcar-pago-devuelto-pedido-online', pedidoId);
+  },
+  // F8b: cuentas de la tienda y su vínculo con el Cliente interno.
+  // Formas de pago online = cuentas de los proveedores (PLAN-tienda-pagos-multi-icpay).
+  getFormasPagoOnline: async (): Promise<any> => {
+    return await ipcRenderer.invoke('get-formas-pago-online');
+  },
+  guardarFormaPagoOnline: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('guardar-forma-pago-online', data);
+  },
+  eliminarFormaPagoOnline: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('eliminar-forma-pago-online', id);
+  },
+  moverFormaPagoOnline: async (id: number, direccion: number): Promise<any> => {
+    return await ipcRenderer.invoke('mover-forma-pago-online', id, direccion);
+  },
+  probarFormaPagoOnline: async (id: number): Promise<any> => {
+    return await ipcRenderer.invoke('probar-forma-pago-online', id);
+  },
+  getCuentasTienda: async (filtros?: any): Promise<any> => {
+    return await ipcRenderer.invoke('get-cuentas-tienda', filtros);
+  },
+  getVinculosCuentaTienda: async (cuentaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-vinculos-cuenta-tienda', cuentaId);
+  },
+  vincularCuentaTienda: async (cuentaId: number, clienteId: number, motivo?: string): Promise<any> => {
+    return await ipcRenderer.invoke('vincular-cuenta-tienda', cuentaId, clienteId, motivo);
+  },
+  desvincularCuentaTienda: async (cuentaId: number, motivo: string): Promise<any> => {
+    return await ipcRenderer.invoke('desvincular-cuenta-tienda', cuentaId, motivo);
+  },
+  getCuentaTiendaDeCliente: async (clienteId: number): Promise<any> => {
+    return await ipcRenderer.invoke('get-cuenta-tienda-de-cliente', clienteId);
+  },
+  resolverPagoPedidoOnline: async (pedidoId: number, decisionPago: any): Promise<any> => {
+    return await ipcRenderer.invoke('resolver-pago-pedido-online', pedidoId, decisionPago);
+  },
+  pedidosOnlinePagadosDeVenta: async (ventaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('pedidos-online-pagados-de-venta', ventaId);
+  },
   getZonasDeliveryAdmin: async (): Promise<any[]> => {
     return await ipcRenderer.invoke('get-zonas-delivery-admin');
+  },
+  getDashboardZonasDelivery: async (params?: { rango?: string }): Promise<any> => {
+    return await ipcRenderer.invoke('get-dashboard-zonas-delivery', params);
   },
   guardarZonaDelivery: async (data: any): Promise<any> => {
     return await ipcRenderer.invoke('guardar-zona-delivery', data);
   },
   eliminarZonaDelivery: async (zonaId: number): Promise<any> => {
     return await ipcRenderer.invoke('eliminar-zona-delivery', zonaId);
+  },
+  // Tienda online F6: categorías propias de la carta
+  getTiendaCategoriasAdmin: async (): Promise<any[]> => {
+    return await ipcRenderer.invoke('get-tienda-categorias-admin');
+  },
+  guardarTiendaCategoria: async (data: any): Promise<any> => {
+    return await ipcRenderer.invoke('guardar-tienda-categoria', data);
+  },
+  eliminarTiendaCategoria: async (categoriaId: number): Promise<any> => {
+    return await ipcRenderer.invoke('eliminar-tienda-categoria', categoriaId);
+  },
+  reordenarTiendaCategorias: async (ids: number[]): Promise<any> => {
+    return await ipcRenderer.invoke('reordenar-tienda-categorias', ids);
   },
 
   // Producción (buffet)

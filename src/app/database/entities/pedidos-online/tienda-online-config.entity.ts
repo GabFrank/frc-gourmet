@@ -61,10 +61,94 @@ export class TiendaOnlineConfig extends BaseModel {
   aceptacionAutomatica!: boolean;
 
   /**
+   * F6b: el cliente personaliza cada sabor de la pizza (sacar / cambiar ingredientes y
+   * adicionales por sabor), como en el PdV. Nace apagado: prenderlo después de revisar que las
+   * recetas tengan marcados los ingredientes opcionales y cambiables.
+   */
+  @Column({ name: 'personalizar_sabores', type: 'boolean', default: false })
+  personalizarSabores!: boolean;
+
+  /**
+   * F8: métodos de pago al recibir que ofrece la tienda (JSON: ["EFECTIVO","QR",…]).
+   * Null = sólo efectivo, como antes de F8.
+   */
+  @Column({ name: 'metodos_pago', type: 'text', nullable: true })
+  metodosPago?: string | null;
+
+  /**
+   * F9: con qué se mandan los códigos de ingreso por WhatsApp: META (Cloud API) o EVOLUTION (la
+   * instancia de «Configuración de Notificaciones»). Null = META. Si el elegido no está cargado se
+   * usa el otro.
+   */
+  @Column({ name: 'whatsapp_proveedor', type: 'varchar', length: 20, nullable: true })
+  whatsappProveedor?: string | null;
+
+  /** F9: teléfono del local que ve el cliente (llamar / escribir desde el detalle del pedido). */
+  /** Avisar al cliente por WhatsApp cuando su pedido cambia de estado (apagado por defecto). */
+  @Column({ name: 'avisos_whatsapp', type: 'boolean', default: false })
+  avisosWhatsapp!: boolean;
+
+  /** Fuera de la app instalada (copias, desarrollo) los avisos van SOLO a este número. */
+  @Column({ name: 'avisos_telefono_prueba', type: 'varchar', length: 30, nullable: true })
+  avisosTelefonoPrueba?: string | null;
+
+  @Column({ name: 'telefono_contacto', type: 'varchar', length: 30, nullable: true })
+  telefonoContacto?: string | null;
+
+  /**
    * Horarios de atención como JSON:
    * `[{ dia: 0-6 (0=Dom), abre: 'HH:mm', cierra: 'HH:mm', activo: bool }]`.
    * null/[] = siempre abierta (mientras `activa`).
    */
   @Column({ name: 'horarios_json', type: 'text', nullable: true })
   horariosJson?: string;
+
+  /**
+   * Ingreso de clientes (PLAN-tienda-online F3). Solo datos NO secretos: el token de
+   * WhatsApp Cloud va al almacén seguro del SO (`tienda-secrets.util.ts`), nunca a la BD.
+   * Vacíos = se usan las variables de entorno (WHATSAPP_PHONE_NUMBER_ID, GOOGLE_CLIENT_ID...).
+   */
+  @Column({ name: 'whatsapp_phone_number_id', type: 'varchar', length: 64, nullable: true })
+  whatsappPhoneNumberId?: string;
+
+  @Column({ name: 'whatsapp_plantilla', type: 'varchar', length: 120, nullable: true })
+  whatsappPlantilla?: string;
+
+  @Column({ name: 'whatsapp_idioma', type: 'varchar', length: 16, nullable: true })
+  whatsappIdioma?: string;
+
+  /** Client ID OAuth web de Google (público). */
+  @Column({ name: 'google_client_id', type: 'varchar', length: 255, nullable: true })
+  googleClientId?: string;
+
+  // ── Pago online con uPay (PLAN-tienda-online F4). La API Key va al almacén seguro. ──
+  /** Ofrecer «Pagar con tarjeta» en pedidos NUEVOS. Apagarlo no corta la confirmación de los en curso. */
+  @Column({ name: 'pago_online_activo', type: 'boolean', default: false })
+  pagoOnlineActivo!: boolean;
+
+  @Column({ name: 'upay_base_url', type: 'varchar', length: 255, nullable: true })
+  upayBaseUrl?: string | null;
+
+  @Column({ name: 'upay_merchant_id', type: 'varchar', length: 64, nullable: true })
+  upayMerchantId?: string | null;
+
+  @Column({ name: 'upay_merchant_nombre', type: 'varchar', length: 150, nullable: true })
+  upayMerchantNombre?: string | null;
+
+  // ── Proveedores de pago online (PLAN-tienda-pagos-proveedores). ──
+  /** Proveedor con el que se cobran los pedidos NUEVOS (`UPAY`, `BANCARD`). Vacío = uPay. */
+  @Column({ name: 'pago_proveedor', type: 'varchar', length: 20, nullable: true })
+  pagoProveedor?: string | null;
+
+  /** Datos NO secretos por proveedor, en JSON: `{"BANCARD":{"publicKey":"…","entorno":"PRUEBA"}}`. */
+  @Column({ name: 'pago_config_json', type: 'text', nullable: true })
+  pagoConfigJson?: string | null;
+
+  /** «Hay que devolverlo» intenta devolver por la API del proveedor (si la tiene). */
+  @Column({ name: 'pago_devolucion_automatica', type: 'boolean', default: false })
+  pagoDevolucionAutomatica!: boolean;
+
+  /** Aviso al personal si un pedido pagado no se acepta en estos minutos. */
+  @Column({ name: 'minutos_aviso_pagado_sin_aceptar', type: 'int', default: 20 })
+  minutosAvisoPagadoSinAceptar!: number;
 }

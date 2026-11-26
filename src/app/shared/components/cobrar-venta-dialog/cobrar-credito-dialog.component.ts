@@ -94,9 +94,11 @@ export class CobrarCreditoDialogComponent implements OnInit {
   private recomputeSaldoProyectado(): void {
     this.saldoProyectado = (this.data.saldoActual || 0) + (this.data.monto || 0);
     const limite = this.data.limiteCredito || 0;
+    // El límite se respeta: sin límite no hay crédito, y pasarse no se puede aprobar.
+    this.sinLimite = limite <= 0;
     if (limite <= 0) {
       this.excedeLimite = false;
-      this.saldoClass = 'ok';
+      this.saldoClass = 'over';
     } else if (this.saldoProyectado > limite) {
       this.excedeLimite = true;
       this.saldoClass = 'over';
@@ -135,11 +137,15 @@ export class CobrarCreditoDialogComponent implements OnInit {
     this.dialogRef.close();
   }
 
+  /** El cliente no tiene límite cargado: no se puede vender a crédito. */
+  sinLimite = false;
+
   async submit(forzar = false): Promise<void> {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
     }
+    if (this.sinLimite || this.excedeLimite) return;
     // Preguntar una sola vez si se imprime el pagaré (por defecto No). En el
     // re-submit con `forzar` no se vuelve a preguntar.
     if (!this.imprimirPagarePreguntado) {

@@ -98,3 +98,23 @@
   --error-text: #ffffff;
   --info-text: #ffffff;
 }
+
+// 🗺️ Colores de zona de delivery (dashboard de Zonas). Paleta categórica validada
+// (guía dataviz, `validate_palette.js`): orden fijo, se asigna por el orden de la zona.
+// `--zona-mapa-*` va sobre los mosaicos del mapa, que son claros en los dos temas, así
+// que no cambia con el tema. `--zona-*` es el punto de color de la fila, sobre la
+// superficie de la app. Contraste < 3:1 en algunos pasos: cada zona lleva su nombre
+// visible (etiqueta en el mapa y fila en la tabla), nunca sólo el color.
+:root {
+  --zona-mapa-1: #2a78d6; --zona-mapa-2: #eb6834; --zona-mapa-3: #1baf7a; --zona-mapa-4: #eda100;
+  --zona-mapa-5: #e87ba4; --zona-mapa-6: #008300; --zona-mapa-7: #6250d6; --zona-mapa-8: #e34948;
+  --zona-1: #2a78d6; --zona-2: #eb6834; --zona-3: #1baf7a; --zona-4: #eda100;
+  --zona-5: #e87ba4; --zona-6: #008300; --zona-7: #6250d6; --zona-8: #e34948;
+  // Anillo de los puntos (separa puntos superpuestos) y punto de un pedido sin zona.
+  --zona-mapa-anillo: #ffffff; --zona-mapa-sin-zona: #757575; --zona-mapa-texto: #212121;
+}
+.dark-theme,
+[data-theme="dark"] {
+  --zona-1: #3987e5; --zona-2: #d95926; --zona-3: #199e70; --zona-4: #c98500;
+  --zona-5: #d55181; --zona-6: #008300; --zona-7: #9085e9; --zona-8: #e66767;
+}

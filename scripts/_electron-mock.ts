@@ -21,6 +21,25 @@ const mockIpcMain = {
   removeHandler: (channel: string) => reg().delete(channel),
 };
 
+// keytar en memoria: los tests NUNCA tocan el llavero real de la máquina. Escribían y borraban
+// secretos con los mismos nombres que la app (token de WhatsApp, credenciales de pago) y se
+// llevaban por delante los que el dueño había cargado (2026-11-11: dos veces el token de Meta).
+const llaveroDePrueba = new Map<string, string>();
+const claveLlavero = (s: string, a: string) => `${s}\u0000${a}`;
+require.cache[require.resolve('keytar')] = {
+  id: 'keytar',
+  filename: 'keytar',
+  loaded: true,
+  exports: {
+    getPassword: async (s: string, a: string) => llaveroDePrueba.get(claveLlavero(s, a)) ?? null,
+    setPassword: async (s: string, a: string, v: string) => { llaveroDePrueba.set(claveLlavero(s, a), String(v)); },
+    deletePassword: async (s: string, a: string) => llaveroDePrueba.delete(claveLlavero(s, a)),
+    findCredentials: async (s: string) => [...llaveroDePrueba.entries()]
+      .filter(([k]) => k.startsWith(`${s}\u0000`)).map(([k, password]) => ({ account: k.split('\u0000')[1], password })),
+    findPassword: async (s: string) => [...llaveroDePrueba.entries()].find(([k]) => k.startsWith(`${s}\u0000`))?.[1] ?? null,
+  },
+} as any;
+
 require.cache[require.resolve('electron')] = {
   id: 'electron',
   filename: 'electron',

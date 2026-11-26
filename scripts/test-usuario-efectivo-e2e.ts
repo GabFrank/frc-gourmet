@@ -347,6 +347,34 @@ async function main() {
   });
   if (rpcSis.statusCode === 401) pass('token de Sistema / Online en /api/rpc → 401');
   else fail('Sistema / Online en /api/rpc → 401', `status=${rpcSis.statusCode}`);
+  // Aviso de un proveedor de pago (webhook): también a nombre de Sistema / Online.
+  handlerRegistry.set('pub-pago-aviso', async () => {
+    const p = dataSource.getRepository(Persona).create({ nombre: 'CREADA POR AVISO' } as any);
+    await setEntityUserTracking(dataSource, p, (consola as Usuario)?.id, false);
+    const guardada: any = await dataSource.getRepository(Persona).save(p);
+    return { http: 200, respuesta: { requestUserId: getRequestUser()?.id ?? null, createdById: guardada.createdBy?.id ?? null } };
+  });
+  const aviso = await pubFastify.inject({ method: 'POST', url: '/pub/pagos/BANCARD/aviso', payload: { x: 1 } });
+  let avisoBody: any; try { avisoBody = JSON.parse(aviso.body); } catch { avisoBody = aviso.body; }
+  if (aviso.statusCode === 200 && avisoBody?.requestUserId === sistema?.id && avisoBody?.createdById === sistema?.id) {
+    pass('aviso de pago (/pub/pagos/:proveedor/aviso) corre a nombre de Sistema / Online');
+  } else fail('aviso de pago a nombre de Sistema / Online', `status=${aviso.statusCode} ${aviso.body.slice(0, 200)} sistema=${sistema?.id}`);
+
+  // Job de pagos: a nombre de Sistema / Online, y si no se puede resolver, se saltea (fail-closed).
+  const { cicloJobPagosOnline } = await import('../electron/services/pagos-online/pagos-online.service');
+  let usadoPorJob: number | null = null;
+  const corrio = await cicloJobPagosOnline(dataSource, async () => undefined, async (ds) => {
+    const u = await getUsuarioSistemaOnline(ds);
+    usadoPorJob = u.id;
+    return u;
+  });
+  if (corrio && usadoPorJob === sistema?.id) pass('ciclo del job de pagos corre con Sistema / Online');
+  else fail('ciclo del job con Sistema / Online', `corrio=${corrio} usuario=${usadoPorJob} sistema=${sistema?.id}`);
+  let tickCorrio = false;
+  const salteado = await cicloJobPagosOnline(dataSource, async () => { tickCorrio = true; }, async () => { throw new Error('sin usuario'); });
+  if (salteado === false && !tickCorrio) pass('sin usuario Sistema / Online el job se saltea el ciclo (fail-closed)');
+  else fail('job fail-closed', `salteado=${salteado} tickCorrio=${tickCorrio}`);
+
   if (consola && (consola as Usuario).id === admin.id) pass('la consola sigue con su usuario tras las rutas públicas');
   else fail('consola intacta tras pub', `consola=${JSON.stringify(consola)?.slice(0, 80)}`);
   await pubFastify.close();

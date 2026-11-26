@@ -9,6 +9,7 @@ import {
   EstadoPedidoOnline,
   CanalPedidoOnline,
   MetodoPagoOnline,
+  EstadoPagoOnline,
 } from './pedido-online.enums';
 
 /**
@@ -30,6 +31,13 @@ export class PedidoOnline extends BaseModel {
   @ManyToOne(() => CuentaCliente, { nullable: true, createForeignKeyConstraints: false })
   @JoinColumn({ name: 'cuenta_cliente_id' })
   cuentaCliente?: CuentaCliente;
+
+  /**
+   * F8b: el `Cliente` interno del pedido, fijado al crearlo desde el vínculo de la cuenta. La
+   * venta sale con este cliente; desvincular la cuenta después no lo cambia.
+   */
+  @Column({ name: 'cliente_id', type: 'int', nullable: true })
+  clienteId?: number | null;
 
   // Snapshot de contacto (por si la cuenta se edita/borra).
   @Column({ name: 'nombre_cliente', type: 'varchar', length: 150, nullable: true })
@@ -112,6 +120,104 @@ export class PedidoOnline extends BaseModel {
 
   @Column({ name: 'fecha_entregado', nullable: true })
   fechaEntregado?: Date;
+
+  // Clave de idempotencia del cliente (uuid por intento). Única por cuenta o, si es
+  // invitado, por mesa: índices únicos parciales de la migración TiendaOnlineSeguridad.
+  @Column({ name: 'idempotency_key', type: 'varchar', length: 64, nullable: true })
+  idempotencyKey?: string;
+
+  // F2 (M6): SHA-256 del token de seguimiento del invitado de mesa. El token en claro
+  // se devuelve una sola vez al crear el pedido; acá nunca se guarda.
+  @Column({ name: 'seguimiento_token_hash', type: 'varchar', length: 64, nullable: true, select: false })
+  seguimientoTokenHash?: string;
+
+  // ── Pago online (PLAN-tienda-online F4). Todo null en pedidos en efectivo. ──
+  @Column({ name: 'estado_pago', type: 'varchar', length: 30, nullable: true })
+  estadoPago?: EstadoPagoOnline | null;
+
+  @Column({ name: 'pago_proveedor', type: 'varchar', length: 20, nullable: true })
+  pagoProveedor?: string | null;
+
+  /** Intento de pago (1, 2…): cada reintento es una sesión nueva en el proveedor. */
+  @Column({ name: 'pago_intento', type: 'int', nullable: true })
+  pagoIntento?: number | null;
+
+  /** Idempotency-Key del intento actual: un reintento de red reusa la misma sesión. */
+  @Column({ name: 'pago_idem_key', type: 'varchar', length: 64, nullable: true, select: false })
+  pagoIdemKey?: string | null;
+
+  @Column({ name: 'pago_sesion_id', type: 'varchar', length: 64, nullable: true })
+  pagoSesionId?: string | null;
+
+  @Column({ name: 'pago_checkout_url', type: 'varchar', length: 500, nullable: true, select: false })
+  pagoCheckoutUrl?: string | null;
+
+  /** Cuenta (`formas_pago_online`) con la que se cobra: se consulta y devuelve con esa. */
+  @Column({ name: 'forma_pago_online_id', type: 'int', nullable: true })
+  formaPagoOnlineId?: number | null;
+
+  /** Lo que el proveedor devolvió al crear el cobro y hace falta después (QR Pix, monto en USD). JSON. */
+  @Column({ name: 'pago_datos_json', type: 'text', nullable: true, select: false })
+  pagoDatosJson?: string | null;
+
+  /** Id del payment del proveedor (único: un pago confirma un solo pedido). */
+  @Column({ name: 'pago_id', type: 'varchar', length: 64, nullable: true })
+  pagoId?: string | null;
+
+  @Column({ name: 'pago_monto', type: 'decimal', precision: 18, scale: 2, nullable: true })
+  pagoMonto?: number | null;
+
+  @Column({ name: 'pago_expira_en', nullable: true })
+  pagoExpiraEn?: Date;
+
+  @Column({ name: 'pago_ultima_consulta', nullable: true })
+  pagoUltimaConsulta?: Date;
+
+  @Column({ name: 'pago_detalle', type: 'varchar', length: 255, nullable: true })
+  pagoDetalle?: string | null;
+
+  @Column({ name: 'pagado_en', nullable: true })
+  pagadoEn?: Date;
+
+  @Column({ name: 'pago_aviso_sin_aceptar', type: 'boolean', default: false })
+  pagoAvisoSinAceptar!: boolean;
+
+  // ── F8: cómo dijo el cliente que va a pagar (no es un cobro: el cajero cobra en el PdV) ──
+  @Column({ name: 'pago_modalidad', type: 'varchar', length: 20, nullable: true })
+  pagoModalidad?: string | null;
+
+  /** Moneda con la que paga en efectivo (puede no ser la principal). Sin FK: se resuelve por id. */
+  @Column({ name: 'pago_moneda_id', type: 'int', nullable: true })
+  pagoMonedaId?: number | null;
+
+  /** «Paga con»: el billete que entrega, en `pagoMonedaId`. Null = no necesita vuelto. */
+  @Column({ name: 'vuelto_para', type: 'decimal', precision: 18, scale: 2, nullable: true })
+  vueltoPara?: number | null;
+
+  /** Cotización (compraLocal, a la principal) vigente al pedir, para el ticket y la auditoría. */
+  @Column({ name: 'pago_cotizacion', type: 'decimal', precision: 18, scale: 4, nullable: true })
+  pagoCotizacion?: number | null;
+
+  @Column({ name: 'pago_observacion', type: 'varchar', length: 200, nullable: true })
+  pagoObservacion?: string | null;
+
+  // ── F9: el cliente pidió cancelar (el local aprueba o rechaza desde la bandeja) ──
+  /** Cuándo la pidió. Null = no hay solicitud pendiente. */
+  // Sin `type` y tipado `Date` (no `Date | null`), como `fecha_aceptado`: TypeORM elige el tipo
+  // por driver; un `| null` sin tipo explícito rompe la validación en Postgres (PR #234).
+  @Column({ name: 'cancelacion_solicitada_en', nullable: true })
+  cancelacionSolicitadaEn?: Date;
+
+  @Column({ name: 'cancelacion_motivo', type: 'varchar', length: 200, nullable: true })
+  cancelacionMotivo?: string | null;
+
+  /** El local la rechazó: por qué (el cliente lo ve). Con esto ya no puede volver a pedirla. */
+  @Column({ name: 'cancelacion_respuesta', type: 'varchar', length: 200, nullable: true })
+  cancelacionRespuesta?: string | null;
+
+  /** El cliente aceptó en el checkout recibir avisos del pedido por WhatsApp (PLAN-tienda-avisos-whatsapp). */
+  @Column({ name: 'avisos_consentimiento_en', nullable: true })
+  avisosConsentimientoEn?: Date;
 
   @OneToMany('PedidoOnlineItem', 'pedido', { cascade: true })
   items?: PedidoOnlineItem[];

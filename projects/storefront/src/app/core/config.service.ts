@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { BehaviorSubject } from 'rxjs';
 import { PublicApiService } from './public-api.service';
 
 export interface TiendaConfig {
@@ -12,6 +13,23 @@ export interface TiendaConfig {
   prepTimeMinutos: number;
   montoMinimoPedido: number;
   googleClientId?: string | null;
+  /** Login por código de WhatsApp disponible (hay canal real de envío). */
+  otpWhatsappDisponible?: boolean;
+  /** F4: el local ofrece pagar con tarjeta (uPay) en retiro y delivery. */
+  pagoOnline?: boolean;
+  /** Proveedor con el que se cobra (`UPAY`, `BANCARD`) y hosts a los que la tienda puede ir. */
+  pagoOnlineProveedor?: string | null;
+  pagoOnlineHosts?: string[];
+  /** Varios proveedores prendidos a la vez: el cliente elige (tarjeta con Bancard, Pix…). */
+  pagoOnlineProveedores?: { formaId?: number | null; id: string; etiqueta: string; medio: string; pickup?: boolean; delivery?: boolean }[];
+  /** F8: métodos para pagar al recibir / retirar (sin configurar = sólo efectivo). */
+  metodosPago?: string[];
+  /** F8b: la tienda ofrece «A cuenta» (si este cliente puede, lo dice `auth.me`). */
+  compraACuenta?: boolean;
+  /** F9: teléfono del local (llamar / escribir desde el detalle del pedido). */
+  telefonoContacto?: string | null;
+  /** Avisos del pedido por WhatsApp prendidos: el checkout ofrece la casilla. */
+  avisosWhatsapp?: boolean;
 }
 
 /** Carga la config pública de la tienda y aplica el branding (nombre/color). */
@@ -23,6 +41,8 @@ export class ConfigService {
     prepTimeMinutos: 30, montoMinimoPedido: 0,
   };
   loaded = false;
+  /** Emite la config actual y cada vez que llega del server (para lo que depende de ella, como Google). */
+  readonly cambios$ = new BehaviorSubject<TiendaConfig>(this.config);
 
   constructor(private api: PublicApiService) {}
 
@@ -36,6 +56,7 @@ export class ConfigService {
           }
         }
         this.loaded = true;
+        this.cambios$.next(this.config);
       },
       error: () => (this.loaded = true),
     });
