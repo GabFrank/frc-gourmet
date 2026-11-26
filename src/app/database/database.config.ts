@@ -339,16 +339,36 @@ import { AcreditacionesPosReglas1793110000000 } from './migrations/1793110000000
 import { FichasCantina1793299117857 } from './migrations/1793299117857-FichasCantina';
 import { CajaMayorMontosAmplios1793302813170 } from './migrations/1793302813170-CajaMayorMontosAmplios';
 import { PdvTiposVenta1793381465964 } from './migrations/1793381465964-PdvTiposVenta';
+import { TiendaOnlineSeguridad1793727680955 } from './migrations/1793727680955-TiendaOnlineSeguridad';
+import { TiendaSeguimientoMesa1793727681955 } from './migrations/1793727681955-TiendaSeguimientoMesa';
+import { TiendaIngresoClientes1793727682955 } from './migrations/1793727682955-TiendaIngresoClientes';
+import { TiendaPagoOnline1793727683955 } from './migrations/1793727683955-TiendaPagoOnline';
+import { TiendaCategorias1793727684955 } from './migrations/1793727684955-TiendaCategorias';
+import { TiendaPersonalizarSabores1793727685955 } from './migrations/1793727685955-TiendaPersonalizarSabores';
+import { TiendaPagoMoneda1793912540026 } from './migrations/1793912540026-TiendaPagoMoneda';
+import { TiendaDetallePedido1793919146544 } from './migrations/1793919146544-TiendaDetallePedido';
+import { TiendaTelefonoContactoCuenta1793995236513 } from './migrations/1793995236513-TiendaTelefonoContactoCuenta';
+import { TiendaPagoProveedores1793998020104 } from './migrations/1793998020104-TiendaPagoProveedores';
+import { TiendaVinculoCuentaCliente1794069224523 } from './migrations/1794069224523-TiendaVinculoCuentaCliente';
+import { TiendaPagosMultiIcpay1794242488018 } from './migrations/1794242488018-TiendaPagosMultiIcpay';
+import { TiendaAvisosPedido1794318252364 } from './migrations/1794318252364-TiendaAvisosPedido';
+import { TiendaAvisosPreferenciaCuenta1794424012805 } from './migrations/1794424012805-TiendaAvisosPreferenciaCuenta';
+import { TiendaFormaPagoOnlinePos1794427578823 } from './migrations/1794427578823-TiendaFormaPagoOnlinePos';
+import { PedidoOnlineAviso } from './entities/pedidos-online/pedido-online-aviso.entity';
+import { PagoOnlineEvento } from './entities/pedidos-online/pago-online-evento.entity';
 import { ClasificacionItemsCompra1794356000000 } from './migrations/1794356000000-ClasificacionItemsCompra';
 import { CompraDetalleSnapshotCosto1794700000000 } from './migrations/1794700000000-CompraDetalleSnapshotCosto';
 import { MovimientoClienteLiquidacionItem1794800000000 } from './migrations/1794800000000-MovimientoClienteLiquidacionItem';
 import { CuentaCliente } from './entities/pedidos-online/cuenta-cliente.entity';
+import { CuentaClienteVinculo } from './entities/pedidos-online/cuenta-cliente-vinculo.entity';
 import { CodigoOtp } from './entities/pedidos-online/codigo-otp.entity';
 import { ZonaDelivery } from './entities/pedidos-online/zona-delivery.entity';
 import { PedidoOnline } from './entities/pedidos-online/pedido-online.entity';
+import { FormaPagoOnline } from './entities/pedidos-online/forma-pago-online.entity';
 import { PedidoOnlineItem } from './entities/pedidos-online/pedido-online-item.entity';
 import { CustomerRefreshToken } from './entities/pedidos-online/customer-refresh-token.entity';
 import { TiendaOnlineConfig } from './entities/pedidos-online/tienda-online-config.entity';
+import { TiendaCategoria, TiendaCategoriaProducto } from './entities/pedidos-online/tienda-categoria.entity';
 // Atajo (accesos rápidos) entities
 import { PdvAtajoGrupo } from './entities/ventas/pdv-atajo-grupo.entity';
 import { PdvAtajoItem } from './entities/ventas/pdv-atajo-item.entity';
@@ -454,12 +474,18 @@ function getEntitiesList(): any[] {
       PasswordResetToken,
       // Pedidos online (web app)
       CuentaCliente,
+      CuentaClienteVinculo,
       CodigoOtp,
       ZonaDelivery,
       PedidoOnline,
+      FormaPagoOnline,
+      PedidoOnlineAviso,
+      PagoOnlineEvento,
       PedidoOnlineItem,
       CustomerRefreshToken,
       TiendaOnlineConfig,
+      TiendaCategoria,
+      TiendaCategoriaProducto,
       // Shared
       Adjunto,
       // Notificaciones (Email + WhatsApp)
@@ -821,6 +847,21 @@ function getMigrations(driverType: 'sqlite' | 'postgres'): Function[] {
     CajaMayorMontosAmplios1793302813170,
     // PdV: tipos de venta habilitados (mesas, comandas, venta rápida), global
     PdvTiposVenta1793381465964,
+    TiendaOnlineSeguridad1793727680955,
+    TiendaSeguimientoMesa1793727681955,
+    TiendaIngresoClientes1793727682955,
+    TiendaPagoOnline1793727683955,
+    TiendaCategorias1793727684955,
+    TiendaPersonalizarSabores1793727685955,
+    TiendaPagoMoneda1793912540026,
+    TiendaDetallePedido1793919146544,
+    TiendaTelefonoContactoCuenta1793995236513,
+    TiendaPagoProveedores1793998020104,
+    TiendaVinculoCuentaCliente1794069224523,
+    TiendaPagosMultiIcpay1794242488018,
+    TiendaAvisosPedido1794318252364,
+    TiendaAvisosPreferenciaCuenta1794424012805,
+    TiendaFormaPagoOnlinePos1794427578823,
     // Compras: clase de ítem (CMV / gasto operativo / reventa) y alias con marca
     ClasificacionItemsCompra1794356000000,
     // Compras: snapshot del costo por línea para revertirlo al anular (#189)

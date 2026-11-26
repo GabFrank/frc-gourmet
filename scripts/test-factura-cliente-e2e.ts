@@ -176,6 +176,21 @@ async function main() {
     ok(await contarClientes() === antes, 'H: no crea uno nuevo por el RUC distinto');
   }
 
+  // ═══════ [J] RUC genérico de consumidor final ═══════
+  console.log('\n[J] RUC de consumidor final (44444401-7)');
+  {
+    const antes = await contarClientes();
+    const f1: any = await facturar({ ruc: '44444401-7', nombreCliente: 'JUAN PEREZ' });
+    const f2: any = await facturar({ ruc: '44444401-7', nombreCliente: 'MARIA GOMEZ' });
+    ok(!!f1?.id && !!f2?.id, 'J: las facturas salen igual');
+    ok(await contarClientes() === antes, 'J: no se crea ningún cliente con el RUC genérico');
+    ok(!f1?.cliente?.id && !f2?.cliente?.id, 'J: y no quedan colgadas de ningún cliente');
+    ok(await buscarClientePorRuc(ds, '44444401-7') === null, 'J: el RUC genérico no identifica a nadie');
+    const cli: any = await save(Cliente, { persona: await save(Persona, { nombre: 'CLIENTE CON CUENTA WEB', tipoDocumento: 'CI' }), activo: true });
+    const f3: any = await facturar({ ruc: '44444401-7', nombreCliente: 'CLIENTE CON CUENTA WEB', cliente: { id: cli.id } });
+    ok(f3?.cliente?.id === cli.id, 'J: con un cliente vinculado (sin RUC) la factura queda con ese cliente', f3?.cliente?.id);
+  }
+
   // ═══════ [I] Numeración correlativa ═══════
   console.log('\n[I] La numeración no se rompe');
   {

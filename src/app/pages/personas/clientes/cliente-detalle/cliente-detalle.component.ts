@@ -91,6 +91,9 @@ export class ClienteDetalleComponent implements OnInit {
 
   // Aviso cruzado: funcionario vinculado a la misma persona (o null)
   funcionarioVinculado: any = null;
+  /** F8b: cuenta de la tienda online vinculada a este cliente (texto y detalle pre-computados). */
+  cuentaWebTexto = '';
+  cuentaWebDetalle = '';
 
   // Movimientos paginados con filtros
   filterForm!: FormGroup;
@@ -137,6 +140,23 @@ export class ClienteDetalleComponent implements OnInit {
     if (this.clienteId) this.loadAll();
   }
 
+  /** Sólo con CLIENTES_VER (el handler lo exige); sin permiso no se muestra nada. */
+  private async loadCuentaWeb(): Promise<void> {
+    this.cuentaWebTexto = '';
+    this.cuentaWebDetalle = '';
+    if (!this.clienteId) return;
+    try {
+      const res: any = await firstValueFrom(this.repositoryService.getCuentaTiendaDeCliente(this.clienteId));
+      const c = res?.data;
+      if (!c) return;
+      this.cuentaWebTexto = `Cuenta web: ${c.telefono || c.email || c.nombre || `#${c.id}`}`;
+      const cuando = c.vinculadoEn ? new Date(c.vinculadoEn).toLocaleString('es-PY', { dateStyle: 'short', timeStyle: 'short' }) : '';
+      this.cuentaWebDetalle = ['Vinculada a la tienda online', c.vinculadoPor ? `por ${c.vinculadoPor}` : '', cuando].filter(Boolean).join(' ');
+    } catch {
+      /* sin permiso o modo cliente: no se muestra */
+    }
+  }
+
   private async loadFuncionarioVinculado(): Promise<void> {
     if (!this.clienteId) { this.funcionarioVinculado = null; return; }
     try {
@@ -173,6 +193,7 @@ export class ClienteDetalleComponent implements OnInit {
       this.applyEstadoCuenta(estado);
       this.applyStats(stats);
       this.loadFuncionarioVinculado();
+      this.loadCuentaWeb();
       await this.loadMovimientos();
     } catch (e) {
       console.error(e);

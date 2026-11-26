@@ -30,6 +30,16 @@ export function normalizarRuc(ruc: string | null | undefined): string {
   return String(ruc ?? '').replace(/[\s.\-]/g, '').trim().toUpperCase();
 }
 
+/**
+ * RUC genérico de «consumidor final / sin nombre» de la SET (44444401-7). No identifica a nadie:
+ * no se busca ni se crea un cliente con él (si no, todas las facturas sin RUC terminaban colgadas
+ * del primer cliente que lo usó).
+ */
+export const RUC_CONSUMIDOR_FINAL = '444444017';
+export function esRucConsumidorFinal(ruc: string | null | undefined): boolean {
+  return normalizarRuc(ruc) === RUC_CONSUMIDOR_FINAL;
+}
+
 /** El RUC tal cual se guarda: se respeta el formato tipeado. */
 export function formatoGuardadoRuc(ruc: string | null | undefined): string {
   return String(ruc ?? '').trim().toUpperCase();
@@ -52,7 +62,7 @@ export async function buscarClientePorRuc(
   ruc: string | null | undefined,
 ): Promise<Cliente | null> {
   const buscado = normalizarRuc(ruc);
-  if (!buscado) return null;
+  if (!buscado || buscado === RUC_CONSUMIDOR_FINAL) return null;
 
   const candidatos: Cliente[] = await managerOrDs
     .getRepository(Cliente)
@@ -88,7 +98,7 @@ export async function resolverOCrearClientePorRuc(
   const ruc = normalizarRuc(datos.ruc);
   const rucGuardado = formatoGuardadoRuc(datos.ruc);
   const nombre = String(datos.nombre ?? '').trim().toUpperCase();
-  if (!ruc || !nombre) return null;
+  if (!ruc || !nombre || ruc === RUC_CONSUMIDOR_FINAL) return null;
 
   const existente = await buscarClientePorRuc(dataSource, ruc);
   if (existente) {

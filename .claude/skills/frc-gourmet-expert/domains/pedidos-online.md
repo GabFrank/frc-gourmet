@@ -37,7 +37,7 @@ Todas con `createForeignKeyConstraints: false` (desacoplan borrado):
 | `PedidoOnline` | `pedidos_online` | "Envelope" inbound **antes** de convertirse en `Venta`. `numero` único (`PO-000001`), `estado` (def RECIBIDO, indexado), snapshots de cliente, `tipoPedido`, `metodoPago`, `fechaProgramada` (null=ASAP), montos, `latitud`/`longitud` (Fase D), `direccionEntrega`, vínculos sueltos `ventaId`/`deliveryId`/`mesaId`, `motivoRechazo`, `zonaDelivery`, `referenciaDireccion`, `notas`, `moneda`, timestamps de estado |
 | `PedidoOnlineItem` | `pedido_online_items` | `productoId`/`presentacionId?`, snapshots de nombre, `precioUnitario`/`subtotal` **congelados**, `personalizacion` como **texto JSON** `{opcion, sabores, adicionales, observaciones, notaLibre}` |
 | `CuentaCliente` | `cuentas_cliente` | Cuenta de cliente final **separada de `Usuario`**. `telefono` (único, nullable), `email`, `passwordHash?` (bcrypt), `cliente` FK opcional al `Cliente` interno |
-| `ZonaDelivery` | `zonas_delivery` | `nombre`, `tarifa`, `montoMinimo`, `orden` (tarifa plana; polígonos = Fase 6). ⚠️ **El storefront no las usa** — ver «Huecos conocidos» |
+| `ZonaDelivery` | `zonas_delivery` | `nombre`, `poligono` (GeoJSON en texto; el servidor resuelve el pin del cliente), `precioDelivery` (**tarifa del PdV, una por zona**: el envío y la atribución del delivery por teléfono), `tarifa` (fallback sin tarifa), `montoMinimo`, `orden` (gana la menor si se superponen), `activa` |
 | `TiendaOnlineConfig` | `tienda_online_config` | Fila única. `activa` (master switch), branding, `permitePickup/Delivery`, `prepTimeMinutos`, `montoMinimoPedido`, `aceptacionAutomatica`, `horariosJson` |
 | `CustomerRefreshToken` | `customer_refresh_tokens` | Refresh de cliente (`tokenHash` sha256, revocación) |
 | `CodigoOtp` | `codigos_otp` | OTP de login (`codigoHash` bcrypt, TTL, intentos) |
@@ -219,15 +219,341 @@ si el delivery ya está en el estado destino no se le vuelve a pedir la
 transición (la rechazaría por inválida) y el handler sigue para poner el pedido
 al día. El operador destraba un desfasaje repitiendo la acción.
 
+### Dashboard de Zonas de Delivery (F7, 2026-11)
+
+La pantalla de zonas dejó de ser una tabla: KPIs del período (hoy / 7 días / este mes, con
+**Aplicar** y jornada comercial), alertas, mapa con todas las zonas y los pedidos web como puntos,
+y tabla por zona con **los dos tipos de delivery**. Handler `get-dashboard-zonas-delivery`.
+
+**A qué zona va cada envío** (`asignarEnviosAZonas`, `electron/utils/zonas-dashboard.utils.ts`):
+- Web con zona → la del pedido (la que resolvió el pin), aunque la tarifa del delivery sea de otra.
+  Zona que ya no existe (la FK no tiene constraint) → «Zona eliminada».
+- Teléfono, o web sin zona (un retiro web convertido a delivery en el PdV) → la zona que tiene esa
+  **tarifa del PdV**. Sin zona con esa tarifa → «Tarifa X · sin zona»; con varias (dato previo a la
+  regla) → «Tarifa X · varias zonas», sin adivinar ni repartir. Sin tarifa → «Sin zona».
+- Invariante testeada: cada envío cae en una sola fila, Σ filas = KPIs, y los KPIs = `kpisDelivery`
+  de Reportes con el mismo filtro (ventas CONCLUIDAS, sin retiros, `SOLO_ENVIOS`).
+
+**Decisiones del propietario (05/11):**
+1. **La tarifa del PdV es EL precio de envío de la zona, obligatoria y una por zona.**
+   `guardar-zona-delivery`: `tarifa_requerida` al crear o al sacársela, `tarifa_invalida` si no
+   existe, `tarifa_en_uso` si ya la tiene otra zona. Sólo se controla cuando la tarifa **cambia**:
+   dos zonas viejas que la compartían, o una vieja sin tarifa, se siguen pudiendo editar. La columna
+   `tarifa` de la zona queda como respaldo de datos viejos (no se pide ni se muestra; aditivo, no
+   se borra); `zonas.get` publica el precio que se cobra, no el crudo.
+   Un guardado parcial conserva los campos que no vienen (antes reactivaba la zona y ponía orden y
+   mínimo en 0).
+2. **Lectura con `VENTAS_PDV`** (el permiso del menú); crear, editar, dibujar y eliminar siguen con
+   `PEDIDOS_ONLINE_CONFIGURAR`, y la pantalla oculta esas acciones (`puedeConfigurar`).
+3. **Puntos = pedidos web cobrados** (el mismo conjunto que la tabla), coordenadas redondeadas a 3
+   decimales (~110 m), sin datos del cliente, tope 1000 con aviso. La zona del punto es la misma
+   que cuenta la tabla.
+4. **Colores**: variables del tema `--zona-1…8` (puntos de la tabla, claro y oscuro) y
+   `--zona-mapa-*` (sobre los mosaicos, que son claros en los dos temas). Paleta categórica
+   validada con la guía `dataviz`; contraste < 3:1 en algunos pasos, por eso la zona siempre lleva
+   su nombre visible. Con más de 8 zonas el color se repite.
+
+**Gotchas del motor (`reportes-delivery.helper.ts`):**
+- `agrupar` deduplica sólo la cantidad de tickets (`COUNT(DISTINCT v.id)`); la plata y el envío
+  suman filas. Por eso el pedido web se une por una **subconsulta deduplicada por venta**
+  (`pedidos_online.venta_id` no es único: en la mesa varios pedidos comparten la venta).
+- `agrupar`/`envioRecaudado` aceptan varias columnas de agrupación; la clave se arma en JS
+  (`a|b|c`, '' para NULL) para no concatenar en SQL (`||` con un entero falla en Postgres).
+- Mosaicos de **OpenStreetMap** (CARTO exige clave desde 2026-11): diálogo de zonas, dashboard y
+  checkout de la tienda. Atribución visible; sin internet la pantalla avisa.
+
+Tests: `test:dashboard-zonas` y `test:dashboard-zonas-pg` (misma suite contra una base Postgres
+temporal que se crea y se borra; se saltea sin Postgres).
+
+### Pago del pedido y moneda del menú (F8, 2026-11)
+
+El pedido **registra cómo va a pagar el cliente; no cobra** (salvo uPay, que ya cobraba). El
+cajero cobra en el PdV como siempre, con el cobro del delivery **precargado**.
+
+- **Métodos al recibir / retirar** (`METODOS_AL_RECIBIR`: EFECTIVO, TARJETA_POS, QR, PIX,
+  TRANSFERENCIA), con interruptores en «Config Tienda Online» (`tienda_online_config.metodos_pago`,
+  JSON). Sin configurar o vacío = sólo efectivo, como antes. Online = uPay (`PagoModalidad.ONLINE`).
+- **Efectivo**: moneda (cualquiera activa con cotización), «paga con» (`vuelto_para`, en esa moneda)
+  que tiene que superar el total del servidor y no pasar de 100 veces el total, la cotización usada
+  (`pago_cotizacion`, 4 decimales) y una observación (MAYÚSCULAS, 200). **Por detrás todo es
+  guaraní; el vuelto va siempre en la principal.**
+- **Conversión**: extranjera → principal = × `compraLocal` (la tasa a la que el local recibe esa
+  moneda; buscada en los dos sentidos, `moneda.utils.ts`). La resuelve el servidor (`monedas.get`);
+  la tienda no la reimplementa. El total en otra moneda se redondea hacia arriba a sus decimales,
+  igual en tienda (`moneda-tienda.ts`) y servidor (`pago-pedido.utils.ts`).
+- **Moneda del menú**: sólo visual (selector en la barra, aviso «precios aproximados»; el pipe
+  `precio` recibe la moneda como argumento). Lo registrado (mis pedidos, pago) sigue en ₲.
+- **Sugerencias de vuelto**: con los billetes de la moneda (`monedas_billetes`) que valen al menos
+  el 10 % del total, el primer múltiplo que pasa el total; siempre mayores al total.
+- **Lo que ve el local**: `resumenPago` («EFECTIVO · EN US$ · PAGA CON US$ 10,00 (≈ ₲ 60.000) ·
+  VUELTO ₲ 15.000») en la bandeja, el recibo del panel de delivery y el ticket de delivery. Usa
+  todas las monedas (`monedasParaResumen`): si se desactiva una, el pedido sigue diciendo con qué
+  paga. Un pedido anterior a F8 muestra sólo el método.
+- **Precarga del cobro**: agregar una línea en el cobro ya la guarda (`createPagoDetalle`), así que
+  la precarga es de los **campos** (forma de pago, moneda, monto) y nunca guarda nada sola; sólo en
+  la primera ronda. QR no tiene forma de pago propia en el PdV: se precarga TRANSFERENCIA si no
+  existe una «QR».
+- **Texto libre del cliente sin caracteres de control** (`recortar`, observación y
+  `sanitizarParaTicket`): Postgres rechaza el NUL (el alta fallaba con 500) y la térmica toma
+  ESC/GS como comandos.
+- Pendientes: crédito y vinculación cuenta ↔ Cliente en F8b. («Mis pedidos» ya muestra el pago
+  elegido desde F9.)
+
+Tests: `test:pedidos-online-pago` (+ `-pg`), `test:storefront-vuelto`, F8 en
+`test:tienda-online-migracion`.
+
+### Detalle del pedido, cancelación y WhatsApp elegible (F9, 2026-11)
+
+**Detalle** (`/pedido/:numero`, desde cada tarjeta de «Mis pedidos»): estado con pasos, ítems con
+su personalización, entrega, pago elegido (F8), totales, número copiable; se refresca cada 12 s
+mientras está en curso. **Qué botones hay lo decide el servidor** (`acciones` en `mapPedido`,
+`electron/utils/pedido-acciones.utils.ts`); la tienda sólo los muestra y cada operación vuelve a
+validar con un UPDATE condicionado.
+
+- **Cancelar = siempre una solicitud** (`pedido.cancelacion.solicitar`, motivo opcional en
+  MAYÚSCULAS sin caracteres de control): RECIBIDO/ACEPTADO/EN_PREPARACION/LISTO, sin otra
+  pendiente, sin una ya rechazada, y no en una mesa con el pedido en la cuenta (eso se pide al
+  mozo). Columnas `cancelacion_solicitada_en`, `cancelacion_motivo`, `cancelacion_respuesta`.
+- **El local responde en la bandeja** (`resolver-cancelacion-pedido-online`, GESTIONAR; filtro
+  «Piden cancelar»; suma al contador del badge). **Aprobar** pasa por `cancelarPedido`, el MISMO
+  camino que el rechazo (reversa de la venta, permiso de cobrado, devolución uPay) y termina en
+  **CANCELADO** (lo pidió el cliente; RECHAZADO = lo decidió el local). **No se puede cancelar**:
+  se guarda la respuesta, el cliente la ve y no puede volver a pedirlo (para eso, el teléfono).
+- **Modificar** (excepción decidida por el propietario): cancela **al instante** sólo si está
+  RECIBIDO, sin venta, sin cobro online PAGADO/PENDIENTE y sin solicitud pendiente; no en mesa.
+  Motivo «MODIFICADO POR EL CLIENTE». La tienda rearma el carrito con esos productos.
+- **Repetir**: `core/repetir-pedido.ts` rearma las líneas del snapshot de cada ítem (que ahora
+  guarda también `opcion.recetaId`; `mapPedido` manda `productoId`/`presentacionId`) contra la
+  carta **vigente**: lo que ya no se vende no vuelve y se avisa en el carrito; el precio es el de
+  hoy. Un pedido viejo sin receta con dos variaciones posibles no se adivina: se avisa.
+- **Compartir** (`navigator.share` o `wa.me/?text=`): número, comercio, estado, productos y
+  total; sin dirección ni teléfono. **Llamar / escribir al local** con
+  `tienda_online_config.telefono_contacto` (validado: dígitos, espacios, + y guiones).
+- **Carrera con la materialización** (auditoría A1): `materializarPedidoOnlineEnVenta` ahora fija
+  `venta_id` con un UPDATE condicionado (`venta_id IS NULL AND estado NOT IN (RECHAZADO,
+  CANCELADO)`); si el cliente canceló en el medio, la transacción se deshace y no queda una venta
+  suelta.
+- **Topes**: 20 acciones por cuenta y 60 por IP por hora (`accionClientePermitida`).
+- **Dónde lo ve el personal**: la bandeja y también la cola «Pedidos de la web» del diálogo de
+  delivery (con «PIDIÓ CANCELAR» y los botones CANCELAR PEDIDO / NO SE PUEDE en lugar de
+  ACEPTAR/RECHAZAR). El contador del badge es una sola consulta (un RECIBIDO que pide cancelar
+  cuenta uno). **El badge del PdV leía `res.total`, que nunca existió**: estuvo siempre en 0 hasta
+  F9 (ahora lee `pendientes`).
+- **Solicitud que se queda sin responder**: si el pedido pasa a EN_CAMINO/ENTREGADO (bandeja o
+  sincronización con el delivery), `cierreSolicitudAlSalir` la cierra con «EL PEDIDO YA HABÍA
+  SALIDO»; si no, el cliente quedaba «esperando respuesta» para siempre.
+- Tras un «no» del local tampoco se puede «Modificar» (sería cancelarlo igual).
+- El invitado de mesa (sin cuenta) ve su pedido pero sin acciones.
+
+**WhatsApp elegible** (`tienda_online_config.whatsapp_proveedor` = META | EVOLUTION): el código de
+ingreso sale por Meta Cloud (plantilla) o por **el número del local vía Evolution API**
+(`POST {url}/message/sendText/{instancia}`, encabezado `apikey`, número `595…`). Evolution **no se
+configura dos veces**: usa la de «Configuración › Notificaciones» (`configuracion_notificaciones`
++ `getEvolutionApiKey`), releída como mucho cada 30 s en las llamadas públicas
+(`refrescarCredencialesWhatsapp`, lectura compartida; un error deja las credenciales que había) y
+siempre en la pantalla de config y en «Probar envío». Si el
+elegido no está cargado sale por el otro; un **error** de envío no cae al otro (serían dos
+códigos). La clave nunca aparece en errores. Google ya verificaba de verdad (tokeninfo + `aud`);
+Client ID cargado y probado en la base de copia el 06/11 (falta producción). Apple: no por ahora
+(decisión 05/11).
+
+**Teléfono de contacto (06/11).** Quien entra con Google o email no tiene `telefono` y el pedido
+llegaba sin cómo llamarlo. Ahora el checkout lo exige (no en mesa) con el aviso «te mandamos los
+avisos por WhatsApp y el repartidor te puede llamar o escribir», y `pedido.crear` responde
+`falta_telefono` / `telefono_invalido` (8 a 15 dígitos). Se guarda en
+`cuentas_cliente.telefono_contacto` (migración `TiendaTelefonoContactoCuenta`) y en
+`pedidos_online.telefono_cliente`; la próxima vez viene precargado y se edita en «Mi cuenta»
+(`auth.perfil.update` → `telefonoContacto`). ⚠️ **Nunca en `telefono`**: ese es el de ingreso por
+código (único). Sin verificar, anotar el número ajeno ahí daría acceso a la cuenta de esa persona.
+Cubierto en `test:pedidos-online` (bloque 24b) y `test:tienda-online-migracion`.
+
+Tests: `test:pedidos-online-detalle` (+ `-pg`), `test:whatsapp-proveedores`,
+`test:storefront-detalle`, F9 en `test:tienda-online-migracion`.
+
+### Dos pantallas, un pedido: atención en el diálogo de delivery (F10, 2026-11)
+
+**Decisión del propietario (2026-11-06):** la pantalla de **atención** de los pedidos web es la
+cola del **diálogo de delivery del PdV** (`shared/components/delivery-dialog`). La **bandeja**
+(`pages/ventas/pedidos-online/list-pedidos-online`) sigue viva como **panel de observación y
+acción**: historial, filtros, mesa QR y actuar sin entrar al PdV.
+
+⚠️ **Regla: todo cambio en el flujo de atención se hace en LAS DOS pantallas.** Una acción, un
+estado o un aviso que aparece en una y no en la otra es exactamente el desfase que motivó F10
+(el cajero veía el pedido en un lugar y no podía hacer nada con él en el otro). Al tocar
+cualquiera de las dos, revisar la otra en el mismo PR. Los dos componentes lo dicen en su
+cabecera.
+
+Qué comparten (para no duplicar reglas):
+- **Qué espera a alguien:** `motivoAtencion()` y `WHERE_ATENCION` en `electron/utils/pedido-acciones.utils.ts`
+  — `CANCELACION` > `NUEVO` > `SIN_COCINA` > `DEVOLVER`, una sola por pedido. Lo usan el filtro
+  `get-pedidos-online-admin({ atencion: true })` (la cola del diálogo), el `motivoAtencion` de
+  cada pedido y `contar-pedidos-online-pendientes`. Un test (`[K]` del e2e de detalle) verifica
+  que el WHERE y la función digan lo mismo.
+- **Contador del PdV:** `pendientes` (nuevos + piden cancelar + sin cocina) hace sonar el aviso;
+  `total` (suma las devoluciones de uPay) es el número del badge. Antes contaba todo ACEPTADO
+  aunque ya estuviera en cocina.
+- **Un solo número:** el pedido web se nombra con su **PO-…** (el que ve el cliente) en la lista
+  de delivery (columna PEDIDO), en el comprobante del diálogo y en el ticket impreso
+  («PEDIDO WEB PO-000005» y debajo «DELIVERY N° 8 · VENTA #14»). La bandeja muestra a su vez
+  «Delivery N° 8 · Venta #14». `delivery-listar-pdv` trae `pedidoWeb` (`resumenPedidoWeb()`:
+  sólo número, estado, pago online y cancelación — nada del cliente).
+
+Qué hace la cola del diálogo, por sección: **PIDEN CANCELAR** (cancelar / no se puede; también
+desde el footer con la fila seleccionada), **NUEVOS** (aceptar / rechazar), **ACEPTADOS SIN ENVIAR
+A COCINA** (enviar a cocina con la caja de este PdV / rechazar), **DEVOLVER PAGO EN UPAY** (ya
+devolví). Cancelar desde el footer un pedido pagado online avisa que queda para devolver.
+
+**Mesa QR queda afuera a propósito:** su aprobación es habilitar la mesa en el PdV y después va
+sola a cocina (ver «Canal MESA_QR»). El recovery de una mesa sin venta sigue en la bandeja. Idea
+del propietario para más adelante: que los pedidos pasen solos a cocina con reglas de cuidado
+para casos especiales.
+
+**Auditoría post-F10 (2026-11-06).** Pedido, venta y delivery terminan juntos por todas las
+puertas: rechazo/cancelación aprobada (`cancelarPedido`), `delivery-cancelar`, y la venta
+cancelada desde el PdV/historial (`updateVenta` → CANCELADA cancela su delivery). Un delivery
+sobre una venta CANCELADA no avanza (`VENTA_CANCELADA`), no se cobra, y la venta de un pedido web
+cancelado no se rehabilita (`VENTA_DE_PEDIDO_CANCELADO`). `avanzar-estado-pedido-online` es un
+UPDATE condicionado (no revive un pedido cancelado en el medio). Los textos de error de las dos
+pantallas salen de `src/app/shared/utils/pedido-online-errores.util.ts`. Flujo completo cubierto por
+`test:pedidos-online-atencion-flujo` (+`-pg`).
+
+**Qué pasa con lo cobrado online al cancelar (2026-11-06, decisión del propietario).** Antes
+toda cancelación dejaba el pago «a devolver». Ahora quien cancela elige, con el mismo diálogo en
+las tres puertas (`DecisionPagoOnlineDialogComponent` + `DecisionPagoOnlineService`):
+
+| Decisión (`DecisionPagoOnline`) | `estado_pago` | Motivo | Aviso al personal |
+|---|---|---|---|
+| `DEVOLVER` (default, y lo que pasa si no viene nada) | `REEMBOLSO_PENDIENTE` → cola DEVOLVER | — | sí (`avisarReembolso`) |
+| `YA_DEVUELTO` | `DEVUELTO` | — | no |
+| `NO_ENTRO` | `NO_ACREDITADO` | obligatorio | sí |
+| `NO_SE_DEVUELVE` | `RETENIDO` | obligatorio | sí |
+
+- Viaja como argumento extra de `rechazar-pedido-online`, `resolver-cancelacion-pedido-online` y
+  `delivery-cancelar`, y como `__decisionPagoOnline` en el payload de `updateVenta` (historial,
+  últimas ventas, PdV). Lo valida `electron/utils/decision-pago-online.utils.ts`.
+- Cada decisión queda en `pagos_online_eventos` (`DECISION_PAGO` / `REEMBOLSO` / `DEVUELTO`) con
+  motivo y `usuarioId`, y avisa **después del commit** (`registrarDecisionPago[s]`). Las tres
+  puertas avisan igual (antes solo la bandeja).
+- Cancelar desde el historial una venta **CONCLUIDA** también resuelve el pago de su pedido
+  entregado (`pagoDeEntregados`); el pedido sigue ENTREGADO.
+- Una devolución pendiente se cierra con `resolver-pago-pedido-online` (YA_DEVUELTO / NO_ENTRO /
+  NO_SE_DEVUELVE; condicionado a `REEMBOLSO_PENDIENTE`). Botón «RESOLVER DEVOLUCIÓN» / «Resolver
+  devolución» en las dos pantallas. `marcar-pago-devuelto-pedido-online` sigue para llamadores viejos.
+- `pedidos-online-pagados-de-venta` dice antes de cancelar una venta si hay que preguntar.
+- `verificarPagoPedido` no vuelve a consultar uPay sobre `NO_ACREDITADO`/`RETENIDO`.
+
+Pendiente, en **rama aparte** (decisión del propietario): carrera cobro ↔ cancelación en
+Postgres — `updateVenta` lee el estado sin lock y guarda la entidad entera (igual `cobrar-credito`).
+Toca el núcleo del cobro: probar cobrando y facturando de verdad antes del merge.
+
+Falso positivo de la auditoría: «`delivery-convertir-modo` no actualiza `tipo_pedido`». Sí lo hace
+desde f826c761 (y `test:delivery-conversion` lo cubre).
+
+### Pago online con proveedores intercambiables (2026-11, PLAN-tienda-pagos-proveedores)
+
+uPay se bajó (intervención de Ueno, nov. 2026). El pago online ya no está escrito para uPay:
+`electron/services/pagos-online/pagos-online.service.ts` es el **núcleo común** (estados,
+pago tardío, devoluciones, avisos, eventos) y cada proveedor es un módulo en
+`electron/services/pagos-online/proveedores/` que cumple `ProveedorPagoOnline` (`tipos.ts`):
+`credenciales`, `iniciar`, `consultar`, `probarConexion` y opcionales `procesarAviso`, `devolver`,
+`datosPortal`. **Sumar un proveedor = escribir su módulo + agregarlo a `PROVEEDORES` en
+`index.ts`** (+ su forma de pago y su id en `METODOS_PAGO_ONLINE`).
+
+- **Qué proveedor:** `tienda_online_config.pago_proveedor` (vacío = UPAY) cobra los pedidos
+  NUEVOS. Un pedido se cobra con su `metodoPago` y se consulta/devuelve con su `pago_proveedor`:
+  cambiar el activo no rompe los que están en curso. «Pagó online» = `esMetodoPagoOnline(m)` o
+  `pagoModalidad = 'ONLINE'`, nunca `=== 'UPAY'`.
+- **Config:** cada proveedor declara `campos`; la pantalla y el guardado salen de esa lista. No
+  secretos en `pago_config_json`, secretos en el almacén seguro (`tienda-pago-<prov>-<clave>`).
+  uPay sigue con sus columnas `upay_*` y su bloque propio.
+- **Bancard vPOS** (`bancard.proveedor.ts`, API 0.3): `single_buy` firmado con md5 de la clave
+  privada; el formulario de la tarjeta se arma en `/tienda/pago/<numero>` con
+  `bancard-checkout-4.0.0.js` (solo de sus hosts). `shop_process_id = pedido.id * 100 + intento`.
+  Confirmación por **dos caminos**: aviso firmado a `POST /pub/pagos/bancard/aviso` (fuera de
+  /pub/rpc; la firma la verifica el proveedor) y consulta `single_buy/confirmations` del job. Sin
+  pago y vencida +30 min → EXPIRADO. Prueba `https://vpos.infonet.com.py:8888`, producción sin puerto.
+- **Devolución automática** (`pago_devolucion_automatica`, apagada): «Hay que devolverlo» y el
+  pago tardío anulan por API (`rollback`) después del commit; si no se puede, cola DEVOLVER.
+- Tests: `test:pagos-bancard` (simulador, SQLite y `TIENDA_PG`), `test:pagos-online` (uPay +
+  registro), `test:tienda-online-migracion`.
+- **Pendiente:** validar contra el staging de Bancard con claves reales y certificar (Bancard la
+  exige antes de habilitar producción). Antes del merge, cobrar de verdad en prueba.
+
+### Varios proveedores a la vez + Pix con IC Pay (2026-11, PLAN-tienda-pagos-multi-icpay)
+
+- **Varios prendidos:** `tienda_online_config.pago_proveedores` (JSON `["BANCARD","ICPAY"]`) manda;
+  vacía/NULL = el único `pago_proveedor` de antes. `proveedoresActivos(cfg)` /
+  `proveedoresListos(ds, cfg)` en el núcleo; la tienda los recibe en `tienda.config` →
+  `pagoOnlineProveedores [{id, etiqueta, medio}]` y el cliente elige (`metodoPago` = id).
+  `pedido.crear` cobra con el elegido si está listo; si no, con el primero listo.
+- **Cambiar de medio:** `iniciarPagoPedido(…, { nuevoIntento, proveedor })` solo tras FALLIDO y a
+  un proveedor listo: el claim del intento cambia `metodo_pago` y `pago_proveedor`.
+- **Modo QR** (tercer `InicioCobro`): `{ tipo: 'QR', qr: { payload, moneda, monto, expiraEn }, datos }`.
+  `datos` va a `pedidos_online.pago_datos_json` (select:false) y vuelve en `CobroGuardado.datos`
+  para verificar el monto; `pago_checkout_url = 'qr:<sesión>'`. La imagen del QR la arma
+  `iniciar-pago-pedido-online` con `qrcode` (servidor), la tienda no carga nada de terceros.
+- **IC Pay** (`icpay.proveedor.ts` + `icpay-auth.ts`): `x-api-key` + JWT del sign-in (email y
+  contraseña; refresh antes de 5 min del vencimiento; 401 → sign-in y un reintento;
+  `challengeName` → `icpay_mfa`). Cobro: `GET /quote PYG→USD (payment_order)` → USD redondeado
+  hacia arriba → `POST /payment/order {amount USD, currency BRL}` con `Idempotency-Key` = clave
+  del intento. **Sin webhook de órdenes** (solo de payouts) y **sin devolución por API**: la
+  verdad sale de `GET /payment/order/{id}`. PAGADO solo con `completed` + mismo id + USD igual +
+  BRL; `underpaid/duplicated/under_dispute/refunded` → INCONSISTENTE. Forma de pago `PIX ONLINE`.
+- **Gotchas reales:** la API key se copia con «x-api-key: » adelante y la URL con `/api/v1`
+  (se normalizan); **staging genera QR Pix reales pero no recibe la confirmación** (2026-11-09:
+  R$ 1,01 pagado, orden en `pending`). El espejo apaga `pagoOnlineActivo` al arrancar salvo
+  `ESPEJO_PAGO_ONLINE=1`.
+- Tests: `test:pagos-icpay` (simulador, SQLite y `TIENDA_PG`). Runbook:
+  `docs/runbooks/RUNBOOK-TIENDA-PAGO-PIX-ICPAY.md`; checklist §16.
+
+### Cuenta web ↔ Cliente (F8b fase 1, 2026-11, PLAN-tienda-f8b-credito)
+
+- **Vínculo manual, nunca automático.** `cuentas_cliente.cliente_id` lo escribe solo
+  `vincular-cuenta-tienda` (`electron/handlers/cuentas-tienda.handler.ts`), con
+  `CLIENTES_GESTIONAR`. Ver con `CLIENTES_VER` (muestra teléfonos y correos).
+- **Un cliente, una cuenta web**: índice único parcial `UQ_cuentas_cliente_cliente`. Cambiar de
+  cliente = desvincular (con motivo) + vincular: dos registros.
+- **Historial** en `cuentas_cliente_vinculos` (VINCULAR / DESVINCULAR, `created_by`, nota o
+  motivo en mayúsculas). No se borra. El vínculo vigente lleva además `vinculado_por` /
+  `vinculado_en` en la cuenta.
+- **El pedido fija su cliente al crearse** (`pedidos_online.cliente_id`, en `crear-pedido-online`)
+  y `materializarPedidoOnlineEnVenta` pone `venta.cliente` desde ahí. Desvincular después no cambia
+  pedidos viejos. MESA_QR no lleva cliente (venta compartida).
+- `mapCuenta` (API pública) **ya no devuelve `clienteId`**: el id interno no sale a la web.
+- Pantalla: Ventas → Tienda online → **Cuentas web** (`list-cuentas-tienda`); la ficha del cliente
+  muestra «Cuenta web: …».
+- **Operación por agentes:** `docs/runbooks/RUNBOOK-TIENDA-VINCULAR-CUENTAS.md` (canales,
+  errores, qué cuenta como verificación, qué no puede hacer un agente).
+- Tests: `test:tienda-vinculacion` (+ `-pg`), bloque «Vínculo» de `test:tienda-online-migracion`.
+- **Fase 2, compra a cuenta** (`electron/utils/credito-tienda.utils.ts`):
+  - Método `CREDITO`, modalidad `A_CUENTA`. La tienda lo ofrece con `CREDITO` dentro de
+    `metodos_pago` (la API lo expone aparte: `creditoTienda` en admin, `compraACuenta` en la
+    pública; `metodosAlRecibir` lo excluye). `pub-cliente-me` devuelve `credito: { disponible,
+    sinTope } | null`.
+  - Requisitos al crear: cuenta vinculada + cliente activo con `credito` + identidad verificada
+    (`identidadVerificada`). Disponible = límite − saldo − `reservadoWeb` (pedidos CREDITO
+    RECIBIDO/ACEPTADO sin venta). Límite duro. Guardado bajo `withClienteLock`.
+  - **Al materializar** (`cargarDeudaPedidoACuenta`, misma tx que la venta, lock del cliente +
+    FOR UPDATE en Postgres): Pago ABIERTO + detalle `CREDITO`, CPC `CREDITO_VENTA` de 1 cuota a
+    fin de mes, MovimientoCliente CARGO, `ajustarSaldoCliente`. Revalida crédito y disponible.
+  - Cancelar → `cancelarVentaCompletaEnTx` revierte CPC + saldo. `cobrar-venta-credito` rechaza
+    una venta que ya tiene CPC activa.
+  - Tests: `test:tienda-credito` (+ `-pg`), incluye dos pedidos simultáneos.
+
 ### Lo que sigue pendiente
 
-- El cliente **no puede cancelar** su pedido (`EstadoPedidoOnline.CANCELADO`
-  sigue sin usarse).
+- ~~El cliente no puede cancelar su pedido.~~ Hecho en F9 (solicitud que aprueba el local).
 - **No hay aviso al cliente por WhatsApp**; el seguimiento es por poll.
-- `CuentaCliente` **nunca se vincula** al `Cliente` interno: sin crédito, sin CPC,
-  sin dashboard. Y el storefront no pide RUC en ningún lado.
-- `BANCARD`/`UPAY`/`PAGOPAR` y `CanalPedidoOnline.WHATSAPP` siguen declarados sin
-  implementación — el pago es efectivo contra entrega y es una decisión cerrada.
+- ~~`CuentaCliente` **nunca se vincula** al `Cliente` interno.~~ Vínculo manual hecho en F8b
+  fase 1 (ver «Cuenta web ↔ Cliente»). Crédito y CPC desde la tienda siguen pendientes (fase 2).
+  Antes: sin crédito, sin CPC,
+  sin dashboard. Y el storefront no pide RUC en ningún lado. **El crédito en la tienda
+  y esa vinculación quedaron para F8b** (decisión del propietario, 05/11): manual, con
+  permiso de clientes y registro de quién vinculó; nunca automática (riesgo de fraude).
+- `BANCARD`/`PAGOPAR` y `CanalPedidoOnline.WHATSAPP` siguen declarados sin
+  implementación. ~~«El pago es efectivo contra entrega y es una decisión cerrada.»~~
+  **Reabierta y cambiada en F8 (05/11):** tarjeta online por uPay (F4) y, al recibir o
+  retirar, los métodos que habilita el local (ver «Pago del pedido (F8)»).
 - Falta **pantalla de curación de la carta**, y no es sólo una pantalla que falta:
   la carta online es **un espejo del inventario con un filtro de visibilidad**.
   `menu.page.ts` toma `categoriaId` directo del producto, así que las categorías
@@ -250,10 +576,15 @@ al día. El operador destraba un desfasaje repitiendo la acción.
   seis veces** (`pedidos-online-pedidos.handler.ts`), no sólo la colisión del
   índice único. El índice único evita el número duplicado; el retry ciego puede
   esconder otra falla.
-- **Diseñador de zonas:** no se puede borrar un vértice suelto (sólo deshacer el
-  último o borrar todo), y **un polígono que se cruza a sí mismo no se detecta ni
-  se avisa** — con la regla par-impar queda una zona muerta que el dueño no ve en
-  el mapa.
+- **Diseñador de zonas (F7, 2026-11):** una zona puede tener **varias áreas** con
+  el mismo precio (se guarda `Polygon` con una, `MultiPolygon` con varias; el
+  servidor ya resolvía los dos). Vértices visibles, arrastrables, se destacan al
+  pasar el mouse y muestran «×» para borrarlos; clic sobre un borde inserta un
+  punto en ese lado. Antes el diseñador leía sólo la primera área y al guardar
+  borraba las demás. Geometría pura y testeada en
+  `pages/ventas/pedidos-online/zona-geometria.ts` (`test:zonas-geometria`).
+  Pendiente: **un polígono que se cruza a sí mismo no se detecta ni se avisa** —
+  con la regla par-impar queda una zona muerta que el dueño no ve en el mapa.
 - **Accesibilidad del storefront:** prácticamente cero `alt` en imágenes y dos
   `aria-label` en todo el proyecto.
 - **Nominatim se llama sin identificar** desde `checkout.page.ts`. Su política es

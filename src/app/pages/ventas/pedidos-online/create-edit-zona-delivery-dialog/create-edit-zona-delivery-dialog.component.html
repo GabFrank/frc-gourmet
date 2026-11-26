@@ -1,0 +1,45 @@
+<h2 mat-dialog-title>{{ esEdicion ? 'Editar zona' : 'Nueva zona' }}</h2>
+<mat-dialog-content>
+  <form [formGroup]="form" class="form" (ngSubmit)="guardar()">
+    <mat-form-field appearance="outline" class="ancho">
+      <mat-label>Nombre</mat-label>
+      <input matInput formControlName="nombre" maxlength="150" cdkFocusInitial>
+    </mat-form-field>
+
+    <div class="ancho fila-tarifa">
+      <mat-form-field appearance="outline" class="crece">
+        <mat-label>Tarifa de envío (del PdV)</mat-label>
+        <mat-select formControlName="precioDeliveryId" required>
+          <mat-option *ngFor="let t of tarifasOpciones" [value]="t.id" [disabled]="t.disabled">{{ t.label }}</mat-option>
+        </mat-select>
+        <mat-hint *ngIf="!errorTarifa">Es el precio de envío de la zona y la que usa el cajero por teléfono. Una tarifa por zona.</mat-hint>
+        <mat-hint *ngIf="errorTarifa" class="error">{{ errorTarifa }}</mat-hint>
+      </mat-form-field>
+      <button mat-stroked-button type="button" class="btn-tarifa" (click)="nuevaTarifa()" [disabled]="creandoTarifa">
+        <mat-icon>add</mat-icon> Nueva tarifa
+      </button>
+    </div>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Monto mínimo del pedido</mat-label>
+      <input matInput type="number" min="0" formControlName="montoMinimo">
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Orden</mat-label>
+      <input matInput type="number" formControlName="orden">
+      <mat-hint>Si dos zonas se superponen, gana la de menor orden.</mat-hint>
+    </mat-form-field>
+    <div class="toggle">
+      <mat-slide-toggle formControlName="activa" color="primary">Activa</mat-slide-toggle>
+    </div>
+  </form>
+  <p class="error general" *ngIf="errorGeneral" role="alert">{{ errorGeneral }}</p>
+  <p class="nota" *ngIf="!esEdicion">El área se dibuja después, desde el menú de la zona → «Dibujar en el mapa».</p>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="cancelar()">Cancelar</button>
+  <button mat-flat-button color="primary" type="button" [disabled]="form.invalid || guardando" (click)="guardar()">
+    {{ guardando ? 'Guardando…' : 'Guardar' }}
+  </button>
+</mat-dialog-actions>

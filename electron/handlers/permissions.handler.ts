@@ -113,6 +113,7 @@ const SEED_PERMISOS: Array<{ codigo: string; descripcion: string; modulo: string
   // tocarlas. Se separa gestión de configuración, igual que en el resto del PdV.
   { codigo: 'PEDIDOS_ONLINE_VER', descripcion: 'Ver la cola de pedidos de la web', modulo: 'VENTAS' },
   { codigo: 'PEDIDOS_ONLINE_GESTIONAR', descripcion: 'Aceptar, rechazar y avanzar pedidos de la web', modulo: 'VENTAS' },
+  { codigo: 'PEDIDOS_ONLINE_PAGO_NO_DEVOLVER', descripcion: 'Al cancelar un pedido pagado online, marcar que el pago no entró o que no se devuelve', modulo: 'VENTAS' },
   { codigo: 'PEDIDOS_ONLINE_CONFIGURAR', descripcion: 'Configurar la tienda online y dibujar las zonas de reparto', modulo: 'VENTAS' },
   { codigo: 'VENTAS_HISTORICO_VER', descripcion: 'Ver historico de ventas concluidas', modulo: 'VENTAS' },
   { codigo: 'VENTAS_COBRAR', descripcion: 'Cobrar una venta: registrar pagos, vuelto y acreditaciones', modulo: 'VENTAS' },

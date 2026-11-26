@@ -1,4 +1,5 @@
-import { DataSource } from 'typeorm';
+import { DataSource, In, Not } from 'typeorm';
+import { FORMAS_PAGO_ONLINE } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
 import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
 import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
 import { Proveedor } from '../../src/app/database/entities/compras/proveedor.entity';
@@ -48,7 +49,9 @@ async function seedMonedas(dataSource: DataSource): Promise<void> {
 // ===================== FORMAS DE PAGO =====================
 async function seedFormasPago(dataSource: DataSource): Promise<void> {
   const repo = dataSource.getRepository(FormasPago);
-  const count = await repo.count();
+  // Las formas de pago de la tienda (UPAY, BANCARD ONLINE) las crean sus migraciones, inactivas,
+  // antes del seed: no cuentan como "ya hay formas de pago", o una instalación nueva queda sin EFECTIVO.
+  const count = await repo.count({ where: { nombre: Not(In(FORMAS_PAGO_ONLINE)) } });
   if (count > 0) {
     console.log(`  FormasPago: ${count} already exist, skipping.`);
     return;

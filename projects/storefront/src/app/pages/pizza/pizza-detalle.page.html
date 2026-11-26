@@ -1,13 +1,13 @@
 <div class="pd-wrap" *ngIf="!cargando && producto as p">
   <!-- Foto + volver -->
-  <div class="pd-hero" [class.no-photo]="!(saborEntrada?.imageUrl || p.imageUrl | appImg)">
-    <div class="pd-photo" *ngIf="(saborEntrada?.imageUrl || p.imageUrl) | appImg as img" [style.background-image]="'url(' + img + ')'"></div>
-    <button class="pd-back" (click)="volver()" aria-label="Volver">←</button>
+  <div class="pd-hero" [class.no-photo]="!(imagenCab | appImg)">
+    <div class="pd-photo" *ngIf="imagenCab | appImg as img" [style.background-image]="'url(' + img + ')'"></div>
+    <button class="pd-back" (click)="volver()" aria-label="Volver"><sf-icon name="back" [size]="20"></sf-icon></button>
   </div>
 
   <div class="sf-container pd-body">
-    <h1 class="pd-nombre">{{ p.nombre }} {{ saborEntrada?.nombre }}</h1>
-    <p class="pd-desc" *ngIf="saborEntrada?.descripcion">{{ saborEntrada?.descripcion }}</p>
+    <h1 class="pd-nombre">{{ tituloCab }}</h1>
+    <p class="pd-desc" *ngIf="descCab">{{ descCab }}</p>
 
     <!-- Tamaño -->
     <div class="pd-group" *ngIf="tamanos.length">
@@ -20,7 +20,7 @@
           <input type="radio" name="tamano" [value]="t.presentacionId" [ngModel]="presSel" (ngModelChange)="setTamano(t)" />
           <span>{{ t.nombre }}</span>
         </span>
-        <span class="pd-radio-precio" *ngIf="precioTamano(t) as pt">{{ monedaSimbolo }} {{ pt | number:'1.0-2' }}</span>
+        <span class="pd-radio-precio" *ngIf="precioTamano(t) as pt">{{ pt | precio: monedas.seleccionada }}</span>
       </label>
     </div>
 
@@ -34,18 +34,36 @@
         {{ resumenSabores }} · el precio toma
         {{ p.pizzaConfig?.estrategia === 'PROMEDIO' ? 'el promedio' : 'el sabor más caro' }}.
       </p>
-      <label class="pd-check" *ngFor="let s of saboresParaSumar" [class.sel]="esSaborElegido(s)">
+      <label class="pd-check" *ngFor="let s of saboresMitad" [class.sel]="esSaborElegido(s)">
         <span class="pd-check-l">
-          <input type="checkbox" [checked]="esSaborElegido(s)" [disabled]="!esSaborElegido(s) && saboresSel.length >= maxSabores"
+          <input type="checkbox" [checked]="esSaborElegido(s)" [disabled]="esSaborElegido(s) ? soloUnSabor : saboresSel.length >= maxSabores"
                  (change)="toggleSaborExtra(s)" />
           <span>{{ s.nombre }}</span>
         </span>
       </label>
+      <p class="sf-muted pd-mitad-max" *ngIf="soloUnSabor">Para sacar este sabor, elegí otro primero.</p>
       <p class="sf-muted pd-mitad-max" *ngIf="saboresSel.length >= maxSabores">Alcanzaste el máximo de sabores.</p>
     </div>
 
-    <!-- Adicionales -->
-    <div class="pd-group" *ngIf="p.adicionales.length">
+    <!-- F6b: personalizar cada sabor (sacar / cambiar / adicionales), como el PdV -->
+    <div class="pd-group" *ngIf="personalizaPorSabor && presSel != null">
+      <div class="pd-group-head">
+        <span class="pd-group-title">Personalizá cada sabor</span>
+        <span class="pd-opt">Opcional</span>
+      </div>
+      <p class="pd-pers-aviso" *ngIf="avisoPers">{{ avisoPers }}</p>
+      <div class="pd-sabor-row" *ngFor="let s of saboresSel">
+        <div class="pd-sabor-info">
+          <span class="pd-sabor-nombre">{{ saboresSel.length > 1 ? '1/' + saboresSel.length + ' ' : '' }}{{ s.nombre }}</span>
+          <span class="pd-sabor-resumen" *ngIf="resumenPers(s) as r">{{ r }}</span>
+        </div>
+        <button class="sf-btn sf-btn--ghost pd-pers-btn" *ngIf="opcionesDe(s)" (click)="abrirHoja(s)">Personalizar</button>
+        <span class="sf-muted pd-pers-nada" *ngIf="!opcionesDe(s)">Sin opciones</span>
+      </div>
+    </div>
+
+    <!-- Adicionales (de toda la pizza; con personalización por sabor van en cada sabor) -->
+    <div class="pd-group" *ngIf="p.adicionales.length && !personalizaPorSabor">
       <div class="pd-group-head">
         <span class="pd-group-title">Adicionales</span>
         <span class="pd-opt">Opcional</span>
@@ -55,7 +73,7 @@
           <input type="checkbox" [checked]="adicionalesSel.has(a.id)" (change)="toggleAdicional(a)" />
           <span>{{ a.nombre }}</span>
         </span>
-        <span class="pd-check-precio" *ngIf="a.precio > 0">+ {{ a.precio | number:'1.0-2' }}</span>
+        <span class="pd-check-precio" *ngIf="a.precio > 0">+ {{ a.precio | precio: monedas.seleccionada }}</span>
       </label>
     </div>
 
@@ -87,9 +105,52 @@
       <button (click)="cambiarCantidad(1)">+</button>
     </div>
     <button class="sf-btn pd-add" [disabled]="!puedeAgregar" (click)="agregar()">
-      <span *ngIf="config.config.abiertaAhora">Agregar · {{ total | number:'1.0-2' }}</span>
+      <span *ngIf="config.config.abiertaAhora">Agregar · {{ total | precio: monedas.seleccionada }}</span>
       <span *ngIf="!config.config.abiertaAhora">Tienda cerrada</span>
     </button>
+  </div>
+</div>
+
+<!-- F6b: hoja desde abajo para personalizar un sabor -->
+<div class="pd-hoja-fondo" *ngIf="hojaSabor as s" (click)="cerrarHoja()">
+  <div class="pd-hoja" role="dialog" aria-modal="true" (click)="$event.stopPropagation()" *ngIf="opcionesDe(s) as o">
+    <div class="pd-hoja-asa"></div>
+    <h2 class="pd-hoja-titulo">{{ s.nombre }}</h2>
+    <div class="pd-hoja-cuerpo">
+      <div class="pd-group" *ngIf="o.quitables.length">
+        <div class="pd-group-head"><span class="pd-group-title">Sacar</span></div>
+        <label class="pd-check" *ngFor="let q of o.quitables" [class.sel]="estaQuitado(s, q.id)">
+          <span class="pd-check-l">
+            <input type="checkbox" [checked]="estaQuitado(s, q.id)" (change)="toggleQuitar(s, q)" />
+            <span>Sin {{ q.nombre }}</span>
+          </span>
+        </label>
+      </div>
+      <div class="pd-group" *ngIf="o.cambiables.length">
+        <div class="pd-group-head"><span class="pd-group-title">Cambiar</span></div>
+        <div class="pd-cambio" *ngFor="let c of o.cambiables">
+          <span>{{ c.nombre }}</span>
+          <select class="sf-input pd-cambio-sel" [ngModel]="cambioDe(s, c.id)" (ngModelChange)="setCambio(s, c, $event)">
+            <option [ngValue]="null">Como viene</option>
+            <option *ngFor="let op of c.opciones" [ngValue]="op.productoId">{{ op.nombre }}</option>
+          </select>
+        </div>
+      </div>
+      <div class="pd-group" *ngIf="o.adicionales.length">
+        <div class="pd-group-head">
+          <span class="pd-group-title">Adicionales</span>
+          <span class="pd-opt" *ngIf="saboresSel.length > 1">En 1/{{ saboresSel.length }} pizza</span>
+        </div>
+        <label class="pd-check" *ngFor="let a of o.adicionales" [class.sel]="tieneAdicionalSabor(s, a.id)">
+          <span class="pd-check-l">
+            <input type="checkbox" [checked]="tieneAdicionalSabor(s, a.id)" (change)="toggleAdicionalSabor(s, a)" />
+            <span>{{ a.nombre }}</span>
+          </span>
+          <span class="pd-check-precio" *ngIf="a.precio > 0">+ {{ precioEnSabor(a) | precio: monedas.seleccionada }}</span>
+        </label>
+      </div>
+    </div>
+    <button class="sf-btn pd-hoja-listo" (click)="cerrarHoja()">Listo</button>
   </div>
 </div>
 

@@ -28,6 +28,7 @@ import { FormasPago } from './entities/compras/forma-pago.entity';
 import { PrecioDelivery } from './entities/ventas/precio-delivery.entity';
 import { Delivery, DeliveryEstado } from './entities/ventas/delivery.entity';
 import { ConvertirModoDeliveryPayload } from './convertir-modo-delivery.types';
+import { DecisionPagoPayload } from './decision-pago-online.types';
 import { Venta, VentaEstado } from './entities/ventas/venta.entity';
 import { VentaItem } from './entities/ventas/venta-item.entity';
 import { PdvGrupoCategoria } from './entities/ventas/pdv-grupo-categoria.entity';
@@ -373,7 +374,7 @@ export abstract class RepositoryService {
   abstract deliveryActualizarDatos(deliveryId: number, payload: any): Observable<any>;
   abstract deliveryCambiarEstado(deliveryId: number, nuevoEstado: DeliveryEstado, opts?: { funcionarioId?: number }): Observable<any>;
   abstract deliveryAsignarRepartidor(deliveryId: number, funcionarioId: number | null): Observable<any>;
-  abstract deliveryCancelar(deliveryId: number, motivo: string): Observable<any>;
+  abstract deliveryCancelar(deliveryId: number, motivo: string, decisionPago?: DecisionPagoPayload): Observable<any>;
   abstract deliveryConvertirModo(deliveryId: number, payload: ConvertirModoDeliveryPayload): Observable<any>;
   abstract deliveryImprimirTicket(deliveryId: number, printerId?: number): Observable<any>;
   abstract buscarClientePorTelefono(telefono: string): Observable<any>;
@@ -400,6 +401,8 @@ export abstract class RepositoryService {
   abstract createVentaItemObservacion(data: any): Observable<any>;
   abstract deleteVentaItemObservacion(id: number): Observable<boolean>;
   abstract getVentaItemAdicionales(ventaItemId: number): Observable<any[]>;
+  /** ¿La venta tiene una deuda a cuenta con cobros? Entonces sus ítems no se tocan. */
+  abstract getEstadoDeudaVenta(ventaId: number): Observable<{ bloqueada: boolean; codigo?: string }>;
   abstract createVentaItemAdicional(data: any): Observable<any>;
   abstract deleteVentaItemAdicional(id: number): Observable<boolean>;
   abstract getVentaItemIngredienteModificaciones(ventaItemId: number): Observable<any[]>;
@@ -538,15 +541,38 @@ export abstract class RepositoryService {
   abstract getPedidosOnlineAdmin(filtros?: any): Observable<any[]>;
   abstract contarPedidosOnlinePendientes(): Observable<any>;
   abstract aceptarPedidoOnline(pedidoId: number, data?: any): Observable<any>;
-  abstract rechazarPedidoOnline(pedidoId: number, motivo: string): Observable<any>;
+  abstract rechazarPedidoOnline(pedidoId: number, motivo: string, decisionPago?: DecisionPagoPayload): Observable<any>;
+  abstract resolverCancelacionPedidoOnline(pedidoId: number, aprobar: boolean, respuesta?: string, decisionPago?: DecisionPagoPayload): Observable<any>;
   abstract avanzarEstadoPedidoOnline(pedidoId: number, nuevoEstado: string): Observable<any>;
   abstract vincularVentaPedidoOnline(pedidoId: number, ventaId: number): Observable<any>;
   abstract getDetalleVariacionItems(itemIds: number[]): Observable<any>;
   abstract getTiendaOnlineConfig(): Observable<any>;
   abstract updateTiendaOnlineConfig(data: any): Observable<any>;
+  abstract probarTiendaWhatsapp(data: { telefono: string }): Observable<any>;
+  abstract probarTiendaUpay(): Observable<any>;
+  abstract probarTiendaPago(proveedorId?: string): Observable<any>;
+  abstract marcarPagoDevueltoPedidoOnline(pedidoId: number): Observable<any>;
+  // F8b: cuentas de la tienda ↔ Cliente interno
+  abstract getFormasPagoOnline(): Observable<any>;
+  abstract guardarFormaPagoOnline(data: any): Observable<any>;
+  abstract eliminarFormaPagoOnline(id: number): Observable<any>;
+  abstract moverFormaPagoOnline(id: number, direccion: number): Observable<any>;
+  abstract probarFormaPagoOnline(id: number): Observable<any>;
+  abstract getCuentasTienda(filtros?: any): Observable<any>;
+  abstract getVinculosCuentaTienda(cuentaId: number): Observable<any>;
+  abstract vincularCuentaTienda(cuentaId: number, clienteId: number, motivo?: string): Observable<any>;
+  abstract desvincularCuentaTienda(cuentaId: number, motivo: string): Observable<any>;
+  abstract getCuentaTiendaDeCliente(clienteId: number): Observable<any>;
+  abstract resolverPagoPedidoOnline(pedidoId: number, decisionPago: DecisionPagoPayload): Observable<any>;
+  abstract pedidosOnlinePagadosDeVenta(ventaId: number): Observable<any>;
   abstract getZonasDeliveryAdmin(): Observable<any[]>;
+  abstract getDashboardZonasDelivery(params?: { rango?: string }): Observable<any>;
   abstract guardarZonaDelivery(data: any): Observable<any>;
   abstract eliminarZonaDelivery(zonaId: number): Observable<any>;
+  abstract getTiendaCategoriasAdmin(): Observable<any[]>;
+  abstract guardarTiendaCategoria(data: any): Observable<any>;
+  abstract eliminarTiendaCategoria(categoriaId: number): Observable<any>;
+  abstract reordenarTiendaCategorias(ids: number[]): Observable<any>;
   // Producción de buffet (cargar cubas)
   abstract crearProduccion(data: any): Observable<any>;
   abstract getProducciones(filtros?: any): Observable<any[]>;
