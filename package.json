@@ -121,6 +121,7 @@
     "test:reporte-finanzas": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-reporte-finanzas-e2e.ts",
     "test:cpc-cancelada-cuotas": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-cpc-cancelada-cuotas-e2e.ts",
     "test:cpc-lote": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-cpc-lote-e2e.ts",
+    "test:fusionar-clientes": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-fusionar-clientes-e2e.ts",
     "test:config-caja-mayor": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-config-caja-mayor-e2e.ts",
     "test:window-chrome": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-window-chrome.ts",
     "test:reportes-periodo": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-reportes-periodo.ts",
@@ -172,7 +173,8 @@
     "test:usuario-efectivo": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-usuario-efectivo-e2e.ts",
     "test:clasificacion-compras": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-clasificacion-compras-e2e.ts",
     "test:costo-anular-compra": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-costo-anular-compra.ts",
-    "test:caja-mayor-update": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-caja-mayor-update.ts"
+    "test:caja-mayor-update": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-caja-mayor-update.ts",
+    "test:cpp-cuota-centavos": "ts-node --transpile-only --prefer-ts-exts --project tsconfig.typeorm.json scripts/test-cpp-cuota-centavos.ts"
   },
   "private": true,
   "dependencies": {

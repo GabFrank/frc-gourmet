@@ -83,6 +83,25 @@ async function cancelarCpcEnTx(manager: EntityManager, cpc: CuentaPorCobrar, mot
   }
 }
 
+/** Saldo del cliente según sus movimientos (la fórmula de `recalcular-saldo-cliente`). */
+async function saldoPorMovimientos(manager: EntityManager, clienteId: number): Promise<number> {
+  const movimientos = await manager.getRepository(MovimientoCliente).find({ where: { cliente: { id: clienteId } } });
+  let total = 0;
+  for (const m of movimientos) {
+    if (m.tipo === MovimientoClienteTipo.CARGO || m.tipo === MovimientoClienteTipo.AJUSTE_POSITIVO) {
+      total += Number(m.monto);
+    } else if (m.tipo === MovimientoClienteTipo.PAGO || m.tipo === MovimientoClienteTipo.AJUSTE_NEGATIVO) {
+      total -= Number(m.monto);
+    }
+  }
+  return +total.toFixed(2);
+}
+
+/** Señal interna para deshacer la transacción de una fusión simulada. */
+class SimulacionFusion extends Error {
+  constructor(public resultado: any) { super('SIMULACION'); }
+}
+
 const CPC_LOTE_TOPE = 2000;
 
 /** Señal interna para deshacer la transacción de una simulación. */
@@ -938,16 +957,7 @@ export function registerCuentasPorCobrarHandlers(
           : await manager.query('SELECT id FROM clientes WHERE id = ?', [Number(clienteId)]);
         if (!lock?.length) return null;
 
-        const movimientos = await manager.getRepository(MovimientoCliente).find({ where: { cliente: { id: clienteId } } });
-        let total = 0;
-        for (const m of movimientos) {
-          if (m.tipo === MovimientoClienteTipo.CARGO || m.tipo === MovimientoClienteTipo.AJUSTE_POSITIVO) {
-            total += Number(m.monto);
-          } else if (m.tipo === MovimientoClienteTipo.PAGO || m.tipo === MovimientoClienteTipo.AJUSTE_NEGATIVO) {
-            total -= Number(m.monto);
-          }
-        }
-        total = +total.toFixed(2);
+        const total = await saldoPorMovimientos(manager, clienteId);
         // UPDATE de la columna sola (no `save()` del cliente entero).
         await manager.update(Cliente, { id: clienteId }, { saldoActual: total });
         return total;
@@ -956,6 +966,120 @@ export function registerCuentasPorCobrarHandlers(
     } catch (error) {
       console.error(`Error recalculando saldo cliente ${clienteId}:`, error);
       throw error;
+    }
+  });
+
+  /**
+   * Une dos fichas de la misma persona: pasa al destino las CPC (con sus cuotas),
+   * los movimientos y las ventas del origen, lo deja en los convenios del origen,
+   * recalcula los dos saldos y desactiva el origen. Una sola transacción.
+   * Con `simular: true` corre todo y deshace al final; la real exige
+   * `esperado: { saldoDestino }` igual al de la simulación. Devuelve `respaldo`
+   * (ids movidos y estado previo) para poder volver atrás.
+   */
+  ipcMain.handle('fusionar-clientes', async (_event, payload: any) => {
+    await ensurePermission(dataSource, getCurrentUser, 'CPC_GESTIONAR');
+    const p = payload || {};
+    const origenId = Number(p.origenId);
+    const destinoId = Number(p.destinoId);
+    if (!Number.isInteger(origenId) || origenId <= 0 || !Number.isInteger(destinoId) || destinoId <= 0) {
+      throw new Error('Indicá origenId y destinoId');
+    }
+    if (origenId === destinoId) throw new Error('El origen y el destino son el mismo cliente');
+    const simular = p.simular === true;
+    if (!simular && !Number.isFinite(Number(p.esperado?.saldoDestino))) {
+      throw new Error('Falta esperado: { saldoDestino } de la simulación');
+    }
+    const motivo = String(p.motivo || '').trim().toUpperCase() || null;
+
+    const queryRunner = dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const m = queryRunner.manager;
+      const pg = (dataSource.options.type as string) === 'postgres';
+      const ph = (i: number) => (pg ? `$${i}` : '?');
+      // Mismo lock que los cobros (#190/#350): un cobro concurrente espera.
+      if (pg) await m.query('SELECT id FROM clientes WHERE id = ANY($1) ORDER BY id FOR UPDATE', [[origenId, destinoId]]);
+
+      const ficha = async (id: number) => {
+        const c = await m.findOne(Cliente, { where: { id }, relations: ['persona'] });
+        if (!c) return null;
+        const pe: any = (c as any).persona;
+        return {
+          id, nombre: pe ? [pe.nombre, pe.apellido].filter(Boolean).join(' ') : null,
+          documento: pe?.documento ?? null, activo: !!c.activo, saldo: Number(c.saldoActual ?? 0),
+        };
+      };
+      const origen = await ficha(origenId);
+      const destino = await ficha(destinoId);
+      if (!origen) throw new Error(`Cliente ${origenId} (origen) no encontrado`);
+      if (!destino) throw new Error(`Cliente ${destinoId} (destino) no encontrado`);
+      if (!destino.activo) throw new Error(`El cliente ${destinoId} (destino) está inactivo`);
+
+      const ids = async (tabla: string, col = 'id') =>
+        (await m.query(`SELECT ${col} AS id FROM ${tabla} WHERE cliente_id = ${ph(1)} ORDER BY ${col}`, [origenId]))
+          .map((f: any) => Number(f.id));
+      const cpcIds = await ids('cuentas_por_cobrar');
+      const movimientoIds = await ids('movimientos_cliente');
+      const ventaIds = await ids('ventas');
+      const convenioIds = await ids('cliente_convenios', 'convenio_id');
+      const conveniosDestino = await m.query(`SELECT convenio_id AS id FROM cliente_convenios WHERE cliente_id = ${ph(1)}`, [destinoId]);
+      const yaEnDestino = new Set(conveniosDestino.map((f: any) => Number(f.id)));
+      const activas = await m.find(CuentaPorCobrar, { where: { cliente: { id: origenId }, estado: CuentaPorCobrarEstado.ACTIVO } });
+      const pendienteActivas = round2(activas.reduce((s, c) => s + Number(c.montoTotal) - Number(c.montoCobrado), 0));
+      const cuotas = cpcIds.length
+        ? await m.count(CuentaPorCobrarCuota, { where: { cuentaPorCobrar: { id: In(cpcIds) } } as any })
+        : 0;
+
+      const respaldo = {
+        origenId, destinoId, cpcIds, movimientoIds, ventaIds, convenioIds,
+        conveniosAgregadosAlDestino: convenioIds.filter((c: number) => !yaEnDestino.has(c)),
+        origen: { activo: origen.activo, saldoActual: origen.saldo },
+        destino: { activo: destino.activo, saldoActual: destino.saldo },
+      };
+
+      const mover = (ent: any) => m.createQueryBuilder().update(ent)
+        .set({ cliente: { id: destinoId } } as any).where('cliente_id = :o', { o: origenId }).execute();
+      await mover(CuentaPorCobrar);
+      await mover(MovimientoCliente);
+      await mover(Venta);
+      for (const c of respaldo.conveniosAgregadosAlDestino) {
+        await m.query(`INSERT INTO cliente_convenios (cliente_id, convenio_id) VALUES (${ph(1)}, ${ph(2)})`, [destinoId, c]);
+      }
+      await m.query(`DELETE FROM cliente_convenios WHERE cliente_id = ${ph(1)}`, [origenId]);
+
+      const saldoOrigen = await saldoPorMovimientos(m, origenId);
+      const saldoDestino = await saldoPorMovimientos(m, destinoId);
+      await m.update(Cliente, { id: origenId }, { saldoActual: saldoOrigen, activo: false });
+      await m.update(Cliente, { id: destinoId }, { saldoActual: saldoDestino });
+
+      if (!simular && round2(Number(p.esperado.saldoDestino)) !== saldoDestino) {
+        throw new Error(`No coincide con la simulación: el saldo del destino queda en ${saldoDestino}, se esperaba ${p.esperado.saldoDestino}. Volvé a simular.`);
+      }
+
+      const resultado = {
+        simulado: simular, motivo,
+        origen: { ...origen, saldoAntes: origen.saldo, saldoDespues: saldoOrigen, activoDespues: false },
+        destino: { ...destino, saldoAntes: destino.saldo, saldoDespues: saldoDestino },
+        movidos: {
+          cpc: cpcIds.length, cpcActivas: activas.length, pendienteCpcActivas: pendienteActivas, cuotas,
+          movimientos: movimientoIds.length, ventas: ventaIds.length,
+          conveniosAgregadosAlDestino: respaldo.conveniosAgregadosAlDestino.length,
+        },
+        respaldo,
+      };
+      if (simular) throw new SimulacionFusion(resultado);
+      await queryRunner.commitTransaction();
+      console.log(`[fusionar-clientes] ${origenId} -> ${destinoId}${motivo ? ` (${motivo})` : ''}: ${JSON.stringify(resultado.movidos)}`);
+      return resultado;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      if (error instanceof SimulacionFusion) return error.resultado;
+      console.error('Error en fusionar-clientes:', error);
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
   });
 
