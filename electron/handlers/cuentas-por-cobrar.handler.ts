@@ -34,6 +34,8 @@ import { bloquearSiPagoConsolidado } from './pago-consolidado-guard';
 import { assertTerminalPuedeOperar } from '../utils/terminal-caja.utils';
 import { assertCajaAbiertaSiVino } from '../utils/caja-abierta.utils';
 import { ajustarSaldoCliente, ajustarSaldoCuentaBancaria } from '../utils/saldo-atomico.utils';
+import { sincronizarPedidosPorCierreDeVenta } from '../utils/pedido-online-sync.utils';
+import { clienteBloqueado, reservadoWeb, ventaTieneCpcActiva } from '../utils/credito-tienda.utils';
 
 function calcularEstadoCuota(monto: number, montoCobrado: number): CuentaPorCobrarCuotaEstado {
   if (montoCobrado >= monto) return CuentaPorCobrarCuotaEstado.COBRADO;
@@ -1121,6 +1123,11 @@ export function registerCuentasPorCobrarHandlers(
       if (!venta) throw new Error(`Venta ${data.ventaId} no encontrada`);
       if (venta.estado === VentaEstado.CONCLUIDA) throw new Error('La venta ya está concluida');
       if (venta.estado === VentaEstado.CANCELADA) throw new Error('La venta está cancelada');
+      // F8b: un pedido web a cuenta ya generó su deuda al aceptarse. Cobrarlo otra vez a crédito
+      // duplicaría la cuenta por cobrar y el saldo del cliente.
+      if (await ventaTieneCpcActiva(queryRunner.manager, venta.id)) {
+        throw new Error('La venta ya tiene una cuenta por cobrar (pedido web a cuenta): finalizala sin cobrar de nuevo.');
+      }
       // Invariante de caja: cerrar a crédito crea el `Pago` con `caja: venta.caja`
       // (más abajo), así que esa caja tiene que estar abierta. Corre dentro de la
       // transacción del cobro, no opt-in como el gate de terminal.
@@ -1129,6 +1136,8 @@ export function registerCuentasPorCobrarHandlers(
         contexto: 'cobrar-venta-credito',
       });
 
+      // F8b: la fila del cliente se toma (Postgres) para no cruzarse con la deuda de un pedido web.
+      await clienteBloqueado(queryRunner.manager, Number(data.clienteId));
       const cliente = await clienteRepo.findOne({ where: { id: data.clienteId } });
       if (!cliente) throw new Error(`Cliente ${data.clienteId} no encontrado`);
       if (!cliente.activo) throw new Error('El cliente está inactivo');
@@ -1137,19 +1146,20 @@ export function registerCuentasPorCobrarHandlers(
       const montoTotal = Number(data.montoTotal);
       if (!montoTotal || montoTotal <= 0) throw new Error('El monto debe ser mayor a cero');
 
-      // Validar límite de crédito (warning si excede, salvo que se fuerce)
+      // Límite de crédito (decisión 2026-11-09): se respeta siempre. Sin límite cargado no hay
+      // crédito, y pasarse no se puede aprobar «igual» (antes avisaba y se forzaba).
       const limite = Number(cliente.limite_credito) || 0;
       const saldoAct = Number(cliente.saldoActual) || 0;
-      const saldoFinal = saldoAct + montoTotal;
-      if (limite > 0 && saldoFinal > limite && !data.forzar) {
-        return {
-          success: false,
-          requiereConfirmacion: true,
-          message: `El saldo proyectado (${saldoFinal.toFixed(2)}) excede el límite de crédito (${limite.toFixed(2)})`,
-          saldoActual: saldoAct,
-          saldoProyectado: saldoFinal,
-          limite,
-        };
+      if (limite <= 0) {
+        throw new Error('El cliente no tiene límite de crédito: cargale un límite en su ficha para vender a crédito.');
+      }
+      // F8b: los pedidos web a cuenta todavía sin aceptar ya comprometieron parte del límite.
+      const reservadoTienda = await reservadoWeb(queryRunner.manager, cliente.id);
+      const saldoFinal = saldoAct + reservadoTienda + montoTotal;
+      if (saldoFinal > limite + 0.005) {
+        throw new Error(`No alcanza el crédito: el saldo quedaría en ${saldoFinal.toFixed(0)} y el límite es ${limite.toFixed(0)}`
+          + (reservadoTienda > 0 ? ` (incluye ${reservadoTienda.toFixed(0)} de pedidos web a cuenta sin aceptar)` : '')
+          + `. Disponible: ${Math.max(0, limite - saldoAct - reservadoTienda).toFixed(0)}.`);
       }
 
       // Get-or-create FormaPago "CREDITO" (la venta a crédito se registra con
@@ -1206,6 +1216,8 @@ export function registerCuentasPorCobrarHandlers(
       venta.fechaCierre = new Date();
       await setEntityUserTracking(dataSource, venta, cu?.id, true);
       await queryRunner.manager.save(Venta, venta);
+      // Mesa de la tienda cobrada a crédito: sus pedidos online quedan entregados.
+      await sincronizarPedidosPorCierreDeVenta(queryRunner.manager, venta.id, VentaEstado.CONCLUIDA);
 
       // Cerrar la cuenta de una mesa cambia su ocupacion. Este handler NO pasa
       // por `updateVenta`, asi que tiene que resincronizar el cache

@@ -57,6 +57,8 @@ import {
 import { obtenerPagosRegistrados, buildBloquePagosRegistrados } from '../utils/pagos-ticket.utils';
 import { broadcastPrinterEvent, PrinterEventPayload } from '../utils/printer-events.utils';
 import { computeResumenCaja } from '../utils/resumen-caja.utils';
+import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
+import { monedasParaResumen, resumenPago } from '../utils/pago-pedido.utils';
 
 type GetCurrentUser = () => Usuario | null;
 
@@ -2419,7 +2421,11 @@ export async function buildDeliveryTicketLines(
   lines.push(ticketSeparador('='));
   lines.push(ticketText(esRetiro ? 'RETIRO EN LOCAL' : 'DELIVERY',
     { align: 'C', bold: true, size: 'tall' }));
-  lines.push(ticketText(`N° ${deliveryId}${venta ? ` · VENTA #${venta.id}` : ''}`, { align: 'C' }));
+  // F10: un pedido de la web se identifica con el número que ve el cliente (PO-…); el del
+  // delivery y el de la venta quedan debajo, con su nombre, para cruzarlos con el PdV.
+  const pedidoWeb = await dataSource.getRepository(PedidoOnline).findOne({ where: { deliveryId } as any, order: { id: 'DESC' } as any });
+  if (pedidoWeb) lines.push(ticketText(`PEDIDO WEB ${pedidoWeb.numero}`, { align: 'C', bold: true }));
+  lines.push(ticketText(`${esRetiro ? 'RETIRO' : 'DELIVERY'} N° ${deliveryId}${venta ? ` · VENTA #${venta.id}` : ''}`, { align: 'C' }));
   lines.push(ticketText(ticketFmtFechaHora(delivery.fechaAbierto || new Date()), { align: 'C' }));
   lines.push(ticketSeparador('='));
 
@@ -2434,6 +2440,13 @@ export async function buildDeliveryTicketLines(
   if (delivery.observacion) {
     lines.push(ticketText('OBSERVACION:', { bold: true }));
     lines.push(ticketText(delivery.observacion.toUpperCase()));
+  }
+  // F8: cómo dijo el cliente de la tienda que va a pagar (y con cuánto, para llevar el vuelto).
+  // Un delivery cargado en el PdV no tiene pedido online: el ticket sale como siempre.
+  if (pedidoWeb) {
+    lines.push(ticketText('PAGO:', { bold: true }));
+    lines.push(ticketText(resumenPago(pedidoWeb as any, await monedasParaResumen(dataSource))));
+    if (pedidoWeb.pagoObservacion) lines.push(ticketText(String(pedidoWeb.pagoObservacion).toUpperCase()));
   }
   if (!esRetiro && delivery.precioDelivery?.descripcion) {
     lines.push(ticketKv('ZONA', String(delivery.precioDelivery.descripcion).toUpperCase()));

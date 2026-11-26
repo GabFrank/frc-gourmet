@@ -62,6 +62,17 @@ export class AuthService {
     return this.isAuthenticated && !this.cuenta?.nombre;
   }
 
+  /**
+   * F8b: crédito del cliente para el checkout. `null` = no puede comprar a cuenta. `disponible`
+   * null con `sinTope` = sin límite. Se pide al entrar al checkout; no cambia la sesión.
+   */
+  credito: { disponible: number | null; sinTope: boolean } | null = null;
+  cargarCredito(): Observable<any> {
+    return this.api.call<any>('auth.me', []).pipe(
+      tap((res) => { this.credito = res?.success ? (res.credito ?? null) : null; }),
+    );
+  }
+
   refreshMe(): void {
     this.api.call<any>('auth.me', []).subscribe({
       next: (res) => {
@@ -72,7 +83,16 @@ export class AuthService {
     });
   }
 
-  actualizarPerfil(data: { nombre?: string; email?: string; password?: string }): Observable<any> {
+  /** Suma a la cuenta abierta el Gmail verificado por Google. */
+  vincularGoogle(idToken: string): Observable<any> {
+    return this.api.call<any>('auth.google.vincular', [idToken]).pipe(
+      tap((res) => {
+        if (res?.success) this.cuenta = res.cuenta;
+      }),
+    );
+  }
+
+  actualizarPerfil(data: { nombre?: string; email?: string; password?: string; telefonoContacto?: string; avisosWhatsapp?: boolean }): Observable<any> {
     return this.api.call<any>('auth.perfil.update', [data]).pipe(
       tap((res) => {
         if (res?.success) this.cuenta = res.cuenta;
@@ -85,10 +105,12 @@ export class AuthService {
     if (refresh) this.api.call('auth.logout', [refresh]).subscribe({ next: () => {}, error: () => {} });
     this.api.setTokens(null, null);
     this.cuenta = null;
+    this.credito = null;
   }
 
   private setSesion(res: any): void {
     this.api.setTokens(res.accessToken, res.refreshToken ?? null);
     this.cuenta = res.cuenta;
+    this.credito = null;
   }
 }

@@ -58,6 +58,8 @@ const SEED_EVENTOS: SeedEvento[] = [
   { codigo: 'META_ALCANZADA', nombre: 'Meta alcanzada', descripcion: 'Avisa cuando se alcanza una meta', canal: CanalEvento.WHATSAPP },
   { codigo: 'MENSAJE_POSITIVO', nombre: 'Mensaje positivo periodico', descripcion: 'Mensajes motivacionales periodicos al grupo', canal: CanalEvento.WHATSAPP },
   { codigo: 'RECORDATORIO_TAREA', nombre: 'Recordatorio de tarea', descripcion: 'Recordatorios de tareas configuradas', canal: CanalEvento.WHATSAPP },
+  { codigo: 'TIENDA_OTP_TOPE', nombre: 'Tienda online: tope de códigos', descripcion: 'Avisa al pasar el 80 % y al llegar al tope diario de códigos de ingreso de la tienda', canal: CanalEvento.WHATSAPP },
+  { codigo: 'TIENDA_PAGO_ONLINE', nombre: 'Tienda online: pagos con tarjeta', descripcion: 'Avisa pedidos pagados sin aceptar, pagos a devolver y pagos que no coinciden con el pedido', canal: CanalEvento.WHATSAPP },
 ];
 
 export async function seedNotificaciones(dataSource: DataSource): Promise<void> {

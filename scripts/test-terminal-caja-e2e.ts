@@ -286,9 +286,16 @@ async function main() {
       () => comoTerminal(A, 'updateVenta', venta.id, { estado: 'CANCELADA', __validarDispositivoCaja: true }));
 
     // rehabilitarVenta: CANCELADA → CONCLUIDA, desde el historial. No es un
-    // cobro del PdV, así que queda deliberadamente fuera.
+    // cobro del PdV, así que queda deliberadamente fuera. Se llama como la llama
+    // el historial (`list-ventas.component.ts`): sin la marca de cobro.
     await permite('rehabilitar una venta cancelada queda fuera del gate',
-      () => comoTerminal(A, 'updateVenta', venta.id, { estado: 'CONCLUIDA', __validarDispositivoCaja: true }));
+      () => comoTerminal(A, 'updateVenta', venta.id, { estado: 'CONCLUIDA' }));
+    // Con la marca, la llamada ES un cobro: sobre una venta cancelada se rechaza
+    // (2026-11-06: un pedido web cancelado con su delivery vivo se cobró igual).
+    const venta2 = await nuevaVenta(caja.id);
+    await permite('cancelar otra venta', () => comoTerminal(A, 'updateVenta', venta2.id, { estado: 'CANCELADA' }));
+    await rechaza('VENTA_CANCELADA', 'cobrar una venta cancelada se rechaza',
+      () => comoTerminal(A, 'updateVenta', venta2.id, { estado: 'CONCLUIDA', __validarDispositivoCaja: true }));
   }
 
   // ── 9. Venta a crédito ────────────────────────────────────────────────────

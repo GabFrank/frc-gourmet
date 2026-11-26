@@ -32,6 +32,7 @@ import { enTransaccionSiPostgres } from '../utils/tx.utils';
 import { Venta } from '../../src/app/database/entities/ventas/venta.entity';
 import { dispararEventoFt } from '../services/funciones-tareas/eventos';
 import { FtEvento } from '../../src/app/database/entities/rrhh/funciones-tareas/ft.enums';
+import { pagoIdDeDetalle, trasEditarVenta, ventaIdDePago } from '../utils/deuda-venta.utils';
 import { claseParaLineaNueva } from './compra-clases.handler';
 import { revertirCostoAlAnularCompra, ReversionCosto, bloquearProductosParaCosto } from '../utils/costo-compra.utils';
 
@@ -1596,6 +1597,8 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     } catch (e) {
       console.warn('[createPagoDetalle] emit SSE falló:', e);
     }
+    // Venta a cuenta (pedido web): un descuento, un recargo o un pago por otro medio mueven la deuda.
+    if (pagoIdDetalle) await trasEditarVenta(dataSource, await ventaIdDePago(dataSource, Number(pagoIdDetalle)), getCurrentUser()?.id);
     
     return saved;
   });
@@ -1607,7 +1610,10 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     const entity = await repo.findOneBy({ id });
     if (!entity) throw new Error(`PagoDetalle ID ${id} not found`);
     repo.merge(entity, data);
-    return await repo.save(entity);
+    const guardado = await repo.save(entity);
+    const pagoIdUpd = await pagoIdDeDetalle(dataSource, id);
+    if (pagoIdUpd) await trasEditarVenta(dataSource, await ventaIdDePago(dataSource, pagoIdUpd), getCurrentUser()?.id);
+    return guardado;
   });
 
   ipcMain.handle('deletePagoDetalle', async (_event: any, id: number) => {
@@ -1624,7 +1630,9 @@ export function registerComprasHandlers(dataSource: DataSource, getCurrentUser: 
     if (entity.cobroParcialId != null) {
       throw new Error('PAGO_DETALLE_EN_COBRO_PARCIAL');
     }
+    const pagoIdDel = await pagoIdDeDetalle(dataSource, id);
     await repo.remove(entity);
+    if (pagoIdDel) await trasEditarVenta(dataSource, await ventaIdDePago(dataSource, pagoIdDel), getCurrentUser()?.id);
     return { success: true, affected: 1 };
   });
 }

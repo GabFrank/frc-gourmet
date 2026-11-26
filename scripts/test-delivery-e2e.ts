@@ -36,12 +36,34 @@ function ok(cond: boolean, name: string, extra?: any) {
 async function main() {
   const tmpDir = path.resolve(__dirname, '../.tmp');
   if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-  const dbFile = path.join(tmpDir, 'test-delivery.db');
-  if (fs.existsSync(dbFile)) fs.unlinkSync(dbFile);
-
-  const base = getDataSourceOptions(tmpDir);
-  const ds = new DataSource({ ...(base as any), database: dbFile, synchronize: false, migrationsRun: false });
-  await ds.initialize();
+  const PG = process.argv.includes('--pg');
+  let cerrarBase: () => Promise<void> = async () => {};
+  let ds: DataSource;
+  if (!PG) {
+    const dbFile = path.join(tmpDir, 'test-delivery.db');
+    if (fs.existsSync(dbFile)) fs.unlinkSync(dbFile);
+    const base = getDataSourceOptions(tmpDir);
+    ds = new DataSource({ ...(base as any), database: dbFile, synchronize: false, migrationsRun: false });
+    await ds.initialize();
+  } else {
+    // Postgres local: base temporal que se crea y se borra (FRC_PG_HOST/PORT/USERNAME/PASSWORD).
+    const conn = {
+      host: process.env['FRC_PG_HOST'] || 'localhost',
+      port: process.env['FRC_PG_PORT'] ? Number(process.env['FRC_PG_PORT']) : 5432,
+      username: process.env['FRC_PG_USERNAME'] || process.env['USER'] || 'postgres',
+      password: process.env['FRC_PG_PASSWORD'] || undefined,
+    };
+    const nombre = `frc_gourmet_deliverytest_${process.pid}`;
+    const admin = new DataSource({ type: 'postgres', ...conn, database: 'postgres' } as any);
+    try { await admin.initialize(); } catch (e: any) {
+      console.log(`[delivery-pg] SALTEADO: no hay Postgres disponible (${String(e.message).split('\n')[0]}).`);
+      process.exit(0);
+    }
+    await admin.query(`CREATE DATABASE "${nombre}"`);
+    ds = new DataSource({ ...(getDataSourceOptions(tmpDir, { type: 'postgres', ...conn, database: nombre } as any) as any), synchronize: false, migrationsRun: false });
+    await ds.initialize();
+    cerrarBase = async () => { await ds.destroy(); await admin.query(`DROP DATABASE IF EXISTS "${nombre}"`); await admin.destroy(); };
+  }
   await ds.runMigrations({ transaction: 'each' });
   console.log('[delivery] Migraciones OK.');
 
@@ -406,6 +428,46 @@ async function main() {
       page: 1, pageSize: 100, estado: 'CANCELADO',
     });
     ok(filtrada.data.every((d: any) => d.estado === 'CANCELADO'), 'F: el filtro por estado funciona');
+
+    // ── Filtros nuevos: varios estados, texto, entregador y hora ──
+    const A: any = (await crearDelivery({ nombre: 'ZULEMA FILTRO', telefono: '0971555000' })).delivery;
+    const B: any = (await crearDelivery({ nombre: 'ARMANDO FILTRO', telefono: '0972666111' })).delivery;
+    await invokeHandler('delivery-cambiar-estado', B.id, 'EN_CAMINO', { funcionarioId: repartidor.id });
+    const L = async (f: any) => (await invokeHandler('delivery-listar-pdv', caja1.id, { page: 1, pageSize: 100, ...f }) as any);
+    const ids = (r: any) => r.data.map((d: any) => d.id);
+
+    const multi = await L({ estados: ['ABIERTO', 'EN_CAMINO'] });
+    ok(multi.data.length > 0 && multi.data.every((d: any) => ['ABIERTO', 'EN_CAMINO'].includes(d.estado)), 'F: estados[] filtra por varios');
+    ok(ids(multi).includes(A.id) && ids(multi).includes(B.id), 'F: estados[] incluye ambos');
+    const soloUno = await L({ estados: ['EN_CAMINO'] });
+    ok(ids(soloUno).includes(B.id) && !ids(soloUno).includes(A.id), 'F: estados[] de uno excluye al otro');
+    ok(soloUno.total === soloUno.data.length, 'F: el total acompaña al filtro', [soloUno.total, soloUno.data.length]);
+    const viejo2 = await L({ estado: 'EN_CAMINO', estados: [] });
+    ok(viejo2.data.length > 0 && viejo2.data.every((d: any) => d.estado === 'EN_CAMINO'), 'F: `estado` string sigue funcionando');
+
+    ok(ids(await L({ texto: 'zulema' })).join() === String(A.id), 'F: texto por nombre (sin distinguir mayúsculas)');
+    ok(ids(await L({ texto: '0972666' })).join() === String(B.id), 'F: texto por teléfono');
+    ok(ids(await L({ texto: `N° ${A.id}` })).includes(A.id), 'F: texto por número de delivery');
+    ok((await L({ texto: 'NO-EXISTE-XYZ' })).total === 0, 'F: texto sin coincidencias = vacío');
+    ok((await L({ texto: '%' })).total === 0, 'F: el % se trata como literal');
+    await ds.getRepository(require('../src/app/database/entities/pedidos-online/pedido-online.entity').PedidoOnline).save({
+      numero: 'PO-000040', tipoPedido: 'DELIVERY', estado: 'RECIBIDO', canalOrigen: 'WEB', metodoPago: 'EFECTIVO',
+      subtotal: 0, costoEnvio: 0, total: 0, deliveryId: A.id,
+    } as any);
+    ok(ids(await L({ texto: 'po-000040' })).join() === String(A.id), 'F: texto por número de pedido web (PO-…)');
+
+    const porRep = await L({ entregadorId: repartidor.id });
+    ok(ids(porRep).includes(B.id) && !ids(porRep).includes(A.id), 'F: entregadorId filtra por repartidor');
+
+    const ahora = Date.now();
+    const rango = await L({ desde: new Date(ahora - 3600e3).toISOString(), hasta: new Date(ahora + 3600e3).toISOString() });
+    ok(ids(rango).includes(A.id), 'F: rango de hora que contiene al delivery');
+    const fuera = await L({ desde: new Date(ahora + 3600e3).toISOString() });
+    ok(!ids(fuera).includes(A.id), 'F: desde en el futuro lo excluye');
+    const fuera2 = await L({ hasta: new Date(ahora - 3600e3).toISOString() });
+    ok(!ids(fuera2).includes(A.id), 'F: hasta en el pasado lo excluye');
+    const combo = await L({ estados: ['ABIERTO'], texto: 'ZULEMA', entregadorId: repartidor.id });
+    ok(combo.total === 0, 'F: filtros combinados se acumulan (AND)');
   }
 
   // ═══════ [G] Repartidores ═══════
@@ -423,7 +485,7 @@ async function main() {
     ok(!lista2.some((r: any) => r.id === egresado.id), 'G: excluye a los egresados');
   }
 
-  await ds.destroy();
+  await cerrarBase();
   console.log(`\n${failed === 0 ? '✅' : '❌'} delivery: ${passed} pasaron, ${failed} fallaron\n`);
   process.exit(failed === 0 ? 0 : 1);
 }

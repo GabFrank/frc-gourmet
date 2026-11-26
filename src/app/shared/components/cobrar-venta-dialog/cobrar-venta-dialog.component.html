@@ -18,6 +18,12 @@
     </div>
   </div>
 
+  <!-- F8: el pago que eligió el cliente en la tienda. Los campos vienen precargados; se guarda al agregar la línea. -->
+  <div class="aviso-pago-cliente" *ngIf="pagoPrevistoTexto">
+    <mat-icon>storefront</mat-icon>
+    <span>Pago del cliente: {{ pagoPrevistoTexto }}</span>
+  </div>
+
   <!-- Aviso de caja abierta en otra terminal. Explica QUÉ se puede hacer acá,
        que es lo que el cajero necesita saber antes de empezar a cargar. -->
   <div class="aviso-terminal" *ngIf="avisoTerminal">

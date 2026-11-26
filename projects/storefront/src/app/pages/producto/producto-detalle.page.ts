@@ -8,15 +8,20 @@ import { ConfigService } from '../../core/config.service';
 import { AppImgPipe } from '../../core/app-img.pipe';
 import { IconComponent } from '../../core/icon.component';
 import { MenuProducto, MenuOpcion, MenuAdicional, MenuObservacion } from '../../core/models';
+import { GuaraniPipe } from '../../core/guarani.pipe';
+import { PrecioPipe } from '../../core/precio.pipe';
+import { MonedasService } from '../../core/monedas.service';
 
 @Component({
   selector: 'sf-producto-detalle',
   standalone: true,
-  imports: [CommonModule, FormsModule, AppImgPipe, IconComponent],
+  imports: [GuaraniPipe, PrecioPipe, CommonModule, FormsModule, AppImgPipe, IconComponent],
   templateUrl: './producto-detalle.page.html',
   styleUrls: ['./producto-detalle.page.scss'],
 })
 export class ProductoDetallePage implements OnInit {
+  /** F8: moneda en que se ven los precios (argumento del pipe `precio`). */
+  monedas = inject(MonedasService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private menuSvc = inject(MenuService);
@@ -33,6 +38,8 @@ export class ProductoDetallePage implements OnInit {
   cantidad = 1;
 
   ngOnInit(): void {
+    // El detalle abre siempre desde arriba (la foto entera), venga de donde venga en la carta.
+    window.scrollTo({ top: 0 });
     const id = Number(this.route.snapshot.paramMap.get('id'));
     this.menuSvc.cargar().subscribe({
       next: () => {

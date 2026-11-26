@@ -1,12 +1,32 @@
+import { cuentaDeForma, listarFormasPago } from '../services/pagos-online/cuentas-pago';
+import { proveedorPorId } from '../services/pagos-online/proveedores';
+import { estadoCreditoCliente } from '../utils/credito-tienda.utils';
+import { Cliente } from '../../src/app/database/entities/personas/cliente.entity';
+import { marcarDevuelto, registrarDecisionPago, resolverDevolucionPendiente } from '../services/pagos-online/pagos-online.service';
+import { DecisionPago, DecisionPagoError, decisionNoDevuelve, estadoPagoPorDecision, normalizarDecisionPago, PERM_PAGO_NO_DEVOLVER } from '../utils/decision-pago-online.utils';
+import { nombreProveedor } from '../services/pagos-online/proveedores';
+import { cierreSolicitudAlSalir, ESTADOS_CANCELABLES_CLIENTE, limpiarMotivo, motivoAtencion, WHERE_ATENCION, PARAMS_ATENCION } from '../utils/pedido-acciones.utils';
+
+class PedidoCambioError extends Error { constructor() { super('pedido_cambio_reintentar'); } }
 import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
-import { In } from 'typeorm';
+import { In, Not } from 'typeorm';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
 import { Venta, VentaEstado } from '../../src/app/database/entities/ventas/venta.entity';
+import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { ZonaDelivery } from '../../src/app/database/entities/pedidos-online/zona-delivery.entity';
-import { Delivery } from '../../src/app/database/entities/ventas/delivery.entity';
-import { EstadoPedidoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
-import { ensurePermission } from '../utils/auth.utils';
+import { TiendaCategoria, TiendaCategoriaProducto } from '../../src/app/database/entities/pedidos-online/tienda-categoria.entity';
+import { Producto } from '../../src/app/database/entities/productos/producto.entity';
+import { Delivery, DeliveryEstado } from '../../src/app/database/entities/ventas/delivery.entity';
+import { DecisionPagoOnline, EstadoPedidoOnline, EstadoPagoOnline, MetodoPagoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { checkPermission, ensurePermission } from '../utils/auth.utils';
+import { PrecioDelivery } from '../../src/app/database/entities/ventas/precio-delivery.entity';
+import { enviosPorZonaYCanal, filtroDeRango } from './reportes-delivery.helper';
+import { getCotizacionMap, getInicioJornada, getMonedaPrincipalId } from './dashboard-ventas.handler';
+import { rangoToFechas } from '../utils/dashboard-rangos.util';
+import { dbQuery } from '../utils/db-query';
+import { asignarEnviosAZonas, redondearCoordenada } from '../utils/zonas-dashboard.utils';
+import { MonedaTienda, monedasParaResumen, resumenPago } from '../utils/pago-pedido.utils';
 import { materializarPedidoOnlineEnVenta } from './ventas.handler';
 import { cancelarVentaCompletaEnTx } from '../utils/venta-reversa.utils';
 import { invokeHandler } from '../utils/handler-registry';
@@ -40,7 +60,8 @@ const TRANSICIONES: Record<string, EstadoPedidoOnline[]> = {
   [EstadoPedidoOnline.EN_CAMINO]: [EstadoPedidoOnline.ENTREGADO],
 };
 
-function mapPedidoAdmin(p: PedidoOnline): any {
+/** `monedas` hace falta para el resumen del pago (símbolos); sin ellas, el resumen sale sin moneda. */
+function mapPedidoAdmin(p: PedidoOnline, monedas: Pick<MonedaTienda, 'id' | 'simbolo' | 'decimales' | 'principal'>[] = []): any {
   return {
     id: p.id,
     numero: p.numero,
@@ -66,6 +87,26 @@ function mapPedidoAdmin(p: PedidoOnline): any {
     fechaAceptado: p.fechaAceptado ?? null,
     fechaListo: p.fechaListo ?? null,
     fechaEntregado: p.fechaEntregado ?? null,
+    // F4: pago con tarjeta online (el proveedor del pedido).
+    estadoPago: p.estadoPago ?? null,
+    pagoId: p.pagoId ?? null,
+    pagoProveedorNombre: p.estadoPago ? nombreProveedor(p.pagoProveedor) : null,
+    pagoMonto: p.pagoMonto != null ? Number(p.pagoMonto) : null,
+    pagoDetalle: p.pagoDetalle ?? null,
+    pagadoEn: p.pagadoEn ?? null,
+    // F8: cómo dijo que va a pagar (no es un cobro).
+    pagoModalidad: p.pagoModalidad ?? null,
+    pagoMonedaId: p.pagoMonedaId ?? null,
+    vueltoPara: p.vueltoPara != null ? Number(p.vueltoPara) : null,
+    pagoCotizacion: p.pagoCotizacion != null ? Number(p.pagoCotizacion) : null,
+    pagoObservacion: p.pagoObservacion ?? null,
+    pagoResumen: resumenPago(p as any, monedas),
+    // F9: solicitud de cancelación del cliente.
+    cancelacionSolicitadaEn: p.cancelacionSolicitadaEn ?? null,
+    cancelacionMotivo: p.cancelacionMotivo ?? null,
+    cancelacionRespuesta: p.cancelacionRespuesta ?? null,
+    // F10: por qué está en la cola de atención del diálogo de delivery (null = no espera nada).
+    motivoAtencion: motivoAtencion(p as any),
     createdAt: p.createdAt,
     items: (p.items || []).map((it) => ({
       id: it.id,
@@ -97,32 +138,61 @@ export function registerPedidosOnlineAdminHandlers(
       .orderBy('p.createdAt', 'DESC')
       .take(filtros?.take || 100);
 
-    if (filtros?.estado) {
+    if (filtros?.atencion) {
+      // F10: la cola de atención del diálogo de delivery (mismo criterio que el contador).
+      qb.andWhere(WHERE_ATENCION, PARAMS_ATENCION);
+    } else if (filtros?.cancelacionPendiente) {
+      // F9: solicitudes de cancelación del cliente que esperan respuesta.
+      qb.andWhere('p.cancelacion_solicitada_en IS NOT NULL AND p.estado IN (:...canc)', { canc: ESTADOS_CANCELABLES_CLIENTE });
+    } else if (filtros?.estado) {
       qb.andWhere('p.estado = :estado', { estado: filtros.estado });
     } else if (filtros?.estados?.length) {
       qb.andWhere('p.estado IN (:...estados)', { estados: filtros.estados });
     }
-    const pedidos = await qb.getMany();
-    return pedidos.map(mapPedidoAdmin);
+    const pedidos = await qb.addSelect('p.pagoDatosJson').getMany();
+    const monedas = await monedasParaResumen(dataSource);
+    // Nombre de la cuenta con que se cobró (PIX (BRASIL), TARJETA — BANCARD…) y su medio, para la
+    // insignia y el texto del pago (sin la cuenta, el proveedor).
+    const formas = new Map((await listarFormasPago(dataSource)).map((f) => [f.id, f]));
+    return pedidos.map((p) => {
+      const m = mapPedidoAdmin(p, monedas);
+      const f = p.formaPagoOnlineId ? formas.get(p.formaPagoOnlineId) : null;
+      const prov = proveedorPorId(p.pagoProveedor || p.metodoPago);
+      // El medio con que se cobró ESTE pedido (la cuenta puede haber cambiado de moneda después).
+      const monedaIntento = String(safeParse(p.pagoDatosJson || '')?.qr?.moneda || '').toUpperCase();
+      const medio = monedaIntento === 'USDT' ? 'CRIPTO' : monedaIntento === 'BRL' ? 'PIX'
+        : prov ? (f && prov.medioDe ? prov.medioDe(cuentaDeForma(f).config) : prov.medio) : null;
+      const online = !!prov && !!p.estadoPago;
+      return {
+        ...m,
+        pagoCuentaNombre: f?.nombre ?? null,
+        pagoMedio: medio,
+        // El resumen del pago dice con qué cuenta se pagó (PIX (BRASIL) · USDT).
+        ...(online && f ? { pagoResumen: `${f.nombre}${medio === 'CRIPTO' ? ' · USDT' : ''}` } : {}),
+      };
+    });
   });
 
   // ============== CONTADOR DE PENDIENTES (badge/sonido) ==============
-  // Cuenta RECIBIDO + ACEPTADO sin venta materializada: así el staff también ve
-  // señal de los pedidos auto-aceptados (que no pasan por RECIBIDO).
-  /**
-   * Retiros en curso: pedidos PICKUP ya materializados y todavía sin entregar.
-   *
-   * Un DELIVERY materializado aparece solo en la tabla de la izquierda del
-   * diálogo, porque tiene un `Delivery` detrás. Un PICKUP no genera ninguno, así
-   * que su `Venta` -sin mesa, sin comanda, sin delivery- no sale en ninguna
-   * pantalla del PdV y no habría forma de cobrarla. Esta lista es esa pantalla.
-   */
   ipcMain.handle('contar-pedidos-online-pendientes', async () => {
     await ensurePermission(dataSource, getCurrentUser, PERM_VER);
-    const count = await repo().count({
-      where: { estado: In([EstadoPedidoOnline.RECIBIDO, EstadoPedidoOnline.ACEPTADO]) },
-    });
-    return { pendientes: count };
+    // F10: el badge cuenta lo mismo que muestra la cola de atención del diálogo de delivery
+    // (`motivoAtencion`). Antes contaba todo ACEPTADO, aunque ya tuviera venta y estuviera en curso.
+    // `pendientes` (nuevos, piden cancelar y aceptados que no llegaron a cocina —p. ej. la aceptación
+    // automática sin caja abierta—) es lo que hace sonar el aviso; `total` es el número del badge,
+    // que suma además las devoluciones de uPay (esperan a alguien, pero no hay cliente esperando).
+    const filas: any[] = await repo().createQueryBuilder('p')
+      .select(['p.id', 'p.estado', 'p.tipoPedido', 'p.ventaId', 'p.mesaId', 'p.estadoPago', 'p.cancelacionSolicitadaEn'])
+      .where(WHERE_ATENCION, PARAMS_ATENCION)
+      .getMany();
+    const motivos = filas.map((p) => motivoAtencion(p));
+    const cuenta = (m: string) => motivos.filter((x) => x === m).length;
+    const cancelaciones = cuenta('CANCELACION');
+    const nuevos = cuenta('NUEVO');
+    const sinCocina = cuenta('SIN_COCINA');
+    const devoluciones = cuenta('DEVOLVER');
+    const pendientes = nuevos + cancelaciones + sinCocina;
+    return { pendientes, cancelaciones, nuevos, sinCocina, devoluciones, total: motivos.filter(Boolean).length };
   });
 
   // ============== ACEPTAR ==============
@@ -133,11 +203,42 @@ export function registerPedidosOnlineAdminHandlers(
     if (pedido.estado !== EstadoPedidoOnline.RECIBIDO) {
       return { success: false, error: 'estado_invalido', estadoActual: pedido.estado };
     }
-    pedido.estado = EstadoPedidoOnline.ACEPTADO;
-    pedido.fechaAceptado = new Date();
-    // Vínculo a una venta ya creada a mano (compat; el camino normal materializa acá).
-    if (data?.ventaId) pedido.ventaId = data.ventaId;
-    const saved = await repo().save(pedido);
+    // F5 (auditoría C2/M-F2-7): sin una caja abierta de quien acepta no se acepta. Antes el
+    // pedido quedaba ACEPTADO sin venta (invisible para el PdV) o caía en una caja ajena.
+    if (!data?.ventaId) {
+      const cajaId = Number(data?.cajaId) || 0;
+      const caja = cajaId ? await dataSource.getRepository(Caja).findOne({ where: { id: cajaId } }) : null;
+      if (!caja || caja.estado !== CajaEstado.ABIERTO) {
+        return { success: false, error: 'sin_caja' };
+      }
+    }
+    // F8b: a cuenta. Si el cliente ya no tiene crédito o no le alcanza, no se acepta (si no, el
+    // pedido quedaba ACEPTADO, sin venta ni deuda, y el cliente ya avisado). La deuda en sí se
+    // vuelve a validar al materializar, con el cliente bloqueado.
+    if (pedido.metodoPago === MetodoPagoOnline.CREDITO) {
+      const cli = pedido.clienteId ? await dataSource.getRepository(Cliente).findOne({ where: { id: pedido.clienteId } }) : null;
+      const est = await estadoCreditoCliente(dataSource.manager, cli, pedido.id);
+      if (!est.habilitado) return { success: false, error: 'credito_no_habilitado' };
+      if (est.disponible !== null && Number(pedido.total) > est.disponible + 1e-9) {
+        return { success: false, error: 'credito_insuficiente', disponible: est.disponible };
+      }
+    }
+    // Transición atómica RECIBIDO → ACEPTADO (F5, M-F2-8): un rechazo o una aceptación
+    // concurrente gana una sola vez.
+    const upd = await repo().createQueryBuilder().update(PedidoOnline)
+      .set({
+        estado: EstadoPedidoOnline.ACEPTADO,
+        fechaAceptado: new Date(),
+        // Vínculo a una venta ya creada a mano (compat; el camino normal materializa acá).
+        ...(data?.ventaId ? { ventaId: Number(data.ventaId) } : {}),
+      } as any)
+      .where('id = :id AND estado = :est', { id: pedido.id, est: EstadoPedidoOnline.RECIBIDO })
+      .execute();
+    if (!upd.affected) {
+      const actual = await repo().findOne({ where: { id: pedidoId } });
+      return { success: false, error: 'estado_invalido', estadoActual: actual?.estado };
+    }
+    const saved = (await repo().findOne({ where: { id: pedidoId } }))!;
 
     // Materializar en la misma acción: crear la Venta y mandar a cocina.
     // Best-effort a propósito: un problema de caja no debe deshacer la
@@ -192,8 +293,39 @@ export function registerPedidosOnlineAdminHandlers(
     EstadoPedidoOnline.LISTO,
   ];
 
-  ipcMain.handle('rechazar-pedido-online', async (_event: any, pedidoId: number, motivo: string) => {
+  /** La decisión del pago llega del cliente; mal formada o sin motivo, se corta antes de tocar nada. */
+  const leerDecision = async (raw: any): Promise<DecisionPago | { error: string }> => {
+    let d: DecisionPago;
+    try { d = normalizarDecisionPago(raw); } catch (e) {
+      if (e instanceof DecisionPagoError) return { error: e.codigo };
+      throw e;
+    }
+    // Dejar la plata sin devolver es una decisión aparte de cancelar (permiso propio).
+    if (decisionNoDevuelve(d) && !(await checkPermission(dataSource, getCurrentUser, PERM_PAGO_NO_DEVOLVER)).ok) {
+      return { error: 'permiso_pago_no_devolver' };
+    }
+    return d;
+  };
+
+  ipcMain.handle('rechazar-pedido-online', async (_event: any, pedidoId: number, motivo: string, decisionPago?: any) => {
     await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
+    const d = await leerDecision(decisionPago);
+    if ('error' in d) return { success: false, error: d.error };
+    return cancelarPedido(pedidoId, motivo, EstadoPedidoOnline.RECHAZADO, {}, undefined, d);
+  });
+
+  /**
+   * Rechazo del local (RECHAZADO) o aprobación de la solicitud del cliente (F9: CANCELADO). Es el
+   * mismo camino —reversa de la venta, permiso de cobrado, devolución de uPay— para que aprobar
+   * una solicitud no pueda saltarse ninguna regla del rechazo.
+   */
+  const cancelarPedido = async (
+    pedidoId: number, motivo: string,
+    estadoFinal: EstadoPedidoOnline.RECHAZADO | EstadoPedidoOnline.CANCELADO,
+    extra: Partial<PedidoOnline> = {},
+    condicion?: string,
+    decisionPago?: DecisionPago,
+  ): Promise<any> => {
     const pedido = await repo().findOne({ where: { id: pedidoId } });
     if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
     if (!ESTADOS_CANCELABLES.includes(pedido.estado)) {
@@ -202,6 +334,8 @@ export function registerPedidosOnlineAdminHandlers(
 
     const motivoNormalizado = motivo ? String(motivo).toUpperCase() : 'SIN MOTIVO';
     const usuarioId = getCurrentUser()?.id;
+    const pagado = pedido.estadoPago === EstadoPagoOnline.PAGADO;
+    const decision = decisionPago ?? normalizarDecisionPago(null);
 
     // MESA_QR comparte UNA cuenta por mesa: varios comensales pidiendo desde su
     // celular caen en la misma `Venta`. Revertirla por el rechazo de un solo
@@ -234,6 +368,7 @@ export function registerPedidosOnlineAdminHandlers(
     }
 
     let reversa: any = null;
+    try {
     await dataSource.transaction(async (manager) => {
       if (pedido.ventaId) {
         reversa = await cancelarVentaCompletaEnTx(manager, dataSource, pedido.ventaId, {
@@ -241,13 +376,110 @@ export function registerPedidosOnlineAdminHandlers(
           motivo: motivoNormalizado,
         });
       }
-      pedido.estado = EstadoPedidoOnline.RECHAZADO;
-      pedido.motivoRechazo = motivoNormalizado;
-      await manager.getRepository(PedidoOnline).save(pedido);
+      // El delivery (o retiro) del pedido se cancela con él, como hace `delivery-cancelar` del
+      // otro lado. Sin esto quedaba vivo en la lista de delivery sobre una venta ya cancelada, y
+      // el cajero podía cobrarlo y finalizarlo (pasó el 2026-11-06 con PO-000006).
+      if (pedido.deliveryId) {
+        await manager.createQueryBuilder().update(Delivery)
+          .set({ estado: DeliveryEstado.CANCELADO, fechaCancelacion: new Date(), motivoCancelacion: motivoNormalizado } as any)
+          .where('id = :id AND estado NOT IN (:...terminales)', {
+            id: pedido.deliveryId, terminales: [DeliveryEstado.ENTREGADO, DeliveryEstado.CANCELADO],
+          })
+          .execute();
+      }
+      // F5 (auditoría M-F2-8/M-pay4): rechazo condicionado al estado y a la venta que se
+      // revirtió (una materialización concurrente no queda pisada), y el «a devolver» del pago
+      // con tarjeta en la MISMA transacción.
+      const qb = manager.getRepository(PedidoOnline).createQueryBuilder().update(PedidoOnline)
+        .set({
+          ...extra,
+          estado: estadoFinal,
+          motivoRechazo: motivoNormalizado,
+          // Auditoría post-F10: lo cobrado no siempre se devuelve; lo elige quien cancela.
+          ...(pagado ? { estadoPago: estadoPagoPorDecision(decision) } : {}),
+        } as any)
+        .where('id = :id AND estado IN (:...cancelables)', { id: pedido.id, cancelables: ESTADOS_CANCELABLES });
+      if (pedido.ventaId) qb.andWhere('venta_id = :v', { v: pedido.ventaId });
+      else qb.andWhere('venta_id IS NULL');
+      if (pedido.estadoPago) qb.andWhere('estado_pago = :ep', { ep: pedido.estadoPago });
+      else qb.andWhere('estado_pago IS NULL');
+      if (condicion) qb.andWhere(condicion);
+      const r = await qb.execute();
+      if (!r.affected) throw new PedidoCambioError();
     });
+    } catch (e) {
+      if (!(e instanceof PedidoCambioError)) throw e;
+      return { success: false, error: 'pedido_cambio_reintentar', detalle: 'El pedido cambió mientras se rechazaba. Volvé a intentarlo.' };
+    }
+
+    // Pagado con tarjeta: se registra lo decidido con el cobro y se avisa al personal (F4 §6).
+    const decidido = pagado
+      ? await registrarDecisionPago(dataSource, pedido.id, decision,
+        estadoFinal === EstadoPedidoOnline.CANCELADO ? 'CANCELADO' : 'RECHAZADO', usuarioId)
+      : null;
 
     const saved = await repo().findOne({ where: { id: pedidoId } });
-    return { success: true, pedido: mapPedidoAdmin(saved || pedido), reversa };
+    return {
+      success: true, pedido: mapPedidoAdmin(saved || pedido), reversa,
+      montoDevolver: decidido?.montoDevolver ?? null, devolucionAutomatica: decidido?.devolucionAutomatica ?? null,
+    };
+  };
+
+  // ============== F9: RESOLVER LA SOLICITUD DE CANCELACIÓN DEL CLIENTE ==============
+  // Aprobar = cancelar por el mismo camino que el rechazo (estado CANCELADO: lo pidió el
+  // cliente). Rechazar = el pedido sigue; se guarda la respuesta y el cliente no puede volver a
+  // pedirlo (para eso está el teléfono del local).
+  ipcMain.handle('resolver-cancelacion-pedido-online', async (_event: any, pedidoId: number, aprobar: boolean, respuesta?: string, decisionPago?: any) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
+    const d = await leerDecision(decisionPago);
+    if ('error' in d) return { success: false, error: d.error };
+    const pedido = await repo().findOne({ where: { id: Number(pedidoId) } });
+    if (!pedido) return { success: false, error: 'pedido_no_encontrado' };
+    if (!pedido.cancelacionSolicitadaEn) return { success: false, error: 'sin_solicitud' };
+    const texto = limpiarMotivo(respuesta);
+    if (aprobar) {
+      return cancelarPedido(pedido.id, pedido.cancelacionMotivo || 'CANCELADO A PEDIDO DEL CLIENTE',
+        EstadoPedidoOnline.CANCELADO, { cancelacionRespuesta: texto || 'APROBADA' } as any,
+        'cancelacion_solicitada_en IS NOT NULL', d);
+    }
+    const r = await repo().createQueryBuilder().update(PedidoOnline)
+      .set({ cancelacionSolicitadaEn: null, cancelacionRespuesta: texto || 'NO SE PUEDE CANCELAR' } as any)
+      .where('id = :id AND cancelacion_solicitada_en IS NOT NULL AND estado IN (:...e)', { id: pedido.id, e: ESTADOS_CANCELABLES_CLIENTE })
+      .execute();
+    if (!r.affected) return { success: false, error: 'sin_solicitud' };
+    const saved = await repo().findOne({ where: { id: pedido.id } });
+    return { success: true, pedido: mapPedidoAdmin(saved!) };
+  });
+
+  // ============== PAGO DEVUELTO (F4): el personal ya hizo la devolución en uPay ==============
+  ipcMain.handle('marcar-pago-devuelto-pedido-online', async (_event: any, pedidoId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
+    const okDev = await marcarDevuelto(dataSource, Number(pedidoId));
+    return okDev ? { success: true } : { success: false, error: 'no_hay_devolucion_pendiente' };
+  });
+
+  // Auditoría post-F10: antes de cancelar una venta (historial, PdV), saber si tiene un pedido web
+  // pagado online para preguntar qué se hace con ese cobro. Solo lo mínimo para la pregunta.
+  ipcMain.handle('pedidos-online-pagados-de-venta', async (_event: any, ventaId: number) => {
+    if (!getCurrentUser()) return { success: false, error: 'no_autenticado' };
+    const ps = await repo().find({ where: { ventaId: Number(ventaId), estadoPago: EstadoPagoOnline.PAGADO } as any });
+    return {
+      success: true,
+      pedidos: ps.map((p) => ({ id: p.id, numero: p.numero, monto: Number(p.pagoMonto ?? p.total), estado: p.estado, proveedor: nombreProveedor(p.pagoProveedor) })),
+    };
+  });
+
+  // Auditoría post-F10: una devolución pendiente también puede cerrarse sin devolver (el pago no
+  // entró, o el local no lo devuelve), con motivo. Mismo diálogo en la bandeja y en el delivery.
+  ipcMain.handle('resolver-pago-pedido-online', async (_event: any, pedidoId: number, decisionPago: any) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_GESTIONAR);
+    const d = await leerDecision(decisionPago);
+    if ('error' in d) return { success: false, error: d.error };
+    if (d.decision === DecisionPagoOnline.DEVOLVER) return { success: false, error: 'decision_pago_invalida' };
+    const ok = await resolverDevolucionPendiente(dataSource, Number(pedidoId), d, getCurrentUser()?.id);
+    if (!ok) return { success: false, error: 'no_hay_devolucion_pendiente' };
+    const saved = await repo().findOne({ where: { id: Number(pedidoId) } });
+    return { success: true, pedido: saved ? mapPedidoAdmin(saved) : null };
   });
 
   // ============== ZONAS DE DELIVERY (CRUD admin) ==============
@@ -274,13 +506,19 @@ export function registerPedidosOnlineAdminHandlers(
   ipcMain.handle('guardar-zona-delivery', async (_event: any, data: any) => {
     await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
     const repoZ = dataSource.getRepository(ZonaDelivery);
-    const zona = data?.id ? await repoZ.findOne({ where: { id: data.id } }) : repoZ.create();
+    const zona = data?.id ? await repoZ.findOne({ where: { id: data.id }, relations: ['precioDelivery'] }) : repoZ.create();
     if (!zona) return { success: false, error: 'zona_no_encontrada' };
-    zona.nombre = String(data?.nombre || '').trim().toUpperCase();
-    zona.tarifa = Number(data?.tarifa) || 0;
-    zona.montoMinimo = Number(data?.montoMinimo) || 0;
-    zona.activa = data?.activa !== false;
-    zona.orden = Number(data?.orden) || 0;
+    // En una zona existente, un campo que no viene conserva su valor: antes un
+    // guardado parcial (p. ej. por /api/rpc) la reactivaba y le ponía orden y
+    // mínimo en 0. En una nueva, los defaults de siempre.
+    const nueva = !zona.id;
+    const viene = (k: string) => data?.[k] !== undefined;
+    if (nueva || viene('nombre')) zona.nombre = String(data?.nombre || '').trim().toUpperCase();
+    if (!zona.nombre) return { success: false, error: 'nombre_requerido' };
+    if (nueva || viene('tarifa')) zona.tarifa = Number(data?.tarifa) || 0;
+    if (nueva || viene('montoMinimo')) zona.montoMinimo = Number(data?.montoMinimo) || 0;
+    if (nueva || viene('activa')) zona.activa = data?.activa !== false;
+    if (nueva || viene('orden')) zona.orden = Number(data?.orden) || 0;
     // Polígono dibujado en el mapa (GeoJSON en texto). Se valida que parsee y que
     // sea una geometría de área: guardar un GeoJSON roto dejaría la zona muda —
     // no resolvería nunca y el pedido caería en "fuera de cobertura" sin que
@@ -300,17 +538,176 @@ export function registerPedidosOnlineAdminHandlers(
         zona.poligono = texto;
       }
     }
-    if (data?.precioDeliveryId !== undefined) {
-      zona.precioDelivery = data.precioDeliveryId ? ({ id: Number(data.precioDeliveryId) } as any) : null;
+    // La tarifa del PdV es EL precio de envío de la zona (F7: obligatoria). Es la
+    // misma que usa el cajero por teléfono, así el envío es uno solo en los dos
+    // canales, y es lo que le dice al dashboard a qué zona fue un delivery por
+    // teléfono. `tarifa` (precio propio de la zona) queda sólo como respaldo de
+    // zonas viejas sin vínculo: no se pide ni se muestra.
+    const esNueva = nueva;
+    const actualId = (zona as any).precioDelivery?.id ?? null;
+    const tarifaId = data?.precioDeliveryId !== undefined
+      ? (data.precioDeliveryId ? Number(data.precioDeliveryId) : null)
+      : actualId;
+    // Requerida al crear y al cambiarla; una zona vieja sin tarifa se puede seguir
+    // redibujando o renombrando (el dashboard la marca como alerta).
+    if (tarifaId == null && (esNueva || actualId != null)) return { success: false, error: 'tarifa_requerida' };
+    if (tarifaId != null && tarifaId !== actualId) {
+      if (!Number.isInteger(tarifaId) || tarifaId <= 0) return { success: false, error: 'tarifa_invalida' };
+      const existe = await dataSource.getRepository(PrecioDelivery).findOne({ where: { id: tarifaId } });
+      if (!existe) return { success: false, error: 'tarifa_invalida' };
+      // Una tarifa por zona. Sólo se controla si CAMBIA: dos zonas viejas que ya
+      // la compartían tienen que poder seguir editándose sin quedar trabadas.
+      const otra = await repoZ.findOne({
+        where: { precioDelivery: { id: tarifaId }, ...(zona.id ? { id: Not(zona.id) } : {}) },
+        relations: ['precioDelivery'],
+      });
+      if (otra) return { success: false, error: 'tarifa_en_uso', zona: otra.nombre };
     }
-    if (!zona.nombre) return { success: false, error: 'nombre_requerido' };
+    zona.precioDelivery = tarifaId != null ? ({ id: tarifaId } as any) : null;
     const saved = await repoZ.save(zona);
     return { success: true, zona: mapZona(saved) };
+  });
+
+  // ============== DASHBOARD DE ZONAS (F7) ==============
+  // Lectura con VENTAS_PDV (decisión del propietario): la ve quien ve la entrada del
+  // menú. Crear, editar, dibujar y eliminar siguen pidiendo PEDIDOS_ONLINE_CONFIGURAR.
+  const RANGOS_DASHBOARD = ['today', 'week', 'month'] as const;
+  const TOPE_PUNTOS = 1000;
+  ipcMain.handle('get-dashboard-zonas-delivery', async (_event: any, params?: { rango?: string }) => {
+    await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
+    const rango = (RANGOS_DASHBOARD as readonly string[]).includes(String(params?.rango))
+      ? (params!.rango as typeof RANGOS_DASHBOARD[number]) : 'week';
+    const inicioJornada = await getInicioJornada(dataSource);
+    const ventana = rangoToFechas(rango, new Date(), inicioJornada);
+    const filtro = filtroDeRango(dataSource, ventana);
+    const monPrincipal = await getMonedaPrincipalId(dataSource);
+    const ctx = { monPrincipal, cotMap: await getCotizacionMap(dataSource, monPrincipal), isPg: dataSource.options.type === 'postgres' };
+
+    const zonasEnt = await dataSource.getRepository(ZonaDelivery).find({
+      order: { orden: 'ASC', nombre: 'ASC' }, relations: ['precioDelivery'],
+    });
+    const zonas = zonasEnt.map(mapZona);
+    const tarifas = (await dataSource.getRepository(PrecioDelivery).find({ order: { descripcion: 'ASC' } }))
+      .map((t: any) => ({ id: t.id, descripcion: t.descripcion, valor: Number(t.valor), activo: t.activo !== false }));
+    const { filas, kpis } = asignarEnviosAZonas(zonas, tarifas, await enviosPorZonaYCanal(dataSource, ctx, filtro));
+
+    // Puntos del mapa: el MISMO conjunto que cuenta la tabla para la tienda (venta
+    // concluida del período, reparto y no retiro), con coordenadas redondeadas y
+    // sin nada que identifique al cliente.
+    const filasPuntos: any[] = await dbQuery(dataSource, `
+      SELECT po.latitud AS lat, po.longitud AS lng, u.zid AS zona_id
+      FROM ventas v
+      -- Un pedido por venta (venta_id no es único en pedidos_online): las
+      -- coordenadas del primero y la zona con el MISMO criterio que la tabla
+      -- (MIN(zona_delivery_id) en enviosPorZonaYCanal), para que punto y fila coincidan.
+      JOIN (SELECT venta_id, MIN(id) AS pid, MIN(zona_delivery_id) AS zid FROM pedidos_online WHERE venta_id IS NOT NULL GROUP BY venta_id) u ON u.venta_id = v.id
+      JOIN pedidos_online po ON po.id = u.pid
+      LEFT JOIN deliveries dcanal ON dcanal.id = v.delivery_id
+      WHERE v.estado = ? AND ${filtro.sql}
+        AND v.canal_origen = 'WEB'
+        AND v.delivery_id IS NOT NULL AND (dcanal.modo IS NULL OR dcanal.modo <> 'RETIRO')
+        AND po.latitud IS NOT NULL AND po.longitud IS NOT NULL
+      ORDER BY v.created_at DESC, v.id DESC
+      LIMIT ${TOPE_PUNTOS + 1}
+    `, [VentaEstado.CONCLUIDA, ...filtro.params]);
+    const puntos = filasPuntos.slice(0, TOPE_PUNTOS)
+      .map((f) => ({ lat: redondearCoordenada(f.lat), lng: redondearCoordenada(f.lng), zonaId: f.zona_id != null ? Number(f.zona_id) : null }))
+      .filter((p) => p.lat != null && p.lng != null);
+
+    const puedeConfigurar = (await checkPermission(dataSource, getCurrentUser, PERM_CONFIGURAR)).ok;
+    return {
+      rango, desde: ventana.desde, hasta: ventana.hasta,
+      zonas, tarifas, filas, kpis, puntos,
+      puntosTruncados: filasPuntos.length > TOPE_PUNTOS,
+      puedeConfigurar,
+    };
   });
 
   ipcMain.handle('eliminar-zona-delivery', async (_event: any, zonaId: number) => {
     await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
     await dataSource.getRepository(ZonaDelivery).delete({ id: zonaId });
+    return { success: true };
+  });
+
+  // ============== CATEGORÍAS DE LA TIENDA (F6) ==============
+  const mapCategoriaTienda = (c: any) => ({
+    id: c.id,
+    nombre: c.nombre,
+    orden: c.orden,
+    activo: c.activo,
+    productos: (c.productos || [])
+      .filter((cp: any) => cp.producto)
+      .sort((a: any, b: any) => a.orden - b.orden)
+      .map((cp: any) => ({ productoId: cp.producto.id, nombre: cp.producto.nombre, orden: cp.orden })),
+  });
+  const cargarCategoriaTienda = (id: number) =>
+    dataSource.getRepository(TiendaCategoria).findOne({ where: { id }, relations: ['productos', 'productos.producto'] });
+
+  ipcMain.handle('get-tienda-categorias-admin', async () => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    const cats = await dataSource.getRepository(TiendaCategoria).find({
+      relations: ['productos', 'productos.producto'],
+      order: { orden: 'ASC', id: 'ASC' },
+    });
+    return cats.map(mapCategoriaTienda);
+  });
+
+  /** Alta o edición: nombre, activo y la lista completa de productos en su orden (reemplaza la anterior). */
+  ipcMain.handle('guardar-tienda-categoria', async (_event: any, data: any) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    const nombre = String(data?.nombre || '').trim().toUpperCase().slice(0, 80);
+    if (!nombre) return { success: false, error: 'nombre_requerido' };
+    const productoIds: number[] = Array.isArray(data?.productoIds)
+      ? Array.from(new Set<number>(data.productoIds.map((x: any) => Number(x)).filter((x: number) => Number.isInteger(x) && x > 0)))
+      : [];
+    if (productoIds.length) {
+      const existen = await dataSource.getRepository(Producto).count({ where: { id: In(productoIds) } as any });
+      if (existen !== productoIds.length) return { success: false, error: 'producto_inexistente' };
+    }
+    const id = await dataSource.transaction(async (em) => {
+      const repoC = em.getRepository(TiendaCategoria);
+      let cat: TiendaCategoria | null;
+      if (data?.id) {
+        cat = await repoC.findOne({ where: { id: Number(data.id) } });
+        if (!cat) return null;
+      } else {
+        const ultima = await repoC.findOne({ where: {}, order: { orden: 'DESC' } });
+        cat = repoC.create({ orden: (ultima?.orden ?? -1) + 1 });
+      }
+      cat.nombre = nombre;
+      cat.activo = data?.activo !== false;
+      const saved = await repoC.save(cat);
+      if (Array.isArray(data?.productoIds)) {
+        const repoCP = em.getRepository(TiendaCategoriaProducto);
+        await repoCP.delete({ categoria: { id: saved.id } } as any);
+        if (productoIds.length) {
+          await repoCP.save(productoIds.map((pid, i) => repoCP.create({ categoria: { id: saved.id } as any, producto: { id: pid } as any, orden: i })));
+        }
+      }
+      return saved.id;
+    });
+    if (id == null) return { success: false, error: 'categoria_no_encontrada' };
+    return { success: true, categoria: mapCategoriaTienda(await cargarCategoriaTienda(id)) };
+  });
+
+  ipcMain.handle('eliminar-tienda-categoria', async (_event: any, categoriaId: number) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    // Las asignaciones se borran a mano además del ON DELETE CASCADE (SQLite puede tener las FK apagadas).
+    await dataSource.transaction(async (em) => {
+      await em.getRepository(TiendaCategoriaProducto).delete({ categoria: { id: Number(categoriaId) } } as any);
+      await em.getRepository(TiendaCategoria).delete({ id: Number(categoriaId) });
+    });
+    return { success: true };
+  });
+
+  /** Orden de las pestañas: la lista de ids en el orden nuevo. */
+  ipcMain.handle('reordenar-tienda-categorias', async (_event: any, ids: number[]) => {
+    await ensurePermission(dataSource, getCurrentUser, PERM_CONFIGURAR);
+    if (!Array.isArray(ids)) return { success: false, error: 'ids_invalidos' };
+    await dataSource.transaction(async (em) => {
+      const repoC = em.getRepository(TiendaCategoria);
+      for (let i = 0; i < ids.length; i++) await repoC.update({ id: Number(ids[i]) }, { orden: i });
+    });
     return { success: true };
   });
 
@@ -323,6 +720,12 @@ export function registerPedidosOnlineAdminHandlers(
     const permitidos = TRANSICIONES[pedido.estado] || [];
     if (!permitidos.includes(nuevoEstado as EstadoPedidoOnline)) {
       return { success: false, error: 'transicion_invalida', estadoActual: pedido.estado, permitidos };
+    }
+    // F5 (auditoría C2): un pedido aceptado sin venta no avanza a mano: primero «Enviar a
+    // cocina» (que crea la venta). Si no, quedaba en preparación sin cuenta ni comanda.
+    if (pedido.estado === EstadoPedidoOnline.ACEPTADO && !pedido.ventaId
+        && nuevoEstado !== EstadoPedidoOnline.RECHAZADO && nuevoEstado !== EstadoPedidoOnline.CANCELADO) {
+      return { success: false, error: 'sin_venta', estadoActual: pedido.estado };
     }
 
     // Si el pedido tiene un Delivery detrás, la transición equivalente se delega
@@ -365,11 +768,23 @@ export function registerPedidosOnlineAdminHandlers(
       }
     }
 
-    pedido.estado = nuevoEstado as EstadoPedidoOnline;
-    if (nuevoEstado === EstadoPedidoOnline.LISTO) pedido.fechaListo = new Date();
-    if (nuevoEstado === EstadoPedidoOnline.ENTREGADO) pedido.fechaEntregado = new Date();
+    const estadoLeido = pedido.estado;
+    // F9: si salió con una solicitud de cancelación sin responder, la solicitud se cierra sola
+    // (ya no se puede cancelar) y el cliente ve por qué, en vez de quedar «esperando respuesta».
+    const cambios: any = { estado: nuevoEstado, ...cierreSolicitudAlSalir(pedido, nuevoEstado) };
+    if (nuevoEstado === EstadoPedidoOnline.LISTO) cambios.fechaListo = new Date();
+    if (nuevoEstado === EstadoPedidoOnline.ENTREGADO) cambios.fechaEntregado = new Date();
     try {
-      const saved = await repo().save(pedido);
+      // Condicionado al estado leído (auditoría F10): un `save` de la entidad pisaba una
+      // cancelación hecha en el medio y «revivía» el pedido. Si la sincronización desde el
+      // delivery ya lo dejó en el destino, también vale.
+      const r = await repo().createQueryBuilder().update(PedidoOnline).set(cambios)
+        .where('id = :id AND estado IN (:...ok)', { id: pedido.id, ok: [estadoLeido, nuevoEstado] })
+        .execute();
+      const saved = await repo().findOne({ where: { id: pedido.id }, relations: ['items', 'zonaDelivery'] });
+      if (!r.affected || saved?.estado !== nuevoEstado) {
+        return { success: false, error: 'pedido_cambio_reintentar', estadoActual: saved?.estado };
+      }
       return { success: true, pedido: mapPedidoAdmin(saved) };
     } catch (e) {
       // El delivery ya avanzó y el pedido no: se nombra el desfasaje en vez de

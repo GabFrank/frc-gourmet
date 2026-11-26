@@ -1,0 +1,266 @@
+/**
+ * IC Pay (IC Investments S.A.) como proveedor: Pix de Brasil (PLAN-tienda-pagos-multi-icpay §3).
+ *
+ * API «IC Investments API» (OpenAPI en https://www.developer.ic.com.py/openapi.json):
+ * - Cada llamada lleva `x-api-key` + `Authorization: Bearer <accessToken>`. El token sale del
+ *   sign-in con email y contraseña y dura 1 h; se renueva con el refresh (ver `icpay-auth.ts`).
+ * - El cobro es una «orden de pago» en **dólares**: IC la convierte a reales con su cotización y
+ *   devuelve el QR Pix dinámico (`qrData.payload`, EMV) y lo que paga el cliente (`totalAmount`).
+ *   El monto en USD lo calculamos desde los guaraníes del pedido con la cotización de IC
+ *   (PYG→USD, contexto `payment_order`), redondeando hacia arriba para no cobrar de menos.
+ * - No hay aviso (webhook) de órdenes de pago: la confirmación sale de consultar la orden (la
+ *   página de pago mientras el cliente mira, y el job). No hay devolución por API.
+ * - La orden no acepta una referencia nuestra: se correlaciona por su `id` (= sesión del intento).
+ * - **Modo USDT** (campo «Moneda»): la orden es en USDT por la red Tron. No trae QR: el cliente paga a
+ *   la dirección Tron fija del comercio (`/store/me` → `walletAddress`) el monto exacto, y para que IC
+ *   lo detecte hay que llamar a `POST /payment/webhook/{id}/tron` (devuelve la orden). Es la única
+ *   moneda que staging confirma sola (con una wallet de la testnet), por eso sirve para probar.
+ */
+import { DataSource } from 'typeorm';
+import { FORMA_PAGO_ICPAY } from '../../../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { TiendaOnlineConfig } from '../../../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
+import { ResultadoPago } from '../interpretar-pago';
+import { valoresCompletos } from './config-proveedor';
+import { IcpayConfig, icpayLlamar, normalizarApiKey, normalizarBaseIcpay } from './icpay-auth';
+import { decidirVerificacionTron, invalidarPanoramaTron } from './icpay-tron';
+import { CuentaPago, ProveedorError, ProveedorPagoOnline } from './tipos';
+
+export const PROVEEDOR_ICPAY = 'ICPAY';
+
+/** Una orden pendiente pasado su vencimiento por más de esto se da por vencida. */
+const GRACIA_VENCIMIENTO_MS = 15 * 60_000;
+/** Diferencia tolerada entre el USD pedido y el que informa IC (redondeo a centavos). */
+const TOLERANCIA_USD = 0.005;
+/** Cuántas veces se sube un centavo si IC devuelve una orden de otro pedido. */
+const MAX_AJUSTES_MONTO = 10;
+/** USDT no trae vencimiento: le damos una hora, como el QR Pix. */
+const VENCE_USDT_MS = 60 * 60_000;
+
+/** «5.64», «541,24», 5.64 → número; NaN si no se entiende. */
+export function montoIcpay(v: any): number {
+  if (v == null || v === '') return NaN;
+  if (typeof v === 'number') return v;
+  let s = String(v).trim();
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.'); // 1.234,56
+  else s = s.replace(',', '.');
+  return /^\d+(\.\d+)?$/.test(s) ? Number(s) : NaN;
+}
+
+/** Reales → USD con la tasa «reales por dólar», hacia arriba a centavos (IC no cobra de menos). */
+export function usdDesdeReales(reales: number, brlPorUsd: number): number {
+  if (!(reales > 0) || !(brlPorUsd > 0)) return NaN;
+  return Math.ceil(Math.round((reales / brlPorUsd) * 1e6) / 1e4) / 100;
+}
+
+/** Guaraníes → USD con la tasa «guaraníes por dólar», redondeado hacia arriba a centavos. */
+export function usdDesdeGuaranies(guaranies: number, pygPorUsd: number): number {
+  if (!(guaranies > 0) || !(pygPorUsd > 0)) return NaN;
+  return Math.ceil(Math.round((guaranies / pygPorUsd) * 1e6) / 1e4) / 100;
+}
+
+/** Traduce una orden de IC a `ResultadoPago` (función pura, para los tests). */
+export function interpretarOrdenIcpay(
+  o: any,
+  esperado: { sesionId: string; usd: number | null; ahora: Date; expiraEn?: Date | null; moneda?: string },
+): ResultadoPago {
+  const st = String(o?.status ?? '').toLowerCase();
+  const id = o?.id != null ? String(o.id) : null;
+  if (!id || id !== esperado.sesionId) {
+    return { tipo: 'INCONSISTENTE', paymentId: id, detalle: `IC devolvió otra orden (${id ?? 'sin id'})` };
+  }
+  const usd = montoIcpay(o?.amount);
+  const moneda = String(o?.currency ?? '').toUpperCase();
+  const vence = o?.qrData?.expiresAt ? new Date(o.qrData.expiresAt) : esperado.expiraEn ?? null;
+  switch (st) {
+    case 'completed': {
+      if (esperado.usd == null) return { tipo: 'INCONSISTENTE', paymentId: id, detalle: 'IC informa cobrado pero falta el monto del intento' };
+      const pedida = (esperado.moneda || 'BRL').toUpperCase();
+      if (moneda !== pedida) return { tipo: 'INCONSISTENTE', paymentId: id, detalle: `moneda ${moneda || '?'} en vez de ${pedida}` };
+      if (!(Math.abs(usd - esperado.usd) < TOLERANCIA_USD)) {
+        return { tipo: 'INCONSISTENTE', paymentId: id, detalle: `IC informa US$ ${o?.amount} y el intento era US$ ${esperado.usd.toFixed(2)}` };
+      }
+      if (pedida === 'USDT') {
+        // USDT: el cliente escribe el monto; si mandó de más, IC la completa y anota el excedente.
+        const extra = montoIcpay(o?.pendingAmount);
+        return { tipo: 'PAGADO', paymentId: id, monto: NaN, detalle: `USDT cobrado por IC: ${o?.totalAmount ?? '?'} USDT${extra > 0 ? ` (de más: ${o.pendingAmount})` : ''}` };
+      }
+      return { tipo: 'PAGADO', paymentId: id, monto: NaN, detalle: `Pix cobrado por IC: R$ ${o?.totalAmount ?? '?'} (US$ ${usd.toFixed(2)})` };
+    }
+    case 'pending': {
+      const vencida = vence && esperado.ahora.getTime() > vence.getTime() + GRACIA_VENCIMIENTO_MS;
+      return vencida ? { tipo: 'EXPIRADO', detalle: 'el pago venció sin cobrarse' } : { tipo: 'PENDIENTE', detalle: (esperado.moneda || 'BRL') === 'USDT' ? 'IC espera el USDT' : 'IC espera el Pix' };
+    }
+    case 'expired': return { tipo: 'EXPIRADO', detalle: 'IC informa la orden vencida' };
+    case 'cancelled': return { tipo: 'FALLIDO', paymentId: id, detalle: 'IC canceló la orden' };
+    case 'underpaid': return { tipo: 'INCONSISTENTE', paymentId: id, detalle: `IC informa pago incompleto (pagó ${o?.totalAmount ?? '?'}, falta ${o?.pendingAmount ?? '?'})` };
+    case 'duplicated': return { tipo: 'INCONSISTENTE', paymentId: id, detalle: 'IC marca la orden como duplicada' };
+    case 'under_dispute': return { tipo: 'INCONSISTENTE', paymentId: id, detalle: 'la orden tiene un reclamo abierto en IC' };
+    case 'refunded': return { tipo: 'INCONSISTENTE', paymentId: id, detalle: 'IC informa la orden devuelta' };
+    default: return { tipo: 'PENDIENTE', detalle: `estado de IC no reconocido: ${st || 'vacío'}` };
+  }
+}
+
+function jsonDe(r: { status: number; body: any }, que: string): any {
+  if (r.status === 401 || r.status === 403) throw new ProveedorError('icpay_credenciales', `IC rechazó las credenciales al ${que} (HTTP ${r.status})`, r.status);
+  if (r.status < 200 || r.status >= 300 || !r.body || typeof r.body !== 'object') {
+    const msg = r.body?.message ? ` · ${Array.isArray(r.body.message) ? r.body.message.join(', ') : r.body.message}` : '';
+    throw new ProveedorError('icpay_error', `IC no pudo ${que} (HTTP ${r.status}${msg})`, r.status);
+  }
+  return r.body;
+}
+
+const proveedor: ProveedorPagoOnline<IcpayConfig> = {
+  id: PROVEEDOR_ICPAY,
+  nombre: 'IC Pay',
+  etiqueta: 'Pix (Brasil)',
+  medio: 'PIX',
+  medioDe: (config) => (String(config['moneda'] || '').toUpperCase() === 'USDT' ? 'CRIPTO' : 'PIX'),
+  // IC (Fede, 10/11): «el flujo de USDT está pensado para pagos secuenciales», y con varios pagos
+  // sin asociar en la misma wallet IC los marca mal (lo están corrigiendo). Hasta que lo corrijan,
+  // un pago USDT abierto por vez. Pix trae su propio QR: no hace falta.
+  unCobroPorVez: (c) => c.moneda === 'USDT',
+  formaPago: FORMA_PAGO_ICPAY,
+  // El QR se dibuja en la tienda: no se redirige ni se carga nada de IC en el navegador.
+  hosts: [],
+  modo: 'QR',
+  campos: [
+    {
+      clave: 'baseUrl', etiqueta: 'URL de la API', requerido: true, patron: 'https://[A-Za-z0-9.-]+(:\\d+)?(/[A-Za-z0-9._/-]*)?', maxLength: 200,
+      porDefecto: 'https://stage.api.ic.com.py', ayuda: 'Sandbox: https://stage.api.ic.com.py. La de producción la da IC.',
+    },
+    {
+      clave: 'moneda', etiqueta: 'Moneda', requerido: true, porDefecto: 'BRL',
+      opciones: [{ valor: 'BRL', etiqueta: 'Pix (reales)' }, { valor: 'USDT', etiqueta: 'USDT por Tron (pruebas)' }],
+      ayuda: 'USDT sirve para probar en staging con una wallet de la testnet: Pix solo se confirma a mano.',
+    },
+    { clave: 'email', etiqueta: 'Usuario (email)', requerido: true, patron: '[^\\s@]+@[^\\s@]+', maxLength: 150, ayuda: 'Usuario «store» de IC, sin MFA y con la contraseña definitiva.' },
+    { clave: 'apiKey', etiqueta: 'API key', secreto: true, requerido: true, maxLength: 200 },
+    { clave: 'password', etiqueta: 'Contraseña', secreto: true, requerido: true, maxLength: 200 },
+  ],
+
+  async credenciales(_ds: DataSource, cfg: TiendaOnlineConfig | null, cuenta?: CuentaPago | null) {
+    const v = await valoresCompletos(cfg, proveedor, cuenta);
+    if (!v) return null;
+    return {
+      baseUrl: normalizarBaseIcpay(v['baseUrl']), email: v['email'], apiKey: normalizarApiKey(v['apiKey']), password: v['password'],
+      moneda: v['moneda'] === 'USDT' ? 'USDT' : 'BRL',
+    };
+  },
+
+  async iniciar(creds, input, ctx) {
+    const q = jsonDe(await icpayLlamar(creds, ctx.fetch, 'GET', '/api/v1/quote?fromCurrency=PYG&toCurrency=USD&context=payment_order'), 'cotizar');
+    const base = Number(q?.data?.baseExchangeRate);
+    const inv = Number(q?.data?.targetExchangeRate);
+    const pygPorUsd = base > 0 ? base : inv > 0 ? 1 / inv : NaN;
+    let usd = usdDesdeGuaranies(input.monto, pygPorUsd);
+    // Pix: el cliente vio el total en reales con la cotización de la tienda y eso es lo que se le
+    // cobra. IC solo acepta órdenes en dólares y convierte con su cotización: se le piden los
+    // dólares que, a su cotización, dan esos reales (hacia arriba: unos centavos de más, nunca de
+    // menos). Sin el real configurado en la tienda, se sigue convirtiendo desde los guaraníes.
+    let brlPorUsd: number | null = null;
+    if (creds.moneda === 'BRL' && Number(input.montoReales) > 0) {
+      const qb = jsonDe(await icpayLlamar(creds, ctx.fetch, 'GET', '/api/v1/quote?fromCurrency=USD&toCurrency=BRL&context=payment_order'), 'cotizar en reales');
+      const b = Number(qb?.data?.baseExchangeRate);
+      const t = Number(qb?.data?.targetExchangeRate);
+      brlPorUsd = b > 0 ? b : t > 0 ? 1 / t : null;
+      if (!(brlPorUsd && brlPorUsd > 0)) throw new ProveedorError('icpay_cotizacion', `cotización de IC dólar→real inválida (${qb?.data?.baseExchangeRate ?? 'sin tasa'})`);
+      usd = usdDesdeReales(Number(input.montoReales), brlPorUsd);
+    }
+    if (!(usd >= 0.01)) throw new ProveedorError('icpay_cotizacion', `cotización de IC inválida (${q?.data?.baseExchangeRate ?? 'sin tasa'})`);
+
+    // IC trata dos órdenes del mismo monto como la misma (responde la existente aunque la
+    // Idempotency-Key sea otra, 2026-11-09). Si la que devuelve ya es de otro pedido, se pide con un
+    // centavo de dólar más, hasta conseguir una propia. Sin esto, dos clientes con el mismo total
+    // compartirían el QR.
+    let usdFinal = usd;
+    let o: any = null;
+    for (let i = 0; i < MAX_AJUSTES_MONTO; i++) {
+      o = jsonDe(
+        await icpayLlamar(creds, ctx.fetch, 'POST', '/api/v1/payment/order', { amount: usdFinal.toFixed(2), currency: creds.moneda },
+          { 'Idempotency-Key': i ? `${input.idempotencyKey}:${i}` : input.idempotencyKey }),
+        'crear la orden',
+      );
+      if (!o?.id || !ctx.sesionUsada || !(await ctx.sesionUsada(String(o.id)))) break;
+      o = null;
+      usdFinal = Math.round((usdFinal + 0.01) * 100) / 100;
+    }
+    if (!o) throw new ProveedorError('icpay_orden_repetida', `IC devolvió órdenes de otros pedidos ${MAX_AJUSTES_MONTO} veces`);
+    let payload = String(o?.qrData?.payload ?? '');
+    let expira = o?.qrData?.expiresAt ? new Date(o.qrData.expiresAt) : null;
+    if (creds.moneda === 'USDT') {
+      // Sin QR propio: se paga a la dirección Tron del comercio. El vencimiento lo ponemos nosotros.
+      const st = jsonDe(await icpayLlamar(creds, ctx.fetch, 'GET', '/api/v1/store/me'), 'leer la dirección del comercio');
+      payload = String(st?.walletAddress ?? '');
+      expira = new Date(Date.now() + VENCE_USDT_MS);
+    }
+    if (!o?.id || !payload) throw new ProveedorError('icpay_error', creds.moneda === 'USDT' ? 'IC no tiene dirección Tron para el comercio' : 'IC creó la orden sin QR');
+    const qr = { payload, moneda: creds.moneda, monto: String(o.totalAmount ?? ''), expiraEn: expira ? expira.toISOString() : null };
+    return {
+      tipo: 'QR',
+      sesionId: String(o.id),
+      qr,
+      expiraEn: expira,
+      datos: { qr, usd: usdFinal.toFixed(2), pygPorUsd, cotizacionBrl: o.quote ?? null, ...(brlPorUsd ? { realesTienda: Number(input.montoReales).toFixed(2), brlPorUsdPedido: brlPorUsd } : {}), ...(usdFinal !== usd ? { usdCalculado: usd.toFixed(2) } : {}) },
+      crudo: { status: o.status, id: o.id, amount: o.amount, totalAmount: o.totalAmount, quote: o.quote, pygPorUsd, expiresAt: o.qrData?.expiresAt ?? null, ...(usdFinal !== usd ? { usdCalculado: usd.toFixed(2) } : {}) },
+    };
+  },
+
+  async consultar(creds, cobro, ctx) {
+    // USDT: la verificación de Tron es la que hace que IC detecte el pago (y devuelve la orden).
+    // Solo si ESTE intento se cobró en USDT (lo dice su `datos`): una cuenta que pasó de BRL a USDT
+    // no tiene que pedir la verificación de Tron sobre órdenes en reales (IC le asignaría un pago).
+    let o: any = null;
+    const monedaIntento = String(cobro.datos?.qr?.moneda || '').toUpperCase();
+    let aviso: string | null = null;
+    if (monedaIntento === 'USDT') {
+      // Solo si el último pago sin orden es de ESTA orden (ver icpay-tron.ts): IC le asigna a la orden
+      // verificada el pago más reciente sin mirar el monto.
+      const usdIntento = montoIcpay(cobro.datos?.usd);
+      const wallet = String(cobro.datos?.qr?.payload || '');
+      try {
+        const d = await decidirVerificacionTron(creds, ctx.fetch, wallet, cobro.sesionId, usdIntento);
+        if (d.verificar) {
+          const t = await icpayLlamar(creds, ctx.fetch, 'POST', `/api/v1/payment/webhook/${encodeURIComponent(cobro.sesionId)}/tron`);
+          invalidarPanoramaTron(creds);
+          if (t.status >= 200 && t.status < 300 && t.body?.id) o = t.body;
+        } else if (d.verificar === false && d.bloqueado) {
+          aviso = d.motivo;
+        }
+      } catch (e: any) {
+        // Sin mirar la cadena no se pide la verificación (podría llevarse el pago de otra orden).
+        aviso = null;
+      }
+    }
+    if (!o) o = jsonDe(await icpayLlamar(creds, ctx.fetch, 'GET', `/api/v1/payment/order/${encodeURIComponent(cobro.sesionId)}`), 'consultar la orden');
+    // Un pago que no es de ninguna orden pendiente traba la cola (no se asigna a nadie): se avisa.
+    if (aviso && String(o?.status) === 'pending') {
+      return { resultado: { tipo: 'INCONSISTENTE', paymentId: null, detalle: aviso }, crudo: { status: o.status, id: o.id, bloqueoTron: aviso } };
+    }
+    const usd = cobro.datos?.usd != null ? montoIcpay(cobro.datos.usd) : null;
+    const resultado = interpretarOrdenIcpay(o, {
+      sesionId: cobro.sesionId, usd: usd != null && !isNaN(usd) ? usd : null, ahora: cobro.ahora ?? new Date(),
+      expiraEn: cobro.expiraEn ?? null, moneda: monedaIntento || 'BRL',
+    });
+    // El servicio guarda en el pedido el monto en guaraníes: el del pedido.
+    if (resultado.tipo === 'PAGADO') resultado.monto = cobro.monto;
+    // Del pagador solo el nombre (el CPF no se guarda).
+    const crudo = {
+      status: o.status, id: o.id, amount: o.amount, totalAmount: o.totalAmount, pendingAmount: o.pendingAmount ?? null, currency: o.currency,
+      completedAt: o.completedAt ?? null, pagador: o.providerMetadata?.payerName ?? null, txTron: o.providerMetadata?.txId ?? o.providerMetadata?.hash ?? null,
+    };
+    return { resultado, crudo };
+  },
+
+  async probarConexion(creds, ctx) {
+    try {
+      const st = jsonDe(await icpayLlamar(creds, ctx.fetch, 'GET', '/api/v1/store/me'), 'leer el comercio');
+      const cuenta = await icpayLlamar(creds, ctx.fetch, 'GET', '/api/v1/account/me');
+      const moneda = cuenta.status === 200 ? cuenta.body?.data?.currency : null;
+      return { ok: true, detalle: `Conectado como ${st?.name ?? 'comercio'}${moneda ? ` (cuenta en ${moneda})` : ''}` };
+    } catch (e: any) {
+      return { ok: false, error: e instanceof ProveedorError ? e.codigo : 'icpay_sin_conexion', detalle: e?.message || String(e) };
+    }
+  },
+};
+
+export const icpayProveedor = proveedor;
