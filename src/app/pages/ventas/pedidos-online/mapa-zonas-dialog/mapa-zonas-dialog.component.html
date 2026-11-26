@@ -1,0 +1,39 @@
+<h2 mat-dialog-title>Dibujar zona · {{ data.zona.nombre || 'Nueva zona' }}</h2>
+<mat-dialog-content class="cont">
+  <p class="ayuda">
+    Tocá el mapa para marcar los vértices del área. Arrastrá un punto para moverlo; al pasar el mouse
+    aparece <strong>×</strong> para borrarlo. Clic sobre un borde agrega un punto en ese lado.
+    Una zona puede tener varias áreas con el mismo precio.
+  </p>
+
+  <div class="areas" role="tablist" aria-label="Áreas de la zona">
+    <button mat-stroked-button type="button" *ngFor="let c of chips" role="tab"
+            class="chip-area" [class.activa]="c.activa" [class.incompleta]="c.incompleta"
+            [attr.aria-selected]="c.activa" (click)="seleccionarArea(c.indice)">
+      {{ c.label }}
+    </button>
+    <button mat-button type="button" color="primary" (click)="agregarArea()">
+      <mat-icon>add</mat-icon> Agregar área
+    </button>
+  </div>
+
+  <div #mapEl class="mapa"></div>
+
+  <div class="barra">
+    <span class="contador">{{ resumen }}</span>
+    <span class="aviso" *ngIf="superpone">Se superpone con otra zona: gana la de menor orden.</span>
+    <span class="spacer"></span>
+    <button mat-stroked-button type="button" (click)="deshacer()" [disabled]="!puntosActiva">
+      <mat-icon>undo</mat-icon> Deshacer
+    </button>
+    <button mat-stroked-button type="button" color="warn" (click)="borrarArea()" [disabled]="!hayAreas">
+      <mat-icon>delete_outline</mat-icon> Borrar área
+    </button>
+  </div>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="ref.close()">Cancelar</button>
+  <button mat-flat-button color="primary" type="button" [disabled]="!puedeGuardar" (click)="aceptar()">
+    Guardar zona
+  </button>
+</mat-dialog-actions>

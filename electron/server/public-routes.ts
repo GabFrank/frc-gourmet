@@ -15,6 +15,7 @@
  * NUNCA se acepta un channel arbitrario por nombre — solo claves de la whitelist.
  */
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { clientIpDe } from '../utils/client-ip.util';
 import { invokeHandlerWithContext } from '../utils/handler-registry';
 import { verifyCustomerToken, VerifiedCustomer } from '../utils/customer-jwt.utils';
 import { DataSource } from 'typeorm';
@@ -100,6 +101,46 @@ export function registerPublicRoutes(fastify: FastifyInstance, dataSource?: Data
     timestamp: new Date().toISOString(),
   }));
 
+  // ---- Aviso de un proveedor de pago (webhook, PLAN-tienda-pagos-proveedores §4). El proveedor
+  // postea su propio formato a una URL fija que se carga en su portal. Sin JWT: la autenticidad la
+  // prueba la firma del aviso, que verifica el proveedor (`procesarAviso`). Solo proveedores
+  // conocidos (letras), y con el mismo tope que el RPC público.
+  fastify.post<{ Params: { proveedor: string } }>(
+    '/pub/pagos/:proveedor/aviso',
+    { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const proveedor = String(request.params.proveedor || '').toUpperCase();
+      if (!/^[A-Z]{2,20}(-\d{1,9})?$/.test(proveedor)) {
+        reply.code(404);
+        return { status: 'error' };
+      }
+      try {
+        const ipInfo = clientIpDe(request);
+        const ctx = { userId: null, deviceId: null, customerId: null, clientIp: ipInfo.ip, viaTunel: ipInfo.viaTunel };
+        // #357.3: el aviso corre a nombre de «Sistema / Online», no de la consola. Fail-closed:
+        // sin ese usuario, 503 (el proveedor reintenta y el job consulta el pago igual).
+        let sistema;
+        try {
+          sistema = dataSource ? await getUsuarioSistemaOnline(dataSource) : null;
+        } catch (err) {
+          console.error('[pub] aviso de pago sin usuario Sistema / Online:', err);
+        }
+        if (!sistema) {
+          reply.code(503);
+          return { status: 'error' };
+        }
+        const r: any = await withRequestUser(sistema, () =>
+          invokeHandlerWithContext('pub-pago-aviso', ctx, proveedor, request.body ?? null));
+        reply.code(Number(r?.http) || 200);
+        return r?.respuesta ?? { status: 'error' };
+      } catch (err: any) {
+        console.error(`[pub] aviso de pago (${proveedor}) falló:`, err);
+        reply.code(500);
+        return { status: 'error' };
+      }
+    },
+  );
+
   // ---- RPC público acotado por whitelist.
   fastify.post<{ Body: { op: string; params?: any[] } }>(
     '/pub/rpc',
@@ -148,7 +189,8 @@ export function registerPublicRoutes(fastify: FastifyInstance, dataSource?: Data
         // El contexto NO lleva userId de staff: las operaciones públicas usan
         // handlers que no exigen permisos de staff. El cliente autenticado se
         // propaga como `customerId` para que el handler sepa a quién atiende.
-        const ctx = { userId: null, deviceId: null, customerId: customer?.sub ?? null, clientIp: request.ip };
+        const ipInfo = clientIpDe(request);
+        const ctx = { userId: null, deviceId: null, customerId: customer?.sub ?? null, clientIp: ipInfo.ip, viaTunel: ipInfo.viaTunel };
         const result = await invokeHandlerWithContext(def.channel, ctx, ...(params || []));
         return { result };
       } catch (err: any) {

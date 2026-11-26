@@ -1,3 +1,4 @@
+import { acreditarCobroOnline } from '../utils/acreditacion-pago-online.utils';
 import { ipcMain } from 'electron';
 import { DataSource } from 'typeorm';
 import { PrecioDelivery } from '../../src/app/database/entities/ventas/precio-delivery.entity';
@@ -76,13 +77,24 @@ import { condicionCanal, esCanalValido } from '../utils/canal-venta.utils';
 import { limiteFechaSqlite } from '../utils/db-query';
 import { Caja, CajaEstado } from '../../src/app/database/entities/financiero/caja.entity';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
-import { EstadoPedidoOnline, TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { reapuntarPedidosDeVenta, sincronizarPedidosPorCierreDeVenta } from '../utils/pedido-online-sync.utils';
+import { DecisionPago, decisionNoDevuelve, normalizarDecisionPagoOError, PagoDecidido, PERM_PAGO_NO_DEVOLVER } from '../utils/decision-pago-online.utils';
+import { registrarDecisionesPago } from '../services/pagos-online/pagos-online.service';
+import { proveedorDelPedido } from '../services/pagos-online/proveedores';
+import { EstadoPedidoOnline, TipoPedidoOnline, EstadoPagoOnline, FORMA_PAGO_UPAY, MetodoPagoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { cargarDeudaPedidoACuenta, clienteBloqueado, withClienteLock } from '../utils/credito-tienda.utils';
+import { TiendaOnlineConfig } from '../../src/app/database/entities/pedidos-online/tienda-online-config.entity';
+import { motivoNoMaterializable } from '../utils/pedido-online-materializable';
+import { FormasPago } from '../../src/app/database/entities/compras/forma-pago.entity';
+import { Moneda } from '../../src/app/database/entities/financiero/moneda.entity';
+import { PagoEstado } from '../../src/app/database/entities/compras/estado.enum';
 import { CobroParcial } from '../../src/app/database/entities/ventas/cobro-parcial.entity';
 import { CobroParcialItem } from '../../src/app/database/entities/ventas/cobro-parcial-item.entity';
 import { PagoDetalle, TipoDetalle } from '../../src/app/database/entities/compras/pago-detalle.entity';
 import { Pago } from '../../src/app/database/entities/compras/pago.entity';
 import { invalidarCacheJornada } from './dashboard-ventas.handler';
 import { ajustarSaldoCliente } from '../utils/saldo-atomico.utils';
+import { DeudaVentaError, trasEditarVenta, ventaIdDeItem, verificarEdicionVentaConDeuda } from '../utils/deuda-venta.utils';
 
 /**
  * M-04: mutex por-venta para serializar procesarStockVenta. El chequeo de
@@ -242,9 +254,16 @@ export async function materializarPedidoOnlineEnVenta(
   // MESA_QR se serializa por mesa (varios comensales pidiendo a la misma cuenta);
   // PICKUP/DELIVERY no tienen mesa y se serializan por pedido.
   const conMesa = !!pedidoPre.mesaId;
-  const conLock = conMesa
+  // F8b: un pedido a cuenta crea la deuda del cliente: se serializa también por cliente, con el
+  // candado tomado hasta el commit (los pedidos nuevos de ese cliente miran el disponible después).
+  const aCuentaDe = !conMesa && pedidoPre.metodoPago === MetodoPagoOnline.CREDITO && pedidoPre.clienteId
+    ? Number(pedidoPre.clienteId) : null;
+  const lockPedido = conMesa
     ? <T,>(fn: () => Promise<T>) => withMesaLock(pedidoPre.mesaId as number, fn)
     : <T,>(fn: () => Promise<T>) => withPedidoLock(pedidoId, fn);
+  const conLock = aCuentaDe
+    ? <T,>(fn: () => Promise<T>) => withClienteLock(aCuentaDe, () => lockPedido(fn))
+    : lockPedido;
 
   return conLock(async () => {
     // `zonaDelivery.precioDelivery` se carga para poder sellar la zona en el
@@ -258,6 +277,13 @@ export async function materializarPedidoOnlineEnVenta(
     // Idempotencia autoritativa BAJO lock: evita doble materialización del mismo pedido.
     if (pedido.ventaId) {
       return { ventaId: pedido.ventaId, yaMaterializado: true, itemsCreados: 0, observacionesNoMapeadas: [] };
+    }
+
+    // F5 (C1): chequeo temprano (el autoritativo va dentro de la tx, más abajo).
+    {
+      const cfgPre = await dataSource.getRepository(TiendaOnlineConfig).findOne({ where: {}, order: { id: 'ASC' } as any });
+      const motivoPre = motivoNoMaterializable(pedido, !!cfgPre?.aceptacionAutomatica);
+      if (motivoPre) throw new Error(motivoPre);
     }
 
     // Caja: la del parámetro o la única caja abierta.
@@ -310,6 +336,8 @@ export async function materializarPedidoOnlineEnVenta(
     await qr.connect();
     await qr.startTransaction();
     try {
+    // F8b: pedido a cuenta → la fila del cliente se toma primero (ver `clienteBloqueado`).
+    if (aCuentaDe) await clienteBloqueado(qr.manager, aCuentaDe);
     // Guard DENTRO de la transacción: entre la resolución de arriba y este
     // punto la caja pudo cerrarse.
     await assertCajaAbierta(qr.manager, cajaId, { lock: 'read', contexto: 'materializarPedidoOnlineEnVenta' });
@@ -319,6 +347,7 @@ export async function materializarPedidoOnlineEnVenta(
     const itemRepo = qr.manager.getRepository(VentaItem);
     const saborRepo = qr.manager.getRepository(VentaItemSabor);
     const adicionalRepo = qr.manager.getRepository(VentaItemAdicional);
+    const modIngRepo = qr.manager.getRepository(VentaItemIngredienteModificacion);
     const obsCatRepo = qr.manager.getRepository(Observacion);
     const obsItemRepo = qr.manager.getRepository(VentaItemObservacion);
 
@@ -376,6 +405,9 @@ export async function materializarPedidoOnlineEnVenta(
         caja: { id: cajaId } as any,
         canalOrigen: 'WEB',
         nombreCliente: pedido.nombreCliente ? pedido.nombreCliente.toUpperCase() : undefined,
+        // F8b: el cliente interno de la cuenta vinculada (fijado al crear el pedido): queda en su
+        // historial y la factura sale con sus datos.
+        ...(pedido.clienteId ? { cliente: { id: pedido.clienteId } as any } : {}),
       });
 
       // DELIVERY y PICKUP abren su registro en la misma transacción. Sin esto
@@ -409,7 +441,8 @@ export async function materializarPedidoOnlineEnVenta(
           // canales; es null en las zonas anteriores a esa unificación, y ahí
           // no hay zona que sellar.
           precioDeliveryId: esRetiro ? null : (pedido.zonaDelivery?.precioDelivery?.id ?? null),
-          cobroAnticipado: false,
+          // Pagado con tarjeta en la tienda (F4): el cobro ya está hecho.
+          cobroAnticipado: pedido.estadoPago === EstadoPagoOnline.PAGADO,
         }, userId);
         venta.delivery = delivery as any;
         venta.costoDelivery = esRetiro ? 0 : (Number(pedido.costoEnvio) || 0);
@@ -418,6 +451,48 @@ export async function materializarPedidoOnlineEnVenta(
 
       await setEntityUserTracking(dataSource, venta, userId, false);
       venta = await ventaRepo.save(venta);
+
+      // Pago con tarjeta por la tienda (PLAN-tienda-online F4): el cobro ya se hizo en el
+      // proveedor del pedido. Se registra como un cobro anticipado (Pago + detalle «UPAY ONLINE»,
+      // «BANCARD ONLINE»…, que no mueve la caja física) para que el PdV vea la venta saldada y la
+      // concluya/facture como siempre.
+      if (pedido.estadoPago === EstadoPagoOnline.PAGADO) {
+        const formaPagoOnline = proveedorDelPedido(pedido)?.formaPago || FORMA_PAGO_UPAY;
+        const fp = await qr.manager.getRepository(FormasPago).findOne({ where: { nombre: formaPagoOnline } });
+        if (!fp) throw new Error(`falta la forma de pago ${formaPagoOnline} (migraciones de la tienda)`);
+        const moneda = pedido.moneda?.id
+          ? { id: pedido.moneda.id }
+          : await qr.manager.getRepository(Moneda).findOne({ where: { principal: true } });
+        if (!moneda) throw new Error('no hay moneda principal para registrar el pago online');
+        const pago = await qr.manager.getRepository(Pago).save(qr.manager.getRepository(Pago).create({
+          estado: PagoEstado.ABIERTO, caja: { id: cajaId } as any, activo: true,
+        } as any) as any) as Pago;
+        await qr.manager.getRepository(PagoDetalle).save(qr.manager.getRepository(PagoDetalle).create({
+          valor: Number(pedido.pagoMonto ?? pedido.total),
+          descripcion: `${formaPagoOnline} ${pedido.numero}${pedido.pagoId ? ' · ' + pedido.pagoId : ''}`.slice(0, 255),
+          activo: true,
+          tipo: TipoDetalle.PAGO,
+          pago: { id: pago.id } as any,
+          moneda: { id: (moneda as any).id } as any,
+          formaPago: { id: fp.id } as any,
+        } as any));
+        venta.pago = { id: pago.id } as any;
+        venta = await ventaRepo.save(venta);
+      }
+
+      // F8b: a cuenta. La deuda nace acá, en esta misma transacción: si algo de la venta falla,
+      // tampoco queda deuda. Como el cobro online, deja la venta saldada para que el PdV la concluya.
+      if (pedido.metodoPago === MetodoPagoOnline.CREDITO) {
+        const moneda = pedido.moneda?.id
+          ? { id: pedido.moneda.id }
+          : await qr.manager.getRepository(Moneda).findOne({ where: { principal: true } });
+        if (!moneda) throw new Error('no hay moneda principal para registrar la deuda a cuenta');
+        const deuda = await cargarDeudaPedidoACuenta(qr.manager, {
+          pedido, ventaId: venta.id, cajaId: cajaId as number, monedaId: (moneda as any).id, usuarioId: userId ?? null,
+        });
+        venta.pago = { id: deuda.pagoId } as any;
+        venta = await ventaRepo.save(venta);
+      }
     }
 
     ventaId = venta.id;
@@ -430,7 +505,12 @@ export async function materializarPedidoOnlineEnVenta(
 
       // El pedido congela precioUnitario = opcion.valor + Σ adicionales.
       // Se separa igual que el PdV: precioVentaUnitario base + precioAdicionales.
-      const adicTotal = adicionales.reduce((s, a) => s + (Number(a?.precio) || 0), 0);
+      // F6b: los adicionales de cada sabor suman precio × proporción (regla del PdV, mismo
+      // redondeo que el alta del pedido).
+      const adicSabores = Math.round(sabores.reduce((acc, s) => acc + (Array.isArray(s?.personalizacion?.adicionales)
+        ? s.personalizacion.adicionales.reduce((t: number, a: any) => t + (Number(a?.precio) || 0) * (Number(s.proporcion) || 1 / sabores.length), 0)
+        : 0), 0));
+      const adicTotal = adicionales.reduce((s, a) => s + (Number(a?.precio) || 0), 0) + adicSabores;
       const precioVentaUnitario = Math.max(0, Number(pItem.precioUnitario || 0) - adicTotal);
 
       const esPizza = sabores.length > 0;
@@ -494,7 +574,49 @@ export async function materializarPedidoOnlineEnVenta(
           costoReferencia: rpCostos.get(Number(s.recetaPresentacionId) || 0) || 0,
         });
         await setEntityUserTracking(dataSource, vs, userId, false);
-        await saborRepo.save(vs);
+        const savedSabor = await saborRepo.save(vs);
+
+        // F6b: personalización de este sabor, colgada de su VentaItemSabor como hace
+        // `persistirPersonalizacionConSabor` del PdV (stock, KDS y tickets ya la leen).
+        const ps = s.personalizacion;
+        if (ps) {
+          for (const q of Array.isArray(ps.quitados) ? ps.quitados : []) {
+            if (!q?.id) continue;
+            const m = modIngRepo.create({
+              ventaItem: { id: savedItem.id } as any,
+              recetaIngrediente: { id: q.id } as any,
+              tipoModificacion: TipoModificacionIngrediente.REMOVIDO,
+              ventaItemSabor: { id: savedSabor.id } as any,
+            });
+            await setEntityUserTracking(dataSource, m, userId, false);
+            await modIngRepo.save(m);
+          }
+          for (const c of Array.isArray(ps.cambios) ? ps.cambios : []) {
+            if (!c?.id || !c?.reemplazoId) continue;
+            const m = modIngRepo.create({
+              ventaItem: { id: savedItem.id } as any,
+              recetaIngrediente: { id: c.id } as any,
+              tipoModificacion: TipoModificacionIngrediente.INTERCAMBIADO,
+              ingredienteReemplazo: { id: c.reemplazoId } as any,
+              ventaItemSabor: { id: savedSabor.id } as any,
+            });
+            await setEntityUserTracking(dataSource, m, userId, false);
+            await modIngRepo.save(m);
+          }
+          for (const a of Array.isArray(ps.adicionales) ? ps.adicionales : []) {
+            if (!a?.id) continue;
+            // Igual que el PdV: precioCobrado = precio de lista; el ítem suma × proporción.
+            const va = adicionalRepo.create({
+              ventaItem: { id: savedItem.id } as any,
+              adicional: { id: a.id } as any,
+              precioCobrado: Number(a.precio) || 0,
+              cantidad: 1,
+              ventaItemSabor: { id: savedSabor.id } as any,
+            });
+            await setEntityUserTracking(dataSource, va, userId, false);
+            await adicionalRepo.save(va);
+          }
+        }
       }
 
       // Adicionales — ids presentes en el snapshot.
@@ -555,9 +677,14 @@ export async function materializarPedidoOnlineEnVenta(
     // ya impresa: el operador rechazó y la cocina cocinó igual.
     const estadoActual = await qr.manager.getRepository(PedidoOnline).findOne({
       where: { id: pedidoId },
-      select: ['id', 'estado', 'ventaId'],
+      select: ['id', 'estado', 'ventaId', 'tipoPedido', 'mesaId', 'metodoPago', 'estadoPago', 'pagoModalidad'],
     });
     if (!estadoActual) throw new Error(`Pedido online ${pedidoId} no encontrado`);
+    // F5 (auditoría C1): solo va a cocina un pedido aceptado (o de mesa / con aceptación
+    // automática) y, si es con tarjeta, ya pagado. Se chequea acá, dentro de la tx.
+    const cfgTienda = await qr.manager.getRepository(TiendaOnlineConfig).findOne({ where: {}, order: { id: 'ASC' } as any });
+    const motivoNo = motivoNoMaterializable(estadoActual, !!cfgTienda?.aceptacionAutomatica);
+    if (motivoNo) throw new Error(motivoNo);
     if (
       estadoActual.estado === EstadoPedidoOnline.RECHAZADO ||
       estadoActual.estado === EstadoPedidoOnline.CANCELADO
@@ -574,7 +701,16 @@ export async function materializarPedidoOnlineEnVenta(
 
     pedido.ventaId = ventaId;
     pedido.estado = EstadoPedidoOnline.EN_PREPARACION;
-    await qr.manager.getRepository(PedidoOnline).save(pedido);
+    // F9 (auditoría A1): update CONDICIONADO, no `save`. Entre la lectura de arriba y acá el
+    // cliente pudo «modificar» (cancelar) el pedido: en Postgres (READ COMMITTED) un `save`
+    // incondicional lo resucitaba EN_PREPARACION con los productos ya devueltos a su carrito.
+    const r = await qr.manager.createQueryBuilder().update(PedidoOnline)
+      .set({ ventaId, estado: EstadoPedidoOnline.EN_PREPARACION, deliveryId: pedido.deliveryId ?? null } as any)
+      .where('id = :id AND venta_id IS NULL AND estado NOT IN (:...fin)', {
+        id: pedido.id, fin: [EstadoPedidoOnline.RECHAZADO, EstadoPedidoOnline.CANCELADO],
+      })
+      .execute();
+    if (!r.affected) throw new Error('pedido_rechazado_durante_materializacion');
 
     await qr.commitTransaction();
   } catch (e) {
@@ -583,6 +719,14 @@ export async function materializarPedidoOnlineEnVenta(
   } finally {
     await qr.release();
   }
+
+  // Post-commit: lo cobrado online se acredita en el banco de la máquina POS de su forma de pago.
+  // No frena la aceptación: si falla, se avisa y se carga a mano en Bancos.
+  try {
+    const ac = await acreditarCobroOnline(dataSource, pedidoId, ventaId, userId ?? null);
+    if (ac.creada) console.log(`[materializar-pedido-online] acreditación ${ac.id}: ${ac.moneda} ${ac.monto}`);
+    else if (ac.creada === false && ac.motivo !== 'sin cobro online' && ac.motivo !== 'ya acreditado') console.warn(`[materializar-pedido-online] cobro online sin acreditar (pedido ${pedidoId}): ${ac.motivo}`);
+  } catch (e) { console.warn('[materializar-pedido-online] acreditar el cobro online falló:', e); }
 
   // Post-commit: disparar KDS + impresión (leen por dataSource, ya visible).
   for (const itemId of createdItemIds) {
@@ -989,6 +1133,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         for (const v of ventasAbiertas) {
           v.estado = estado as VentaEstado;
           await manager.getRepository(Venta).save(v);
+          await sincronizarPedidosPorCierreDeVenta(manager, v.id, v.estado);
         }
       });
       // Cerrar las cuentas de la mesa cambia su ocupacion: el cache la sigue.
@@ -1500,6 +1645,17 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
         delete data.__validarDispositivoCaja;
       }
 
+      // Auditoría post-F10: al cancelar la venta de un pedido web pagado online, qué se hace con
+      // lo cobrado (devolver, ya devuelto, no entró, no se devuelve). Sin esto, se devuelve.
+      let decisionPagoOnline: DecisionPago | undefined;
+      if (data && Object.prototype.hasOwnProperty.call(data, '__decisionPagoOnline')) {
+        decisionPagoOnline = normalizarDecisionPagoOError(data.__decisionPagoOnline);
+        delete data.__decisionPagoOnline;
+        if (decisionNoDevuelve(decisionPagoOnline)) {
+          await ensurePermission(dataSource, getCurrentUser, PERM_PAGO_NO_DEVOLVER);
+        }
+      }
+
       const estadoAnterior = entity.estado;
 
       // `findOneBy` no trae las relaciones `mesa` ni `caja`: se leen las FK
@@ -1549,6 +1705,23 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // y rechazar dejaría al cajero trabado sin poder cobrar. Si la caja de la
       // venta está cerrada, ahí sí se rechaza (Q1).
       const pagoAdoptadoId = Number((data?.pago as any)?.id ?? data?.pago) || null;
+      // Una venta CANCELADA no se cobra: el cobro adopta un Pago (y finalizarlo la volvería
+      // CONCLUIDA con plata en la caja). Rehabilitar desde el historial no adopta pago y sigue
+      // permitido. Pasó con un pedido web cancelado cuyo delivery quedó vivo (2026-11-06).
+      if (estadoAnterior === VentaEstado.CANCELADA && (pagoAdoptadoId || validarDispositivoCaja)) {
+        throw new Error('VENTA_CANCELADA: esta venta fue cancelada y no se puede cobrar.');
+      }
+      // Rehabilitar (CANCELADA → CONCLUIDA desde el historial) la venta de un pedido web que ya se
+      // canceló revivía una venta sin ítems activos ni cobro, con el pedido cancelado y el pago
+      // online quizá ya devuelto. Ese pedido se vuelve a cargar, no se rehabilita.
+      if (estadoAnterior === VentaEstado.CANCELADA && data?.estado === VentaEstado.CONCLUIDA) {
+        const pedidoMuerto = await dataSource.getRepository(PedidoOnline).createQueryBuilder('p')
+          .where('p.venta_id = :id AND p.estado IN (:...fin)', { id: Number(id), fin: ['CANCELADO', 'RECHAZADO'] })
+          .getCount();
+        if (pedidoMuerto > 0) {
+          throw new Error('VENTA_DE_PEDIDO_CANCELADO: es la venta de un pedido web cancelado; no se rehabilita, se vuelve a cargar.');
+        }
+      }
       if (pagoAdoptadoId) {
         await assertCajaAbiertaSiVino(dataSource, cajaDeLaVenta, { contexto: 'updateVenta(pago)' });
         if (cajaDeLaVenta != null) {
@@ -1694,6 +1867,41 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       repo.merge(entity, ventaData);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
+
+      // La venta cancelada se lleva su delivery/retiro: si quedaba vivo, se podía pasar a listo o
+      // en camino sobre una venta que ya no existe (auditoría F10; mismo criterio que el rechazo
+      // de un pedido web y que `delivery-cancelar` del otro lado). Uno entregado no se toca.
+      if (saved.estado === VentaEstado.CANCELADA && estadoAnterior !== VentaEstado.CANCELADA) {
+        try {
+          const conDelivery = await repo.findOne({ where: { id } as any, relations: ['delivery'] });
+          const deliveryId = (conDelivery as any)?.delivery?.id;
+          if (deliveryId) {
+            await dataSource.createQueryBuilder().update(Delivery)
+              .set({ estado: DeliveryEstado.CANCELADO, fechaCancelacion: new Date(), motivoCancelacion: 'VENTA CANCELADA EN EL PDV' } as any)
+              .where('id = :d AND estado NOT IN (:...fin)', { d: deliveryId, fin: [DeliveryEstado.ENTREGADO, DeliveryEstado.CANCELADO] })
+              .execute();
+          }
+        } catch (e) {
+          console.warn('[updateVenta] cancelar el delivery de la venta falló:', e);
+        }
+      }
+
+      // Pedidos online de la tienda sobre esta venta: la mesa cobrada queda
+      // entregada y la venta cancelada los cancela. Al salir de ABIERTA, y también al cancelar
+      // una venta ya CONCLUIDA desde el historial: su pedido entregado no cambia, pero lo cobrado
+      // online se resuelve (antes quedaba PAGADO y nadie se enteraba de que había que devolverlo).
+      const cancelaConcluida = estadoAnterior === VentaEstado.CONCLUIDA && saved.estado === VentaEstado.CANCELADA;
+      if ((estadoAnterior === VentaEstado.ABIERTA && saved.estado !== VentaEstado.ABIERTA) || cancelaConcluida) {
+        try {
+          const pagos: PagoDecidido[] = [];
+          await sincronizarPedidosPorCierreDeVenta(dataSource.manager, id, saved.estado, {
+            decisionPago: decisionPagoOnline, pagos, pagoDeEntregados: cancelaConcluida,
+          });
+          await registrarDecisionesPago(dataSource, pagos, 'CANCELADO_PDV', getCurrentUser()?.id);
+        } catch (e) {
+          console.warn('[updateVenta] sincronizar pedidos online falló:', e);
+        }
+      }
 
       // ─── SSE: emitir evento de cambio ─────────────────────────────────────
       try {
@@ -1885,10 +2093,26 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
     }
   });
 
+  // Antes de tocar los ítems: ¿la venta tiene una deuda a cuenta con cobros? (PLAN-tienda-deuda-editada).
+  // El PdV pregunta primero para avisar sin romper nada a medias (personalizar borra y vuelve a crear);
+  // los handlers de ítems lo siguen frenando igual.
+  ipcMain.handle('venta-deuda-estado', async (_event: any, ventaId: number) => {
+    try {
+      await verificarEdicionVentaConDeuda(dataSource, Number(ventaId) || null);
+      return { bloqueada: false };
+    } catch (e: any) {
+      if (e instanceof DeudaVentaError) return { bloqueada: true, codigo: e.codigo };
+      throw e;
+    }
+  });
+
   ipcMain.handle('createVentaItem', async (_event: any, data: any) => {
     try {
       await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
       await validarVariacionDelItem(dataSource, data);
+      // Venta a cuenta (pedido web) con cobros: no se edita. Sin cobros, la deuda sigue al total.
+      const ventaIdAlta = Number(data?.venta?.id ?? data?.ventaId) || null;
+      await verificarEdicionVentaConDeuda(dataSource, ventaIdAlta);
       const { emitVentaCambio } = await import('../utils/mesa-emit.utils');
       const repo = dataSource.getRepository(VentaItem);
       const entity = repo.create(data);
@@ -1928,6 +2152,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       } catch (e) {
         console.warn('[createVentaItem] emit SSE falló:', e);
       }
+      await trasEditarVenta(dataSource, ventaIdAlta ?? (await ventaIdDeItem(dataSource, (saved as any).id)), getCurrentUser()?.id);
 
       return saved;
     } catch (error) {
@@ -1959,6 +2184,8 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       // que exigirla igual que en el alta. Se pasa el ítem existente aparte
       // para que el chequeo mire el resultado final, no sólo lo que vino.
       await validarVariacionDelItem(dataSource, data, entity);
+      const ventaIdItem = await ventaIdDeItem(dataSource, id);
+      await verificarEdicionVentaConDeuda(dataSource, ventaIdItem);
       repo.merge(entity, data);
       await setEntityUserTracking(dataSource, entity, getCurrentUser()?.id, true);
       const saved = await repo.save(entity);
@@ -1980,6 +2207,7 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       } catch (e) {
         console.warn('[updateVentaItem] emit SSE falló:', e);
       }
+      await trasEditarVenta(dataSource, ventaIdItem, getCurrentUser()?.id);
 
       return saved;
     } catch (error) {
@@ -1995,7 +2223,8 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
       const repo = dataSource.getRepository(VentaItem);
       const entity = await repo.findOneBy({ id });
       if (!entity) throw new Error(`Venta Item ID ${id} not found`);
-      const ventaId = (entity as any).venta?.id ?? (entity as any).venta_id ?? (entity as any).ventaId;
+      const ventaId = (entity as any).venta?.id ?? (entity as any).venta_id ?? (entity as any).ventaId ?? (await ventaIdDeItem(dataSource, id));
+      await verificarEdicionVentaConDeuda(dataSource, ventaId);
       
       // KDS: borrar ComandaItems del item antes para no dejar FK huérfana.
       try {
@@ -2016,10 +2245,13 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           console.warn('[deleteVentaItem] emit SSE falló:', e);
         }
       }
+      await trasEditarVenta(dataSource, ventaId, getCurrentUser()?.id);
       
       return true;
     } catch (error) {
       console.error(`Error deleting venta item ID ${id}:`, error);
+      // La venta a cuenta con cobros se avisa (con `false` el PdV no sabría por qué no se borró).
+      if (error instanceof DeudaVentaError) throw error;
       return false;
     }
   });
@@ -3415,6 +3647,9 @@ export function registerVentasHandlers(dataSource: DataSource, getCurrentUser: (
           await setEntityUserTracking(dataSource, ventaOrigen as any, userId, true);
           await manager.save(Venta, ventaOrigen);
           origenCerrado = true;
+          // Los pedidos online de la cuenta origen siguen a sus ítems: la que se
+          // va a cobrar es la destino.
+          await reapuntarPedidosDeVenta(manager, ventaOrigen.id, ventaDestinoId);
         }
       } else {
         origenCerrado = true;

@@ -1067,14 +1067,14 @@
         <mat-icon>delivery_dining</mat-icon>
         <span>DELIVERY</span>
         <!-- Dos contadores distintos: repartos vivos (naranja) y pedidos de la
-             web esperando aceptación (rojo). `matBadge` se ancla al elemento
+             web para atender (rojo). `matBadge` se ancla al elemento
              que lo declara, así que colgado del icono y del texto los círculos
              caían sobre el medio del botón; acá van posicionados contra la
              esquina superior derecha, que es donde el ojo los busca. -->
         <span class="pdv-badges" *ngIf="deliveriesPendientesCount || pedidosOnlinePendientesCount">
           <span class="pdv-badge pdv-badge-web"
-                *ngIf="tiendaOnlineActiva && pedidosOnlinePendientesCount"
-                matTooltip="Pedidos de la web por aceptar"
+                *ngIf="pedidosOnlinePendientesCount"
+                matTooltip="Pedidos de la web para atender (nuevos, piden cancelar, sin cocina, devoluciones)"
           >{{ pedidosOnlinePendientesCount }}</span>
           <span class="pdv-badge pdv-badge-repartos"
                 *ngIf="deliveriesPendientesCount"

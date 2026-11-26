@@ -90,6 +90,26 @@ function concluidas(filtro: FiltroVentas): FiltroVentas {
 }
 
 /**
+ * Una o varias expresiones de agrupación. Con varias, cada una va en su propia
+ * columna y la clave del Map se arma en JS (`a|b|c`, con '' para NULL): concatenar
+ * en SQL se porta mal entre drivers (`||` con un entero falla en Postgres y un
+ * NULL anula la clave entera en los dos).
+ */
+type Grupo = string | string[];
+
+function columnasGrupo(g: Grupo) {
+  const gs = Array.isArray(g) ? g : [g];
+  return {
+    select: gs.map((e, i) => `${e} AS g${i}`).join(', '),
+    groupBy: gs.join(', '),
+    // Una sola expresión conserva la clave de siempre (`String(valor)`).
+    clave: (f: any) => (gs.length === 1
+      ? String(f.g0)
+      : gs.map((_, i) => (f[`g${i}`] == null ? '' : String(f[`g${i}`]))).join('|')),
+  };
+}
+
+/**
  * Facturación (en moneda principal) y cantidad de tickets, agrupadas por una
  * expresión SQL arbitraria.
  *
@@ -103,16 +123,17 @@ async function agrupar(
   ds: DataSource,
   ctx: CotizacionCtx,
   filtro: FiltroVentas,
-  grupoExpr: string,
+  grupoExpr: Grupo,
   joins: string,
   filtroExtra = '',
 ): Promise<Map<string, { tickets: number; facturacion: number }>> {
   const base = concluidas(filtro);
+  const g = columnasGrupo(grupoExpr);
   const where = `${base.sql}${filtroExtra ? ` AND ${filtroExtra}` : ''}`;
   const params = base.params;
 
   const filasPlata: any[] = await dbQuery(ds, `
-    SELECT ${grupoExpr} AS grupo,
+    SELECT ${g.select},
            pd.moneda_id AS moneda_id,
            m.principal  AS principal,
            COALESCE(SUM(CASE WHEN pd.tipo = 'PAGO' THEN pd.valor ELSE 0 END), 0)
@@ -123,15 +144,15 @@ async function agrupar(
     LEFT JOIN pagos_detalles pd ON pd.pago_id = p.id AND pd.activo
     LEFT JOIN monedas m ON m.id = pd.moneda_id
     WHERE ${where}
-    GROUP BY ${grupoExpr}, pd.moneda_id, m.principal
+    GROUP BY ${g.groupBy}, pd.moneda_id, m.principal
   `, params);
 
   const filasTickets: any[] = await dbQuery(ds, `
-    SELECT ${grupoExpr} AS grupo, COUNT(DISTINCT v.id) AS cnt
+    SELECT ${g.select}, COUNT(DISTINCT v.id) AS cnt
     FROM ventas v
     ${joins}
     WHERE ${where}
-    GROUP BY ${grupoExpr}
+    GROUP BY ${g.groupBy}
   `, params);
 
   const acc = new Map<string, { tickets: number; facturacion: number }>();
@@ -143,9 +164,9 @@ async function agrupar(
   for (const f of filasPlata) {
     if (f.moneda_id == null) continue;
     const cot = esPrincipal(f.principal) ? 1 : (ctx.cotMap[Number(f.moneda_id)] || 0);
-    entrada(String(f.grupo)).facturacion += Math.round(num(f.total) * cot);
+    entrada(g.clave(f)).facturacion += Math.round(num(f.total) * cot);
   }
-  for (const f of filasTickets) entrada(String(f.grupo)).tickets += num(f.cnt);
+  for (const f of filasTickets) entrada(g.clave(f)).tickets += num(f.cnt);
 
   return acc;
 }
@@ -161,13 +182,14 @@ async function agrupar(
 async function envioRecaudado(
   ds: DataSource,
   filtro: FiltroVentas,
-  grupoExpr: string | null,
+  grupoExpr: Grupo | null,
   joins: string,
   filtroExtra = '',
 ): Promise<Map<string, number>> {
   const base = concluidas(filtro);
-  const select = grupoExpr ? `${grupoExpr} AS grupo, ` : '';
-  const groupBy = grupoExpr ? `GROUP BY ${grupoExpr}` : '';
+  const g = grupoExpr ? columnasGrupo(grupoExpr) : null;
+  const select = g ? `${g.select}, ` : '';
+  const groupBy = g ? `GROUP BY ${g.groupBy}` : '';
   const filas: any[] = await dbQuery(ds, `
     SELECT ${select}COALESCE(SUM(v.costo_delivery), 0) AS total
     FROM ventas v
@@ -179,7 +201,7 @@ async function envioRecaudado(
   `, base.params);
   const acc = new Map<string, number>();
   for (const f of filas) {
-    const k = grupoExpr ? String(f.grupo) : TOTAL_SIN_AGRUPAR;
+    const k = g ? g.clave(f) : TOTAL_SIN_AGRUPAR;
     acc.set(k, (acc.get(k) || 0) + num(f.total));
   }
   return acc;
@@ -334,6 +356,65 @@ export async function enviosPorZona(
       minutosPromedio: tiempos.get(zona) ?? null,
     }))
     .sort((a, b) => b.envios - a.envios || b.facturacion - a.facturacion);
+}
+
+/**
+ * Envíos del período por **puerta de entrada × zona del pedido web × tarifa del
+ * PdV**, para el dashboard de Zonas de Delivery. La asignación a una zona la hace
+ * quien llama (con la lista de zonas), no el SQL: unir `zonas_delivery` por tarifa
+ * duplicaría las ventas de una tarifa que comparten dos zonas.
+ *
+ * El pedido web se une por una subconsulta **deduplicada por venta**: `agrupar`
+ * sólo deduplica la cantidad de tickets, la plata y el envío suman filas, y
+ * `pedidos_online.venta_id` no es único (en la mesa varios pedidos comparten la
+ * venta). Con la tabla cruda, dos pedidos sobre una venta duplicarían su plata.
+ */
+export interface FilaZonaCanal {
+  canal: 'WEB' | 'LOCAL';
+  /** `pedidos_online.zona_delivery_id` (sólo web; null si el pedido no tenía zona). */
+  zonaPedidoId: number | null;
+  /** `deliveries.precio_delivery_id`: la tarifa del PdV del reparto. */
+  tarifaId: number | null;
+  envios: number;
+  facturacion: number;
+  envioRecaudado: number;
+}
+
+export async function enviosPorZonaYCanal(
+  ds: DataSource,
+  ctx: CotizacionCtx,
+  filtro: FiltroVentas,
+): Promise<FilaZonaCanal[]> {
+  const grupos = [
+    `CASE WHEN v.canal_origen = 'WEB' THEN 'WEB' ELSE 'LOCAL' END`,
+    `po.zid`,
+    `dcanal.precio_delivery_id`,
+  ];
+  const joins = `
+    ${joinDeliveryCanal()}
+    LEFT JOIN (
+      SELECT venta_id, MIN(zona_delivery_id) AS zid
+      FROM pedidos_online
+      WHERE venta_id IS NOT NULL
+      GROUP BY venta_id
+    ) po ON po.venta_id = v.id
+  `;
+  const acc = await agrupar(ds, ctx, filtro, grupos, joins, SOLO_ENVIOS);
+  const envios = await envioRecaudado(ds, filtro, grupos, joins, SOLO_ENVIOS);
+  const claves = new Set([...acc.keys(), ...envios.keys()]);
+  const id = (x: string) => (x === '' ? null : Number(x));
+  return [...claves].map((k) => {
+    const [canal, zid, tarifa] = k.split('|');
+    const v = acc.get(k) || { tickets: 0, facturacion: 0 };
+    return {
+      canal: canal === 'WEB' ? 'WEB' as const : 'LOCAL' as const,
+      zonaPedidoId: id(zid),
+      tarifaId: id(tarifa),
+      envios: v.tickets,
+      facturacion: v.facturacion,
+      envioRecaudado: Math.round(envios.get(k) || 0),
+    };
+  });
 }
 
 // ─────────────────────── Repartidores ───────────────────────

@@ -38,8 +38,12 @@
       <span class="value">{{ data.limiteCredito | number:'1.0-2' }}</span>
     </div>
     <div class="saldo-warning" *ngIf="excedeLimite">
-      <mat-icon>warning</mat-icon>
-      <span>Excede el límite — al confirmar se pedirá aprobación.</span>
+      <mat-icon>block</mat-icon>
+      <span>Excede el límite de crédito: no se puede vender a crédito por este monto.</span>
+    </div>
+    <div class="saldo-warning" *ngIf="sinLimite">
+      <mat-icon>block</mat-icon>
+      <span>El cliente no tiene límite de crédito. Cargale un límite en su ficha para vender a crédito.</span>
     </div>
   </section>
 
@@ -98,7 +102,7 @@
 
 <mat-dialog-actions align="end">
   <button mat-button type="button" (click)="cancel()" [disabled]="saving">Cancelar</button>
-  <button mat-flat-button color="primary" type="button" (click)="submit()" [disabled]="saving || form.invalid">
+  <button mat-flat-button color="primary" type="button" (click)="submit()" [disabled]="saving || form.invalid || sinLimite || excedeLimite">
     <mat-icon *ngIf="!saving">check</mat-icon>
     <mat-progress-spinner *ngIf="saving" diameter="18" mode="indeterminate"></mat-progress-spinner>
     Confirmar venta a crédito

@@ -22,7 +22,7 @@
  */
 
 import { ipcMain } from 'electron';
-import { DataSource, EntityManager } from 'typeorm';
+import { Brackets, DataSource, EntityManager, In } from 'typeorm';
 
 import { Delivery, DeliveryEstado, DeliveryModo } from '../../src/app/database/entities/ventas/delivery.entity';
 import { PrecioDelivery } from '../../src/app/database/entities/ventas/precio-delivery.entity';
@@ -43,7 +43,13 @@ import {
 import { printDeliveryTicketInternal } from './documentos-tickets.handler';
 import { getEstadoCobroVentaInternal } from './ventas.handler';
 import { PedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.entity';
+import { PEDIDO_POR_ESTADO_DELIVERY, sincronizarPedidosOnline } from '../utils/pedido-online-sync.utils';
+import { decisionNoDevuelve, normalizarDecisionPagoOError, PagoDecidido, PERM_PAGO_NO_DEVOLVER } from '../utils/decision-pago-online.utils';
+import { registrarDecisionesPago } from '../services/pagos-online/pagos-online.service';
+import { monedasParaResumen, resumenPago } from '../utils/pago-pedido.utils';
 import { TipoPedidoOnline } from '../../src/app/database/entities/pedidos-online/pedido-online.enums';
+import { resumenPedidoWeb } from '../utils/pedido-acciones.utils';
+import { trasEditarVenta, ventaIdDeDelivery, verificarEdicionVentaConDeuda } from '../utils/deuda-venta.utils';
 /**
  * Columnas de la `Persona` del **`Funcionario`** repartidor que este canal publica.
  *
@@ -235,9 +241,47 @@ export function registerDeliveryHandlers(
       qb.where('venta.caja_id = :cajaId', { cajaId });
     }
 
-    if (filtros?.estado) {
+    // Estado: `estados` (varios) tiene prioridad; `estado` (uno solo) sigue aceptándose.
+    const estadosFiltro: string[] = Array.isArray(filtros?.estados)
+      ? filtros.estados.map((e: any) => String(e).trim().toUpperCase()).filter(Boolean)
+      : [];
+    if (estadosFiltro.length) {
+      qb.andWhere('delivery.estado IN (:...estadosFiltro)', { estadosFiltro });
+    } else if (filtros?.estado) {
       qb.andWhere('delivery.estado = :estado', { estado: filtros.estado });
     }
+
+    // Texto libre: número del delivery (N° 8 / 8), número del pedido web (PO-000040),
+    // nombre o teléfono del reparto, o nombre/apellido de la persona del cliente.
+    const texto = String(filtros?.texto ?? '').trim().toUpperCase();
+    if (texto) {
+      const like = `%${texto.replace(/[\\%_]/g, (c) => '\\' + c)}%`;
+      const soloDigitos = texto.replace(/^N?°?\s*/, '');
+      const idNumerico = /^\d+$/.test(soloDigitos) ? Number(soloDigitos) : null;
+      qb.andWhere(
+        new Brackets((w) => {
+          w.where("UPPER(COALESCE(delivery.nombre, '')) LIKE :txt ESCAPE '\\'", { txt: like })
+            .orWhere("UPPER(COALESCE(delivery.telefono, '')) LIKE :txt ESCAPE '\\'")
+            .orWhere("UPPER(COALESCE(persona.nombre, '')) LIKE :txt ESCAPE '\\'")
+            .orWhere("UPPER(COALESCE(persona.apellido, '')) LIKE :txt ESCAPE '\\'")
+            .orWhere(
+              `EXISTS (SELECT 1 FROM pedidos_online po WHERE po.delivery_id = delivery.id AND UPPER(po.numero) LIKE :txt ESCAPE '\\')`,
+            );
+          if (idNumerico != null) w.orWhere('delivery.id = :txtId', { txtId: idNumerico });
+        }),
+      );
+    }
+
+    const entregadorId = Number(filtros?.entregadorId);
+    if (Number.isFinite(entregadorId) && entregadorId > 0) {
+      qb.andWhere('repartidor.id = :entregadorId', { entregadorId });
+    }
+
+    // Rango de hora de apertura del delivery (fechas completas ISO; el diálogo las ancla a la caja).
+    const desde = filtros?.desde ? new Date(filtros.desde) : null;
+    if (desde && !isNaN(desde.getTime())) qb.andWhere('delivery.fechaAbierto >= :desde', { desde });
+    const hasta = filtros?.hasta ? new Date(filtros.hasta) : null;
+    if (hasta && !isNaN(hasta.getTime())) qb.andWhere('delivery.fechaAbierto <= :hasta', { hasta });
 
     // Propiedad de la entidad, no nombre de columna: con `skip`/`take` TypeORM
     // reescribe el ORDER BY contra el mapa de columnas y con el nombre crudo
@@ -247,6 +291,25 @@ export function registerDeliveryHandlers(
       .take(pageSize);
 
     const [ventas, total] = await qb.getManyAndCount();
+
+    // F8: cómo dijo el cliente de la tienda que va a pagar, para mostrarlo y precargar el
+    // cobro (sin cobrar nada). Una consulta para toda la página; un delivery del PdV no tiene.
+    const ids = ventas.map((v) => (v.delivery as any)?.id).filter((x) => x != null);
+    const pedidosWeb = ids.length
+      ? await dataSource.getRepository(PedidoOnline).find({ where: { deliveryId: In(ids) } as any })
+      : [];
+    const monedasPago = pedidosWeb.length ? await monedasParaResumen(dataSource) : [];
+    const pagoPorDelivery = new Map(pedidosWeb.map((p: any) => [p.deliveryId, {
+      metodoPago: p.metodoPago,
+      pagoMonedaId: p.pagoMonedaId ?? null,
+      vueltoPara: p.vueltoPara != null ? Number(p.vueltoPara) : null,
+      resumen: resumenPago(p, monedasPago),
+      observacion: p.pagoObservacion ?? null,
+    }]));
+    // F10: el pedido web detrás de cada fila, para que el diálogo use el MISMO número que ve el
+    // cliente (PO-…) y pueda atender lo que la bandeja atendía (cancelación pedida, devolución).
+    // Sólo lo que la pantalla usa: nada del cliente que no esté ya en el delivery.
+    const webPorDelivery = new Map(pedidosWeb.map((p: any) => [p.deliveryId, resumenPedidoWeb(p)]));
 
     const data = ventas.map((venta) => ({
       ...(venta.delivery as any),
@@ -269,6 +332,8 @@ export function registerDeliveryHandlers(
         // cajero del que entró por la tienda online.
         canalOrigen: (venta as any).canalOrigen ?? 'LOCAL',
       },
+      pagoPrevisto: pagoPorDelivery.get((venta.delivery as any)?.id) || null,
+      pedidoWeb: webPorDelivery.get((venta.delivery as any)?.id) || null,
     }));
 
     return { data, total };
@@ -397,7 +462,10 @@ export function registerDeliveryHandlers(
     // conversión revertía la conversión en silencio y dejaba
     // `venta.costoDelivery` (que la conversión sí había cambiado) apuntando al
     // modo equivocado.
-    return await dataSource.transaction(async (manager) => {
+    // Venta a cuenta (pedido web): con cobros no se edita; si no, la deuda sigue al envío nuevo.
+    const ventaIdDeuda = await ventaIdDeDelivery(dataSource, id);
+    await verificarEdicionVentaConDeuda(dataSource, ventaIdDeuda);
+    const actualizado = await dataSource.transaction(async (manager) => {
       await lockDelivery(manager, dataSource, id);
 
       const delivery = await manager.getRepository(Delivery).findOne({
@@ -493,6 +561,8 @@ export function registerDeliveryHandlers(
 
       return guardado;
     });
+    await trasEditarVenta(dataSource, ventaIdDeuda, usuarioId);
+    return actualizado;
   });
 
   // ─── Máquina de estados ─────────────────────────────────────────────────
@@ -538,6 +608,12 @@ export function registerDeliveryHandlers(
 
       const venta = await manager.getRepository(Venta).findOne({ where: { delivery: { id } } });
 
+      // Sobre una venta cancelada no hay pedido que avanzar: sólo queda cancelar el delivery
+      // (acción CANCELAR). Sin esto se podía pasar a listo o en camino (auditoría F10).
+      if (venta && venta.estado === VentaEstado.CANCELADA) {
+        throw new Error('VENTA_CANCELADA: la venta de este pedido fue cancelada; sólo se puede cancelar el delivery.');
+      }
+
       // Entregar exige que la venta esté cobrada: marcar ENTREGADO con la venta
       // ABIERTA deja un pedido en la calle que nadie va a cobrar nunca.
       if (nuevoEstado === DeliveryEstado.ENTREGADO && venta && venta.estado !== VentaEstado.CONCLUIDA) {
@@ -577,6 +653,11 @@ export function registerDeliveryHandlers(
       delivery.estado = nuevoEstado;
       await setEntityUserTracking(dataSource, delivery, usuarioId, true);
       const guardado = await manager.save(Delivery, delivery);
+
+      // El pedido online de la tienda sigue al delivery en la misma transacción:
+      // el cajero opera desde este panel, no desde la bandeja.
+      const destinoPedido = PEDIDO_POR_ESTADO_DELIVERY[nuevoEstado];
+      if (destinoPedido) await sincronizarPedidosOnline(manager, { deliveryId: id }, destinoPedido);
 
       if (nuevoEstado === DeliveryEstado.EN_CAMINO && config?.deliveryAutoImprimirAlEnviar) {
         // Fuera de la transacción en la práctica: `setImmediate` corre después
@@ -666,6 +747,8 @@ export function registerDeliveryHandlers(
       throw new Error(`Modo de pedido inválido: ${payload?.modo}. Usá DELIVERY o RETIRO.`);
     }
     const esRetiroDestino = modoDestino === DeliveryModo.RETIRO;
+    const ventaIdDeuda = await ventaIdDeDelivery(dataSource, id);
+    await verificarEdicionVentaConDeuda(dataSource, ventaIdDeuda);
 
     const resultado = await dataSource.transaction(async (manager) => {
       await lockDelivery(manager, dataSource, id);
@@ -816,6 +899,7 @@ export function registerDeliveryHandlers(
     if (resultado.sinCambios) {
       return { ...resultado, advertencia: null };
     }
+    await trasEditarVenta(dataSource, ventaIdDeuda, usuarioId);
 
     // La advertencia se calcula DESPUÉS del commit y con la función que ya usa
     // el diálogo de cobro (`getEstadoCobroVentaInternal`): dentro de la
@@ -865,9 +949,13 @@ export function registerDeliveryHandlers(
    * Si la venta ya estaba CONCLUIDA se exige un permiso adicional: revertir un
    * cobro no es lo mismo que descartar un pedido que nunca se cobró.
    */
-  ipcMain.handle('delivery-cancelar', async (_event: any, id: number, motivo?: string) => {
+  ipcMain.handle('delivery-cancelar', async (_event: any, id: number, motivo?: string, decisionPago?: any) => {
     await ensurePermission(dataSource, getCurrentUser, 'VENTAS_PDV');
     const usuarioId = getCurrentUser()?.id;
+    // Qué se hace con lo cobrado online si es un pedido web pagado (auditoría post-F10).
+    const decision = normalizarDecisionPagoOError(decisionPago);
+    if (decisionNoDevuelve(decision)) await ensurePermission(dataSource, getCurrentUser, PERM_PAGO_NO_DEVOLVER);
+    const pagos: PagoDecidido[] = [];
 
     const motivoNormalizado = upper(motivo);
     if (!motivoNormalizado) throw new Error('Indicá el motivo de la cancelación.');
@@ -926,6 +1014,11 @@ export function registerDeliveryHandlers(
       await setEntityUserTracking(dataSource, delivery, usuarioId, true);
       const guardado = await manager.save(Delivery, delivery);
 
+      // El pedido online de la tienda (si lo hay) queda cancelado con el mismo motivo.
+      await sincronizarPedidosOnline(manager, { deliveryId: id }, PEDIDO_POR_ESTADO_DELIVERY.CANCELADO!, {
+        motivo: motivoNormalizado, decisionPago: decision, pagos,
+      });
+
       // ─── SSE: emitir evento si tiene mesa ─────────────────────────────────────
       const ventaMesaId = (venta as any)?.mesa?.id ?? null;
       if (ventaMesaId) {
@@ -940,7 +1033,10 @@ export function registerDeliveryHandlers(
       return { delivery: guardado, reversa };
     });
 
-    return resultado;
+    // Después del commit: historial del pago y aviso al personal (antes solo lo hacía la bandeja).
+    const decididos = await registrarDecisionesPago(dataSource, pagos, 'CANCELADO_PDV', usuarioId);
+    const auto = decididos.find((d) => d.devolucionAutomatica)?.devolucionAutomatica ?? null;
+    return auto ? { ...resultado, devolucionAutomatica: auto } : resultado;
   });
 
   // ─── Impresión ──────────────────────────────────────────────────────────

@@ -229,6 +229,9 @@ export class FacturarDialogComponent implements OnInit {
       return;
     }
     if (this.clienteId && ruc === this.rucVinculado) return;
+    // El cliente vinculado no tenía RUC: el que se tipea es el de esta factura (consumidor final o
+    // el suyo), no otro cliente. Se mantiene el vínculo.
+    if (this.clienteId && !this.rucVinculado) return;
     // El usuario desvinculó a mano y no cambió el RUC: no volver a enganchar.
     if (this.desvinculadoManual && ruc === this.rucVinculado) return;
 
@@ -259,7 +262,8 @@ export class FacturarDialogComponent implements OnInit {
     if (actual !== this.rucVinculado) {
       // RUC distinto: vuelve a habilitarse el lookup automático.
       this.desvinculadoManual = false;
-      if (this.clienteId) this.desvincularSiCambioRuc();
+      // Un cliente vinculado SIN RUC no se desvincula al cargarle uno (ver onRucBlur).
+      if (this.clienteId && this.rucVinculado) this.desvincularSiCambioRuc();
     }
   }
 

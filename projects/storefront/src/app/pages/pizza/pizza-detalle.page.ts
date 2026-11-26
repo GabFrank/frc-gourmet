@@ -6,7 +6,11 @@ import { CartService } from '../../core/cart.service';
 import { MenuService } from '../../core/menu.service';
 import { ConfigService } from '../../core/config.service';
 import { AppImgPipe } from '../../core/app-img.pipe';
-import { MenuProducto, MenuSaborPizza, MenuTamano, MenuAdicional, MenuObservacion } from '../../core/models';
+import { MenuProducto, MenuSaborPizza, MenuTamano, MenuAdicional, MenuObservacion, PersonalizacionReceta, PersonalizacionSabor } from '../../core/models';
+import { GuaraniPipe } from '../../core/guarani.pipe';
+import { PrecioPipe } from '../../core/precio.pipe';
+import { MonedasService } from '../../core/monedas.service';
+import { IconComponent } from '../../core/icon.component';
 
 /**
  * Detalle de una pizza — entrada POR SABOR (tipo iFood).
@@ -18,11 +22,13 @@ import { MenuProducto, MenuSaborPizza, MenuTamano, MenuAdicional, MenuObservacio
 @Component({
   selector: 'sf-pizza-detalle',
   standalone: true,
-  imports: [CommonModule, FormsModule, AppImgPipe],
+  imports: [IconComponent, GuaraniPipe, PrecioPipe, CommonModule, FormsModule, AppImgPipe],
   templateUrl: './pizza-detalle.page.html',
   styleUrls: ['./pizza-detalle.page.scss'],
 })
 export class PizzaDetallePage implements OnInit {
+  /** F8: moneda en que se ven los precios (argumento del pipe `precio`). */
+  monedas = inject(MonedasService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private menuSvc = inject(MenuService);
@@ -34,6 +40,13 @@ export class PizzaDetallePage implements OnInit {
   cargando = true;
 
   tamanos: MenuTamano[] = [];
+  /** Cabecera de la pantalla: sigue a los sabores elegidos (el de entrada se puede quitar). */
+  tituloCab = '';
+  descCab = '';
+  imagenCab: string | null = null;
+  /** Sabores del mitad y mitad: todos los que tienen precio en el tamaño elegido. */
+  saboresMitad: MenuSaborPizza[] = [];
+  soloUnSabor = false;
   presSel: number | null = null;
   saboresSel: MenuSaborPizza[] = [];
   montarMitad = false;
@@ -43,7 +56,14 @@ export class PizzaDetallePage implements OnInit {
   notaLibre = '';
   cantidad = 1;
 
+  /** F6b: personalización de cada sabor (como el PdV), y el sabor abierto en la hoja. */
+  persSabores = new Map<number, PersonalizacionSabor>();
+  hojaSabor: MenuSaborPizza | null = null;
+  avisoPers = '';
+
   ngOnInit(): void {
+    // El detalle abre siempre desde arriba (la foto entera), venga de donde venga en la carta.
+    window.scrollTo({ top: 0 });
     const productoId = Number(this.route.snapshot.paramMap.get('productoId'));
     const saborId = Number(this.route.snapshot.paramMap.get('saborId'));
     this.menuSvc.cargar().subscribe({
@@ -52,17 +72,43 @@ export class PizzaDetallePage implements OnInit {
         if (p && p.esPizza && p.sabores?.length) {
           this.producto = p;
           this.saborEntrada = p.sabores.find((s) => s.saborId === saborId) || p.sabores[0];
-          // Tamaños que el sabor de entrada realmente tiene cotizados.
-          this.tamanos = (p.tamanos || []).filter((t) =>
-            this.saborEntrada!.precios.some((pr) => pr.presentacionId === t.presentacionId),
-          );
-          this.presSel = this.tamanos[0]?.presentacionId ?? null;
           this.saboresSel = this.saborEntrada ? [this.saborEntrada] : [];
+          this.recalcularTamanos();
+          this.presSel = this.tamanos[0]?.presentacionId ?? null;
+          this.actualizarVista();
         }
         this.cargando = false;
       },
       error: () => (this.cargando = false),
     });
+  }
+
+  /** Tamaños que el primer sabor elegido tiene cotizados (todos los elegidos tienen precio en el tamaño actual). */
+  private recalcularTamanos(): void {
+    const ref = this.saboresSel[0];
+    this.tamanos = ref
+      ? (this.producto?.tamanos || []).filter((t) => ref.precios.some((pr) => pr.presentacionId === t.presentacionId))
+      : [];
+  }
+
+  /** Recalcula lo que depende de los sabores elegidos y del tamaño (cabecera y lista de mitad y mitad). */
+  private actualizarVista(): void {
+    const p = this.producto;
+    const primero = this.saboresSel[0] || null;
+    if (!p || !primero) return;
+    const entradaPrimero = primero.saborId === this.saborEntrada?.saborId;
+    if (this.saboresSel.length > 1 && !entradaPrimero) {
+      this.tituloCab = p.nombre;
+      this.descCab = this.resumenSabores;
+    } else {
+      this.tituloCab = `${p.nombre} ${primero.nombre}`;
+      this.descCab = primero.descripcion || '';
+    }
+    this.imagenCab = primero.imageUrl || p.imageUrl || null;
+    this.soloUnSabor = this.saboresSel.length <= 1;
+    this.saboresMitad = this.presSel == null
+      ? []
+      : (p.sabores || []).filter((s) => s.precios.some((pr) => pr.presentacionId === this.presSel));
   }
 
   get maxSabores(): number {
@@ -73,20 +119,6 @@ export class PizzaDetallePage implements OnInit {
     return this.maxSabores > 1;
   }
 
-  /** Sabores hermanos que se pueden sumar (tienen precio en el tamaño elegido y no están ya elegidos). */
-  get saboresParaSumar(): MenuSaborPizza[] {
-    if (!this.producto || this.presSel == null) return [];
-    return (this.producto.sabores || []).filter(
-      (s) =>
-        !this.saboresSel.some((x) => x.saborId === s.saborId) &&
-        s.precios.some((pr) => pr.presentacionId === this.presSel),
-    );
-  }
-
-  get puedeSumarMas(): boolean {
-    return this.saboresSel.length < this.maxSabores && this.saboresParaSumar.length > 0;
-  }
-
   private precioDe(s: MenuSaborPizza, presId: number | null): number | null {
     if (presId == null) return null;
     const pr = s.precios.find((x) => x.presentacionId === presId);
@@ -94,25 +126,35 @@ export class PizzaDetallePage implements OnInit {
   }
 
   precioTamano(t: MenuTamano): number | null {
-    // Precio del sabor de entrada para ese tamaño (referencia del selector).
-    return this.saborEntrada ? this.precioDe(this.saborEntrada, t.presentacionId) : null;
+    // Precio del primer sabor elegido para ese tamaño (referencia del selector).
+    return this.saboresSel[0] ? this.precioDe(this.saboresSel[0], t.presentacionId) : null;
   }
 
   setTamano(t: MenuTamano): void {
+    // La personalización es de la receta sabor × tamaño: otro tamaño, otra receta.
+    if (this.presSel !== t.presentacionId && this.hayPersonalizacion) {
+      this.persSabores.clear();
+      this.avisoPers = 'Cambiaste el tamaño: volvé a personalizar los sabores.';
+    }
     this.presSel = t.presentacionId;
-    // Quitar sabores extra que no tengan precio en el nuevo tamaño (el de entrada se conserva).
+    // Quitar sabores que no tengan precio en el nuevo tamaño (el primero siempre lo tiene: define los tamaños).
     this.saboresSel = this.saboresSel.filter(
       (s, i) => i === 0 || this.precioDe(s, this.presSel) != null,
     );
+    this.actualizarVista();
   }
 
   toggleSaborExtra(s: MenuSaborPizza): void {
     const idx = this.saboresSel.findIndex((x) => x.saborId === s.saborId);
-    if (idx > 0) {
-      this.saboresSel.splice(idx, 1); // quitar (nunca el de entrada, índice 0)
-    } else if (idx < 0 && this.saboresSel.length < this.maxSabores) {
+    if (idx >= 0) {
+      if (this.saboresSel.length <= 1) return; // siempre queda al menos un sabor
+      this.saboresSel.splice(idx, 1);
+      this.persSabores.delete(s.saborId);
+      this.recalcularTamanos();
+    } else if (this.saboresSel.length < this.maxSabores) {
       this.saboresSel.push(s);
     }
+    this.actualizarVista();
   }
 
   esSaborElegido(s: MenuSaborPizza): boolean {
@@ -153,8 +195,99 @@ export class PizzaDetallePage implements OnInit {
       .reduce((s, a) => s + a.precio, 0);
   }
 
+  // ── F6b: personalizar cada sabor ──────────────────────────────────────────
+  /** Con el interruptor de la tienda prendido, el menú trae qué se puede tocar de cada receta. */
+  get personalizaPorSabor(): boolean {
+    return !!this.menuSvc.actual?.personalizacionPorReceta;
+  }
+
+  opcionesDe(s: MenuSaborPizza): PersonalizacionReceta | null {
+    const recetaId = s.precios.find((x) => x.presentacionId === this.presSel)?.recetaId;
+    const mapa = this.menuSvc.actual?.personalizacionPorReceta;
+    return recetaId && mapa ? mapa[String(recetaId)] || null : null;
+  }
+
+  persDe(s: MenuSaborPizza): PersonalizacionSabor {
+    let ps = this.persSabores.get(s.saborId);
+    if (!ps) {
+      ps = { saborId: s.saborId, nombreSabor: s.nombre, quitar: [], cambios: [], adicionales: [] };
+      this.persSabores.set(s.saborId, ps);
+    }
+    return ps;
+  }
+
+  resumenPers(s: MenuSaborPizza): string {
+    const ps = this.persSabores.get(s.saborId);
+    if (!ps) return '';
+    return [
+      ...ps.quitar.map((q) => `Sin ${q.nombre.toLowerCase()}`),
+      ...ps.cambios.map((c) => `${c.nombre.toLowerCase()} → ${c.reemplazoNombre.toLowerCase()}`),
+      ...ps.adicionales.map((a) => `+ ${a.nombre.toLowerCase()}`),
+    ].join(' · ');
+  }
+
+  abrirHoja(s: MenuSaborPizza): void {
+    this.avisoPers = '';
+    this.hojaSabor = s;
+  }
+
+  cerrarHoja(): void {
+    this.hojaSabor = null;
+  }
+
+  estaQuitado(s: MenuSaborPizza, id: number): boolean {
+    return this.persDe(s).quitar.some((q) => q.id === id);
+  }
+
+  toggleQuitar(s: MenuSaborPizza, q: { id: number; nombre: string }): void {
+    const ps = this.persDe(s);
+    const i = ps.quitar.findIndex((x) => x.id === q.id);
+    if (i >= 0) ps.quitar.splice(i, 1);
+    else ps.quitar.push({ id: q.id, nombre: q.nombre });
+  }
+
+  cambioDe(s: MenuSaborPizza, recetaIngredienteId: number): number | null {
+    return this.persDe(s).cambios.find((c) => c.recetaIngredienteId === recetaIngredienteId)?.productoId ?? null;
+  }
+
+  setCambio(s: MenuSaborPizza, c: PersonalizacionReceta['cambiables'][number], productoId: number | null): void {
+    const ps = this.persDe(s);
+    ps.cambios = ps.cambios.filter((x) => x.recetaIngredienteId !== c.id);
+    const op = c.opciones.find((o) => o.productoId === Number(productoId));
+    if (op) ps.cambios.push({ recetaIngredienteId: c.id, nombre: c.nombre, productoId: op.productoId, reemplazoNombre: op.nombre });
+  }
+
+  tieneAdicionalSabor(s: MenuSaborPizza, id: number): boolean {
+    return this.persDe(s).adicionales.some((a) => a.id === id);
+  }
+
+  toggleAdicionalSabor(s: MenuSaborPizza, a: MenuAdicional): void {
+    const ps = this.persDe(s);
+    const i = ps.adicionales.findIndex((x) => x.id === a.id);
+    if (i >= 0) ps.adicionales.splice(i, 1);
+    else ps.adicionales.push({ ...a });
+  }
+
+  /** Lo que suma un adicional en este sabor: precio × proporción (mitad → 50 %), como el PdV. */
+  precioEnSabor(a: MenuAdicional): number {
+    return Math.round(a.precio / Math.max(1, this.saboresSel.length));
+  }
+
+  get hayPersonalizacion(): boolean {
+    return [...this.persSabores.values()].some((ps) => ps.quitar.length || ps.cambios.length || ps.adicionales.length);
+  }
+
+  get precioPersonalizacion(): number {
+    const n = Math.max(1, this.saboresSel.length);
+    let total = 0;
+    for (const s of this.saboresSel) {
+      for (const a of this.persSabores.get(s.saborId)?.adicionales || []) total += a.precio / n;
+    }
+    return Math.round(total);
+  }
+
   get precioUnitario(): number {
-    return this.precioBase + this.precioAdicionales;
+    return this.precioBase + this.precioAdicionales + this.precioPersonalizacion;
   }
 
   get total(): number {
@@ -185,12 +318,15 @@ export class PizzaDetallePage implements OnInit {
     this.cart.agregar({
       productoId: this.producto.id,
       nombreProducto: this.producto.nombre,
-      imageUrl: this.saborEntrada?.imageUrl || this.producto.imageUrl,
+      imageUrl: this.saboresSel[0]?.imageUrl || this.producto.imageUrl,
       opcion: {
         tipo: 'PIZZA',
         label,
         presentacionId: this.presSel,
         saborIds: this.saboresSel.map((s) => s.saborId),
+        personalizacionSabores: this.saboresSel
+          .map((s) => this.persSabores.get(s.saborId))
+          .filter((ps): ps is PersonalizacionSabor => !!ps && !!(ps.quitar.length || ps.cambios.length || ps.adicionales.length)),
       },
       adicionales,
       observaciones,

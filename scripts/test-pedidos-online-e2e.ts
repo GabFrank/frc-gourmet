@@ -33,6 +33,7 @@ const PORT = 7099;
 const BASE = `http://localhost:${PORT}`;
 
 // --- mini framework de asserts ---
+let dsM5: DataSource | null = null;
 let passed = 0;
 let failed = 0;
 function ok(cond: boolean, name: string, extra?: any) {
@@ -218,10 +219,12 @@ async function seed(dataSource: DataSource): Promise<any> {
   return {
     admin, producto, presentacion, zona, elaborado, receta, adicional,
     pizza, presGrande, presMediana, saborCalabresa, saborBacon, saborMussarela,
+    recCalabresa, recBacon,
   };
 }
 
 async function main() {
+  const cuentasRepoM5 = () => dsM5!.getRepository('CuentaCliente');
   const tmpDir = path.resolve(__dirname, '../.tmp');
   if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
   const dbFile = path.join(tmpDir, 'test-pedidos-online.db');
@@ -230,6 +233,7 @@ async function main() {
   const baseOptions = getDataSourceOptions(tmpDir);
   const dataSource = new DataSource({ ...(baseOptions as any), database: dbFile, synchronize: false, migrationsRun: false });
   await dataSource.initialize();
+  dsM5 = dataSource;
   await dataSource.runMigrations({ transaction: 'each' });
   console.log('[e2e] Migraciones OK.');
 
@@ -249,7 +253,7 @@ async function main() {
   await fastify.register(cors, { origin: true });
   await fastify.register(rateLimit, { max: 10000, timeWindow: '1 minute' });
   await registerAuthPlugin(fastify);
-  registerPublicRoutes(fastify);
+  registerPublicRoutes(fastify, dataSource);
   await fastify.listen({ port: PORT, host: '127.0.0.1' });
 
   // Captura del OTP dev-log
@@ -289,12 +293,48 @@ async function main() {
   ok(pPizza?.precioDesde === 45000, 'PIZZA: precioDesde global = 45000', pPizza?.precioDesde);
   ok(pPizza?.pizzaConfig?.maxSabores === 2 && pPizza?.pizzaConfig?.estrategia === 'MAYOR_PRECIO', 'PIZZA: pizzaConfig (max 2, MAYOR_PRECIO)', pPizza?.pizzaConfig);
 
-  // 2. OTP request
+  // A3: sin zonas dibujadas no hay delivery (antes salía con envío gratis).
+  const cfgZonas = await pub('tienda.config', []);
+  ok(cfgZonas.result?.permiteDelivery === false, 'A3: sin zonas con polígono tienda.config.permiteDelivery=false', cfgZonas.result?.permiteDelivery);
+  const cotSin = await pub('envio.cotizar', [-25.3, -57.6]);
+  ok(cotSin.result?.cubierto === false && cotSin.result?.sinZonasDefinidas === true, 'A3: envio.cotizar sin zonas → no cubierto', cotSin.result);
+
+  // 2a. Sin WhatsApp configurado y sin FRC_OTP_DEV: no hay login por código ni fuga del código
+  //     (PLAN-tienda-online C1: antes devolvía devCodigo a cualquiera).
   const tel = '0981123456';
+  delete process.env['FRC_OTP_DEV'];
+  const cfgSinOtp = await pub('tienda.config', []);
+  ok(cfgSinOtp.result?.otpWhatsappDisponible === false, 'C1: tienda.config otpWhatsappDisponible=false sin canal', cfgSinOtp.result?.otpWhatsappDisponible);
+  const otpSin = await pub('auth.otp.request', [tel]);
+  ok(otpSin.result?.success === false && otpSin.result?.error === 'otp_no_disponible', 'C1: otp.request sin canal → otp_no_disponible', otpSin.result);
+  ok(!JSON.stringify(otpSin).includes('devCodigo') && !otpCapturado, 'C1: no devuelve ni loguea código sin canal');
+
+  // 2. OTP request (fallback de desarrollo explícito)
+  process.env['FRC_OTP_DEV'] = '1';
+  const cfgDev = await pub('tienda.config', []);
+  ok(cfgDev.result?.otpWhatsappDisponible === true, 'tienda.config otpWhatsappDisponible=true con FRC_OTP_DEV=1');
   const otpReq = await pub('auth.otp.request', [tel]);
   ok(otpReq.result?.success === true, 'auth.otp.request success');
   ok(otpReq.result?.provider === 'dev-log', 'OTP en modo dev-log (sin credenciales)');
   ok(!!otpCapturado, 'código OTP capturado del log', otpCapturado);
+
+  // Tope global diario de OTP (anti gasto en plantillas de WhatsApp).
+  const notifMod = require('../electron/services/notificacion.service');
+  const dispatchOrig = notifMod.dispatchEvento;
+  const avisos: any[] = [];
+  notifMod.dispatchEvento = async (codigo: string, payload: any) => { avisos.push({ codigo, ...payload }); return []; };
+  process.env['FRC_OTP_MAX_GLOBAL_DIA'] = '1';
+  const otpTope = await pub('auth.otp.request', ['0981999888']);
+  ok(otpTope.result?.error === 'otp_no_disponible', 'tope global diario de OTP corta el envío', otpTope.result);
+  ok(avisos.some((a) => a.codigo === 'TIENDA_OTP_TOPE' && /^tope-/.test(a.dedupeKey)), 'tope global: avisa al staff (TIENDA_OTP_TOPE)', avisos);
+  // Tope 2 con 1 código ya pedido: el siguiente llega al 80 %. Se pide para el mismo
+  // teléfono, así el código capturado sigue sirviendo para el verify de abajo.
+  process.env['FRC_OTP_MAX_GLOBAL_DIA'] = '2';
+  avisos.length = 0;
+  await pub('auth.otp.request', [tel]);
+  ok(avisos.some((a) => a.codigo === 'TIENDA_OTP_TOPE' && /^80-/.test(a.dedupeKey)), 'al pasar el 80 % del tope avisa una vez por día', avisos);
+  notifMod.dispatchEvento = dispatchOrig;
+  delete process.env['FRC_OTP_MAX_GLOBAL_DIA'];
 
   // 3. OTP verify
   const otpVer = await pub('auth.otp.verify', [tel, otpCapturado]);
@@ -307,9 +347,29 @@ async function main() {
   const otpBad = await pub('auth.otp.verify', [tel, '000000']);
   ok(otpBad.result?.success === false, 'OTP incorrecto/usado es rechazado');
 
+  // 3c. F5 (A-auth1): intentos en paralelo no pasan el tope de 5, y el código se consume una vez.
+  const telPar = '0981555444';
+  await pub('auth.otp.request', [telPar]);
+  const codPar = otpCapturado;
+  const malos = await Promise.all(Array.from({ length: 12 }, () => pub('auth.otp.verify', [telPar, '999999' === codPar ? '888888' : '999999'])));
+  const incorrectos = malos.filter((r: any) => r.result?.error === 'codigo_incorrecto').length;
+  ok(incorrectos <= 5, 'F5: 12 intentos en paralelo → como mucho 5 se comparan', incorrectos);
+  const trasTope = await pub('auth.otp.verify', [telPar, codPar]);
+  ok(trasTope.result?.success === false, 'F5: agotados los intentos, ni el código correcto entra', trasTope.result);
+  const telDoble = '0981555333';
+  await pub('auth.otp.request', [telDoble]);
+  const codDoble = otpCapturado;
+  const dobles = await Promise.all([pub('auth.otp.verify', [telDoble, codDoble]), pub('auth.otp.verify', [telDoble, codDoble])]);
+  ok(dobles.filter((r: any) => r.result?.success === true).length === 1, 'F5: el mismo código correcto dos veces a la vez abre una sola sesión', dobles.map((d: any) => d.result?.success));
+
   // 4. me
   const me = await pub('auth.me', [], token);
-  ok(me.result?.success === true && me.result?.cuenta?.telefono === '0981123456', 'auth.me devuelve la cuenta');
+  ok(me.result?.success === true && me.result?.cuenta?.telefono === '595981123456', 'auth.me devuelve la cuenta (número local → internacional)');
+
+  // 4b. F2 (M5): cuenta sin nombre → el pedido exige nombre (antes quedaba sin nombre en la bandeja).
+  const sinNombre = await pub('pedido.crear', [{ tipoPedido: 'PICKUP', items: [{ productoId: 1, cantidad: 1 }] }], token);
+  ok(sinNombre.result?.error === 'falta_nombre', 'M5: cuenta sin nombre → falta_nombre', sinNombre.result);
+  await pub('auth.perfil.update', [{ nombre: 'Cliente Otp' }], token);
 
   // 5. pedido.crear sin token → rechazado
   //
@@ -345,6 +405,24 @@ async function main() {
   }], token);
   ok(delivBajo.result?.error === 'monto_minimo_no_alcanzado', 'DELIVERY bajo mínimo → error', delivBajo.result?.error);
 
+  // A3: DELIVERY sin zona dibujada ni zona elegida → rechazado (antes envío 0).
+  const delivSinZona = await pub('pedido.crear', [{
+    tipoPedido: 'DELIVERY', direccionEntrega: 'Calle 1', latitud: -24.06, longitud: -54.31,
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 3 }],
+  }], token);
+  ok(delivSinZona.result?.error === 'delivery_no_disponible', 'A3: DELIVERY sin zonas → delivery_no_disponible', delivSinZona.result);
+
+  // A2: validaciones de entrada.
+  const base = { tipoPedido: 'PICKUP', items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }] };
+  const upay = await pub('pedido.crear', [{ ...base, metodoPago: 'UPAY' }], token);
+  ok(upay.result?.error === 'metodo_pago_no_disponible', 'A2: metodoPago UPAY sin cobro online → rechazado', upay.result);
+  const tipoMal = await pub('pedido.crear', [{ ...base, tipoPedido: 'XX' }], token);
+  ok(tipoMal.result?.error === 'tipo_pedido_invalido', 'A2: tipoPedido inválido → rechazado', tipoMal.result);
+  const cantMal = await pub('pedido.crear', [{ ...base, items: [{ ...base.items[0], cantidad: 51 }] }], token);
+  ok(cantMal.result?.error === 'cantidad_excedida', 'A2: cantidad > 50 → rechazado', cantMal.result);
+  const muchos = await pub('pedido.crear', [{ ...base, items: Array.from({ length: 41 }, () => base.items[0]) }], token);
+  ok(muchos.result?.error === 'demasiados_items', 'A2: más de 40 ítems → rechazado', muchos.result);
+
   // 8. DELIVERY válido (3×25000=75000 ≥ 50000) + envío 15000
   const deliv = await pub('pedido.crear', [{
     tipoPedido: 'DELIVERY', zonaDeliveryId: seeded.zona.id, direccionEntrega: 'Calle 1',
@@ -362,6 +440,12 @@ async function main() {
     items: [{ productoId: seeded.elaborado.id, opcion: { tipo: 'RECETA' }, cantidad: 1, adicionalIds: [seeded.adicional.id] }],
   }], token);
   ok(pedElab.result?.success === true && pedElab.result?.total === 47000, 'ELABORADO + adicional: total server-side = 47000', pedElab.result?.total);
+  // F5 (A-F2-2): un adicional que no corresponde ya no se descarta en silencio.
+  const adicMal = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP',
+    items: [{ productoId: seeded.elaborado.id, opcion: { tipo: 'RECETA' }, cantidad: 1, adicionalIds: [seeded.adicional.id, 987654] }],
+  }], token);
+  ok(adicMal.result?.success === false && /^adicional_invalido/.test(String(adicMal.result?.error)), 'F5: adicional que no corresponde → adicional_invalido', adicMal.result);
 
   // 9. mis pedidos
   const mis = await pub('pedido.mis', [], token);
@@ -374,7 +458,17 @@ async function main() {
 
   const primero: any = lista[0];
   // 11. aceptar
-  const acep = await invokeHandlerWithContext('aceptar-pedido-online', undefined, primero.id);
+  // F5 (C2): sin una caja abierta de quien acepta, no se acepta (antes quedaba ACEPTADO sin venta).
+  const sinCaja = await invokeHandlerWithContext('aceptar-pedido-online', undefined, primero.id);
+  const trasSinCaja: any = await dataSource.getRepository('PedidoOnline').findOne({ where: { id: primero.id } });
+  ok(sinCaja?.success === false && sinCaja?.error === 'sin_caja' && trasSinCaja?.estado === 'RECIBIDO',
+    'F5: aceptar sin caja abierta → sin_caja y sigue RECIBIDO', [sinCaja, trasSinCaja?.estado]);
+  // F5 (C2): un ACEPTADO sin venta no avanza a mano.
+  await dataSource.getRepository('PedidoOnline').update({ id: lista[2].id }, { estado: 'ACEPTADO' });
+  const sinVenta = await invokeHandlerWithContext('avanzar-estado-pedido-online', undefined, lista[2].id, 'EN_PREPARACION');
+  ok(sinVenta?.success === false && sinVenta?.error === 'sin_venta', 'F5: ACEPTADO sin venta no pasa a EN_PREPARACION', sinVenta);
+  // Camino compat: aceptar vinculando una venta ya creada en el PdV.
+  const acep = await invokeHandlerWithContext('aceptar-pedido-online', undefined, primero.id, { ventaId: 999999 });
   ok(acep?.success === true && acep?.pedido?.estado === 'ACEPTADO', 'aceptar → ACEPTADO');
 
   // 12. transición inválida (ACEPTADO → LISTO no permitido directo)
@@ -393,15 +487,46 @@ async function main() {
   ok(rech?.success === true && rech?.pedido?.estado === 'RECHAZADO', 'rechazar → RECHAZADO');
   await invokeHandlerWithContext('rechazar-pedido-online', undefined, lista[2].id, 'sin stock');
 
+  // 14b. F2 (M7): sin caja abierta el aceptar NO crea venta y devuelve el motivo para el operador.
+  ok(!acep?.errorMaterializacion, 'aceptar con venta vinculada: no intenta materializar', acep?.errorMaterializacion);
+  // 14c. F2 (M6): el cliente ve el motivo del rechazo y la personalización en «Mis pedidos».
+  const misRech = await pub('pedido.mis', [], token);
+  const pRech = (misRech.result?.pedidos || []).find((p: any) => p.numero === segundo.numero);
+  ok(pRech?.estado === 'RECHAZADO' && !!pRech?.motivoRechazo, 'mis pedidos: el rechazado trae motivoRechazo', pRech?.motivoRechazo);
+  ok((misRech.result?.pedidos || []).every((p: any) => (p.items || []).every((it: any) => 'personalizacion' in it)),
+    'mis pedidos: cada línea trae su personalización', null);
+  ok((misRech.result?.pedidos || []).every((p: any) => p.seguimientoTokenHash === undefined),
+    'mis pedidos: nunca expone el hash de seguimiento', null);
+  // 14d. F2: el server ignora el precio que manda el cliente y cobra el de la carta.
+  const falso = await pub('pedido.crear', [{
+    tipoPedido: 'PICKUP', idempotencyKey: 'f2-precio-falso-0001',
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1, precioUnitario: 1, precio: 1, subtotal: 1 }],
+    subtotal: 1, total: 1,
+  }], token);
+  ok(falso.result?.success === true && Number(falso.result?.total) > 1, 'precio falso del cliente se ignora: total = precio de la carta', falso.result);
+  await invokeHandlerWithContext('rechazar-pedido-online', undefined, falso.result?.pedidoId, 'prueba');
+  // 14e. F2 (M5): el nombre que manda el checkout queda en la cuenta y en el pedido.
+  const sinNom: any = await cuentasRepoM5().save(cuentasRepoM5().create({ telefono: '0981777666', telefonoVerificado: true, activo: true }));
+  const conNom: any = await invokeHandlerWithContext('crear-pedido-online', { customerId: sinNom.id }, {
+    tipoPedido: 'PICKUP', nombreCliente: 'Rosa Paz', items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }],
+  });
+  const cuentaM5: any = await cuentasRepoM5().findOne({ where: { id: sinNom.id } });
+  const pedM5: any = await dataSource.getRepository('PedidoOnline').findOne({ where: { numero: conNom?.numero } });
+  ok(conNom?.success === true && cuentaM5?.nombre === 'ROSA PAZ' && pedM5?.nombreCliente === 'ROSA PAZ',
+    'M5: el nombre del checkout queda en la cuenta y en el pedido', [conNom, cuentaM5?.nombre, pedM5?.nombreCliente]);
+  await invokeHandlerWithContext('rechazar-pedido-online', undefined, conNom?.pedidoId, 'prueba');
+
   // 15. pendientes (primero=LISTO ya no cuenta, segundo/tercero rechazados) = 0
   const pend = await invokeHandlerWithContext('contar-pedidos-online-pendientes', undefined);
-  ok(pend?.pendientes === 0, 'contar pendientes = 0 (ya no hay RECIBIDO/ACEPTADO)', pend?.pendientes);
+  // F10: `pendientes` = nuevos + piden cancelar + aceptados sin cocina; ninguno de los tres quedó.
+  ok(pend?.pendientes === 0 && pend?.nuevos === 0 && pend?.sinCocina === 0,
+    'contar pendientes = 0 (sin nuevos, sin cancelaciones pedidas, sin aceptados sin cocina)', pend);
 
   console.log('\n[e2e] === CONFIG DE TIENDA + REFRESH TOKEN ===');
   // 16. config pública (default: abierta, ambos tipos)
   const cfgPub = await pub('tienda.config');
   ok(cfgPub.result?.abiertaAhora === true, 'tienda.config: abierta por default');
-  ok(cfgPub.result?.permitePickup === true && cfgPub.result?.permiteDelivery === true, 'ambos tipos habilitados por default');
+  ok(cfgPub.result?.permitePickup === true && cfgPub.result?.permiteDelivery === false, 'pickup por default; delivery apagado mientras no haya zona dibujada (A3)', cfgPub.result);
 
   // 17. refresh token: rota y emite nuevo access
   const ref1 = await pub('auth.refresh', [refreshTok]);
@@ -409,6 +534,9 @@ async function main() {
   // el refresh viejo ya no sirve (rotación)
   const refOld = await pub('auth.refresh', [refreshTok]);
   ok(refOld.result?.success === false, 'refresh viejo invalidado tras rotar');
+  // F5 (M-auth5): reusar un refresh ya rotado cierra todas las sesiones de la cuenta.
+  const refNuevoTrasReuso = await pub('auth.refresh', [ref1.result?.refreshToken]);
+  ok(refNuevoTrasReuso.result?.success === false, 'F5: tras el reuso, el refresh nuevo también queda revocado', refNuevoTrasReuso.result);
   const token2 = ref1.result?.accessToken;
   const me2 = await pub('auth.me', [], token2);
   ok(me2.result?.success === true, 'access token nuevo funciona en auth.me');
@@ -455,29 +583,185 @@ async function main() {
   // 24. login con el email registrado
   const logEmail = await pub('auth.login', ['cliente@mail.com', 'secreto123']);
   ok(logEmail.result?.success === true && !!logEmail.result?.accessToken, 'login por email + password funciona');
+  // 24b. Cuenta sin teléfono (email/Google): el pedido exige un teléfono de CONTACTO, que queda en
+  // la cuenta y en el pedido, y nunca en `telefono` (el del ingreso por código).
+  const tokEmail = logEmail.result?.accessToken;
+  const itemsTel = [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }];
+  const sinTel = await pub('pedido.crear', [{ tipoPedido: 'PICKUP', items: itemsTel, metodoPago: 'EFECTIVO' }], tokEmail);
+  ok(sinTel.result?.error === 'falta_telefono', 'cuenta sin teléfono → falta_telefono', sinTel.result);
+  const telMalo = await pub('pedido.crear', [{ tipoPedido: 'PICKUP', items: itemsTel, metodoPago: 'EFECTIVO', telefonoContacto: '12-34' }], tokEmail);
+  ok(telMalo.result?.error === 'telefono_invalido', 'teléfono de contacto corto → telefono_invalido', telMalo.result);
+  const conTel = await pub('pedido.crear', [{ tipoPedido: 'PICKUP', items: itemsTel, metodoPago: 'EFECTIVO', telefonoContacto: '0981 777 888' }], tokEmail);
+  ok(conTel.result?.success === true, 'con teléfono de contacto el pedido se crea', conTel.result);
+  const cuentaTel: any = await dataSource.getRepository('CuentaCliente').findOne({ where: { email: 'cliente@mail.com' } });
+  ok(cuentaTel?.telefonoContacto === '595981777888' && !cuentaTel?.telefono,
+    'queda como contacto de la cuenta (internacional, solo dígitos), no como teléfono de ingreso', { c: cuentaTel?.telefonoContacto, t: cuentaTel?.telefono });
+  const pedTel: any = await dataSource.getRepository('PedidoOnline').findOne({ where: { numero: conTel.result?.numero } });
+  ok(pedTel?.telefonoCliente === '595981777888', 'el pedido lleva el teléfono para el local', pedTel?.telefonoCliente);
+  const otroPed = await pub('pedido.crear', [{ tipoPedido: 'PICKUP', items: itemsTel, metodoPago: 'EFECTIVO' }], tokEmail);
+  ok(otroPed.result?.success === true, 'el siguiente pedido ya no lo pide (lo recuerda la cuenta)', otroPed.result);
+  const meTel = await pub('auth.me', [], tokEmail);
+  ok(meTel.result?.cuenta?.telefonoContacto === '595981777888', 'auth.me lo devuelve para precargar el checkout', meTel.result?.cuenta);
+  const perfMalo = await pub('auth.perfil.update', [{ telefonoContacto: 'abc' }], tokEmail);
+  ok(perfMalo.result?.error === 'telefono_invalido', 'perfil: teléfono inválido rechazado', perfMalo.result);
+  const perfOk = await pub('auth.perfil.update', [{ telefonoContacto: '+595 981 222 333' }], tokEmail);
+  ok(perfOk.result?.success === true && perfOk.result?.cuenta?.telefonoContacto === '595981222333', 'perfil: se cambia el contacto', perfOk.result?.cuenta);
+  // Anotar el número de otra cuenta como contacto no da acceso a esa cuenta ni la pisa.
+  const ajeno = await pub('auth.perfil.update', [{ telefonoContacto: '0981123456' }], tokEmail);
+  const cuentaOtp: any = await dataSource.getRepository('CuentaCliente').findOne({ where: { telefono: '595981123456' } });
+  ok(ajeno.result?.success === true && cuentaOtp && cuentaOtp.email !== 'cliente@mail.com',
+    'un contacto igual al teléfono de otra cuenta no la toca (no es dato de ingreso)', ajeno.result);
+
   // 25. Google sin credenciales
   const g = await pub('auth.google', ['fake-token']);
   ok(g.result?.error === 'google_no_configurado', 'auth.google sin GOOGLE_CLIENT_ID → no_configurado');
+
+  console.log('\n[e2e] === F3: CREDENCIALES DE INGRESO DESDE LA APP ===');
+  // Validaciones: no se guardan valores con formato inválido.
+  const vPhone: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { whatsappPhoneNumberId: '12ab' });
+  ok(vPhone?.error === 'whatsapp_phone_id_invalido', 'F3: Phone Number ID con letras → rechazado', vPhone);
+  const vGoogle: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { googleClientId: 'cualquier-cosa' });
+  ok(vGoogle?.error === 'google_client_id_invalido', 'F3: Client ID de Google inválido → rechazado', vGoogle);
+  const vPlant: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { whatsappPlantilla: 'Código Ingreso' });
+  ok(vPlant?.error === 'whatsapp_plantilla_invalida', 'F3: plantilla con espacios → rechazada', vPlant);
+
+  // Proveedores de pago (PLAN-tienda-pagos-proveedores): la pantalla recibe la lista y el activo.
+  const cfgProv: any = await invokeHandlerWithContext('get-tienda-online-config', undefined);
+  ok(cfgProv?.pago?.proveedorActivo === 'UPAY' && cfgProv?.pago?.proveedores?.some((x: any) => x.id === 'UPAY'),
+    'Proveedores: sin elegir, el activo es uPay y la pantalla recibe la lista', cfgProv?.pago);
+  const vProv: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoProveedor: 'MERCADOPAGO' });
+  ok(vProv?.error === 'pago_proveedor_invalido', 'Proveedores: un proveedor que no existe → rechazado', vProv);
+  const vProvCfg: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoConfig: { NOEXISTE: { a: 'b' } } });
+  ok(vProvCfg?.error === 'pago_proveedor_invalido', 'Proveedores: datos para un proveedor desconocido → rechazado', vProvCfg);
+  const vBkey: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoConfig: { BANCARD: { publicKey: 'con espacios ' } } });
+  ok(vBkey?.error === 'bancard_publickey_invalido', 'Bancard: clave pública con formato inválido → rechazada', vBkey);
+  const vBent: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoConfig: { BANCARD: { entorno: 'OTRO' } } });
+  ok(vBent?.error === 'bancard_entorno_invalido', 'Bancard: entorno que no existe → rechazado', vBent);
+  const okB: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoProveedor: 'BANCARD', pagoConfig: { BANCARD: { publicKey: 'pubABC12345', entorno: 'PRUEBA' } } });
+  const bEst = okB?.config?.pago?.proveedores?.find((x: any) => x.id === 'BANCARD');
+  ok(okB?.success === true && okB.config.pago.proveedorActivo === 'BANCARD' && bEst?.valores?.publicKey === 'pubABC12345'
+    && bEst?.secretosGuardados?.privateKey === false && !('privateKey' in (bEst?.valores || {})),
+    'Bancard: se guarda la clave pública; de la privada solo se informa si está', bEst);
+  ok(bEst?.datosPortal?.[0]?.valor?.endsWith('/pub/pagos/bancard/aviso') && bEst?.devuelvePorApi === true, 'Bancard: la pantalla recibe la URL de confirmación y que sabe devolver', bEst);
+  const sinPriv: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoOnlineActivo: true });
+  ok(sinPriv?.error === 'pago_faltan_credenciales', 'Bancard: no se activa el pago online sin la clave privada', sinPriv);
+  const secretoNoSoportado: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoSecretos: { BANCARD: { publicKey: 'x12345678' } } });
+  ok(secretoNoSoportado?.error === 'pago_proveedor_invalido', 'Bancard: un campo no secreto no entra como secreto', secretoNoSoportado);
+  await invokeHandlerWithContext('update-tienda-online-config', undefined, { pagoProveedor: 'UPAY' });
+
+  const pubProv = await pub('tienda.config', []);
+  ok(pubProv.result?.pagoOnline === false && pubProv.result?.pagoOnlineProveedor === null && Array.isArray(pubProv.result?.pagoOnlineHosts),
+    'Proveedores: sin pago online, tienda.config no publica proveedor ni hosts', pubProv.result);
+
+  // Google desde la pantalla: tienda.config lo publica y auth.google deja de dar no_configurado.
+  const GID = '1234-abc.apps.googleusercontent.com';
+  const gSave: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, {
+    googleClientId: GID, whatsappPhoneNumberId: '109876543210', whatsappPlantilla: 'codigo_ingreso', whatsappIdioma: 'es',
+  });
+  ok(gSave?.success === true && gSave?.config?.ingreso?.googleConfigurado === true, 'F3: Client ID de Google guardado', gSave?.config?.ingreso);
+  const cfgG = await pub('tienda.config', []);
+  ok(cfgG.result?.googleClientId === GID, 'F3: tienda.config publica el Client ID de la pantalla', cfgG.result?.googleClientId);
+  const fetchOrig = (globalThis as any).fetch;
+  const llamadas: Array<{ url: string; body: any }> = [];
+  (globalThis as any).fetch = async (url: any, init?: any) => {
+    // Solo se simulan Google y Meta; el RPC local de la tienda pasa al fetch real.
+    if (!/googleapis\.com|graph\.facebook\.com/.test(String(url))) return fetchOrig(url, init);
+    llamadas.push({ url: String(url), body: init?.body ? JSON.parse(init.body) : null });
+    if (String(url).includes('graph.facebook.com')) return { ok: true, status: 200, text: async () => '{}', json: async () => ({}) };
+    return { ok: false, status: 400, text: async () => '{}', json: async () => ({}) };
+  };
+  try {
+    const g2 = await pub('auth.google', ['fake-token']);
+    ok(g2.result?.error === 'google_token_invalido', 'F3: auth.google usa el Client ID de la pantalla (ya no no_configurado)', g2.result);
+
+    // WhatsApp: Phone Number ID cargado pero sin token → sin configurar, y la prueba no manda nada.
+    const tokenEnv = process.env['WHATSAPP_CLOUD_TOKEN'];
+    delete process.env['WHATSAPP_CLOUD_TOKEN'];
+    const est: any = await invokeHandlerWithContext('get-tienda-online-config', undefined);
+    const tieneTokenGuardado = !!est?.ingreso?.whatsappTokenGuardado;
+    if (!tieneTokenGuardado) {
+      ok(est?.ingreso?.whatsappConfigurado === false, 'F3: sin token, WhatsApp figura sin configurar', est?.ingreso);
+      const pSin: any = await invokeHandlerWithContext('probar-tienda-whatsapp', undefined, { telefono: '595981123456' });
+      ok(pSin?.error === 'whatsapp_no_configurado' && !llamadas.some((l) => l.url.includes('graph.facebook.com')), 'F3: probar envío sin token → no manda nada', pSin);
+    }
+    // Token por pantalla: nunca vuelve en la respuesta; sin almacén seguro se rechaza (no texto plano).
+    const SECRETO = 'EAAG-token-secreto-de-prueba';
+    const tSave: any = await invokeHandlerWithContext('update-tienda-online-config', undefined, { whatsappToken: SECRETO });
+    ok(!JSON.stringify(tSave).includes(SECRETO), 'F3: el token no vuelve en la respuesta de guardar');
+    ok(
+      tSave?.success === true || tSave?.error === 'almacen_seguro_no_disponible' || tSave?.error === 'token_no_guardado',
+      'F3: token guardado en almacén seguro o rechazado (nunca en la BD)', tSave?.error,
+    );
+    const filaCfg: any[] = await dataSource.query(`SELECT * FROM tienda_online_config`);
+    ok(!JSON.stringify(filaCfg).includes(SECRETO), 'F3: el token no está en la tabla tienda_online_config');
+    const estT: any = await invokeHandlerWithContext('get-tienda-online-config', undefined);
+    ok(!JSON.stringify(estT).includes(SECRETO), 'F3: get-tienda-online-config no devuelve el token');
+
+    // Con token (entorno) + datos de la pantalla: el envío usa el Phone Number ID y la plantilla cargados.
+    process.env['WHATSAPP_CLOUD_TOKEN'] = 'token-entorno';
+    await invokeHandlerWithContext('update-tienda-online-config', undefined, {});
+    const pTelMal: any = await invokeHandlerWithContext('probar-tienda-whatsapp', undefined, { telefono: '12' });
+    ok(pTelMal?.error === 'telefono_invalido', 'F3: probar envío con teléfono inválido → rechazado', pTelMal);
+    llamadas.length = 0;
+    const pOk: any = await invokeHandlerWithContext('probar-tienda-whatsapp', undefined, { telefono: '+595 981 123456' });
+    const envio = llamadas.find((l) => l.url.includes('graph.facebook.com'));
+    ok(pOk?.success === true, 'F3: probar envío con credenciales → ok', pOk);
+    ok(!!envio && envio.url.includes('/109876543210/messages'), 'F3: el envío usa el Phone Number ID de la pantalla', envio?.url);
+    ok(envio?.body?.template?.name === 'codigo_ingreso' && envio?.body?.to === '595981123456', 'F3: plantilla y teléfono normalizado', envio?.body?.template?.name);
+    ok(envio?.body?.template?.components?.some((c: any) => c.type === 'button' && c.sub_type === 'url'), 'F3: lleva el botón «Copiar código» (plantilla de autenticación)');
+    const pRep: any = await invokeHandlerWithContext('probar-tienda-whatsapp', undefined, { telefono: '595981123456' });
+    ok(pRep?.error === 'demasiadas_pruebas', 'F3: segunda prueba al mismo teléfono en menos de 1 minuto → frenada', pRep);
+
+    // Solo variables de entorno (sin plantilla en pantalla): el envío real no lleva el botón,
+    // así las plantillas existentes sin botón siguen funcionando.
+    await invokeHandlerWithContext('update-tienda-online-config', undefined, { whatsappPlantilla: '' });
+    llamadas.length = 0;
+    const pEnv: any = await invokeHandlerWithContext('probar-tienda-whatsapp', undefined, { telefono: '595982000111' });
+    const envioEnv = llamadas.find((l) => l.url.includes('graph.facebook.com'));
+    ok(pEnv?.success === true && !envioEnv?.body?.template?.components?.some((c: any) => c.type === 'button'), 'F3: sin plantilla en pantalla no se manda el botón', envioEnv?.body?.template);
+
+    // Vaciar los campos vuelve a las variables de entorno.
+    await invokeHandlerWithContext('update-tienda-online-config', undefined, {
+      googleClientId: '', whatsappPhoneNumberId: '', whatsappPlantilla: '', whatsappIdioma: '', whatsappTokenBorrar: true,
+    });
+    const cfgVacio = await pub('tienda.config', []);
+    ok(cfgVacio.result?.googleClientId === (process.env['GOOGLE_CLIENT_ID'] || null), 'F3: sin valores de pantalla rige el entorno', cfgVacio.result?.googleClientId);
+    if (tokenEnv === undefined) delete process.env['WHATSAPP_CLOUD_TOKEN'];
+    else process.env['WHATSAPP_CLOUD_TOKEN'] = tokenEnv;
+    await invokeHandlerWithContext('update-tienda-online-config', undefined, {});
+  } finally {
+    (globalThis as any).fetch = fetchOrig;
+  }
 
   console.log('\n[e2e] === ZONAS DELIVERY (ADMIN CRUD) + UBICACIÓN ===');
   // 26. listar zonas (ya hay 1 del seed)
   const zonasIni: any = await invokeHandlerWithContext('get-zonas-delivery-admin', undefined);
   ok(Array.isArray(zonasIni) && zonasIni.length === 1, 'admin ve 1 zona inicial', zonasIni?.length);
 
-  // 27. crear una zona nueva
-  const nuevaZona: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, {
+  // 27. crear una zona nueva: la tarifa del PdV es obligatoria (F7) y es su precio de envío.
+  const sinTarifa: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, {
     nombre: 'villa morra', tarifa: 20000, montoMinimo: 60000, activa: true, orden: 2,
+  });
+  ok(sinTarifa?.success === false && sinTarifa?.error === 'tarifa_requerida', 'zona nueva sin tarifa del PdV → tarifa_requerida', sinTarifa);
+  const tarifaVilla: any = await dataSource.getRepository('PrecioDelivery').save({ descripcion: 'VILLA MORRA', valor: 20000, activo: true } as any);
+  const nuevaZona: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, {
+    nombre: 'villa morra', precioDeliveryId: tarifaVilla.id, montoMinimo: 60000, activa: true, orden: 2,
   });
   ok(nuevaZona?.success === true && !!nuevaZona?.zona?.id, 'guardar-zona-delivery crea zona');
   ok(nuevaZona?.zona?.nombre === 'VILLA MORRA', 'nombre de zona en UPPERCASE', nuevaZona?.zona?.nombre);
-  ok(nuevaZona?.zona?.tarifa === 20000, 'tarifa persistida', nuevaZona?.zona?.tarifa);
+  ok(nuevaZona?.zona?.precioDeliveryId === tarifaVilla.id, 'tarifa del PdV persistida', nuevaZona?.zona);
 
   // 28. editar la zona creada
   const editZona: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, {
-    id: nuevaZona.zona.id, nombre: 'villa morra norte', tarifa: 22000, montoMinimo: 60000, activa: false, orden: 2,
+    id: nuevaZona.zona.id, nombre: 'villa morra norte', montoMinimo: 60000, activa: false, orden: 2,
   });
-  ok(editZona?.success === true && editZona?.zona?.nombre === 'VILLA MORRA NORTE' && editZona?.zona?.activa === false,
-    'guardar-zona-delivery edita zona existente');
+  ok(editZona?.success === true && editZona?.zona?.nombre === 'VILLA MORRA NORTE' && editZona?.zona?.activa === false
+    && editZona?.zona?.precioDeliveryId === tarifaVilla.id,
+    'guardar-zona-delivery edita zona existente (sin mandar la tarifa, la conserva)');
+  const soltar: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, { id: nuevaZona.zona.id, nombre: 'villa morra norte', precioDeliveryId: null });
+  ok(soltar?.success === false && soltar?.error === 'tarifa_requerida', 'no se le puede sacar la tarifa a una zona', soltar);
+  const inexistente: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, { id: nuevaZona.zona.id, nombre: 'villa morra norte', precioDeliveryId: 999999 });
+  ok(inexistente?.success === false && inexistente?.error === 'tarifa_invalida', 'una tarifa que no existe → tarifa_invalida', inexistente);
 
   // 29. nombre requerido
   const zonaSinNombre: any = await invokeHandlerWithContext('guardar-zona-delivery', undefined, { nombre: '   ', tarifa: 1000 });
@@ -552,6 +836,227 @@ async function main() {
   const itMitad = pedMitad?.items?.[0];
   ok(itMitad?.personalizacion?.sabores?.length === 2 && Math.abs(itMitad.personalizacion.sabores[0].proporcion - 0.5) < 1e-6,
     'PIZZA mitad: snapshot con 2 sabores y proporción 0.5', itMitad?.personalizacion?.sabores);
+
+  console.log('\n[e2e] === F6b: PERSONALIZAR CADA SABOR ===');
+  {
+    const R = (n: string) => dataSource.getRepository(n);
+    const ing = async (nombre: string) => R('Producto').save(R('Producto').create({ nombre, tipo: 'RETAIL_INGREDIENTE', activo: true, esVendible: false, esIngrediente: true, iva: 10 } as any));
+    const cebolla: any = await ing('CEBOLLA');
+    const aceituna: any = await ing('ACEITUNA');
+    const morron: any = await ing('MORRON');
+    const queso: any = await ing('QUESO');
+    const ri = (receta: any, ingrediente: any, extra: any) => R('RecetaIngrediente').save(R('RecetaIngrediente').create({ receta, ingrediente, cantidad: 1, unidad: 'GRAMOS', activo: true, ...extra } as any));
+    const riCebolla: any = await ri(seeded.recCalabresa, cebolla, { esOpcional: true });
+    const riAceituna: any = await ri(seeded.recCalabresa, aceituna, { esCambiable: true });
+    const riQueso: any = await ri(seeded.recCalabresa, queso, {});
+    const riCebollaBacon: any = await ri(seeded.recBacon, cebolla, { esOpcional: true });
+    const riInactivo: any = await ri(seeded.recCalabresa, morron, { esOpcional: true, activo: false });
+    await R('RecetaIngredienteIntercambiable').save(R('RecetaIngredienteIntercambiable').create({ recetaIngrediente: riAceituna, ingredienteOpcion: morron, activo: true } as any));
+    const borde: any = await R('Adicional').save(R('Adicional').create({ nombre: 'BORDE CHEDDAR', precio: 9000, activo: true } as any));
+    const apagado: any = await R('Adicional').save(R('Adicional').create({ nombre: 'APAGADO', precio: 1000, activo: false } as any));
+    await R('RecetaAdicionalVinculacion').save(R('RecetaAdicionalVinculacion').create({ receta: seeded.recCalabresa, adicional: borde, precioAdicional: 10000, activo: true } as any));
+    await R('RecetaAdicionalVinculacion').save(R('RecetaAdicionalVinculacion').create({ receta: seeded.recCalabresa, adicional: apagado, precioAdicional: 1000, activo: true } as any));
+
+    const G = seeded.presGrande.id, CAL = seeded.saborCalabresa.id, BAC = seeded.saborBacon.id;
+    const pedir = (pers: any, saborIds = [CAL, BAC]) => pub('pedido.crear', [{
+      tipoPedido: 'PICKUP',
+      items: [{ productoId: seeded.pizza.id, opcion: { tipo: 'PIZZA', presentacionId: G, saborIds, personalizacionSabores: pers }, cantidad: 1 }],
+    }], token2);
+    const persOk = [{ saborId: CAL, quitarIds: [riCebolla.id], cambios: [{ recetaIngredienteId: riAceituna.id, productoId: morron.id }], adicionalIds: [borde.id] }];
+
+    // Interruptor apagado (por defecto): el menú no publica y el alta rechaza.
+    const menuOff: any = await pub('menu.get', [], token2);
+    ok(menuOff.result?.personalizacionPorReceta == null, 'F6b: interruptor apagado → el menú no publica personalización', menuOff.result?.personalizacionPorReceta);
+    const off = await pedir(persOk);
+    ok(String(off.result?.error || '').startsWith('personalizacion_invalida:deshabilitada'), 'F6b: interruptor apagado → alta rechaza personalización', off.result?.error);
+
+    await R('TiendaOnlineConfig').update({}, { personalizarSabores: true });
+    const menuOn: any = await pub('menu.get', [], token2);
+    const pz = menuOn.result?.productos?.find((x: any) => x.id === seeded.pizza.id);
+    const recIdCal = pz?.sabores?.find((x: any) => x.saborId === CAL)?.precios?.find((x: any) => x.presentacionId === G)?.recetaId;
+    const opc = menuOn.result?.personalizacionPorReceta?.[String(recIdCal)];
+    ok(recIdCal === seeded.recCalabresa.id && !!opc, 'F6b: el menú publica la receta de cada sabor × tamaño', [recIdCal, opc]);
+    ok(opc?.quitables?.map((q: any) => q.nombre).join() === 'CEBOLLA', 'F6b: quitables solo opcionales activos (no el inactivo ni el fijo)', opc?.quitables);
+    ok(opc?.cambiables?.[0]?.opciones?.[0]?.nombre === 'MORRON', 'F6b: cambiables con sus opciones', opc?.cambiables);
+    ok(opc?.adicionales?.length === 1 && opc.adicionales[0].precio === 10000, 'F6b: adicionales activos de la receta, precio de vinculación', opc?.adicionales);
+    ok(!JSON.stringify(opc).includes('costo') && !JSON.stringify(opc).includes('cantidad'), 'F6b: sin costos ni cantidades en el menú');
+
+    // Precio: 70000 (mayor) + 10000 × 1/2 = 75000.
+    const bien = await pedir(persOk);
+    ok(bien.result?.success === true && bien.result?.total === 75000, 'F6b: mitad y mitad con borde en una mitad = 70000 + 5000', bien.result?.total ?? bien.result?.error);
+    const entera = await pedir([{ saborId: CAL, adicionalIds: [borde.id] }], [CAL]);
+    ok(entera.result?.total === 70000, 'F6b: pizza entera CALABRESA 60000 + borde 10000', entera.result?.total ?? entera.result?.error);
+
+    const rechazos: [string, any, string][] = [
+      ['sabor que no está en saborIds', [{ saborId: seeded.saborMussarela.id, quitarIds: [riCebolla.id] }], 'sabor_no_elegido'],
+      ['sabor repetido', [{ saborId: CAL, quitarIds: [riCebolla.id] }, { saborId: CAL }], 'sabor_repetido'],
+      ['id repetido en quitar', [{ saborId: CAL, quitarIds: [riCebolla.id, riCebolla.id] }], 'quitar_repetido'],
+      ['adicional repetido', [{ saborId: CAL, adicionalIds: [borde.id, borde.id] }], 'adicionales_repetido'],
+      ['quitado y cambiado', [{ saborId: CAL, quitarIds: [riAceituna.id], cambios: [{ recetaIngredienteId: riAceituna.id, productoId: morron.id }] }], 'quitado_y_cambiado'],
+      ['ingrediente de otra receta', [{ saborId: CAL, quitarIds: [riCebollaBacon.id] }], 'ingrediente_no_quitable'],
+      ['ingrediente fijo', [{ saborId: CAL, quitarIds: [riQueso.id] }], 'ingrediente_no_quitable'],
+      ['ingrediente inactivo', [{ saborId: CAL, quitarIds: [riInactivo.id] }], 'ingrediente_no_quitable'],
+      ['cambiar uno no cambiable', [{ saborId: CAL, cambios: [{ recetaIngredienteId: riCebolla.id, productoId: morron.id }] }], 'ingrediente_no_cambiable'],
+      ['opción de cambio ajena', [{ saborId: CAL, cambios: [{ recetaIngredienteId: riAceituna.id, productoId: queso.id }] }], 'opcion_de_cambio_invalida'],
+      ['adicional de otra receta', [{ saborId: BAC, adicionalIds: [borde.id] }], 'adicional_invalido'],
+      ['adicional inactivo', [{ saborId: CAL, adicionalIds: [apagado.id] }], 'adicional_invalido'],
+      ['más de 20', [{ saborId: CAL, quitarIds: Array.from({ length: 21 }, (_, i) => i + 1) }], 'quitar_demasiados'],
+    ];
+    for (const [nombre, pers, motivo] of rechazos) {
+      const r = await pedir(pers);
+      ok(String(r.result?.error || '').startsWith(`personalizacion_invalida:${motivo}`), `F6b: rechaza ${nombre}`, r.result?.error);
+    }
+
+    // Snapshot por sabor y materialización en venta (caja abierta del flujo anterior).
+    const lista: any = await invokeHandlerWithContext('get-pedidos-online-admin', undefined, {});
+    const ped: any = (lista || []).find((p: any) => p.numero === bien.result?.numero);
+    const sCal = ped?.items?.[0]?.personalizacion?.sabores?.find((x: any) => x.saborId === CAL);
+    ok(sCal?.personalizacion?.quitados?.[0]?.nombre === 'CEBOLLA' && sCal?.personalizacion?.cambios?.[0]?.reemplazoNombre === 'MORRON'
+      && sCal?.personalizacion?.adicionales?.[0]?.precio === 10000, 'F6b: snapshot con la personalización de cada sabor', sCal);
+    const { materializarPedidoOnlineEnVenta } = require('../electron/handlers/ventas.handler');
+    // Caja abierta y pedido aceptado, como en el local.
+    const disp: any = await R('Dispositivo').save(R('Dispositivo').create({ nombre: 'TERMINAL F6B', activo: true } as any));
+    const conteo: any = await R('Conteo').save(R('Conteo').create({ activo: true, tipo: 'APERTURA', fecha: new Date() } as any));
+    await R('Caja').save(R('Caja').create({ estado: 'ABIERTO', activo: true, fechaApertura: new Date(), conteoApertura: { id: conteo.id }, dispositivo: { id: disp.id } } as any));
+    await R('PedidoOnline').update({ id: ped.id }, { estado: 'ACEPTADO' });
+    let mat: any = null;
+    try { mat = await materializarPedidoOnlineEnVenta(dataSource, ped.id); } catch (e: any) { mat = { error: e?.message }; }
+    if (mat?.ventaId) {
+      const vi: any = await R('VentaItem').findOne({ where: { venta: { id: mat.ventaId } } });
+      const mods: any[] = await R('VentaItemIngredienteModificacion').find({ where: { ventaItem: { id: vi.id } }, relations: ['ventaItemSabor', 'recetaIngrediente', 'ingredienteReemplazo'] });
+      const ads: any[] = await R('VentaItemAdicional').find({ where: { ventaItem: { id: vi.id } }, relations: ['ventaItemSabor'] });
+      ok(Number(vi.precioVentaUnitario) + Number(vi.precioAdicionales) === 75000 && Number(vi.precioAdicionales) === 5000,
+        'F6b: venta = pedido (base 70000 + adicionales 5000)', [vi.precioVentaUnitario, vi.precioAdicionales]);
+      ok(mods.length === 2 && mods.every((m) => !!m.ventaItemSabor) && mods.some((m) => m.tipoModificacion === 'REMOVIDO' && m.recetaIngrediente?.id === riCebolla.id)
+        && mods.some((m) => m.tipoModificacion === 'INTERCAMBIADO' && m.ingredienteReemplazo?.id === morron.id), 'F6b: modificaciones con su sabor (como el PdV)', mods.map((m) => m.tipoModificacion));
+      ok(ads.length === 1 && !!ads[0].ventaItemSabor && Number(ads[0].precioCobrado) === 10000, 'F6b: adicional con su sabor, precioCobrado de lista (como el PdV)', ads);
+      // Lo que la caja cobra (mismas funciones que el panel de cobro y los reportes) = total del pedido.
+      const { getEstadoCobroVentaInternal } = require('../electron/handlers/ventas.handler');
+      const { getTotalesPorVenta } = require('../electron/utils/venta-total.utils');
+      const est: any = await getEstadoCobroVentaInternal(dataSource, mat.ventaId);
+      const tot = (await getTotalesPorVenta(dataSource, [mat.ventaId])).get(mat.ventaId);
+      const pedTotal = Number((await R('PedidoOnline').findOne({ where: { id: ped.id } }) as any)?.total);
+      ok(Math.abs(Number(est.deudaBruta) - pedTotal) < 0.5 && Math.abs(Number(est.pendienteBruto) - pedTotal) < 0.5,
+        'F6b: la caja cobra lo mismo que el pedido (deuda = total del pedido)', [est.deudaBruta, est.pendienteBruto, pedTotal]);
+      ok(Math.abs(Number(tot) - pedTotal) < 0.5, 'F6b: el total de la venta en reportes = total del pedido', [tot, pedTotal]);
+      // Igual que el PdV (pdv.component: precioAdicionales = Σ precioAdicionalTotal × proporción, base = mayor precio).
+      const pdvAdic = 10000 * 0.5;
+      ok(Number(vi.precioAdicionales) === pdvAdic && Number(vi.precioVentaUnitario) === 70000, 'F6b: mismo desglose que la misma pizza cargada en el PdV', [vi.precioVentaUnitario, vi.precioAdicionales]);
+
+      // Stock (objeción de la auditoría): el descargo es el mismo `procesarStockVenta` del PdV.
+      // Mitad CALABRESA sin cebolla y aceituna → morrón; mitad BACON sin tocar (su cebolla sí baja).
+      const { registerVentasHandlers, stopRetryComandaWorker } = require('../electron/handlers/ventas.handler');
+      registerVentasHandlers(dataSource, getCurrentUser);
+      stopRetryComandaWorker();
+      // El descargo corre al concluir la venta (después del cobro), como en el PdV.
+      await R('Venta').update({ id: mat.ventaId }, { estado: 'CONCLUIDA' });
+      let stockErr: any = null;
+      try {
+        const r: any = await invokeHandlerWithContext('procesarStockVenta', undefined, mat.ventaId);
+        if (!r?.success) stockErr = r?.message;
+      } catch (e: any) { stockErr = e?.message; }
+      const movs: any[] = await R('StockMovimiento').find({ where: { referencia: mat.ventaId, tipoReferencia: 'VENTA', activo: true }, relations: ['producto'] });
+      const baja = (prod: any) => movs.filter((m) => m.producto?.id === prod.id).reduce((s, m) => s + Number(m.cantidad), 0);
+      const stock = { cebolla: baja(cebolla), aceituna: baja(aceituna), morron: baja(morron), queso: baja(queso) };
+      ok(!stockErr && movs.length > 0, 'F6b: el stock de la venta se procesa', stockErr ?? movs.length);
+      ok(stock.aceituna === 0 && stock.morron === 0.5, 'F6b stock: el reemplazo baja (½ morrón) y el reemplazado no (aceituna 0)', stock);
+      ok(stock.cebolla === 0.5, 'F6b stock: la cebolla sacada en CALABRESA no baja; la de BACON sí (½)', stock);
+      ok(stock.queso === 0.5, 'F6b stock: el resto de la receta baja por la proporción del sabor (½ queso)', stock);
+    } else {
+      ok(false, 'F6b: materializar pedido personalizado', mat);
+    }
+    await R('TiendaOnlineConfig').update({}, { personalizarSabores: false });
+  }
+
+  // 39. idempotencia (PLAN-tienda-online A2.4): mismo uuid del mismo dueño → mismo pedido.
+  const idemBody = (key: string) => [{
+    tipoPedido: 'PICKUP', idempotencyKey: key,
+    items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }],
+  }];
+  const idemKey = 'a1b2c3d4-0000-4000-8000-00000000abcd';
+  const idem1 = await pub('pedido.crear', idemBody(idemKey), token2);
+  const idem2 = await pub('pedido.crear', idemBody(idemKey), token2);
+  ok(idem1.result?.success === true && idem2.result?.numero === idem1.result?.numero && idem2.result?.repetido === true,
+    'idempotencia: reintento con la misma clave devuelve el mismo pedido', [idem1.result?.numero, idem2.result]);
+  const idem3 = await pub('pedido.crear', idemBody('a1b2c3d4-0000-4000-8000-00000000abce'), token2);
+  ok(idem3.result?.success === true && idem3.result?.numero !== idem1.result?.numero, 'idempotencia: clave nueva crea otro pedido', idem3.result);
+  const cuentasRepo = dataSource.getRepository('CuentaCliente');
+  const otra: any = await cuentasRepo.save(cuentasRepo.create({ telefono: '0981999888', telefonoVerificado: true, nombre: 'OTRA CUENTA', activo: true }));
+  const idemOtra: any = await invokeHandlerWithContext('crear-pedido-online', { customerId: otra.id }, idemBody(idemKey)[0]);
+  ok(idemOtra?.success === true && idemOtra?.numero !== idem1.result?.numero && !idemOtra?.repetido,
+    'idempotencia: la misma clave de otra cuenta no devuelve el pedido ajeno', idemOtra);
+  const nIdem = await dataSource.getRepository('PedidoOnline').count({ where: { idempotencyKey: idemKey } });
+  ok(nIdem === 2, 'idempotencia: un pedido por dueño con esa clave (2 dueños → 2)', nIdem);
+  const idemBasura = await pub('pedido.crear', idemBody("x'; drop"), token2);
+  ok(idemBasura.result?.success === true && !idemBasura.result?.repetido, 'idempotencia: clave inválida se ignora (pedido normal)', idemBasura.result);
+
+  // 40. A1: fuerza bruta en login (5 fallos cuenta+IP → bloqueada aunque la clave sea buena).
+  for (let i = 0; i < 5; i++) await pub('auth.login', ['cliente@mail.com', 'mala-clave']);
+  const logBloq = await pub('auth.login', ['cliente@mail.com', 'secreto123']);
+  ok(logBloq.result?.error === 'demasiados_intentos', 'login: 5 fallos seguidos → demasiados_intentos', logBloq.result);
+  const { reiniciarLimitesTienda } = await import('../electron/utils/tienda-limites');
+  reiniciarLimitesTienda();
+  // 41. A1: cambio de contraseña revoca las demás sesiones (refresh tokens).
+  const s1 = await pub('auth.login', ['cliente@mail.com', 'secreto123']);
+  const s2 = await pub('auth.login', ['cliente@mail.com', 'secreto123']);
+  const cambio = await pub('auth.perfil.update', [{ password: 'nueva-clave-9', passwordActual: 'secreto123' }], s2.result?.accessToken);
+  ok(cambio.result?.success === true, 'cambio de contraseña OK', cambio.result);
+  const ref1Viejo = await pub('auth.refresh', [s1.result?.refreshToken]);
+  ok(ref1Viejo.result?.success !== true, 'cambio de contraseña: la otra sesión ya no refresca', ref1Viejo.result);
+  // 42. A1: cuenta dada de baja no ve pedidos con token vigente.
+  const sBaja = await pub('auth.login', ['cliente@mail.com', 'nueva-clave-9']);
+  await dataSource.getRepository('CuentaCliente').update({ email: 'cliente@mail.com' }, { activo: false });
+  const misBaja = await pub('pedido.mis', [], sBaja.result?.accessToken);
+  ok(misBaja.result?.success !== true && misBaja.result?.error === 'cuenta_invalida', 'cuenta inactiva: pedido.mis rechazado', misBaja.result);
+  await dataSource.getRepository('CuentaCliente').update({ email: 'cliente@mail.com' }, { activo: true });
+
+  // 43. F4: pago con tarjeta (uPay simulado). Apagado → rechazado; activo → PENDIENTE_PAGO + checkoutUrl;
+  // pagado → RECIBIDO; MESA_QR nunca paga online; otro cliente no consulta el pago ajeno.
+  const { setPagosOnlineDeps } = await import('../electron/services/pagos-online/pagos-online.service');
+  const { cargarCredencialesTienda } = await import('../electron/utils/tienda-ingreso.utils');
+  const sesF4 = new Map<string, any>();
+  setPagosOnlineDeps({
+    apiKey: async () => 'k-e2e', avisar: async () => undefined,
+    fetch: (async (url: string, init: any) => {
+      const r = (st: number, b: any) => ({ status: st, text: async () => JSON.stringify(b) });
+      const u = new URL(url);
+      if (init.method === 'POST') {
+        const b = JSON.parse(init.body); const id = 'e2e-' + (sesF4.size + 1);
+        sesF4.set(id, { status: 'open', amount: b.amount, ref: b.merchant.seller.operationReferenceId });
+        return r(201, { sessionId: id, checkoutUrl: 'https://checkout.online-payments.upay.com/' + id, expiresAt: new Date(Date.now() + 7200_000).toISOString() });
+      }
+      const m = u.pathname.match(/checkout-sessions\/(.+)$/);
+      if (m) { const s = sesF4.get(m[1]); return r(200, { status: s.status, paymentId: s.paymentId, amount: s.amount, merchant: { referenceId: s.ref } }); }
+      return r(200, { status: 'SUCCEEDED', subStatus: 'APPROVED', amount: [...sesF4.values()][0].amount });
+    }) as any,
+  });
+  const sF4 = await pub('auth.login', ['cliente@mail.com', 'nueva-clave-9']);
+  const tF4 = sF4.result?.accessToken;
+  const bodyF4 = { tipoPedido: 'PICKUP', metodoPago: 'UPAY', items: [{ productoId: seeded.producto.id, presentacionId: seeded.presentacion.id, cantidad: 1 }] };
+  const f4Apagado = await pub('pedido.crear', [bodyF4], tF4);
+  ok(f4Apagado.result?.error === 'metodo_pago_no_disponible', 'F4: con el pago online apagado, UPAY se rechaza', f4Apagado.result);
+  await dataSource.getRepository('TiendaOnlineConfig').update({}, { pagoOnlineActivo: true, upayMerchantId: 'M-E2E', aceptacionAutomatica: false });
+  await cargarCredencialesTienda(dataSource);
+  const cfgF4 = await pub('tienda.config', []);
+  ok(cfgF4.result?.pagoOnline === true, 'F4: tienda.config ofrece pago online', cfgF4.result);
+  const f4 = await pub('pedido.crear', [bodyF4], tF4);
+  ok(f4.result?.success === true && f4.result?.estado === 'PENDIENTE_PAGO' && /^https:\/\/checkout\.online-payments\.upay\.com\//.test(f4.result?.checkoutUrl), 'F4: pedido UPAY → PENDIENTE_PAGO + checkoutUrl', f4.result);
+  const pendF4 = await invokeHandlerWithContext('get-pedidos-online-admin', { userId: 1 } as any, { estado: 'RECIBIDO' }).catch(() => null);
+  ok(!Array.isArray(pendF4) || !pendF4.some((p: any) => p.numero === f4.result?.numero), 'F4: no aparece para aceptar mientras espera el pago');
+  const otraF4: any = await invokeHandlerWithContext('verificar-pago-pedido-online', { customerId: otra.id }, f4.result?.numero);
+  ok(otraF4?.success === false, 'F4: otro cliente no puede consultar el pago ajeno', otraF4);
+  const v1F4 = await pub('pedido.pago.verificar', [f4.result?.numero], tF4);
+  ok(v1F4.result?.pedido?.estado === 'PENDIENTE_PAGO' && v1F4.result?.pedido?.estadoPago === 'PENDIENTE', 'F4: sin pagar sigue esperando', v1F4.result);
+  const sid = [...sesF4.keys()][0]; sesF4.get(sid).status = 'complete'; sesF4.get(sid).paymentId = 'pay-e2e';
+  const v2F4 = await pub('pedido.pago.verificar', [f4.result?.numero], tF4);
+  ok(v2F4.result?.pedido?.estadoPago === 'PENDIENTE', 'F4: tope de 10 s entre consultas desde la tienda', v2F4.result?.pedido);
+  await dataSource.getRepository('PedidoOnline').update({ numero: f4.result?.numero }, { pagoUltimaConsulta: null });
+  const v3F4 = await pub('pedido.pago.verificar', [f4.result?.numero], tF4);
+  ok(v3F4.result?.pedido?.estado === 'RECIBIDO' && v3F4.result?.pedido?.estadoPago === 'PAGADO', 'F4: pagado → RECIBIDO para aceptar', v3F4.result?.pedido);
+  const f4Rep = await pub('pedido.crear', [{ ...bodyF4, tipoPedido: 'MESA_QR', mesaToken: 'x' }], tF4);
+  ok(f4Rep.result?.success !== true, 'F4: MESA_QR no admite pago online', f4Rep.result);
+  await dataSource.getRepository('TiendaOnlineConfig').update({}, { pagoOnlineActivo: false });
+  await cargarCredencialesTienda(dataSource);
 
   console.log = origLog;
   await fastify.close();
